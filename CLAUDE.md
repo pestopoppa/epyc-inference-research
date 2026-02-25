@@ -45,5 +45,8 @@ All results are for AMD EPYC 9655 "Turin" (96C/192T Zen 5, 1.13TB DDR5-5600 ECC,
 
 ## Related Repositories
 
+- [epyc-root](https://github.com/pestopoppa/epyc-root) — Governance, agents, handoffs, progress
 - [epyc-orchestrator](https://github.com/pestopoppa/epyc-orchestrator) — Production orchestration system
-- [llama.cpp fork](https://github.com/pestopoppa/llama.cpp) — Custom patches for AMD EPYC
+- [epyc-llama](https://github.com/pestopoppa/llama.cpp) — Custom llama.cpp fork for AMD EPYC
+
+Agent files, hooks, and handoffs live in `epyc-root` — not here. Orchestrator runtime code (`src/`) lives in `epyc-orchestrator` — not here.
