@@ -1,0 +1,16 @@
+Find all lines containing 'error' in the context.
+
+---
+test_id: t1_context_grep
+context: |
+  Log entry 1: System started successfully
+  Log entry 2: Connection error occurred at 10:15
+  Log entry 3: Processing complete
+  Log entry 4: Another error detected in module X
+  Log entry 5: Shutdown initiated
+expected_behavior: Uses grep('error') to find matching lines
+pass_criteria:
+  max_turns: 3
+  answer_contains: ["error", "10:15", "module X"]
+  uses_function: ["grep"]
+  must_call_final: true

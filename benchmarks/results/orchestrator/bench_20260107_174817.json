@@ -1,0 +1,649 @@
+{
+  "t1_routing": {
+    "suite": "t1_routing",
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "avg_latency_ms": 136.5,
+    "avg_turns": 2.25,
+    "tests": [
+      {
+        "test_id": "t1_context_grep",
+        "suite": "t1_context",
+        "passed": true,
+        "turns": 3,
+        "latency_ms": 149,
+        "functions_called": [
+          "grep"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "Found ERROR on lines 15, 42, 87.",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 3,
+            "max": 3
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "answer_contains": {
+            "passed": true,
+            "required": [
+              "ERROR",
+              "error"
+            ]
+          },
+          "uses_function": {
+            "passed": true,
+            "required": [
+              "grep"
+            ],
+            "actual": [
+              "grep"
+            ]
+          }
+        }
+      },
+      {
+        "test_id": "t1_context_peek",
+        "suite": "t1_context",
+        "passed": true,
+        "turns": 2,
+        "latency_ms": 138,
+        "functions_called": [
+          "peek"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "The first word is 'The'.",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 2,
+            "max": 3
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "answer_contains": {
+            "passed": true,
+            "required": [
+              "The"
+            ]
+          },
+          "uses_function": {
+            "passed": true,
+            "required": [
+              "peek"
+            ],
+            "actual": [
+              "peek"
+            ]
+          }
+        }
+      },
+      {
+        "test_id": "t1_direct_answer",
+        "suite": "t1_direct",
+        "passed": true,
+        "turns": 1,
+        "latency_ms": 114,
+        "functions_called": [],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "4",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 1,
+            "max": 2
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "answer_contains": {
+            "passed": true,
+            "required": [
+              "4"
+            ]
+          },
+          "no_llm_calls": {
+            "passed": true,
+            "actual": []
+          }
+        }
+      },
+      {
+        "test_id": "t1_simple_delegate",
+        "suite": "t1_simple",
+        "passed": true,
+        "turns": 3,
+        "latency_ms": 145,
+        "functions_called": [
+          "llm_call"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "This document discusses machine learning concepts...",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 3,
+            "max": 5
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "uses_function": {
+            "passed": true,
+            "required": [
+              "llm_call"
+            ],
+            "actual": [
+              "llm_call"
+            ]
+          },
+          "llm_calls_count": {
+            "passed": true,
+            "actual": 1,
+            "range": [
+              1,
+              2
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "t2_delegation": {
+    "suite": "t2_delegation",
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "avg_latency_ms": 167.75,
+    "avg_turns": 4.0,
+    "tests": [
+      {
+        "test_id": "t2_code_explain",
+        "suite": "t2_code",
+        "passed": true,
+        "turns": 4,
+        "latency_ms": 162,
+        "functions_called": [
+          "llm_call"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "This is a bubble sort implementation with O(n^2) complexity...",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 4,
+            "max": 5
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "answer_contains_any": {
+            "passed": true,
+            "options": [
+              "bubble",
+              "sort",
+              "swap",
+              "loop",
+              "O(n"
+            ]
+          },
+          "uses_function": {
+            "passed": true,
+            "required": [
+              "llm_call"
+            ],
+            "actual": [
+              "llm_call"
+            ]
+          }
+        }
+      },
+      {
+        "test_id": "t2_iterative_refine",
+        "suite": "t2_iterative",
+        "passed": true,
+        "turns": 5,
+        "latency_ms": 178,
+        "functions_called": [
+          "llm_call",
+          "llm_call",
+          "llm_call"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "Refined code with improvements...",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 5,
+            "max": 8
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "uses_function": {
+            "passed": true,
+            "required": [
+              "llm_call"
+            ],
+            "actual": [
+              "llm_call",
+              "llm_call",
+              "llm_call"
+            ]
+          },
+          "llm_calls_count": {
+            "passed": true,
+            "actual": 3,
+            "range": [
+              2,
+              5
+            ]
+          }
+        }
+      },
+      {
+        "test_id": "t2_parallel_summarize",
+        "suite": "t2_parallel",
+        "passed": true,
+        "turns": 4,
+        "latency_ms": 162,
+        "functions_called": [
+          "llm_batch"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "Combined summary of all sections...",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 4,
+            "max": 6
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "uses_function": {
+            "passed": true,
+            "required": [
+              "llm_batch"
+            ],
+            "actual": [
+              "llm_batch"
+            ]
+          }
+        }
+      },
+      {
+        "test_id": "t2_structured_extract",
+        "suite": "t2_structured",
+        "passed": true,
+        "turns": 3,
+        "latency_ms": 169,
+        "functions_called": [
+          "llm_call"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "{\"name\": \"John Doe\", \"email\": \"john@example.com\", \"phone\": \"555-1234\"}",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 3,
+            "max": 5
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "uses_function": {
+            "passed": true,
+            "required": [
+              "llm_call"
+            ],
+            "actual": [
+              "llm_call"
+            ]
+          },
+          "answer_is_valid_json": {
+            "passed": true
+          },
+          "json_has_keys": {
+            "passed": true,
+            "required": [
+              "name",
+              "email"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "t3_escalation": {
+    "suite": "t3_escalation",
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "avg_latency_ms": 213.4,
+    "avg_turns": 5.2,
+    "tests": [
+      {
+        "test_id": "t3_ambiguous_task",
+        "suite": "t3_ambiguous",
+        "passed": true,
+        "turns": 4,
+        "latency_ms": 115,
+        "functions_called": [
+          "llm_call"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "I've added type hints and a docstring to improve the code...",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 4,
+            "max": 8
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "one_of": {
+            "passed": true,
+            "options": [
+              {
+                "asks_clarification": true
+              },
+              {
+                "answer_contains_any": [
+                  "type hints",
+                  "docstring",
+                  "validation",
+                  "error handling",
+                  "typing",
+                  "documentation"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "test_id": "t3_architecture_design",
+        "suite": "t3_architecture",
+        "passed": true,
+        "turns": 7,
+        "latency_ms": 265,
+        "functions_called": [
+          "escalate",
+          "llm_call"
+        ],
+        "escalation_triggered": true,
+        "escalation_to": "architect",
+        "final_called": true,
+        "error": null,
+        "response_preview": "Microservices architecture with API gateway...",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 7,
+            "max": 10
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "answer_contains_any": {
+            "passed": true,
+            "options": [
+              "microservice",
+              "API",
+              "database",
+              "scale",
+              "load"
+            ]
+          },
+          "escalation_triggered": {
+            "passed": true
+          },
+          "escalation_to": {
+            "passed": true,
+            "expected": "architect",
+            "actual": "architect"
+          }
+        }
+      },
+      {
+        "test_id": "t3_complex_code_gen",
+        "suite": "t3_complex",
+        "passed": true,
+        "turns": 6,
+        "latency_ms": 376,
+        "functions_called": [
+          "escalate",
+          "llm_call"
+        ],
+        "escalation_triggered": true,
+        "escalation_to": "coder",
+        "final_called": true,
+        "error": null,
+        "response_preview": "class ThreadSafeLRUCache:\n    def __init__(self)...",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 6,
+            "max": 10
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "answer_contains_any": {
+            "passed": true,
+            "options": [
+              "class",
+              "def",
+              "LRU",
+              "lock",
+              "thread"
+            ]
+          },
+          "escalation_triggered": {
+            "passed": true
+          },
+          "escalation_to": {
+            "passed": true,
+            "expected": "coder",
+            "actual": "coder"
+          }
+        }
+      },
+      {
+        "test_id": "t3_failure_recovery",
+        "suite": "t3_failure",
+        "passed": true,
+        "turns": 5,
+        "latency_ms": 161,
+        "functions_called": [
+          "llm_call",
+          "llm_call"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "{\"name\": \"John Doe\", \"age\": 30}",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 5,
+            "max": 8
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "answer_is_valid_json": {
+            "passed": true
+          },
+          "json_has_keys": {
+            "passed": true,
+            "required": [
+              "name",
+              "age"
+            ]
+          }
+        }
+      },
+      {
+        "test_id": "t3_long_context_64k",
+        "suite": "t3_long",
+        "passed": true,
+        "turns": 4,
+        "latency_ms": 150,
+        "functions_called": [
+          "grep",
+          "peek"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "The secret code is SECRET_CODE_XYZ123.",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 4,
+            "max": 10
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "answer_contains": {
+            "passed": true,
+            "required": [
+              "SECRET_CODE_XYZ123"
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "t4_adversarial": {
+    "suite": "t4_adversarial",
+    "total": 3,
+    "passed": 3,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "avg_latency_ms": 235.66666666666666,
+    "avg_turns": 4.333333333333333,
+    "tests": [
+      {
+        "test_id": "t4_infinite_loop_trap",
+        "suite": "t4_infinite",
+        "passed": true,
+        "turns": 3,
+        "latency_ms": 189,
+        "functions_called": [
+          "llm_call"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "The code is already simple and well-written. No further improvements needed.",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 3,
+            "max": 10
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "must_terminate": {
+            "passed": true
+          }
+        }
+      },
+      {
+        "test_id": "t4_malformed_context",
+        "suite": "t4_malformed",
+        "passed": true,
+        "turns": 2,
+        "latency_ms": 127,
+        "functions_called": [],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "The provided data appears to contain malformed/binary content. Unable to analyze.",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 2,
+            "max": 5
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "must_not_crash": {
+            "passed": true
+          }
+        }
+      },
+      {
+        "test_id": "t4_timeout_heavy",
+        "suite": "t4_timeout",
+        "passed": true,
+        "turns": 8,
+        "latency_ms": 391,
+        "functions_called": [
+          "llm_call",
+          "llm_call"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "Partial summary of quantum computing covering history and basic principles...",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 8,
+            "max": 10
+          },
+          "must_call_final": {
+            "passed": true
+          }
+        }
+      }
+    ]
+  }
+}

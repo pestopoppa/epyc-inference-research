@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,18.45,2,Response truncated but substantial content present
+thinking,t3_q2_causal_inference,23.96,3,Correct DAG analysis with backdoor/collider concepts
+thinking,t3_q3_reasoning_trap,17.9,3,Identified overfitting with specific scenario
+thinking,t2_q1_paradox,18.76,3,Presented 2+ positions with personal evaluation
+thinking,t2_q2_counterfactual,19.18,3,Substantial counterfactual analysis
+thinking,t2_q3_formal,25.6,2,Substantial reasoning response
+thinking,t2_q4_metacognition,25.12,2,Substantial reasoning response
+thinking,t1_q1_multistep,25.52,2,Substantial reasoning response
+thinking,t1_q2_hypothesis,28.99,2,Substantial reasoning response
+thinking,t1_q3_planning,17.65,2,Substantial reasoning response
+coder,t3_q1_concurrent_correctness,17.03,1,Text response but no code
+coder,t3_q2_distributed_consistency,18.02,1,Text response but no code
+coder,t3_q3_algorithmic_hardness,17.62,1,Text response but no code
+coder,t2_q1_design,23.59,3,Code implementation present with structure
+coder,t2_q2_debug_complex,18.45,3,Code implementation present with structure
+coder,t2_q3_optimize,26.59,3,Code implementation present with structure
+coder,t2_q4_system,22.84,3,Code implementation present with structure
+coder,t1_q1_algorithm,18.17,1,Text response but no code
+coder,t1_q2_refactor,17.13,3,Code implementation present with structure
+coder,t1_q3_test,24.9,3,Code implementation present with structure
+agentic,t3_q1_competing_constraints,22.78,2,JSON present but structure unclear
+agentic,t3_q2_multi_agent_coordination,25.36,2,JSON present but structure unclear
+agentic,t3_q3_adversarial_robustness,16.9,0,No tool call structure
+agentic,t2_q1_ambiguous,29.43,3,Tool call JSON structure present
+agentic,t2_q2_error_chain,27.24,3,Tool call JSON structure present
+agentic,t2_q3_schema_edge,29.09,3,Tool call JSON structure present
+agentic,t2_q4_orchestration,27.75,2,JSON present but structure unclear
+agentic,t1_q1_sequential,27.89,0,No tool call structure
+agentic,t1_q2_error_handling,18.17,2,JSON present but structure unclear
+agentic,t1_q3_nested_params,29.49,1,Attempted but malformed
+general,t3_q1_policy_analysis,22.15,3,Substantial general response
+general,t3_q2_system_failure,25.67,3,Substantial general response
+general,t3_q3_strategic_communication,19.99,3,Substantial general response
+general,t2_q1_synthesis,18.03,3,Substantial general response
+general,t2_q2_transform,28.93,3,Substantial general response
+general,t2_q3_schedule,17.01,3,Substantial general response
+general,t2_q4_inconsistency,24.23,3,Substantial general response
+general,t1_q1_json,27.91,2,Partial general response
+general,t1_q2_multistep,21.7,3,Substantial general response
+general,t1_q3_compare,28.03,3,Substantial general response
+math,t3_q1_analysis,18.17,3,Mathematical answer with reasoning
+math,t3_q2_combinatorics,17.94,3,Mathematical answer with reasoning
+math,t3_q3_probability_theory,18.53,3,Mathematical answer with reasoning
+math,t2_q1_optimization,24.69,3,Mathematical answer with reasoning
+math,t2_q2_proof,15.69,3,Mathematical answer with reasoning
+math,t2_q3_calculus,27.63,3,Mathematical answer with reasoning
+math,t2_q4_statistics,18.69,3,Mathematical answer with reasoning
+math,t1_q1_word_problem,26.68,3,Mathematical answer with reasoning
+math,t1_q2_system_equations,15.42,3,Mathematical answer with reasoning
+math,t1_q3_probability,25.42,3,Mathematical answer with reasoning
+instruction_precision,t3_q1_self_referential,26.72,2,Response present but format unclear
+instruction_precision,t3_q2_cascading_constraints,26.62,2,Response present but format unclear
+instruction_precision,t3_q3_meta_instruction,27.3,2,Response present but format unclear
+instruction_precision,t2_q1_resist_elaboration,30.26,3,Correct minimal answer
+instruction_precision,t2_q2_maintain_format,29.84,3,Format maintained correctly
+instruction_precision,t2_q3_empty_handling,30.36,0,Did not output required string
+instruction_precision,t2_q4_conflicting_constraints,26.89,2,Response present but format unclear
+instruction_precision,t1_q1_negative_instruction,31.12,3,Avoided forbidden words
+instruction_precision,t1_q2_word_limit,31.12,3,Word limit met
+instruction_precision,t1_q3_structured_format,25.85,3,Correct format maintained
+instruction_precision,t1_q4_multiple_constraints,31.3,3,All constraints met

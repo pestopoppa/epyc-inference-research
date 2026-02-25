@@ -1,0 +1,32 @@
+version: 1
+name: memory_viability
+objective: quality_first
+independent_from_seeding: true
+
+fixed_controls:
+  - baseline
+  - raw_subgraph
+  - category_coarse
+
+adaptive_templates:
+  - name: adaptive_template_dense_motifs
+    knobs:
+      memory_mode: subgraph
+      graph_variant: coarse_graph_level_category
+      retrieval_k: 10
+      edge_k: 10
+      motif_variant: level_category
+      failure_motif_k: 6
+      hypothesis_motif_k: 6
+      memory_char_budget: 1800
+
+  - name: adaptive_template_raw_heavy
+    knobs:
+      memory_mode: subgraph
+      graph_variant: raw_graph_latest
+      retrieval_k: 12
+      edge_k: 12
+      motif_variant: embedding_t075
+      failure_motif_k: 4
+      hypothesis_motif_k: 4
+      memory_char_budget: 2200

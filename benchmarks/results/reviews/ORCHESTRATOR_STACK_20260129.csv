@@ -1,0 +1,83 @@
+suite,question_id,tier,latency_ms,claude_score,score_reason
+thinking,t3_q1_methodological_critique,3,10526,2,Identifies 4 issues by name (Selection Bias/Confounding/Measurement/Statistical Fluke) but no detailed mechanisms or amendments
+thinking,t3_q2_causal_inference,3,22626,3,Correct minimal adjustment set {Gene}; correctly identifies Yellow Fingers conditioning introduces bias (descendant not collider)
+thinking,t3_q3_reasoning_trap,3,85208,1,Discusses dataset quality metrics and overfitting but misses the specific distribution mismatch flaw; returns code not analysis
+thinking,t2_q1_paradox,2,10800,0,Empty answer: 'Analysis complete' with no Ship of Theseus discussion
+thinking,t2_q2_counterfactual,2,58194,3,Structured JSON with knowledge dissemination mechanisms and second-order effects across dimensions
+thinking,t2_q3_formal,2,20965,3,Correct formal proof of hypothetical syllogism via double Modus Ponens + concrete rain/ground/mud example
+thinking,t2_q4_metacognition,2,14842,1,Empty final: 'Estimation complete. See above.' — no Fermi estimation values visible in captured output
+thinking,t1_q1_multistep,1,9778,3,Correct answer: 11:34 AM
+thinking,t1_q2_hypothesis,1,18692,3,Multiple confounding variables (SES; sleep patterns; general health) correctly identified
+thinking,t1_q3_planning,1,11543,2,Python constraint-checker code is correct approach but doesn't enumerate final orderings
+coder,t3_q1_concurrent_correctness,3,31539,3,Detailed ABA scenario with thread interleaving; identifies pointer reuse and stale reference
+coder,t3_q2_distributed_consistency,3,24525,2,LWW strategy with shopping cart scenario; truncated before completing all 4+ strategies
+coder,t3_q3_algorithmic_hardness,3,27463,2,Adversary argument started correctly but conflates selection with sorting in decision tree reasoning
+coder,t2_q1_design,2,26767,2,LRU Cache works but uses O(n) list.remove() instead of required O(1) OrderedDict/DLL
+coder,t2_q2_debug_complex,2,0,0,Empty response — race condition question unanswered
+coder,t2_q3_optimize,2,0,0,Empty response — pair counting optimization unanswered
+coder,t2_q4_system,2,51158,3,Correct sliding window rate limiter with deque; proper is_allowed() and cleanup logic
+coder,t1_q1_algorithm,1,10604,3,Both binary search bugs found and fixed: infinite loop (mid→mid+1) and off-by-one (len→len-1)
+coder,t1_q2_refactor,1,17530,3,Two refactored versions with time/space complexity analysis and tradeoff discussion
+coder,t1_q3_test,1,8431,3,Comprehensive pytest suite: normal cases; edge cases (zero numerator; negatives; floats); ValueError for zero divisor
+general,t3_q1_policy_analysis,3,64512,2,Identifies data representation and monitoring failure modes but misses specific Goodhart's Law and explainability-accuracy tradeoff
+general,t3_q2_system_failure,3,25926,3,Correctly identifies replica lag as root cause of double-charge despite idempotency keys
+general,t3_q3_strategic_communication,3,49015,2,Board speech acknowledges 40% revenue miss but generic — lacks LOI framing and 90-day milestones
+general,t2_q1_synthesis,2,4868,3,Three-phase approach (immediate/short-term/long-term) correctly synthesizes engineering/product/finance perspectives
+general,t2_q2_transform,2,17742,2,Correct defaultdict approach for YAML nesting; truncated before validating output format
+general,t2_q3_schedule,2,33449,2,Constraint satisfaction code for meeting scheduling; truncated before showing final schedule
+general,t2_q4_inconsistency,2,16600,2,Finds 2 inconsistencies (request body type; rate limit values) but may miss others across 3 doc versions
+general,t1_q1_json,1,17546,1,Returns regex parsing code instead of direct JSON output — wrong output format
+general,t1_q2_multistep,1,3409,3,Perfect: sorted deduplicated numbered list with correct count (4)
+general,t1_q3_compare,1,14913,2,Correct microservices vs monolith comparison but brief — missing detailed tradeoff analysis
+math,t3_q1_analysis,3,51897,3,Correct differentiability proof via absolute convergence; recognizes Im(e^{xe^i}) closed form via complex exponentials
+math,t3_q2_combinatorics,3,29893,1,Numerical verification code only — no sign-reversing involution proof as required
+math,t3_q3_probability_theory,3,54778,2,Correct insight: P(S_{n-1}≤1) = volume of simplex = 1/(n-1)!; truncated before stating E[N]=e explicitly
+math,t2_q1_optimization,2,8588,3,Correct: Length=100m Width=50m Area=5000m² for fencing problem with river constraint
+math,t2_q2_proof,2,18695,3,Correctly identifies induction failure at n=1→2: no overlap between singleton remaining sets
+math,t2_q3_calculus,2,21134,3,Correct: integral of 3x²+2x-1 from 0 to 2 = [x³+x²-x]₀² = 10
+math,t2_q4_statistics,2,63650,2,Correct mean/median/std dev implementations but truncated before showing computed values
+math,t1_q1_word_problem,1,11590,2,Correct calculation code (20% off then 8% tax) but truncated before showing $129.60
+math,t1_q2_system_equations,1,51191,3,All 4 solutions correct: (4;3) (3;4) (-3;-4) (-4;-3)
+math,t1_q3_probability,1,38437,2,Correct combination approach for P(both red) but truncated before final probability values
+agentic,t3_q1_competing_constraints,3,33198,2,CSV analysis code with proper column validation; truncated before results
+agentic,t3_q2_multi_agent_coordination,3,72965,0,System error: 'No backend configured for role researcher_agent/coder_agent/reviewer_agent'
+agentic,t3_q3_adversarial_robustness,3,45667,2,Command injection defense with dangerous pattern detection; incomplete adversarial analysis
+agentic,t2_q1_ambiguous,2,35996,3,Correct: asks clarification questions before acting on ambiguous outage notification
+agentic,t2_q2_error_chain,2,10539,1,Only first diagnostic step (DNS check) — doesn't trace full error chain
+agentic,t2_q3_schema_edge,2,0,0,Empty response
+agentic,t2_q4_orchestration,2,0,0,Empty response
+agentic,t1_q1_sequential,1,0,0,Empty response
+agentic,t1_q2_error_handling,1,0,0,Empty response
+agentic,t1_q3_nested_params,1,11219,3,Correct JSON with title; assignees array; nested metadata with priority/tags/due_date
+instruction_precision,t3_q1_self_referential,3,11833,1,Attempts self-referential sentence but word/letter counts are incorrect
+instruction_precision,t3_q2_cascading_constraints,3,9580,1,Code approach — word chain doesn't satisfy length constraints ('running' is 7 not 8 letters)
+instruction_precision,t3_q3_meta_instruction,3,17185,0,Max turns (10) reached; stuck in loop printing 'hi' — failed to follow meta-instructions
+instruction_precision,t2_q1_resist_elaboration,2,1360,3,Perfect: just '4' with no elaboration
+instruction_precision,t2_q2_maintain_format,2,9310,1,Returns Python dict repr instead of required output format
+instruction_precision,t2_q3_empty_handling,2,8749,3,Correct regex extraction returning ['NONE'] for no-match case
+instruction_precision,t2_q4_conflicting_constraints,2,3997,2,Brief 5-word sentence; attempts conflicting constraints but unclear if all satisfied
+instruction_precision,t1_q1_negative_instruction,1,7869,2,Avoids 'sun/sunlight/solar' successfully but says 'light-emitting diode' (factually wrong) and 3 sentences (req: 2)
+instruction_precision,t1_q2_word_limit,1,4386,1,19 words — requirement was exactly 20-25 words
+instruction_precision,t1_q3_structured_format,1,1439,3,Clean structured output: Python (1991) / Java (1995) / C++ (1985)
+instruction_precision,t1_q4_multiple_constraints,1,6541,2,5 countries in alphabetical order; constraints partially met
+long_context,t3_q1_multi_hop_reasoning,3,51747,1,Structured JSON but values appear hallucinated rather than extracted from context
+long_context,t3_q2_contradiction_detection,3,42224,1,Code framework for witness extraction but no actual contradictions identified
+long_context,t3_q3_evolving_requirements,3,81717,1,RequirementTracker class framework but no actual requirement analysis
+long_context,t2_q1_deep_needle,2,43864,0,Completely off-target: fixes 're' import instead of finding embedded needle
+long_context,t2_q2_synthesis,2,20413,1,Empty final: 'Analysis complete. See integrated results above.' — no visible synthesis
+long_context,t2_q3_architecture,2,82257,1,Generic FrontDoor class creation instead of analyzing provided architecture
+long_context,t1_q1_needle,1,41158,1,Generic credential regex finder — doesn't find the specific hardcoded credential
+long_context,t1_q2_multi_file,1,64801,0,Generic config/main boilerplate — doesn't analyze the provided multi-file context
+long_context,t1_q3_extraction,1,0,0,Empty response
+vl,t3_q1_chart_critique,3,0,0,Empty response — no image processing
+vl,t3_q2_multi_chart_synthesis,3,0,0,Empty response — no image processing
+vl,t3_q3_twyne_security,3,0,0,Empty response — no image processing
+vl,t3_q4_twyne_economic,3,0,0,Empty response — no image processing
+vl,t3_q5_document_forensics,3,58855,0,Empty: 'Analysis complete. See structured output above.' — no actual analysis visible
+vl,t2_q1_calculation,2,38862,1,Simulated options data — not extracted from actual image
+vl,t2_q2_comparison,2,29130,0,Acknowledges 'No actual chart or data file was provided'
+vl,t2_q3_trend_analysis,2,37495,0,JSON parsing fix code — completely wrong task
+vl,t2_q4_ratio_calculation,2,7661,2,Provides ratio answer (1.25) — may be correct if image data matches
+vl,t2_q5_document_synthesis,2,57823,1,Generic dividend code — not from actual document
+vl,t1_q1_scene_text,1,0,0,Empty response — no image processing
+vl,t1_q2_sign_reading,1,54216,0,Generic frontdoor failure handling code — not reading any sign

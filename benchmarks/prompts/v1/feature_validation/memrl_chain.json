@@ -1,0 +1,65 @@
+[
+  {
+    "id": "memrl_01",
+    "prompt": "Explain how a B-tree insertion works, step by step, for a tree of order 3.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "tier": "frontdoor",
+    "source": "general.yaml",
+    "rubric": {
+      "must_mention": ["find correct leaf", "insert key in sorted order", "split if node exceeds order-1 keys", "promote median to parent", "recursive splits up to root"],
+      "pass_if": "correctly describes leaf insertion + split + promotion for order 3"
+    }
+  },
+  {
+    "id": "memrl_02",
+    "prompt": "Write a Python async web scraper that respects robots.txt and rate limits.",
+    "role": "coder_escalation",
+    "mode": "repl",
+    "tier": "coder",
+    "source": "coder.yaml",
+    "rubric": {
+      "must_contain": ["aiohttp or httpx async", "robots.txt parsing (urllib.robotparser or manual)", "rate limiting (semaphore or sleep)", "error handling"],
+      "pass_if": "functional async scraper with robots.txt check and rate limiting mechanism"
+    }
+  },
+  {
+    "id": "memrl_03",
+    "prompt": "Design a distributed cache invalidation strategy for a multi-region deployment.",
+    "role": "architect_general",
+    "mode": "direct",
+    "tier": "architect",
+    "source": "general.yaml",
+    "rubric": {
+      "must_mention": ["TTL-based expiration", "event-driven invalidation (pub/sub)", "versioning/generation numbers", "consistency vs availability tradeoff"],
+      "strategies": ["write-through", "write-behind", "cache-aside"],
+      "pass_if": "proposes >=2 invalidation strategies with multi-region consistency considerations"
+    }
+  },
+  {
+    "id": "memrl_04",
+    "prompt": "Implement a lock-free concurrent queue in C++ using compare-and-swap.",
+    "role": "architect_coding",
+    "mode": "direct",
+    "tier": "architect",
+    "source": "coder.yaml",
+    "rubric": {
+      "must_contain": ["std::atomic or atomic_compare_exchange", "head and tail pointers", "ABA problem awareness", "memory ordering (acquire/release)"],
+      "reference": "Michael-Scott queue algorithm",
+      "pass_if": "CAS-based enqueue/dequeue with correct memory ordering"
+    }
+  },
+  {
+    "id": "memrl_05",
+    "prompt": "What are the trade-offs between event sourcing and CRUD for a banking application?",
+    "role": "frontdoor",
+    "mode": "direct",
+    "tier": "frontdoor",
+    "source": "general.yaml",
+    "rubric": {
+      "event_sourcing_pros": ["complete audit trail", "temporal queries", "replay/rebuild state", "natural fit for financial transactions"],
+      "event_sourcing_cons": ["eventual consistency complexity", "storage growth", "query complexity (need projections/CQRS)", "learning curve"],
+      "pass_if": "covers >=2 pros and >=2 cons with banking-specific reasoning"
+    }
+  }
+]

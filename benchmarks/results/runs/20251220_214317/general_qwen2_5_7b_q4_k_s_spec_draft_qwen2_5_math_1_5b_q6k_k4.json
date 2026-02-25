@@ -1,0 +1,29 @@
+{
+  "model_role": "general_qwen2_5_7b_q4_k_s",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/QuantFactory/Qwen2.5-7B-GGUF/Qwen2.5-7B.Q4_K_S.gguf",
+  "config_name": "spec_draft_qwen2_5_math_1_5b_q6k_k4",
+  "run_id": "20251220_214317",
+  "timestamp": "2026-01-15T19:23:29.689827",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 19.423820228779476,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 19.423820228779476,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

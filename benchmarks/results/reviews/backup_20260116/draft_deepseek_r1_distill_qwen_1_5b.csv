@@ -1,0 +1,21 @@
+question_id,score,reason
+general/t1_q1_json,1,Correct JSON but repeated context after
+general/t1_q2_multistep,2,Steps
+general/t1_q3_compare,2,Compare
+general/t2_q1_synthesis,2,Synthesis
+general/t2_q2_transform,2,YAML
+general/t2_q3_schedule,2,Schedule
+general/t2_q4_inconsistency,2,Issues
+general/t3_q1_policy_analysis,2,Policy
+general/t3_q2_system_failure,2,Failure
+general/t3_q3_strategic_communication,2,Strategy
+thinking/t1_q1_multistep,2,Good problem setup with variables
+thinking/t1_q2_hypothesis,2,Confounders
+thinking/t1_q3_planning,2,Constraints
+thinking/t2_q1_paradox,2,Philosophy
+thinking/t2_q2_counterfactual,2,Analysis
+thinking/t2_q3_formal,2,Identifies hypothetical syllogism
+thinking/t2_q4_metacognition,2,Fermi
+thinking/t3_q1_methodological_critique,2,Critique
+thinking/t3_q2_causal_inference,2,Causal
+thinking/t3_q3_reasoning_trap,2,Trap

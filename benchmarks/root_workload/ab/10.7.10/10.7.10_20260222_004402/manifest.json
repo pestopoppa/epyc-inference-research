@@ -1,0 +1,421 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-02-21T23:44:04.307273+00:00",
+  "optimization_id": "10.7.10",
+  "seed": 42,
+  "tasks_per_arm": 50,
+  "workload_pack_path": "benchmarks/root_workload/workload_pack_v1.json",
+  "workload_pack_version": "v1-starter",
+  "selected_tasks": [
+    {
+      "task_id": "rs_004",
+      "task_class": "read_search",
+      "input_payload": "Identify benchmark scripts that already produce A/B artifacts usable for governance experiments.",
+      "quality_rubric_id": "rubric.read_search.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "re_004",
+      "task_class": "resume",
+      "input_payload": "Validate fallback-to-full-replay trigger when delta confidence drops below threshold.",
+      "quality_rubric_id": "rubric.resume.v1",
+      "expected_artifact_type": "report"
+    },
+    {
+      "task_id": "if_002",
+      "task_class": "implementation_fix",
+      "input_payload": "Patch a hook to block writes to protected governance files while preserving fail-open for non-critical checks.",
+      "quality_rubric_id": "rubric.implementation.v1",
+      "expected_artifact_type": "patch"
+    },
+    {
+      "task_id": "rs_001",
+      "task_class": "read_search",
+      "input_payload": "Find all references to 'nightshift' under scripts/ and summarize key ownership boundaries.",
+      "quality_rubric_id": "rubric.read_search.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "re_005",
+      "task_class": "resume",
+      "input_payload": "Compare resumed session behavior with and without delta injection and capture decision rationale.",
+      "quality_rubric_id": "rubric.resume.v1",
+      "expected_artifact_type": "report"
+    },
+    {
+      "task_id": "rs_005",
+      "task_class": "read_search",
+      "input_payload": "List files that define nightshift budgets, reserve policy, and run wrappers.",
+      "quality_rubric_id": "rubric.read_search.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "re_004",
+      "task_class": "resume",
+      "input_payload": "Validate fallback-to-full-replay trigger when delta confidence drops below threshold.",
+      "quality_rubric_id": "rubric.resume.v1",
+      "expected_artifact_type": "report"
+    },
+    {
+      "task_id": "li_002",
+      "task_class": "long_input",
+      "input_payload": "Process a large list of hook failure logs and output compact structured failure table plus action notes.",
+      "quality_rubric_id": "rubric.long_input.v1",
+      "expected_artifact_type": "table"
+    },
+    {
+      "task_id": "re_001",
+      "task_class": "resume",
+      "input_payload": "Resume a paused run from delta summary and continue with pending optimization IDs only.",
+      "quality_rubric_id": "rubric.resume.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "rs_005",
+      "task_class": "read_search",
+      "input_payload": "List files that define nightshift budgets, reserve policy, and run wrappers.",
+      "quality_rubric_id": "rubric.read_search.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "ps_002",
+      "task_class": "planning_synthesis",
+      "input_payload": "Produce a dependency-safe migration plan for replacing hardcoded child repo names with alias maps.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "re_002",
+      "task_class": "resume",
+      "input_payload": "Restore mandatory fields after compaction and verify missing obligations are surfaced.",
+      "quality_rubric_id": "rubric.resume.v1",
+      "expected_artifact_type": "checklist"
+    },
+    {
+      "task_id": "rs_003",
+      "task_class": "read_search",
+      "input_payload": "Find all mentions of '.session-stats' and explain where schema enforcement is defined.",
+      "quality_rubric_id": "rubric.read_search.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "if_005",
+      "task_class": "implementation_fix",
+      "input_payload": "Add budget envelope checks to deny subagent admission when concurrent expensive spawns exceed thresholds.",
+      "quality_rubric_id": "rubric.implementation.v1",
+      "expected_artifact_type": "patch"
+    },
+    {
+      "task_id": "ps_001",
+      "task_class": "planning_synthesis",
+      "input_payload": "Draft a rollout plan to enable correctness-gated escalation with telemetry for both codex and claude-code.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "if_003",
+      "task_class": "implementation_fix",
+      "input_payload": "Add telemetry emission for escalation blocked reasons and quality gate outcome.",
+      "quality_rubric_id": "rubric.implementation.v1",
+      "expected_artifact_type": "patch"
+    },
+    {
+      "task_id": "if_002",
+      "task_class": "implementation_fix",
+      "input_payload": "Patch a hook to block writes to protected governance files while preserving fail-open for non-critical checks.",
+      "quality_rubric_id": "rubric.implementation.v1",
+      "expected_artifact_type": "patch"
+    },
+    {
+      "task_id": "ps_004",
+      "task_class": "planning_synthesis",
+      "input_payload": "Synthesize a policy update plan for deterministic routing precedence and conflict resolution.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "rs_002",
+      "task_class": "read_search",
+      "input_payload": "Locate where hook fail-open policy is documented and list the controlling files.",
+      "quality_rubric_id": "rubric.read_search.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "li_001",
+      "task_class": "long_input",
+      "input_payload": "Given a long governance report, produce Stage A cheap summary then Stage B verification summary.",
+      "quality_rubric_id": "rubric.long_input.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "li_002",
+      "task_class": "long_input",
+      "input_payload": "Process a large list of hook failure logs and output compact structured failure table plus action notes.",
+      "quality_rubric_id": "rubric.long_input.v1",
+      "expected_artifact_type": "table"
+    },
+    {
+      "task_id": "li_005",
+      "task_class": "long_input",
+      "input_payload": "Review a long handoff and extract only obligations required post-compaction resume.",
+      "quality_rubric_id": "rubric.long_input.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "ps_001",
+      "task_class": "planning_synthesis",
+      "input_payload": "Draft a rollout plan to enable correctness-gated escalation with telemetry for both codex and claude-code.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "re_002",
+      "task_class": "resume",
+      "input_payload": "Restore mandatory fields after compaction and verify missing obligations are surfaced.",
+      "quality_rubric_id": "rubric.resume.v1",
+      "expected_artifact_type": "checklist"
+    },
+    {
+      "task_id": "ps_001",
+      "task_class": "planning_synthesis",
+      "input_payload": "Draft a rollout plan to enable correctness-gated escalation with telemetry for both codex and claude-code.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "rs_002",
+      "task_class": "read_search",
+      "input_payload": "Locate where hook fail-open policy is documented and list the controlling files.",
+      "quality_rubric_id": "rubric.read_search.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "li_003",
+      "task_class": "long_input",
+      "input_payload": "Summarize a multi-file policy diff and identify contradictions requiring escalation.",
+      "quality_rubric_id": "rubric.long_input.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "if_004",
+      "task_class": "implementation_fix",
+      "input_payload": "Implement deterministic routing source attribution logging with route_selected and route_source_priority fields.",
+      "quality_rubric_id": "rubric.implementation.v1",
+      "expected_artifact_type": "patch"
+    },
+    {
+      "task_id": "re_003",
+      "task_class": "resume",
+      "input_payload": "Resume from checkpoint and generate only delta-driven context injection payload.",
+      "quality_rubric_id": "rubric.resume.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "li_005",
+      "task_class": "long_input",
+      "input_payload": "Review a long handoff and extract only obligations required post-compaction resume.",
+      "quality_rubric_id": "rubric.long_input.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "ps_004",
+      "task_class": "planning_synthesis",
+      "input_payload": "Synthesize a policy update plan for deterministic routing precedence and conflict resolution.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "if_003",
+      "task_class": "implementation_fix",
+      "input_payload": "Add telemetry emission for escalation blocked reasons and quality gate outcome.",
+      "quality_rubric_id": "rubric.implementation.v1",
+      "expected_artifact_type": "patch"
+    },
+    {
+      "task_id": "li_001",
+      "task_class": "long_input",
+      "input_payload": "Given a long governance report, produce Stage A cheap summary then Stage B verification summary.",
+      "quality_rubric_id": "rubric.long_input.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "rs_005",
+      "task_class": "read_search",
+      "input_payload": "List files that define nightshift budgets, reserve policy, and run wrappers.",
+      "quality_rubric_id": "rubric.read_search.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "ps_003",
+      "task_class": "planning_synthesis",
+      "input_payload": "Design a phased approach for introducing structured context compaction only for approved artifact classes.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "rs_001",
+      "task_class": "read_search",
+      "input_payload": "Find all references to 'nightshift' under scripts/ and summarize key ownership boundaries.",
+      "quality_rubric_id": "rubric.read_search.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "ps_005",
+      "task_class": "planning_synthesis",
+      "input_payload": "Create a weekly anomaly triage plan based on normalized cost ratio per task class.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "if_001",
+      "task_class": "implementation_fix",
+      "input_payload": "Implement a JSON schema validator for .session-stats with required counters and schema_version.",
+      "quality_rubric_id": "rubric.implementation.v1",
+      "expected_artifact_type": "patch"
+    },
+    {
+      "task_id": "if_001",
+      "task_class": "implementation_fix",
+      "input_payload": "Implement a JSON schema validator for .session-stats with required counters and schema_version.",
+      "quality_rubric_id": "rubric.implementation.v1",
+      "expected_artifact_type": "patch"
+    },
+    {
+      "task_id": "re_004",
+      "task_class": "resume",
+      "input_payload": "Validate fallback-to-full-replay trigger when delta confidence drops below threshold.",
+      "quality_rubric_id": "rubric.resume.v1",
+      "expected_artifact_type": "report"
+    },
+    {
+      "task_id": "li_004",
+      "task_class": "long_input",
+      "input_payload": "Convert a large benchmark result set into normalized cost anomaly candidates by task class.",
+      "quality_rubric_id": "rubric.long_input.v1",
+      "expected_artifact_type": "table"
+    },
+    {
+      "task_id": "if_002",
+      "task_class": "implementation_fix",
+      "input_payload": "Patch a hook to block writes to protected governance files while preserving fail-open for non-critical checks.",
+      "quality_rubric_id": "rubric.implementation.v1",
+      "expected_artifact_type": "patch"
+    },
+    {
+      "task_id": "re_002",
+      "task_class": "resume",
+      "input_payload": "Restore mandatory fields after compaction and verify missing obligations are surfaced.",
+      "quality_rubric_id": "rubric.resume.v1",
+      "expected_artifact_type": "checklist"
+    },
+    {
+      "task_id": "ps_002",
+      "task_class": "planning_synthesis",
+      "input_payload": "Produce a dependency-safe migration plan for replacing hardcoded child repo names with alias maps.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "ps_001",
+      "task_class": "planning_synthesis",
+      "input_payload": "Draft a rollout plan to enable correctness-gated escalation with telemetry for both codex and claude-code.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "re_005",
+      "task_class": "resume",
+      "input_payload": "Compare resumed session behavior with and without delta injection and capture decision rationale.",
+      "quality_rubric_id": "rubric.resume.v1",
+      "expected_artifact_type": "report"
+    },
+    {
+      "task_id": "li_001",
+      "task_class": "long_input",
+      "input_payload": "Given a long governance report, produce Stage A cheap summary then Stage B verification summary.",
+      "quality_rubric_id": "rubric.long_input.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "if_001",
+      "task_class": "implementation_fix",
+      "input_payload": "Implement a JSON schema validator for .session-stats with required counters and schema_version.",
+      "quality_rubric_id": "rubric.implementation.v1",
+      "expected_artifact_type": "patch"
+    },
+    {
+      "task_id": "li_005",
+      "task_class": "long_input",
+      "input_payload": "Review a long handoff and extract only obligations required post-compaction resume.",
+      "quality_rubric_id": "rubric.long_input.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "rs_005",
+      "task_class": "read_search",
+      "input_payload": "List files that define nightshift budgets, reserve policy, and run wrappers.",
+      "quality_rubric_id": "rubric.read_search.v1",
+      "expected_artifact_type": "summary"
+    }
+  ],
+  "selected_task_ids": [
+    "rs_004",
+    "re_004",
+    "if_002",
+    "rs_001",
+    "re_005",
+    "rs_005",
+    "re_004",
+    "li_002",
+    "re_001",
+    "rs_005",
+    "ps_002",
+    "re_002",
+    "rs_003",
+    "if_005",
+    "ps_001",
+    "if_003",
+    "if_002",
+    "ps_004",
+    "rs_002",
+    "li_001",
+    "li_002",
+    "li_005",
+    "ps_001",
+    "re_002",
+    "ps_001",
+    "rs_002",
+    "li_003",
+    "if_004",
+    "re_003",
+    "li_005",
+    "ps_004",
+    "if_003",
+    "li_001",
+    "rs_005",
+    "ps_003",
+    "rs_001",
+    "ps_005",
+    "if_001",
+    "if_001",
+    "re_004",
+    "li_004",
+    "if_002",
+    "re_002",
+    "ps_002",
+    "ps_001",
+    "re_005",
+    "li_001",
+    "if_001",
+    "li_005",
+    "rs_005"
+  ],
+  "required_environments": [
+    "codex",
+    "claude-code"
+  ],
+  "required_arms": [
+    "A",
+    "B"
+  ]
+}

@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,68.2,1,Minimal policy analysis
+general,t3_q2_system_failure,61.5,1,Incomplete system analysis
+general,t3_q3_strategic_communication,63.8,1,No actual statement written
+general,t2_q1_synthesis,64.1,1,Echoes perspectives
+general,t2_q2_transform,62.7,1,Incomplete YAML
+general,t2_q3_schedule,63.4,1,No valid schedule
+general,t2_q4_inconsistency,62.1,1,Missed key inconsistencies
+general,t1_q1_json,65.3,3,Correct JSON format
+general,t1_q2_multistep,66.8,1,Incomplete solution
+general,t1_q3_compare,61.9,2,Basic comparison
+thinking,t3_q1_methodological_critique,65.2,1,Generic issues listed
+thinking,t3_q2_causal_inference,64.7,0,No causal analysis
+thinking,t3_q3_reasoning_trap,62.3,2,Identifies overfitting flaw
+thinking,t2_q1_paradox,66.1,1,Minimal philosophical content
+thinking,t2_q2_counterfactual,64.5,1,Lists dimensions only
+thinking,t2_q3_formal,67.2,2,Partial proof shown
+thinking,t2_q4_metacognition,68.4,1,No actual estimates
+thinking,t1_q1_multistep,69.1,2,Shows work partially
+thinking,t1_q2_hypothesis,67.8,2,Two valid alternatives
+thinking,t1_q3_planning,63.6,0,No valid orderings

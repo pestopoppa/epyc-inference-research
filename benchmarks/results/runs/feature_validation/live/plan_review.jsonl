@@ -1,0 +1,2 @@
+{"feature": "plan_review", "verdict": "PASS", "quality_delta": 0.0, "latency_delta_s": -2.854998456314206e-05, "tps_delta": 0.0, "memory_delta_mb": -0.1171875, "timestamp": "2026-02-19T21:24:08+00:00"}
+{"feature": "plan_review", "verdict": "PASS", "quality_delta": 0.0, "latency_delta_s": -25.642419104027795, "tps_delta": -14.281276872458712, "memory_delta_mb": -0.26953125, "timestamp": "2026-02-19T21:57:11+00:00"}

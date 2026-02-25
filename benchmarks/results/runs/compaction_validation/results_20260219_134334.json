@@ -1,0 +1,38 @@
+{
+  "timestamp": "2026-02-19T13:43:34",
+  "tests": [
+    {
+      "name": "baseline_small",
+      "context_chars": 5132,
+      "answer_chars": 266,
+      "elapsed_s": 49.4,
+      "tool_results_cleared": 0,
+      "compaction_triggered": false,
+      "compaction_tokens_saved": 0,
+      "mode": "repl",
+      "turns": 2,
+      "role": "frontdoor",
+      "has_answer": true,
+      "pass": true
+    },
+    {
+      "name": "c1_medium_context",
+      "context_chars": 15069,
+      "answer_chars": 1000,
+      "elapsed_s": 80.4,
+      "tool_results_cleared": 0,
+      "compaction_triggered": false,
+      "compaction_tokens_saved": 0,
+      "mode": "repl",
+      "turns": 4,
+      "role": "coder_escalation",
+      "has_answer": true,
+      "pass": true
+    },
+    {
+      "name": "c1_large_context",
+      "error": "http_504: {\"answer\":\"[ERROR: Inference failed: Request timed out after 1s]\",\"turns\":2,\"tokens_used\":500,\"elapsed_seconds\":90.83537925800192,\"mock_mode\":false,\"real_mode\":true,\"cache_stats\":{\"frontdoor\":{\"router_total_routes\":2,\"router_hit_rate\":0.0,\"backend_hit_rate\":0.875,\"backend_token_savings\":1.0921887496667555,\"total_prompt_tokens\":18755,\"cached_prompt_tokens\":20484,\"slot_stats\":[{\"slot_id\":0,\"prefix_hash\":\"224df33d...\",\"hit_count\":0,\"miss_count\":1,\"hit_rate\":0.0,\"last_access\":1771503833.458095},{\"sl",
+      "pass": false
+    }
+  ]
+}

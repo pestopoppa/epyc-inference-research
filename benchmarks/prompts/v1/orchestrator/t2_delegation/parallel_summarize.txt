@@ -1,0 +1,25 @@
+Summarize each section separately, then combine the summaries.
+
+---
+test_id: t2_parallel_summarize
+context: |
+  ## Section 1: Introduction
+  Machine learning has revolutionized how we approach data analysis.
+  Traditional statistical methods are being augmented with neural networks.
+  This shift has enabled breakthrough applications in computer vision and NLP.
+
+  ## Section 2: Methods
+  We employed a transformer-based architecture with 12 attention heads.
+  Training was conducted on 8 GPUs over 72 hours using mixed precision.
+  Data augmentation included random cropping and color jittering.
+
+  ## Section 3: Results
+  Our model achieved 94.2% accuracy on the test set, surpassing baseline.
+  Ablation studies confirmed the importance of pre-training on diverse data.
+  Inference speed was 15ms per sample on consumer hardware.
+expected_behavior: Uses llm_batch() to summarize 3 sections in parallel
+pass_criteria:
+  max_turns: 6
+  uses_function: ["grep", "llm_batch"]
+  llm_batch_min_calls: 3
+  must_call_final: true

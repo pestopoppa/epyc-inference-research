@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t1_q1_multistep,19.85,3,Correct calculation with clear step-by-step work
+thinking,t1_q2_hypothesis,19.85,3,Three specific alternative explanations with mechanisms
+thinking,t1_q3_planning,19.85,3,Correct valid orderings with systematic reasoning
+thinking,t2_q1_paradox,19.85,3,Presents multiple philosophical positions with clear arguments
+thinking,t2_q2_counterfactual,19.85,3,Detailed analysis across three dimensions with specific mechanisms
+thinking,t2_q3_formal,19.85,2,Proof structure correct but example flawed (wet ground doesn't cause green grass)
+thinking,t2_q4_metacognition,19.85,3,Clear Fermi estimation approach with assumptions and bounds
+thinking,t3_q1_methodological_critique,19.85,3,Identifies 4+ methodological issues with study design proposal
+thinking,t3_q2_causal_inference,19.85,2,Correct on Q1 (Gene) but wrong on Q2 (misidentifies Yellow Fingers as mediator/collider inconsistently) and Q3 (IV approach incorrect - Gene violates exclusion restriction)
+thinking,t3_q3_reasoning_trap,19.85,3,Identifies class imbalance flaw and constructs detailed concrete scenarios with mechanisms
+coder,t1_q1_algorithm,19.85,3,Identifies both bugs (left=mid infinite loop and right=len(arr) off-by-one) with fixes
+coder,t1_q2_refactor,19.85,3,Two refactored versions with time complexity analysis and tradeoff discussion
+coder,t1_q3_test,19.85,3,Comprehensive pytest test cases covering normal edge and error cases
+coder,t2_q1_design,19.85,3,LRU cache with correct data structure (hash map + doubly linked list) and O(1) explanation
+coder,t2_q2_debug_complex,19.85,3,Identifies race condition and fixes with asyncio.Lock
+coder,t2_q3_optimize,19.85,3,Optimizes from O(n^2) to O(n) using hash map with correct approach
+coder,t2_q4_system,19.85,3,Rate limiter with sliding window and edge case handling
+coder,t3_q1_concurrent_correctness,19.85,3,Explains ABA problem scenario and provides fix using tagged pointers
+coder,t3_q2_distributed_consistency,19.85,3,Four conflict resolution strategies with failure scenarios and application-specific recommendations
+coder,t3_q3_algorithmic_hardness,19.85,3,Proves Omega(n) lower bound and derives median-of-medians recurrence with group size analysis

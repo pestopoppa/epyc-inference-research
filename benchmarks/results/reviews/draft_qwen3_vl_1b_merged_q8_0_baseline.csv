@@ -1,0 +1,3 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t2_q2_hypothesis,68.6,0,Garbage output - random tokens after prompt echo
+thinking,t3_q4_metacognition,66.8,0,Garbage output - random tokens after prompt echo

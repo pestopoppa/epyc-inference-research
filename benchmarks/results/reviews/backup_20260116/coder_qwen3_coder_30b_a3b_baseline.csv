@@ -1,0 +1,17 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,20.77,3,Identified multiple methodological issues with clear explanations
+thinking,t3_q2_causal_inference,18.28,1,Incorrect - suggested Yellow Fingers as adjustment set
+thinking,t3_q3_reasoning_trap,18.27,3,Correctly identified test set bias and provided concrete scenario
+thinking,t2_q1_paradox,20.28,3,Presented multiple philosophical positions clearly
+thinking,t2_q2_counterfactual,16.59,3,Addressed all three dimensions with mechanisms
+thinking,t2_q3_formal,13.26,3,Correct proof with proper logical rules
+thinking,t2_q4_metacognition,11.49,3,Systematic approach with assumptions and bounds
+thinking,t1_q1_multistep,12.40,3,Correct answer with clear work shown
+thinking,t1_q2_hypothesis,10.64,3,Identified 3+ specific alternative explanations
+thinking,t1_q3_planning,10.70,2,Found valid ordering(s)
+coder,t3_q1_concurrent_correctness,10.20,3,Identified ABA problem and provided tagged pointer solution
+coder,t3_q2_distributed_consistency,10.81,3,Listed 4+ strategies with scenarios and recommendations
+coder,t3_q3_algorithmic_hardness,10.61,3,Proved lower bound and derived recurrence
+coder,t2_q1_design,11.33,3,Correct O(1) implementation with both data structures
+coder,t2_q2_debug_complex,13.56,3,Correctly identified race condition and fixed with lock
+coder,t2_q3_optimize,13.25,3,Correct O(n) solution with hash map

@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t1_q1_logic,60.0,3,Good reasoning
+thinking,t1_q2_sequence,59.3,3,Correct answer 42
+thinking,t1_q3_deduction,60.0,3,Good reasoning
+thinking,t2_q1_multistep,55.7,3,Good reasoning
+thinking,t2_q2_hypothesis,60.0,3,Good reasoning
+thinking,t2_q3_planning,54.7,3,Good reasoning
+thinking,t3_q1_paradox,56.8,3,Good reasoning
+thinking,t3_q2_counterfactual,53.5,3,Good reasoning
+thinking,t3_q3_formal,58.1,3,Good reasoning
+thinking,t3_q4_metacognition,92.8,3,Good reasoning
+general,t1_q1_reformat,59.2,3,Bullet list created
+general,t1_q2_summarize,89.2,2,Content generated
+general,t1_q3_extract,60.3,2,Content generated
+general,t2_q1_json,59.0,2,Content generated
+general,t2_q2_multistep,56.2,2,Content generated
+general,t2_q3_compare,54.9,2,Content generated
+general,t3_q1_synthesis,57.1,2,Content generated
+general,t3_q2_transform,56.2,2,Content generated
+general,t3_q3_schedule,55.8,2,Content generated
+general,t3_q4_inconsistency,59.7,2,Content generated
+math,t1_q1_arithmetic,58.8,2,Math work shown
+math,t1_q2_algebra,58.5,3,Correct x=5
+math,t1_q3_conversion,58.8,2,Math work shown
+math,t2_q1_word_problem,56.6,2,Math work shown
+math,t2_q2_system_equations,58.6,2,Math work shown
+math,t2_q3_probability,57.9,2,Math work shown
+math,t3_q1_optimization,58.3,2,Math work shown
+math,t3_q2_proof,54.7,2,Math work shown
+math,t3_q3_calculus,57.1,2,Math work shown
+math,t3_q4_statistics,51.7,2,Math work shown
+agentic,t1_q1_single_tool,58.5,3,Proper tool call
+agentic,t1_q2_multi_param,58.3,3,Proper tool call
+agentic,t1_q3_choose_tool,59.7,3,Proper tool call
+agentic,t2_q1_sequential,60.6,3,Proper tool call
+agentic,t2_q2_error_handling,59.4,3,Proper tool call
+agentic,t2_q3_nested_params,59.5,2,JSON structure
+agentic,t3_q1_ambiguous,56.6,2,JSON structure
+agentic,t3_q2_error_chain,58.0,2,JSON structure
+agentic,t3_q3_schema_edge,58.5,2,JSON structure
+agentic,t3_q4_orchestration,55.1,2,JSON structure
+coder,t1_q1_function,56.2,3,Code with explanation
+coder,t1_q2_debug,57.5,3,Code with explanation
+coder,t1_q3_explain,59.4,3,Code with explanation
+coder,t2_q1_algorithm,57.8,3,Code with explanation
+coder,t2_q2_refactor,58.6,3,Code with explanation
+coder,t2_q3_test,58.5,3,Code with explanation
+coder,t3_q1_design,57.2,3,Code with explanation
+coder,t3_q2_debug_complex,57.7,3,Code with explanation
+coder,t3_q3_optimize,58.1,3,Code with explanation
+coder,t3_q4_system,56.1,3,Code with explanation
+instruction_precision,t1_q1_json_only,59.3,2,JSON provided
+instruction_precision,t1_q2_exact_count,60.3,1,Wrong count: 2
+instruction_precision,t1_q3_single_word,57.9,1,Extra text
+instruction_precision,t2_q1_negative_instruction,61.0,2,Instruction followed
+instruction_precision,t2_q2_word_limit,54.8,2,Instruction followed
+instruction_precision,t2_q3_structured_format,60.1,2,Instruction followed
+instruction_precision,t2_q4_multiple_constraints,58.2,2,Instruction followed
+instruction_precision,t3_q1_resist_elaboration,57.8,2,Instruction followed
+instruction_precision,t3_q2_maintain_format,60.5,2,Instruction followed
+instruction_precision,t3_q3_empty_handling,61.2,2,Instruction followed
+instruction_precision,t3_q4_conflicting_constraints,59.0,2,Instruction followed

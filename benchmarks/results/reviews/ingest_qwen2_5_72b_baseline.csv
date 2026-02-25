@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+instruction_precision,t3_q1_self_referential,2.56,1,Response repeats prompt then gives answer but word/letter count wrong
+instruction_precision,t3_q2_cascading_constraints,2.54,0,Lists words that violate constraints (Antagonist->Tonic OK but Cynical breaks length rule)
+instruction_precision,t3_q3_meta_instruction,2.01,0,Enters infinite loop repeating "Do not" instructions - completely broken
+instruction_precision,t2_q1_resist_elaboration,1.64,3,Correctly outputs just "4"
+instruction_precision,t2_q2_maintain_format,1.63,3,Correctly formatted ERROR_TYPE/ROOT_CAUSE/FIX response
+instruction_precision,t2_q3_empty_handling,1.65,3,Correctly outputs "NONE"
+instruction_precision,t2_q4_conflicting_constraints,1.64,3,Good sentence meeting all constraints
+instruction_precision,t1_q1_negative_instruction,2.15,1,Violates constraint by mentioning "light" (similar to sun/solar)
+instruction_precision,t1_q2_word_limit,2.56,3,22 words - within 20-25 range
+instruction_precision,t1_q3_structured_format,2.58,1,Violates format by including numbering (1. 2. 3.)
+instruction_precision,t1_q4_multiple_constraints,1.71,0,Enters infinite loop repeating constraints - completely broken
+agentic,t3_q1_competing_constraints,1.53,3,Comprehensive JSON plan with validation and fallback
+agentic,t3_q2_multi_agent_coordination,1.54,2,JSON response present but misses time budget optimization
+agentic,t3_q3_adversarial_robustness,1.54,3,Thorough security analysis of malicious commands
+agentic,t2_q1_ambiguous,12.79,0,Empty response - just repeats prompt
+agentic,t2_q2_error_chain,1.59,3,Reasonable next action (restart database service)
+agentic,t2_q3_schema_edge,1.46,0,Enters infinite loop repeating charset constraints - broken
+agentic,t2_q4_orchestration,1.58,3,Complete JSON deployment plan with error handling
+agentic,t1_q1_sequential,1.62,3,Correct sequence of tool calls in JSON array
+agentic,t1_q2_error_handling,1.62,0,Just repeats prompt - no actual response
+agentic,t1_q3_nested_params,1.62,3,Correct JSON with nested metadata structure
+general,t3_q1_policy_analysis,1.55,3,Identifies failure modes and proposes amendments
+general,t3_q2_system_failure,1.56,3,Explains replica lag causing double-charges with fixes
+general,t3_q3_strategic_communication,1.59,3,Professional board statement addressing concerns
+general,t2_q1_synthesis,1.62,3,Good phased approach balancing all stakeholders
+general,t2_q3_schedule,1.57,2,Provides schedule but violates no-back-to-back constraint
+general,t2_q4_inconsistency,1.61,3,Correctly identifies all JSON vs form-data conflicts
+general,t1_q1_json,1.63,3,Correct JSON extraction
+general,t1_q2_multistep,1.47,0,Infinite loop repeating item names - broken
+general,t1_q3_compare,1.63,3,Clear comparison of microservices vs monolith
+general,t2_q2_transform,2.82,3,Correct YAML nested by department
+coder,t3_q1_concurrent_correctness,1.54,1,Describes ABA problem but doesn't provide actual fix code
+coder,t3_q2_distributed_consistency,1.56,2,Good analysis but Manual Resolution for banking is questionable
+coder,t3_q3_algorithmic_hardness,12.55,0,Empty response - just repeats prompt
+coder,t2_q1_design,1.57,2,LRU cache implementation present but missing dict explanation (point 1)
+coder,t2_q2_debug_complex,1.60,3,Correctly identifies race condition and fixes with asyncio.Lock
+coder,t2_q3_optimize,1.59,3,Correct O(n) hash table optimization
+coder,t2_q4_system,1.56,3,Complete rate limiter with tests and edge cases
+coder,t1_q1_algorithm,1.57,2,Identifies one bug correctly but second bug analysis is wrong
+coder,t1_q2_refactor,11.73,0,Empty response - just repeats prompt
+coder,t1_q3_test,1.61,3,Good pytest tests covering normal/edge/error cases
+math,t3_q1_analysis,1.57,2,Attempts proof but makes errors in closed form derivation
+math,t3_q2_combinatorics,1.52,1,Attempts combinatorial proof but reasoning is flawed
+math,t3_q3_probability_theory,1.51,3,Correct answer (e) with two proof approaches
+math,t2_q1_optimization,1.58,3,Correct optimization solution (100m x 50m = 5000 sq m)
+math,t2_q2_proof,1.55,3,Correctly identifies n=2 as where induction fails
+math,t2_q3_calculus,1.62,3,Correct definite integral calculation (answer: 10)
+math,t2_q4_statistics,1.51,3,Correct mean/median/stdev/outlier analysis
+math,t1_q1_word_problem,1.58,3,Correct discount and tax calculation
+math,t1_q2_system_equations,1.55,3,Finds all 4 real solutions correctly
+math,t1_q3_probability,1.55,3,Correct probability calculations for drawing balls
+thinking,t3_q1_methodological_critique,1.61,3,Identifies selection bias and confounding variables
+thinking,t3_q2_causal_inference,1.58,2,Correct minimal adjustment set but IV claim for Yellow Fingers is wrong
+thinking,t3_q3_reasoning_trap,1.55,3,Identifies test set bias flaw with concrete medical imaging scenario
+thinking,t2_q1_paradox,1.58,3,Presents endurantism vs four-dimensionalism coherently
+thinking,t2_q2_counterfactual,1.59,3,Good analysis of pre-internet research impacts
+thinking,t2_q3_formal,1.60,3,Correct proof of hypothetical syllogism
+thinking,t2_q4_metacognition,1.56,3,Fermi estimation with clear assumptions and bounds
+thinking,t1_q1_multistep,1.57,3,Correct train meeting time calculation (11:34 AM)
+thinking,t1_q2_hypothesis,1.62,3,Three good alternative explanations for correlation
+thinking,t1_q3_planning,1.57,2,Lists orderings but some violate constraints (DC not always together)

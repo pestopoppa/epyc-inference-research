@@ -1,0 +1,56 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,0.0,3,Excellent analysis with failure modes and amendments
+general,t3_q2_system_failure,0.0,3,Good explanation with idempotency lock solution
+general,t3_q3_strategic_communication,1.9,3,Strategic board statement with accountability
+general,t2_q1_synthesis,2.0,3,Good phased approach recommendation
+general,t2_q2_transform,1.9,3,Correct YAML with Python code explanation
+general,t2_q3_schedule,0.0,2,Has scheduling code but truncated
+general,t2_q4_inconsistency,2.0,3,Good table of all inconsistencies
+general,t1_q1_json,2.0,3,Perfect JSON output
+general,t1_q2_multistep,2.0,3,Correct list processing with count=5
+general,t1_q3_compare,2.1,3,Good microservices vs monolith comparison
+coder,t3_q1_concurrent_correctness,1.9,3,Tagged pointers for ABA problem - excellent
+coder,t3_q2_distributed_consistency,0.0,3,Good consistency strategy discussion
+coder,t3_q3_algorithmic_hardness,0.0,2,Expected comparisons recurrence analysis
+coder,t2_q1_design,1.8,3,LRU with doubly linked list O(1)
+coder,t2_q2_debug_complex,1.9,3,Correct async lock for race condition
+coder,t2_q3_optimize,1.9,3,O(n) hash-based solution
+coder,t2_q4_system,2.0,3,Rate limiter implementation
+coder,t1_q1_algorithm,1.9,3,Correct binary search fix
+coder,t1_q2_refactor,1.9,3,Two versions with tradeoffs explained
+coder,t1_q3_test,2.0,3,Comprehensive pytest test cases
+math,t3_q1_analysis,1.9,3,Correct limit = 0 with complex exponential
+math,t3_q2_combinatorics,0.0,1,Repetitive loop output
+math,t3_q3_probability_theory,0.0,2,E[N] = e-1 wrong but good approach
+math,t2_q1_optimization,1.9,3,Correct 50x100 dimensions 5000 area
+math,t2_q2_proof,1.9,3,Correctly identifies n=1 error
+math,t2_q3_calculus,2.0,3,Correct integral evaluation = 10
+math,t2_q4_statistics,1.9,3,Correct stats with no outliers
+math,t1_q1_word_problem,2.0,3,All prices correct
+math,t1_q2_system_equations,1.9,3,All 4 solutions found
+math,t1_q3_probability,2.0,3,Both probabilities correct
+agentic,t3_q1_competing_constraints,1.9,3,Good JSON plan with fallback
+agentic,t3_q2_multi_agent_coordination,1.9,3,Good multi-phase orchestration
+agentic,t3_q3_adversarial_robustness,0.0,3,Comprehensive security policy
+agentic,t2_q1_ambiguous,2.0,3,Clarification + JSON with reasoning
+agentic,t2_q2_error_chain,2.0,3,restart_service call with reasoning
+agentic,t2_q3_schema_edge,2.1,3,Correct API JSON structure
+agentic,t2_q4_orchestration,1.9,3,Full deployment plan with rollback
+agentic,t1_q1_sequential,2.1,3,Correct tool call order
+agentic,t1_q2_error_handling,2.4,3,search_users fallback
+agentic,t1_q3_nested_params,2.2,3,Correct nested JSON structure
+instruction_precision,t3_q1_self_referential,1.9,1,Extra chat output after sentence
+instruction_precision,t3_q2_cascading_constraints,3.4,1,Only 2 words shown not 5
+instruction_precision,t3_q3_meta_instruction,3.9,2,42 + hi*7 partially correct
+instruction_precision,t2_q1_resist_elaboration,4.2,3,Just 4 - perfect
+instruction_precision,t2_q2_maintain_format,3.6,3,Perfect ERROR_TYPE format
+instruction_precision,t2_q3_empty_handling,4.1,3,Just NONE - perfect
+instruction_precision,t2_q4_conflicting_constraints,4.2,3,Valid 8-word sentence A...data
+instruction_precision,t1_q1_negative_instruction,3.0,3,Uses light not sunlight - good
+instruction_precision,t1_q2_word_limit,2.4,3,20 words correct
+instruction_precision,t1_q3_structured_format,3.1,3,Perfect LANGUAGE (YEAR) format
+instruction_precision,t1_q4_multiple_constraints,2.5,2,5 countries but not alphabetical
+thinking,t3_q1_methodological_critique,2.0,3,Good methodological critique
+thinking,t3_q2_causal_inference,2.1,3,Good front-door discussion
+thinking,t3_q3_reasoning_trap,2.1,3,Good generalization analysis
+thinking,t2_q1_paradox,2.0,3,Bundle theory discussion

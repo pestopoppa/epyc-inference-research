@@ -1,0 +1,12 @@
+{
+  "decision": "DROP",
+  "reasons": [
+    "quality non-inferiority failed in at least one environment"
+  ],
+  "combined_deltas": {
+    "delta_quality": 0.0,
+    "delta_cost": -0.09917548194117147,
+    "delta_latency": -0.030915142190565213,
+    "delta_manual_intervention": 0.010000000000000009
+  }
+}

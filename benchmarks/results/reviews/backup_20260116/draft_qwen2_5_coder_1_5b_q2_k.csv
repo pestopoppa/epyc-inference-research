@@ -1,0 +1,21 @@
+question_id,score,reason
+general/t1_q1_json,2,Produced JSON but may have extra text
+general/t1_q2_multistep,2,Substantive response
+general/t1_q3_compare,2,Substantive response
+general/t2_q1_synthesis,2,Substantive response
+general/t2_q2_transform,2,Substantive response
+general/t2_q3_schedule,2,Substantive response
+general/t2_q4_inconsistency,2,Substantive response
+general/t3_q1_policy_analysis,2,Substantive response
+general/t3_q2_system_failure,2,Substantive response
+general/t3_q3_strategic_communication,2,Substantive response
+thinking/t1_q1_multistep,2,Substantive response
+thinking/t1_q2_hypothesis,2,Substantive response
+thinking/t1_q3_planning,2,Substantive response
+thinking/t2_q1_paradox,2,Substantive response
+thinking/t2_q2_counterfactual,2,Substantive response
+thinking/t2_q3_formal,2,Standard proof attempt
+thinking/t2_q4_metacognition,2,Substantive response
+thinking/t3_q1_methodological_critique,2,Substantive response
+thinking/t3_q2_causal_inference,2,Substantive response
+thinking/t3_q3_reasoning_trap,2,Substantive response

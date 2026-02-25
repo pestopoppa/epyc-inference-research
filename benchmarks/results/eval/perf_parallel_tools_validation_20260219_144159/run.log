@@ -1,0 +1,468 @@
+[2026-02-19 14:41:59] Output directory: benchmarks/results/eval/perf_parallel_tools_validation_20260219_144159
+[2026-02-19 14:41:59] API URL: http://127.0.0.1:8000
+[2026-02-19 14:41:59] STEP START: api_health_initial
+---- api_health_initial ----
+[2026-02-19 14:41:59] STEP PASS: api_health_initial
+[2026-02-19 14:41:59] STEP START: ws2_sweep_dry_run
+---- ws2_sweep_dry_run ----
+Concurrent Inference Sweep
+  n_predict: 128
+  warmup batches: 2
+  measured batches: 5
+  roles: frontdoor, coder, worker, architect_general, fast_worker
+
+  [DRY-RUN MODE]
+
+============================================================
+Role: frontdoor | Port: 8080 | Qwen3-Coder-30B-A3B (3B active MoE)
+Current -np: 1 | Test concurrency: [1, 2, 3]
+============================================================
+  [DRY-RUN] concurrency=1 ✓
+  [DRY-RUN] concurrency=2 ⚠ >np
+  [DRY-RUN] concurrency=3 ⚠ >np
+
+============================================================
+Role: coder | Port: 8081 | Qwen2.5-Coder-32B (dense)
+Current -np: 1 | Test concurrency: [1, 2]
+============================================================
+  [DRY-RUN] concurrency=1 ✓
+  [DRY-RUN] concurrency=2 ⚠ >np
+
+============================================================
+Role: worker | Port: 8082 | Qwen2.5-7B-f16
+Current -np: 2 | Test concurrency: [1, 2, 3, 4]
+============================================================
+  [DRY-RUN] concurrency=1 ✓
+  [DRY-RUN] concurrency=2 ✓
+  [DRY-RUN] concurrency=3 ⚠ >np
+  [DRY-RUN] concurrency=4 ⚠ >np
+
+============================================================
+Role: architect_general | Port: 8083 | Qwen3-235B-A22B
+Current -np: 1 | Test concurrency: [1, 2]
+============================================================
+  [DRY-RUN] concurrency=1 ✓
+  [DRY-RUN] concurrency=2 ⚠ >np
+
+============================================================
+Role: fast_worker | Port: 8102 | Qwen2.5-1.5B
+Current -np: 4 | Test concurrency: [1, 2, 4, 6, 8]
+============================================================
+  [DRY-RUN] concurrency=1 ✓
+  [DRY-RUN] concurrency=2 ✓
+  [DRY-RUN] concurrency=4 ✓
+  [DRY-RUN] concurrency=6 ⚠ >np
+  [DRY-RUN] concurrency=8 ⚠ >np
+[2026-02-19 14:41:59] STEP PASS: ws2_sweep_dry_run
+[2026-02-19 14:41:59] STEP START: ws2_sweep_live
+---- ws2_sweep_live ----
+Concurrent Inference Sweep
+  n_predict: 128
+  warmup batches: 2
+  measured batches: 5
+  roles: frontdoor, coder, worker, fast_worker
+
+============================================================
+Role: frontdoor | Port: 8080 | Qwen3-Coder-30B-A3B (3B active MoE)
+Current -np: 1 | Test concurrency: [1, 2, 3]
+============================================================
+  Measuring TTFT baseline (3 runs)...
+  TTFT baseline: 831.3ms
+
+  concurrency=1
+    Warmup: 2 batches..... done
+    Measured: 5 batches........ done
+    per_tps: 89.57 ± 19.91 t/s
+    agg_tps: 89.57 t/s
+    latency: p50=2142ms p95=3215ms
+    success: 5/5 (error_rate=0.0%)
+
+  concurrency=2 ⚠ concurrency>np (queuing)
+    Warmup: 2 batches..... done
+    Measured: 5 batches........ done
+    per_tps: 99.30 ± 1.47 t/s
+    agg_tps: 198.61 t/s
+    latency: p50=4162ms p95=4287ms
+    success: 10/10 (error_rate=0.0%)
+
+  concurrency=3 ⚠ concurrency>np (queuing)
+    Warmup: 2 batches..... done
+    Measured: 5 batches........ done
+    per_tps: 100.19 ± 0.50 t/s
+    agg_tps: 300.58 t/s
+    latency: p50=4195ms p95=6336ms
+    success: 15/15 (error_rate=0.0%)
+
+============================================================
+Role: coder | Port: 8081 | Qwen2.5-Coder-32B (dense)
+Current -np: 1 | Test concurrency: [1, 2]
+============================================================
+  Measuring TTFT baseline (3 runs)...
+  TTFT baseline: 2826.8ms
+
+  concurrency=1
+    Warmup: 2 batches..... done
+    Measured: 5 batches........ done
+    per_tps: 41.88 ± 0.81 t/s
+    agg_tps: 41.88 t/s
+    latency: p50=5915ms p95=5969ms
+    success: 5/5 (error_rate=0.0%)
+
+  concurrency=2 ⚠ concurrency>np (queuing)
+    Warmup: 2 batches..... done
+    Measured: 5 batches........ done
+    per_tps: 42.07 ± 0.35 t/s
+    agg_tps: 84.14 t/s
+    latency: p50=11720ms p95=11803ms
+    success: 10/10 (error_rate=0.0%)
+
+============================================================
+Role: worker | Port: 8082 | Qwen2.5-7B-f16
+Current -np: 2 | Test concurrency: [1, 2, 3, 4]
+============================================================
+  Measuring TTFT baseline (3 runs)...
+  TTFT baseline: 1137.0ms
+
+  concurrency=1
+    Warmup: 2 batches..... done
+    Measured: 5 batches........ done
+    per_tps: 75.56 ± 0.54 t/s
+    agg_tps: 75.56 t/s
+    latency: p50=2815ms p95=2825ms
+    success: 5/5 (error_rate=0.0%)
+
+  concurrency=2
+    Warmup: 2 batches..... done
+    Measured: 5 batches........ done
+    per_tps: 68.05 ± 0.34 t/s
+    agg_tps: 136.10 t/s
+    latency: p50=4228ms p95=4253ms
+    success: 10/10 (error_rate=0.0%)
+
+  concurrency=3 ⚠ concurrency>np (queuing)
+    Warmup: 2 batches..... done
+    Measured: 5 batches........ done
+    per_tps: 69.65 ± 3.37 t/s
+    agg_tps: 208.95 t/s
+    latency: p50=4251ms p95=7168ms
+    success: 15/15 (error_rate=0.0%)
+
+  concurrency=4 ⚠ concurrency>np (queuing)
+    Warmup: 2 batches..... done
+    Measured: 5 batches........ done
+    per_tps: 67.90 ± 0.70 t/s
+    agg_tps: 271.59 t/s
+    latency: p50=8391ms p95=8514ms
+    success: 20/20 (error_rate=0.0%)
+
+============================================================
+Role: fast_worker | Port: 8102 | Qwen2.5-1.5B
+Current -np: 4 | Test concurrency: [1, 2, 4, 6, 8]
+============================================================
+  ⚠ Server on port 8102 not responding, skipping
+
+============================================================
+Results written to: benchmarks/results/eval/concurrent_sweep_20260219_144159.csv
+Total measurements: 9
+
+Summary:
+Role                 Conc  Per TPS  Agg TPS   P50ms   P95ms
+------------------------------------------------------------
+frontdoor              1     89.57    89.57    2142    3215
+frontdoor              2⚠    99.30   198.61    4162    4287
+frontdoor              3⚠   100.19   300.58    4195    6336
+coder                  1     41.88    41.88    5915    5969
+coder                  2⚠    42.07    84.14   11720   11803
+worker                 1     75.56    75.56    2815    2825
+worker                 2     68.05   136.10    4228    4253
+worker                 3⚠    69.65   208.95    4251    7168
+worker                 4⚠    67.90   271.59    8391    8514
+Summary JSON written to: benchmarks/results/eval/concurrent_sweep_20260219_144159.summary.json
+[2026-02-19 14:49:12] STEP PASS: ws2_sweep_live
+[2026-02-19 14:49:12] STEP START: reload_orchestrator_api(PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=1 ORCHESTRATOR_PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=1)
+---- reload_orchestrator_api(PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=1 ORCHESTRATOR_PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=1) ----
+Reloading orchestrator...
+  Starting orchestrator API on port 8000
+    PID: 1877314
+    Waiting for health...
+    [OK] Orchestrator ready
+[2026-02-19 14:49:55] STEP PASS: reload_orchestrator_api(PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=1 ORCHESTRATOR_PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=1)
+[2026-02-19 14:49:55] STEP START: wait_for_api_health
+---- wait_for_api_health ----
+[2026-02-19 14:49:55] STEP PASS: wait_for_api_health
+[2026-02-19 14:49:55] STEP START: chat_probe_ws3a_bypass_on_1
+---- chat_probe_ws3a_bypass_on_1 ----
+{
+  "elapsed_seconds": 23.820240261993604,
+  "mode": "direct",
+  "routed_to": "worker_explore",
+  "role_history": [
+    "worker_explore"
+  ],
+  "error_code": null
+}
+[2026-02-19 14:50:19] STEP PASS: chat_probe_ws3a_bypass_on_1
+[2026-02-19 14:50:19] STEP START: chat_probe_ws3a_bypass_on_2
+---- chat_probe_ws3a_bypass_on_2 ----
+{
+  "elapsed_seconds": 90.23534287602524,
+  "mode": "direct",
+  "routed_to": "worker_explore",
+  "role_history": [
+    "worker_explore"
+  ],
+  "error_code": null
+}
+[2026-02-19 14:51:49] STEP PASS: chat_probe_ws3a_bypass_on_2
+[2026-02-19 14:51:49] STEP START: ws3a_extract_bypass_on_1
+---- ws3a_extract_bypass_on_1 ----
+{}
+[2026-02-19 14:51:49] STEP PASS: ws3a_extract_bypass_on_1
+[2026-02-19 14:51:49] STEP START: ws3a_extract_bypass_on_2
+---- ws3a_extract_bypass_on_2 ----
+{}
+[2026-02-19 14:51:50] STEP PASS: ws3a_extract_bypass_on_2
+[2026-02-19 14:51:50] STEP START: reload_orchestrator_api(PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=0 ORCHESTRATOR_PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=0)
+---- reload_orchestrator_api(PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=0 ORCHESTRATOR_PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=0) ----
+Reloading orchestrator...
+  Starting orchestrator API on port 8000
+    PID: 1878925
+    Waiting for health...
+    [OK] Orchestrator ready
+[2026-02-19 14:52:28] STEP PASS: reload_orchestrator_api(PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=0 ORCHESTRATOR_PREFIX_CACHE_BYPASS_FRONTDOOR_REPL=0)
+[2026-02-19 14:52:28] STEP START: wait_for_api_health
+---- wait_for_api_health ----
+[2026-02-19 14:52:28] STEP PASS: wait_for_api_health
+[2026-02-19 14:52:28] STEP START: chat_probe_ws3a_bypass_off_1
+---- chat_probe_ws3a_bypass_off_1 ----
+{
+  "elapsed_seconds": 23.382183758018073,
+  "mode": "direct",
+  "routed_to": "worker_explore",
+  "role_history": [
+    "worker_explore"
+  ],
+  "error_code": null
+}
+[2026-02-19 14:52:52] STEP PASS: chat_probe_ws3a_bypass_off_1
+[2026-02-19 14:52:52] STEP START: chat_probe_ws3a_bypass_off_2
+---- chat_probe_ws3a_bypass_off_2 ----
+{
+  "elapsed_seconds": 88.56607791801798,
+  "mode": "direct",
+  "routed_to": "worker_explore",
+  "role_history": [
+    "worker_explore"
+  ],
+  "error_code": null
+}
+[2026-02-19 14:54:21] STEP PASS: chat_probe_ws3a_bypass_off_2
+[2026-02-19 14:54:21] STEP START: ws3a_extract_bypass_off_1
+---- ws3a_extract_bypass_off_1 ----
+{}
+[2026-02-19 14:54:21] STEP PASS: ws3a_extract_bypass_off_1
+[2026-02-19 14:54:21] STEP START: ws3a_extract_bypass_off_2
+---- ws3a_extract_bypass_off_2 ----
+{}
+[2026-02-19 14:54:21] STEP PASS: ws3a_extract_bypass_off_2
+[2026-02-19 14:54:21] STEP START: ws3b_ab_off_seed_901
+---- ws3b_ab_off_seed_901 ----
+2026-02-19 14:54:21,156 [INFO] ============================================================
+2026-02-19 14:54:21,156 [INFO] PREFLIGHT CHECKS
+2026-02-19 14:54:21,156 [INFO] ============================================================
+2026-02-19 14:54:21,157 [INFO]   Restarting API to pick up code changes...
+2026-02-19 14:54:22,253 [INFO]   API stopped, will relaunch below
+2026-02-19 14:54:24,334 [INFO]   API not reachable but 9 model port(s) are up — launching API only...
+2026-02-19 14:54:24,334 [INFO]   Launching orchestrator API only (model servers already running)...
+2026-02-19 14:54:44,371 [INFO]   API healthy (pid=1880341) after 25s
+2026-02-19 14:54:44,371 [INFO]   API health: OK (http://localhost:8000)
+2026-02-19 14:54:44,386 [INFO]   Smoke test: 2+2...
+2026-02-19 14:54:48,601 [INFO]   Smoke test OK: routed_to=worker_explore, answer=4
+
+You're correct! The answer to 2+2 is 4. Well do
+2026-02-19 14:54:48,601 [INFO] PREFLIGHT PASSED
+2026-02-19 14:54:48,601 [INFO] ============================================================
+2026-02-19 14:55:05,559 [INFO] Starting 3-way routing evaluation: session=3way_20260219_145448
+2026-02-19 14:55:06,887 [INFO] Previously seen questions: 46
+2026-02-19 14:55:11,819 [INFO]   [coder] Sampled 20 from 664 HF dataset questions (seed=901)
+2026-02-19 14:55:11,819 [INFO] 
+============================================================
+2026-02-19 14:55:11,819 [INFO] 3-Way Routing Evaluation: 1 questions
+2026-02-19 14:55:11,819 [INFO] Session: 3way_20260219_145448
+2026-02-19 14:55:11,819 [INFO] Actions: SELF:direct, SELF:repl, ARCHITECT, WORKER
+2026-02-19 14:55:11,819 [INFO] Seed: 901  Rewards: on
+2026-02-19 14:55:11,819 [INFO] Cache control: cache_prompt=False for all 3-way eval calls (fair timing)
+2026-02-19 14:55:11,819 [INFO] ============================================================
+
+2026-02-19 14:55:11,822 [INFO] [1/1] coder/humaneval_HumanEval_68
+2026-02-19 14:55:11,840 [WARNING]   slot erase unsupported on port 8080; disabling erase attempts
+2026-02-19 14:55:11,858 [WARNING]   slot erase unsupported on port 8081; disabling erase attempts
+2026-02-19 14:55:11,874 [WARNING]   slot erase unsupported on port 8082; disabling erase attempts
+2026-02-19 14:55:11,899 [WARNING]   slot erase unsupported on port 8083; disabling erase attempts
+2026-02-19 14:55:11,916 [WARNING]   slot erase unsupported on port 8084; disabling erase attempts
+2026-02-19 14:55:11,933 [WARNING]   slot erase unsupported on port 8085; disabling erase attempts
+2026-02-19 14:55:11,958 [WARNING]   slot erase unsupported on port 8086; disabling erase attempts
+2026-02-19 14:55:11,973 [WARNING]   slot erase unsupported on port 8087; disabling erase attempts
+2026-02-19 14:55:12,013 [INFO]   → SELF:direct (frontdoor:direct, timeout=120s)...
+2026-02-19 14:55:16,535 [INFO]     SELF:direct → PASS (4.5s, 23.0 t/s, 104 tok)
+2026-02-19 14:55:16,582 [INFO]   → SELF:repl (frontdoor:repl, timeout=120s)...
+2026-02-19 14:55:32,427 [INFO]     [SELF:repl diag] loops=0 cap=False break_reason=none repeated_edges=0 repeated_roles=0 infer_hops=0 avg_prompt_ms=n/a avg_gen_ms=n/a report_handles=0 ids=none
+2026-02-19 14:55:32,428 [INFO]     SELF:repl → PASS (15.8s, 9.5 t/s, 150 tok, 0 tools)
+2026-02-19 14:55:34,996 [INFO]   [idle-wait] Heavy models idle after 2.6s
+2026-02-19 14:55:35,022 [INFO]   → ARCHITECT (architect_general:delegated, timeout=120s)...
+2026-02-19 14:56:31,274 [INFO]     [ARCHITECT diag] loops=1 cap=False break_reason=specialist_report repeated_edges=0 repeated_roles=0 infer_hops=1 avg_prompt_ms=4386.7 avg_gen_ms=14620.6 report_handles=0 ids=none
+2026-02-19 14:56:31,274 [INFO]     ARCHITECT → PASS (56.3s, 2.3 t/s, 131 tok)
+2026-02-19 14:56:31,274 [INFO]       delegate: coder_escalation → ok (19423ms, 5.4 t/s, 105 tok)
+2026-02-19 14:56:31,274 [INFO]       chain: architect_general → coder_escalation
+2026-02-19 14:56:31,331 [INFO]   → ARCHITECT (architect_coding:delegated, timeout=120s)...
+2026-02-19 14:57:11,621 [INFO]     [ARCHITECT diag] loops=1 cap=False break_reason=specialist_report repeated_edges=0 repeated_roles=0 infer_hops=1 avg_prompt_ms=4265.8 avg_gen_ms=13551.5 report_handles=0 ids=none
+2026-02-19 14:57:11,621 [INFO]     ARCHITECT → PASS (40.3s, 3.1 t/s, 126 tok)
+2026-02-19 14:57:11,621 [INFO]       delegate: coder_escalation → ok (17823ms, 5.9 t/s, 105 tok)
+2026-02-19 14:57:11,621 [INFO]       chain: architect_coding → coder_escalation
+2026-02-19 14:57:11,621 [INFO]     reward[ARCHITECT] = 1.0
+2026-02-19 14:57:11,621 [INFO]     reward[SELF:direct] = 1.0
+2026-02-19 14:57:11,621 [INFO]     reward[SELF:repl] = 1.0
+2026-02-19 14:57:11,621 [INFO]     reward[WORKER] = 1.0
+2026-02-19 14:57:12,029 [INFO]   Injected 4 rewards
+
+======================================================================
+3-WAY ROUTING EVALUATION SUMMARY
+======================================================================
+Questions: 1
+
+Action                Pass  Fail    Acc%   Q-bar
+--------------------------------------------------
+SELF:direct              1     0  100.0%  1.000
+SELF:repl                1     0  100.0%  1.000
+ARCHITECT                1     0  100.0%  1.000
+WORKER                   1     0  100.0%  1.000
+
+Tool Value (SELF:direct vs SELF:repl):
+  Tools helped: 0
+  Tools neutral: 1
+  Tools hurt: 0
+
+Rewards injected: 4
+[2026-02-19 14:57:13] STEP PASS: ws3b_ab_off_seed_901
+[2026-02-19 14:57:13] STEP START: ws3b_ab_off_seed_902
+---- ws3b_ab_off_seed_902 ----
+2026-02-19 14:57:13,821 [INFO] ============================================================
+2026-02-19 14:57:13,821 [INFO] PREFLIGHT CHECKS
+2026-02-19 14:57:13,821 [INFO] ============================================================
+2026-02-19 14:57:13,822 [INFO]   Restarting API to pick up code changes...
+2026-02-19 14:57:14,912 [INFO]   API stopped, will relaunch below
+2026-02-19 14:57:16,994 [INFO]   API not reachable but 9 model port(s) are up — launching API only...
+2026-02-19 14:57:16,994 [INFO]   Launching orchestrator API only (model servers already running)...
+2026-02-19 14:57:37,035 [INFO]   API healthy (pid=1881657) after 25s
+2026-02-19 14:57:37,035 [INFO]   API health: OK (http://localhost:8000)
+2026-02-19 14:57:37,051 [INFO]   Smoke test: 2+2...
+2026-02-19 14:57:38,068 [INFO]   Smoke test OK: routed_to=worker_explore, answer=4
+
+You're correct! The answer to 2+2 is 4. Well do
+2026-02-19 14:57:38,068 [INFO] PREFLIGHT PASSED
+2026-02-19 14:57:38,068 [INFO] ============================================================
+2026-02-19 14:57:55,024 [INFO] Starting 3-way routing evaluation: session=3way_20260219_145738
+2026-02-19 14:57:56,853 [INFO] Previously seen questions: 47
+2026-02-19 14:58:01,925 [INFO]   [coder] Sampled 20 from 664 HF dataset questions (seed=902)
+2026-02-19 14:58:01,925 [INFO]   [coder] Filtered 1 previously seen questions
+2026-02-19 14:58:01,925 [INFO] 
+============================================================
+2026-02-19 14:58:01,925 [INFO] 3-Way Routing Evaluation: 1 questions
+2026-02-19 14:58:01,925 [INFO] Session: 3way_20260219_145738
+2026-02-19 14:58:01,925 [INFO] Actions: SELF:direct, SELF:repl, ARCHITECT, WORKER
+2026-02-19 14:58:01,925 [INFO] Seed: 902  Rewards: on
+2026-02-19 14:58:01,925 [INFO] Cache control: cache_prompt=False for all 3-way eval calls (fair timing)
+2026-02-19 14:58:01,925 [INFO] ============================================================
+
+2026-02-19 14:58:01,929 [INFO] [1/1] coder/mbpp_0466
+2026-02-19 14:58:01,944 [WARNING]   slot erase unsupported on port 8080; disabling erase attempts
+2026-02-19 14:58:01,962 [WARNING]   slot erase unsupported on port 8081; disabling erase attempts
+2026-02-19 14:58:01,977 [WARNING]   slot erase unsupported on port 8082; disabling erase attempts
+2026-02-19 14:58:02,003 [WARNING]   slot erase unsupported on port 8083; disabling erase attempts
+2026-02-19 14:58:02,020 [WARNING]   slot erase unsupported on port 8084; disabling erase attempts
+2026-02-19 14:58:02,037 [WARNING]   slot erase unsupported on port 8085; disabling erase attempts
+2026-02-19 14:58:02,059 [WARNING]   slot erase unsupported on port 8086; disabling erase attempts
+2026-02-19 14:58:02,076 [WARNING]   slot erase unsupported on port 8087; disabling erase attempts
+2026-02-19 14:58:02,116 [INFO]   → SELF:direct (frontdoor:direct, timeout=120s)...
+2026-02-19 14:58:38,500 [INFO]     SELF:direct → PASS (36.4s, 20.6 t/s, 750 tok)
+2026-02-19 14:58:41,082 [INFO]   [idle-wait] Heavy models idle after 2.3s
+2026-02-19 14:58:41,111 [INFO]   → SELF:repl (frontdoor:repl, timeout=120s)...
+2026-02-19 14:59:45,892 [INFO]     [SELF:repl diag] loops=0 cap=False break_reason=none repeated_edges=0 repeated_roles=0 infer_hops=0 avg_prompt_ms=n/a avg_gen_ms=n/a report_handles=0 ids=none
+2026-02-19 14:59:45,892 [INFO]     SELF:repl → PASS (64.8s, 16.2 t/s, 1049 tok, 0 tools)
+2026-02-19 14:59:45,949 [INFO]   → ARCHITECT (architect_general:delegated, timeout=120s)...
+2026-02-19 15:00:55,396 [INFO]     [ARCHITECT diag] loops=1 cap=False break_reason=specialist_report repeated_edges=0 repeated_roles=0 infer_hops=1 avg_prompt_ms=0.0 avg_gen_ms=33935.6 report_handles=0 ids=none
+2026-02-19 15:00:55,397 [INFO]     ARCHITECT → FAIL (69.4s, 3.8 t/s, 262 tok)
+2026-02-19 15:00:55,397 [INFO]       delegate: coder_escalation → ok (33942ms, 6.9 t/s, 235 tok)
+2026-02-19 15:00:55,397 [INFO]       chain: architect_general → coder_escalation
+2026-02-19 15:00:57,727 [INFO]   [idle-wait] Heavy models idle after 2.3s
+2026-02-19 15:00:57,756 [INFO]   → ARCHITECT (architect_coding:delegated, timeout=120s)...
+2026-02-19 15:02:26,023 [INFO]     [ARCHITECT diag] loops=3 cap=True break_reason=specialist_timeout repeated_edges=0 repeated_roles=0 infer_hops=1 avg_prompt_ms=2112.9 avg_gen_ms=32327.7 report_handles=0 ids=none
+2026-02-19 15:02:26,023 [INFO]     ARCHITECT → FAIL (88.3s, 6.6 t/s, 583 tok)
+2026-02-19 15:02:26,023 [INFO]       delegate: coder_escalation → fail (66913ms, 8.3 t/s, 557 tok)
+2026-02-19 15:02:26,023 [INFO]       chain: architect_coding → coder_escalation
+2026-02-19 15:02:26,023 [INFO]     reward[ARCHITECT] = 0.0
+2026-02-19 15:02:26,023 [INFO]     reward[SELF:direct] = 1.0
+2026-02-19 15:02:26,023 [INFO]     reward[SELF:repl] = 1.0
+2026-02-19 15:02:26,023 [INFO]     reward[WORKER] = 1.0
+2026-02-19 15:02:26,591 [INFO]   Injected 4 rewards
+
+======================================================================
+3-WAY ROUTING EVALUATION SUMMARY
+======================================================================
+Questions: 1
+
+Action                Pass  Fail    Acc%   Q-bar
+--------------------------------------------------
+SELF:direct              1     0  100.0%  1.000
+SELF:repl                1     0  100.0%  1.000
+ARCHITECT                0     1    0.0%  0.000
+WORKER                   1     0  100.0%  1.000
+
+Tool Value (SELF:direct vs SELF:repl):
+  Tools helped: 0
+  Tools neutral: 1
+  Tools hurt: 0
+
+Rewards injected: 4
+[2026-02-19 15:02:27] STEP FAIL(124): ws3b_ab_off_seed_902
+[2026-02-19 15:02:27] Fail-fast enabled. Stopping.
+[2026-02-19 17:12:15] Output directory: benchmarks/results/eval/perf_parallel_tools_validation_20260219_144159
+[2026-02-19 17:12:15] API URL: http://127.0.0.1:8000
+[2026-02-19 17:12:15] Resume from stage: ws3b
+[2026-02-19 17:12:15] STEP START: ws3b_ab_off_seed_902
+---- ws3b_ab_off_seed_902 ----
+2026-02-19 17:12:15,859 [INFO] ============================================================
+2026-02-19 17:12:15,859 [INFO] PREFLIGHT CHECKS
+2026-02-19 17:12:15,859 [INFO] ============================================================
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1456, in <module>
+    main()
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 988, in main
+    if not run_preflight(args.url):
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seeding_infra.py", line 255, in run_preflight
+    if restart_api and _check_port(8000):
+                       ^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seeding_infra.py", line 93, in _check_port
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/daniele/miniforge3/lib/python3.12/socket.py", line 233, in __init__
+    _socket.socket.__init__(self, family, type, proto, fileno)
+PermissionError: [Errno 1] Operation not permitted
+[2026-02-19 17:12:15] STEP FAIL(1): ws3b_ab_off_seed_902
+[2026-02-19 17:12:15] Fail-fast enabled. Stopping.
+[2026-02-19 17:12:43] Output directory: benchmarks/results/eval/perf_parallel_tools_validation_20260219_144159
+[2026-02-19 17:12:43] API URL: http://127.0.0.1:8000
+[2026-02-19 17:12:43] Resume from stage: ws3b
+[2026-02-19 17:12:43] STEP START: ws3b_ab_off_seed_902
+---- ws3b_ab_off_seed_902 ----
+2026-02-19 17:13:00,091 [INFO] Starting 3-way routing evaluation: session=3way_20260219_171243
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1456, in <module>
+    main()
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1196, in main
+    results = run_batch_3way(
+              ^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 378, in run_batch_3way
+    raise HealthCheckError(f"API unreachable: {url}")
+seeding_types.HealthCheckError: API unreachable: http://localhost:8000

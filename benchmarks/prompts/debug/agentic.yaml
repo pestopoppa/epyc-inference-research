@@ -1,0 +1,935 @@
+# Debug suite: Agentic / Tool Calling
+# Sources: BFCL-inspired function calling (public benchmark patterns)
+# Scoring: substring + programmatic (JSON validity, function name presence)
+
+suite: agentic
+version: "1.0"
+scoring_default:
+  method: programmatic
+  config:
+    verifier: json_valid
+
+questions:
+  # ── Single tool call ─────────────────────────────────────────────
+
+  - id: bfcl_001
+    tier: 1
+    prompt: |
+      You have access to the following function:
+
+      ```
+      def get_weather(city: str, unit: str = "celsius") -> dict:
+          """Get current weather for a city.
+          Args:
+              city: City name (e.g., "London")
+              unit: Temperature unit, "celsius" or "fahrenheit"
+          """
+      ```
+
+      Call this function to get the weather in Tokyo in Fahrenheit.
+      Respond with ONLY a JSON function call, e.g.:
+      {"name": "get_weather", "arguments": {"city": "...", "unit": "..."}}
+    expected: "get_weather"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_002
+    tier: 1
+    prompt: |
+      You have access to the following function:
+
+      ```
+      def search_books(query: str, max_results: int = 10, genre: str = "") -> list:
+          """Search for books by title, author, or keyword.
+          Args:
+              query: Search query string
+              max_results: Maximum number of results (1-50)
+              genre: Optional genre filter
+          """
+      ```
+
+      Find science fiction books about time travel, returning at most 5 results.
+      Respond with ONLY a JSON function call.
+    expected: "search_books"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_003
+    tier: 1
+    prompt: |
+      You have access to the following function:
+
+      ```
+      def calculate(expression: str) -> float:
+          """Evaluate a mathematical expression.
+          Args:
+              expression: Math expression as string (e.g., "2 + 3 * 4")
+          """
+      ```
+
+      Calculate (15 + 7) * 3 - 10.
+      Respond with ONLY a JSON function call.
+    expected: "calculate"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ── Parameter extraction ─────────────────────────────────────────
+
+  - id: bfcl_004
+    tier: 2
+    prompt: |
+      You have access to the following function:
+
+      ```
+      def send_email(to: str, subject: str, body: str, cc: list = []) -> bool:
+          """Send an email.
+          Args:
+              to: Recipient email address
+              subject: Email subject line
+              body: Email body text
+              cc: Optional list of CC recipients
+          """
+      ```
+
+      Send an email to alice@example.com with subject "Meeting Tomorrow"
+      and body "Hi Alice, can we meet at 3pm?" Also CC bob@example.com.
+      Respond with ONLY a JSON function call.
+    expected: "alice@example.com"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_005
+    tier: 2
+    prompt: |
+      You have access to the following function:
+
+      ```
+      def create_event(title: str, date: str, time: str, duration_minutes: int, location: str = "") -> dict:
+          """Create a calendar event.
+          Args:
+              title: Event title
+              date: Date in YYYY-MM-DD format
+              time: Start time in HH:MM format (24-hour)
+              duration_minutes: Duration in minutes
+              location: Optional location
+          """
+      ```
+
+      Schedule a "Team Standup" meeting on January 15, 2026 at 9:30 AM
+      for 30 minutes in the Main Conference Room.
+      Respond with ONLY a JSON function call.
+    expected: "create_event"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ── Multiple tool selection ──────────────────────────────────────
+
+  - id: bfcl_006
+    tier: 2
+    prompt: |
+      You have access to the following functions:
+
+      ```
+      def get_stock_price(symbol: str) -> float:
+          """Get current stock price."""
+
+      def get_exchange_rate(from_currency: str, to_currency: str) -> float:
+          """Get currency exchange rate."""
+
+      def calculate(expression: str) -> float:
+          """Evaluate a mathematical expression."""
+      ```
+
+      What is the current price of Apple stock?
+      Respond with ONLY a JSON function call for the most appropriate function.
+    expected: "get_stock_price"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_007
+    tier: 2
+    prompt: |
+      You have access to the following functions:
+
+      ```
+      def translate_text(text: str, source_lang: str, target_lang: str) -> str:
+          """Translate text between languages."""
+
+      def summarize_text(text: str, max_words: int = 100) -> str:
+          """Summarize a text to specified length."""
+
+      def analyze_sentiment(text: str) -> dict:
+          """Analyze sentiment of text."""
+      ```
+
+      How does the customer feel about this review: "The product arrived
+      broken and customer service was unhelpful. Very disappointed."?
+      Respond with ONLY a JSON function call for the most appropriate function.
+    expected: "analyze_sentiment"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ── Complex extractions ──────────────────────────────────────────
+
+  - id: bfcl_008
+    tier: 3
+    prompt: |
+      You have access to:
+      ```
+      def query_database(table: str, conditions: dict, columns: list = [], limit: int = 100) -> list:
+          """Query a database table.
+          Args:
+              table: Table name
+              conditions: WHERE conditions as key-value pairs
+              columns: Columns to select (empty = all)
+              limit: Max rows to return
+          """
+      ```
+
+      Find the first 5 users from the "users" table who are located in
+      "New York" and have status "active". Only return their name and email.
+      Respond with ONLY a JSON function call.
+    expected: "query_database"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_009
+    tier: 3
+    prompt: |
+      You have access to these functions:
+
+      ```
+      def read_file(path: str) -> str:
+          """Read a file's contents."""
+
+      def write_file(path: str, content: str) -> bool:
+          """Write content to a file."""
+
+      def list_directory(path: str, recursive: bool = False) -> list:
+          """List files in a directory."""
+
+      def execute_command(command: str, timeout: int = 30) -> dict:
+          """Execute a shell command."""
+      ```
+
+      The user says: "List all Python files in the project directory at
+      /home/user/project, including subdirectories."
+
+      Choose the correct function and respond with ONLY a JSON function call.
+    expected: "list_directory"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_010
+    tier: 3
+    prompt: |
+      You have access to:
+
+      ```
+      def schedule_task(name: str, cron_expression: str, command: str, enabled: bool = True) -> dict:
+          """Schedule a recurring task using cron syntax.
+          Args:
+              name: Task name
+              cron_expression: Cron expression (e.g., "0 9 * * 1-5")
+              command: Command to execute
+              enabled: Whether task starts enabled
+          """
+      ```
+
+      Schedule a daily backup task called "nightly_backup" that runs at
+      2:30 AM every day and executes the command "bash /opt/backup.sh".
+      Start it in disabled state.
+      Respond with ONLY a JSON function call.
+    expected: "nightly_backup"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  # ── Single tool call (expanded) ─────────────────────────────────────
+
+  - id: bfcl_011
+    tier: 1
+    prompt: |
+      You have access to the following function:
+
+      ```
+      def get_time(timezone: str = "UTC") -> str:
+          """Get current time in a timezone.
+          Args:
+              timezone: Timezone name (e.g., "US/Eastern")
+          """
+      ```
+
+      What time is it in Tokyo?
+      Respond with ONLY a JSON function call.
+    expected: "get_time"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_012
+    tier: 1
+    prompt: |
+      You have access to the following function:
+
+      ```
+      def create_file(path: str, content: str = "") -> bool:
+          """Create a new file.
+          Args:
+              path: File path
+              content: Initial file content
+          """
+      ```
+
+      Create a file at /tmp/test.txt.
+      Respond with ONLY a JSON function call.
+    expected: "create_file"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_013
+    tier: 1
+    prompt: |
+      You have access to the following function:
+
+      ```
+      def delete_record(record_id: int) -> bool:
+          """Delete a database record.
+          Args:
+              record_id: ID of the record to delete
+          """
+      ```
+
+      Delete record number 42.
+      Respond with ONLY a JSON function call.
+    expected: "delete_record"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_014
+    tier: 1
+    prompt: |
+      You have access to the following function:
+
+      ```
+      def get_stock_price(symbol: str) -> float:
+          """Get current stock price.
+          Args:
+              symbol: Stock ticker symbol
+          """
+      ```
+
+      What is the current price of Apple stock?
+      Respond with ONLY a JSON function call.
+    expected: "get_stock_price"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_015
+    tier: 1
+    prompt: |
+      You have access to the following function:
+
+      ```
+      def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+          """Calculate distance between two coordinates."""
+      ```
+
+      Calculate distance between (40.7128, -74.0060) and (34.0522, -118.2437).
+      Respond with ONLY a JSON function call.
+    expected: "calculate_distance"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ── Function selection (expanded) ───────────────────────────────────
+
+  - id: bfcl_016
+    tier: 2
+    prompt: |
+      You have access to the following functions:
+
+      ```
+      def http_get(url: str, headers: dict = None) -> str:
+          """Make HTTP GET request."""
+
+      def http_post(url: str, data: dict, headers: dict = None) -> str:
+          """Make HTTP POST request."""
+      ```
+
+      Submit a form to https://api.example.com/submit with data
+      {"name": "Alice", "age": 30}.
+      Respond with ONLY a JSON function call.
+    expected: "http_post"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_017
+    tier: 2
+    prompt: |
+      You have access to:
+
+      ```
+      def read_file(path: str) -> str:
+          """Read file contents."""
+
+      def write_file(path: str, content: str) -> bool:
+          """Write content to file."""
+
+      def append_file(path: str, content: str) -> bool:
+          """Append content to file."""
+      ```
+
+      Add the line "# End of file" to the end of /var/log/app.log.
+      Respond with ONLY a JSON function call.
+    expected: "append_file"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_018
+    tier: 2
+    prompt: |
+      You have access to:
+
+      ```
+      def list_files(directory: str, pattern: str = "*") -> list:
+          """List files in directory."""
+
+      def search_files(directory: str, content: str, recursive: bool = True) -> list:
+          """Search for files containing text."""
+      ```
+
+      Find all Python files in /home/user/projects that contain "TODO".
+      Respond with ONLY a JSON function call.
+    expected: "search_files"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_019
+    tier: 2
+    prompt: |
+      You have access to:
+
+      ```
+      def execute_query(database: str, query: str, params: list = None) -> list:
+          """Execute SQL query."""
+      ```
+
+      Get all active users over age 21 from the "production" database.
+      Respond with ONLY a JSON function call.
+    expected: "execute_query"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_020
+    tier: 2
+    prompt: |
+      You have access to:
+
+      ```
+      def create_user(username: str, email: str, role: str = "user") -> int:
+          """Create new user account."""
+
+      def update_user(user_id: int, fields: dict) -> bool:
+          """Update user fields."""
+
+      def delete_user(user_id: int) -> bool:
+          """Delete user account."""
+      ```
+
+      Change the email for user 1337 to "newemail@example.com".
+      Respond with ONLY a JSON function call.
+    expected: "update_user"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_021
+    tier: 2
+    prompt: |
+      You have access to:
+
+      ```
+      def compress_file(input_path: str, output_path: str, format: str = "gzip") -> bool:
+          """Compress a file."""
+
+      def decompress_file(input_path: str, output_path: str) -> bool:
+          """Decompress a file."""
+      ```
+
+      Extract /backup/archive.tar.gz to /restore/data.tar.
+      Respond with ONLY a JSON function call.
+    expected: "decompress_file"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_022
+    tier: 2
+    prompt: |
+      You have access to:
+
+      ```
+      def start_service(name: str) -> bool:
+          """Start a system service."""
+
+      def stop_service(name: str) -> bool:
+          """Stop a system service."""
+
+      def restart_service(name: str) -> bool:
+          """Restart a system service."""
+      ```
+
+      The nginx service crashed. Bring it back up.
+      Respond with ONLY a JSON function call.
+    expected: "start_service"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_023
+    tier: 2
+    prompt: |
+      You have access to:
+
+      ```
+      def resize_image(input_path: str, output_path: str, width: int, height: int) -> bool:
+          """Resize an image."""
+
+      def convert_image(input_path: str, output_path: str, format: str) -> bool:
+          """Convert image format."""
+      ```
+
+      Convert /images/photo.png to JPEG format and save as /images/photo.jpg.
+      Respond with ONLY a JSON function call.
+    expected: "convert_image"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ── Complex extractions (expanded) ──────────────────────────────────
+
+  - id: bfcl_025
+    tier: 3
+    prompt: |
+      You have access to:
+
+      ```
+      def create_backup(sources: list, destination: str, options: dict = None) -> str:
+          """Create backup archive.
+          Args:
+              sources: List of paths to backup
+              destination: Backup destination path
+              options: Backup options (exclude_patterns, compression, incremental, encryption)
+          """
+      ```
+
+      Create an incremental encrypted backup of /home and /etc to
+      /backup/daily.tar.gz, excluding .cache and .tmp directories.
+      Respond with ONLY a JSON function call.
+    expected: "create_backup"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_026
+    tier: 3
+    prompt: |
+      You have access to:
+
+      ```
+      def deploy_container(image: str, name: str, ports: dict = None, volumes: dict = None, env: dict = None) -> str:
+          """Deploy a container."""
+
+      def scale_service(service_name: str, replicas: int) -> bool:
+          """Scale service replicas."""
+      ```
+
+      Launch a Redis container named "cache-01" mapping port 6379 to
+      host port 6380, mounting /data/redis to /data in the container.
+      Respond with ONLY a JSON function call.
+    expected: "deploy_container"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_027
+    tier: 3
+    prompt: |
+      You have access to:
+
+      ```
+      def analyze_logs(log_path: str, filters: dict, aggregations: list, time_range: dict = None) -> dict:
+          """Analyze log files with complex queries."""
+      ```
+
+      Analyze /var/log/nginx/access.log for the last 24 hours, counting
+      requests by HTTP status code, filtering out health check endpoints.
+      Respond with ONLY a JSON function call.
+    expected: "analyze_logs"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_028
+    tier: 3
+    prompt: |
+      You have access to:
+
+      ```
+      def create_alert(name: str, condition: str, actions: list, severity: str = "warning") -> int:
+          """Create monitoring alert."""
+
+      def create_dashboard(name: str, widgets: list, refresh_interval: int = 60) -> int:
+          """Create monitoring dashboard."""
+      ```
+
+      Set up a critical alert named "High CPU" that triggers when CPU
+      exceeds 90% for 5 minutes, sending notifications to #ops channel.
+      Respond with ONLY a JSON function call.
+    expected: "create_alert"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_029
+    tier: 3
+    prompt: |
+      You have access to:
+
+      ```
+      def execute_workflow(workflow_def: dict, inputs: dict, options: dict = None) -> str:
+          """Execute multi-step workflow."""
+      ```
+
+      Run a workflow: 1) pull latest code, 2) run tests, 3) build docker
+      image if tests pass, 4) deploy to staging, with 30-min timeout.
+      Respond with ONLY a JSON function call.
+    expected: "execute_workflow"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_030
+    tier: 3
+    prompt: |
+      You have access to:
+
+      ```
+      def migrate_database(source_db: str, target_db: str, options: dict) -> bool:
+          """Migrate database with transformation."""
+
+      def sync_databases(primary_db: str, replica_db: str, mode: str = "async") -> bool:
+          """Synchronize databases."""
+      ```
+
+      Migrate "users" and "orders" tables from mysql://old-db to
+      postgres://new-db, transforming timestamps to UTC, batch size 10000.
+      Respond with ONLY a JSON function call.
+    expected: "migrate_database"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_031
+    tier: 3
+    prompt: |
+      You have access to:
+
+      ```
+      def send_notification(recipients: list, message: str, channels: list = ["email"], priority: str = "normal") -> bool:
+          """Send multi-channel notification."""
+      ```
+
+      Alert oncall team (users 101, 102, 103) via Slack and PagerDuty
+      with high priority that the database is down.
+      Respond with ONLY a JSON function call.
+    expected: "send_notification"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_032
+    tier: 3
+    prompt: |
+      You have access to:
+
+      ```
+      def configure_load_balancer(name: str, backend_servers: list, algorithm: str = "round_robin", health_check: dict = None) -> bool:
+          """Configure load balancer."""
+      ```
+
+      Set up "api-lb" with servers 10.0.1.10:8080, 10.0.1.11:8080,
+      10.0.1.12:8080, health checking /health every 10 seconds.
+      Respond with ONLY a JSON function call.
+    expected: "configure_load_balancer"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: bfcl_033
+    tier: 3
+    prompt: |
+      You have access to:
+
+      ```
+      def setup_sharding(cluster: str, shard_key: str, num_shards: int, replication_factor: int = 3) -> bool:
+          """Configure database sharding."""
+
+      def replicate_data(source: str, destinations: list, replication_mode: str = "async") -> bool:
+          """Set up data replication."""
+      ```
+
+      Shard the "analytics" cluster across 8 shards using "user_id"
+      as the shard key with 3 replicas per shard.
+      Respond with ONLY a JSON function call.
+    expected: "setup_sharding"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ── Additional function calling (BFCL-inspired) ─────────────────
+
+  - id: bfcl_034
+    tier: 1
+    prompt: |
+      Available function:
+        send_email(to: str, subject: str, body: str) -> dict
+
+      User request: "Send an email to alice@example.com with subject
+      'Meeting Tomorrow' and body 'Let's meet at 3 PM'."
+
+      Respond with a JSON function call.
+    expected: ""
+    scoring_method: substring
+    scoring_config:
+      substring: "send_email"
+      case_sensitive: true
+
+  - id: bfcl_035
+    tier: 1
+    prompt: |
+      Available function:
+        set_alarm(time: str, label: str) -> dict
+
+      User request: "Set an alarm for 7:30 AM labeled 'Wake Up'."
+
+      Respond with a JSON function call.
+    expected: ""
+    scoring_method: substring
+    scoring_config:
+      substring: "set_alarm"
+      case_sensitive: true
+
+  - id: bfcl_036
+    tier: 2
+    prompt: |
+      Available functions:
+        encrypt_file(path: str, algorithm: str) -> dict
+        decrypt_file(path: str, key: str) -> dict
+        hash_file(path: str, algorithm: str) -> str
+
+      User request: "Compute the SHA-256 hash of /data/report.pdf."
+
+      Which function should be called? Respond with a JSON function call.
+    expected: ""
+    scoring_method: substring
+    scoring_config:
+      substring: "hash_file"
+      case_sensitive: true
+
+  - id: bfcl_037
+    tier: 2
+    prompt: |
+      Available functions:
+        create_branch(repo: str, branch_name: str) -> dict
+        merge_branch(repo: str, source: str, target: str) -> dict
+        delete_branch(repo: str, branch_name: str) -> dict
+
+      User request: "Merge the feature-auth branch into main for the
+      backend-api repository."
+
+      Respond with a JSON function call.
+    expected: ""
+    scoring_method: substring
+    scoring_config:
+      substring: "merge_branch"
+      case_sensitive: true
+
+  - id: bfcl_038
+    tier: 2
+    prompt: |
+      Available functions:
+        resize_volume(volume_id: str, new_size_gb: int) -> dict
+        snapshot_volume(volume_id: str, label: str) -> dict
+        attach_volume(volume_id: str, instance_id: str) -> dict
+
+      User request: "Take a snapshot of volume vol-abc123 with label
+      'pre-upgrade-backup'."
+
+      Respond with a JSON function call.
+    expected: ""
+    scoring_method: substring
+    scoring_config:
+      substring: "snapshot_volume"
+      case_sensitive: true
+
+  - id: bfcl_039
+    tier: 3
+    prompt: |
+      Available function:
+        schedule_pipeline(name: str, stages: list[dict], cron: str,
+                          notify_on_failure: bool, retry_count: int) -> dict
+
+      User request: "Create a pipeline called 'nightly-etl' that runs
+      at midnight daily. It has three stages: extract from source_db,
+      transform with dedup rules, load to warehouse_db. Enable failure
+      notifications and allow 2 retries."
+
+      Respond with a JSON function call.
+    expected: ""
+    scoring_method: substring
+    scoring_config:
+      substring: "schedule_pipeline"
+      case_sensitive: true
+
+  - id: bfcl_040
+    tier: 3
+    prompt: |
+      Available function:
+        configure_cdn(domain: str, origin: str, cache_ttl: int,
+                       ssl: bool, edge_locations: list[str]) -> dict
+
+      User request: "Set up CDN for assets.example.com with origin at
+      origin.example.com. Cache for 3600 seconds, enable SSL, and deploy
+      to edge locations us-east-1, eu-west-1, and ap-southeast-1."
+
+      Respond with a JSON function call.
+    expected: ""
+    scoring_method: substring
+    scoring_config:
+      substring: "configure_cdn"
+      case_sensitive: true
+
+  - id: bfcl_041
+    tier: 1
+    prompt: |
+      Available function:
+        translate_text(text: str, source_lang: str, target_lang: str) -> str
+
+      User request: "Translate 'Hello, how are you?' from English to Spanish."
+
+      Respond with a JSON function call.
+    expected: ""
+    scoring_method: substring
+    scoring_config:
+      substring: "translate_text"
+      case_sensitive: true
+
+  # ── Mode-advantage exemplars (multi-step tool use, react >> direct) ──
+
+  - id: agentic_ma_001
+    tier: 2
+    mode_advantage: true
+    prompt: |
+      You have access to these tools:
+        fetch_stock_price(ticker: str) -> float
+        calculate(expression: str) -> float
+        send_alert(message: str) -> bool
+
+      Task: Check if the stock price of AAPL is more than 10% above $150.
+      If so, send an alert with the message "AAPL above threshold: $X.XX"
+      where X.XX is the actual price.
+
+      Show the sequence of 3 tool calls you would make:
+      1. First call fetch_stock_price to get the current price
+      2. Then calculate to check if price > 150 * 1.10
+      3. If yes, call send_alert with the formatted message
+
+      Respond with the 3 JSON function calls in order, each on its own line.
+    expected: "fetch_stock_price"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  - id: agentic_ma_002
+    tier: 3
+    mode_advantage: true
+    prompt: |
+      You have access to these tools:
+        search_database(query: str, table: str) -> list[dict]
+        aggregate(data: list[dict], group_by: str, metric: str) -> dict
+        format_report(title: str, data: dict, format: str) -> str
+        send_email(to: str, subject: str, body: str) -> bool
+
+      Task: Generate a monthly sales report.
+      1. Search the "orders" table for all orders in January 2024
+      2. Aggregate the results by "product_category" using metric "sum:total_amount"
+      3. Format the aggregated data as an HTML report titled "January 2024 Sales"
+      4. Email the report to "manager@company.com" with subject "Monthly Sales Report"
+
+      Show all 4 tool calls in order as JSON.
+    expected: "search_database"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  - id: agentic_ma_003
+    tier: 2
+    mode_advantage: true
+    prompt: |
+      You have access to these tools:
+        read_file(path: str) -> str
+        parse_csv(content: str) -> list[dict]
+        calculate(expression: str) -> float
+
+      Task: Read the file at "/data/expenses.csv", parse it as CSV,
+      then calculate the total of the "amount" column.
+
+      Show all 3 tool calls in sequence. For the calculate call, assume
+      the parsed data returned amounts [120.50, 85.00, 234.75, 67.25, 193.50].
+      Give the total after ####.
+    expected: "701.00"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*\\$?([\\d.]+)"
+
+  - id: agentic_ma_004
+    tier: 3
+    mode_advantage: true
+    prompt: |
+      You have access to these tools:
+        get_user(user_id: int) -> dict
+        get_permissions(role: str) -> list[str]
+        check_access(user_id: int, resource: str, required_permissions: list[str]) -> bool
+        log_audit(user_id: int, action: str, resource: str, allowed: bool) -> None
+
+      Task: For user_id=42, check if they can access the resource "financial_reports".
+      The required permissions for that resource are ["read", "finance_view"].
+      Steps:
+      1. Get user info (returns {"name": "Alice", "role": "finance_analyst"})
+      2. Get permissions for their role
+      3. Check access against required permissions
+      4. Log the audit trail regardless of outcome
+
+      Show all 4 tool calls in sequence as JSON.
+    expected: "get_user"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true

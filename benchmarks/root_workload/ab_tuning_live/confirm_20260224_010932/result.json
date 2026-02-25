@@ -1,0 +1,68 @@
+{
+  "timestamp": "20260224_010932",
+  "n_tasks": 100,
+  "config": {
+    "label": "haiku_classifier_routing",
+    "description": "Haiku reads the task prompt (~$0.001) and classifies as HAIKU/SONNET/OPUS. Task is then routed to that model. No post-hoc judging. Classifier sees only the task, not the answer.",
+    "enabled": {
+      "0.1": false,
+      "0.2": true,
+      "0.3": false,
+      "0.4": false,
+      "0.5": false,
+      "0.6": false,
+      "10.7.1": false,
+      "10.7.2": false,
+      "10.7.3": false,
+      "10.7.4": true,
+      "10.7.5": true,
+      "10.7.6": false,
+      "10.7.7": true,
+      "10.7.8": false,
+      "10.7.9": true,
+      "10.7.10": false,
+      "10.8": true
+    },
+    "scales": {
+      "0.2": 0.607,
+      "10.7.4": 1.157,
+      "10.7.5": 0.842,
+      "10.7.7": 0.674,
+      "10.7.9": 0.787,
+      "10.8": 1.0
+    },
+    "effect": {
+      "quality": -0.004,
+      "cost": -0.601,
+      "latency": -0.216,
+      "manual": -0.012
+    },
+    "classifier": true
+  },
+  "summary_A": {
+    "arm": "A",
+    "n_tasks": 100,
+    "quality_pass_rate": 0.96,
+    "cost_total": 9.32315575,
+    "cost_per_task": 0.09323155749999999,
+    "p95_latency_s": 38.25482798507437,
+    "timeouts": 0
+  },
+  "summary_B": {
+    "arm": "B",
+    "n_tasks": 100,
+    "quality_pass_rate": 0.93,
+    "cost_total": 7.85742255,
+    "cost_per_task": 0.0785742255,
+    "p95_latency_s": 37.84840433194768,
+    "timeouts": 0,
+    "total_escalations": 0,
+    "tasks_escalated": 0
+  },
+  "deltas": {
+    "quality": -0.029999999999999916,
+    "cost": -0.15721427800881688,
+    "latency": -0.010624113988573308
+  },
+  "decision": "DROP"
+}

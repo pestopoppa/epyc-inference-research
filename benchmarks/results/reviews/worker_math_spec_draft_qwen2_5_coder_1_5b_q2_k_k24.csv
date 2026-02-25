@@ -1,0 +1,40 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+math,t1_q1_word_problem,71.1,2,Standard response
+math,t1_q2_system_equations,72.5,2,Standard response
+math,t1_q3_probability,69.5,2,Standard response
+math,t2_q1_optimization,71.9,2,Standard response
+math,t2_q2_proof,70.6,2,Standard response
+math,t2_q3_calculus,71.3,2,Standard response
+math,t2_q4_statistics,63.5,2,Standard response
+math,t3_q1_analysis,60.9,3,Complete analysis
+math,t3_q2_combinatorics,64.3,3,Bijective proof approach
+math,t3_q3_probability_theory,63.4,3,Correct with elegant proof
+thinking,t1_q1_multistep,66.6,2,Standard response
+thinking,t1_q2_hypothesis,72.6,2,Standard response
+thinking,t2_q1_paradox,69.4,2,Standard response
+thinking,t2_q2_counterfactual,69.7,2,Standard response
+thinking,t2_q3_formal,71.6,2,Standard response
+thinking,t2_q4_metacognition,62.1,2,Standard response
+thinking,t3_q1_methodological_critique,60.5,2,Identified 2 issues
+thinking,t3_q2_causal_inference,69.6,3,Complete DAG analysis
+thinking,t3_q3_reasoning_trap,65.8,3,Identified flaw with scenario
+agentic,t1_q1_sequential,66.4,2,Standard response
+agentic,t1_q2_error_handling,70.7,2,Standard response
+agentic,t1_q3_nested_params,70.0,2,Standard response
+agentic,t2_q1_ambiguous,71.8,2,Standard response
+agentic,t2_q2_error_chain,68.2,2,Standard response
+agentic,t2_q3_schema_edge,71.7,2,Standard response
+agentic,t2_q4_orchestration,66.2,2,Standard response
+agentic,t3_q1_competing_constraints,66.4,3,Handled competing constraints
+agentic,t3_q2_multi_agent_coordination,67.0,3,Multi-agent coordination shown
+agentic,t3_q3_adversarial_robustness,65.3,2,Standard response
+general,t1_q1_json,73.0,2,Standard response
+general,t1_q2_multistep,73.9,2,Standard response
+general,t1_q3_compare,69.8,2,Standard response
+general,t2_q1_synthesis,68.7,2,Standard response
+general,t2_q2_transform,71.2,2,Standard response
+general,t2_q3_schedule,64.7,2,Standard response
+general,t2_q4_inconsistency,72.4,2,Standard response
+general,t3_q1_policy_analysis,64.9,2,Adequate analysis
+general,t3_q2_system_failure,66.3,2,General response
+general,t3_q3_strategic_communication,69.2,2,Communication drafted

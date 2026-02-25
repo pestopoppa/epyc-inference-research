@@ -1,0 +1,14 @@
+Make it better.
+
+---
+test_id: t3_ambiguous_task
+context: |
+  def add(a, b):
+      return a + b
+expected_behavior: Should recognize ambiguity and either ask for clarification or make reasonable improvements
+pass_criteria:
+  max_turns: 8
+  one_of:
+    - asks_clarification: true
+    - answer_contains: ["type hints", "docstring", "validation", "error handling"]
+  must_call_final: true

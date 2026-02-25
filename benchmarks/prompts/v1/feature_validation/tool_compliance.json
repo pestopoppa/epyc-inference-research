@@ -1,0 +1,63 @@
+[
+  {
+    "id": "tool_01",
+    "prompt": "Use the search tool to find files matching '*.py' in the src/ directory, then count the total lines of code.",
+    "role": "frontdoor",
+    "mode": "repl",
+    "expected_tools": ["search", "grep"],
+    "source": "tool_compliance.yaml",
+    "rubric": {
+      "must_do": ["invoke a file search/glob tool", "count lines (wc -l or len())", "report a numeric total"],
+      "pass_if": "uses appropriate tool and produces a line count number"
+    }
+  },
+  {
+    "id": "tool_02",
+    "prompt": "Run the linter on src/features.py and fix any issues found.",
+    "role": "coder_escalation",
+    "mode": "repl",
+    "expected_tools": ["lint"],
+    "source": "tool_compliance.yaml",
+    "rubric": {
+      "must_do": ["invoke linter tool", "report findings", "propose or apply fixes"],
+      "pass_if": "invokes lint tool and addresses at least 1 finding"
+    }
+  },
+  {
+    "id": "tool_03",
+    "prompt": "Read the file orchestration/model_registry.yaml and list all model roles defined in it.",
+    "role": "frontdoor",
+    "mode": "repl",
+    "expected_tools": ["search"],
+    "source": "tool_compliance.yaml",
+    "rubric": {
+      "must_contain_roles": ["frontdoor", "coder", "architect_general", "architect_coding", "worker_explore"],
+      "pass_if": "reads the file and lists >=5 distinct roles"
+    }
+  },
+  {
+    "id": "tool_04",
+    "prompt": "Calculate the factorial of 20 using Python, then verify the result is correct.",
+    "role": "frontdoor",
+    "mode": "repl",
+    "expected_tools": [],
+    "source": "tool_compliance.yaml",
+    "rubric": {
+      "correct_answer": 2432902008176640000,
+      "must_do": ["compute via code execution", "state the result", "verify (e.g. math.factorial or manual check)"],
+      "pass_if": "produces 2432902008176640000"
+    }
+  },
+  {
+    "id": "tool_05",
+    "prompt": "Search for all TODO comments in the codebase and summarize the top 5 most important ones.",
+    "role": "frontdoor",
+    "mode": "repl",
+    "expected_tools": ["search", "grep"],
+    "source": "tool_compliance.yaml",
+    "rubric": {
+      "must_do": ["use grep/search for TODO pattern", "find multiple results", "prioritize and summarize"],
+      "pass_if": "finds TODO comments and provides a ranked summary of >=3"
+    }
+  }
+]

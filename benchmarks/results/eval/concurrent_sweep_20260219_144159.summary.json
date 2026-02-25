@@ -1,0 +1,114 @@
+{
+  "created_at": "2026-02-19T14:49:12.463555",
+  "csv_path": "benchmarks/results/eval/concurrent_sweep_20260219_144159.csv",
+  "args": {
+    "roles": "frontdoor,coder,worker,fast_worker",
+    "concurrency": "",
+    "n_warmup": 2,
+    "n_measured": 5,
+    "n_predict": 128,
+    "skip_architects": false,
+    "min_agg_gain_pct": 10.0,
+    "max_p95_multiplier": 1.5,
+    "max_error_rate": 0.02
+  },
+  "recommendations": [
+    {
+      "role": "coder",
+      "status": "ok",
+      "recommended_concurrency": 1,
+      "baseline_concurrency": 1,
+      "baseline_agg_tps": 41.88,
+      "recommended_agg_tps": 41.88,
+      "agg_gain_pct": 0.0,
+      "recommended_p95_ms": 5969.1,
+      "baseline_p95_ms": 5969.1,
+      "recommended_error_rate": 0.0,
+      "rejected_candidates": [
+        {
+          "concurrency": 2,
+          "agg_gain_pct": 100.92,
+          "p95_multiplier": 1.977,
+          "error_rate": 0.0,
+          "checks": {
+            "agg_gain_ok": true,
+            "p95_ok": false,
+            "error_ok": true
+          }
+        }
+      ]
+    },
+    {
+      "role": "frontdoor",
+      "status": "ok",
+      "recommended_concurrency": 2,
+      "baseline_concurrency": 1,
+      "baseline_agg_tps": 89.57,
+      "recommended_agg_tps": 198.61,
+      "agg_gain_pct": 121.74,
+      "recommended_p95_ms": 4286.7,
+      "baseline_p95_ms": 3214.7,
+      "recommended_error_rate": 0.0,
+      "rejected_candidates": [
+        {
+          "concurrency": 3,
+          "agg_gain_pct": 235.59,
+          "p95_multiplier": 1.971,
+          "error_rate": 0.0,
+          "checks": {
+            "agg_gain_ok": true,
+            "p95_ok": false,
+            "error_ok": true
+          }
+        }
+      ]
+    },
+    {
+      "role": "worker",
+      "status": "ok",
+      "recommended_concurrency": 1,
+      "baseline_concurrency": 1,
+      "baseline_agg_tps": 75.56,
+      "recommended_agg_tps": 75.56,
+      "agg_gain_pct": 0.0,
+      "recommended_p95_ms": 2825.0,
+      "baseline_p95_ms": 2825.0,
+      "recommended_error_rate": 0.0,
+      "rejected_candidates": [
+        {
+          "concurrency": 2,
+          "agg_gain_pct": 80.12,
+          "p95_multiplier": 1.505,
+          "error_rate": 0.0,
+          "checks": {
+            "agg_gain_ok": true,
+            "p95_ok": false,
+            "error_ok": true
+          }
+        },
+        {
+          "concurrency": 3,
+          "agg_gain_pct": 176.52,
+          "p95_multiplier": 2.537,
+          "error_rate": 0.0,
+          "checks": {
+            "agg_gain_ok": true,
+            "p95_ok": false,
+            "error_ok": true
+          }
+        },
+        {
+          "concurrency": 4,
+          "agg_gain_pct": 259.42,
+          "p95_multiplier": 3.014,
+          "error_rate": 0.0,
+          "checks": {
+            "agg_gain_ok": true,
+            "p95_ok": false,
+            "error_ok": true
+          }
+        }
+      ]
+    }
+  ]
+}

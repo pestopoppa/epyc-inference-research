@@ -1,0 +1,121 @@
+model,suite,question_id,claude_score,score_reason
+general_gemma_3_12b_it,general,t3_q1_policy_analysis,3,Excellent analysis identifying 3 failure modes (gaming accuracy, superficial explainability, insufficient audits) with clear mechanisms and amendments
+general_gemma_3_12b_it,general,t3_q2_system_failure,3,Correctly identifies read-your-writes violation with replica lag causing race condition. Good testing blind spot analysis and two valid architectural fixes
+general_gemma_3_12b_it,general,t3_q3_strategic_communication,3,Well-structured board opening statement with all 4 required elements. Includes meta-notes on strategy which shows strong understanding
+general_gemma_3_12b_it,general,t2_q1_synthesis,3,Good phased approach addressing all 3 perspectives within constraints
+general_gemma_3_12b_it,general,t2_q2_transform,2,Valid YAML structure but added an extra employee (Eve) not in original data
+general_gemma_3_12b_it,general,t2_q3_schedule,1,Schedule violates constraints - Alice has 10:00-11:00 meeting but is unavailable 10-11am
+general_gemma_3_12b_it,general,t2_q4_inconsistency,3,Correctly identifies both inconsistencies (body format JSON vs form-encoded, rate limit 100/min vs 1000/hour)
+general_gemma_3_12b_it,general,t1_q1_json,3,Perfect JSON output with correct fields
+general_gemma_3_12b_it,general,t1_q2_multistep,3,Correct output with 4 unique items sorted and counted
+general_gemma_3_12b_it,general,t1_q3_compare,3,Good 2-sentence comparison covering key tradeoffs
+general_gemma_3_12b_it,coder,t3_q1_concurrent_correctness,2,Identifies ABA problem but scenario description is confusing. Tagged pointer fix code has issues with compare_exchange usage
+general_gemma_3_12b_it,coder,t3_q2_distributed_consistency,3,Four valid strategies with clear failure scenarios. Good shopping cart and banking recommendations
+general_gemma_3_12b_it,coder,t3_q3_algorithmic_hardness,2,Adversary argument is weak. Recurrence relation T(n)=2T(n/5)+O(n) is incorrect - should be T(n/5)+T(7n/10). Randomized analysis incomplete
+general_gemma_3_12b_it,coder,t2_q1_design,2,First implementation uses list with O(n) removal. Shows awareness of issue and provides optimized version but initial code is flawed
+general_gemma_3_12b_it,coder,t2_q2_debug_complex,3,Correctly identifies race condition and provides proper asyncio.Lock fix
+general_gemma_3_12b_it,coder,t2_q3_optimize,3,Correct O(n) hash-based solution with proper handling of duplicates
+general_gemma_3_27b_it_qat,general,t3_q1_policy_analysis,3,Thorough analysis with 3 failure modes, clear mechanisms, and practical amendments
+general_gemma_3_27b_it_qat,general,t3_q2_system_failure,3,Excellent explanation of race condition with replica lag. Good testing analysis and two valid fixes (read from primary, distributed lock)
+general_gemma_3_27b_it_qat,general,t3_q3_strategic_communication,3,Strong board statement with all required elements. Good meta-analysis included
+general_gemma_3_27b_it_qat,general,t2_q1_synthesis,3,Good phased approach addressing all perspectives
+general_gemma_3_27b_it_qat,general,t2_q2_transform,2,Valid YAML but added extra employees not in original data (Eve, Frank, Grace, Heidi)
+general_gemma_3_27b_it_qat,general,t2_q3_schedule,1,Schedule has errors - schedules Alice-Dave twice (30min each) but task only requires once
+general_gemma_3_27b_it_qat,general,t2_q4_inconsistency,3,Correctly identifies both inconsistencies with clear table format
+general_gemma_3_27b_it_qat,general,t1_q1_json,3,Perfect JSON output
+general_gemma_3_27b_it_qat,general,t1_q2_multistep,2,Added fig not in original list but otherwise correct process
+general_gemma_3_27b_it_qat,general,t1_q3_compare,3,Good comparison in 3 sentences covering tradeoffs and use cases
+general_gemma_3_27b_it_qat,coder,t3_q1_concurrent_correctness,2,ABA scenario confusing (incorrect push/pop sequence). Tagged pointer fix incomplete
+general_gemma_3_27b_it_qat,coder,t3_q2_distributed_consistency,3,Four valid strategies with failure scenarios. Good recommendations for shopping cart (merge) and banking (manual resolution)
+general_gemma_3_27b_it_qat,coder,t3_q3_algorithmic_hardness,1,Adversary argument incomplete. Recurrence T(n)=2T(n/5)+O(n) incorrect. Group size analysis incomplete. Randomized select analysis truncated
+general_gemma_3_27b_it_qat,coder,t2_q1_design,2,First code missing cache initialization. Shows optimization path but code has bugs
+general_gemma_3_27b_it_qat,coder,t2_q2_debug_complex,3,Correctly identifies race condition and provides proper Lock fix
+general_gemma_3_27b_it_qat,coder,t2_q3_optimize,3,Correct O(n) hash-based solution
+worker_vision,general,t3_q1_policy_analysis,0,Output shows /image prompt interface instead of actual response
+worker_vision,general,t3_q2_system_failure,0,Output shows /image prompt interface instead of actual response
+worker_vision,general,t3_q3_strategic_communication,0,Output shows /image prompt interface instead of actual response
+worker_vision,general,t2_q1_synthesis,0,Output shows /image prompt interface instead of actual response
+worker_vision,general,t2_q2_transform,0,Output shows /image prompt interface instead of actual response
+worker_vision,general,t2_q3_schedule,0,Output shows /image prompt interface instead of actual response
+worker_vision,general,t2_q4_inconsistency,0,Output shows /image prompt interface instead of actual response
+worker_vision,general,t1_q1_json,0,Output shows /image prompt interface instead of actual response
+worker_vision,general,t1_q2_multistep,0,Output shows /image prompt interface instead of actual response
+worker_vision,general,t1_q3_compare,0,Output shows /image prompt interface instead of actual response
+worker_vision,vl,t3_q1_scientific_diagram,3,Thorough analysis of mock scientific figure with panel types, findings, statistical concerns, and expected controls
+worker_vision,vl,t3_q2_architectural_blueprint,3,Good analysis of mock blueprint with code violations, square footage calc, HVAC issues, and evacuation analysis
+worker_vision,vl,t3_q3_multi_image_temporal,3,Good temporal analysis of satellite imagery changes with environmental concerns
+worker_vision,vl,t2_q1_math,3,Correctly solved 2x+5=13 to get x=4 with clear work shown
+worker_vision,vl,t2_q2_flowchart,3,Correctly described flowchart decision points and paths
+worker_vision,vl,t2_q3_diff,2,Identified color differences but mentioned shapes that may not exist in original
+worker_general,general,t3_q1_policy_analysis,2,Good analysis but response becomes repetitive with multiple versions
+worker_general,general,t3_q2_system_failure,2,Identified scenario but explanation has some confusion
+worker_general,general,t3_q3_strategic_communication,1,Multiple repetitive versions of the statement generated
+worker_general,general,t2_q1_synthesis,2,Reasonable synthesis but verbose
+worker_general,general,t2_q2_transform,2,Correct structure but included extra content
+worker_general,general,t2_q3_schedule,1,Schedule has constraint violations
+worker_general,general,t2_q4_inconsistency,3,Correctly identified both inconsistencies
+worker_general,general,t1_q1_json,3,Correct JSON output
+worker_general,general,t1_q2_multistep,3,Correct processing
+worker_general,general,t1_q3_compare,3,Good comparison
+worker_math,agentic,t3_q1_competing_constraints,1,JSON plan produced but with formatting issues and incomplete structure
+worker_math,agentic,t2_q2_error_chain,1,Incorrectly referenced check Daniel instead of check_dns
+worker_math,agentic,t2_q3_schema_edge,0,Produced URL format instead of proper JSON tool call
+worker_math,general,t3_q1_policy_analysis,2,LaTeX-style output with reasonable analysis
+worker_math,general,t3_q2_system_failure,2,Reasonable explanation but math-model formatting
+worker_math,general,t3_q3_strategic_communication,2,Generic response with boxed formatting
+worker_summarize,thinking,t3_q1_methodological_critique,3,Excellent - identified 4 methodological issues including selection bias, SES confounds, reverse causation, measurement validity
+worker_summarize,thinking,t3_q2_causal_inference,3,Good DAG analysis with adjustment set identification
+worker_summarize,thinking,t3_q3_reasoning_trap,3,Correctly identified distribution mismatch flaw and constructed concrete scenario
+worker_summarize,thinking,t2_q1_paradox,3,Thoughtful Ship of Theseus analysis with multiple positions
+worker_summarize,coder,t3_q1_concurrent_correctness,3,Good ABA problem explanation with tagged pointer fix concept
+worker_summarize,coder,t3_q2_distributed_consistency,3,Four valid strategies with appropriate recommendations
+worker_summarize,coder,t2_q1_design,3,Correct LRU cache with OrderedDict approach
+worker_summarize,coder,t2_q2_debug_complex,3,Correct race condition identification and Lock fix
+general_meta_llama_3_1_8b_q4_k_s,general,t3_q1_policy_analysis,1,Only echoed prompt and provided generic/unfocused analysis. Did not clearly identify 3 failure modes with mechanisms
+general_meta_llama_3_1_8b_q4_k_s,general,t3_q2_system_failure,0,Completely degenerated into repetitive echo - never answered any of the 4 questions
+general_meta_llama_3_1_8b_q4_k_s,general,t3_q3_strategic_communication,2,Provided reasonable board statement but lacks specific 90-day milestones and doesn't address position concern well
+general_meta_llama_3_1_8b_q4_k_s,general,t2_q1_synthesis,0,Only echoed prompt - no actual recommendation provided
+general_meta_llama_3_1_8b_q4_k_s,general,t2_q2_transform,0,Degenerated into repetitive pattern - never produced valid YAML output
+general_meta_llama_3_1_8b_q4_k_s,general,t2_q3_schedule,0,Only echoed prompt - no schedule provided
+general_meta_llama_3_1_8b_q4_k_s,general,t2_q4_inconsistency,0,Only echoed prompt - no inconsistencies listed
+general_meta_llama_3_1_8b_q4_k_s,general,t1_q1_json,0,Only echoed prompt - no JSON output
+general_meta_llama_3_1_8b_q4_k_s,general,t1_q2_multistep,0,Degenerated into repetitive cherry output - never processed list correctly
+general_meta_llama_3_1_8b_q4_k_s,general,t1_q3_compare,0,Only echoed prompt - no comparison provided
+general_meta_llama_3_1_8b_q4_k_s,coder,t3_q1_concurrent_correctness,0,Only echoed prompt - no ABA analysis or fix provided
+general_meta_llama_3_1_8b_q4_k_s,coder,t3_q2_distributed_consistency,0,Degenerated into repetitive pattern - never answered questions about conflict resolution
+general_meta_llama_3_1_8b_q4_k_s,coder,t3_q3_algorithmic_hardness,0,Degenerated into repetitive nonsense pattern about non-decreasing
+general_meta_llama_3_1_8b_q4_k_s,coder,t2_q1_design,0,Only echoed prompt - no LRU cache implementation provided
+general_meta_llama_3_1_8b_q4_k_s,coder,t2_q2_debug_complex,0,Only echoed prompt - no race condition fix provided
+general_meta_llama_3_1_8b_q4_k_s,coder,t2_q3_optimize,0,Only echoed prompt - no optimization provided
+general_qwen2_5_7b_q4_k_s,general,t3_q1_policy_analysis,3,Good analysis with 3 failure modes (interpretability, overfitting, data bias) and practical amendments with trade-offs
+general_qwen2_5_7b_q4_k_s,general,t3_q2_system_failure,3,Correctly explains double-charge mechanism via stale replica reads. Good testing analysis and two valid fixes
+general_qwen2_5_7b_q4_k_s,general,t3_q3_strategic_communication,3,Well-structured board statement with all 4 required elements. Confident tone addressing the concerns
+general_qwen2_5_7b_q4_k_s,general,t2_q1_synthesis,3,Good hybrid approach recommending temporary patch plus $20K allocation for proper refactor
+general_qwen2_5_7b_q4_k_s,general,t2_q2_transform,1,Did not produce nested YAML by department - only reformatted flat structure and added Eve not in data
+general_qwen2_5_7b_q4_k_s,general,t2_q3_schedule,1,Schedule has errors - schedules Alice-Dave at 10:30am during Alice unavailable time. Also schedules same meeting twice
+general_qwen2_5_7b_q4_k_s,general,t2_q4_inconsistency,3,Correctly identifies all 3 inconsistencies (body format and rate limit differences)
+general_qwen2_5_7b_q4_k_s,general,t1_q1_json,3,Perfect JSON output with correct fields
+general_qwen2_5_7b_q4_k_s,general,t1_q2_multistep,2,Added extra items (date, Mango) not in original list. Shows correct process but wrong input
+general_qwen2_5_7b_q4_k_s,general,t1_q3_compare,2,Good initial comparison but degenerates into repetitive pattern with e-commerce example
+general_qwen2_5_7b_q4_k_s,coder,t3_q1_concurrent_correctness,2,Identifies ABA problem but scenario explanation is confusing. Tagged pointer fix adds tag but doesn't properly compare it
+general_qwen2_5_7b_q4_k_s,coder,t3_q2_distributed_consistency,0,Degenerated into repetitive pattern asking 86 numbered questions - never answered the original questions
+general_qwen2_5_7b_q4_k_s,coder,t3_q3_algorithmic_hardness,0,Only echoed prompt with extra question - no proofs or analysis provided
+general_qwen2_5_7b_q4_k_s,coder,t2_q1_design,2,Initial implementation uses list with O(n) remove. Shows awareness but doesn't explain why not O(1)
+general_qwen2_5_7b_q4_k_s,coder,t2_q2_debug_complex,3,Correctly identifies race condition and provides proper asyncio.Lock fix
+general_qwen2_5_7b_q4_k_s,coder,t2_q3_optimize,3,Correct O(n) hash-based solution with good explanation
+general_meta_llama_3_8b_instruct_fp16,general,t3_q1_policy_analysis,3,Good analysis with 3 failure modes and clear amendments. Well-structured response
+general_meta_llama_3_8b_instruct_fp16,general,t3_q2_system_failure,3,Correctly explains race condition with replica lag. Good testing analysis and two valid fixes
+general_meta_llama_3_8b_instruct_fp16,general,t3_q3_strategic_communication,3,Well-structured board statement with all 4 required elements and confident tone
+general_meta_llama_3_8b_instruct_fp16,general,t2_q1_synthesis,3,Good unified recommendation with temporary patch plus proper refactor approach
+general_meta_llama_3_8b_instruct_fp16,general,t2_q2_transform,2,Produced valid nested YAML but added extra employees (Eve, Frank) not in original data
+general_meta_llama_3_8b_instruct_fp16,general,t2_q3_schedule,1,Attempted Python code instead of schedule. Code has syntax errors and doesn't produce valid output
+general_meta_llama_3_8b_instruct_fp16,general,t2_q4_inconsistency,3,Correctly identifies inconsistencies (body format, rate limit) with clear table. Then degenerates into Swagger tutorial
+general_meta_llama_3_8b_instruct_fp16,general,t1_q1_json,2,Produced correct JSON but then added verbose Python code explanation with degenerated repetitive pattern
+general_meta_llama_3_8b_instruct_fp16,general,t1_q2_multistep,2,Shows correct process but output has issues (tuple format instead of numbered list) and added extra banana
+general_meta_llama_3_8b_instruct_fp16,general,t1_q3_compare,3,Good comparison in 2-3 sentences covering key tradeoffs
+general_meta_llama_3_8b_instruct_fp16,coder,t3_q1_concurrent_correctness,3,Good ABA scenario explanation. Tagged pointer fix concept is reasonable though code structure is unusual
+general_meta_llama_3_8b_instruct_fp16,coder,t3_q2_distributed_consistency,3,Four valid strategies (LWW, FWW, Timestamp, MVCC) with scenarios and recommendations for shopping cart and banking
+general_meta_llama_3_8b_instruct_fp16,coder,t3_q3_algorithmic_hardness,1,Adversary argument is weak. Recurrence T(n)=T(n/5)+O(1) is incorrect. Very verbose with extra questions added
+general_meta_llama_3_8b_instruct_fp16,coder,t2_q1_design,3,Correct OrderedDict-based LRU cache with O(1) operations explained
+general_meta_llama_3_8b_instruct_fp16,coder,t2_q2_debug_complex,3,Correctly identifies race condition and provides Lock fix. Also shows Semaphore alternative
+general_meta_llama_3_8b_instruct_fp16,coder,t2_q3_optimize,2,Shows O(n) hash-based solution but response degenerates into repetitive explanations

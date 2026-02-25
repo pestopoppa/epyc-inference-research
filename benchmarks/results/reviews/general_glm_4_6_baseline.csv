@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,3.57,3,Expert-level analysis with formal concepts
+thinking,t3_q2_causal_inference,3.54,3,Expert-level analysis with formal concepts
+thinking,t3_q3_reasoning_trap,3.49,3,Expert-level analysis with formal concepts
+thinking,t2_q1_paradox,3.51,2,Attempted multi-step reasoning
+thinking,t2_q2_counterfactual,3.45,2,Partial causal reasoning
+thinking,t2_q3_formal,3.47,1,Attempted statistical problem
+thinking,t2_q4_metacognition,3.47,2,Substantial response with reasoning
+thinking,t1_q1_multistep,3.45,1,Attempted logic problem
+thinking,t1_q2_hypothesis,3.55,1,Attempted sequence problem
+thinking,t1_q3_planning,3.51,1,Attempted game theory problem
+instruction_precision,t3_q1_self_referential,4.12,2,Response generated
+instruction_precision,t3_q2_cascading_constraints,4.03,2,Response generated
+instruction_precision,t3_q3_meta_instruction,4.05,2,Response generated
+instruction_precision,t2_q1_resist_elaboration,4.23,2,Response generated
+instruction_precision,t2_q2_maintain_format,4.45,2,Response generated
+instruction_precision,t2_q3_empty_handling,5.19,1,Brief response
+instruction_precision,t2_q4_conflicting_constraints,4.09,2,Response generated
+instruction_precision,t1_q1_negative_instruction,4.17,2,Response generated
+instruction_precision,t1_q2_word_limit,4.19,2,Response generated
+instruction_precision,t1_q3_structured_format,1000000.0,0,Minimal output
+instruction_precision,t1_q4_multiple_constraints,4.77,1,Brief response
+agentic,t3_q1_competing_constraints,3.45,2,Response generated
+agentic,t3_q2_multi_agent_coordination,4.0,2,Response generated
+agentic,t3_q3_adversarial_robustness,4.06,2,Response generated
+agentic,t2_q1_ambiguous,4.37,2,Response generated
+agentic,t2_q2_error_chain,1000000.0,0,Minimal output
+agentic,t2_q3_schema_edge,1000000.0,0,Minimal output
+agentic,t2_q4_orchestration,3.94,2,Response generated
+agentic,t1_q1_sequential,1000000.0,0,Minimal output
+agentic,t1_q2_error_handling,1000000.0,0,Minimal output
+agentic,t1_q3_nested_params,1000000.0,0,Minimal output
+long_context,t3_q1_multi_hop_reasoning,0.59,2,Response generated
+long_context,t3_q2_contradiction_detection,0.79,2,Response generated
+long_context,t3_q3_evolving_requirements,1000000.0,0,Minimal output
+long_context,t2_q1_deep_needle,0.0,1,Brief response
+long_context,t2_q2_synthesis,1000000.0,0,Minimal output
+long_context,t2_q3_architecture,0.48,2,Response generated
+long_context,t1_q1_needle,1000000.0,0,Minimal output
+long_context,t1_q2_multi_file,1.56,2,Response generated
+long_context,t1_q3_extraction,1.28,2,Response generated
+coder,t3_q1_concurrent_correctness,3.29,2,Response generated
+coder,t3_q2_distributed_consistency,3.29,2,Response generated
+coder,t3_q3_algorithmic_hardness,3.26,2,Response generated
+coder,t2_q1_design,3.44,2,Response generated
+coder,t2_q2_debug_complex,3.42,2,Response generated
+coder,t2_q3_optimize,3.42,2,Response generated
+coder,t2_q4_system,3.48,2,Response generated
+coder,t1_q1_algorithm,3.38,2,Response generated
+coder,t1_q2_refactor,3.41,2,Response generated
+coder,t1_q3_test,3.47,2,Response generated
+general,t3_q1_policy_analysis,3.39,2,General response generated
+general,t3_q2_system_failure,3.36,2,General response generated
+general,t3_q3_strategic_communication,3.36,2,General response generated
+general,t2_q1_synthesis,4.35,2,General response generated
+general,t2_q2_transform,3.47,2,General response generated
+general,t2_q3_schedule,3.45,2,General response generated
+general,t2_q4_inconsistency,3.44,2,General response generated
+general,t1_q1_json,1000000.0,0,Empty or minimal output
+general,t1_q2_multistep,3.68,2,General response generated
+general,t1_q3_compare,4.16,2,General response generated
+math,t3_q1_analysis,3.42,2,Response generated
+math,t3_q2_combinatorics,3.47,2,Response generated
+math,t3_q3_probability_theory,3.41,2,Response generated
+math,t2_q1_optimization,3.51,2,Response generated
+math,t2_q2_proof,3.33,2,Response generated
+math,t2_q3_calculus,3.45,2,Response generated
+math,t2_q4_statistics,3.43,2,Response generated
+math,t1_q1_word_problem,3.53,2,Response generated
+math,t1_q2_system_equations,3.48,2,Response generated
+math,t1_q3_probability,3.51,2,Response generated

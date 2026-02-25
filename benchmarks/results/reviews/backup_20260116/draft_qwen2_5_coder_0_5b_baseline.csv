@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,160.7,2,Reasonable analysis of failure modes
+general,t3_q2_system_failure,152.4,1,Mentions idempotency but doesn't identify exact timing issue
+general,t3_q3_strategic_communication,135.7,0,Repetitive garbage output
+general,t2_q1_synthesis,162.6,2,Good structure but no concrete synthesized recommendation
+general,t2_q2_transform,159.6,0,Adds extra employees - incorrect transformation
+general,t2_q3_schedule,137.4,1,Good problem decomposition but no actual solution
+general,t2_q4_inconsistency,162.9,2,Starts identifying inconsistencies properly
+general,t1_q1_json,72.6,0,Empty response
+general,t1_q2_multistep,129.6,0,Repetitive garbage output
+general,t1_q3_compare,89.0,0,Empty response
+thinking,t3_q1_methodological_critique,138.4,2,Good identification of control group bias
+thinking,t3_q2_causal_inference,158.5,2,Good structure identifying MSAS concept
+thinking,t3_q3_reasoning_trap,128.7,0,Empty response
+thinking,t2_q1_paradox,167.0,2,Good philosophical analysis approach
+thinking,t2_q2_counterfactual,168.7,2,Good counterfactual analysis structure
+thinking,t2_q3_formal,171.0,2,Good proof approach and logical structure
+thinking,t2_q4_metacognition,73.7,0,Empty response
+thinking,t1_q1_multistep,159.7,2,Good step by step calculation approach
+thinking,t1_q2_hypothesis,162.8,2,Good identification of social factors as alternatives
+thinking,t1_q3_planning,153.9,2,Good systematic approach but incomplete

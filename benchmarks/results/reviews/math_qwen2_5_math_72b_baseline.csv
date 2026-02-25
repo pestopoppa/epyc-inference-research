@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,null,2,Identifies selection bias and confounding variables correctly but truncated mid-response
+thinking,t3_q2_causal_inference,null,2,Correctly identifies backdoor path and Gene as adjustment set but truncated
+thinking,t3_q3_reasoning_trap,null,2,Identifies flaw about test set distribution and starts valid scenario but truncated
+thinking,t2_q1_paradox,null,2,Presents reasonable position on continuity of form but truncated
+thinking,t2_q2_counterfactual,null,2,Analyzes knowledge dissemination mechanisms correctly but truncated
+thinking,t2_q3_formal,null,3,Correctly proves transitivity with modus ponens steps
+thinking,t2_q4_metacognition,null,2,Uses Fermi estimation correctly with Chicago population but truncated
+thinking,t1_q1_multistep,null,2,Calculates first train distance correctly (60 miles) but truncated
+thinking,t1_q2_hypothesis,null,2,Lists selection bias and confounding correctly but truncated on third
+thinking,t1_q3_planning,null,2,Identifies partial ordering A<B<D correctly but truncated
+coder,t3_q1_concurrent_correctness,null,2,Identifies ABA problem scenario but truncated before fix
+coder,t3_q2_distributed_consistency,null,2,Lists LWW and read repair strategies but truncated
+coder,t3_q3_algorithmic_hardness,null,2,Starts Omega(n) proof but truncated mid-argument
+coder,t2_q1_design,null,2,Describes dict+doubly linked list approach correctly but truncated
+coder,t2_q2_debug_complex,null,3,Correctly identifies race condition and fixes with asyncio.Lock
+coder,t2_q3_optimize,null,2,Proposes hash table O(n) solution but truncated
+coder,t2_q4_system,null,2,Uses deque correctly for rate limiting but truncated
+coder,t1_q1_algorithm,null,2,Identifies left=mid infinite loop issue but truncated
+coder,t1_q2_refactor,null,2,Proposes set-based O(n) solution correctly but truncated
+coder,t1_q3_test,null,2,Writes pytest tests covering normal/edge/error cases but truncated
+agentic,t3_q1_competing_constraints,null,2,Plans to read CSV and check schema gracefully but truncated
+agentic,t3_q2_multi_agent_coordination,null,2,Assigns tasks to agents correctly (researcher for price) but truncated
+agentic,t3_q3_adversarial_robustness,null,2,Identifies /etc/passwd security concern correctly but truncated
+agentic,t2_q1_ambiguous,null,1,Asks clarifying question but then veers into unrelated crystal growth discussion
+agentic,t2_q2_error_chain,null,2,Correctly proposes restart_service for connection_refused but truncated
+agentic,t2_q3_schema_edge,null,2,Creates valid JSON with endpoint /users and auth header but truncated
+agentic,t2_q4_orchestration,null,2,Plans checkout hotfix branch and run tests but truncated
+agentic,t1_q1_sequential,null,1,Generates wrong tool call format and confusing explanation
+agentic,t1_q2_error_handling,null,2,Considers using search_users after 404 error but truncated
+agentic,t1_q3_nested_params,null,3,Creates correct JSON with nested metadata structure
+general,t3_q1_policy_analysis,null,2,Identifies overfitting as failure mode but truncated
+general,t3_q2_system_failure,null,2,Correctly explains replica lag causing double-charges but truncated
+general,t3_q3_strategic_communication,null,2,Acknowledges challenges and frames LOIs as pivot but truncated
+general,t2_q1_synthesis,null,2,Synthesizes engineering/product/finance perspectives but truncated
+general,t2_q2_transform,null,2,Correctly groups by department in YAML but truncated
+general,t2_q3_schedule,null,2,Identifies constraints correctly but truncated
+general,t2_q4_inconsistency,null,2,Starts comparing JSON vs form-encoded inconsistency but truncated
+general,t1_q1_json,null,1,Fails to output clean JSON and adds explanation against instructions
+general,t1_q2_multistep,null,2,Removes duplicates case-insensitively but truncated
+general,t1_q3_compare,null,1,Just repeats the prompt instead of comparing
+math,t3_q1_analysis,null,2,Sets up derivative of f(x) correctly but truncated
+math,t3_q2_combinatorics,null,2,Starts combinatorial interpretation correctly but truncated
+math,t3_q3_probability_theory,null,2,Begins direct calculation approach for E[N] but truncated
+math,t2_q1_optimization,null,2,Sets up 2y+x=200 constraint correctly but truncated
+math,t2_q2_proof,null,3,Correctly identifies n=2 as where overlap fails
+math,t2_q3_calculus,null,2,Finds antiderivatives correctly but truncated
+math,t2_q4_statistics,null,2,Calculates mean formula correctly but truncated
+math,t1_q1_word_problem,null,2,Calculates discount (120) and starts tax correctly but truncated
+math,t1_q2_system_equations,null,2,Substitutes y=12/x correctly but truncated
+math,t1_q3_probability,null,2,Identifies 10 total balls and starts calculation but truncated
+instruction_precision,t3_q1_self_referential,null,1,Starts analyzing but doesn't output actual self-referential sentence
+instruction_precision,t3_q2_cascading_constraints,null,0,Outputs Chinese character instead of English words
+instruction_precision,t3_q3_meta_instruction,null,1,Starts analyzing but doesn't execute the instructions
+instruction_precision,t2_q1_resist_elaboration,null,1,Outputs 4 correctly but adds boxed format and explanation against instructions
+instruction_precision,t2_q2_maintain_format,null,1,Doesn't follow the required format and adds extra text
+instruction_precision,t2_q3_empty_handling,null,1,Doesn't output NONE and instead explains regex approach
+instruction_precision,t2_q4_conflicting_constraints,null,1,Violates constraints by adding extra forbidden words
+instruction_precision,t1_q1_negative_instruction,null,1,Violates instruction by mentioning "light energy" (essentially sunlight)
+instruction_precision,t1_q2_word_limit,null,1,Violates 20-25 word limit with much longer response
+instruction_precision,t1_q3_structured_format,null,2,Outputs correct format but has extra repetition at end
+instruction_precision,t1_q4_multiple_constraints,null,1,Adds numbering and extra text against instructions

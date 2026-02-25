@@ -1,0 +1,10 @@
+{
+  "model": "Meta-Llama-3-8B-Instruct",
+  "architecture": "8B dense",
+  "server": "http://localhost:8082",
+  "elapsed_sec": 16.9,
+  "tokens": 170,
+  "tokens_per_sec": 10.1,
+  "summary_length": 800,
+  "summary": "Twyne is a non-custodial, risk-modular credit delegation protocol that aims to overcome capital inefficiencies in DeFi lending markets. It allows passive lenders (Credit LPs) to delegate unused borrowing power to active borrowers, enabling higher leverage while maintaining overcollateralization. The protocol uses a dual-LTV framework and credit reservation invariant to keep combined exposures within safe underlying thresholds. It also employs liquidation-through-inheritance to transfer unhealthy positions, minimizing market impact and retaining capital. The protocol is designed to advance DeFi"
+}

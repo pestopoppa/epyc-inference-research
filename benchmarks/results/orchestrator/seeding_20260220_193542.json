@@ -1,0 +1,60 @@
+{
+  "config": {
+    "suites": [
+      "gpqa",
+      "usaco",
+      "livecodebench",
+      "debugbench",
+      "mode_advantage_hard",
+      "math",
+      "hotpotqa",
+      "simpleqa",
+      "agentic",
+      "coder",
+      "long_context",
+      "mode_advantage",
+      "thinking",
+      "general",
+      "instruction_precision",
+      "vl",
+      "tool_compliance"
+    ],
+    "roles": [
+      "frontdoor",
+      "coder_escalation",
+      "coder_escalation",
+      "architect_general",
+      "architect_coding",
+      "worker_vision",
+      "vision_escalation"
+    ],
+    "modes": [
+      "direct",
+      "repl"
+    ],
+    "combos": [
+      "worker_vision:direct",
+      "frontdoor:direct",
+      "worker_vision:repl",
+      "coder_escalation:direct",
+      "coder_escalation:direct",
+      "architect_general:direct",
+      "architect_coding:direct",
+      "vision_escalation:direct",
+      "frontdoor:repl",
+      "coder_escalation:repl",
+      "coder_escalation:repl",
+      "architect_general:delegated",
+      "architect_coding:delegated"
+    ],
+    "sample_size": 10,
+    "seed": 1771616134,
+    "dry_run": false,
+    "dedup": true,
+    "alias_map": {
+      "coder_escalation": "coder_escalation"
+    }
+  },
+  "results": [],
+  "timestamp": "2026-02-20T19:35:42.899485"
+}

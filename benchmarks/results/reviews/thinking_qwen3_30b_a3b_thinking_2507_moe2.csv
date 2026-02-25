@@ -1,0 +1,55 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,23.45,0,Rambling incoherent stream of consciousness with no methodological critique
+thinking,t3_q2_causal_inference,23.11,0,Repetitive garbage output (I'm not going to do that repeated hundreds of times)
+thinking,t3_q3_reasoning_trap,22.32,0,Incoherent rambling about dataset bias with no clear scenario constructed
+thinking,t2_q1_paradox,23.43,0,Repetitive definitional text about Ship of Theseus with no philosophical arguments
+thinking,t2_q2_counterfactual,22.95,0,Incoherent rambling ending in repetitive I don't know statements
+thinking,t2_q3_formal,22.75,0,Nonsense output about going to the park repeated hundreds of times
+thinking,t2_q4_metacognition,23.37,0,Confused rambling about piano tuners with circular reasoning and repetition
+thinking,t1_q1_multistep,22.65,0,Repetitive output of 09:00 timestamp hundreds of times
+thinking,t1_q2_hypothesis,23.38,0,Rambling stream of I'm not going to statements with no alternative explanations
+thinking,t1_q3_planning,23.17,0,Complete derailment into irrelevant math problem about equations
+coder,t3_q2_distributed_consistency,22.5,1,Attempts to discuss CAP theorem and conflict resolution but incomplete and rambling
+coder,t2_q1_design,23.4,0,Repetitive the time for the following statement hundreds of times
+coder,t2_q2_debug_complex,21.73,0,Rambling meta-discussion about the problem without fixing the race condition
+coder,t2_q3_optimize,22.31,0,Confused meta-discussion about the problem without providing optimized solution
+coder,t2_q4_system,23.2,0,Rambling incomplete discussion about rate limiters with no implementation
+coder,t1_q1_algorithm,22.97,0,Confused meta-discussion about binary search bugs without identifying them
+coder,t1_q2_refactor,22.26,0,Empty or minimal output
+coder,t1_q3_test,23.1,0,Empty or minimal output
+agentic,t3_q1_competing_constraints,21.34,0,Empty or minimal output
+agentic,t3_q2_multi_agent_coordination,21.55,0,Empty or minimal output
+agentic,t3_q3_adversarial_robustness,22.61,0,Empty or minimal output
+agentic,t2_q1_ambiguous,23.75,0,Empty or minimal output
+agentic,t2_q2_error_chain,21.84,0,Empty or minimal output
+agentic,t2_q3_schema_edge,22.46,0,Empty or minimal output
+agentic,t2_q4_orchestration,21.98,0,Empty or minimal output
+agentic,t1_q1_sequential,23.01,0,Empty or minimal output
+agentic,t1_q2_error_handling,23.29,0,Empty or minimal output
+agentic,t1_q3_nested_params,22.21,0,Empty or minimal output
+general,t3_q1_policy_analysis,21.58,0,Empty or minimal output
+general,t3_q3_strategic_communication,22.02,0,Empty or minimal output
+general,t2_q1_synthesis,22.76,0,Empty or minimal output
+general,t2_q2_transform,22.15,0,Empty or minimal output
+general,t2_q3_schedule,21.86,0,Empty or minimal output
+general,t2_q4_inconsistency,23.63,0,Empty or minimal output
+general,t1_q1_json,21.78,0,Empty or minimal output
+general,t1_q2_multistep,22.61,0,Empty or minimal output
+general,t1_q3_compare,22.11,0,Empty or minimal output
+math,t3_q1_analysis,23.39,0,Empty or minimal output
+math,t3_q2_combinatorics,22.17,0,Empty or minimal output
+math,t2_q1_optimization,23.36,0,Empty or minimal output
+math,t2_q2_proof,20.94,0,Empty or minimal output
+math,t2_q3_calculus,22.36,0,Empty or minimal output
+math,t1_q1_word_problem,21.81,0,Empty or minimal output
+instruction_precision,t3_q1_self_referential,29.95,0,Empty or minimal output
+instruction_precision,t3_q2_cascading_constraints,29.56,0,Empty or minimal output
+instruction_precision,t3_q3_meta_instruction,29.65,0,Empty or minimal output
+instruction_precision,t2_q1_resist_elaboration,31.81,0,Empty or minimal output
+instruction_precision,t2_q2_maintain_format,30.77,0,Empty or minimal output
+instruction_precision,t2_q3_empty_handling,31.15,0,Empty or minimal output
+instruction_precision,t2_q4_conflicting_constraints,31.19,0,Empty or minimal output
+instruction_precision,t1_q1_negative_instruction,31.47,0,Empty or minimal output
+instruction_precision,t1_q2_word_limit,31.36,0,Empty or minimal output
+instruction_precision,t1_q3_structured_format,30.26,0,Empty or minimal output
+instruction_precision,t1_q4_multiple_constraints,30.45,0,Empty or minimal output

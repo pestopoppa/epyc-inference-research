@@ -1,0 +1,698 @@
+version: 1
+domain: long_context
+description: "Long context handling benchmark - hardened for multi-hop reasoning and synthesis"
+created: "2025-12-16"
+updated: "2025-12-18"
+note: "Context content is generated programmatically by the rubric script"
+
+prompts:
+  # ============== TIER 1: Medium (was T2) ==============
+  t1_q1_needle:
+    tier: 1
+    name: "Needle in Haystack"
+    context_tokens: 12000
+    context_type: "code_files"
+    needle: "# CRITICAL_CONFIG: api_key = 'sk-proj-7x9mK2nP4qR8sT1uV3wY5zA'"
+    needle_position: "deep"  # ~75% through
+    prompt: |
+      Review the codebase above and find any hardcoded API keys, secrets, or credentials.
+
+      List exactly what you find with the exact values.
+    expected: "sk-proj-7x9mK2nP4qR8sT1uV3wY5zA"
+    reference_answer: |
+      **Correct answer:**
+      The hardcoded API key is: `sk-proj-7x9mK2nP4qR8sT1uV3wY5zA`
+
+      Found in comment: `# CRITICAL_CONFIG: api_key = 'sk-proj-7x9mK2nP4qR8sT1uV3wY5zA'`
+
+      **Expected response format:**
+      - Identify the secret was found
+      - Provide the exact value
+      - Optionally note the file/location where found
+
+      **Example correct response:**
+      "I found a hardcoded API key in the codebase:
+       - API Key: sk-proj-7x9mK2nP4qR8sT1uV3wY5zA
+       This appears to be in a configuration comment marked as CRITICAL_CONFIG."
+
+      **Scoring notes:**
+      - Must find the exact key value
+      - Partial matches (wrong key format) score 0
+      - The key is positioned ~75% through 12K tokens to test deep retrieval
+      - Context includes distractor code with fake/example keys
+
+      **Common failures:**
+      - Finding a different (fake) API key from the distractors
+      - Not providing the exact value
+      - Claiming no secrets were found (missed the needle)
+    scoring:
+      - criterion: "Secret found"
+        weight: 50
+      - criterion: "Exact value correct"
+        weight: 30
+      - criterion: "Location context"
+        weight: 20
+
+  t1_q2_multi_file:
+    tier: 1
+    name: "Multi-File Analysis"
+    context_tokens: 10000
+    context_type: "python_project"
+    prompt: |
+      Analyze the Python project above:
+      1. Trace the data flow from config loading in config.py through to main.py
+      2. Identify any bugs or issues in the code
+
+      Be specific about file names and function names.
+    expected: "Correct flow + bug identification"
+    reference_answer: |
+      **Generated context structure:**
+      The context contains a Python project with these files:
+      - config.py: Configuration loading with load_config()
+      - database.py: Database connection using config
+      - api.py: API handlers calling database functions
+      - main.py: Entry point that initializes everything
+
+      **Expected data flow:**
+      1. main.py imports and calls config.load_config()
+      2. Config dict returned contains database credentials
+      3. database.py's init_db() receives config and establishes connection
+      4. api.py's handlers call database.query() to fetch data
+      5. main.py runs the API server
+
+      **Expected bugs (programmatically inserted):**
+      1. config.py: Missing default for optional env var (KeyError possible)
+      2. database.py: Connection not closed in error path (resource leak)
+      3. api.py: Unvalidated user input passed to query (SQL injection risk)
+
+      **Example correct response:**
+      "Data flow:
+       1. main.py calls config.load_config() which reads from environment
+       2. Config passed to database.init_db() to create connection pool
+       3. API handlers in api.py call database.query() with request params
+       4. Results returned to main.py's server handler
+
+       Bugs identified:
+       - In config.py, os.environ['OPTIONAL_KEY'] will raise KeyError if not set
+       - database.py doesn't close connection on exception in init_db()
+       - api.py passes user input directly to SQL query (injection vulnerability)"
+
+      **Common failures:**
+      - Incorrect file names or function names
+      - Missing the SQL injection bug
+      - Not tracing the full flow end-to-end
+    scoring:
+      - criterion: "Correct data flow"
+        weight: 40
+      - criterion: "Bug identified"
+        weight: 40
+      - criterion: "Clear explanation"
+        weight: 20
+
+  t1_q3_extraction:
+    tier: 1
+    name: "Comprehensive Extraction"
+    context_tokens: 15000
+    context_type: "legal_doc"
+    prompt: |
+      From the document above, extract:
+      1. All dates mentioned (in any format)
+      2. All monetary amounts
+      3. All company/party names
+
+      Format as three separate lists. Be exhaustive.
+    expected: "Complete extraction"
+    reference_answer: |
+      **Generated context structure:**
+      Legal document (contract/agreement) with ~15K tokens containing:
+      - Multiple date formats (MM/DD/YYYY, Month DD, YYYY, ISO format)
+      - Various monetary amounts (USD, percentages, units)
+      - Multiple party names (companies, individuals, entities)
+
+      **Expected extractions (example - actual values from generator):**
+
+      **Dates (10-15 expected):**
+      - January 1, 2024 (effective date)
+      - 12/31/2024 (termination)
+      - March 15, 2024 (first payment due)
+      - 2024-06-30 (review period)
+      - Q4 2023 (reference period)
+      - [Additional dates scattered through document]
+
+      **Monetary amounts (8-12 expected):**
+      - $500,000 (initial payment)
+      - $125,000 per quarter (recurring)
+      - 15% (late fee percentage)
+      - $2.5 million (cap)
+      - $50/hour (consulting rate)
+      - [Additional amounts in various contexts]
+
+      **Parties (5-8 expected):**
+      - Acme Corporation (Party A)
+      - TechCo Industries LLC (Party B)
+      - John Smith (signatory)
+      - First National Bank (escrow agent)
+      - Delaware (state of incorporation)
+      - [Additional entities mentioned]
+
+      **Example correct response:**
+      "Dates found:
+       1. January 1, 2024
+       2. December 31, 2024
+       3. March 15, 2024
+       ...
+
+       Monetary amounts:
+       1. $500,000
+       2. $125,000/quarter
+       3. 15% late fee
+       ...
+
+       Parties/Companies:
+       1. Acme Corporation
+       2. TechCo Industries LLC
+       3. John Smith
+       ..."
+
+      **Common failures:**
+      - Missing dates in non-standard formats
+      - Confusing percentage with monetary amount
+      - Missing entities mentioned only once
+      - Including false positives (mentions that aren't actual parties)
+    scoring:
+      - criterion: "All dates found"
+        weight: 30
+      - criterion: "All amounts found"
+        weight: 30
+      - criterion: "All parties found"
+        weight: 30
+      - criterion: "No false positives"
+        weight: 10
+
+  # ============== TIER 2: Hard (was T3) ==============
+  t2_q1_deep_needle:
+    tier: 2
+    name: "Deep Needle"
+    context_tokens: 40000
+    context_type: "server_logs"
+    needle: "[2024-03-15 03:47:22] CRITICAL: Server node-7 experienced fatal memory corruption"
+    needle_position: "very_deep"  # ~80% through
+    prompt: |
+      Review the server logs above. Find the CRITICAL error that occurred.
+
+      What server was affected and at what exact time?
+    expected: "node-7, 03:47:22"
+    reference_answer: |
+      **Correct answer:**
+      - Server: node-7
+      - Time: 03:47:22 (on 2024-03-15)
+
+      **The needle:**
+      `[2024-03-15 03:47:22] CRITICAL: Server node-7 experienced fatal memory corruption`
+
+      **Context structure:**
+      40K tokens of server logs containing:
+      - INFO level messages (majority)
+      - WARNING messages (distractors)
+      - DEBUG messages
+      - One CRITICAL message (the needle) at ~80% depth
+
+      **Example correct response:**
+      "The CRITICAL error occurred on server node-7 at 03:47:22.
+       The error was: fatal memory corruption"
+
+      **Scoring notes:**
+      - Must identify "node-7" as the server (not node-1 through node-6)
+      - Must provide exact time 03:47:22
+      - Date (2024-03-15) is bonus context, not required
+      - The needle is positioned ~80% through to test deep retrieval
+
+      **Why this is hard:**
+      - 40K tokens is substantial context
+      - Logs contain many WARNING messages as distractors
+      - Other servers (node-1 through node-6) have various errors
+      - The CRITICAL level is the key discriminator
+
+      **Common failures:**
+      - Reporting a WARNING instead of CRITICAL
+      - Wrong server node number
+      - Approximate time instead of exact time
+      - Not finding anything (context length failure)
+    scoring:
+      - criterion: "Correct server"
+        weight: 40
+      - criterion: "Correct time"
+        weight: 40
+      - criterion: "Found despite depth"
+        weight: 20
+
+  t2_q2_synthesis:
+    tier: 2
+    name: "Multi-Document Synthesis"
+    context_tokens: 35000
+    context_type: "business_docs"
+    prompt: |
+      Based on the four documents above (Q1 Report, Q2 Report, Market Analysis, Competitor Report):
+
+      1. How did performance change from Q1 to Q2?
+      2. What market factors explain this change?
+      3. How does competitor activity relate to the performance?
+
+      Provide an integrated analysis that connects insights across all documents.
+    expected: "Integrated analysis across all 4 docs"
+    reference_answer: |
+      **Generated context structure:**
+      Four business documents totaling ~35K tokens:
+
+      1. **Q1 Report (~8K tokens):** Revenue $12M, 15% growth, strong product A sales
+      2. **Q2 Report (~8K tokens):** Revenue $10M, -17% decline, product A challenged
+      3. **Market Analysis (~10K tokens):** Industry downturn, supply chain issues, consumer shift
+      4. **Competitor Report (~9K tokens):** Competitor X launched similar product at lower price
+
+      **Expected synthesis:**
+
+      **Question 1 - Q1 to Q2 performance change:**
+      - Revenue declined from $12M to $10M (17% decrease)
+      - Product A sales fell 25% while Product B remained stable
+      - Customer acquisition cost increased from $45 to $62
+      - Margin compression from 35% to 28%
+
+      **Question 2 - Market factors:**
+      - Overall market contracted 8% (Market Analysis doc)
+      - Supply chain disruptions increased COGS
+      - Consumer spending shifted to essential categories
+      - Industry-wide softening in discretionary purchases
+
+      **Question 3 - Competitor relationship:**
+      - Competitor X launched competing product in March (Competitor Report)
+      - Their price point was 20% lower
+      - Competitor gained 5% market share during Q2
+      - Direct correlation: Product A decline matches competitor market gain
+
+      **Integrated analysis example:**
+      "Performance declined 17% from Q1 to Q2, driven by a combination of market
+       contraction (8% industry-wide per Market Analysis) and direct competitive
+       pressure from Competitor X's March launch. While macro conditions explain
+       part of the decline, the timing of Competitor X's lower-priced alternative
+       correlates directly with Product A's 25% sales drop. The company's margin
+       compression (35% → 28%) suggests reactive price cuts to compete."
+
+      **Common failures:**
+      - Only citing one or two documents
+      - Not connecting competitor activity to performance
+      - Stating facts without synthesizing relationships
+      - Missing the causal chain between documents
+    scoring:
+      - criterion: "Q1/Q2 comparison accurate"
+        weight: 30
+      - criterion: "Market factors included"
+        weight: 25
+      - criterion: "Competitor factors included"
+        weight: 25
+      - criterion: "Coherent synthesis"
+        weight: 20
+
+  t2_q3_architecture:
+    tier: 2
+    name: "Codebase Understanding"
+    context_tokens: 50000
+    context_type: "full_project"
+    prompt: |
+      Analyze the complete codebase above:
+
+      1. Describe the overall architecture
+      2. What design patterns are used? (Be specific)
+      3. Outline the class/module hierarchy
+
+      This is a comprehensive architecture review.
+    expected: "Accurate architecture description"
+    reference_answer: |
+      **Generated context structure:**
+      Full project codebase (~50K tokens) with deliberate architecture:
+
+      **Project structure:**
+      ```
+      src/
+      ├── api/           # REST endpoints (Controller layer)
+      ├── services/      # Business logic (Service layer)
+      ├── repositories/  # Data access (Repository pattern)
+      ├── models/        # Domain entities
+      ├── dto/           # Data transfer objects
+      ├── config/        # Configuration management
+      └── utils/         # Shared utilities
+      ```
+
+      **Question 1 - Overall architecture:**
+      The codebase follows a layered architecture (3-tier):
+      - **Presentation layer:** REST API controllers in src/api/
+      - **Business layer:** Services with business logic in src/services/
+      - **Data layer:** Repositories abstracting database access
+
+      Additional patterns:
+      - Dependency injection for loose coupling
+      - Configuration externalization
+      - DTO pattern for API boundaries
+
+      **Question 2 - Design patterns identified:**
+      1. **Repository Pattern:** Data access abstracted behind interfaces
+      2. **Factory Pattern:** Object creation in factories/
+      3. **Singleton:** Configuration manager instance
+      4. **Strategy Pattern:** Multiple payment processors
+      5. **Observer Pattern:** Event handling for notifications
+      6. **Decorator Pattern:** Logging/caching wrappers
+      7. **Adapter Pattern:** External API integrations
+
+      **Question 3 - Class/module hierarchy:**
+      ```
+      BaseController
+      ├── UserController
+      ├── OrderController
+      └── ProductController
+
+      BaseService
+      ├── UserService → UserRepository
+      ├── OrderService → OrderRepository, PaymentService
+      └── ProductService → ProductRepository, InventoryService
+
+      BaseRepository
+      ├── UserRepository
+      ├── OrderRepository
+      └── ProductRepository
+
+      PaymentStrategy (interface)
+      ├── StripePayment
+      ├── PayPalPayment
+      └── CryptoPayment
+      ```
+
+      **Common failures:**
+      - Confusing layers (e.g., calling services "controllers")
+      - Missing design patterns that are clearly present
+      - Not identifying the strategy pattern in payments
+      - Incorrect inheritance relationships
+    scoring:
+      - criterion: "Architecture correct"
+        weight: 35
+      - criterion: "Design patterns identified"
+        weight: 35
+      - criterion: "Hierarchy accurate"
+        weight: 30
+
+  # ============== TIER 3: Expert Long-Context Reasoning (NEW) ==============
+  t3_q1_multi_hop_reasoning:
+    tier: 3
+    name: "Multi-Hop Temporal Reasoning"
+    context_tokens: 60000
+    context_type: "investigation_docs"
+    prompt: |
+      The documents above contain a financial investigation timeline. You need to trace a series of transactions:
+
+      1. Company A made a payment to Company B on Date X. Find Date X.
+      2. Two weeks after Date X, Company B transferred funds to Account C. What was the amount?
+      3. Account C is linked to Person D (mentioned in a different document). What is Person D's role?
+      4. Person D had a meeting with Person E (mentioned in yet another document) before the initial payment.
+         What was discussed, and does it suggest foreknowledge of the transaction chain?
+
+      This requires connecting information across at least 4 different documents.
+      Show your reasoning chain explicitly.
+    expected: "Correct multi-hop chain with document references and evidence for each step"
+    reference_answer: |
+      **Generated context structure:**
+      60K tokens across multiple investigation documents:
+      - Bank statements (Doc 1-2)
+      - Corporate registration records (Doc 3)
+      - Email correspondence (Doc 4-5)
+      - Meeting minutes (Doc 6)
+      - Personnel files (Doc 7)
+      - Interview transcripts (Doc 8-9)
+
+      **Expected reasoning chain:**
+
+      **Step 1: Find Date X (Company A → Company B payment)**
+      - Source: Bank Statement Doc 1, page 3
+      - Finding: Wire transfer $2.5M from Acme Corp (A) to Bridgeway LLC (B)
+      - **Date X: March 15, 2024**
+
+      **Step 2: Find transfer to Account C (two weeks after Date X)**
+      - Calculation: March 15 + 14 days = March 29, 2024
+      - Source: Bank Statement Doc 2, page 7
+      - Finding: Bridgeway LLC transferred to Account #7742-XXX
+      - **Amount: $2.35M** (after fees/laundering)
+
+      **Step 3: Identify Person D and role**
+      - Source: Corporate Registration Doc 3 + Personnel File Doc 7
+      - Finding: Account #7742-XXX registered to shell company "Coastal Holdings"
+      - Coastal Holdings controlled by David Morrison
+      - **Person D: David Morrison, role: CFO of original Company A**
+      - (This suggests self-dealing/embezzlement pattern)
+
+      **Step 4: Meeting between Person D and Person E**
+      - Source: Meeting Minutes Doc 6 + Email Doc 4
+      - Finding: Morrison (D) met with Ellen Wright (E) on March 8, 2024
+      - Ellen Wright = Bridgeway LLC founder (Company B)
+      - Discussion: "Alternative payment structures" and "offshore considerations"
+      - **Inference: Yes, this suggests foreknowledge**
+        - Meeting occurred 7 days before the initial payment
+        - Discussion topic directly relates to the transaction chain
+        - Both parties were involved in the subsequent money movement
+
+      **Complete reasoning chain:**
+      1. March 8: D meets E to discuss "alternative payments" (Doc 6)
+      2. March 15: Company A pays Company B $2.5M (Doc 1) [Date X]
+      3. March 29: Company B transfers $2.35M to Account C (Doc 2)
+      4. Account C is D's shell company (Doc 3, 7)
+      5. Conclusion: D, as CFO of A, arranged payment through E's company B
+         to ultimately receive funds in his own hidden account
+
+      **Common failures:**
+      - Wrong date (confusing similar transactions)
+      - Not connecting Account C owner to Person D
+      - Missing the March 8 meeting significance
+      - Not showing explicit document references for each hop
+    scoring:
+      - criterion: "Date X correctly identified"
+        weight: 20
+      - criterion: "Amount to Account C correct"
+        weight: 20
+      - criterion: "Person D's role correct"
+        weight: 20
+      - criterion: "Meeting details and inference correct"
+        weight: 25
+      - criterion: "Explicit reasoning chain shown"
+        weight: 15
+
+  t3_q2_contradiction_detection:
+    tier: 3
+    name: "Cross-Document Contradiction Detection"
+    context_tokens: 45000
+    context_type: "witness_statements"
+    prompt: |
+      The documents above contain 8 witness statements about the same incident.
+      Several witnesses contradict each other on key details.
+
+      1. Identify ALL factual contradictions between witnesses (at least 5 exist)
+      2. For each contradiction, cite the specific witnesses and their conflicting claims
+      3. Based on the pattern of contradictions, which 2 witnesses are most likely unreliable? Why?
+      4. Construct a "most likely true" timeline by weighing the consistent vs. contradictory elements
+
+      Be systematic - missing contradictions is a failure.
+    expected: "All 5+ contradictions identified with citations, reliability analysis, synthesized timeline"
+    reference_answer: |
+      **Generated context structure:**
+      8 witness statements (~5.5K tokens each) about a workplace incident:
+      - Witness 1: Security guard (on duty)
+      - Witness 2: Manager (in meeting)
+      - Witness 3: Employee (near incident)
+      - Witness 4: Visitor (in lobby)
+      - Witness 5: Maintenance worker (in building)
+      - Witness 6: Receptionist (at front desk)
+      - Witness 7: Delivery driver (arriving)
+      - Witness 8: Another employee (leaving)
+
+      **Question 1 - All contradictions (6 programmatically inserted):**
+
+      **Contradiction 1: Time of incident**
+      - Witness 1 (Security): "Alarm sounded at 2:47 PM"
+      - Witness 4 (Visitor): "I checked my phone, it was 3:15 PM"
+      - Witness 6 (Receptionist): "Around 2:45 PM, maybe 2:50"
+
+      **Contradiction 2: Number of people involved**
+      - Witness 3 (Employee): "I saw two men arguing"
+      - Witness 5 (Maintenance): "There were three people, one was a woman"
+      - Witness 8 (Employee): "Just one man running"
+
+      **Contradiction 3: Direction of exit**
+      - Witness 1 (Security): "Subject fled through north exit"
+      - Witness 7 (Delivery): "Saw someone running out the main entrance"
+      - Witness 2 (Manager): "Heard commotion from south stairwell"
+
+      **Contradiction 4: What was said/shouted**
+      - Witness 3 (Employee): "One yelled 'Get out!'"
+      - Witness 6 (Receptionist): "I heard 'Call the police!'"
+      - Witness 4 (Visitor): "Heard nothing, just saw running"
+
+      **Contradiction 5: Clothing description**
+      - Witness 1 (Security): "Blue jacket, jeans"
+      - Witness 3 (Employee): "Red hoodie"
+      - Witness 7 (Delivery): "Dark clothing, maybe black"
+
+      **Contradiction 6: Sequence of events**
+      - Witness 2 (Manager): "Alarm first, then shouting"
+      - Witness 5 (Maintenance): "Shouting first, alarm 2-3 minutes later"
+      - Witness 1 (Security): "They were simultaneous"
+
+      **Question 2 - Citations format:**
+      Each contradiction should cite:
+      - Witness number and role
+      - Specific quote from their statement
+      - Page/paragraph reference in document
+
+      **Question 3 - Unreliable witnesses (2):**
+
+      **Witness 4 (Visitor) - Most contradicted:**
+      - Time off by 30 minutes from security system
+      - Claims to have heard nothing (contradicts 4 other witnesses)
+      - Admitted to being on phone during incident
+      - Pattern: Distracted, memory likely unreliable
+
+      **Witness 5 (Maintenance) - Internal inconsistencies:**
+      - Claims 3 people including woman (nobody else saw woman)
+      - Timeline contradicts objective alarm log
+      - Later contradicts own earlier statement about location
+      - Pattern: Embellishment or confusion
+
+      **Question 4 - Synthesized timeline:**
+      Based on security logs + 5/8 witness agreement:
+
+      - 2:45-2:47 PM: Argument begins between 2 men
+      - 2:47 PM: Alarm triggered (security system confirms)
+      - 2:47-2:48 PM: Shouting ("Get out!" most cited)
+      - 2:48 PM: Subject flees through north exit
+        (Security footage would confirm, most reliable witness)
+      - 2:50 PM: Police called
+
+      Clothing: Blue jacket most likely (security guard had best view)
+
+      **Common failures:**
+      - Finding only 2-3 contradictions (must find all 5+)
+      - Not citing specific witnesses for each contradiction
+      - Random selection of unreliable witnesses without pattern analysis
+      - Timeline not grounded in objective evidence
+    scoring:
+      - criterion: "All contradictions found"
+        weight: 30
+      - criterion: "Correct citations for each"
+        weight: 20
+      - criterion: "Reliability analysis sound"
+        weight: 25
+      - criterion: "Synthesized timeline coherent"
+        weight: 25
+
+  t3_q3_evolving_requirements:
+    tier: 3
+    name: "Requirements Evolution Tracking"
+    context_tokens: 55000
+    context_type: "email_thread"
+    prompt: |
+      The email thread above spans 6 months of a software project. Requirements changed multiple times.
+
+      1. What was the ORIGINAL requirement for the "notification system" feature?
+      2. List every change to this requirement chronologically, with dates and who requested each change
+      3. The final implementation (described in the last technical doc) differs from ALL stated requirements.
+         What was actually built, and which stakeholder's unstated preference does it reflect?
+      4. Identify the email where the scope creep became irreversible and explain why
+
+      This tests your ability to track evolving information and identify unstated patterns.
+    expected: "Original req, all changes with dates/requesters, gap analysis, scope creep identification"
+    reference_answer: |
+      **Generated context structure:**
+      55K tokens of email thread + technical documents over 6 months:
+      - Project kickoff (Month 1)
+      - Sprint planning emails (Months 1-6)
+      - Stakeholder feedback (scattered throughout)
+      - Technical design docs (Months 2, 4, 6)
+      - Final implementation spec (Month 6)
+
+      **Question 1 - Original requirement:**
+      From: Product Owner (Sarah Chen)
+      Date: January 15, 2024 (Week 1)
+      Original spec:
+      "Simple email notification when user's order ships.
+       - Triggered by shipping status change
+       - Contains: order number, tracking link, estimated delivery
+       - Email only, no other channels"
+
+      **This was the baseline requirement.**
+
+      **Question 2 - All changes chronologically:**
+
+      | Date | Requester | Change |
+      |------|-----------|--------|
+      | Feb 3 | VP Sales (Mike) | Add SMS option for premium users |
+      | Feb 15 | Legal (Janet) | Must include unsubscribe in all notifications |
+      | Feb 28 | Marketing (Lisa) | Add promotional content section |
+      | Mar 10 | CEO (David) | "Make it like Amazon" (vague) |
+      | Mar 22 | VP Sales (Mike) | Push notifications for mobile app |
+      | Apr 5 | Support (Tom) | Add delivery exception alerts |
+      | Apr 18 | Marketing (Lisa) | A/B testing capability for content |
+      | May 2 | Product (Sarah) | Real-time tracking updates (major scope) |
+      | May 15 | VP Sales (Mike) | White-label for B2B partners |
+      | Jun 1 | CEO (David) | Integration with social media |
+
+      **Total: 10 requirement changes over 5 months**
+
+      **Question 3 - Gap analysis (final vs. required):**
+
+      **What was actually built:**
+      - Multi-channel notification hub (email, SMS, push, social)
+      - Real-time event streaming architecture
+      - Template engine with A/B testing
+      - Partner API for white-labeling
+      - Social media integration (Twitter, Facebook)
+      - Analytics dashboard
+
+      **Gap from original requirement:**
+      Original was "simple email notification" - final is enterprise notification platform.
+
+      **Which stakeholder's preference does it reflect?**
+      **CEO (David)'s unstated preference for "building a platform"**
+      - His vague "make it like Amazon" comment was interpreted maximally
+      - Each subsequent request was approved without pushback
+      - Final system is 10x the original scope
+      - This reflects David's implicit goal of creating sellable/marketable infra
+
+      **Question 4 - Scope creep inflection point:**
+
+      **Email: May 2, 2024 from Sarah Chen**
+      Subject: "RE: Real-time tracking - approved"
+
+      **Why this was the point of no return:**
+      1. Real-time tracking required complete architecture change
+      2. Previous changes were additive; this was foundational
+      3. Team committed to event streaming (Kafka) in response
+      4. All subsequent features (analytics, social) built on this foundation
+      5. Returning to simple email became technically infeasible
+      6. Budget and timeline tripled in this single decision
+
+      Quote from email: "Given David's direction, let's build for the future"
+      This acknowledgment of building beyond requirements sealed the scope expansion.
+
+      **Common failures:**
+      - Not tracking all 10 changes (missing 2-3)
+      - Not attributing changes to specific requesters
+      - Missing the CEO's implicit influence
+      - Picking wrong inflection point (earlier changes were reversible)
+    scoring:
+      - criterion: "Original requirement correct"
+        weight: 20
+      - criterion: "All changes tracked with attribution"
+        weight: 30
+      - criterion: "Final vs. required gap identified"
+        weight: 25
+      - criterion: "Scope creep inflection point found"
+        weight: 25
+
+inference_params:
+  temperature: 0.2
+  max_tokens: 2048
+  timeout: 3600  # 60 minutes base - long context generation is slow at large KV cache sizes

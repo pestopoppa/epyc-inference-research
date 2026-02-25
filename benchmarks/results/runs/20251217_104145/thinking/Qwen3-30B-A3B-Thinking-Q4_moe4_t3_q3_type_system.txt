@@ -1,0 +1,246 @@
+build: 7404 (52392291b) with GNU 13.3.0 for Linux x86_64
+main: llama backend init
+main: load the model and apply lora adapter, if any
+llama_model_loader: loaded meta data with 45 key-value pairs and 579 tensors from /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/Qwen3-30B-A3B-Thinking-2507-Q4_K_S.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen3moe
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Qwen3-30B-A3B-Thinking-2507
+llama_model_loader: - kv   3:                            general.version str              = 2507
+llama_model_loader: - kv   4:                           general.finetune str              = Thinking
+llama_model_loader: - kv   5:                           general.basename str              = Qwen3-30B-A3B-Thinking-2507
+llama_model_loader: - kv   6:                       general.quantized_by str              = Unsloth
+llama_model_loader: - kv   7:                         general.size_label str              = 30B-A3B
+llama_model_loader: - kv   8:                            general.license str              = apache-2.0
+llama_model_loader: - kv   9:                       general.license.link str              = https://huggingface.co/Qwen/Qwen3-30B...
+llama_model_loader: - kv  10:                           general.repo_url str              = https://huggingface.co/unsloth
+llama_model_loader: - kv  11:                   general.base_model.count u32              = 1
+llama_model_loader: - kv  12:                  general.base_model.0.name str              = Qwen3 30B A3B Thinking 2507
+llama_model_loader: - kv  13:               general.base_model.0.version str              = 2507
+llama_model_loader: - kv  14:          general.base_model.0.organization str              = Qwen
+llama_model_loader: - kv  15:              general.base_model.0.repo_url str              = https://huggingface.co/Qwen/Qwen3-30B...
+llama_model_loader: - kv  16:                               general.tags arr[str,3]       = ["qwen", "qwen3", "unsloth"]
+llama_model_loader: - kv  17:                       qwen3moe.block_count u32              = 48
+llama_model_loader: - kv  18:                    qwen3moe.context_length u32              = 262144
+llama_model_loader: - kv  19:                  qwen3moe.embedding_length u32              = 2048
+llama_model_loader: - kv  20:               qwen3moe.feed_forward_length u32              = 6144
+llama_model_loader: - kv  21:              qwen3moe.attention.head_count u32              = 32
+llama_model_loader: - kv  22:           qwen3moe.attention.head_count_kv u32              = 4
+llama_model_loader: - kv  23:                    qwen3moe.rope.freq_base f32              = 10000000.000000
+llama_model_loader: - kv  24:  qwen3moe.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  25:                 qwen3moe.expert_used_count u32              = 8
+llama_model_loader: - kv  26:              qwen3moe.attention.key_length u32              = 128
+llama_model_loader: - kv  27:            qwen3moe.attention.value_length u32              = 128
+llama_model_loader: - kv  28:                      qwen3moe.expert_count u32              = 128
+llama_model_loader: - kv  29:        qwen3moe.expert_feed_forward_length u32              = 768
+llama_model_loader: - kv  30:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  31:                         tokenizer.ggml.pre str              = qwen2
+llama_model_loader: - kv  32:                      tokenizer.ggml.tokens arr[str,151936]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  33:                  tokenizer.ggml.token_type arr[i32,151936]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  34:                      tokenizer.ggml.merges arr[str,151387]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  35:                tokenizer.ggml.eos_token_id u32              = 151645
+llama_model_loader: - kv  36:            tokenizer.ggml.padding_token_id u32              = 151654
+llama_model_loader: - kv  37:               tokenizer.ggml.add_bos_token bool             = false
+llama_model_loader: - kv  38:                    tokenizer.chat_template str              = {%- if tools %}\n    {{- '<|im_start|>...
+llama_model_loader: - kv  39:               general.quantization_version u32              = 2
+llama_model_loader: - kv  40:                          general.file_type u32              = 14
+llama_model_loader: - kv  41:                      quantize.imatrix.file str              = Qwen3-30B-A3B-Thinking-2507-GGUF/imat...
+llama_model_loader: - kv  42:                   quantize.imatrix.dataset str              = unsloth_calibration_Qwen3-30B-A3B-Thi...
+llama_model_loader: - kv  43:             quantize.imatrix.entries_count u32              = 384
+llama_model_loader: - kv  44:              quantize.imatrix.chunks_count u32              = 684
+llama_model_loader: - type  f32:  241 tensors
+llama_model_loader: - type q4_K:  327 tensors
+llama_model_loader: - type q5_K:   10 tensors
+llama_model_loader: - type q6_K:    1 tensors
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = Q4_K - Small
+print_info: file size   = 16.25 GiB (4.57 BPW) 
+validate_override: Using metadata override (  int) 'qwen3moe.expert_used_count' = 4
+load: printing all EOG tokens:
+load:   - 151643 ('<|endoftext|>')
+load:   - 151645 ('<|im_end|>')
+load:   - 151662 ('<|fim_pad|>')
+load:   - 151663 ('<|repo_name|>')
+load:   - 151664 ('<|file_sep|>')
+load: special tokens cache size = 26
+load: token to piece cache size = 0.9311 MB
+print_info: arch             = qwen3moe
+print_info: vocab_only       = 0
+print_info: n_ctx_train      = 262144
+print_info: n_embd           = 2048
+print_info: n_embd_inp       = 2048
+print_info: n_layer          = 48
+print_info: n_head           = 32
+print_info: n_head_kv        = 4
+print_info: n_rot            = 128
+print_info: n_swa            = 0
+print_info: is_swa_any       = 0
+print_info: n_embd_head_k    = 128
+print_info: n_embd_head_v    = 128
+print_info: n_gqa            = 8
+print_info: n_embd_k_gqa     = 512
+print_info: n_embd_v_gqa     = 512
+print_info: f_norm_eps       = 0.0e+00
+print_info: f_norm_rms_eps   = 1.0e-06
+print_info: f_clamp_kqv      = 0.0e+00
+print_info: f_max_alibi_bias = 0.0e+00
+print_info: f_logit_scale    = 0.0e+00
+print_info: f_attn_scale     = 0.0e+00
+print_info: n_ff             = 6144
+print_info: n_expert         = 128
+print_info: n_expert_used    = 4
+print_info: n_expert_groups  = 0
+print_info: n_group_used     = 0
+print_info: causal attn      = 1
+print_info: pooling type     = 0
+print_info: rope type        = 2
+print_info: rope scaling     = linear
+print_info: freq_base_train  = 10000000.0
+print_info: freq_scale_train = 1
+print_info: n_ctx_orig_yarn  = 262144
+print_info: rope_yarn_log_mul= 0.0000
+print_info: rope_finetuned   = unknown
+print_info: model type       = 30B.A3B
+print_info: model params     = 30.53 B
+print_info: general.name     = Qwen3-30B-A3B-Thinking-2507
+print_info: n_ff_exp         = 768
+print_info: vocab type       = BPE
+print_info: n_vocab          = 151936
+print_info: n_merges         = 151387
+print_info: BOS token        = 11 ','
+print_info: EOS token        = 151645 '<|im_end|>'
+print_info: EOT token        = 151645 '<|im_end|>'
+print_info: PAD token        = 151654 '<|vision_pad|>'
+print_info: LF token         = 198 'Ċ'
+print_info: FIM PRE token    = 151659 '<|fim_prefix|>'
+print_info: FIM SUF token    = 151661 '<|fim_suffix|>'
+print_info: FIM MID token    = 151660 '<|fim_middle|>'
+print_info: FIM PAD token    = 151662 '<|fim_pad|>'
+print_info: FIM REP token    = 151663 '<|repo_name|>'
+print_info: FIM SEP token    = 151664 '<|file_sep|>'
+print_info: EOG token        = 151643 '<|endoftext|>'
+print_info: EOG token        = 151645 '<|im_end|>'
+print_info: EOG token        = 151662 '<|fim_pad|>'
+print_info: EOG token        = 151663 '<|repo_name|>'
+print_info: EOG token        = 151664 '<|file_sep|>'
+print_info: max token length = 256
+load_tensors: loading model tensors, this can take a while... (mmap = true)
+load_tensors:   CPU_Mapped model buffer size = 16533.65 MiB
+load_tensors:   CPU_REPACK model buffer size = 15387.75 MiB
+....................................................................................................
+common_init_result: added <|endoftext|> logit bias = -inf
+common_init_result: added <|im_end|> logit bias = -inf
+common_init_result: added <|fim_pad|> logit bias = -inf
+common_init_result: added <|repo_name|> logit bias = -inf
+common_init_result: added <|file_sep|> logit bias = -inf
+llama_context: constructing llama_context
+llama_context: n_seq_max     = 1
+llama_context: n_ctx         = 4096
+llama_context: n_ctx_seq     = 4096
+llama_context: n_batch       = 2048
+llama_context: n_ubatch      = 512
+llama_context: causal_attn   = 1
+llama_context: flash_attn    = auto
+llama_context: kv_unified    = false
+llama_context: freq_base     = 10000000.0
+llama_context: freq_scale    = 1
+llama_context: n_ctx_seq (4096) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+llama_context:        CPU  output buffer size =     0.58 MiB
+llama_kv_cache:        CPU KV buffer size =   384.00 MiB
+llama_kv_cache: size =  384.00 MiB (  4096 cells,  48 layers,  1/1 seqs), K (f16):  192.00 MiB, V (f16):  192.00 MiB
+llama_context: Flash Attention was auto, set to enabled
+llama_context:        CPU compute buffer size =   304.75 MiB
+llama_context: graph nodes  = 2647
+llama_context: graph splits = 106 (with bs=512), 1 (with bs=1)
+common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+main: llama threadpool init, n_threads = 96
+main: chat template is available, enabling conversation mode (disable it with -no-cnv)
+*** User-specified prompt will pre-start conversation, did you mean to set --system-prompt (-sys) instead?
+main: chat template example:
+<|im_start|>system
+You are a helpful assistant<|im_end|>
+<|im_start|>user
+Hello<|im_end|>
+<|im_start|>assistant
+Hi there<|im_end|>
+<|im_start|>user
+How are you?<|im_end|>
+<|im_start|>assistant
+
+
+system_info: n_threads = 96 (n_threads_batch = 96) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+
+main: interactive mode on.
+sampler seed: 729996297
+sampler params: 
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
+	top_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.600
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000
+sampler chain: logits -> penalties -> dry -> top-n-sigma -> top-k -> typical -> top-p -> min-p -> xtc -> temp-ext -> dist 
+generate: n_ctx = 4096, n_batch = 2048, n_predict = 512, n_keep = 0
+
+== Running in interactive mode. ==
+ - Press Ctrl+C to interject at any time.
+ - Press Return to return control to the AI.
+ - To return control without starting a new line, end your input with '/'.
+ - If you want to submit another line, end your input with '\'.
+ - Not using system message. To change it, set a different value via -sys PROMPT
+
+user
+Consider this function:
+
+from typing import Sequence, TypeVar
+T = TypeVar('T')
+
+def first_or_default(items: Sequence[T], default: T) -> T:
+    return items[0] if items else default
+
+What happens with: first_or_default([], None)?
+Is the type signature correct? What is the subtle issue?
+assistant
+<think>
+We are given a function `first_or_default` that takes a sequence `items` and a `default` value of type `T` and returns the first element of the sequence if it's not empty, otherwise returns the `default` value.
+
+The function is defined as:
+```python
+from typing import Sequence, TypeVar
+T = TypeVar('T')
+
+def first_or_default(items: Sequence[T], default: T) -> T:
+    return items[0] if items else default
+```
+
+Now, the question asks: What happens with `first_or_default([], None)`?
+
+Let's break it down:
+
+1. The function is called with `items = []` (an empty list) and `default = None`.
+2. Since `items` is empty, the condition `if items` is `False` (because an empty list is falsy), so the function returns `default`.
+3. The `default` in this call is `None`, so it returns `None`.
+
+But note: the return type of the function is `T` (the same type as the elements of `items`). However, in the call `first_or_default([], None)`, we are passing `items` as an empty list (which is a `Sequence` of some type, say `T1`), and `default` as `None` (which is of type `None`).
+
+The issue is with the type system and the actual runtime behavior.
+
+The problem is that the type of `items` is inferred from the first argument. In the call `first_or_default([], None)`:
+- The empty list `[]` is of type `List[SomeType]` but the empty list doesn't tell us the type. However, note that the empty list `[]` is a `Sequence` but the type of the generic `T` for the sequence is not constrained by the fact that it's empty.
+
+But the issue is more subtle: the type system expects that the `default` value is of the same type as the elements of `items` (because `T` is the same for both the items and the default). However, in the example, we are passing an empty list for `items` (which is a sequence of some type `T` that is not specified, but the empty list doesn't give us a concrete type) and then we pass `None` as the `default`.
+
+The type checker (like mypy) would see:
+- The first argument is `[]
+> EOF by user
+
+
+common_perf_print:    sampling time =      62.50 ms
+common_perf_print:    samplers time =      27.05 ms /   588 tokens
+common_perf_print:        load time =    9443.63 ms
+common_perf_print: prompt eval time =     239.20 ms /    76 tokens (    3.15 ms per token,   317.73 tokens per second)
+common_perf_print:        eval time =   12444.12 ms /   511 runs   (   24.35 ms per token,    41.06 tokens per second)
+common_perf_print:       total time =   12783.22 ms /   587 tokens
+common_perf_print: unaccounted time =      37.40 ms /   0.3 %      (total - sampling - prompt eval - eval) / (total)
+common_perf_print:    graphs reused =        509
+llama_memory_breakdown_print: | memory breakdown [MiB] | total   free     self   model   context   compute    unaccounted |
+llama_memory_breakdown_print: |   - Host               |                 17222 = 16533 +     384 +     304                |
+llama_memory_breakdown_print: |   - CPU_REPACK         |                 15387 = 15387 +       0 +       0                |

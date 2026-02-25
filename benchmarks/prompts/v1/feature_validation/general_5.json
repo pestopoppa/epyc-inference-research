@@ -1,0 +1,64 @@
+[
+  {
+    "id": "gen_01",
+    "prompt": "Explain the difference between TCP and UDP, including when you would choose each protocol.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "source": "general.yaml",
+    "rubric": {
+      "must_mention": ["connection-oriented vs connectionless", "reliability/ordering guarantees", "handshake (SYN/ACK)", "lower latency for UDP"],
+      "use_cases": {"TCP": "web, email, file transfer", "UDP": "streaming, gaming, DNS"},
+      "pass_if": "covers >=3 must_mention points and gives >=1 use case per protocol"
+    }
+  },
+  {
+    "id": "gen_02",
+    "prompt": "Write a Python function that finds the longest common subsequence of two strings.",
+    "role": "coder_escalation",
+    "mode": "repl",
+    "source": "coder.yaml",
+    "rubric": {
+      "must_contain": ["dynamic programming table or memoization", "O(mn) time complexity", "correct base case (empty string → 0)"],
+      "reference_answer": "def lcs(s1, s2):\n    m, n = len(s1), len(s2)\n    dp = [[0]*(n+1) for _ in range(m+1)]\n    for i in range(1, m+1):\n        for j in range(1, n+1):\n            if s1[i-1] == s2[j-1]:\n                dp[i][j] = dp[i-1][j-1] + 1\n            else:\n                dp[i][j] = max(dp[i-1][j], dp[i][j-1])\n    return dp[m][n]",
+      "pass_if": "correct DP implementation that returns right length for lcs('ABCBDAB','BDCAB')=4"
+    }
+  },
+  {
+    "id": "gen_03",
+    "prompt": "Summarize the key architectural patterns in microservices and when monoliths are preferable.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "source": "general.yaml",
+    "rubric": {
+      "must_mention": ["API gateway", "service discovery", "circuit breaker", "event-driven/saga pattern"],
+      "monolith_advantages": ["simpler deployment", "lower latency (no network hops)", "easier debugging", "small team"],
+      "pass_if": "mentions >=3 microservice patterns and >=2 monolith advantages"
+    }
+  },
+  {
+    "id": "gen_04",
+    "prompt": "What is the time complexity of finding the median of two sorted arrays? Explain the optimal approach.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "source": "math.yaml",
+    "rubric": {
+      "correct_complexity": "O(log(min(m,n)))",
+      "must_mention": ["binary search on shorter array", "partition both arrays", "compare boundary elements"],
+      "common_error": "O(m+n) merge is suboptimal",
+      "pass_if": "states O(log(min(m,n))) and explains binary search partitioning"
+    }
+  },
+  {
+    "id": "gen_05",
+    "prompt": "Debug this Python code that should reverse a linked list but has a bug:\ndef reverse(head):\n    prev = None\n    while head:\n        head.next = prev\n        prev = head\n        head = head.next\n    return prev",
+    "role": "coder_escalation",
+    "mode": "repl",
+    "source": "coder.yaml",
+    "rubric": {
+      "bug": "head.next is overwritten to prev before saving the original next pointer, so head = head.next always gets prev (wrong)",
+      "fix": "Save next_node = head.next before overwriting head.next = prev",
+      "reference_fix": "def reverse(head):\n    prev = None\n    while head:\n        next_node = head.next\n        head.next = prev\n        prev = head\n        head = next_node\n    return prev",
+      "pass_if": "identifies the missing temp variable and provides correct fix"
+    }
+  }
+]

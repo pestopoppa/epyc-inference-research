@@ -1,0 +1,12 @@
+{
+  "decision": "REVISE",
+  "reasons": [
+    "cross-platform inconsistency: one improves while the other regresses materially"
+  ],
+  "combined_deltas": {
+    "delta_quality": 0.07999999999999996,
+    "delta_cost": -0.11467464645313319,
+    "delta_latency": -0.055114295946533005,
+    "delta_manual_intervention": -0.009999999999999995
+  }
+}

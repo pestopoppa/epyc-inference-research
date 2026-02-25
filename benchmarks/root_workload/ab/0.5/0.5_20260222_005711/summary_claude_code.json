@@ -1,0 +1,23 @@
+{
+  "environment": "claude-code",
+  "A": {
+    "total_tasks": 50,
+    "quality_pass_rate": 0.74,
+    "cost_per_task": 2.44637574,
+    "p95_task_latency": 6.950816,
+    "manual_intervention_rate": 0.16
+  },
+  "B": {
+    "total_tasks": 50,
+    "quality_pass_rate": 0.9,
+    "cost_per_task": 2.3009103200000003,
+    "p95_task_latency": 7.174419,
+    "manual_intervention_rate": 0.08
+  },
+  "deltas": {
+    "delta_quality": 0.16000000000000003,
+    "delta_cost": -0.05946160175705464,
+    "delta_latency": 0.0321693165234126,
+    "delta_manual_intervention": -0.08
+  }
+}

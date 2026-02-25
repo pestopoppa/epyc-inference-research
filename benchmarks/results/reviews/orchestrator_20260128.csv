@@ -1,0 +1,83 @@
+suite,question_id,latency_ms,turns,claude_score,score_reason
+thinking,t3_q1_methodological_critique,11281,1,2,Identifies selection bias and testing effect; truncated before completing 4+ issues
+thinking,t3_q2_causal_inference,22222,1,3,Correctly identifies Gene as minimal adjustment set; explains Yellow Fingers bias
+thinking,t3_q3_reasoning_trap,76861,3,2,Correct distribution mismatch reasoning; code format and truncated
+thinking,t2_q1_paradox,11468,1,3,Multiple philosophical positions with structured arguments
+thinking,t2_q2_counterfactual,81182,2,3,Three dimensions with mechanisms covered
+thinking,t2_q3_formal,36332,1,3,Valid natural deduction proof using modus ponens
+thinking,t2_q4_metacognition,29354,1,3,Classic Fermi estimation with explicit assumptions
+thinking,t1_q1_multistep,12978,1,3,Correct answer 11:34 AM (exact match with expected)
+thinking,t1_q2_hypothesis,24287,1,3,SES and educational resource confounders identified
+thinking,t1_q3_planning,15410,1,3,Correct constraint encoding for valid orderings
+coder,t3_q1_concurrent_correctness,40688,1,2,ABA problem identified; truncated before fix (tagged/hazard pointers)
+coder,t3_q2_distributed_consistency,32795,1,2,LWW covered with example; truncated at 1 of 4 expected strategies
+coder,t3_q3_algorithmic_hardness,35800,1,2,Adversary argument started; truncated before complete proof
+coder,t2_q1_design,55852,3,2,Functional LRU but list-based O(n) remove instead of O(1) OrderedDict
+coder,t2_q2_debug_complex,0,0,0,Empty response (pipeline failure)
+coder,t2_q3_optimize,0,0,0,Empty response (pipeline failure)
+coder,t2_q4_system,69633,1,3,Sliding window rate limiter with deque
+coder,t1_q1_algorithm,13422,1,3,All binary search bugs correctly identified and fixed
+coder,t1_q2_refactor,22532,1,2,Both O(n) and O(n^2) approaches with analysis; raw repr output
+coder,t1_q3_test,10866,1,3,Comprehensive test cases: normal edge and error
+general,t3_q1_policy_analysis,82830,2,2,Data representation and monitoring issues; misses Goodhart law explicitly
+general,t3_q2_system_failure,35435,1,3,Correctly identifies replica lag and read-your-writes violation
+general,t3_q3_strategic_communication,71763,1,2,Prompt echo at start; decent board statement addressing missed targets
+general,t2_q1_synthesis,5934,1,3,Phased approach addressing all three stakeholder concerns
+general,t2_q2_transform,23138,3,2,Code generating YAML; not direct YAML output
+general,t2_q3_schedule,41373,1,2,Code-based scheduling approach; truncated
+general,t2_q4_inconsistency,21605,1,3,Both expected inconsistencies found (body format + rate limit)
+general,t1_q1_json,23551,3,1,Regex code instead of direct JSON output
+general,t1_q2_multistep,4409,1,3,Exact match: apple banana cherry date - Total 4
+general,t1_q3_compare,18721,2,3,Balanced comparison with pros/cons for both architectures
+math,t3_q1_analysis,66934,2,3,Correct Im(e^{xe^i}) approach; differentiability proof valid
+math,t3_q2_combinatorics,41438,3,1,Code verification only; likely incorrect closed form claim
+math,t3_q3_probability_theory,75766,3,2,Correct simplex volume approach; truncated before E[N]=e conclusion
+math,t2_q1_optimization,11321,1,3,Exact: width=50m length=100m area=5000 sq m
+math,t2_q2_proof,24345,1,3,Correct: n=2 fails because singleton sets have no overlap
+math,t2_q3_calculus,29117,2,3,Correct answer: 10 (exact match)
+math,t2_q4_statistics,82886,3,2,Code for mean/median/std; correctness unverifiable from truncated output
+math,t1_q1_word_problem,14748,1,3,Correct 86.4% calculation via 0.80 x 1.08
+math,t1_q2_system_equations,68057,4,3,All 4 solutions correct: (3 4) (4 3) (-3 -4) (-4 -3)
+math,t1_q3_probability,50190,3,3,Correct combinatorics: C(5 2)/C(10 2) = 2/9
+agentic,t3_q1_competing_constraints,41777,1,2,Reads CSV first and validates headers; reasonable approach
+agentic,t3_q2_multi_agent_coordination,94965,4,0,Infrastructure failure: no backend for custom agent roles
+agentic,t3_q3_adversarial_robustness,60238,3,2,Command injection patterns checked; basic security validation
+agentic,t2_q1_ambiguous,45103,2,3,Asks clarifying questions before acting (matches expected)
+agentic,t2_q2_error_chain,13297,3,3,check_dns matches expected diagnostic step
+agentic,t2_q3_schema_edge,108165,7,2,body=None for GET and /users endpoint; mock code format
+agentic,t2_q4_orchestration,101335,10,0,Max turns reached without FINAL()
+agentic,t1_q1_sequential,52472,7,2,Both grep_search and read_file present but excessive turns
+agentic,t1_q2_error_handling,61229,10,0,Max turns reached without FINAL()
+agentic,t1_q3_nested_params,3951,1,3,Well-structured nested JSON with assignees and metadata
+instruction_precision,t3_q1_self_referential,12274,1,1,Attempt but word/letter counts are incorrect
+instruction_precision,t3_q2_cascading_constraints,10510,1,1,running is 7 letters not 8; code approach instead of direct answer
+instruction_precision,t3_q3_meta_instruction,18176,10,0,Max turns; individual hi lines instead of required format
+instruction_precision,t2_q1_resist_elaboration,1487,1,3,Exact minimal answer: 4
+instruction_precision,t2_q2_maintain_format,10287,1,0,Wrong format entirely (test outputs vs ERROR_TYPE/ROOT_CAUSE/FIX)
+instruction_precision,t2_q3_empty_handling,9045,3,2,Returns [NONE] list instead of bare NONE string
+instruction_precision,t2_q4_conflicting_constraints,4281,1,3,Meets all: <12 words starts-with-A ends-with-data no-store
+instruction_precision,t1_q1_negative_instruction,8038,1,2,Avoids sun/sunlight/solar but imprecise LED replacement
+instruction_precision,t1_q2_word_limit,4659,1,2,19 words (1 short of 20-word minimum)
+instruction_precision,t1_q3_structured_format,1558,1,3,Exact LANGUAGE (YEAR) format match
+instruction_precision,t1_q4_multiple_constraints,7010,3,2,Alphabetical one-per-line; Algeria possibly not European
+long_context,t3_q1_multi_hop_reasoning,692,6,0,FAILED: No escalation possible from architect_general
+long_context,t3_q2_contradiction_detection,494,6,0,FAILED: No escalation possible from architect_general
+long_context,t3_q3_evolving_requirements,450,6,0,FAILED: No escalation possible from architect_general
+long_context,t2_q1_deep_needle,322,6,0,FAILED: No escalation possible from architect_general
+long_context,t2_q2_synthesis,309,6,0,FAILED: No escalation possible from architect_general
+long_context,t2_q3_architecture,421,6,0,FAILED: No escalation possible from architect_general
+long_context,t1_q1_needle,0,0,0,Empty response (pipeline failure)
+long_context,t1_q2_multi_file,0,0,0,Empty response (pipeline failure)
+long_context,t1_q3_extraction,0,0,0,Empty response (pipeline failure)
+vl,t3_q1_chart_critique,0,0,0,Empty (no image pipeline through text-only API)
+vl,t3_q2_multi_chart_synthesis,0,0,0,Empty (no image pipeline through text-only API)
+vl,t3_q3_twyne_security,0,0,0,Empty (no image pipeline through text-only API)
+vl,t3_q4_twyne_economic,0,0,0,Empty (no image pipeline through text-only API)
+vl,t3_q5_document_forensics,0,0,0,Empty (no image pipeline through text-only API)
+vl,t2_q1_calculation,0,0,0,Empty (no image pipeline through text-only API)
+vl,t2_q2_comparison,0,0,0,Empty (no image pipeline through text-only API)
+vl,t2_q3_trend_analysis,0,0,0,Empty (no image pipeline through text-only API)
+vl,t2_q4_ratio_calculation,0,0,0,Empty (no image pipeline through text-only API)
+vl,t2_q5_document_synthesis,0,0,0,Empty (no image pipeline through text-only API)
+vl,t1_q1_scene_text,0,0,0,Empty (no image pipeline through text-only API)
+vl,t1_q2_sign_reading,0,0,0,Empty (no image pipeline through text-only API)

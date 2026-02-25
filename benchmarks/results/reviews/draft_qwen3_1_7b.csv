@@ -1,0 +1,21 @@
+question_id,score,reason
+general/t1_q1_json,1,Output correct JSON then repeated many times
+general/t1_q2_multistep,2,Steps followed
+general/t1_q3_compare,2,Good comparison
+general/t2_q1_synthesis,2,Synthesis
+general/t2_q2_transform,2,YAML
+general/t2_q3_schedule,2,Schedule
+general/t2_q4_inconsistency,2,Issues found
+general/t3_q1_policy_analysis,2,Analysis
+general/t3_q2_system_failure,2,Root cause
+general/t3_q3_strategic_communication,2,Strategy
+thinking/t1_q1_multistep,2,Correct setup and reasoning
+thinking/t1_q2_hypothesis,2,Good confounding analysis
+thinking/t1_q3_planning,2,Constraint handling
+thinking/t2_q1_paradox,2,Philosophical engagement
+thinking/t2_q2_counterfactual,2,Structured analysis
+thinking/t2_q3_formal,2,Identifies hypothetical syllogism
+thinking/t2_q4_metacognition,2,Estimation process
+thinking/t3_q1_methodological_critique,2,Critique
+thinking/t3_q2_causal_inference,2,Causal reasoning
+thinking/t3_q3_reasoning_trap,2,Trap identified

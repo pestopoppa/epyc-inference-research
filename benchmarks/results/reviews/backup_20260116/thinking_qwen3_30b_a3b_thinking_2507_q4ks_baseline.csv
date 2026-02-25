@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,19.39,3,Full thinking chain with analysis
+general,t3_q2_system_failure,16.89,3,Full thinking chain with analysis
+general,t3_q3_strategic_communication,17.76,3,Full thinking chain with analysis
+general,t2_q1_synthesis,21.33,2,Good analysis with structure
+general,t2_q2_transform,18.34,2,Good analysis with structure
+general,t2_q3_schedule,16.97,2,Good analysis with structure
+general,t2_q4_inconsistency,18.32,2,Good analysis with structure
+general,t1_q1_json,25.59,2,Partial analysis
+general,t1_q2_multistep,17.34,2,Good analysis with structure
+general,t1_q3_compare,22.55,3,Full thinking chain with analysis
+long_context,t3_q1_multi_hop_reasoning,1.87,2,Good analysis with structure
+long_context,t3_q2_contradiction_detection,2.49,2,Good analysis with structure
+long_context,t3_q3_evolving_requirements,0,2,Partial analysis
+long_context,t2_q1_deep_needle,0,2,Partial analysis
+long_context,t2_q2_synthesis,0,2,Good analysis with structure
+long_context,t2_q3_architecture,0,2,Partial analysis
+long_context,t1_q1_needle,3.38,2,Good analysis with structure
+long_context,t1_q2_multi_file,2.56,2,Good analysis with structure
+long_context,t1_q3_extraction,1.93,2,Good analysis with structure
+agentic,t3_q1_competing_constraints,15.94,2,Good analysis with structure
+agentic,t3_q2_multi_agent_coordination,15.01,2,Good analysis with structure
+agentic,t3_q3_adversarial_robustness,14.36,2,Partial analysis
+agentic,t2_q1_ambiguous,20.31,2,Good analysis with structure
+agentic,t2_q2_error_chain,15.17,2,Good analysis with structure
+agentic,t2_q3_schema_edge,20.43,2,Partial analysis
+agentic,t2_q4_orchestration,16.25,2,Good analysis with structure
+agentic,t1_q1_sequential,15.71,2,Good analysis with structure
+agentic,t1_q2_error_handling,15.78,2,Good analysis with structure
+agentic,t1_q3_nested_params,21.41,2,Partial analysis
+instruction_precision,t3_q1_self_referential,15.26,2,Partial analysis
+instruction_precision,t3_q2_cascading_constraints,19.94,2,Partial analysis
+instruction_precision,t3_q3_meta_instruction,20.29,2,Partial analysis
+instruction_precision,t2_q1_resist_elaboration,21.91,2,Partial analysis
+instruction_precision,t2_q2_maintain_format,20.44,2,Partial analysis
+instruction_precision,t2_q3_empty_handling,20.76,2,Good analysis with structure
+instruction_precision,t2_q4_conflicting_constraints,20.93,2,Partial analysis
+instruction_precision,t1_q1_negative_instruction,21.51,3,Full thinking chain with analysis
+instruction_precision,t1_q2_word_limit,20.6,2,Partial analysis
+instruction_precision,t1_q3_structured_format,20.6,2,Good analysis with structure
+instruction_precision,t1_q4_multiple_constraints,21.23,2,Partial analysis
+coder,t3_q1_concurrent_correctness,15.26,2,Good analysis with structure
+coder,t3_q2_distributed_consistency,15.35,3,Full thinking chain with analysis
+coder,t3_q3_algorithmic_hardness,15.09,2,Good analysis with structure
+coder,t2_q1_design,15.53,2,Good analysis with structure
+coder,t2_q2_debug_complex,15.69,2,Good analysis with structure
+coder,t2_q3_optimize,15.32,2,Good analysis with structure
+coder,t2_q4_system,16.09,2,Good analysis with structure
+coder,t1_q1_algorithm,13.7,2,Good analysis with structure
+coder,t1_q2_refactor,13.8,2,Good analysis with structure
+coder,t1_q3_test,14.39,2,Good analysis with structure
+thinking,t3_q1_methodological_critique,15.4,3,Full thinking chain with analysis
+thinking,t3_q2_causal_inference,15.31,2,Good analysis with structure
+thinking,t3_q3_reasoning_trap,14.89,2,Good analysis with structure
+thinking,t2_q1_paradox,15.67,2,Good analysis with structure
+thinking,t2_q2_counterfactual,15.57,3,Full thinking chain with analysis
+thinking,t2_q3_formal,16.08,2,Good analysis with structure
+thinking,t2_q4_metacognition,15.07,3,Full thinking chain with analysis
+thinking,t1_q1_multistep,18.51,2,Good analysis with structure
+thinking,t1_q2_hypothesis,15.91,2,Good analysis with structure
+thinking,t1_q3_planning,15.97,2,Good analysis with structure
+math,t3_q1_analysis,15.2,2,Good analysis with structure
+math,t3_q2_combinatorics,14.59,2,Good analysis with structure
+math,t3_q3_probability_theory,17.07,2,Good analysis with structure
+math,t2_q1_optimization,19.61,2,Partial analysis
+math,t2_q2_proof,15.13,2,Good analysis with structure
+math,t2_q3_calculus,17.86,2,Partial analysis
+math,t2_q4_statistics,15.32,2,Good analysis with structure
+math,t1_q1_word_problem,14.48,2,Good analysis with structure
+math,t1_q2_system_equations,15.7,2,Good analysis with structure
+math,t1_q3_probability,20.18,2,Partial analysis

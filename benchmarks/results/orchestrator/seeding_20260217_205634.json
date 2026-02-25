@@ -1,0 +1,40 @@
+{
+  "config": {
+    "suites": [
+      "simpleqa"
+    ],
+    "roles": [
+      "frontdoor",
+      "coder_primary",
+      "coder_escalation",
+      "architect_general",
+      "architect_coding",
+      "worker_vision",
+      "vision_escalation"
+    ],
+    "modes": [
+      "repl"
+    ],
+    "combos": [
+      "worker_vision:repl",
+      "frontdoor:repl",
+      "worker_vision:direct",
+      "coder_primary:repl",
+      "coder_escalation:repl",
+      "architect_general:delegated",
+      "architect_coding:delegated",
+      "architect_general:direct",
+      "architect_coding:direct",
+      "vision_escalation:direct"
+    ],
+    "sample_size": 1,
+    "seed": 42,
+    "dry_run": false,
+    "dedup": true,
+    "alias_map": {
+      "coder_primary": "frontdoor"
+    }
+  },
+  "results": [],
+  "timestamp": "2026-02-17T20:56:34.103326"
+}

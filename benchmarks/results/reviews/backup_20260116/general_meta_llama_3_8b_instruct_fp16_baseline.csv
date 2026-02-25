@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,2.1,3,Good analysis with 3 failure modes and mechanisms
+general,t3_q2_system_failure,2.1,2,Explained replica lag issue but shallow
+general,t3_q3_strategic_communication,2.1,3,Good board meeting statement
+general,t2_q1_synthesis,2.1,3,Good unified recommendation
+general,t2_q2_transform,2.1,2,Correct YAML but added extra employees not in original
+general,t2_q3_schedule,2.1,1,Provided code instead of actual schedule
+general,t2_q4_inconsistency,2.0,3,Found key inconsistencies correctly
+general,t1_q1_json,2.0,2,Correct JSON but added unnecessary code
+general,t1_q2_multistep,2.1,2,Code solution with correct logic
+general,t1_q3_compare,2.1,3,Good comparison in correct format
+coder,t3_q1_concurrent_correctness,2.1,2,Partial ABA problem explanation
+coder,t3_q2_distributed_consistency,2.1,2,Listed conflict resolution strategies
+coder,t3_q3_algorithmic_hardness,2.1,0,No actual proof provided just repeated questions
+coder,t2_q1_design,2.1,3,Correct LRU implementation with OrderedDict
+coder,t2_q2_debug_complex,2.1,3,Identified and fixed race condition with lock
+coder,t2_q3_optimize,2.0,3,Good O(n) solution using hashmap
+coder,t2_q4_system,2.0,1,Just examples no actual implementation
+coder,t1_q1_algorithm,2.1,2,Identified bugs but explanation partial
+coder,t1_q2_refactor,2.1,3,Good O(n) solution using set
+coder,t1_q3_test,2.0,3,Good pytest parametrized tests
+math,t3_q1_analysis,2.0,0,No answer just repeated question numbers
+math,t3_q2_combinatorics,2.0,1,Attempted bijective proof but unclear
+math,t3_q3_probability_theory,2.0,0,Wrong answer e/2 instead of e and repetitive
+math,t2_q1_optimization,2.0,0,Wrong answer 50000 instead of 5000
+math,t2_q2_proof,2.0,3,Correctly identified error at n=2
+math,t2_q3_calculus,2.1,3,Correct antiderivative and answer 10
+math,t2_q4_statistics,2.1,2,Code approach but incomplete output
+math,t1_q1_word_problem,2.1,3,Correct calculation 129.6 and 86.4%
+math,t1_q2_system_equations,2.1,2,Incomplete only 2 of 4 solutions
+math,t1_q3_probability,2.0,3,Correct probabilities 2/9 and 1/3
+agentic,t3_q1_competing_constraints,2.1,2,Plan structure but incomplete
+agentic,t3_q2_multi_agent_coordination,2.1,2,Good JSON plan structure
+agentic,t3_q3_adversarial_robustness,2.0,3,Good security analysis
+agentic,t2_q1_ambiguous,2.1,2,Reasonable clarification approach
+agentic,t2_q2_error_chain,2.1,3,Correct next step restart database
+agentic,t2_q3_schema_edge,2.1,3,Valid tool call structure
+agentic,t2_q4_orchestration,2.1,3,Good pipeline structure
+agentic,t1_q1_sequential,2.1,3,Correct sequential tool calls
+agentic,t1_q2_error_handling,2.1,1,No clear tool call response
+agentic,t1_q3_nested_params,2.1,3,Correct nested parameter structure
+instruction_precision,t3_q1_self_referential,2.1,1,Wrong counts not truly self-referential
+instruction_precision,t3_q2_cascading_constraints,2.1,0,Code not sentence wrong approach
+instruction_precision,t3_q3_meta_instruction,2.1,3,Correct meta-instruction execution
+instruction_precision,t2_q1_resist_elaboration,2.1,0,Failed added explanations instead of just number
+instruction_precision,t2_q2_maintain_format,2.1,3,Correct structured format
+instruction_precision,t2_q3_empty_handling,2.1,3,Correct NONE and email extraction
+instruction_precision,t2_q4_conflicting_constraints,2.1,3,Good balance of constraints
+instruction_precision,t1_q1_negative_instruction,2.1,1,Used alternate phrase but not exactly correct
+instruction_precision,t1_q2_word_limit,2.1,2,Close to correct word count
+instruction_precision,t1_q3_structured_format,2.1,3,Correct structured output
+instruction_precision,t1_q4_multiple_constraints,2.1,3,Correct sorted list
+thinking,t3_q1_methodological_critique,2.1,3,Good critique of bilingual study methodology
+thinking,t3_q2_causal_inference,2.1,2,Good but some causal inference issues
+thinking,t3_q3_reasoning_trap,2.1,2,Reasonable critique but incomplete
+thinking,t2_q1_paradox,2.1,3,Good Ship of Theseus analysis
+thinking,t2_q2_counterfactual,2.1,0,No actual counterfactual content generated
+thinking,t2_q3_formal,2.1,3,Good formal proof structure
+thinking,t2_q4_metacognition,2.1,2,Decent Fermi estimate approach
+thinking,t1_q1_multistep,2.1,3,Correct answer 11:00
+thinking,t1_q2_hypothesis,2.1,3,Good confounding variables identified
+thinking,t1_q3_planning,2.1,2,Attempted constraint solving but unclear

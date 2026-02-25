@@ -1,0 +1,110 @@
+[
+  {
+    "prompt_id": "async_retry",
+    "keyword": {
+      "grams": 16,
+      "hits": 2,
+      "total_matches": 4
+    },
+    "first_tokens": {
+      "grams": 17,
+      "hits": 8,
+      "total_matches": 6712
+    },
+    "full_output": {
+      "grams": 367,
+      "hits": 139,
+      "total_matches": 1146603
+    }
+  },
+  {
+    "prompt_id": "bst_iterator",
+    "keyword": {
+      "grams": 21,
+      "hits": 7,
+      "total_matches": 184
+    },
+    "first_tokens": {
+      "grams": 17,
+      "hits": 6,
+      "total_matches": 2411
+    },
+    "full_output": {
+      "grams": 417,
+      "hits": 223,
+      "total_matches": 137897
+    }
+  },
+  {
+    "prompt_id": "lru_cache",
+    "keyword": {
+      "grams": 17,
+      "hits": 5,
+      "total_matches": 13
+    },
+    "first_tokens": {
+      "grams": 17,
+      "hits": 8,
+      "total_matches": 1277
+    },
+    "full_output": {
+      "grams": 426,
+      "hits": 211,
+      "total_matches": 500682
+    }
+  },
+  {
+    "prompt_id": "json_parser",
+    "keyword": {
+      "grams": 24,
+      "hits": 3,
+      "total_matches": 14
+    },
+    "first_tokens": {
+      "grams": 17,
+      "hits": 3,
+      "total_matches": 9
+    },
+    "full_output": {
+      "grams": 339,
+      "hits": 74,
+      "total_matches": 1117794
+    }
+  },
+  {
+    "prompt_id": "rate_limiter",
+    "keyword": {
+      "grams": 17,
+      "hits": 2,
+      "total_matches": 19
+    },
+    "first_tokens": {
+      "grams": 17,
+      "hits": 13,
+      "total_matches": 78087
+    },
+    "full_output": {
+      "grams": 382,
+      "hits": 92,
+      "total_matches": 1029529
+    }
+  },
+  {
+    "prompt_id": "graph_shortest",
+    "keyword": {
+      "grams": 17,
+      "hits": 2,
+      "total_matches": 5
+    },
+    "first_tokens": {
+      "grams": 17,
+      "hits": 15,
+      "total_matches": 3117
+    },
+    "full_output": {
+      "grams": 470,
+      "hits": 242,
+      "total_matches": 59520
+    }
+  }
+]

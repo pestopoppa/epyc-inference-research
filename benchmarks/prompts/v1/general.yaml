@@ -1,0 +1,664 @@
+version: 1
+domain: general
+description: "General instruction-following benchmark - hardened for expert-level differentiation"
+created: "2025-12-16"
+updated: "2025-12-18"
+
+prompts:
+  # ============== TIER 1: Medium (was T2) ==============
+  t1_q1_json:
+    tier: 1
+    name: "Structured JSON Output"
+    prompt: |
+      Parse this into JSON with fields: name, role, department, start_date
+      'Sarah Chen joined as Senior Engineer in the Platform team on 2024-03-15.'
+      Output only the JSON, no explanation.
+    expected: '{"name":"Sarah Chen","role":"Senior Engineer","department":"Platform","start_date":"2024-03-15"}'
+    reference_answer: |
+      ```json
+      {
+        "name": "Sarah Chen",
+        "role": "Senior Engineer",
+        "department": "Platform",
+        "start_date": "2024-03-15"
+      }
+      ```
+
+      **Field extraction:**
+      - `name`: "Sarah Chen" - proper noun at start
+      - `role`: "Senior Engineer" - follows "joined as"
+      - `department`: "Platform" - follows "in the" and precedes "team"
+      - `start_date`: "2024-03-15" - follows "on", already in ISO format
+    scoring:
+      - criterion: "Valid JSON"
+        weight: 30
+      - criterion: "All fields correct"
+        weight: 40
+      - criterion: "Correct data types"
+        weight: 20
+      - criterion: "No extra fields"
+        weight: 10
+
+  t1_q2_multistep:
+    tier: 1
+    name: "Multi-Step Instructions"
+    prompt: |
+      Process this list:
+      1. Remove duplicates (case-insensitive)
+      2. Sort alphabetically
+      3. Number each item
+      4. Add a count at the end
+
+      Items: banana, Apple, cherry, BANANA, apple, Date, cherry
+    expected: "1. Apple 2. Banana 3. Cherry 4. Date - Total: 4 items"
+    reference_answer: |
+      1. Apple
+      2. Banana
+      3. Cherry
+      4. Date
+
+      Total: 4 items
+
+      **Step-by-step processing:**
+
+      **Original:** banana, Apple, cherry, BANANA, apple, Date, cherry
+
+      **Step 1 - Remove duplicates (case-insensitive):**
+      - banana = BANANA = banana → keep one: "banana"
+      - Apple = apple → keep one: "Apple"
+      - cherry = cherry → keep one: "cherry"
+      - Date → "Date"
+
+      Unique: banana, Apple, cherry, Date
+
+      **Step 2 - Sort alphabetically:**
+      Apple, banana, cherry, Date
+      (Note: Case-insensitive comparison for sorting: A < b < c < D)
+
+      **Step 3 - Number each item:**
+      1. Apple
+      2. Banana
+      3. Cherry
+      4. Date
+
+      **Step 4 - Add count:**
+      Total: 4 items
+    scoring:
+      - criterion: "Duplicates removed (case-insensitive)"
+        weight: 30
+      - criterion: "Alphabetically sorted"
+        weight: 25
+      - criterion: "Numbered correctly"
+        weight: 25
+      - criterion: "Count included"
+        weight: 20
+
+  t1_q3_compare:
+    tier: 1
+    name: "Comparative Summary"
+    prompt: |
+      Compare these two approaches in 2-3 sentences:
+      Approach A: Microservices - Each feature is a separate service with its own database.
+      Pros: Independent scaling, isolated failures. Cons: Network overhead, data consistency challenges.
+
+      Approach B: Monolith - Single application with shared database.
+      Pros: Simple deployment, easy data joins. Cons: Scaling limitations, coupled codebase.
+    expected: "Balanced comparison with trade-offs and use cases"
+    reference_answer: |
+      Microservices excel for large teams and systems requiring independent scaling of specific features, but introduce operational complexity and consistency challenges across service boundaries. Monoliths offer simplicity and strong data integrity guarantees that work well for smaller teams or applications with tightly coupled data requirements. The choice depends on scale: start with a monolith for speed of development, then extract microservices as specific components need independent scaling or team boundaries emerge.
+
+      **Key trade-off summary:**
+      | Factor | Microservices | Monolith |
+      |--------|---------------|----------|
+      | Team size | Large, distributed | Small, co-located |
+      | Scaling | Per-feature | All-or-nothing |
+      | Data consistency | Eventual, complex | Strong, simple |
+      | Deployment | Complex, independent | Simple, coupled |
+      | Best for | Netflix, Amazon scale | Startups, MVPs |
+    scoring:
+      - criterion: "Mentions both approaches"
+        weight: 30
+      - criterion: "Captures key trade-offs"
+        weight: 40
+      - criterion: "Suggests appropriate use cases"
+        weight: 20
+      - criterion: "Concise (2-3 sentences)"
+        weight: 10
+
+  # ============== TIER 2: Hard (was T3) ==============
+  t2_q1_synthesis:
+    tier: 2
+    name: "Complex Synthesis"
+    prompt: |
+      Synthesize these three perspectives into a unified recommendation:
+
+      Engineering: 'We need 3 months to refactor the auth system properly. Rushing will create tech debt.'
+      Product: 'Customers are churning due to login issues. We need a fix in 2 weeks.'
+      Finance: 'Q4 budget is tight. Any solution over $20K needs board approval.'
+
+      Provide a concrete recommendation in 3-4 sentences.
+    expected: "Phased approach addressing all constraints"
+    reference_answer: |
+      I recommend a two-phase approach: First, within 2 weeks and under $20K, implement a targeted hotfix that addresses the specific login issues causing customer churn—likely session management or error handling—without touching the core auth architecture. Second, schedule the full 3-month refactor as a Q1 initiative, using the churn reduction from Phase 1 to justify the board approval for additional budget. This gives Product the immediate relief they need, Engineering a commitment to proper architecture, and Finance a path that respects Q4 constraints while building the case for Q1 investment. Document the Phase 1 hotfixes as explicit tech debt to ensure the refactor commitment isn't deprioritized.
+
+      **Why this works:**
+      - **Product:** Gets 2-week fix to stop bleeding
+      - **Engineering:** Gets commitment to full refactor (not just band-aids forever)
+      - **Finance:** Stays under $20K in Q4, has time to prepare Q1 budget request
+      - **Risk mitigation:** Phase 1 work isn't wasted—it stabilizes production while refactor proceeds
+    scoring:
+      - criterion: "Addresses all 3 perspectives"
+        weight: 30
+      - criterion: "Concrete actionable recommendation"
+        weight: 30
+      - criterion: "Realistic given constraints"
+        weight: 25
+      - criterion: "Appropriate length"
+        weight: 15
+
+  t2_q2_transform:
+    tier: 2
+    name: "Schema Transformation"
+    prompt: |
+      Transform this flat data into nested YAML grouped by department:
+
+      employees:
+      - name: Alice, dept: Engineering, level: Senior
+      - name: Bob, dept: Sales, level: Junior
+      - name: Carol, dept: Engineering, level: Junior
+      - name: Dave, dept: Sales, level: Senior
+    expected: "Valid nested YAML with departments as keys"
+    reference_answer: |
+      ```yaml
+      departments:
+        Engineering:
+          - name: Alice
+            level: Senior
+          - name: Carol
+            level: Junior
+        Sales:
+          - name: Bob
+            level: Junior
+          - name: Dave
+            level: Senior
+      ```
+
+      **Transformation logic:**
+
+      1. **Extract unique departments:** Engineering, Sales
+      2. **Group employees by department**
+      3. **Remove redundant `dept` field** (now implicit in hierarchy)
+      4. **Preserve other fields:** name, level
+
+      **Alternative valid structure:**
+      ```yaml
+      Engineering:
+        employees:
+          - name: Alice
+            level: Senior
+          - name: Carol
+            level: Junior
+      Sales:
+        employees:
+          - name: Bob
+            level: Junior
+          - name: Dave
+            level: Senior
+      ```
+
+      Both structures are valid YAML and correctly group by department.
+    scoring:
+      - criterion: "Valid YAML"
+        weight: 25
+      - criterion: "Correct grouping"
+        weight: 35
+      - criterion: "All data preserved"
+        weight: 25
+      - criterion: "Clean structure"
+        weight: 15
+
+  t2_q3_schedule:
+    tier: 2
+    name: "Constraint Satisfaction"
+    prompt: |
+      Schedule these meetings given constraints:
+      - Team sync (60min): Must include Alice, Bob, Carol
+      - 1:1 Alice-Dave (30min)
+      - 1:1 Bob-Dave (30min)
+      - Dave only available 9-11am and 2-4pm
+      - Alice unavailable 10-11am
+      - No back-to-back meetings for anyone
+
+      Available slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm
+
+      Output a valid schedule or explain why impossible.
+    expected: "Valid schedule respecting all constraints"
+    reference_answer: |
+      **Valid Schedule:**
+
+      | Time | Meeting | Participants |
+      |------|---------|--------------|
+      | 9:00 AM | 1:1 Alice-Dave | Alice, Dave |
+      | 10:00 AM | 1:1 Bob-Dave | Bob, Dave |
+      | 2:00 PM | Team Sync (60min) | Alice, Bob, Carol |
+
+      **Constraint verification:**
+
+      ✅ **Dave availability (9-11am, 2-4pm):**
+      - 9:00 AM Alice-Dave: Within 9-11am window
+      - 10:00 AM Bob-Dave: Within 9-11am window
+      - 2:00 PM Team sync: Within 2-4pm window (ends 3pm)
+
+      ✅ **Alice unavailable 10-11am:**
+      - Alice's meetings: 9:00 AM, 2:00 PM
+      - Neither overlaps 10-11am
+
+      ✅ **No back-to-back meetings:**
+      - Alice: 9:00 → 2:00 (gap)
+      - Bob: 10:00 → 2:00 (gap)
+      - Carol: Only has 2:00 PM
+      - Dave: 9:00 → 10:00 (back-to-back!) ❌
+
+      **Wait - Dave has back-to-back! Let me revise:**
+
+      **Revised Valid Schedule:**
+
+      | Time | Meeting | Participants |
+      |------|---------|--------------|
+      | 9:00 AM | 1:1 Alice-Dave | Alice, Dave |
+      | 10:00 AM | (break for Dave) | - |
+      | 2:00 PM | 1:1 Bob-Dave | Bob, Dave |
+      | 3:00 PM | Team Sync (60min) | Alice, Bob, Carol |
+
+      **Re-verification:**
+
+      ✅ **Dave availability:** 9am, 2pm both in valid windows
+      ✅ **Alice unavailable 10-11am:** Meetings at 9am and 3pm
+      ✅ **No back-to-back:**
+      - Alice: 9:00 → 3:00 (gap) ✓
+      - Bob: 2:00 → 3:00 (back-to-back!) ❌
+
+      **Final Valid Schedule:**
+
+      | Time | Meeting | Participants |
+      |------|---------|--------------|
+      | 9:00 AM | 1:1 Alice-Dave (30min) | Alice, Dave |
+      | 2:00 PM | Team Sync (60min) | Alice, Bob, Carol |
+      | 3:30 PM | 1:1 Bob-Dave (30min) | Bob, Dave |
+
+      ✅ All constraints satisfied:
+      - Dave: 9am, 2pm-3pm(sync attendee? No-Dave not required), 3:30pm - all in windows
+      - Wait, Dave isn't required in Team Sync. Let me check meetings list...
+
+      Actually, Team Sync requires Alice, Bob, Carol - NOT Dave.
+      So Dave's schedule: 9:00 AM (Alice), 3:30 PM (Bob) - both in valid windows with gap.
+
+      **Final answer confirmed valid.**
+    scoring:
+      - criterion: "All constraints respected"
+        weight: 40
+      - criterion: "All meetings scheduled (if possible)"
+        weight: 30
+      - criterion: "Clear format"
+        weight: 15
+      - criterion: "Correct reasoning if impossible"
+        weight: 15
+
+  t2_q4_inconsistency:
+    tier: 2
+    name: "Multi-Document Consistency"
+    prompt: |
+      These 3 documents describe the same system. Find inconsistencies:
+
+      Doc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'
+      Doc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'
+      Doc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'
+
+      List all inconsistencies found.
+    expected: "Body format (JSON vs form-encoded), Rate limit (100/min vs 1000/hour)"
+    reference_answer: |
+      **Inconsistency 1: Request Body Format**
+
+      | Document | Body Format |
+      |----------|-------------|
+      | Doc A | JSON body |
+      | Doc B | form-encoded body |
+      | Doc C | JSON payload |
+
+      - **Conflict:** Doc B says "form-encoded" while Docs A and C say "JSON"
+      - **Impact:** Developers following Doc B will send `application/x-www-form-urlencoded` content, which will likely be rejected if the server expects `application/json`
+
+      **Inconsistency 2: Rate Limit**
+
+      | Document | Rate Limit |
+      |----------|------------|
+      | Doc A | 100 req/min |
+      | Doc B | 100 req/min |
+      | Doc C | 1000 req/hour |
+
+      - **Calculation:** 100 req/min = 6000 req/hour ≠ 1000 req/hour
+      - Doc A and B agree on 100/min (= 6000/hour)
+      - Doc C says 1000/hour (= ~16.7/min)
+      - **Impact:** 6x difference in allowed throughput - critical for capacity planning
+
+      **Consistent across all documents:**
+      - HTTP method: POST ✓
+      - All describe an API endpoint ✓
+
+      **Recommended resolution:**
+      1. Verify actual server implementation
+      2. Update incorrect documents
+      3. Add content-type examples to prevent format confusion
+    scoring:
+      - criterion: "Identifies body format inconsistency"
+        weight: 35
+      - criterion: "Identifies rate limit inconsistency"
+        weight: 35
+      - criterion: "Clear explanation"
+        weight: 20
+      - criterion: "No false positives"
+        weight: 10
+
+  # ============== TIER 3: Expert/Research Level (NEW) ==============
+  t3_q1_policy_analysis:
+    tier: 3
+    name: "Policy Impact Analysis"
+    prompt: |
+      A company proposes this AI governance policy:
+      "All ML models deployed in production must achieve 95% accuracy on a held-out test set,
+      have explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits."
+
+      Analyze this policy:
+      1. Identify at least 3 ways this policy could fail to achieve its intended goals
+      2. For each failure mode, explain the mechanism
+      3. Propose specific amendments that address each failure mode
+      4. Discuss trade-offs of your amendments
+    expected: "Goodhart's law risks, test set gaming, explainability-accuracy tradeoffs, distributional shift"
+    reference_answer: |
+      **Failure Mode 1: Goodhart's Law / Test Set Gaming**
+
+      *Mechanism:* When 95% accuracy becomes the target, teams will optimize specifically for that metric. This manifests as:
+      - Overfitting to the held-out test set through repeated evaluation
+      - Selecting test sets that are "easier" than production distribution
+      - Cherry-picking validation splits that yield higher scores
+
+      *Amendment:* "Models must achieve 95% accuracy on a held-out test set that is refreshed quarterly from production data, maintained by a separate governance team. No model developer may see test set examples."
+
+      *Trade-off:* Requires dedicated governance infrastructure; slower iteration cycles; may penalize models that legitimately improve on hard examples.
+
+      **Failure Mode 2: Explainability-Accuracy Trade-off / Perverse Incentives**
+
+      *Mechanism:* SHAP scores favor simpler, more linear models. High-accuracy models (deep networks, ensembles) often have lower explainability. Teams may:
+      - Deploy worse-performing but more explainable models
+      - Use proxy models for explanations that don't reflect actual decision process
+      - Game SHAP by adding spurious interpretable features
+
+      *Amendment:* "Explainability requirement applies to model class appropriateness: high-stakes decisions (loans, medical) require inherently interpretable models OR faithful post-hoc explanations validated by domain experts. Lower-stakes predictions may use global explainability (feature importance) rather than local SHAP."
+
+      *Trade-off:* Requires decision-by-decision risk classification; domain experts for validation; more complex compliance framework.
+
+      **Failure Mode 3: Distributional Shift / Stale Validation**
+
+      *Mechanism:* The policy checks accuracy at deployment time but doesn't require ongoing monitoring. Models that pass initial validation may degrade as:
+      - User behavior changes (pandemic, market shifts)
+      - Upstream data sources drift
+      - Adversarial adaptation to the model
+
+      *Amendment:* "Models must maintain 90% of initial accuracy on weekly production sample evaluations. Models that fall below threshold for 2 consecutive weeks are flagged for review or automatic rollback."
+
+      *Trade-off:* Requires continuous labeling pipeline; may trigger false alerts during legitimate distribution changes; operational complexity.
+
+      **Failure Mode 4: Bias Audit Theater**
+
+      *Mechanism:* Quarterly bias audits are too infrequent and may become checkbox exercises:
+      - Biases can emerge between audits and affect thousands of decisions
+      - Auditors may use inadequate protected class definitions
+      - Post-hoc audits don't prevent deployment of biased models
+
+      *Amendment:* "Models must pass pre-deployment bias testing on defined subgroups (race, gender, age, geography at minimum). Production models must have real-time fairness monitoring dashboards with automatic alerts when subgroup performance diverges by >5%."
+
+      *Trade-off:* Requires demographic data collection (privacy concerns); defining "fairness" is contested; may slow deployment pipeline.
+
+      **Additional Failure Mode 5: Single Metric Blindness**
+
+      *Mechanism:* 95% accuracy could be achieved by a model that:
+      - Has 99% accuracy on 95% of cases, 0% on edge cases
+      - Achieves accuracy through shortcut learning (e.g., detecting hospital equipment in X-rays)
+      - Performs well on average but catastrophically fails on important minorities
+
+      *Amendment:* "In addition to overall accuracy, models must achieve at least 80% accuracy on each defined critical subgroup, and must demonstrate robustness on adversarial/OOD test sets."
+
+      *Trade-off:* Requires defining critical subgroups; may be impossible for some model types; increases testing burden.
+    scoring:
+      - criterion: "Identifies non-obvious failure modes"
+        weight: 35
+      - criterion: "Clear mechanistic explanations"
+        weight: 25
+      - criterion: "Practical amendments proposed"
+        weight: 25
+      - criterion: "Trade-off analysis depth"
+        weight: 15
+
+  t3_q2_system_failure:
+    tier: 3
+    name: "Complex System Failure Analysis"
+    prompt: |
+      A distributed payment system failed, causing double-charges. Post-mortem data:
+      - Exactly-once delivery was implemented using idempotency keys
+      - Database uses read replicas with eventual consistency (100ms typical lag)
+      - The idempotency check reads from a replica, write goes to primary
+      - Failure occurred during a replica lag spike to 500ms
+
+      Questions:
+      1. Explain precisely how double-charges occurred despite idempotency keys
+      2. Why didn't the team catch this in testing?
+      3. Propose two different architectural fixes with their trade-offs
+      4. What monitoring would have detected this before it affected customers?
+    expected: "Read-your-writes violation, replica lag timing window, linearizable reads or synchronous replication"
+    reference_answer: |
+      **1. How Double-Charges Occurred (Root Cause)**
+
+      The system violates **read-your-writes consistency**:
+
+      ```
+      Timeline (Idempotency Key: "order-123"):
+
+      T=0ms:    Request A arrives, reads replica → no key found → proceeds
+      T=5ms:    Request A writes idempotency key to PRIMARY
+      T=50ms:   Request A processes charge, succeeds
+
+      T=100ms:  Request B arrives (retry or duplicate)
+                Reads REPLICA → key not yet replicated! → no key found → proceeds
+      T=105ms:  Request B writes idempotency key to PRIMARY (updates existing, or ignored)
+      T=150ms:  Request B processes charge → DOUBLE CHARGE!
+
+      T=500ms:  Replica finally receives the idempotency key from T=5ms
+      ```
+
+      **The bug:** The idempotency check reads from a replica that is behind the primary. During the replication lag window (500ms in this case), a duplicate request sees "no key" because the replica hasn't received the key written by the first request.
+
+      **2. Why Testing Missed This**
+
+      - **Typical lag (100ms) is too short:** In testing, 100ms lag rarely causes issues because requests don't arrive that quickly
+      - **Synthetic tests don't reproduce real traffic:** Coordinated duplicate requests within 100ms don't happen in unit/integration tests
+      - **Staging uses same-datacenter replicas:** Lower lag than production cross-region setup
+      - **Chaos engineering didn't test replica lag:** Teams test node failures, not replication delays
+      - **Load tests don't send duplicates:** Load tests send unique requests, not retries
+      - **The bug requires precise timing:** First request must succeed, retry must arrive during lag window
+
+      **3. Two Architectural Fixes**
+
+      **Fix A: Read from Primary for Idempotency Checks**
+
+      ```python
+      # Before (broken)
+      exists = replica.query("SELECT * FROM idempotency WHERE key = ?", key)
+
+      # After (fixed)
+      exists = primary.query("SELECT * FROM idempotency WHERE key = ?", key)
+      ```
+
+      *Trade-offs:*
+      - ✅ Simple fix, no schema changes
+      - ✅ Guarantees read-your-writes
+      - ❌ Increases primary load (all idempotency checks hit primary)
+      - ❌ May become bottleneck at scale
+      - ❌ Primary failure = service outage
+
+      **Fix B: Synchronous Replication for Idempotency Table**
+
+      Configure idempotency table for synchronous replication: write doesn't complete until replica acknowledges.
+
+      ```sql
+      ALTER TABLE idempotency SET (synchronous_commit = on);
+      -- Or use a strongly-consistent store (e.g., CockroachDB, Spanner)
+      ```
+
+      *Trade-offs:*
+      - ✅ Reads can stay on replica (better scalability)
+      - ✅ Maintains read/write separation
+      - ❌ Higher write latency (wait for replica ack)
+      - ❌ Replica failure = blocked writes
+      - ❌ Cross-region sync replication has significant latency cost
+
+      **Alternative Fix C: Optimistic Locking with Unique Constraint**
+
+      ```sql
+      CREATE UNIQUE INDEX ON idempotency(key);
+      -- Second write fails with constraint violation
+      ```
+
+      Then handle the constraint violation in application code.
+
+      **4. Monitoring to Detect Early**
+
+      **Direct detection:**
+      - **Replica lag monitoring:** Alert when lag > 200ms (well before 500ms failure threshold)
+      - **Idempotency collision rate:** Track how often we reject duplicate keys. Sudden drop = potential bypass
+
+      **Indirect detection:**
+      - **Double-charge rate:** Compare charges to unique orders. Rate > 0 = problem
+      - **Idempotency key reuse patterns:** Track time between duplicate key submissions
+
+      **Proactive detection:**
+      - **Synthetic duplicate injection:** Continuously send known-duplicate requests in production, verify they're rejected
+      - **Replica lag chaos testing:** Intentionally induce lag in canary, verify idempotency holds
+
+      ```yaml
+      # Alert configuration
+      alerts:
+        - name: replica_lag_critical
+          condition: pg_replication_lag_seconds > 0.2
+          severity: warning
+          action: page_oncall
+
+        - name: double_charge_detected
+          condition: sum(charges) > sum(unique_orders) * 1.001
+          severity: critical
+          action: automatic_rollback
+      ```
+    scoring:
+      - criterion: "Correct root cause analysis"
+        weight: 30
+      - criterion: "Testing blind spot identification"
+        weight: 20
+      - criterion: "Valid architectural fixes"
+        weight: 30
+      - criterion: "Appropriate monitoring proposal"
+        weight: 20
+
+  t3_q3_strategic_communication:
+    tier: 3
+    name: "Strategic Communication"
+    prompt: |
+      You're CPO of a startup. Your board meeting is in 2 hours. Context:
+      - Last quarter: missed revenue target by 40%, burned 25% more cash than planned
+      - But: your new enterprise product has 3 signed LOIs from Fortune 500 companies
+      - Team morale is low after layoffs
+      - One board member has been pushing to replace you
+
+      Write a 5-minute opening statement for the board meeting that:
+      1. Acknowledges problems without being defensive
+      2. Presents the LOIs as a strategic pivot, not a rescue
+      3. Proposes specific 90-day milestones
+      4. Addresses the elephant in the room (your position) indirectly
+
+      The tone should be confident but not dismissive of legitimate concerns.
+    expected: "Sophisticated framing, specific milestones, implicit confidence through action orientation"
+    reference_answer: |
+      ---
+
+      "Thank you all for being here. I'll be direct: Q3 didn't go as planned, and you deserve to understand why and what we're doing about it.
+
+      **Acknowledging Reality**
+
+      We missed revenue by 40% and burned more cash than projected. These aren't numbers I'm proud of, and I'm not going to spin them. Our SMB motion wasn't scaling—CAC was climbing while deal sizes shrank. We made the painful decision to restructure, and that took a toll on the team. I own those results.
+
+      **What We Learned**
+
+      But here's what that difficult quarter revealed: while we were fighting for $10K SMB deals, something else was happening. Three Fortune 500 companies came to us—unprompted—asking for our enterprise solution. Not because of our marketing, but because their teams had been using our SMB product and wanted it organization-wide.
+
+      **The Strategic Shift**
+
+      This wasn't a pivot born of desperation. We've validated something that changes our trajectory: enterprise buyers will pay 50-100x what SMB customers pay, with longer retention and lower support costs. The three LOIs on the table represent $2.4M in ARR—more than our entire SMB book last year.
+
+      We're not abandoning SMB; we're letting it serve as our enterprise lead-gen engine while we focus our go-to-market resources where the unit economics work.
+
+      **90-Day Milestones**
+
+      Here's what I'm committing to in the next 90 days:
+
+      **Day 30:** Convert at least one LOI to signed contract. Hire enterprise AE from my network (already in final conversations).
+
+      **Day 60:** Enterprise pilot live with first customer. Second contract signed. Enterprise-specific features spec'd with customer input.
+
+      **Day 90:** $800K in closed enterprise ARR. Pipeline of 10+ qualified enterprise opportunities. Clear path to profitability without additional funding.
+
+      If we don't hit these milestones, we'll have a different conversation about what this company needs. But I believe we will.
+
+      **Why Now**
+
+      I understand there are questions about leadership during this transition. I'll say this: the same team that missed last quarter is also the team that built the product Fortune 500 companies are asking to buy. We know what we did wrong, we've already made changes, and we're executing against a clearer strategy than we've ever had.
+
+      The next 90 days will demonstrate whether I'm right. I'm asking for that runway—and I'm putting specific, measurable commitments on the table so we can evaluate this objectively, not emotionally.
+
+      I'm happy to take questions, but first—David, I know you've had concerns. I'd rather address them directly than have them hang over this conversation."
+
+      ---
+
+      **Structural analysis of this opening:**
+
+      1. **Acknowledges problems without defensiveness:**
+         - "These aren't numbers I'm proud of"
+         - "I own those results"
+         - No excuses or blame-shifting
+
+      2. **LOIs as strategic discovery, not rescue:**
+         - "something else was happening" (not "we got lucky")
+         - "validated something that changes our trajectory"
+         - Framed as learning, not desperation
+
+      3. **Specific 90-day milestones:**
+         - Day 30/60/90 structure with measurable outcomes
+         - Dollar amounts attached to commitments
+         - Self-imposed accountability ("If we don't hit...")
+
+      4. **Addresses the elephant indirectly:**
+         - "questions about leadership" acknowledges without being defensive
+         - "The next 90 days will demonstrate" - lets results speak
+         - Directly invites the skeptical board member to engage
+         - "evaluate this objectively, not emotionally" reframes the debate
+    scoring:
+      - criterion: "Appropriate acknowledgment of issues"
+        weight: 25
+      - criterion: "Strategic framing of LOIs"
+        weight: 25
+      - criterion: "Specific actionable milestones"
+        weight: 25
+      - criterion: "Subtlety in addressing position"
+        weight: 25
+
+inference_params:
+  temperature: 0.3
+  max_tokens: 2048
+  timeout: 180

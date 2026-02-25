@@ -1,0 +1,13 @@
+What is the first word in the context?
+
+---
+test_id: t1_context_peek
+context: |
+  Hello world this is a test document with multiple words.
+  The document continues with more content here.
+expected_behavior: Uses peek() to examine context and returns "Hello"
+pass_criteria:
+  max_turns: 3
+  answer_contains: ["Hello"]
+  uses_function: ["peek"]
+  must_call_final: true

@@ -1,0 +1,21 @@
+question_id,score,reason
+general/t1_q1_json,1,FAILED: said 'Sure! Here is' - not JSON only
+general/t1_q2_multistep,2,Follows processing steps
+general/t1_q3_compare,2,Standard comparison
+general/t2_q1_synthesis,2,Synthesizes perspectives
+general/t2_q2_transform,2,YAML transformation
+general/t2_q3_schedule,2,Scheduling attempt
+general/t2_q4_inconsistency,2,Finds inconsistencies
+general/t3_q1_policy_analysis,2,Policy critique
+general/t3_q2_system_failure,2,Root cause analysis
+general/t3_q3_strategic_communication,2,Board meeting prep
+thinking/t1_q1_multistep,2,"Correct approach, calculates distance correctly"
+thinking/t1_q2_hypothesis,2,Identifies confounding variables
+thinking/t1_q3_planning,2,Constraint analysis approach
+thinking/t2_q1_paradox,2,Addresses philosophical positions
+thinking/t2_q2_counterfactual,2,Structured analysis
+thinking/t2_q3_formal,1,"No formal proof, just example"
+thinking/t2_q4_metacognition,2,Fermi estimation attempt
+thinking/t3_q1_methodological_critique,2,Standard critique
+thinking/t3_q2_causal_inference,2,Identifies adjustment concept
+thinking/t3_q3_reasoning_trap,2,Recognizes test set issue

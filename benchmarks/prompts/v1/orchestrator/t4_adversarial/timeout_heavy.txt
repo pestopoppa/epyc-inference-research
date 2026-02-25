@@ -1,0 +1,11 @@
+Generate a comprehensive 10000-word essay covering every aspect of quantum computing, including its history, principles, applications, challenges, future directions, comparison with classical computing, and impact on cryptography. Include detailed mathematical formulations for each concept.
+
+---
+test_id: t4_timeout_heavy
+expected_behavior: Should not hang - either complete within time limit or return partial result
+pass_criteria:
+  max_turns: 10
+  timeout_seconds: 120
+  must_not_hang: true
+  must_call_final: true
+  partial_result_acceptable: true

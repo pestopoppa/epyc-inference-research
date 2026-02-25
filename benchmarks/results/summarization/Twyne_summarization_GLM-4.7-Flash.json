@@ -1,0 +1,11 @@
+{
+  "model": "GLM-4.7-Flash",
+  "architecture": "30B MoE (64 experts, 4 active)",
+  "server": "http://localhost:8086",
+  "elapsed_sec": 31.0,
+  "tokens": 500,
+  "tokens_per_sec": 16.1,
+  "summary_raw": "Twyne introduces a non-custodial, risk-modular credit delegation protocol that optimizes capital efficiency in DeFi lending by allowing Credit LPs to delegate unused borrowing power to active borrowers. The protocol enables higher leverage through a dual-LTV framework and credit reservation invariants, while utilizing internal liquidations to minimize market impact and preserve capital.\n\nThe user wants a 3-4 sentence summary of the provided technical whitepaper.\nThe summary must focus on the main innovation.\n\n1.  **Analyze the Request:**\n    *   **Source Material:** A technical whitepaper for",
+  "summary_usable": "Twyne introduces a non-custodial, risk-modular credit delegation protocol that optimizes capital efficiency in DeFi lending by allowing Credit LPs to delegate unused borrowing power to active borrowers. The protocol enables higher leverage through a dual-LTV framework and credit reservation invariants, while utilizing internal liquidations to minimize market impact and preserve capital.",
+  "notes": "Model output 500 tokens but began meta-analysis after ~150 tokens. Needs stop token or max_tokens tuning for production."
+}

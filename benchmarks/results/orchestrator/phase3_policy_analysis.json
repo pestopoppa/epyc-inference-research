@@ -1,0 +1,534 @@
+{
+  "analysis": {
+    "best_action": "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Analyze customer feedback and provide insights\"}",
+    "q_value": 1.0,
+    "n": 6,
+    "all_actions": {
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Analyze customer feedback and provide insights\"}": {
+        "n": 6,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Analyze error logs and provide insights\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Analyze user behavior data and provide insights\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Create a report on error rates\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Create a report on system performance\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Create a report on user retention\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Find patterns in categorical data\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Find patterns in clickstream data\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Find patterns in geospatial data\"}": {
+        "n": 8,
+        "mean_q": 0.90625
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Find patterns in time series data\"}": {
+        "n": 7,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Investigate the trends in A/B test results\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Investigate the trends in production logs\"}": {
+        "n": 5,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"analytical\", \"steps\": [{\"role\": \"tool_data\", \"task\": \"Load and validate data\"}, {\"role\": \"worker_math\", \"task\": \"Calculate summary statistics\"}, {\"role\": \"tool_script\", \"task\": \"Run statistical tests\"}, {\"role\": \"coder_primary\", \"task\": \"Generate visualizations\"}, {\"role\": \"frontdoor\", \"task\": \"Synthesize findings into report\"}], \"objective\": \"Investigate the trends in user surveys\"}": {
+        "n": 9,
+        "mean_q": 1.0
+      }
+    }
+  },
+  "code": {
+    "best_action": "{\"type\": \"hierarchical\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Design high-level architecture and interfaces\"}, {\"role\": \"coder_primary\", \"task\": \"Implement core functionality\"}, {\"role\": \"worker_general\", \"task\": \"Write unit tests\", \"parallel\": true}, {\"role\": \"worker_general\", \"task\": \"Write integration tests\", \"parallel\": true}, {\"role\": \"coder_primary\", \"task\": \"Review and refactor\"}], \"objective\": \"Create a complete logging infrastructure solution\"}",
+    "q_value": 1.0,
+    "n": 4,
+    "all_actions": {
+      "{\"type\": \"hierarchical\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Design high-level architecture and interfaces\"}, {\"role\": \"coder_primary\", \"task\": \"Implement core functionality\"}, {\"role\": \"worker_general\", \"task\": \"Write unit tests\", \"parallel\": true}, {\"role\": \"worker_general\", \"task\": \"Write integration tests\", \"parallel\": true}, {\"role\": \"coder_primary\", \"task\": \"Review and refactor\"}], \"objective\": \"Create a complete logging infrastructure solution\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"hierarchical\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Design high-level architecture and interfaces\"}, {\"role\": \"coder_primary\", \"task\": \"Implement core functionality\"}, {\"role\": \"worker_general\", \"task\": \"Write unit tests\", \"parallel\": true}, {\"role\": \"worker_general\", \"task\": \"Write integration tests\", \"parallel\": true}, {\"role\": \"coder_primary\", \"task\": \"Review and refactor\"}], \"objective\": \"Create a complete payment processing solution\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"hierarchical\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Design high-level architecture and interfaces\"}, {\"role\": \"coder_primary\", \"task\": \"Implement core functionality\"}, {\"role\": \"worker_general\", \"task\": \"Write unit tests\", \"parallel\": true}, {\"role\": \"worker_general\", \"task\": \"Write integration tests\", \"parallel\": true}, {\"role\": \"coder_primary\", \"task\": \"Review and refactor\"}], \"objective\": \"Create a complete user authentication solution\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"hierarchical\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Design high-level architecture and interfaces\"}, {\"role\": \"coder_primary\", \"task\": \"Implement core functionality\"}, {\"role\": \"worker_general\", \"task\": \"Write unit tests\", \"parallel\": true}, {\"role\": \"worker_general\", \"task\": \"Write integration tests\", \"parallel\": true}, {\"role\": \"coder_primary\", \"task\": \"Review and refactor\"}], \"objective\": \"Implement API versioning for the web app\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"hierarchical\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Design high-level architecture and interfaces\"}, {\"role\": \"coder_primary\", \"task\": \"Implement core functionality\"}, {\"role\": \"worker_general\", \"task\": \"Write unit tests\", \"parallel\": true}, {\"role\": \"worker_general\", \"task\": \"Write integration tests\", \"parallel\": true}, {\"role\": \"coder_primary\", \"task\": \"Review and refactor\"}], \"objective\": \"Implement payment processing for the mobile backend\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"refactoring\", \"steps\": [{\"role\": \"architect_coding\", \"task\": \"Analyze current structure and identify issues\"}, {\"role\": \"architect_coding\", \"task\": \"Design target architecture\"}, {\"role\": \"worker_general\", \"task\": \"Add tests for existing behavior\"}, {\"role\": \"coder_primary\", \"task\": \"Implement refactoring in small steps\"}, {\"role\": \"worker_general\", \"task\": \"Verify tests still pass\"}, {\"role\": \"coder_primary\", \"task\": \"Clean up and document changes\"}], \"objective\": \"Clean up and optimize the build system\"}": {
+        "n": 6,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"refactoring\", \"steps\": [{\"role\": \"architect_coding\", \"task\": \"Analyze current structure and identify issues\"}, {\"role\": \"architect_coding\", \"task\": \"Design target architecture\"}, {\"role\": \"worker_general\", \"task\": \"Add tests for existing behavior\"}, {\"role\": \"coder_primary\", \"task\": \"Implement refactoring in small steps\"}, {\"role\": \"worker_general\", \"task\": \"Verify tests still pass\"}, {\"role\": \"coder_primary\", \"task\": \"Clean up and document changes\"}], \"objective\": \"Clean up and optimize the core business logic\"}": {
+        "n": 6,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"refactoring\", \"steps\": [{\"role\": \"architect_coding\", \"task\": \"Analyze current structure and identify issues\"}, {\"role\": \"architect_coding\", \"task\": \"Design target architecture\"}, {\"role\": \"worker_general\", \"task\": \"Add tests for existing behavior\"}, {\"role\": \"coder_primary\", \"task\": \"Implement refactoring in small steps\"}, {\"role\": \"worker_general\", \"task\": \"Verify tests still pass\"}, {\"role\": \"coder_primary\", \"task\": \"Clean up and document changes\"}], \"objective\": \"Clean up and optimize the test suite\"}": {
+        "n": 6,
+        "mean_q": 0.75
+      },
+      "{\"type\": \"refactoring\", \"steps\": [{\"role\": \"architect_coding\", \"task\": \"Analyze current structure and identify issues\"}, {\"role\": \"architect_coding\", \"task\": \"Design target architecture\"}, {\"role\": \"worker_general\", \"task\": \"Add tests for existing behavior\"}, {\"role\": \"coder_primary\", \"task\": \"Implement refactoring in small steps\"}, {\"role\": \"worker_general\", \"task\": \"Verify tests still pass\"}, {\"role\": \"coder_primary\", \"task\": \"Clean up and document changes\"}], \"objective\": \"Modernize the configuration codebase\"}": {
+        "n": 6,
+        "mean_q": 0.875
+      },
+      "{\"type\": \"refactoring\", \"steps\": [{\"role\": \"architect_coding\", \"task\": \"Analyze current structure and identify issues\"}, {\"role\": \"architect_coding\", \"task\": \"Design target architecture\"}, {\"role\": \"worker_general\", \"task\": \"Add tests for existing behavior\"}, {\"role\": \"coder_primary\", \"task\": \"Implement refactoring in small steps\"}, {\"role\": \"worker_general\", \"task\": \"Verify tests still pass\"}, {\"role\": \"coder_primary\", \"task\": \"Clean up and document changes\"}], \"objective\": \"Refactor the data access layer to improve performance\"}": {
+        "n": 3,
+        "mean_q": 0.75
+      },
+      "{\"type\": \"refactoring\", \"steps\": [{\"role\": \"architect_coding\", \"task\": \"Analyze current structure and identify issues\"}, {\"role\": \"architect_coding\", \"task\": \"Design target architecture\"}, {\"role\": \"worker_general\", \"task\": \"Add tests for existing behavior\"}, {\"role\": \"coder_primary\", \"task\": \"Implement refactoring in small steps\"}, {\"role\": \"worker_general\", \"task\": \"Verify tests still pass\"}, {\"role\": \"coder_primary\", \"task\": \"Clean up and document changes\"}], \"objective\": \"Refactor the utility functions to improve maintainability\"}": {
+        "n": 3,
+        "mean_q": 0.75
+      },
+      "{\"type\": \"refactoring\", \"steps\": [{\"role\": \"architect_coding\", \"task\": \"Analyze current structure and identify issues\"}, {\"role\": \"architect_coding\", \"task\": \"Design target architecture\"}, {\"role\": \"worker_general\", \"task\": \"Add tests for existing behavior\"}, {\"role\": \"coder_primary\", \"task\": \"Implement refactoring in small steps\"}, {\"role\": \"worker_general\", \"task\": \"Verify tests still pass\"}, {\"role\": \"coder_primary\", \"task\": \"Clean up and document changes\"}], \"objective\": \"Restructure the complex conditionals for better extensibility\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"refactoring\", \"steps\": [{\"role\": \"architect_coding\", \"task\": \"Analyze current structure and identify issues\"}, {\"role\": \"architect_coding\", \"task\": \"Design target architecture\"}, {\"role\": \"worker_general\", \"task\": \"Add tests for existing behavior\"}, {\"role\": \"coder_primary\", \"task\": \"Implement refactoring in small steps\"}, {\"role\": \"worker_general\", \"task\": \"Verify tests still pass\"}, {\"role\": \"coder_primary\", \"task\": \"Clean up and document changes\"}], \"objective\": \"Restructure the duplicated logic for better dependency injection\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"refactoring\", \"steps\": [{\"role\": \"architect_coding\", \"task\": \"Analyze current structure and identify issues\"}, {\"role\": \"architect_coding\", \"task\": \"Design target architecture\"}, {\"role\": \"worker_general\", \"task\": \"Add tests for existing behavior\"}, {\"role\": \"coder_primary\", \"task\": \"Implement refactoring in small steps\"}, {\"role\": \"worker_general\", \"task\": \"Verify tests still pass\"}, {\"role\": \"coder_primary\", \"task\": \"Clean up and document changes\"}], \"objective\": \"Restructure the monolithic module for better dependency injection\"}": {
+        "n": 3,
+        "mean_q": 0.75
+      },
+      "{\"type\": \"refactoring\", \"steps\": [{\"role\": \"architect_coding\", \"task\": \"Analyze current structure and identify issues\"}, {\"role\": \"architect_coding\", \"task\": \"Design target architecture\"}, {\"role\": \"worker_general\", \"task\": \"Add tests for existing behavior\"}, {\"role\": \"coder_primary\", \"task\": \"Implement refactoring in small steps\"}, {\"role\": \"worker_general\", \"task\": \"Verify tests still pass\"}, {\"role\": \"coder_primary\", \"task\": \"Clean up and document changes\"}], \"objective\": \"Restructure the tightly coupled classes for better extensibility\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      }
+    }
+  },
+  "debug": {
+    "best_action": "{\"type\": \"diagnostic\", \"steps\": [{\"role\": \"tool_logs\", \"task\": \"Gather relevant logs and metrics\"}, {\"role\": \"coder_primary\", \"task\": \"Analyze error patterns and stack traces\"}, {\"role\": \"architect_coding\", \"task\": \"Identify potential root causes\"}, {\"role\": \"coder_primary\", \"task\": \"Implement and test fix\"}, {\"role\": \"tool_monitoring\", \"task\": \"Verify fix in monitoring\"}], \"objective\": \"Find and fix the root cause of the data sync issues\"}",
+    "q_value": 1.0,
+    "n": 4,
+    "all_actions": {
+      "{\"type\": \"diagnostic\", \"steps\": [{\"role\": \"tool_logs\", \"task\": \"Gather relevant logs and metrics\"}, {\"role\": \"coder_primary\", \"task\": \"Analyze error patterns and stack traces\"}, {\"role\": \"architect_coding\", \"task\": \"Identify potential root causes\"}, {\"role\": \"coder_primary\", \"task\": \"Implement and test fix\"}, {\"role\": \"tool_monitoring\", \"task\": \"Verify fix in monitoring\"}], \"objective\": \"Find and fix the root cause of the data sync issues\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"diagnostic\", \"steps\": [{\"role\": \"tool_logs\", \"task\": \"Gather relevant logs and metrics\"}, {\"role\": \"coder_primary\", \"task\": \"Analyze error patterns and stack traces\"}, {\"role\": \"architect_coding\", \"task\": \"Identify potential root causes\"}, {\"role\": \"coder_primary\", \"task\": \"Implement and test fix\"}, {\"role\": \"tool_monitoring\", \"task\": \"Verify fix in monitoring\"}], \"objective\": \"Find and fix the root cause of the intermittent failures\"}": {
+        "n": 6,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"diagnostic\", \"steps\": [{\"role\": \"tool_logs\", \"task\": \"Gather relevant logs and metrics\"}, {\"role\": \"coder_primary\", \"task\": \"Analyze error patterns and stack traces\"}, {\"role\": \"architect_coding\", \"task\": \"Identify potential root causes\"}, {\"role\": \"coder_primary\", \"task\": \"Implement and test fix\"}, {\"role\": \"tool_monitoring\", \"task\": \"Verify fix in monitoring\"}], \"objective\": \"Find and fix the root cause of the slow response times\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"diagnostic\", \"steps\": [{\"role\": \"tool_logs\", \"task\": \"Gather relevant logs and metrics\"}, {\"role\": \"coder_primary\", \"task\": \"Analyze error patterns and stack traces\"}, {\"role\": \"architect_coding\", \"task\": \"Identify potential root causes\"}, {\"role\": \"coder_primary\", \"task\": \"Implement and test fix\"}, {\"role\": \"tool_monitoring\", \"task\": \"Verify fix in monitoring\"}], \"objective\": \"Investigate why data is inconsistent is happening\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"diagnostic\", \"steps\": [{\"role\": \"tool_logs\", \"task\": \"Gather relevant logs and metrics\"}, {\"role\": \"coder_primary\", \"task\": \"Analyze error patterns and stack traces\"}, {\"role\": \"architect_coding\", \"task\": \"Identify potential root causes\"}, {\"role\": \"coder_primary\", \"task\": \"Implement and test fix\"}, {\"role\": \"tool_monitoring\", \"task\": \"Verify fix in monitoring\"}], \"objective\": \"Investigate why memory usage is growing is happening\"}": {
+        "n": 9,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"diagnostic\", \"steps\": [{\"role\": \"tool_logs\", \"task\": \"Gather relevant logs and metrics\"}, {\"role\": \"coder_primary\", \"task\": \"Analyze error patterns and stack traces\"}, {\"role\": \"architect_coding\", \"task\": \"Identify potential root causes\"}, {\"role\": \"coder_primary\", \"task\": \"Implement and test fix\"}, {\"role\": \"tool_monitoring\", \"task\": \"Verify fix in monitoring\"}], \"objective\": \"Investigate why requests are timing out is happening\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"diagnostic\", \"steps\": [{\"role\": \"tool_logs\", \"task\": \"Gather relevant logs and metrics\"}, {\"role\": \"coder_primary\", \"task\": \"Analyze error patterns and stack traces\"}, {\"role\": \"architect_coding\", \"task\": \"Identify potential root causes\"}, {\"role\": \"coder_primary\", \"task\": \"Implement and test fix\"}, {\"role\": \"tool_monitoring\", \"task\": \"Verify fix in monitoring\"}], \"objective\": \"Troubleshoot the Connection errors in production\"}": {
+        "n": 5,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"diagnostic\", \"steps\": [{\"role\": \"tool_logs\", \"task\": \"Gather relevant logs and metrics\"}, {\"role\": \"coder_primary\", \"task\": \"Analyze error patterns and stack traces\"}, {\"role\": \"architect_coding\", \"task\": \"Identify potential root causes\"}, {\"role\": \"coder_primary\", \"task\": \"Implement and test fix\"}, {\"role\": \"tool_monitoring\", \"task\": \"Verify fix in monitoring\"}], \"objective\": \"Troubleshoot the NullPointer errors in production\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"diagnostic\", \"steps\": [{\"role\": \"tool_logs\", \"task\": \"Gather relevant logs and metrics\"}, {\"role\": \"coder_primary\", \"task\": \"Analyze error patterns and stack traces\"}, {\"role\": \"architect_coding\", \"task\": \"Identify potential root causes\"}, {\"role\": \"coder_primary\", \"task\": \"Implement and test fix\"}, {\"role\": \"tool_monitoring\", \"task\": \"Verify fix in monitoring\"}], \"objective\": \"Troubleshoot the OutOfMemory errors in production\"}": {
+        "n": 5,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"diagnostic\", \"steps\": [{\"role\": \"tool_logs\", \"task\": \"Gather relevant logs and metrics\"}, {\"role\": \"coder_primary\", \"task\": \"Analyze error patterns and stack traces\"}, {\"role\": \"architect_coding\", \"task\": \"Identify potential root causes\"}, {\"role\": \"coder_primary\", \"task\": \"Implement and test fix\"}, {\"role\": \"tool_monitoring\", \"task\": \"Verify fix in monitoring\"}], \"objective\": \"Troubleshoot the Timeout errors in production\"}": {
+        "n": 3,
+        "mean_q": 0.75
+      }
+    }
+  },
+  "design": {
+    "best_action": "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Architect a solution for implementing multi-region deployment\"}",
+    "q_value": 1.0,
+    "n": 6,
+    "all_actions": {
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Architect a solution for implementing multi-region deployment\"}": {
+        "n": 6,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Architect a solution for migrating to microservices\"}": {
+        "n": 6,
+        "mean_q": 0.875
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Architect a solution for reducing costs by 50%\"}": {
+        "n": 3,
+        "mean_q": 0.75
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Architect a solution for scaling to 10x traffic\"}": {
+        "n": 5,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Create a system design for 99.99% uptime SLA\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Create a system design for GDPR compliance\"}": {
+        "n": 6,
+        "mean_q": 0.75
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Create a system design for handling 1M concurrent users\"}": {
+        "n": 6,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Create a system design for sub-100ms latency globally\"}": {
+        "n": 4,
+        "mean_q": 0.8125
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Design the architecture for a content delivery network\"}": {
+        "n": 5,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Design the architecture for a distributed task queue\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Design the architecture for a real-time chat application\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Design the architecture for an e-commerce platform\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Plan the technical approach for the infrastructure overhaul\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"design\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define requirements and constraints\"}, {\"role\": \"architect_general\", \"task\": \"Design high-level architecture\"}, {\"role\": \"architect_coding\", \"task\": \"Design key component interfaces\"}, {\"role\": \"tool_diagram\", \"task\": \"Create architecture diagrams\"}, {\"role\": \"architect_general\", \"task\": \"Identify risks and trade-offs\"}, {\"role\": \"formalizer\", \"task\": \"Create implementation roadmap\"}], \"objective\": \"Plan the technical approach for the platform modernization\"}": {
+        "n": 6,
+        "mean_q": 1.0
+      }
+    }
+  },
+  "doc": {
+    "best_action": "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Create API documentation for notifications\"}",
+    "q_value": 1.0,
+    "n": 3,
+    "all_actions": {
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Create API documentation for notifications\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Create API documentation for payment processing\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Create API documentation for search\"}": {
+        "n": 9,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Create API documentation for user management\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Document the authentication system comprehensively\"}": {
+        "n": 4,
+        "mean_q": 0.8125
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Document the data models comprehensively\"}": {
+        "n": 3,
+        "mean_q": 0.75
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Update the documentation for the API changes\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Update the documentation for the migration\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Update the documentation for the new features\"}": {
+        "n": 9,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Update the documentation for the refactor\"}": {
+        "n": 5,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Write a guide for architecture\"}": {
+        "n": 5,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Write a guide for best practices\"}": {
+        "n": 4,
+        "mean_q": 0.8125
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Write a guide for getting started\"}": {
+        "n": 6,
+        "mean_q": 0.75
+      },
+      "{\"type\": \"documentation\", \"steps\": [{\"role\": \"coder_primary\", \"task\": \"Analyze code structure and interfaces\"}, {\"role\": \"tool_code\", \"task\": \"Extract API signatures and types\"}, {\"role\": \"frontdoor\", \"task\": \"Write clear explanations\"}, {\"role\": \"worker_general\", \"task\": \"Create code examples\"}, {\"role\": \"frontdoor\", \"task\": \"Review and finalize documentation\"}], \"objective\": \"Write a guide for troubleshooting\"}": {
+        "n": 6,
+        "mean_q": 1.0
+      }
+    }
+  },
+  "general": {
+    "best_action": "coder_primary",
+    "q_value": 0.6474954932000629,
+    "n": 262,
+    "all_actions": {
+      "architect_general": {
+        "n": 5,
+        "mean_q": 0.2
+      },
+      "coder_primary": {
+        "n": 262,
+        "mean_q": 0.6474954932000629
+      },
+      "decomposition": {
+        "n": 5,
+        "mean_q": 0.25
+      },
+      "formalizer": {
+        "n": 13,
+        "mean_q": 0.2
+      },
+      "frontdoor": {
+        "n": 74,
+        "mean_q": 0.1054054054054054
+      },
+      "parallel_workers": {
+        "n": 5,
+        "mean_q": 0.05
+      },
+      "sequential_workers": {
+        "n": 5,
+        "mean_q": 0.3
+      },
+      "tool_data": {
+        "n": 8,
+        "mean_q": 0.15
+      },
+      "tool_script": {
+        "n": 13,
+        "mean_q": 0.03076923076923077
+      },
+      "tool_translate": {
+        "n": 8,
+        "mean_q": 0.2
+      },
+      "tool_websearch": {
+        "n": 463,
+        "mean_q": 0.6468100113960622
+      },
+      "worker_general": {
+        "n": 150,
+        "mean_q": 0.127
+      }
+    }
+  },
+  "security": {
+    "best_action": "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Assess the security risks of the architecture change\"}",
+    "q_value": 1.0,
+    "n": 3,
+    "all_actions": {
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Assess the security risks of the architecture change\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Assess the security risks of the library upgrade\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Identify vulnerabilities in the file upload\"}": {
+        "n": 6,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Identify vulnerabilities in the login flow\"}": {
+        "n": 5,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Identify vulnerabilities in the payment processing\"}": {
+        "n": 4,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Identify vulnerabilities in the session management\"}": {
+        "n": 5,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Perform a security audit of the API endpoints\"}": {
+        "n": 9,
+        "mean_q": 0.9166666666666666
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Perform a security audit of the authentication system\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Perform a security audit of the data storage layer\"}": {
+        "n": 5,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Perform a security audit of the third-party integrations\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Review the security posture of our production environment\"}": {
+        "n": 6,
+        "mean_q": 1.0
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Review the security posture of the admin interfaces\"}": {
+        "n": 7,
+        "mean_q": 0.8928571428571429
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Review the security posture of the internal tools\"}": {
+        "n": 3,
+        "mean_q": 0.75
+      },
+      "{\"type\": \"audit\", \"steps\": [{\"role\": \"architect_general\", \"task\": \"Define audit scope and criteria\"}, {\"role\": \"tool_security\", \"task\": \"Run automated security scans\"}, {\"role\": \"coder_primary\", \"task\": \"Review code for vulnerabilities\"}, {\"role\": \"architect_coding\", \"task\": \"Analyze authentication/authorization\"}, {\"role\": \"frontdoor\", \"task\": \"Document findings and recommendations\"}], \"objective\": \"Review the security posture of the user-facing services\"}": {
+        "n": 3,
+        "mean_q": 1.0
+      }
+    }
+  },
+  "unknown": {
+    "best_action": "decompose(['1. Analyze current state', '2. Identify improvement areas', '3. Prioritize changes', '4. Implement improvements', '5. Validate results'])",
+    "q_value": 0.9177516154546794,
+    "n": 5,
+    "all_actions": {
+      "decompose(['1. Analyze current implementation', '2. Design migration plan', '3. Create compatibility layer', '4. Migrate incrementally', '5. Verify and clean up'])": {
+        "n": 4,
+        "mean_q": 0.9015459684651606
+      },
+      "decompose(['1. Analyze current state', '2. Identify improvement areas', '3. Prioritize changes', '4. Implement improvements', '5. Validate results'])": {
+        "n": 5,
+        "mean_q": 0.9177516154546794
+      },
+      "decompose(['1. Design API interface', '2. Implement core logic', '3. Write unit tests', '4. Add integration tests', '5. Write documentation'])": {
+        "n": 6,
+        "mean_q": 0.9106683542193226
+      },
+      "decompose(['1. Reproduce the issue', '2. Analyze stack trace', '3. Identify root cause', '4. Implement fix', '5. Add regression test'])": {
+        "n": 5,
+        "mean_q": 0.909211641192444
+      },
+      "escalate(from='coder_primary', to='architect_general')": {
+        "n": 4,
+        "mean_q": 0.85921298682104
+      },
+      "escalate(from='frontdoor', to='architect_coding')": {
+        "n": 4,
+        "mean_q": 0.8741798976898031
+      },
+      "escalate(from='frontdoor', to='ingest_long_context')": {
+        "n": 4,
+        "mean_q": 0.879878699936017
+      },
+      "escalate(from='worker_general', to='coder_escalation')": {
+        "n": 4,
+        "mean_q": 0.8641906453498548
+      },
+      "exploration": {
+        "n": 249,
+        "mean_q": 0.8739630493271663
+      },
+      "route_to('architect_coding')": {
+        "n": 5,
+        "mean_q": 0.8505349472352564
+      },
+      "route_to('architect_general')": {
+        "n": 102,
+        "mean_q": 0.8895870980255154
+      },
+      "route_to('coder_escalation')": {
+        "n": 312,
+        "mean_q": 0.8935347710449346
+      },
+      "route_to('frontdoor')": {
+        "n": 107,
+        "mean_q": 0.8887684210573809
+      },
+      "route_to('ingest_long_context')": {
+        "n": 66,
+        "mean_q": 0.8904780827994873
+      },
+      "route_to('worker_general')": {
+        "n": 14,
+        "mean_q": 0.8782812383831962
+      },
+      "use_tool('calculate', ...)": {
+        "n": 9,
+        "mean_q": 0.8875794260017678
+      },
+      "use_tool('csv_to_json', ...)": {
+        "n": 3,
+        "mean_q": 0.9018236176569969
+      },
+      "use_tool('git_status', ...)": {
+        "n": 3,
+        "mean_q": 0.8785690512216339
+      },
+      "use_tool('http_get', ...)": {
+        "n": 37,
+        "mean_q": 0.8899356751194687
+      },
+      "use_tool('http_post', ...)": {
+        "n": 38,
+        "mean_q": 0.8869779515982373
+      },
+      "use_tool('json_query', ...)": {
+        "n": 38,
+        "mean_q": 0.884754391342936
+      },
+      "use_tool('lint_python', ...)": {
+        "n": 3,
+        "mean_q": 0.8628465435157763
+      },
+      "use_tool('python_eval', ...)": {
+        "n": 39,
+        "mean_q": 0.888979798613449
+      },
+      "use_tool('run_shell', ...)": {
+        "n": 39,
+        "mean_q": 0.8878386710082188
+      },
+      "use_tool('sql_query', ...)": {
+        "n": 9,
+        "mean_q": 0.89974569915191
+      },
+      "use_tool('statistics', ...)": {
+        "n": 9,
+        "mean_q": 0.8921774155230007
+      },
+      "use_tool('web_search', ...)": {
+        "n": 39,
+        "mean_q": 0.8827335456834879
+      }
+    }
+  }
+}

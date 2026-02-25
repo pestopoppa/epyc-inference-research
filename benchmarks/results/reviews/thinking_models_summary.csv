@@ -1,0 +1,13 @@
+model,model_size,quantization,thinking_score,general_score,math_score,agentic_score,coder_score,total_scored,total_possible,percentage,avg_tokens_per_second,notes
+thinking_deepseek_r1_distill_llama_70b,70B,Q4_K_M,20,0,0,0,4,24,36,67%,null,Many responses truncated at token limit - good reasoning when complete
+thinking_deepseek_r1_distill_llama_8b,8B,Q4_K_M,0,0,0,21,0,21,30,70%,8.9,Good agentic performance - verbose but functional
+thinking_deepseek_r1_distill_qwen_7b,7B,Q4_K_M,0,0,0,17,0,17,30,57%,14.2,Verbose reasoning with some errors - struggles with format compliance
+thinking_deepseek_r1_distill_qwen_14b,14B,Q4_K_M,0,25,0,0,4,29,36,81%,2.8,Strong general task performance - slow speed
+thinking_deepseek_r1_distill_qwen_32b,32B,Q6_K,23,0,0,0,0,23,27,85%,1.75,Excellent thinking quality - very slow at ~1.75 t/s
+thinking_qwen3_30b_a3b_thinking_2507,30B-A3B,Q8_0,19,0,0,0,0,19,24,79%,15.5,Good thinking with some truncation issues
+thinking_qwen3_4b_thinking_2507,4B,Q8_0,0,0,0,17,0,17,24,71%,9.0,Extremely verbose - hits token limits frequently
+thinking_reasoning,80B-A3B,Q4_K_S,0,6,24,0,0,30,33,91%,7.5,Excellent math and general performance - best overall
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,30B-A3B,Q4_K_S,9,0,0,0,0,9,12,75%,null,Similar to Q8_0 version - slight quality loss
+thinking_deepseek_r1_distill_qwen_14b_q6kl,14B,Q6KL,0,9,0,0,0,9,12,75%,null,Similar to Q4_K_M version
+thinking_phi_4_reasoning_plus,14B,F16,9,0,0,0,0,9,12,75%,null,Good thinking quality
+thinking_phi_4_reasoning_plus_q8,14B,Q8,9,0,0,0,0,9,12,75%,null,Minimal quality loss from quantization

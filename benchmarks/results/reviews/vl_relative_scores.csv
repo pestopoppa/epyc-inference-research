@@ -1,0 +1,81 @@
+model,question_id,score,score_reason
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t1_q1_chart,10,Correctly identified category B as highest with value 25
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t1_q1_chart,7,Identified a category as highest with value but may not match test image
+Qwen3_VL_2B.Q4_K_M,t1_q1_chart,0,Empty/garbage output or classification confusion
+Qwen3-VL-4B-Instruct-Q4_K_M,t1_q1_chart,7,Identified a category as highest with value but may not match test image
+Qwen3-VL-4B-Instruct-Q8_0,t1_q1_chart,3,Acknowledged chart but did not answer question correctly
+Qwen3-VL-8B-Instruct-Q4_K_M,t1_q1_chart,7,Identified a category as highest with value but may not match test image
+Qwen3-VL-8B-Instruct-Q8_0,t1_q1_chart,10,Correctly identified category B as highest with value 25
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t1_q1_chart,10,Correctly identified category B as highest with value 25
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t1_q2_invoice,10,Correctly extracted total ($155) and line items
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t1_q2_invoice,2,Did not extract invoice data properly
+Qwen3_VL_2B.Q4_K_M,t1_q2_invoice,2,Did not extract invoice data properly
+Qwen3-VL-4B-Instruct-Q4_K_M,t1_q2_invoice,0,Empty or incomplete response
+Qwen3-VL-4B-Instruct-Q8_0,t1_q2_invoice,0,Empty or incomplete response
+Qwen3-VL-8B-Instruct-Q4_K_M,t1_q2_invoice,7,Extracted total and line items (values may vary from test image)
+Qwen3-VL-8B-Instruct-Q8_0,t1_q2_invoice,7,Extracted total and line items (values may vary from test image)
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t1_q2_invoice,10,Correctly extracted total ($155) and line items
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t1_q3_code,10,Explained code and identified empty list bug
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t1_q3_code,10,Explained code and identified empty list bug
+Qwen3_VL_2B.Q4_K_M,t1_q3_code,0,Empty/garbage output
+Qwen3-VL-4B-Instruct-Q4_K_M,t1_q3_code,0,Empty/garbage output
+Qwen3-VL-4B-Instruct-Q8_0,t1_q3_code,0,Empty/garbage output
+Qwen3-VL-8B-Instruct-Q4_K_M,t1_q3_code,10,Explained code and identified empty list bug
+Qwen3-VL-8B-Instruct-Q8_0,t1_q3_code,10,Explained code and identified empty list bug
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t1_q3_code,8,Explained code and identified bugs
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t2_q1_math,9,Solved linear equation correctly with work shown
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t2_q1_math,9,Solved linear equation correctly with work shown
+Qwen3_VL_2B.Q4_K_M,t2_q1_math,7,Showed work and provided answer
+Qwen3-VL-4B-Instruct-Q4_K_M,t2_q1_math,9,Solved linear equation correctly with work shown
+Qwen3-VL-4B-Instruct-Q8_0,t2_q1_math,1,Did not solve the equation
+Qwen3-VL-8B-Instruct-Q4_K_M,t2_q1_math,9,Solved linear equation correctly with work shown
+Qwen3-VL-8B-Instruct-Q8_0,t2_q1_math,9,Solved linear equation correctly with work shown
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t2_q1_math,9,Solved linear equation correctly with work shown
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t2_q2_flowchart,9,Comprehensive flowchart analysis with decisions and outcomes
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t2_q2_flowchart,9,Comprehensive flowchart analysis with decisions and outcomes
+Qwen3_VL_2B.Q4_K_M,t2_q2_flowchart,0,Empty/garbage output or classification confusion
+Qwen3-VL-4B-Instruct-Q4_K_M,t2_q2_flowchart,9,Comprehensive flowchart analysis with decisions and outcomes
+Qwen3-VL-4B-Instruct-Q8_0,t2_q2_flowchart,9,Comprehensive flowchart analysis with decisions and outcomes
+Qwen3-VL-8B-Instruct-Q4_K_M,t2_q2_flowchart,9,Comprehensive flowchart analysis with decisions and outcomes
+Qwen3-VL-8B-Instruct-Q8_0,t2_q2_flowchart,9,Comprehensive flowchart analysis with decisions and outcomes
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t2_q2_flowchart,9,Comprehensive flowchart analysis with decisions and outcomes
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t2_q3_diff,7,Identified differences with some specifics
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t2_q3_diff,5,Acknowledged differences but vague descriptions
+Qwen3_VL_2B.Q4_K_M,t2_q3_diff,5,Acknowledged differences but vague descriptions
+Qwen3-VL-4B-Instruct-Q4_K_M,t2_q3_diff,5,Acknowledged differences but vague descriptions
+Qwen3-VL-4B-Instruct-Q8_0,t2_q3_diff,5,Acknowledged differences but vague descriptions
+Qwen3-VL-8B-Instruct-Q4_K_M,t2_q3_diff,7,Identified differences with some specifics
+Qwen3-VL-8B-Instruct-Q8_0,t2_q3_diff,5,Acknowledged differences but vague descriptions
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t2_q3_diff,9,Found multiple differences with specific descriptions
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t2_q4_puzzle,10,Correct answer (blue square) with reasoning
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t2_q4_puzzle,6,Provided answer with reasoning (may not match pattern)
+Qwen3_VL_2B.Q4_K_M,t2_q4_puzzle,4,Identified pattern type but answer unclear
+Qwen3-VL-4B-Instruct-Q4_K_M,t2_q4_puzzle,6,Provided answer with reasoning (may not match pattern)
+Qwen3-VL-4B-Instruct-Q8_0,t2_q4_puzzle,4,Identified pattern type but answer unclear
+Qwen3-VL-8B-Instruct-Q4_K_M,t2_q4_puzzle,4,Identified pattern type but answer unclear
+Qwen3-VL-8B-Instruct-Q8_0,t2_q4_puzzle,4,Identified pattern type but answer unclear
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t2_q4_puzzle,10,Correct answer (blue square) with reasoning
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t3_q1_scientific_diagram,9,Comprehensive scientific figure analysis with critiques
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t3_q1_scientific_diagram,9,Comprehensive scientific figure analysis with critiques
+Qwen3_VL_2B.Q4_K_M,t3_q1_scientific_diagram,9,Comprehensive scientific figure analysis with critiques
+Qwen3-VL-4B-Instruct-Q4_K_M,t3_q1_scientific_diagram,9,Comprehensive scientific figure analysis with critiques
+Qwen3-VL-4B-Instruct-Q8_0,t3_q1_scientific_diagram,9,Comprehensive scientific figure analysis with critiques
+Qwen3-VL-8B-Instruct-Q4_K_M,t3_q1_scientific_diagram,9,Comprehensive scientific figure analysis with critiques
+Qwen3-VL-8B-Instruct-Q8_0,t3_q1_scientific_diagram,9,Comprehensive scientific figure analysis with critiques
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t3_q1_scientific_diagram,9,Comprehensive scientific figure analysis with critiques
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t3_q2_architectural_blueprint,9,Comprehensive blueprint analysis with multiple aspects
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t3_q2_architectural_blueprint,9,Comprehensive blueprint analysis with multiple aspects
+Qwen3_VL_2B.Q4_K_M,t3_q2_architectural_blueprint,9,Comprehensive blueprint analysis with multiple aspects
+Qwen3-VL-4B-Instruct-Q4_K_M,t3_q2_architectural_blueprint,9,Comprehensive blueprint analysis with multiple aspects
+Qwen3-VL-4B-Instruct-Q8_0,t3_q2_architectural_blueprint,9,Comprehensive blueprint analysis with multiple aspects
+Qwen3-VL-8B-Instruct-Q4_K_M,t3_q2_architectural_blueprint,9,Comprehensive blueprint analysis with multiple aspects
+Qwen3-VL-8B-Instruct-Q8_0,t3_q2_architectural_blueprint,9,Comprehensive blueprint analysis with multiple aspects
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t3_q2_architectural_blueprint,9,Comprehensive blueprint analysis with multiple aspects
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t3_q3_multi_image_temporal,9,Excellent temporal analysis with causation and prediction
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t3_q3_multi_image_temporal,9,Excellent temporal analysis with causation and prediction
+Qwen3_VL_2B.Q4_K_M,t3_q3_multi_image_temporal,9,Excellent temporal analysis with causation and prediction
+Qwen3-VL-4B-Instruct-Q4_K_M,t3_q3_multi_image_temporal,9,Excellent temporal analysis with causation and prediction
+Qwen3-VL-4B-Instruct-Q8_0,t3_q3_multi_image_temporal,9,Excellent temporal analysis with causation and prediction
+Qwen3-VL-8B-Instruct-Q4_K_M,t3_q3_multi_image_temporal,9,Excellent temporal analysis with causation and prediction
+Qwen3-VL-8B-Instruct-Q8_0,t3_q3_multi_image_temporal,9,Excellent temporal analysis with causation and prediction
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t3_q3_multi_image_temporal,9,Excellent temporal analysis with causation and prediction

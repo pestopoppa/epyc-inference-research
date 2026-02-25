@@ -1,0 +1,133 @@
+{
+  "problem_id": "verif-t2-invariant",
+  "original_task": "The account balance must always remain non-negative after any withdrawal operation.",
+  "formal_specification": {
+    "problem_type": "proof",
+    "variables": [
+      {
+        "name": "balance",
+        "type": "decimal",
+        "domain": "balance >= 0",
+        "description": "Current account balance"
+      },
+      {
+        "name": "amount",
+        "type": "decimal",
+        "domain": "amount > 0",
+        "description": "Amount to withdraw"
+      },
+      {
+        "name": "balance_after",
+        "type": "decimal",
+        "description": "Balance after withdrawal"
+      }
+    ],
+    "preconditions": [
+      "balance >= 0",
+      "amount > 0",
+      "amount <= balance"
+    ],
+    "postconditions": [
+      "balance_after == balance - amount",
+      "balance_after >= 0"
+    ],
+    "invariants": [
+      "forall t: balance(t) >= 0",
+      "withdraw(amount) implies balance_before >= amount"
+    ],
+    "constraints": [
+      {
+        "expression": "balance_after >= 0",
+        "description": "Balance must never go negative",
+        "hard": true
+      },
+      {
+        "expression": "amount <= balance",
+        "description": "Cannot withdraw more than available balance",
+        "hard": true
+      }
+    ]
+  },
+  "edge_cases": [
+    {
+      "description": "Withdrawal exactly equals balance",
+      "input": "balance=100, amount=100",
+      "expected_behavior": "Succeed, balance becomes 0",
+      "severity": "important"
+    },
+    {
+      "description": "Withdrawal exceeds balance",
+      "input": "balance=100, amount=150",
+      "expected_behavior": "Reject with InsufficientFundsException",
+      "severity": "critical"
+    },
+    {
+      "description": "Concurrent withdrawals exceed balance",
+      "input": "balance=100, concurrent: amount1=60, amount2=60",
+      "expected_behavior": "One succeeds, one fails (serializable isolation)",
+      "severity": "critical"
+    },
+    {
+      "description": "Negative withdrawal amount",
+      "input": "amount=-50",
+      "expected_behavior": "Reject with InvalidAmountException",
+      "severity": "critical"
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "criterion": "Balance never goes negative",
+      "testable": true,
+      "test_method": "Property-based testing with random transactions",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Rejects withdrawals exceeding balance",
+      "testable": true,
+      "test_method": "Unit test with overdraft attempt",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Handles concurrent withdrawals safely",
+      "testable": true,
+      "test_method": "Concurrent stress test with race conditions",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Audit trail records all attempts",
+      "testable": true,
+      "test_method": "Verify log entries for both successful and failed withdrawals",
+      "priority": "should_have"
+    }
+  ],
+  "suggested_approach": {
+    "algorithm_family": "optimistic locking with invariant check",
+    "recommended_tools": ["database transactions", "check-then-act pattern", "compare-and-swap"],
+    "decomposition": [
+      "Validate withdrawal amount (positive)",
+      "Acquire lock on account",
+      "Check balance >= amount",
+      "Update balance atomically",
+      "Release lock and return result"
+    ]
+  },
+  "confidence": 0.90,
+  "ambiguities": [
+    {
+      "question": "Should overdraft protection be an option?",
+      "assumption": "No overdraft - strictly non-negative balance",
+      "impact": "Affects whether to allow linked account fallback"
+    },
+    {
+      "question": "What isolation level for concurrent access?",
+      "assumption": "Serializable to prevent race conditions",
+      "impact": "Affects performance vs correctness trade-off"
+    }
+  ],
+  "related_concepts": [
+    "ACID transactions",
+    "Optimistic vs pessimistic locking",
+    "Invariant preservation",
+    "Double-entry bookkeeping"
+  ]
+}

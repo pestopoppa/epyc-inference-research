@@ -1,0 +1,169 @@
+{
+  "t1_routing": {
+    "suite": "t1_routing",
+    "total": 4,
+    "passed": 4,
+    "failed": 0,
+    "pass_rate": 1.0,
+    "avg_latency_ms": 136.5,
+    "avg_turns": 2.25,
+    "tests": [
+      {
+        "test_id": "t1_context_grep",
+        "suite": "t1_context",
+        "passed": true,
+        "turns": 3,
+        "latency_ms": 149,
+        "functions_called": [
+          "grep"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "Found ERROR on lines 15, 42, 87.",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 3,
+            "max": 3
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "answer_contains": {
+            "passed": true,
+            "required": [
+              "ERROR",
+              "error"
+            ]
+          },
+          "uses_function": {
+            "passed": true,
+            "required": [
+              "grep"
+            ],
+            "actual": [
+              "grep"
+            ]
+          }
+        }
+      },
+      {
+        "test_id": "t1_context_peek",
+        "suite": "t1_context",
+        "passed": true,
+        "turns": 2,
+        "latency_ms": 138,
+        "functions_called": [
+          "peek"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "The first word is 'The'.",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 2,
+            "max": 3
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "answer_contains": {
+            "passed": true,
+            "required": [
+              "The"
+            ]
+          },
+          "uses_function": {
+            "passed": true,
+            "required": [
+              "peek"
+            ],
+            "actual": [
+              "peek"
+            ]
+          }
+        }
+      },
+      {
+        "test_id": "t1_direct_answer",
+        "suite": "t1_direct",
+        "passed": true,
+        "turns": 1,
+        "latency_ms": 114,
+        "functions_called": [],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "4",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 1,
+            "max": 2
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "answer_contains": {
+            "passed": true,
+            "required": [
+              "4"
+            ]
+          },
+          "no_llm_calls": {
+            "passed": true,
+            "actual": []
+          }
+        }
+      },
+      {
+        "test_id": "t1_simple_delegate",
+        "suite": "t1_simple",
+        "passed": true,
+        "turns": 3,
+        "latency_ms": 145,
+        "functions_called": [
+          "llm_call"
+        ],
+        "escalation_triggered": false,
+        "escalation_to": null,
+        "final_called": true,
+        "error": null,
+        "response_preview": "This document discusses machine learning concepts...",
+        "criteria_results": {
+          "max_turns": {
+            "passed": true,
+            "actual": 3,
+            "max": 5
+          },
+          "must_call_final": {
+            "passed": true
+          },
+          "uses_function": {
+            "passed": true,
+            "required": [
+              "llm_call"
+            ],
+            "actual": [
+              "llm_call"
+            ]
+          },
+          "llm_calls_count": {
+            "passed": true,
+            "actual": 1,
+            "range": [
+              1,
+              2
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

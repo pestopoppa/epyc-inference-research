@@ -1,0 +1,10 @@
+What is 2 + 2?
+
+---
+test_id: t1_direct_answer
+expected_behavior: Direct answer without sub-LM calls
+pass_criteria:
+  max_turns: 2
+  answer_contains: ["4"]
+  no_llm_calls: true
+  must_call_final: true

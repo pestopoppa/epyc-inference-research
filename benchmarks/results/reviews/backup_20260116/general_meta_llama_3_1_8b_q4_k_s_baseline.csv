@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,11.59,2,General response generated
+general,t3_q2_system_failure,0.0,2,General response generated
+general,t3_q3_strategic_communication,6.96,2,General response generated
+general,t2_q1_synthesis,7.36,2,General response generated
+general,t2_q2_transform,0.0,2,General response generated
+general,t2_q3_schedule,233.01,2,General response generated
+general,t2_q4_inconsistency,169.08,2,General response generated
+general,t1_q1_json,92.48,2,General response generated
+general,t1_q2_multistep,0.0,2,General response generated
+general,t1_q3_compare,140.64,2,General response generated
+coder,t3_q1_concurrent_correctness,220.92,2,Response generated
+coder,t3_q2_distributed_consistency,6.17,2,Response generated
+coder,t3_q3_algorithmic_hardness,6.23,2,Response generated
+coder,t2_q1_design,157.98,2,Response generated
+coder,t2_q2_debug_complex,191.78,2,Response generated
+coder,t2_q3_optimize,179.98,2,Response generated
+coder,t2_q4_system,6.43,2,Response generated
+coder,t1_q1_algorithm,7.23,2,Response generated
+coder,t1_q2_refactor,209.71,2,Response generated
+coder,t1_q3_test,7.31,2,Response generated
+math,t3_q1_analysis,179.87,2,Response generated
+math,t3_q2_combinatorics,6.33,2,Response generated
+math,t3_q3_probability_theory,201.31,2,Response generated
+math,t2_q1_optimization,130.26,2,Response generated
+math,t2_q2_proof,6.26,2,Response generated
+math,t2_q3_calculus,7.21,2,Response generated
+math,t2_q4_statistics,147.5,2,Response generated
+math,t1_q1_word_problem,138.9,2,Response generated
+math,t1_q2_system_equations,84.04,2,Response generated
+math,t1_q3_probability,126.52,2,Response generated
+agentic,t3_q1_competing_constraints,314.55,2,Response generated
+agentic,t3_q2_multi_agent_coordination,340.73,2,Response generated
+agentic,t3_q3_adversarial_robustness,14.25,2,Response generated
+agentic,t2_q1_ambiguous,246.66,2,Response generated
+agentic,t2_q2_error_chain,9.22,2,Response generated
+agentic,t2_q3_schema_edge,7.23,2,Response generated
+agentic,t2_q4_orchestration,230.64,2,Response generated
+agentic,t1_q1_sequential,6.3,2,Response generated
+agentic,t1_q2_error_handling,7.25,2,Response generated
+agentic,t1_q3_nested_params,6.51,2,Response generated
+instruction_precision,t3_q1_self_referential,7.05,2,Response generated
+instruction_precision,t3_q2_cascading_constraints,6.84,2,Response generated
+instruction_precision,t3_q3_meta_instruction,6.96,2,Response generated
+instruction_precision,t2_q1_resist_elaboration,7.05,2,Response generated
+instruction_precision,t2_q2_maintain_format,7.34,2,Response generated
+instruction_precision,t2_q3_empty_handling,7.42,2,Response generated
+instruction_precision,t2_q4_conflicting_constraints,6.96,2,Response generated
+instruction_precision,t1_q1_negative_instruction,7.0,2,Response generated
+instruction_precision,t1_q2_word_limit,7.06,2,Response generated
+instruction_precision,t1_q3_structured_format,7.06,2,Response generated
+instruction_precision,t1_q4_multiple_constraints,7.09,2,Response generated
+thinking,t3_q1_methodological_critique,6.37,2,Substantial attempt at expert problem
+thinking,t3_q2_causal_inference,6.34,3,Expert-level analysis with formal concepts
+thinking,t3_q3_reasoning_trap,237.05,1,Basic attempt at expert problem
+thinking,t2_q1_paradox,155.78,2,Attempted multi-step reasoning
+thinking,t2_q2_counterfactual,6.19,2,Partial causal reasoning
+thinking,t2_q3_formal,83.24,1,Attempted statistical problem
+thinking,t2_q4_metacognition,7.16,2,Substantial response with reasoning
+thinking,t1_q1_multistep,6.85,1,Attempted logic problem
+thinking,t1_q2_hypothesis,6.3,3,Correct answer: 42
+thinking,t1_q3_planning,6.37,1,Attempted game theory problem

@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.json
+htmlcov/
+
+# Optuna (keep orchestration/optuna_study.db as historical reference)
+*.db
+!orchestration/optuna_study.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large generated artifacts
+benchmarks/results/runs/*/raw/
+benchmarks/prompts/question_pool.jsonl
+*.gguf
+*.bin
+*.safetensors
+
+# Cache
+.cache/
+cache/

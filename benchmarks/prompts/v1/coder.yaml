@@ -1,0 +1,1188 @@
+version: 1
+domain: coder
+description: "Code generation and debugging benchmark - hardened for systems/research level"
+created: "2025-12-16"
+updated: "2025-12-18"
+
+prompts:
+  # ============== TIER 1: Medium (was T2) ==============
+  t1_q1_algorithm:
+    tier: 1
+    name: "Bug Detection in Algorithm"
+    prompt: |
+      This binary search implementation has TWO subtle bugs that cause incorrect
+      results on specific inputs. Find both bugs and fix them.
+
+      def binary_search(arr, target):
+          left, right = 0, len(arr)
+          while left < right:
+              mid = (left + right) // 2
+              if arr[mid] == target:
+                  return mid
+              elif arr[mid] < target:
+                  left = mid
+              else:
+                  right = mid
+          return -1
+
+      For each bug:
+      1. Provide a specific input that triggers the bug
+      2. Explain what goes wrong
+      3. Show the fix
+    expected: "Bug 1: left=mid causes infinite loop (fix: left=mid+1). Bug 2: right=mid may skip target (fix: right=mid is correct but need left<=right or right=len-1)"
+    reference_answer: |
+      **Bug 1: `left = mid` causes infinite loop**
+
+      *Triggering input:* `arr = [1, 3], target = 2`
+
+      *Trace:*
+      - left=0, right=2, mid=1, arr[1]=3 > 2, right=1
+      - left=0, right=1, mid=0, arr[0]=1 < 2, left=0 (unchanged!)
+      - Infinite loop: left stays 0, right stays 1, mid stays 0 forever
+
+      *Problem:* When `arr[mid] < target`, we know mid isn't the target, so we should exclude it. Setting `left = mid` doesn't exclude mid, so when left and right differ by 1, left never advances.
+
+      *Fix:* `left = mid + 1`
+
+      **Bug 2: Off-by-one with exclusive right bound**
+
+      *Issue:* The code uses `right = len(arr)` (exclusive upper bound) with `while left < right`, which is one valid pattern. However, there's a subtle inconsistency in how boundaries are handled.
+
+      *Triggering input:* `arr = [1, 2, 3, 4], target = 4`
+
+      With the first bug fixed (`left = mid + 1`), let's trace:
+      - left=0, right=4, mid=2, arr[2]=3 < 4, left=3
+      - left=3, right=4, mid=3, arr[3]=4 == 4, return 3 ✓
+
+      Actually, the code works after fixing Bug 1 for most cases. The "second bug" is more of a pattern consistency issue:
+
+      *Alternative interpretation:* For very large arrays, `mid = (left + right) // 2` can overflow in some languages. Python handles big integers, but in C/Java: `mid = left + (right - left) // 2` is safer.
+
+      **Corrected Code:**
+      ```python
+      def binary_search(arr, target):
+          left, right = 0, len(arr) - 1  # inclusive bounds
+          while left <= right:
+              mid = left + (right - left) // 2  # overflow-safe
+              if arr[mid] == target:
+                  return mid
+              elif arr[mid] < target:
+                  left = mid + 1
+              else:
+                  right = mid - 1
+          return -1
+      ```
+
+      Or keeping exclusive right:
+      ```python
+      def binary_search(arr, target):
+          left, right = 0, len(arr)  # exclusive right
+          while left < right:
+              mid = (left + right) // 2
+              if arr[mid] == target:
+                  return mid
+              elif arr[mid] < target:
+                  left = mid + 1  # FIX: was left = mid
+              else:
+                  right = mid
+          return -1
+      ```
+    scoring:
+      - criterion: "Identifies infinite loop bug"
+        weight: 30
+      - criterion: "Provides triggering input"
+        weight: 20
+      - criterion: "Identifies boundary bug"
+        weight: 30
+      - criterion: "Correct fixes"
+        weight: 20
+
+  t1_q2_refactor:
+    tier: 1
+    name: "Refactoring with Tradeoffs"
+    prompt: |
+      This function finds duplicate items in a list. It's correct but slow.
+
+      def find_duplicates(items):
+          duplicates = []
+          for i in range(len(items)):
+              for j in range(i + 1, len(items)):
+                  if items[i] == items[j] and items[i] not in duplicates:
+                      duplicates.append(items[i])
+          return duplicates
+
+      Provide TWO different refactored versions:
+      1. Optimize for speed (what's the new time complexity?)
+      2. Optimize for memory when items are very large objects
+
+      For each version, explain the tradeoff you're making.
+    expected: "V1: set/Counter O(n) but O(n) memory. V2: sort first O(n log n) but O(1) extra space"
+    reference_answer: |
+      **Original Complexity:** O(n²) time for nested loops, plus O(n) for `in duplicates` check = O(n³) worst case. O(k) space where k = number of duplicates.
+
+      **Version 1: Speed-Optimized (Hash-Based)**
+
+      ```python
+      from collections import Counter
+
+      def find_duplicates_fast(items):
+          counts = Counter(items)
+          return [item for item, count in counts.items() if count > 1]
+      ```
+
+      Or without Counter:
+      ```python
+      def find_duplicates_fast(items):
+          seen = set()
+          duplicates = set()
+          for item in items:
+              if item in seen:
+                  duplicates.add(item)
+              seen.add(item)
+          return list(duplicates)
+      ```
+
+      *Time complexity:* O(n) - single pass, O(1) hash lookups
+      *Space complexity:* O(n) - stores all unique items in set/dict
+
+      *Tradeoff:* Uses O(n) extra memory to achieve O(n) time. If items are very large objects, this means storing references to all unique items, which could be memory-intensive.
+
+      **Version 2: Memory-Optimized (Sort-Based)**
+
+      ```python
+      def find_duplicates_memory_efficient(items):
+          if not items:
+              return []
+
+          sorted_items = sorted(items)  # O(n log n)
+          duplicates = []
+
+          i = 0
+          while i < len(sorted_items) - 1:
+              if sorted_items[i] == sorted_items[i + 1]:
+                  duplicates.append(sorted_items[i])
+                  # Skip all copies of this duplicate
+                  while i < len(sorted_items) - 1 and sorted_items[i] == sorted_items[i + 1]:
+                      i += 1
+              i += 1
+
+          return duplicates
+      ```
+
+      *Time complexity:* O(n log n) - dominated by sort
+      *Space complexity:* O(1) extra space if we can sort in-place, O(n) for sorted copy
+
+      *Tradeoff:* Slower than hash-based (O(n log n) vs O(n)), but if items are very large objects, we only store references during sorting rather than building an additional data structure. In-place sort (if allowed to modify input) uses O(1) extra space.
+
+      **For truly huge objects where even sorted() is problematic:**
+      ```python
+      def find_duplicates_minimal_memory(items):
+          # Sort indices by item value, not items themselves
+          indices = sorted(range(len(items)), key=lambda i: items[i])
+          duplicates = []
+          i = 0
+          while i < len(indices) - 1:
+              if items[indices[i]] == items[indices[i + 1]]:
+                  duplicates.append(items[indices[i]])
+                  while i < len(indices) - 1 and items[indices[i]] == items[indices[i + 1]]:
+                      i += 1
+              i += 1
+          return duplicates
+      ```
+
+      This only stores indices (integers) during sorting, accessing the large objects only for comparison.
+    scoring:
+      - criterion: "Speed-optimized version correct"
+        weight: 30
+      - criterion: "Memory-optimized version correct"
+        weight: 30
+      - criterion: "Correct complexity analysis"
+        weight: 25
+      - criterion: "Tradeoff explanation"
+        weight: 15
+
+  t1_q3_test:
+    tier: 1
+    name: "Test Case Generation"
+    prompt: |
+      Write pytest test cases for this function:
+
+      def divide(a, b):
+          if b == 0:
+              raise ValueError("Cannot divide by zero")
+          return a / b
+
+      Cover normal cases, edge cases, and error cases.
+    expected: "Tests for normal division, zero divisor, negative numbers"
+    reference_answer: |
+      ```python
+      import pytest
+      from your_module import divide  # or define inline
+
+      class TestDivide:
+          # ========== Normal Cases ==========
+          def test_positive_integers(self):
+              assert divide(10, 2) == 5.0
+
+          def test_positive_with_remainder(self):
+              assert divide(7, 2) == 3.5
+
+          def test_negative_dividend(self):
+              assert divide(-10, 2) == -5.0
+
+          def test_negative_divisor(self):
+              assert divide(10, -2) == -5.0
+
+          def test_both_negative(self):
+              assert divide(-10, -2) == 5.0
+
+          def test_float_inputs(self):
+              assert divide(5.5, 2.0) == 2.75
+
+          # ========== Edge Cases ==========
+          def test_zero_dividend(self):
+              assert divide(0, 5) == 0.0
+
+          def test_divide_by_one(self):
+              assert divide(42, 1) == 42.0
+
+          def test_divide_by_negative_one(self):
+              assert divide(42, -1) == -42.0
+
+          def test_very_small_divisor(self):
+              result = divide(1, 0.0001)
+              assert result == pytest.approx(10000.0)
+
+          def test_very_large_numbers(self):
+              assert divide(1e100, 1e50) == pytest.approx(1e50)
+
+          def test_result_is_float(self):
+              result = divide(10, 4)
+              assert isinstance(result, float)
+              assert result == 2.5
+
+          # ========== Error Cases ==========
+          def test_divide_by_zero_raises_valueerror(self):
+              with pytest.raises(ValueError) as exc_info:
+                  divide(10, 0)
+              assert "Cannot divide by zero" in str(exc_info.value)
+
+          def test_divide_by_zero_float(self):
+              with pytest.raises(ValueError):
+                  divide(10, 0.0)
+
+          def test_zero_divided_by_zero(self):
+              with pytest.raises(ValueError):
+                  divide(0, 0)
+
+          # ========== Parameterized Tests (Bonus) ==========
+          @pytest.mark.parametrize("a,b,expected", [
+              (10, 2, 5.0),
+              (9, 3, 3.0),
+              (1, 4, 0.25),
+              (-6, 2, -3.0),
+              (6, -2, -3.0),
+          ])
+          def test_division_parametrized(self, a, b, expected):
+              assert divide(a, b) == expected
+      ```
+
+      **Test Coverage Summary:**
+      - **Normal cases:** Positive/negative integers, floats, mixed signs
+      - **Edge cases:** Zero dividend, divide by 1, very small/large numbers
+      - **Error cases:** Zero divisor (int and float), 0/0 case
+      - **Assertions:** Value correctness, exception type, exception message
+    scoring:
+      - criterion: "Tests normal cases"
+        weight: 30
+      - criterion: "Tests zero division error"
+        weight: 30
+      - criterion: "Tests edge cases"
+        weight: 25
+      - criterion: "Proper pytest syntax"
+        weight: 15
+
+  # ============== TIER 2: Hard (was T3) ==============
+  t2_q1_design:
+    tier: 2
+    name: "Class Design"
+    prompt: |
+      Design a Python class for a simple LRU (Least Recently Used) cache with:
+      - __init__(capacity): Initialize with max capacity
+      - get(key): Return value if exists, -1 otherwise
+      - put(key, value): Insert or update value
+
+      Both get and put should be O(1) time complexity.
+      Explain your data structure choices.
+    expected: "OrderedDict or dict+doubly linked list implementation"
+    reference_answer: |
+      **Solution 1: Using OrderedDict (Recommended for Python)**
+
+      ```python
+      from collections import OrderedDict
+
+      class LRUCache:
+          def __init__(self, capacity: int):
+              self.capacity = capacity
+              self.cache = OrderedDict()
+
+          def get(self, key: int) -> int:
+              if key not in self.cache:
+                  return -1
+              # Move to end (most recently used)
+              self.cache.move_to_end(key)
+              return self.cache[key]
+
+          def put(self, key: int, value: int) -> None:
+              if key in self.cache:
+                  # Update existing key and move to end
+                  self.cache.move_to_end(key)
+              self.cache[key] = value
+              if len(self.cache) > self.capacity:
+                  # Remove least recently used (first item)
+                  self.cache.popitem(last=False)
+      ```
+
+      **Data Structure Choice Explanation:**
+      - `OrderedDict` maintains insertion order and provides O(1) `move_to_end()` and `popitem()`
+      - Keys are hashed for O(1) lookup
+      - Order tracks recency: front = LRU, back = MRU
+
+      **Solution 2: Dict + Doubly Linked List (Interview Classic)**
+
+      ```python
+      class Node:
+          def __init__(self, key=0, val=0):
+              self.key = key
+              self.val = val
+              self.prev = None
+              self.next = None
+
+      class LRUCache:
+          def __init__(self, capacity: int):
+              self.capacity = capacity
+              self.cache = {}  # key -> Node
+
+              # Dummy head and tail for easier manipulation
+              self.head = Node()
+              self.tail = Node()
+              self.head.next = self.tail
+              self.tail.prev = self.head
+
+          def _remove(self, node: Node):
+              node.prev.next = node.next
+              node.next.prev = node.prev
+
+          def _add_to_front(self, node: Node):
+              node.next = self.head.next
+              node.prev = self.head
+              self.head.next.prev = node
+              self.head.next = node
+
+          def get(self, key: int) -> int:
+              if key not in self.cache:
+                  return -1
+              node = self.cache[key]
+              self._remove(node)
+              self._add_to_front(node)
+              return node.val
+
+          def put(self, key: int, value: int) -> None:
+              if key in self.cache:
+                  self._remove(self.cache[key])
+
+              node = Node(key, value)
+              self.cache[key] = node
+              self._add_to_front(node)
+
+              if len(self.cache) > self.capacity:
+                  lru = self.tail.prev
+                  self._remove(lru)
+                  del self.cache[lru.key]
+      ```
+
+      **Why O(1):**
+      - Dict lookup: O(1) average
+      - Doubly linked list insertion/removal: O(1) with direct node reference
+      - No searching required - dict maps directly to node
+
+      **Tradeoff:**
+      - OrderedDict: Simpler, Pythonic, uses more memory internally
+      - Dict+DLL: More explicit, classic interview answer, teaches the underlying concept
+    scoring:
+      - criterion: "Correct LRU behavior"
+        weight: 35
+      - criterion: "O(1) operations"
+        weight: 30
+      - criterion: "Clean API"
+        weight: 20
+      - criterion: "Explains design choices"
+        weight: 15
+
+  t2_q2_debug_complex:
+    tier: 2
+    name: "Complex Debugging"
+    prompt: |
+      This async Python code has a race condition. Find and fix it:
+
+      import asyncio
+
+      counter = 0
+
+      async def increment():
+          global counter
+          temp = counter
+          await asyncio.sleep(0.001)
+          counter = temp + 1
+
+      async def main():
+          await asyncio.gather(*[increment() for _ in range(100)])
+          print(f"Counter: {counter}")  # Expected: 100, Actual: varies
+
+      asyncio.run(main())
+    expected: "Use asyncio.Lock to protect counter access"
+    reference_answer: |
+      **The Race Condition:**
+
+      The bug is a classic read-modify-write race condition:
+
+      1. All 100 coroutines start and read `counter = 0` into `temp`
+      2. All coroutines `await asyncio.sleep(0.001)` - this yields control
+      3. After sleeping, all coroutines write `temp + 1 = 1` to counter
+      4. Result: counter = 1 (or some small number), not 100
+
+      **Why it happens:**
+      - `await` is a yield point where other coroutines can run
+      - Between reading `temp = counter` and writing `counter = temp + 1`, other coroutines also read the same stale value
+      - All coroutines overwrite each other's increments
+
+      **Fixed Code with asyncio.Lock:**
+
+      ```python
+      import asyncio
+
+      counter = 0
+      lock = asyncio.Lock()
+
+      async def increment():
+          global counter
+          async with lock:  # Acquire lock before critical section
+              temp = counter
+              await asyncio.sleep(0.001)
+              counter = temp + 1
+
+      async def main():
+          await asyncio.gather(*[increment() for _ in range(100)])
+          print(f"Counter: {counter}")  # Now always 100
+
+      asyncio.run(main())
+      ```
+
+      **Alternative: Move sleep outside critical section**
+
+      If the sleep isn't logically part of the increment operation:
+
+      ```python
+      async def increment():
+          global counter
+          await asyncio.sleep(0.001)  # Do slow work first
+          async with lock:
+              counter += 1  # Quick atomic-like operation
+      ```
+
+      **Key Concepts:**
+      - `asyncio.Lock()` is an async context manager
+      - Only one coroutine can hold the lock at a time
+      - Other coroutines wait at `async with lock:` until it's released
+      - This serializes access to the critical section
+
+      **Note:** In single-threaded asyncio, race conditions only occur at `await` points. Without the sleep, `counter += 1` would actually be safe because there's no yield point. But the explicit read-wait-write pattern makes the race visible.
+    scoring:
+      - criterion: "Identifies race condition"
+        weight: 30
+      - criterion: "Proposes Lock solution"
+        weight: 35
+      - criterion: "Correct implementation"
+        weight: 25
+      - criterion: "Explains the issue"
+        weight: 10
+
+  t2_q3_optimize:
+    tier: 2
+    name: "Performance Optimization"
+    prompt: |
+      Optimize this function for large inputs (n > 10^6):
+
+      def count_pairs(nums, target):
+          count = 0
+          for i in range(len(nums)):
+              for j in range(i + 1, len(nums)):
+                  if nums[i] + nums[j] == target:
+                      count += 1
+          return count
+
+      Current: O(n^2). Target: O(n) or O(n log n).
+      Provide the optimized code and explain the approach.
+    expected: "Hash map approach for O(n) solution"
+    reference_answer: |
+      **Optimized Solution: O(n) using Hash Map**
+
+      ```python
+      from collections import Counter
+
+      def count_pairs(nums, target):
+          count = 0
+          seen = Counter()
+
+          for num in nums:
+              complement = target - num
+              # Count how many times we've seen the complement before this num
+              count += seen[complement]
+              # Record this number for future complements
+              seen[num] += 1
+
+          return count
+      ```
+
+      **How it works:**
+      1. For each number, its "complement" is `target - num`
+      2. Count how many previous numbers equal this complement
+      3. Add current number to the seen count
+      4. Process left-to-right ensures we only count (i, j) pairs where i < j
+
+      **Time Complexity:** O(n) - single pass through array
+      **Space Complexity:** O(n) - hash map stores up to n unique values
+
+      **Example Trace:** `nums = [1, 5, 7, -1, 5], target = 6`
+
+      | num | complement | seen before | count | seen after |
+      |-----|------------|-------------|-------|------------|
+      | 1   | 5          | {}          | 0     | {1:1}      |
+      | 5   | 1          | {1:1}       | 1     | {1:1, 5:1} |
+      | 7   | -1         | {1:1, 5:1}  | 1     | {1:1, 5:1, 7:1} |
+      | -1  | 7          | {..., 7:1}  | 2     | {..., -1:1} |
+      | 5   | 1          | {1:1, ...}  | 3     | {5:2, ...} |
+
+      Pairs found: (1,5), (7,-1), (1,5) → count = 3
+
+      **Handling Duplicates:**
+
+      The Counter approach handles duplicates correctly:
+      - `[3, 3, 3], target = 6`: pairs are (0,1), (0,2), (1,2) → 3 pairs
+      - Each 3 sees how many 3s came before it
+
+      **Alternative O(n log n) with Sorting:**
+
+      ```python
+      def count_pairs_sorted(nums, target):
+          nums = sorted(nums)
+          count = 0
+          left, right = 0, len(nums) - 1
+
+          while left < right:
+              total = nums[left] + nums[right]
+              if total == target:
+                  # Handle duplicates carefully
+                  if nums[left] == nums[right]:
+                      # All remaining elements are the same
+                      n = right - left + 1
+                      count += n * (n - 1) // 2
+                      break
+                  else:
+                      # Count duplicates on both ends
+                      left_count = 1
+                      right_count = 1
+                      while left + left_count < right and nums[left + left_count] == nums[left]:
+                          left_count += 1
+                      while right - right_count > left and nums[right - right_count] == nums[right]:
+                          right_count += 1
+                      count += left_count * right_count
+                      left += left_count
+                      right -= right_count
+              elif total < target:
+                  left += 1
+              else:
+                  right -= 1
+
+          return count
+      ```
+
+      This uses O(1) extra space (if sorting in-place allowed) but is more complex.
+    scoring:
+      - criterion: "Achieves better complexity"
+        weight: 40
+      - criterion: "Correct implementation"
+        weight: 30
+      - criterion: "Handles duplicates correctly"
+        weight: 20
+      - criterion: "Clear explanation"
+        weight: 10
+
+  t2_q4_system:
+    tier: 2
+    name: "System Design Code"
+    prompt: |
+      Implement a simple rate limiter class in Python:
+      - Allow max N requests per time window W seconds
+      - is_allowed() returns True/False
+      - Should work correctly across multiple calls
+
+      Use only standard library. Handle edge cases.
+    expected: "Sliding window or token bucket implementation"
+    reference_answer: |
+      **Solution 1: Sliding Window with Deque**
+
+      ```python
+      import time
+      from collections import deque
+
+      class RateLimiter:
+          def __init__(self, max_requests: int, window_seconds: float):
+              """
+              Args:
+                  max_requests: Maximum requests allowed in the window
+                  window_seconds: Time window in seconds
+              """
+              self.max_requests = max_requests
+              self.window_seconds = window_seconds
+              self.timestamps = deque()
+
+          def is_allowed(self) -> bool:
+              current_time = time.time()
+
+              # Remove timestamps outside the current window
+              while self.timestamps and current_time - self.timestamps[0] >= self.window_seconds:
+                  self.timestamps.popleft()
+
+              # Check if we can accept this request
+              if len(self.timestamps) < self.max_requests:
+                  self.timestamps.append(current_time)
+                  return True
+
+              return False
+
+          def reset(self):
+              """Clear all recorded requests."""
+              self.timestamps.clear()
+      ```
+
+      **How it works:**
+      - Store timestamp of each allowed request
+      - On each `is_allowed()` call, purge old timestamps (older than window)
+      - If fewer than N timestamps remain, allow the request
+      - Deque gives O(1) append and popleft
+
+      **Time Complexity:** O(1) amortized - each timestamp added once, removed once
+      **Space Complexity:** O(N) - stores at most N timestamps
+
+      **Solution 2: Token Bucket**
+
+      ```python
+      import time
+
+      class TokenBucketRateLimiter:
+          def __init__(self, max_tokens: int, refill_rate: float):
+              """
+              Args:
+                  max_tokens: Maximum tokens (bucket capacity)
+                  refill_rate: Tokens added per second
+              """
+              self.max_tokens = max_tokens
+              self.refill_rate = refill_rate
+              self.tokens = max_tokens
+              self.last_refill = time.time()
+
+          def is_allowed(self) -> bool:
+              self._refill()
+
+              if self.tokens >= 1:
+                  self.tokens -= 1
+                  return True
+
+              return False
+
+          def _refill(self):
+              now = time.time()
+              elapsed = now - self.last_refill
+              tokens_to_add = elapsed * self.refill_rate
+              self.tokens = min(self.max_tokens, self.tokens + tokens_to_add)
+              self.last_refill = now
+      ```
+
+      **Token Bucket vs Sliding Window:**
+      - Token bucket allows "bursts" up to max_tokens at once
+      - Sliding window strictly limits requests per window
+      - Token bucket uses O(1) space; sliding window uses O(N)
+
+      **Edge Cases Handled:**
+      - First request always allowed (if N >= 1)
+      - Requests exactly at window boundary
+      - Rapid requests in succession
+      - Long idle periods followed by bursts
+
+      **Thread-Safe Version (Bonus):**
+
+      ```python
+      import threading
+
+      class ThreadSafeRateLimiter:
+          def __init__(self, max_requests: int, window_seconds: float):
+              self.max_requests = max_requests
+              self.window_seconds = window_seconds
+              self.timestamps = deque()
+              self.lock = threading.Lock()
+
+          def is_allowed(self) -> bool:
+              with self.lock:
+                  current_time = time.time()
+                  while self.timestamps and current_time - self.timestamps[0] >= self.window_seconds:
+                      self.timestamps.popleft()
+                  if len(self.timestamps) < self.max_requests:
+                      self.timestamps.append(current_time)
+                      return True
+                  return False
+      ```
+    scoring:
+      - criterion: "Correct rate limiting logic"
+        weight: 35
+      - criterion: "Handles time windows properly"
+        weight: 30
+      - criterion: "Thread-safe consideration"
+        weight: 20
+      - criterion: "Clean implementation"
+        weight: 15
+
+  # ============== TIER 3: Systems/Research Level (NEW) ==============
+  t3_q1_concurrent_correctness:
+    tier: 3
+    name: "Lock-Free Data Structure"
+    prompt: |
+      Below is a lock-free stack implementation. Identify the ABA problem scenario,
+      explain why it causes incorrect behavior, and fix it without using locks.
+
+      ```c
+      struct Node { int val; Node* next; };
+      atomic<Node*> top;
+
+      void push(int v) {
+        Node* n = new Node{v, top.load()};
+        while (!top.compare_exchange_weak(n->next, n));
+      }
+
+      int pop() {
+        Node* t = top.load();
+        while (t && !top.compare_exchange_weak(t, t->next));
+        return t ? t->val : -1;
+      }
+      ```
+
+      Provide:
+      1. A concrete sequence of operations that demonstrates the ABA problem
+      2. What incorrect behavior results
+      3. A fix using either tagged pointers or hazard pointers (show code)
+    expected: "Detailed ABA scenario, fix with version counters or hazard pointers"
+    reference_answer: |
+      **1. Concrete ABA Problem Scenario:**
+
+      Initial state: Stack = [A → B → C], top points to A
+
+      | Step | Thread 1 | Thread 2 | Stack State |
+      |------|----------|----------|-------------|
+      | 1 | `pop()`: loads `t = A`, `t->next = B` | | [A → B → C] |
+      | 2 | (preempted before CAS) | | [A → B → C] |
+      | 3 | | `pop()`: pops A | [B → C] |
+      | 4 | | `pop()`: pops B | [C] |
+      | 5 | | `push(A)`: reuses A (or allocator returns same address) | [A → C] |
+      | 6 | | (A's next now points to C, not B!) | [A → C] |
+      | 7 | `CAS(top, A, B)`: succeeds! top was A, is A | [B → ???] |
+
+      **2. What Goes Wrong:**
+
+      Thread 1's CAS succeeds because `top` still equals `A` (the same pointer value). But:
+      - Thread 1 stored `t->next = B` when A pointed to B
+      - Now A points to C, but Thread 1 uses its stale `B`
+      - `top` is set to `B`, but B was already freed/popped!
+
+      **Results:**
+      - Stack corruption: `top` points to freed memory (B)
+      - Use-after-free: accessing B's value/next is undefined behavior
+      - Lost elements: C is orphaned (memory leak)
+      - Potential crashes or data corruption
+
+      **3. Fix Using Tagged Pointers (Version Counter):**
+
+      ```cpp
+      #include <atomic>
+      #include <cstdint>
+
+      struct Node { int val; Node* next; };
+
+      // Pack pointer (lower 48 bits) and counter (upper 16 bits)
+      struct TaggedPtr {
+          Node* ptr;
+          uint16_t tag;
+
+          bool operator==(const TaggedPtr& other) const {
+              return ptr == other.ptr && tag == other.tag;
+          }
+      };
+
+      // Use 128-bit atomic on x86-64 for atomic TaggedPtr operations
+      // Or use uintptr_t with bit manipulation on 64-bit systems
+
+      std::atomic<TaggedPtr> top{{nullptr, 0}};
+
+      void push(int v) {
+          TaggedPtr old_top = top.load();
+          Node* n = new Node{v, old_top.ptr};
+          TaggedPtr new_top{n, old_top.tag + 1};  // Increment tag on every modification
+
+          while (!top.compare_exchange_weak(old_top, new_top)) {
+              n->next = old_top.ptr;
+              new_top = {n, old_top.tag + 1};
+          }
+      }
+
+      int pop() {
+          TaggedPtr old_top = top.load();
+
+          while (old_top.ptr) {
+              Node* next = old_top.ptr->next;
+              TaggedPtr new_top{next, old_top.tag + 1};  // New tag prevents ABA
+
+              if (top.compare_exchange_weak(old_top, new_top)) {
+                  int val = old_top.ptr->val;
+                  // Safe deletion requires additional care (see below)
+                  return val;
+              }
+              // CAS failed: old_top is updated to current value, retry
+          }
+          return -1;
+      }
+      ```
+
+      **Why This Fixes ABA:**
+
+      Even if the same pointer address `A` is reused:
+      - Initial: `{A, tag=5}`
+      - After pops and reuse push: `{A, tag=8}` (different tag!)
+      - Thread 1's CAS compares `{A, tag=5}` vs `{A, tag=8}` → **fails**
+      - Thread 1 retries with fresh values
+
+      **Alternative: Hazard Pointers (Better for Memory Reclamation)**
+
+      ```cpp
+      thread_local Node* hazard_ptr = nullptr;
+
+      int pop() {
+          TaggedPtr old_top;
+          do {
+              old_top = top.load();
+              if (!old_top.ptr) return -1;
+
+              // Announce we're using this pointer
+              hazard_ptr = old_top.ptr;
+
+              // Re-read to ensure consistency
+              if (top.load() != old_top) continue;
+
+              TaggedPtr new_top{old_top.ptr->next, old_top.tag + 1};
+              if (top.compare_exchange_weak(old_top, new_top)) {
+                  int val = old_top.ptr->val;
+                  hazard_ptr = nullptr;
+
+                  // Defer deletion: only delete if no thread's hazard_ptr
+                  // points to this node (requires global scan)
+                  retire(old_top.ptr);
+                  return val;
+              }
+          } while (true);
+      }
+      ```
+
+      **Key Points:**
+      - Tagged pointers: simple, hardware-supported (CMPXCHG16B on x86-64)
+      - Hazard pointers: more complex, but better memory reclamation
+      - Both ensure CAS detects intervening modifications even with pointer reuse
+    scoring:
+      - criterion: "Correct ABA scenario"
+        weight: 30
+      - criterion: "Explains incorrect behavior"
+        weight: 20
+      - criterion: "Working fix implementation"
+        weight: 35
+      - criterion: "Code quality"
+        weight: 15
+
+  t3_q2_distributed_consistency:
+    tier: 3
+    name: "Distributed Systems"
+    prompt: |
+      You're designing a distributed key-value store that must handle network partitions.
+      During a partition:
+      - Client A writes key K with value V1 to node A
+      - Client B writes key K with value V2 to node B
+
+      When the partition heals:
+      1. What are your options for conflict resolution? List at least 4 strategies.
+      2. For EACH strategy, give a specific scenario where it produces wrong/surprising behavior.
+      3. Recommend which strategy for a shopping cart application, with justification.
+      4. What if the application was a banking ledger instead?
+    expected: "LWW, vector clocks, CRDTs, app-level merge. OR-Set for cart, stronger consistency for banking."
+    reference_answer: |
+      **1. Four Conflict Resolution Strategies:**
+
+      **Strategy 1: Last-Writer-Wins (LWW)**
+      - Each write gets a timestamp (logical or physical)
+      - On conflict, highest timestamp wins
+      - Simple, deterministic, O(1) storage overhead
+
+      **Strategy 2: Vector Clocks / Version Vectors**
+      - Each node maintains a vector of logical clocks
+      - Detects concurrent writes (neither happened-before the other)
+      - Returns all concurrent versions to client for resolution
+
+      **Strategy 3: CRDTs (Conflict-free Replicated Data Types)**
+      - Data structures designed for automatic merge
+      - Examples: G-Counter, PN-Counter, OR-Set, LWW-Register
+      - Merge operation is associative, commutative, idempotent
+
+      **Strategy 4: Application-Level Merge**
+      - Store all conflicting versions
+      - Application logic resolves conflicts (e.g., union for carts)
+      - Most flexible but requires app-specific code
+
+      **Strategy 5: Operational Transformation (OT)**
+      - Transform concurrent operations to preserve intent
+      - Used in collaborative editing (Google Docs)
+      - Complex to implement correctly
+
+      **2. Failure Scenarios for Each:**
+
+      **LWW Failure Scenario:**
+      - Clock skew: Node B's clock is 5 minutes ahead
+      - Client A adds item at t=10:00:00 (real time)
+      - Client B removes same item at t=10:00:01 (real time)
+      - But B's timestamp shows t=10:05:01
+      - B's delete wins even though it happened "after" A's add
+      - **Result:** Item lost that user intended to keep
+
+      **Vector Clocks Failure Scenario:**
+      - Both clients add different items to a list concurrently
+      - System detects conflict, returns both versions to client
+      - Client displays "conflict resolution" dialog
+      - **Result:** User must manually merge every conflict, poor UX
+      - If automated: client may silently pick one, same as LWW
+
+      **CRDT Failure Scenario (OR-Set):**
+      - Client A adds item X, assigned unique tag t1
+      - Client B removes item X, removes tag t1
+      - Client A (partitioned) adds X again, assigned tag t2
+      - After merge: X exists (tag t2 not removed)
+      - **Result:** Item appears to resurrect after deletion
+      - User deleted X but it's back! (Add-wins semantics)
+
+      **Application-Level Merge Failure:**
+      - Shopping cart: merge = union of items
+      - Client A sets quantity of widget from 2 to 1
+      - Client B sets quantity of widget from 2 to 3
+      - Merge unions: {widget: 1} ∪ {widget: 3} = ???
+      - **Result:** Ambiguous merge; may get widget: [1,3] or pick randomly
+
+      **3. Shopping Cart Recommendation: OR-Set CRDT**
+
+      **Justification:**
+      - Shopping carts have "add-biased" semantics: users more upset when items disappear than when they unexpectedly appear
+      - OR-Set provides automatic merge without user intervention
+      - High availability: both partitions can accept writes
+      - Semantic match: "add item" and "remove item" operations map cleanly to OR-Set semantics
+
+      **Implementation:**
+      ```
+      - Each item has unique tag on add
+      - Remove removes specific tags, not item conceptually
+      - Item exists if any tag for it exists
+      - Merge: union of all (item, tag) pairs minus removed tags
+      ```
+
+      **Quantity handling:**
+      Use PN-Counter CRDT per item, or treat quantity changes as add(item, quantity) operations with LWW-Register per quantity slot.
+
+      **4. Banking Ledger: Reject Availability for Strong Consistency**
+
+      For banking, correctness trumps availability:
+
+      **Recommendation: Single-leader with synchronous replication, or consensus-based (Raft/Paxos)**
+
+      **Justification:**
+      - Double-spending is unacceptable (user has $100, withdraws from both partitions = -$100 bank loss)
+      - Better to refuse transactions during partition than to accept conflicting ones
+      - Regulatory requirements often mandate audit trail with total order
+
+      **During Partition:**
+      - Only leader's partition can process writes
+      - Minority partition returns "service unavailable"
+      - No conflicting writes means no conflicts to resolve
+
+      **Alternative: Escrow / Reservation Pattern**
+      - Pre-allocate funds during normal operation
+      - Allow offline spending up to reserved amount
+      - Reconcile after partition heals
+      - **Trade-off:** Limits transaction size, increases complexity
+
+      **Key Insight:** CAP theorem forces a choice. Shopping carts choose A (availability), banking chooses C (consistency).
+    scoring:
+      - criterion: "Four valid strategies"
+        weight: 25
+      - criterion: "Failure scenarios for each"
+        weight: 25
+      - criterion: "Shopping cart recommendation"
+        weight: 25
+      - criterion: "Banking contrast"
+        weight: 25
+
+  t3_q3_algorithmic_hardness:
+    tier: 3
+    name: "Algorithm Analysis"
+    prompt: |
+      You need to find the k-th smallest element in an unsorted array of n elements.
+
+      1. Prove that any comparison-based algorithm requires Omega(n) comparisons in the worst case.
+         (Hint: use an adversary argument)
+      2. The median-of-medians algorithm achieves O(n). Derive the recurrence relation
+         T(n) and explain why the choice of group size 5 is significant.
+         What happens with group size 3? Group size 7?
+      3. Randomized select has O(n) expected time. Derive the expected number of comparisons
+         precisely (not just big-O).
+    expected: "Adversary argument, T(n) <= T(n/5) + T(7n/10) + O(n), analysis of group sizes"
+    reference_answer: |
+      **1. Adversary Argument for Ω(n) Lower Bound:**
+
+      **Claim:** Any comparison-based algorithm for finding the k-th smallest element requires at least n-1 comparisons in the worst case.
+
+      **Proof (Adversary Argument):**
+
+      Consider finding the minimum (k=1). The adversary maintains the invariant that every element could potentially be the minimum until it loses a comparison.
+
+      - Initially, n elements are "candidates" for minimum
+      - Each comparison eliminates at most 1 candidate (the larger element)
+      - To guarantee correctness, we must reduce candidates to 1
+      - Therefore: n - 1 eliminations needed → **n - 1 comparisons minimum**
+
+      **Adversary Strategy:**
+      When the algorithm compares elements a and b:
+      - If neither has lost before: adversary assigns values making either outcome consistent
+      - If only a has lost before: adversary makes a > b (a loses again)
+      - If both have lost: adversary is consistent with previous answers
+
+      The adversary can force n-1 comparisons before any single element has "beaten" all others.
+
+      **For general k:** Similar argument shows n - 1 comparisons needed (every element except the k-th smallest must be shown to not be k-th smallest).
+
+      **Conclusion:** T(n) = Ω(n) for any comparison-based selection algorithm.
+
+      **2. Median-of-Medians Recurrence:**
+
+      **Algorithm Overview:**
+      1. Divide n elements into ⌈n/5⌉ groups of 5
+      2. Find median of each group: O(1) per group × n/5 groups = O(n)
+      3. Recursively find median of these medians: T(n/5)
+      4. Partition around this "pivot"
+      5. Recurse on appropriate side: T(?)
+
+      **Key Insight - How Many Elements Are Guaranteed Smaller/Larger:**
+
+      ```
+      M = median of medians
+
+      Groups:     [  ]  [  ]  [  ]  [  ]  [  ]  ...
+                   ↑     ↑     ↑
+                  m1    m2   m3 <= M    (half the medians)
+
+      Each such median has 2 elements smaller in its group.
+      So: at least 3 elements per "small" group × (n/5)/2 groups
+          = 3n/10 elements definitely smaller than M
+      ```
+
+      Similarly, at least 3n/10 elements are definitely larger than M.
+
+      **Worst-case partition:** After pivoting around M, we recurse on at most n - 3n/10 = **7n/10** elements.
+
+      **Recurrence:**
+      T(n) ≤ T(n/5) + T(7n/10) + O(n)
+
+      **Verification that T(n) = O(n):**
+      Let T(n) ≤ cn for some constant c.
+      T(n) ≤ c(n/5) + c(7n/10) + an
+           = cn(1/5 + 7/10) + an
+           = cn(9/10) + an
+           = n(0.9c + a)
+
+      For T(n) ≤ cn, we need 0.9c + a ≤ c, i.e., a ≤ 0.1c, i.e., c ≥ 10a.
+      This is satisfiable, so **T(n) = O(n)** ✓
+
+      **Why Group Size 5?**
+
+      | Group Size g | Fraction ≤ M | Recurse on | Sum | O(n)? |
+      |--------------|--------------|------------|-----|-------|
+      | 3 | 2/3 × 1/2 = 1/3 | 2n/3 | 1/3 + 2/3 = 1 | **No!** |
+      | 5 | 3/5 × 1/2 = 3/10 | 7n/10 | 1/5 + 7/10 = 9/10 | **Yes** |
+      | 7 | 4/7 × 1/2 = 2/7 | 5n/7 | 1/7 + 5/7 = 6/7 | **Yes** |
+
+      **Group size 3:** T(n) = T(n/3) + T(2n/3) + O(n)
+      - 1/3 + 2/3 = 1 → doesn't shrink! T(n) = O(n log n)
+
+      **Group size 7:** T(n) = T(n/7) + T(5n/7) + O(n)
+      - 1/7 + 5/7 = 6/7 < 1 → works! T(n) = O(n)
+      - But constant factor larger due to finding median of 7
+
+      **5 is the smallest group size that achieves O(n) linear time.**
+
+      **3. Randomized Select Expected Comparisons:**
+
+      **Algorithm:** Pick random pivot, partition, recurse on relevant side.
+
+      **Analysis:**
+      Let X_ij = 1 if elements with ranks i and j are ever compared, 0 otherwise.
+
+      Total comparisons = Σ_{i<j} X_ij
+
+      Elements i and j are compared iff one of them is chosen as pivot before any element with rank between i and j. (Once we pivot on something between them, they're separated forever.)
+
+      **Probability analysis:**
+      Between ranks i and j (inclusive), there are j - i + 1 elements.
+      P(i compared to j) = 2/(j - i + 1)
+
+      (Either i or j must be the first pivot chosen from the range [i,j])
+
+      **Expected comparisons:**
+      E[comparisons] = Σ_{i=1}^{k} Σ_{j=k}^{n} 2/(j - i + 1)
+
+      For k = n/2 (median):
+      E ≈ Σ_{i=1}^{n/2} Σ_{j=n/2}^{n} 2/(j - i + 1)
+        ≈ 2n × H_n ≈ 2n ln n (but this overcounts)
+
+      **More precise for arbitrary k:**
+
+      E[T(n)] = n - 1 + (1/n) Σ_{i=1}^{n} E[T(max(i-1, n-i))]
+
+      **Solving this recurrence:**
+      E[T(n)] ≤ 4n
+
+      The expected number of comparisons for randomized selection is approximately **3.4n** for the median, with the exact constant depending on k.
+
+      **For k = 1 (minimum):** Always partition into 1 element + (n-1) elements after first comparison phase. E[T(n)] = n - 1 + n - 2 + ... = O(n) but always checks all elements.
+    scoring:
+      - criterion: "Valid adversary argument"
+        weight: 25
+      - criterion: "Correct recurrence derivation"
+        weight: 30
+      - criterion: "Group size analysis"
+        weight: 25
+      - criterion: "Randomized analysis"
+        weight: 20
+
+inference_params:
+  temperature: 0.2
+  max_tokens: 2048
+  timeout: 300

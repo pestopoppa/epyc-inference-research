@@ -1,0 +1,36 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,7.6,3,Perfect JSON array with correct grep then read_file sequence
+agentic,t1_q2_error_handling,7.3,3,Good error analysis and appropriate clarifying questions
+agentic,t1_q3_nested_params,7.5,3,Correct JSON with properly nested metadata object
+agentic,t2_q1_ambiguous,7.4,3,Correctly asks clarifying question instead of assuming
+agentic,t2_q2_error_chain,7.2,3,Good error chain reasoning - identifies DB connection as root cause
+agentic,t2_q3_schema_edge,7.6,2,Missing body:null for GET request (schema requires it)
+agentic,t2_q4_orchestration,7.1,3,Good deployment plan with on_test_fail and on_deploy_fail handlers
+agentic,t3_q1_competing_constraints,7.2,2,Good plan but steps are prose not tool calls - missing execute_code calls
+agentic,t3_q2_multi_agent_coordination,6.8,3,Excellent multi-phase plan with parallel research tasks and context passing
+agentic,t3_q3_adversarial_robustness,6.6,3,Excellent security analysis - identifies command injection and handles admin pressure
+thinking,t1_q1_multistep,6.7,1,Encoding corruption (6日消息1 instead of 60 mph) - partial reasoning shown
+thinking,t1_q2_hypothesis,7.3,3,Good alternative explanations for breakfast-test correlation
+thinking,t1_q3_planning,6.1,3,Correct constraint-based plant watering order reasoning
+thinking,t2_q1_paradox,7.0,3,Thorough Ship of Theseus analysis with multiple perspectives
+thinking,t2_q2_counterfactual,7.0,3,Good counterfactual analysis of internet's impact on research
+thinking,t2_q3_formal,7.1,3,Correct proof of hypothetical syllogism (P->Q and Q->R implies P->R)
+thinking,t2_q4_metacognition,7.0,3,Good Fermi estimation with top-down approach for piano tuners
+thinking,t3_q1_methodological_critique,7.1,3,Excellent critique of bilingualism study - identifies SES confounding
+thinking,t3_q2_causal_inference,7.2,3,Correct minimal adjustment set identification for causal graph
+thinking,t3_q3_reasoning_trap,6.2,3,Correctly identifies flaw in test accuracy as proxy for dataset quality
+long_context,t1_q1_needle,2.6,0,Truncated output - no actual content extracted
+long_context,t1_q2_multi_file,2.7,1,Generic framework only - no specific code analysis shown
+long_context,t2_q2_synthesis,1.1,1,Generic executive summary template - no actual synthesis
+long_context,t3_q1_multi_hop_reasoning,1.0,0,Admits cannot extract information from context
+long_context,t3_q2_contradiction_detection,1.3,2,Structure correct but may be hallucinated content
+long_context,t3_q3_evolving_requirements,1.1,0,Admits cannot answer - no requirement data found
+coder,t1_q1_algorithm,5.7,3,Correctly identifies both binary search bugs with good explanations
+coder,t1_q2_refactor,5.8,3,Good O(n) optimization using set with clear tradeoff explanation
+coder,t1_q3_test,5.3,3,Comprehensive pytest coverage including edge cases and parametrization
+coder,t2_q1_design,5.7,3,Correct LRU cache with doubly-linked list and hashmap - O(1) operations
+coder,t2_q2_debug_complex,5.1,3,Correctly identifies async race condition and fixes with asyncio.Lock
+coder,t2_q3_optimize,5.6,3,Good O(n) pair counting with hash map frequency approach
+coder,t2_q4_system,5.9,3,Clean rate limiter with deque and sliding window
+coder,t3_q1_concurrent_correctness,5.0,3,Excellent ABA problem explanation with hazard pointers solution
+coder,t3_q2_distributed_consistency,5.4,3,Good coverage of LWW CRDT vector clocks with tradeoff analysis

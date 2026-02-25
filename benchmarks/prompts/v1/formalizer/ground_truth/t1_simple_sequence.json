@@ -1,0 +1,105 @@
+{
+  "problem_id": "tool-t1-simple-sequence",
+  "original_task": "Download the file at https://example.com/data.csv and analyze it to find the average of the \"price\" column.",
+  "formal_specification": {
+    "problem_type": "tool_orchestration",
+    "variables": [
+      {
+        "name": "url",
+        "type": "string",
+        "domain": "valid URL",
+        "description": "URL of the CSV file to download"
+      },
+      {
+        "name": "column_name",
+        "type": "string",
+        "description": "Name of the column to calculate average for"
+      },
+      {
+        "name": "result",
+        "type": "float",
+        "description": "Computed average value"
+      }
+    ],
+    "tool_sequence": [
+      {
+        "step": 0,
+        "tool": "fetch_url",
+        "description": "Download the CSV file from the given URL",
+        "arguments": {
+          "url": "https://example.com/data.csv"
+        },
+        "output_var": "raw_data",
+        "error_handling": "fail"
+      },
+      {
+        "step": 1,
+        "tool": "parse_csv",
+        "description": "Parse the downloaded data as CSV",
+        "arguments": {
+          "data": "${raw_data}"
+        },
+        "depends_on": [0],
+        "output_var": "csv_data",
+        "error_handling": "fail"
+      },
+      {
+        "step": 2,
+        "tool": "calculate_average",
+        "description": "Calculate the average of the price column",
+        "arguments": {
+          "data": "${csv_data}",
+          "column": "price"
+        },
+        "depends_on": [1],
+        "output_var": "result",
+        "error_handling": "fail"
+      }
+    ],
+    "preconditions": [
+      "URL is accessible",
+      "File contains valid CSV data",
+      "Column 'price' exists in the CSV"
+    ],
+    "postconditions": [
+      "result is a valid numeric value",
+      "result equals the arithmetic mean of all values in the price column"
+    ]
+  },
+  "edge_cases": [
+    {
+      "description": "Empty price column",
+      "input": "CSV with no rows",
+      "expected_behavior": "Return 0 or error indicating empty dataset",
+      "severity": "important"
+    },
+    {
+      "description": "Non-numeric values in price column",
+      "input": "CSV with strings in price column",
+      "expected_behavior": "Skip non-numeric values or error",
+      "severity": "important"
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "criterion": "Successfully downloads the file",
+      "testable": true,
+      "test_method": "Check HTTP response status",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Correctly parses CSV format",
+      "testable": true,
+      "test_method": "Validate parsed row count matches file",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Accurately computes average",
+      "testable": true,
+      "test_method": "Compare against known test data",
+      "priority": "must_have"
+    }
+  ],
+  "confidence": 0.95,
+  "ambiguities": []
+}

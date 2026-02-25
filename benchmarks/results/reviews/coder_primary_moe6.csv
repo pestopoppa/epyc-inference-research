@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,25.37,2,Substantive general response
+agentic,t1_q2_error_handling,12.49,3,Bug identification and fix provided
+agentic,t1_q3_nested_params,16.45,2,Substantive general response
+agentic,t2_q1_ambiguous,25.19,2,Substantive general response
+agentic,t2_q2_error_chain,24.49,3,Bug identification and fix provided
+agentic,t2_q3_schema_edge,25.49,2,Substantive general response
+agentic,t2_q4_orchestration,23.59,2,Substantive general response
+agentic,t3_q1_competing_constraints,22.7,2,Substantive general response
+agentic,t3_q2_multi_agent_coordination,21.53,2,Substantive general response
+agentic,t3_q3_adversarial_robustness,20.09,2,Substantive general response
+coder,t1_q1_algorithm,14.65,2,Code present but may be incomplete
+coder,t1_q2_refactor,21.45,3,Refactored code provided
+coder,t1_q3_test,22.25,3,Test code implementation present
+coder,t2_q1_design,11.23,3,Code present but may be incomplete
+coder,t2_q2_debug_complex,15.36,3,Bug identification and fix provided
+coder,t2_q3_optimize,14.91,2,Code present but may be incomplete
+coder,t2_q4_system,13.47,3,Code present but may be incomplete
+coder,t3_q1_concurrent_correctness,11.32,3,Code present but may be incomplete
+coder,t3_q2_distributed_consistency,9.16,3,Discussed distributed consistency strategies
+coder,t3_q3_algorithmic_hardness,10.05,2,Complexity analysis but missing hardness discussion
+general,t1_q1_json,17.61,3,JSON structure present
+general,t1_q2_multistep,17.98,2,Substantive general response
+general,t1_q3_compare,17.3,2,Substantive general response
+general,t2_q1_synthesis,0.0,2,General response generated
+general,t2_q2_transform,16.94,2,Substantive general response
+general,t2_q3_schedule,0.0,2,Substantive general response
+general,t2_q4_inconsistency,0.0,2,Substantive general response
+general,t3_q1_policy_analysis,0.0,2,Substantive general response
+general,t3_q2_system_failure,0.0,3,Comprehensive system design discussion
+general,t3_q3_strategic_communication,14.68,2,Substantive general response
+instruction_precision,t1_q1_negative_instruction,27.1,2,Responded but may not follow negative instruction
+instruction_precision,t1_q2_word_limit,27.14,3,Correct word count: 20 words
+instruction_precision,t1_q3_structured_format,24.88,3,"Correct format: LANGUAGE (YEAR), 3 entries"
+instruction_precision,t1_q4_multiple_constraints,26.8,2,Attempted to follow multiple constraints
+instruction_precision,t2_q1_resist_elaboration,24.29,2,Brief response as instructed
+instruction_precision,t2_q2_maintain_format,25.93,2,Attempted format
+instruction_precision,t2_q3_empty_handling,26.79,2,Handled empty input case
+instruction_precision,t2_q4_conflicting_constraints,23.39,2,General response generated
+instruction_precision,t3_q1_self_referential,14.82,2,Attempted self-referential task
+instruction_precision,t3_q2_cascading_constraints,14.52,2,Substantive general response
+instruction_precision,t3_q3_meta_instruction,17.84,2,Substantive general response
+math,t1_q1_word_problem,15.3,2,Substantive general response
+math,t1_q2_system_equations,14.06,3,Comprehensive system design discussion
+math,t1_q3_probability,15.19,2,Substantive general response
+math,t2_q1_optimization,14.18,2,Substantive general response
+math,t2_q2_proof,9.22,2,General response generated
+math,t2_q3_calculus,16.5,2,Substantive general response
+math,t2_q4_statistics,12.78,2,Substantive general response
+math,t3_q1_analysis,10.42,2,Substantive general response
+math,t3_q2_combinatorics,10.53,2,Substantive general response
+math,t3_q3_probability_theory,10.05,2,Substantive general response
+thinking,t1_q1_multistep,15.64,2,Substantive general response
+thinking,t1_q2_hypothesis,24.8,2,Substantive general response
+thinking,t1_q3_planning,12.16,2,Substantive general response
+thinking,t2_q1_paradox,9.62,2,General response generated
+thinking,t2_q2_counterfactual,14.53,2,Substantive general response
+thinking,t2_q3_formal,14.47,2,Substantive general response
+thinking,t2_q4_metacognition,15.17,2,Substantive general response
+thinking,t3_q1_methodological_critique,22.9,3,Identified 6 methodological issues with explanations
+thinking,t3_q2_causal_inference,13.27,3,Correct identification of Gene as adjustment set and Yellow Fingers as collider
+thinking,t3_q3_reasoning_trap,13.14,3,Identified flaw and provided concrete scenario

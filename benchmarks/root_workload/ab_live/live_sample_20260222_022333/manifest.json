@@ -1,0 +1,96 @@
+{
+  "timestamp": "20260222_022333",
+  "workload_pack": "/mnt/raid0/llm/claude/benchmarks/root_workload/workload_pack_curated_debug_hard100_v1.json",
+  "sample_size": 6,
+  "seed": 42,
+  "timeout_s": 120,
+  "optimization_id": "live_optuna_best_profiles",
+  "required_environments": [
+    "codex",
+    "claude-code"
+  ],
+  "selected_tasks": [
+    {
+      "task_id": "thinking_003_logic_007",
+      "task_class": "planning_synthesis",
+      "input_payload": "A farmer has 17 sheep. All but 9 die. How many sheep does the\nfarmer have left?\n\nA) 8\nB) 9\nC) 17\nD) 0\n\nAnswer with the letter only (A, B, C, or D).\n",
+      "quality_rubric_id": "rubric.debug.thinking.logic_007",
+      "expected_artifact_type": "analysis",
+      "source": "benchmarks/prompts/debug/thinking.yaml",
+      "source_key": "logic_007",
+      "expected": "B",
+      "tier": 3,
+      "scoring_method": "multiple_choice"
+    },
+    {
+      "task_id": "coder_015_humaneval_002",
+      "task_class": "implementation_fix",
+      "input_payload": "Write a Python function `separate_paren_groups(paren_string)` that\ntakes a string of nested parentheses and returns a list of separate\nbalanced groups. Ignore spaces.\n\n>>> separate_paren_groups('( ) (( )) (( )( ))')\n['()', '(())', '(()())']\n",
+      "quality_rubric_id": "rubric.debug.coder.humaneval_002",
+      "expected_artifact_type": "code",
+      "source": "benchmarks/prompts/debug/coder.yaml",
+      "source_key": "humaneval_002",
+      "expected": "",
+      "tier": 1,
+      "scoring_method": "code_execution"
+    },
+    {
+      "task_id": "coder_004_code_hard_010",
+      "task_class": "implementation_fix",
+      "input_payload": "Write a Python function `is_balanced(s)` that checks if a string\ncontaining only '(', ')', '{', '}', '[', ']' has balanced brackets.\nReturn True if balanced, False otherwise.\n",
+      "quality_rubric_id": "rubric.debug.coder.code_hard_010",
+      "expected_artifact_type": "code",
+      "source": "benchmarks/prompts/debug/coder.yaml",
+      "source_key": "code_hard_010",
+      "expected": "",
+      "tier": 2,
+      "scoring_method": "code_execution"
+    },
+    {
+      "task_id": "long_context_006_needle_035",
+      "task_class": "long_input",
+      "input_payload": "Read the following passage and answer the question.\n\nThe smart city initiative integrates sensors and analytics to improve\nurban services. Infrastructure includes traffic cameras, air quality\nsensors, smart streetlights, and waste management systems.\n\nTraffic management adjusts signal timing based on congestion patterns.\nEnvironmental monitoring tracks pollutants including PM, ozone, and NO2.\n\nThe city's environmental dashboard shows sensor station ENV-082-Downtown\nrecorded a PM2.5 concentration of 45.7 micrograms per cubic meter at\n08:00 on January 20, 2026. This exceeded the daily exposure guideline\nand triggered an air quality alert.\n\nSource analysis indicated the elevated levels were primarily from\nvehicle emissions combined with temperature inversion conditions.\n\nQuestion: What PM2.5 concentration was recorded at sensor ENV-082-Downtown?\n",
+      "quality_rubric_id": "rubric.debug.long_context.needle_035",
+      "expected_artifact_type": "summary",
+      "source": "benchmarks/prompts/debug/long_context.yaml",
+      "source_key": "needle_035",
+      "expected": "45.7 micrograms per cubic meter",
+      "tier": 3,
+      "scoring_method": "substring"
+    },
+    {
+      "task_id": "coder_036_code_hard_011",
+      "task_class": "implementation_fix",
+      "input_payload": "Write a Python function `group_anagrams(words)` that takes a list of\nstrings and groups anagrams together. Return a list of lists, where\neach inner list contains words that are anagrams of each other.\nOrder within groups doesn't matter.\n",
+      "quality_rubric_id": "rubric.debug.coder.code_hard_011",
+      "expected_artifact_type": "code",
+      "source": "benchmarks/prompts/debug/coder.yaml",
+      "source_key": "code_hard_011",
+      "expected": "",
+      "tier": 2,
+      "scoring_method": "code_execution"
+    },
+    {
+      "task_id": "coder_032_code_hard_012",
+      "task_class": "implementation_fix",
+      "input_payload": "Write a Python function `celsius_to_fahrenheit(c)` that converts\na temperature from Celsius to Fahrenheit. Return the result as a float.\n",
+      "quality_rubric_id": "rubric.debug.coder.code_hard_012",
+      "expected_artifact_type": "code",
+      "source": "benchmarks/prompts/debug/coder.yaml",
+      "source_key": "code_hard_012",
+      "expected": "",
+      "tier": 1,
+      "scoring_method": "code_execution"
+    }
+  ],
+  "profile_refs": {
+    "codex": "/mnt/raid0/llm/claude/benchmarks/root_workload/ab_tuning/optuna_20260222_014840/codex/study_summary.json",
+    "claude-code": "/mnt/raid0/llm/claude/benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/study_summary.json"
+  },
+  "notes": [
+    "Arm A: baseline prompt.",
+    "Arm B: optimized-profile prompt policy derived from Optuna best trial.",
+    "Quality scored deterministically from debug-suite expected/scoring_config.",
+    "Cost field is token-cost proxy (input + output + 0.2*cached)."
+  ]
+}

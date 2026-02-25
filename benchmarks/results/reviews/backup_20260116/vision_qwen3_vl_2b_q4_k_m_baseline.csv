@@ -1,0 +1,31 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,44.02,3,Substantial structured response
+agentic,t1_q2_error_handling,43.53,3,Substantial structured response
+agentic,t1_q3_nested_params,49.94,3,Substantial structured response
+agentic,t2_q1_ambiguous,43.13,3,Substantial structured response
+agentic,t2_q2_error_chain,44.82,3,Substantial structured response
+agentic,t2_q3_schema_edge,51.12,3,Substantial structured response
+agentic,t2_q4_orchestration,53.76,3,Substantial structured response
+agentic,t3_q1_competing_constraints,42.14,3,Substantial structured response
+agentic,t3_q2_multi_agent_coordination,42.15,3,Substantial structured response
+agentic,t3_q3_adversarial_robustness,43.75,3,Substantial structured response
+general,t1_q1_json,50.35,3,Substantial structured response
+general,t1_q2_multistep,44.77,3,Substantial structured response
+general,t1_q3_compare,43.31,3,Substantial structured response
+general,t2_q1_synthesis,44.21,3,Substantial structured response
+general,t2_q2_transform,43.32,3,Substantial structured response
+general,t2_q3_schedule,42.6,3,Substantial structured response
+general,t2_q4_inconsistency,47.51,3,Substantial structured response
+general,t3_q1_policy_analysis,45.11,3,Substantial structured response
+general,t3_q2_system_failure,44.18,3,Substantial structured response
+general,t3_q3_strategic_communication,42.18,3,Substantial structured response
+vl,t1_q1_chart,51.92,0,Garbage: hallucinated plant disease classification
+vl,t1_q2_invoice,50.55,0,Garbage: repetitive instruction loops
+vl,t1_q3_code,49.36,0,Garbage: hallucinated plant disease classification
+vl,t2_q1_math,49.85,0,Garbage: hallucinated plant disease classification
+vl,t2_q2_flowchart,50.65,0,Garbage: hallucinated plant disease classification
+vl,t2_q3_diff,50.19,0,Garbage: echo prompt + hallucinated classification task
+vl,t2_q4_puzzle,49.23,0,Garbage: echo prompt + hallucinated classification task
+vl,t3_q1_scientific_diagram,49.05,0,Garbage: hallucinated plant disease classification
+vl,t3_q2_architectural_blueprint,44.86,0,Garbage: echo prompt + hallucinated classification task
+vl,t3_q3_multi_image_temporal,45.46,0,Garbage: echo prompt with no actual VL analysis

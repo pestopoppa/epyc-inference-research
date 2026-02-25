@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,2.60,2,Response but no tool structure
+agentic,t1_q2_error_handling,1.21,3,Tool call JSON structure present
+agentic,t1_q3_nested_params,2.51,3,Tool call JSON structure present
+agentic,t2_q1_ambiguous,1.21,2,Response but no tool structure
+agentic,t2_q2_error_chain,27.79,3,Tool call JSON structure present
+agentic,t2_q3_schema_edge,3.21,3,Tool call JSON structure present
+agentic,t2_q4_orchestration,2.51,2,Response but no tool structure
+agentic,t3_q1_competing_constraints,3.03,2,Response but no tool structure
+agentic,t3_q2_multi_agent_coordination,2.90,2,Response but no tool structure
+agentic,t3_q3_adversarial_robustness,3.02,2,Response but no tool structure
+coder,t1_q1_algorithm,2.91,3,Code implementation present
+coder,t1_q2_refactor,3.01,3,Code implementation present
+coder,t1_q3_test,2.97,3,Code implementation present
+coder,t2_q1_design,2.93,3,Code implementation present
+coder,t2_q2_debug_complex,3.06,3,Code implementation present
+coder,t2_q3_optimize,3.17,3,Code implementation present
+coder,t2_q4_system,2.98,3,Code implementation present
+coder,t3_q1_concurrent_correctness,2.90,3,Code implementation present
+coder,t3_q2_distributed_consistency,3.15,1,No code
+coder,t3_q3_algorithmic_hardness,2.90,0,Got stuck in repetitive loop
+general,t1_q1_json,1.23,2,Partial response
+general,t1_q2_multistep,2.39,3,Comprehensive response
+general,t1_q3_compare,1.21,3,Comprehensive response
+general,t2_q1_synthesis,2.36,3,Comprehensive response
+general,t2_q2_transform,2.70,3,Comprehensive response
+general,t2_q3_schedule,2.57,3,Comprehensive response
+general,t2_q4_inconsistency,2.82,3,Comprehensive response
+general,t3_q1_policy_analysis,3.12,3,Comprehensive response
+general,t3_q2_system_failure,2.19,3,Comprehensive response
+general,t3_q3_strategic_communication,3.09,3,Comprehensive response
+instruction_precision,t1_q1_negative_instruction,2.16,2,Response generated
+instruction_precision,t1_q2_word_limit,2.16,2,Response generated
+instruction_precision,t1_q3_structured_format,2.16,2,Response generated
+instruction_precision,t1_q4_multiple_constraints,2.20,2,Response generated
+instruction_precision,t2_q1_resist_elaboration,2.16,0,Failed to resist elaboration
+instruction_precision,t2_q2_maintain_format,1.23,2,Response generated
+instruction_precision,t2_q3_empty_handling,2.17,0,Failed empty handling
+instruction_precision,t2_q4_conflicting_constraints,1.22,2,Response generated
+instruction_precision,t3_q1_self_referential,2.38,1,Complex instruction - likely partial
+instruction_precision,t3_q2_cascading_constraints,2.12,1,Complex instruction - likely partial
+instruction_precision,t3_q3_meta_instruction,2.16,1,Complex instruction - likely partial
+math,t1_q1_word_problem,1.21,3,Mathematical reasoning present
+math,t1_q2_system_equations,1.98,3,Mathematical reasoning present
+math,t1_q3_probability,3.21,3,Mathematical reasoning present
+math,t2_q1_optimization,2.27,3,Mathematical reasoning present
+math,t2_q2_proof,2.09,3,Mathematical reasoning present
+math,t2_q3_calculus,1.21,3,Mathematical reasoning present
+math,t2_q4_statistics,2.08,3,Mathematical reasoning present
+math,t3_q1_analysis,2.18,3,Mathematical reasoning present
+math,t3_q2_combinatorics,2.07,3,Mathematical reasoning present
+math,t3_q3_probability_theory,2.12,3,Mathematical reasoning present
+thinking,t1_q1_multistep,2.90,3,Structured reasoning with steps
+thinking,t1_q2_hypothesis,3.18,3,Structured reasoning with steps
+thinking,t1_q3_planning,2.98,3,Structured reasoning with steps
+thinking,t2_q1_paradox,2.93,3,Structured reasoning with steps
+thinking,t2_q2_counterfactual,3.14,3,Structured reasoning with steps
+thinking,t2_q3_formal,3.13,3,Structured reasoning with steps
+thinking,t2_q4_metacognition,3.12,3,Structured reasoning with steps
+thinking,t3_q1_methodological_critique,3.17,3,Structured reasoning with steps
+thinking,t3_q2_causal_inference,3.10,3,Structured reasoning with steps
+thinking,t3_q3_reasoning_trap,3.03,3,Structured reasoning with steps

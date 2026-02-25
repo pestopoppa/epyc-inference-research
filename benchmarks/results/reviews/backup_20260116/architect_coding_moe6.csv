@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,6.17,3,JSON structure with relevant content present
+agentic,t3_q2_multi_agent_coordination,5.88,3,JSON structure with relevant content present
+agentic,t3_q3_adversarial_robustness,5.57,3,Comprehensive response generated
+agentic,t2_q1_ambiguous,6.52,2,JSON present but may be incomplete
+agentic,t2_q2_error_chain,6.27,2,JSON present but may be incomplete
+agentic,t2_q3_schema_edge,6.45,2,JSON present but may be incomplete
+agentic,t2_q4_orchestration,6.09,3,JSON structure with relevant content present
+agentic,t1_q1_sequential,6.54,3,JSON structure with relevant content present
+agentic,t1_q2_error_handling,6.33,1,Missing expected JSON format
+agentic,t1_q3_nested_params,6.44,2,JSON present but may be incomplete
+general,t3_q1_policy_analysis,5.18,3,Comprehensive response generated
+general,t3_q2_system_failure,5.01,2,Response present but unclear if code included
+general,t3_q3_strategic_communication,4.83,3,Comprehensive response generated
+general,t2_q1_synthesis,5.31,3,Comprehensive response generated
+general,t2_q2_transform,5.3,3,Comprehensive response generated
+general,t2_q3_schedule,4.49,3,Comprehensive response generated
+general,t2_q4_inconsistency,5.18,1,Missing expected JSON format
+general,t1_q1_json,5.44,2,JSON present but may be incomplete
+general,t1_q2_multistep,5.37,3,Comprehensive response generated
+general,t1_q3_compare,5.38,3,Comprehensive response generated
+long_context,t3_q1_multi_hop_reasoning,0.72,2,Response present but unclear if code included
+long_context,t3_q2_contradiction_detection,0.86,2,Response present but unclear if code included
+long_context,t3_q3_evolving_requirements,1.13,2,Response present but unclear if code included
+long_context,t2_q1_deep_needle,0.0,1,Brief response generated
+long_context,t2_q2_synthesis,0.92,3,Comprehensive response generated
+long_context,t2_q3_architecture,0.62,3,Comprehensive response generated
+long_context,t1_q1_needle,2.26,1,Brief response generated
+long_context,t1_q2_multi_file,2.43,1,Missing expected JSON format
+long_context,t1_q3_extraction,1.84,3,Comprehensive response generated
+thinking,t3_q1_methodological_critique,6.2,1,Missing expected JSON format
+thinking,t3_q2_causal_inference,6.09,3,Comprehensive response generated
+thinking,t3_q3_reasoning_trap,5.89,3,Comprehensive response generated
+thinking,t2_q1_paradox,6.1,3,Comprehensive response generated
+thinking,t2_q2_counterfactual,5.86,3,Comprehensive response generated
+thinking,t2_q3_formal,6.13,3,Comprehensive response generated
+thinking,t2_q4_metacognition,6.04,3,Comprehensive response generated
+thinking,t1_q1_multistep,6.09,3,Comprehensive response generated
+thinking,t1_q2_hypothesis,6.2,3,Comprehensive response generated
+thinking,t1_q3_planning,5.61,3,Comprehensive response generated
+coder,t3_q1_concurrent_correctness,5.62,3,Code implementation present
+coder,t3_q2_distributed_consistency,5.81,3,Comprehensive response generated
+coder,t3_q3_algorithmic_hardness,5.35,3,Comprehensive response generated
+coder,t2_q1_design,5.78,3,Comprehensive response generated
+coder,t2_q2_debug_complex,6.17,3,Comprehensive response generated
+coder,t2_q3_optimize,5.92,3,JSON structure with relevant content present
+coder,t2_q4_system,6.27,3,Code implementation present
+coder,t1_q1_algorithm,6.01,3,Code implementation present
+coder,t1_q2_refactor,5.99,1,Missing expected JSON format
+coder,t1_q3_test,5.59,1,Missing expected JSON format
+math,t3_q1_analysis,5.33,2,JSON present but may be incomplete
+math,t3_q2_combinatorics,5.2,3,Comprehensive response generated
+math,t3_q3_probability_theory,5.32,3,Comprehensive response generated
+math,t2_q1_optimization,6.28,3,Comprehensive response generated
+math,t2_q2_proof,6.02,3,Comprehensive response generated
+math,t2_q3_calculus,6.23,3,Comprehensive response generated
+math,t2_q4_statistics,5.61,3,Comprehensive response generated
+math,t1_q1_word_problem,6.02,3,Comprehensive response generated
+math,t1_q2_system_equations,6.03,3,Comprehensive response generated
+math,t1_q3_probability,6.08,3,Comprehensive response generated
+instruction_precision,t3_q1_self_referential,6.13,3,Comprehensive response generated
+instruction_precision,t3_q2_cascading_constraints,6.67,1,Brief response generated
+instruction_precision,t3_q3_meta_instruction,6.72,1,Brief response generated
+instruction_precision,t2_q1_resist_elaboration,9.89,0,Empty or minimal output
+instruction_precision,t2_q2_maintain_format,6.56,2,Moderate response generated
+instruction_precision,t2_q3_empty_handling,12.89,0,Empty or minimal output
+instruction_precision,t2_q4_conflicting_constraints,6.86,1,Brief response generated
+instruction_precision,t1_q1_negative_instruction,6.63,3,Comprehensive response generated
+instruction_precision,t1_q2_word_limit,6.75,2,Moderate response generated
+instruction_precision,t1_q3_structured_format,6.69,1,Brief response generated
+instruction_precision,t1_q4_multiple_constraints,7.15,1,Brief response generated

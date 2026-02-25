@@ -1,0 +1,2190 @@
+{
+  "study_name": "root_ab_claude_code_20260222_014840",
+  "environment": "claude-code",
+  "seed": 42,
+  "tasks_per_arm": 100,
+  "workload_pack": "benchmarks/root_workload/workload_pack_curated_debug_hard100_v1.json",
+  "optimization_ids": [
+    "0.1",
+    "0.2",
+    "0.3",
+    "0.4",
+    "0.5",
+    "0.6",
+    "10.7.1",
+    "10.7.2",
+    "10.7.3",
+    "10.7.4",
+    "10.7.5",
+    "10.7.6",
+    "10.7.7",
+    "10.7.8",
+    "10.7.9",
+    "10.7.10"
+  ],
+  "resample_mode": "trial_seeded",
+  "resample_folds": 5,
+  "baseline_metrics_by_seed": {
+    "42": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "43": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "44": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "45": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "46": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "47": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "48": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "49": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "50": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "51": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "52": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "53": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "54": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "55": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "56": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "57": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "58": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "59": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "60": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "61": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "62": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "63": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "64": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "65": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "66": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "67": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "68": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "69": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "70": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "71": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "72": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "73": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "74": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "75": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "76": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "77": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "78": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "79": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "80": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "81": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "82": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "83": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "84": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "85": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "86": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "87": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "88": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "89": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "90": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "91": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "92": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "93": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "94": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "95": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "96": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "97": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "98": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "99": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "100": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "101": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "102": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "103": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "104": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "105": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "106": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "107": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "108": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "109": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "110": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "111": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "112": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "113": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "114": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "115": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "116": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "117": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "118": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "119": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "120": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "121": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "122": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "123": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "124": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "125": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "126": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "127": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "128": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "129": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "130": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "131": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "132": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "133": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "134": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "135": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "136": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "137": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "138": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "139": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "140": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "141": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "142": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "143": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "144": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "145": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "146": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "147": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "148": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "149": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "150": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "151": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "152": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "153": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "154": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "155": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "156": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "157": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "158": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "159": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "160": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "161": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "162": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "163": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "164": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "165": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "166": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "167": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "168": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "169": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "170": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "171": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "172": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "173": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "174": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "175": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "176": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "177": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "178": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "179": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "180": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "181": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "182": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "183": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "184": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "185": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "186": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "187": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "188": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "189": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "190": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "191": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "192": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "193": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "194": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "195": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "196": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "197": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "198": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "199": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "200": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "201": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "202": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "203": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "204": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "205": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "206": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "207": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "208": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "209": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "210": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "211": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "212": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "213": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "214": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "215": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "216": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "217": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "218": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "219": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "220": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "221": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "222": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "223": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "224": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "225": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "226": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "227": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "228": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "229": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "230": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "231": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "232": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "233": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "234": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "235": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "236": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "237": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "238": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "239": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "240": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    },
+    "241": {
+      "total_tasks": 100,
+      "quality_pass_rate": 0.9,
+      "cost_per_task": 2.42727672,
+      "p95_task_latency": 7.427061,
+      "manual_intervention_rate": 0.08
+    }
+  },
+  "best_trial": {
+    "number": 145,
+    "value": 49.23254460520694,
+    "params": {
+      "enable__0.1": true,
+      "scale__0.1": 1.1474222787691952,
+      "enable__0.2": true,
+      "scale__0.2": 1.4283426029439776,
+      "enable__0.3": true,
+      "scale__0.3": 1.345225889474573,
+      "enable__0.4": true,
+      "scale__0.4": 1.3604684034321861,
+      "enable__0.5": true,
+      "scale__0.5": 0.8393588625004399,
+      "enable__0.6": false,
+      "enable__10.7.1": true,
+      "scale__10.7.1": 1.4591739053294597,
+      "enable__10.7.2": true,
+      "scale__10.7.2": 1.0048394203995312,
+      "enable__10.7.3": true,
+      "scale__10.7.3": 1.478097675051908,
+      "enable__10.7.4": true,
+      "scale__10.7.4": 0.6220045820606046,
+      "enable__10.7.5": true,
+      "scale__10.7.5": 1.1292214112835546,
+      "enable__10.7.6": true,
+      "scale__10.7.6": 1.4990166356642622,
+      "enable__10.7.7": false,
+      "enable__10.7.8": true,
+      "scale__10.7.8": 1.386936034632364,
+      "enable__10.7.9": true,
+      "scale__10.7.9": 1.417805824434299,
+      "enable__10.7.10": true,
+      "scale__10.7.10": 0.7853395726088024
+    },
+    "user_attrs": {
+      "effect": {
+        "quality": 0.018754555648178087,
+        "cost": -0.6585748688514119,
+        "latency": -0.12126127038592671,
+        "manual": -0.10298204322837627
+      },
+      "enabled": {
+        "0.1": true,
+        "0.2": true,
+        "0.3": true,
+        "0.4": true,
+        "0.5": true,
+        "0.6": false,
+        "10.7.1": true,
+        "10.7.2": true,
+        "10.7.3": true,
+        "10.7.4": true,
+        "10.7.5": true,
+        "10.7.6": true,
+        "10.7.7": false,
+        "10.7.8": true,
+        "10.7.9": true,
+        "10.7.10": true
+      },
+      "delta_quality": 0.039999999999999925,
+      "delta_cost": -0.6581230919563222,
+      "delta_latency": -0.14980636351310428,
+      "delta_manual_intervention": -0.08,
+      "feasible": true,
+      "trial_seed": 187,
+      "trial_dir": "benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/trial_0145"
+    }
+  },
+  "top_trials": [
+    {
+      "number": 145,
+      "value": 49.23254460520694,
+      "params": {
+        "enable__0.1": true,
+        "scale__0.1": 1.1474222787691952,
+        "enable__0.2": true,
+        "scale__0.2": 1.4283426029439776,
+        "enable__0.3": true,
+        "scale__0.3": 1.345225889474573,
+        "enable__0.4": true,
+        "scale__0.4": 1.3604684034321861,
+        "enable__0.5": true,
+        "scale__0.5": 0.8393588625004399,
+        "enable__0.6": false,
+        "enable__10.7.1": true,
+        "scale__10.7.1": 1.4591739053294597,
+        "enable__10.7.2": true,
+        "scale__10.7.2": 1.0048394203995312,
+        "enable__10.7.3": true,
+        "scale__10.7.3": 1.478097675051908,
+        "enable__10.7.4": true,
+        "scale__10.7.4": 0.6220045820606046,
+        "enable__10.7.5": true,
+        "scale__10.7.5": 1.1292214112835546,
+        "enable__10.7.6": true,
+        "scale__10.7.6": 1.4990166356642622,
+        "enable__10.7.7": false,
+        "enable__10.7.8": true,
+        "scale__10.7.8": 1.386936034632364,
+        "enable__10.7.9": true,
+        "scale__10.7.9": 1.417805824434299,
+        "enable__10.7.10": true,
+        "scale__10.7.10": 0.7853395726088024
+      },
+      "user_attrs": {
+        "effect": {
+          "quality": 0.018754555648178087,
+          "cost": -0.6585748688514119,
+          "latency": -0.12126127038592671,
+          "manual": -0.10298204322837627
+        },
+        "enabled": {
+          "0.1": true,
+          "0.2": true,
+          "0.3": true,
+          "0.4": true,
+          "0.5": true,
+          "0.6": false,
+          "10.7.1": true,
+          "10.7.2": true,
+          "10.7.3": true,
+          "10.7.4": true,
+          "10.7.5": true,
+          "10.7.6": true,
+          "10.7.7": false,
+          "10.7.8": true,
+          "10.7.9": true,
+          "10.7.10": true
+        },
+        "delta_quality": 0.039999999999999925,
+        "delta_cost": -0.6581230919563222,
+        "delta_latency": -0.14980636351310428,
+        "delta_manual_intervention": -0.08,
+        "feasible": true,
+        "trial_seed": 187,
+        "trial_dir": "benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/trial_0145"
+      }
+    },
+    {
+      "number": 197,
+      "value": 49.00340974896172,
+      "params": {
+        "enable__0.1": true,
+        "scale__0.1": 1.1968655229749074,
+        "enable__0.2": true,
+        "scale__0.2": 1.3167991018130314,
+        "enable__0.3": true,
+        "scale__0.3": 1.4839028773615757,
+        "enable__0.4": true,
+        "scale__0.4": 1.2749695296327903,
+        "enable__0.5": true,
+        "scale__0.5": 0.9856366121640541,
+        "enable__0.6": false,
+        "enable__10.7.1": true,
+        "scale__10.7.1": 1.3709923553714705,
+        "enable__10.7.2": true,
+        "scale__10.7.2": 0.7583503245486355,
+        "enable__10.7.3": true,
+        "scale__10.7.3": 1.4999087922559096,
+        "enable__10.7.4": true,
+        "scale__10.7.4": 1.0014982207665788,
+        "enable__10.7.5": true,
+        "scale__10.7.5": 1.2783671218943293,
+        "enable__10.7.6": true,
+        "scale__10.7.6": 1.4767123764618506,
+        "enable__10.7.7": false,
+        "enable__10.7.8": true,
+        "scale__10.7.8": 1.4922933716504065,
+        "enable__10.7.9": true,
+        "scale__10.7.9": 1.4828090841975372,
+        "enable__10.7.10": true,
+        "scale__10.7.10": 0.9485754648007373
+      },
+      "user_attrs": {
+        "effect": {
+          "quality": 0.01723578209154913,
+          "cost": -0.6744779986164007,
+          "latency": -0.11363001531141081,
+          "manual": -0.10298135078595778
+        },
+        "enabled": {
+          "0.1": true,
+          "0.2": true,
+          "0.3": true,
+          "0.4": true,
+          "0.5": true,
+          "0.6": false,
+          "10.7.1": true,
+          "10.7.2": true,
+          "10.7.3": true,
+          "10.7.4": true,
+          "10.7.5": true,
+          "10.7.6": true,
+          "10.7.7": false,
+          "10.7.8": true,
+          "10.7.9": true,
+          "10.7.10": true
+        },
+        "delta_quality": 0.030000000000000027,
+        "delta_cost": -0.6740472631402323,
+        "delta_latency": -0.1424229584219114,
+        "delta_manual_intervention": -0.08,
+        "feasible": true,
+        "trial_seed": 239,
+        "trial_dir": "benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/trial_0197"
+      }
+    },
+    {
+      "number": 175,
+      "value": 48.93594393901073,
+      "params": {
+        "enable__0.1": true,
+        "scale__0.1": 1.1655901572366894,
+        "enable__0.2": true,
+        "scale__0.2": 1.453719865239538,
+        "enable__0.3": true,
+        "scale__0.3": 1.460895278802973,
+        "enable__0.4": true,
+        "scale__0.4": 1.3362084189769596,
+        "enable__0.5": true,
+        "scale__0.5": 1.0139252315664622,
+        "enable__0.6": false,
+        "enable__10.7.1": true,
+        "scale__10.7.1": 1.3613964047861145,
+        "enable__10.7.2": true,
+        "scale__10.7.2": 0.9524778214338816,
+        "enable__10.7.3": true,
+        "scale__10.7.3": 1.4969979907057718,
+        "enable__10.7.4": true,
+        "scale__10.7.4": 0.9780521723802176,
+        "enable__10.7.5": true,
+        "scale__10.7.5": 1.0886590683353368,
+        "enable__10.7.6": true,
+        "scale__10.7.6": 1.4695007847684967,
+        "enable__10.7.7": false,
+        "enable__10.7.8": true,
+        "scale__10.7.8": 1.4445390000868445,
+        "enable__10.7.9": true,
+        "scale__10.7.9": 1.4983959792743022,
+        "enable__10.7.10": true,
+        "scale__10.7.10": 0.9094247395216377
+      },
+      "user_attrs": {
+        "effect": {
+          "quality": 0.01856093475626335,
+          "cost": -0.6752167772841571,
+          "latency": -0.1090057055163054,
+          "manual": -0.10679497567722544
+        },
+        "enabled": {
+          "0.1": true,
+          "0.2": true,
+          "0.3": true,
+          "0.4": true,
+          "0.5": true,
+          "0.6": false,
+          "10.7.1": true,
+          "10.7.2": true,
+          "10.7.3": true,
+          "10.7.4": true,
+          "10.7.5": true,
+          "10.7.6": true,
+          "10.7.7": false,
+          "10.7.8": true,
+          "10.7.9": true,
+          "10.7.10": true
+        },
+        "delta_quality": 0.030000000000000027,
+        "delta_cost": -0.6747870181031522,
+        "delta_latency": -0.1379489141128638,
+        "delta_manual_intervention": -0.08,
+        "feasible": true,
+        "trial_seed": 217,
+        "trial_dir": "benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/trial_0175"
+      }
+    },
+    {
+      "number": 171,
+      "value": 48.90507705658993,
+      "params": {
+        "enable__0.1": true,
+        "scale__0.1": 1.1675181837568072,
+        "enable__0.2": true,
+        "scale__0.2": 1.4418269653302382,
+        "enable__0.3": true,
+        "scale__0.3": 1.4560951797236972,
+        "enable__0.4": true,
+        "scale__0.4": 1.3370604378013107,
+        "enable__0.5": true,
+        "scale__0.5": 1.0234399861197252,
+        "enable__0.6": false,
+        "enable__10.7.1": true,
+        "scale__10.7.1": 1.3971790244025246,
+        "enable__10.7.2": true,
+        "scale__10.7.2": 0.9477399975692498,
+        "enable__10.7.3": true,
+        "scale__10.7.3": 1.4987801798600917,
+        "enable__10.7.4": true,
+        "scale__10.7.4": 0.9721599303975893,
+        "enable__10.7.5": true,
+        "scale__10.7.5": 0.6918606952263568,
+        "enable__10.7.6": true,
+        "scale__10.7.6": 1.4745362949600127,
+        "enable__10.7.7": false,
+        "enable__10.7.8": true,
+        "scale__10.7.8": 1.4093291785094408,
+        "enable__10.7.9": true,
+        "scale__10.7.9": 1.4725766923586094,
+        "enable__10.7.10": true,
+        "scale__10.7.10": 0.911214806515154
+      },
+      "user_attrs": {
+        "effect": {
+          "quality": 0.019405920679615864,
+          "cost": -0.6635296432123572,
+          "latency": -0.09541579764987207,
+          "manual": -0.11025744621924272
+        },
+        "enabled": {
+          "0.1": true,
+          "0.2": true,
+          "0.3": true,
+          "0.4": true,
+          "0.5": true,
+          "0.6": false,
+          "10.7.1": true,
+          "10.7.2": true,
+          "10.7.3": true,
+          "10.7.4": true,
+          "10.7.5": true,
+          "10.7.6": true,
+          "10.7.7": false,
+          "10.7.8": true,
+          "10.7.9": true,
+          "10.7.10": true
+        },
+        "delta_quality": 0.039999999999999925,
+        "delta_cost": -0.6630844051435553,
+        "delta_latency": -0.12480050991906488,
+        "delta_manual_intervention": -0.08,
+        "feasible": true,
+        "trial_seed": 213,
+        "trial_dir": "benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/trial_0171"
+      }
+    },
+    {
+      "number": 185,
+      "value": 48.871053187267975,
+      "params": {
+        "enable__0.1": true,
+        "scale__0.1": 1.1564868375307875,
+        "enable__0.2": true,
+        "scale__0.2": 1.3729954170903125,
+        "enable__0.3": true,
+        "scale__0.3": 1.4581621338600232,
+        "enable__0.4": true,
+        "scale__0.4": 1.3205226267377497,
+        "enable__0.5": true,
+        "scale__0.5": 1.0042347931623534,
+        "enable__0.6": false,
+        "enable__10.7.1": true,
+        "scale__10.7.1": 1.3609621645173284,
+        "enable__10.7.2": true,
+        "scale__10.7.2": 0.9036237367280942,
+        "enable__10.7.3": true,
+        "scale__10.7.3": 1.4975224275158103,
+        "enable__10.7.4": true,
+        "scale__10.7.4": 0.9736147527511726,
+        "enable__10.7.5": true,
+        "scale__10.7.5": 1.2051260713562741,
+        "enable__10.7.6": true,
+        "scale__10.7.6": 1.451617541874177,
+        "enable__10.7.7": false,
+        "enable__10.7.8": true,
+        "scale__10.7.8": 1.4695367262254266,
+        "enable__10.7.9": true,
+        "scale__10.7.9": 1.4641605694818298,
+        "enable__10.7.10": true,
+        "scale__10.7.10": 0.9382311779973335
+      },
+      "user_attrs": {
+        "effect": {
+          "quality": 0.017901229205481338,
+          "cost": -0.6734133535206941,
+          "latency": -0.11080245844105607,
+          "manual": -0.10444824633269542
+        },
+        "enabled": {
+          "0.1": true,
+          "0.2": true,
+          "0.3": true,
+          "0.4": true,
+          "0.5": true,
+          "0.6": false,
+          "10.7.1": true,
+          "10.7.2": true,
+          "10.7.3": true,
+          "10.7.4": true,
+          "10.7.5": true,
+          "10.7.6": true,
+          "10.7.7": false,
+          "10.7.8": true,
+          "10.7.9": true,
+          "10.7.10": true
+        },
+        "delta_quality": 0.030000000000000027,
+        "delta_cost": -0.672981183620465,
+        "delta_latency": -0.13968728680160297,
+        "delta_manual_intervention": -0.08,
+        "feasible": true,
+        "trial_seed": 227,
+        "trial_dir": "benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/trial_0185"
+      }
+    },
+    {
+      "number": 172,
+      "value": 48.8692767510572,
+      "params": {
+        "enable__0.1": true,
+        "scale__0.1": 1.1600938544452097,
+        "enable__0.2": true,
+        "scale__0.2": 1.42992231110517,
+        "enable__0.3": true,
+        "scale__0.3": 1.451720536086894,
+        "enable__0.4": true,
+        "scale__0.4": 1.3379538564438365,
+        "enable__0.5": true,
+        "scale__0.5": 1.0142790292981478,
+        "enable__0.6": false,
+        "enable__10.7.1": true,
+        "scale__10.7.1": 1.4111639477188254,
+        "enable__10.7.2": true,
+        "scale__10.7.2": 0.9520545667960981,
+        "enable__10.7.3": true,
+        "scale__10.7.3": 1.4913449024743193,
+        "enable__10.7.4": true,
+        "scale__10.7.4": 0.9429855182819903,
+        "enable__10.7.5": true,
+        "scale__10.7.5": 0.6935502093764796,
+        "enable__10.7.6": true,
+        "scale__10.7.6": 1.4718290564437657,
+        "enable__10.7.7": false,
+        "enable__10.7.8": true,
+        "scale__10.7.8": 1.4081151471170454,
+        "enable__10.7.9": true,
+        "scale__10.7.9": 1.4999242516206135,
+        "enable__10.7.10": true,
+        "scale__10.7.10": 0.9193479285484848
+      },
+      "user_attrs": {
+        "effect": {
+          "quality": 0.01944300640801653,
+          "cost": -0.6626408258356444,
+          "latency": -0.09614342735149661,
+          "manual": -0.11049634453529497
+        },
+        "enabled": {
+          "0.1": true,
+          "0.2": true,
+          "0.3": true,
+          "0.4": true,
+          "0.5": true,
+          "0.6": false,
+          "10.7.1": true,
+          "10.7.2": true,
+          "10.7.3": true,
+          "10.7.4": true,
+          "10.7.5": true,
+          "10.7.6": true,
+          "10.7.7": false,
+          "10.7.8": true,
+          "10.7.9": true,
+          "10.7.10": true
+        },
+        "delta_quality": 0.039999999999999925,
+        "delta_cost": -0.6621944365700504,
+        "delta_latency": -0.12550442227416736,
+        "delta_manual_intervention": -0.08,
+        "feasible": true,
+        "trial_seed": 214,
+        "trial_dir": "benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/trial_0172"
+      }
+    },
+    {
+      "number": 183,
+      "value": 48.80735639314402,
+      "params": {
+        "enable__0.1": true,
+        "scale__0.1": 1.1681949487929737,
+        "enable__0.2": true,
+        "scale__0.2": 1.4013327442229944,
+        "enable__0.3": true,
+        "scale__0.3": 1.4850732042361066,
+        "enable__0.4": true,
+        "scale__0.4": 1.3073910334437016,
+        "enable__0.5": true,
+        "scale__0.5": 0.9747766129359304,
+        "enable__0.6": false,
+        "enable__10.7.1": true,
+        "scale__10.7.1": 1.3697655720383597,
+        "enable__10.7.2": true,
+        "scale__10.7.2": 0.8929580676812573,
+        "enable__10.7.3": true,
+        "scale__10.7.3": 1.499905963750906,
+        "enable__10.7.4": true,
+        "scale__10.7.4": 0.9723589881720458,
+        "enable__10.7.5": true,
+        "scale__10.7.5": 1.1601057517068503,
+        "enable__10.7.6": true,
+        "scale__10.7.6": 1.4484557436149734,
+        "enable__10.7.7": false,
+        "enable__10.7.8": true,
+        "scale__10.7.8": 1.4305778113495895,
+        "enable__10.7.9": true,
+        "scale__10.7.9": 1.4924933595976642,
+        "enable__10.7.10": true,
+        "scale__10.7.10": 0.9595936889621309
+      },
+      "user_attrs": {
+        "effect": {
+          "quality": 0.018000205855484543,
+          "cost": -0.6733553857315158,
+          "latency": -0.10831296366662269,
+          "manual": -0.10480866112232111
+        },
+        "enabled": {
+          "0.1": true,
+          "0.2": true,
+          "0.3": true,
+          "0.4": true,
+          "0.5": true,
+          "0.6": false,
+          "10.7.1": true,
+          "10.7.2": true,
+          "10.7.3": true,
+          "10.7.4": true,
+          "10.7.5": true,
+          "10.7.6": true,
+          "10.7.7": false,
+          "10.7.8": true,
+          "10.7.9": true,
+          "10.7.10": true
+        },
+        "delta_quality": 0.030000000000000027,
+        "delta_cost": -0.672923163865717,
+        "delta_latency": -0.13727866244803966,
+        "delta_manual_intervention": -0.08,
+        "feasible": true,
+        "trial_seed": 225,
+        "trial_dir": "benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/trial_0183"
+      }
+    },
+    {
+      "number": 186,
+      "value": 48.77021422700932,
+      "params": {
+        "enable__0.1": true,
+        "scale__0.1": 1.1734588896873783,
+        "enable__0.2": true,
+        "scale__0.2": 1.3750983661504363,
+        "enable__0.3": true,
+        "scale__0.3": 1.4511546624256704,
+        "enable__0.4": true,
+        "scale__0.4": 1.3243337847662717,
+        "enable__0.5": true,
+        "scale__0.5": 0.9864372788804091,
+        "enable__0.6": false,
+        "enable__10.7.1": true,
+        "scale__10.7.1": 1.3358879047683911,
+        "enable__10.7.2": true,
+        "scale__10.7.2": 0.8946894522486668,
+        "enable__10.7.3": true,
+        "scale__10.7.3": 1.4549688038695519,
+        "enable__10.7.4": true,
+        "scale__10.7.4": 0.9792980873258215,
+        "enable__10.7.5": true,
+        "scale__10.7.5": 1.1841059474406115,
+        "enable__10.7.6": true,
+        "scale__10.7.6": 1.462174158904504,
+        "enable__10.7.7": false,
+        "enable__10.7.8": true,
+        "scale__10.7.8": 1.4627996509620718,
+        "enable__10.7.9": true,
+        "scale__10.7.9": 1.499693349149717,
+        "enable__10.7.10": true,
+        "scale__10.7.10": 0.9371317994546984
+      },
+      "user_attrs": {
+        "effect": {
+          "quality": 0.017933143687842962,
+          "cost": -0.6719379320139207,
+          "latency": -0.1102981400554216,
+          "manual": -0.10444531465930858
+        },
+        "enabled": {
+          "0.1": true,
+          "0.2": true,
+          "0.3": true,
+          "0.4": true,
+          "0.5": true,
+          "0.6": false,
+          "10.7.1": true,
+          "10.7.2": true,
+          "10.7.3": true,
+          "10.7.4": true,
+          "10.7.5": true,
+          "10.7.6": true,
+          "10.7.7": false,
+          "10.7.8": true,
+          "10.7.9": true,
+          "10.7.10": true
+        },
+        "delta_quality": 0.030000000000000027,
+        "delta_cost": -0.6715038448521025,
+        "delta_latency": -0.13919934143532683,
+        "delta_manual_intervention": -0.08,
+        "feasible": true,
+        "trial_seed": 228,
+        "trial_dir": "benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/trial_0186"
+      }
+    },
+    {
+      "number": 191,
+      "value": 48.76087379800986,
+      "params": {
+        "enable__0.1": true,
+        "scale__0.1": 1.1533985864531928,
+        "enable__0.2": true,
+        "scale__0.2": 1.3712783709976346,
+        "enable__0.3": true,
+        "scale__0.3": 1.4471615446182204,
+        "enable__0.4": true,
+        "scale__0.4": 1.317879405412222,
+        "enable__0.5": true,
+        "scale__0.5": 1.013242282373646,
+        "enable__0.6": false,
+        "enable__10.7.1": true,
+        "scale__10.7.1": 1.3629102036463288,
+        "enable__10.7.2": true,
+        "scale__10.7.2": 0.7978544043373188,
+        "enable__10.7.3": true,
+        "scale__10.7.3": 1.4979527453910442,
+        "enable__10.7.4": true,
+        "scale__10.7.4": 0.9547813794852279,
+        "enable__10.7.5": true,
+        "scale__10.7.5": 1.2248824285824398,
+        "enable__10.7.6": true,
+        "scale__10.7.6": 1.396129993792762,
+        "enable__10.7.7": false,
+        "enable__10.7.8": true,
+        "scale__10.7.8": 1.450969928430606,
+        "enable__10.7.9": true,
+        "scale__10.7.9": 1.49961548633785,
+        "enable__10.7.10": true,
+        "scale__10.7.10": 0.9351938899478477
+      },
+      "user_attrs": {
+        "effect": {
+          "quality": 0.01745557810163935,
+          "cost": -0.6705627605513853,
+          "latency": -0.11332769163415823,
+          "manual": -0.10360886398022025
+        },
+        "enabled": {
+          "0.1": true,
+          "0.2": true,
+          "0.3": true,
+          "0.4": true,
+          "0.5": true,
+          "0.6": false,
+          "10.7.1": true,
+          "10.7.2": true,
+          "10.7.3": true,
+          "10.7.4": true,
+          "10.7.5": true,
+          "10.7.6": true,
+          "10.7.7": false,
+          "10.7.8": true,
+          "10.7.9": true,
+          "10.7.10": true
+        },
+        "delta_quality": 0.030000000000000027,
+        "delta_cost": -0.6701268489898424,
+        "delta_latency": -0.14213051434477245,
+        "delta_manual_intervention": -0.08,
+        "feasible": true,
+        "trial_seed": 233,
+        "trial_dir": "benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/trial_0191"
+      }
+    },
+    {
+      "number": 174,
+      "value": 48.75606023113582,
+      "params": {
+        "enable__0.1": true,
+        "scale__0.1": 1.1613045831652677,
+        "enable__0.2": true,
+        "scale__0.2": 1.4023531078256475,
+        "enable__0.3": true,
+        "scale__0.3": 1.4744804494824462,
+        "enable__0.4": true,
+        "scale__0.4": 1.3491319356423792,
+        "enable__0.5": true,
+        "scale__0.5": 1.014923105551013,
+        "enable__0.6": false,
+        "enable__10.7.1": true,
+        "scale__10.7.1": 1.3680124308975083,
+        "enable__10.7.2": true,
+        "scale__10.7.2": 0.9498159884068325,
+        "enable__10.7.3": true,
+        "scale__10.7.3": 1.4938746051522012,
+        "enable__10.7.4": true,
+        "scale__10.7.4": 0.9672741368596038,
+        "enable__10.7.5": true,
+        "scale__10.7.5": 0.6672391593318793,
+        "enable__10.7.6": true,
+        "scale__10.7.6": 1.4665862040556148,
+        "enable__10.7.7": false,
+        "enable__10.7.8": true,
+        "scale__10.7.8": 1.4416779074754087,
+        "enable__10.7.9": true,
+        "scale__10.7.9": 1.4987595877932551,
+        "enable__10.7.10": true,
+        "scale__10.7.10": 0.9598777786903582
+      },
+      "user_attrs": {
+        "effect": {
+          "quality": 0.019310345617786367,
+          "cost": -0.6613083142775393,
+          "latency": -0.0947724417296334,
+          "manual": -0.11080765759523586
+        },
+        "enabled": {
+          "0.1": true,
+          "0.2": true,
+          "0.3": true,
+          "0.4": true,
+          "0.5": true,
+          "0.6": false,
+          "10.7.1": true,
+          "10.7.2": true,
+          "10.7.3": true,
+          "10.7.4": true,
+          "10.7.5": true,
+          "10.7.6": true,
+          "10.7.7": false,
+          "10.7.8": true,
+          "10.7.9": true,
+          "10.7.10": true
+        },
+        "delta_quality": 0.039999999999999925,
+        "delta_cost": -0.6608601470045821,
+        "delta_latency": -0.12417805643443623,
+        "delta_manual_intervention": -0.08,
+        "feasible": true,
+        "trial_seed": 216,
+        "trial_dir": "benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/trial_0174"
+      }
+    }
+  ]
+}

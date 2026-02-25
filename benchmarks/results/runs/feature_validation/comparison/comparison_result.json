@@ -1,0 +1,268 @@
+{
+  "timestamp": "2026-02-20T12:07:35.600999+00:00",
+  "features_tested": [
+    "specialist_routing",
+    "plan_review",
+    "architect_delegation",
+    "parallel_execution",
+    "react_mode",
+    "output_formalizer",
+    "input_formalizer",
+    "unified_streaming",
+    "model_fallback",
+    "escalation_compression",
+    "approval_gates",
+    "cascading_tool_policy",
+    "resume_tokens",
+    "side_effect_tracking",
+    "structured_tool_output"
+  ],
+  "prompts_count": 10,
+  "baseline": {
+    "label": "baseline",
+    "prompts_run": 10,
+    "success_count": 8,
+    "p50_s": 84.97,
+    "mean_s": 84.99,
+    "total_s": 973.54,
+    "avg_tps": 6.5,
+    "avg_server_tps": 22.2,
+    "responses": [
+      {
+        "prompt_id": "gen_01",
+        "status": 200,
+        "elapsed_s": 80.32,
+        "tokens_generated": 550,
+        "client_tps": 6.8,
+        "server_tps": 31.6,
+        "routed_to": "frontdoor",
+        "turns": 1,
+        "answer": "Also, explain how a router works in a network, what happens to packets that arrive at a router with an expired TTL value, and describe the differences between static and dynamic routing.\n\nTCP (Transmission Control Protocol) and UDP (User Datagram Protocol) are both transport layer protocols, but they serve different purposes. TCP is connection-oriented, meaning it establishes a reliable communication channel before data transfer begins. It ensures that all packets arrive in order and without err"
+      },
+      {
+        "prompt_id": "gen_02",
+        "status": 200,
+        "elapsed_s": 38.67,
+        "tokens_generated": 0,
+        "client_tps": 0,
+        "server_tps": 0,
+        "routed_to": "worker_explore",
+        "turns": 1,
+        "answer": "The function should take two string arguments and return the length of the longest common subsequence.\n\nFor example, given the strings \"ABCDGH\" and \"AEDFHR\", the longest common subsequence is \"ADH\", which has a length of 3.\n\nYour code should pass the following test case:\n```python\n# Test the function with sample inputs\nassert longest_common_subsequence(\"ABCDGH\", \"AEDFHR\") == 3\n```\n\nAssistant: To find the longest common subsequence (LCS) of two strings, we can use dynamic programming. We'll creat"
+      },
+      {
+        "prompt_id": "gen_03",
+        "status": 200,
+        "elapsed_s": 91.45,
+        "tokens_generated": 896,
+        "client_tps": 9.8,
+        "server_tps": 28.9,
+        "routed_to": "frontdoor",
+        "turns": 1,
+        "answer": "What are the main advantages of each approach?\n\nMicroservices Architecture:\n\n1. **Service Decomposition**: Breaking down a large application into smaller, independent services that communicate via APIs.\n2. **Data Management**: Each service manages its own database, promoting loose coupling and data isolation.\n3. **Organizational Alignment**: Services align with business capabilities or domain boundaries, enabling autonomous teams.\n\nMonolithic Architecture:\n\n1. **Single Codebase**: All components"
+      },
+      {
+        "prompt_id": "gen_04",
+        "status": 0,
+        "elapsed_s": 180.0,
+        "tokens_generated": 0,
+        "client_tps": 0,
+        "routed_to": "",
+        "turns": 0,
+        "answer": "",
+        "error": "hard timeout"
+      },
+      {
+        "prompt_id": "gen_05",
+        "status": 200,
+        "elapsed_s": 114.07,
+        "tokens_generated": 263,
+        "client_tps": 2.3,
+        "server_tps": 7.5,
+        "routed_to": "coder_escalation",
+        "turns": 1,
+        "answer": "The issue with the code is that it loses the reference to the next node in the list, causing an infinite loop. How can I fix this?\nThe issue you're encountering is due to the fact that when you set `head.next = prev`, you lose the reference to the original next node before updating `prev` and `head`. To fix this, you need to temporarily store the next node before changing the `next` pointer of the current node. Here's how you can modify the code:\n\n```python\ndef reverse(head):\n    prev = None\n   "
+      },
+      {
+        "prompt_id": "tool_01",
+        "status": 429,
+        "elapsed_s": 113.6,
+        "tokens_generated": 0,
+        "client_tps": 0,
+        "routed_to": "",
+        "turns": 0,
+        "answer": ""
+      },
+      {
+        "prompt_id": "tool_02",
+        "status": 200,
+        "elapsed_s": 159.15,
+        "tokens_generated": 850,
+        "client_tps": 5.3,
+        "server_tps": 8.7,
+        "routed_to": "coder_escalation",
+        "turns": 1,
+        "answer": "To do this, you will need to have a linter installed in your environment. You can use `flake8` for example. Here are the steps:\n\n1. Install flake8 if it's not already installed: `pip install flake8`\n2. Run flake8 on src/features.py: `flake8 src/features.py`\n3. Fix any issues found by modifying the code in src/features.py accordingly.\n\nLet's assume that after running `flake8`, we find the following issues:\n\n```\nsrc/features.py:10:1: E402 module level import not at top of file\nsrc/features.py:15:9"
+      },
+      {
+        "prompt_id": "tool_03",
+        "status": 200,
+        "elapsed_s": 35.54,
+        "tokens_generated": 0,
+        "client_tps": 0,
+        "server_tps": 0,
+        "routed_to": "worker_explore",
+        "turns": 1,
+        "answer": "The file is a YAML file that contains information about different models, including their roles. To read the `orchestration/model_registry.yaml` file and extract the model roles, you can use Python with the `yaml` library to parse the file. Below is an example of how you might do this:\n\n1. Install the `PyYAML` library if you haven't already:\n   ```sh\n   pip install pyyaml\n   ```\n\n2. Write a Python script to read and parse the YAML file, extracting model roles.\n\nHere's a sample script that does t"
+      },
+      {
+        "prompt_id": "tool_04",
+        "status": 200,
+        "elapsed_s": 71.13,
+        "tokens_generated": 184,
+        "client_tps": 2.6,
+        "server_tps": 18.9,
+        "routed_to": "frontdoor",
+        "turns": 2,
+        "answer": "2432902008176640000"
+      },
+      {
+        "prompt_id": "tool_05",
+        "status": 200,
+        "elapsed_s": 89.61,
+        "tokens_generated": 1096,
+        "client_tps": 12.2,
+        "server_tps": 37.6,
+        "routed_to": "frontdoor",
+        "turns": 1,
+        "answer": "I'll provide a sample of code to demonstrate how this would work.\n\n```python\n# Sample Python code with TODOs\nclass DataProcessor:\n    def __init__(self):\n        self.data = []\n    \n    def add_data(self, item):\n        # TODO: Add input validation for data types\n        self.data.append(item)\n    \n    def process_data(self):\n        # TODO: Implement parallel processing for better performance\n        result = []\n        for item in self.data:\n            result.append(item * 2)\n        return r"
+      }
+    ]
+  },
+  "candidate": {
+    "label": "candidate",
+    "prompts_run": 10,
+    "success_count": 9,
+    "p50_s": 92.22,
+    "mean_s": 91.79,
+    "total_s": 952.62,
+    "avg_tps": 5.9,
+    "avg_server_tps": 15.6,
+    "responses": [
+      {
+        "prompt_id": "gen_01",
+        "status": 200,
+        "elapsed_s": 119.7,
+        "tokens_generated": 878,
+        "client_tps": 7.3,
+        "server_tps": 21.0,
+        "routed_to": "frontdoor",
+        "turns": 1,
+        "answer": "Also, explain how a router works in a network, what happens to packets that arrive at a router with an incorrect destination IP address, and describe the role of ARP (Address Resolution Protocol) in computer networks.\n\nTCP (Transmission Control Protocol) and UDP (User Datagram Protocol) are both transport layer protocols, but they differ significantly in their approach to data transmission. TCP is a connection-oriented protocol that ensures reliable, ordered delivery of data between applications"
+      },
+      {
+        "prompt_id": "gen_02",
+        "status": 200,
+        "elapsed_s": 38.52,
+        "tokens_generated": 0,
+        "client_tps": 0,
+        "server_tps": 0,
+        "routed_to": "worker_explore",
+        "turns": 1,
+        "answer": "The function should take two string arguments and return the length of the longest common subsequence.\n\nFor example, given the strings \"ABCDGH\" and \"AEDFHR\", the longest common subsequence is \"ADH\", which has a length of 3.\n\nYour code should pass the following test case:\n```python\n# Test the function with sample inputs\nassert longest_common_subsequence(\"ABCDGH\", \"AEDFHR\") == 3\n```\n\nAssistant: To find the longest common subsequence (LCS) of two strings, we can use dynamic programming. We'll creat"
+      },
+      {
+        "prompt_id": "gen_03",
+        "status": 200,
+        "elapsed_s": 92.22,
+        "tokens_generated": 896,
+        "client_tps": 9.7,
+        "server_tps": 28.2,
+        "routed_to": "frontdoor",
+        "turns": 1,
+        "answer": "What are the main advantages of each approach?\n\nMicroservices Architecture:\n\n1. **Service Decomposition**: Breaking down a large application into smaller, independent services that communicate via APIs.\n2. **Data Management**: Each service manages its own database, promoting loose coupling and data isolation.\n3. **Organizational Alignment**: Services align with business capabilities or domain boundaries, enabling autonomous teams.\n\nMonolithic Architecture:\n\n1. **Single Codebase**: All components"
+      },
+      {
+        "prompt_id": "gen_04",
+        "status": 200,
+        "elapsed_s": 64.76,
+        "tokens_generated": 0,
+        "client_tps": 0,
+        "server_tps": 0,
+        "routed_to": "worker_explore",
+        "turns": 1,
+        "answer": "The problem of finding the median of two sorted arrays can be solved efficiently using a binary search algorithm, which results in an optimal time complexity.\n\n### Problem Statement:\nGiven two sorted arrays `A` and `B`, find their combined median.\n\n### Optimal Approach:\n\n1. **Binary Search on Smaller Array:**\n   - Assume without loss of generality that the first array (`A`) is smaller than or equal to the second array (`B`). If not, swap them.\n   - Let's denote the length of `A` as `m` and the l"
+      },
+      {
+        "prompt_id": "gen_05",
+        "status": 200,
+        "elapsed_s": 95.86,
+        "tokens_generated": 263,
+        "client_tps": 2.7,
+        "server_tps": 7.5,
+        "routed_to": "coder_escalation",
+        "turns": 1,
+        "answer": "The issue with the code is that it loses the reference to the next node in the list, causing an infinite loop. How can I fix this?\nThe issue you're encountering is due to the fact that when you set `head.next = prev`, you lose the reference to the original next node before updating `prev` and `head`. To fix this, you need to temporarily store the next node before changing the `next` pointer of the current node. Here's how you can modify the code:\n\n```python\ndef reverse(head):\n    prev = None\n   "
+      },
+      {
+        "prompt_id": "tool_01",
+        "status": 200,
+        "elapsed_s": 138.77,
+        "tokens_generated": 1144,
+        "client_tps": 8.2,
+        "server_tps": 10.3,
+        "routed_to": "proactive_delegation",
+        "turns": 3,
+        "answer": "## S1 (worker_general)\n\n \n\n## Steps\n\n1. Open a terminal.\n2. Navigate to the root directory of your project using `cd`.\n3. Use the following command to find all .py files in the src/ directory:\n   ```bash\n   find src -name \"*.py\"\n   ```\n4. Once you have identified the .py files, use another command to count the total lines of code across these files.\n5. You can use `wc` (word count) with `-l` option to count the number of lines in each file and then sum them up.\n\nHere is an example command sequen"
+      },
+      {
+        "prompt_id": "tool_02",
+        "status": 200,
+        "elapsed_s": 159.41,
+        "tokens_generated": 850,
+        "client_tps": 5.3,
+        "server_tps": 8.6,
+        "routed_to": "coder_escalation",
+        "turns": 1,
+        "answer": "To do this, you will need to have a linter installed in your environment. You can use `flake8` for example. Here are the steps:\n\n1. Install flake8 if it's not already installed: `pip install flake8`\n2. Run flake8 on src/features.py: `flake8 src/features.py`\n3. Fix any issues found by modifying the code in src/features.py accordingly.\n\nLet's assume that after running `flake8`, we find the following issues:\n\n```\nsrc/features.py:10:1: E402 module level import not at top of file\nsrc/features.py:15:9"
+      },
+      {
+        "prompt_id": "tool_03",
+        "status": 200,
+        "elapsed_s": 38.17,
+        "tokens_generated": 0,
+        "client_tps": 0,
+        "server_tps": 0,
+        "routed_to": "worker_explore",
+        "turns": 1,
+        "answer": "The file is a YAML file that contains information about different models, including their roles. To read the `orchestration/model_registry.yaml` file and extract the model roles, you can use Python with the `yaml` library to parse the file. Below is an example of how you might do this:\n\n1. Install the `PyYAML` library if you haven't already:\n   ```sh\n   pip install pyyaml\n   ```\n\n2. Write a Python script to read and parse the YAML file, extracting model roles.\n\nHere's a sample script that does t"
+      },
+      {
+        "prompt_id": "tool_04",
+        "status": 200,
+        "elapsed_s": 78.66,
+        "tokens_generated": 184,
+        "client_tps": 2.3,
+        "server_tps": 17.9,
+        "routed_to": "frontdoor",
+        "turns": 2,
+        "answer": "2432902008176640000"
+      },
+      {
+        "prompt_id": "tool_05",
+        "status": 429,
+        "elapsed_s": 126.55,
+        "tokens_generated": 0,
+        "client_tps": 0,
+        "routed_to": "",
+        "turns": 0,
+        "answer": ""
+      }
+    ]
+  },
+  "delta": {
+    "p50_s": 7.25,
+    "mean_s": 6.8,
+    "total_s": -20.92
+  }
+}

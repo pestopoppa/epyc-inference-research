@@ -1,0 +1,71 @@
+[
+  {
+    "id": "fallback_01",
+    "prompt": "What is the difference between a mutex and a semaphore?",
+    "role": "frontdoor",
+    "mode": "direct",
+    "test_scenario": "primary_healthy",
+    "source": "general.yaml",
+    "rubric": {
+      "must_mention": ["mutex = binary/exclusive lock (1 thread)", "semaphore = counting (N threads)", "ownership (mutex has owner, semaphore doesn't)"],
+      "pass_if": "distinguishes binary vs counting and mentions ownership difference"
+    }
+  },
+  {
+    "id": "fallback_02",
+    "prompt": "Implement a simple HTTP server in Python using only the socket library.",
+    "role": "coder_escalation",
+    "mode": "repl",
+    "test_scenario": "primary_healthy",
+    "source": "coder.yaml",
+    "rubric": {
+      "must_contain": ["socket.socket(AF_INET, SOCK_STREAM)", "bind + listen + accept", "HTTP/1.1 200 OK response header", "Content-Type header"],
+      "pass_if": "functional socket-based server that sends valid HTTP response"
+    }
+  },
+  {
+    "id": "fallback_03",
+    "prompt": "Explain the differences between REST, GraphQL, and gRPC.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "test_scenario": "simulate_circuit_open",
+    "source": "general.yaml",
+    "rubric": {
+      "rest": ["resource-oriented URLs", "HTTP methods (GET/POST/PUT/DELETE)", "over-fetching problem"],
+      "graphql": ["single endpoint", "client-specified fields", "schema/type system"],
+      "grpc": ["Protocol Buffers", "HTTP/2", "bidirectional streaming", "code generation"],
+      "pass_if": "covers >=2 distinguishing features per protocol, fallback quality within 10% of primary"
+    }
+  },
+  {
+    "id": "fallback_04",
+    "prompt": "Write a binary search implementation with proper edge case handling.",
+    "role": "coder_escalation",
+    "mode": "repl",
+    "test_scenario": "simulate_circuit_open",
+    "source": "coder.yaml",
+    "rubric": {
+      "must_handle": ["empty array", "single element", "target not found", "duplicate elements"],
+      "reference": "def binary_search(arr, target):\n    lo, hi = 0, len(arr) - 1\n    while lo <= hi:\n        mid = lo + (hi - lo) // 2\n        if arr[mid] == target: return mid\n        elif arr[mid] < target: lo = mid + 1\n        else: hi = mid - 1\n    return -1",
+      "pass_if": "correct O(log n) implementation, handles empty array without crash"
+    }
+  },
+  {
+    "id": "fallback_05",
+    "prompt": "What are the SOLID principles? Give a brief example for each.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "test_scenario": "simulate_circuit_open",
+    "source": "general.yaml",
+    "rubric": {
+      "principles": {
+        "S": "Single Responsibility - one reason to change",
+        "O": "Open/Closed - open for extension, closed for modification",
+        "L": "Liskov Substitution - subtypes substitutable for base types",
+        "I": "Interface Segregation - prefer specific interfaces over fat ones",
+        "D": "Dependency Inversion - depend on abstractions, not concretions"
+      },
+      "pass_if": "all 5 principles named correctly with at least a brief example each"
+    }
+  }
+]

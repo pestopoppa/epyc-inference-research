@@ -1,0 +1,41 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,14.22,2,Response generated
+agentic,t3_q2_multi_agent_coordination,13.71,2,Response generated
+agentic,t3_q3_adversarial_robustness,15.59,2,Response generated
+agentic,t2_q1_ambiguous,13.2,2,Response generated
+agentic,t2_q2_error_chain,11.51,2,Response generated
+agentic,t2_q3_schema_edge,11.28,2,Response generated
+agentic,t2_q4_orchestration,8.98,2,Response generated
+agentic,t1_q1_sequential,11.83,2,Response generated
+agentic,t1_q2_error_handling,9.13,2,Response generated
+agentic,t1_q3_nested_params,11.69,2,Response generated
+general,t3_q1_policy_analysis,10.47,2,General response generated
+general,t3_q2_system_failure,9.26,2,General response generated
+general,t3_q3_strategic_communication,10.4,2,General response generated
+general,t2_q1_synthesis,11.39,2,General response generated
+general,t2_q2_transform,11.02,2,General response generated
+general,t2_q3_schedule,0.0,2,General response generated
+general,t2_q4_inconsistency,10.88,2,General response generated
+general,t1_q1_json,12.23,2,General response generated
+general,t1_q2_multistep,10.09,2,General response generated
+general,t1_q3_compare,11.71,2,General response generated
+math,t3_q1_analysis,10.56,2,Response generated
+math,t3_q2_combinatorics,9.42,2,Response generated
+math,t3_q3_probability_theory,9.48,2,Response generated
+math,t2_q1_optimization,9.63,2,Response generated
+math,t2_q2_proof,10.94,2,Response generated
+math,t2_q3_calculus,9.71,2,Response generated
+math,t2_q4_statistics,9.33,2,Response generated
+math,t1_q1_word_problem,10.29,2,Response generated
+math,t1_q2_system_equations,9.36,2,Response generated
+math,t1_q3_probability,9.14,2,Response generated
+thinking,t3_q1_methodological_critique,10.65,3,Expert-level analysis with formal concepts
+thinking,t3_q2_causal_inference,10.59,3,Expert-level analysis with formal concepts
+thinking,t3_q3_reasoning_trap,9.13,1,Basic attempt at expert problem
+thinking,t2_q1_paradox,9.52,3,Multi-step reasoning with structure
+thinking,t2_q2_counterfactual,10.24,2,Partial causal reasoning
+thinking,t2_q3_formal,9.22,1,Attempted statistical problem
+thinking,t2_q4_metacognition,8.88,2,Substantial response with reasoning
+thinking,t1_q1_multistep,9.05,1,Attempted logic problem
+thinking,t1_q2_hypothesis,10.64,1,Attempted sequence problem
+thinking,t1_q3_planning,9.19,1,Attempted game theory problem

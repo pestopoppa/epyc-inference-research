@@ -1,0 +1,32 @@
+[
+  {
+    "case": "file_listing",
+    "json_chars": 917,
+    "toon_chars": 292,
+    "json_tokens": 229,
+    "toon_tokens": 73,
+    "token_reduction_pct": 68.12227074235808,
+    "json_ttft_s": 0.3318663333333333,
+    "toon_ttft_s": 0.1700366666666667
+  },
+  {
+    "case": "grep_results",
+    "json_chars": 708,
+    "toon_chars": 337,
+    "json_tokens": 177,
+    "toon_tokens": 84,
+    "token_reduction_pct": 52.542372881355924,
+    "json_ttft_s": 0.19525033333333333,
+    "toon_ttft_s": 0.11970966666666666
+  },
+  {
+    "case": "escalation_context",
+    "json_chars": 365,
+    "toon_chars": 197,
+    "json_tokens": 91,
+    "toon_tokens": 49,
+    "token_reduction_pct": 46.15384615384615,
+    "json_ttft_s": 0.129891,
+    "toon_ttft_s": 0.092727
+  }
+]

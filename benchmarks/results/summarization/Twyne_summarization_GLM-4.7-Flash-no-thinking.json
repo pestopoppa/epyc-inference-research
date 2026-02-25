@@ -1,0 +1,11 @@
+{
+  "model": "GLM-4.7-Flash",
+  "architecture": "30B MoE (64 experts, 4 active)",
+  "server": "http://localhost:8086",
+  "thinking_disabled": true,
+  "elapsed_sec": 24.24149465560913,
+  "tokens": 297,
+  "tokens_per_sec": 12.251719797783942,
+  "summary_length": 1687,
+  "summary_raw": "Twyne is a decentralized finance protocol designed to optimize liquidity and risk management within the DeFi lending ecosystem. Its primary purpose is to bridge the gap between liquidity providers and borrowers by introducing a flexible \"Credit-LP\" mechanism that dynamically manages borrowing capacity and locked resources. By aggregating liquidity and enabling cross-lending market operations, Twyn allows for higher capital utilization and selective risk/yield trade-offs for lenders.\n\nA key innovation of the protocol is its \"Delegated Credit\" framework, which utilizes a dual-LTV (Loan-to-Value) perspective. This allows borrowers to access higher LTVs by combining their own collateral with delegated credit, effectively increasing their purchasing power while maintaining safety. The system functions through two main vaults: the Credit Vault, which aggregates and deploys liquidity, and the Collateral Vault, which secures the borrower's position. This structure is further supported by a lifecycle management system that actively monitors position health, rebalances assets, and manages risk to ensure stability.\n\nFor users, Twyne offers significant benefits: borrowers gain access to on-demand collateral factors and higher borrowing limits, while lenders enjoy higher yields through the delegation of idle capacity. The protocol targets sophisticated participants in the DeFi space, including liquidity providers, borrowers seeking leverage, and risk-averse lenders looking for optimized returns. Ultimately, Twyne aims to enhance the efficiency of the DeFi lending landscape by providing a secure, flexible, and capital-efficient alternative to traditional lending protocols."
+}

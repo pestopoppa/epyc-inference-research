@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,65.62,3,Complete structured reasoning identifying 4 methodological issues
+thinking,t3_q2_causal_inference,65.62,2,Correct answer for Q1 and Q2 but Q3 incorrect
+thinking,t3_q3_reasoning_trap,65.62,3,Identifies flaw and constructs concrete scenario with mechanism
+thinking,t2_q1_paradox,65.62,3,Presents 3 philosophical positions and evaluates them
+thinking,t2_q2_counterfactual,65.62,3,Analyzes across 3 dimensions with second-order effects
+thinking,t2_q3_formal,65.62,3,Provides formal proof and concrete example
+thinking,t2_q4_metacognition,65.62,3,Complete estimation approach with assumptions and bounds
+thinking,t1_q1_multistep,65.62,3,Correct step-by-step solution (11:34 AM)
+thinking,t1_q2_hypothesis,65.62,3,Complete chain-of-thought reasoning
+thinking,t1_q3_planning,65.62,3,Correct logical deduction with reasoning
+agentic,t3_q1_competing_constraints,65.62,3,Complete multi-agent coordination plan with JSON
+agentic,t3_q2_multi_agent_coordination,65.62,3,Tool validation and adversarial handling strategy
+agentic,t3_q3_adversarial_robustness,65.62,3,Time-budgeted orchestration with tool calls
+agentic,t2_q1_ambiguous,65.62,3,Correct single tool call JSON
+agentic,t2_q2_error_chain,65.62,3,Correct next action with reasoning (check_dns)
+agentic,t2_q3_schema_edge,65.62,3,Correct JSON tool call following schema
+agentic,t2_q4_orchestration,65.62,3,Complete deployment plan with error handling
+agentic,t1_q1_sequential,65.62,3,Correct sequential tool calls as JSON array
+agentic,t1_q2_error_handling,65.62,3,Appropriate error handling response
+agentic,t1_q3_nested_params,65.62,3,Correct nested parameter structure
+general,t3_q1_policy_analysis,65.62,3,Comprehensive policy analysis with amendments
+general,t3_q2_system_failure,65.62,3,Complete failure analysis with fixes and monitoring
+general,t3_q3_strategic_communication,65.62,3,Complete board statement with iterations
+general,t2_q1_synthesis,65.62,3,Concrete recommendation synthesizing perspectives
+general,t2_q2_transform,65.62,3,Correct YAML transformation with explanation
+general,t2_q3_schedule,65.62,2,Scheduling attempt but misses back-to-back constraint
+general,t2_q4_inconsistency,65.62,3,Identifies all inconsistencies correctly
+general,t1_q1_json,65.62,3,Correct JSON output
+general,t1_q2_multistep,65.62,3,Complete summarization
+general,t1_q3_compare,65.62,3,Correct categorization
+coder,t3_q1_concurrent_correctness,65.62,3,Identifies ABA problem and provides fixes
+coder,t3_q2_distributed_consistency,65.62,3,4 conflict resolution strategies with scenarios
+coder,t3_q3_algorithmic_hardness,65.62,3,Proof and recurrence relation with precise analysis
+coder,t2_q1_design,65.62,3,Complete LRU cache implementation with explanation
+coder,t2_q2_debug_complex,65.62,0,Empty output (only echoed prompt)
+coder,t2_q3_optimize,65.62,3,Optimized O(n) solution with explanation
+coder,t2_q4_system,65.62,3,Complete rate limiter implementation
+coder,t1_q1_algorithm,65.62,3,Identifies both binary search bugs and fixes them
+coder,t1_q2_refactor,65.62,3,Two refactored versions with tradeoffs
+coder,t1_q3_test,65.62,3,Complete implementation with test cases
+math,t3_q1_analysis,65.62,2,Partial analysis but steps incomplete for closed form
+math,t3_q2_combinatorics,65.62,2,Combinatorial interpretation but proof not rigorous
+math,t3_q3_probability_theory,65.62,3,Correct answer (e) with proof approaches
+math,t2_q1_optimization,65.62,3,Correct optimization with calculus (5000 sq m)
+math,t2_q2_proof,65.62,0,Empty output (only echoed prompt)
+math,t2_q3_calculus,65.62,3,Correct definite integral evaluation (10)
+math,t2_q4_statistics,65.62,3,Complete statistical calculations with all steps
+math,t1_q1_word_problem,65.62,3,Correct multi-step word problem solution
+math,t1_q2_system_equations,65.62,3,All 4 solutions found with clear method
+math,t1_q3_probability,65.62,3,Correct probability calculations for both questions
+instruction_precision,t3_q1_self_referential,65.62,1,Attempted self-referential sentence but constraints not all met
+instruction_precision,t3_q2_cascading_constraints,65.62,2,Valid word chain but length constraints violated
+instruction_precision,t3_q3_meta_instruction,65.62,3,Correct output following meta-instructions
+instruction_precision,t2_q1_resist_elaboration,65.62,0,Massive hallucination (511 tokens of unrelated content)
+instruction_precision,t2_q2_maintain_format,65.62,3,Correct format maintained exactly
+instruction_precision,t2_q3_empty_handling,65.62,3,Correct NONE output
+instruction_precision,t2_q4_conflicting_constraints,65.62,3,Sentence meets all 4 constraints
+instruction_precision,t1_q1_negative_instruction,65.62,3,Explains photosynthesis without forbidden words
+instruction_precision,t1_q2_word_limit,65.62,2,Description present but not exactly 20-25 words
+instruction_precision,t1_q3_structured_format,65.62,3,Exact format followed
+instruction_precision,t1_q4_multiple_constraints,65.62,2,5 countries listed but includes duplicate output

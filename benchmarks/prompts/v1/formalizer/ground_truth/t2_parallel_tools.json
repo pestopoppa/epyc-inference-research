@@ -1,0 +1,131 @@
+{
+  "problem_id": "tool-t2-parallel-tools",
+  "original_task": "Fetch the current weather for New York, London, and Tokyo, then create a comparison table.",
+  "formal_specification": {
+    "problem_type": "tool_orchestration",
+    "variables": [
+      {
+        "name": "cities",
+        "type": "list[string]",
+        "domain": "valid city names",
+        "description": "List of cities to fetch weather for"
+      },
+      {
+        "name": "weather_data",
+        "type": "dict[string, object]",
+        "description": "Weather data keyed by city name"
+      },
+      {
+        "name": "comparison_table",
+        "type": "string",
+        "description": "Formatted comparison table"
+      }
+    ],
+    "tool_sequence": [
+      {
+        "step": 0,
+        "tool": "get_weather",
+        "description": "Fetch weather for New York",
+        "arguments": {
+          "city": "New York"
+        },
+        "output_var": "weather_ny",
+        "error_handling": "skip"
+      },
+      {
+        "step": 1,
+        "tool": "get_weather",
+        "description": "Fetch weather for London",
+        "arguments": {
+          "city": "London"
+        },
+        "output_var": "weather_london",
+        "error_handling": "skip"
+      },
+      {
+        "step": 2,
+        "tool": "get_weather",
+        "description": "Fetch weather for Tokyo",
+        "arguments": {
+          "city": "Tokyo"
+        },
+        "output_var": "weather_tokyo",
+        "error_handling": "skip"
+      },
+      {
+        "step": 3,
+        "tool": "create_table",
+        "description": "Create comparison table from weather data",
+        "arguments": {
+          "data": {
+            "New York": "${weather_ny}",
+            "London": "${weather_london}",
+            "Tokyo": "${weather_tokyo}"
+          },
+          "columns": ["city", "temperature", "conditions", "humidity"]
+        },
+        "depends_on": [0, 1, 2],
+        "output_var": "comparison_table",
+        "error_handling": "fail"
+      }
+    ],
+    "preconditions": [
+      "Weather API is accessible",
+      "City names are valid and recognized by the API"
+    ],
+    "postconditions": [
+      "comparison_table contains data for all requested cities",
+      "Table is properly formatted with headers and rows"
+    ]
+  },
+  "edge_cases": [
+    {
+      "description": "Weather API rate limit",
+      "expected_behavior": "Retry with exponential backoff or return partial data",
+      "severity": "important"
+    },
+    {
+      "description": "One city's API call fails",
+      "expected_behavior": "Include available data, mark failed city as unavailable",
+      "severity": "minor"
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "criterion": "Fetches weather for all three cities",
+      "testable": true,
+      "test_method": "Check that all API calls complete",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Creates readable comparison table",
+      "testable": true,
+      "test_method": "Validate table structure and content",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Handles partial failures gracefully",
+      "testable": true,
+      "test_method": "Simulate API failure for one city",
+      "priority": "should_have"
+    }
+  ],
+  "suggested_approach": {
+    "algorithm_family": "parallel execution",
+    "complexity_class": "O(1) with parallel calls",
+    "recommended_tools": ["weather_api", "table_formatter"],
+    "decomposition": [
+      "Execute weather fetches in parallel",
+      "Aggregate results",
+      "Format as table"
+    ]
+  },
+  "confidence": 0.90,
+  "ambiguities": [
+    {
+      "question": "What units should temperature be displayed in?",
+      "assumption": "Celsius with Fahrenheit in parentheses",
+      "impact": "Affects table formatting"
+    }
+  ]
+}

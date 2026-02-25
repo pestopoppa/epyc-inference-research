@@ -1,0 +1,17 @@
+Explain what this code does and identify any potential issues.
+
+---
+test_id: t2_code_explain
+context: |
+  def process_data(items):
+      results = []
+      for i in range(len(items)):
+          if items[i] is not None:
+              results.append(items[i] * 2)
+      return results
+expected_behavior: Analyzes code, explains functionality, identifies improvements
+pass_criteria:
+  max_turns: 5
+  uses_function: ["peek", "llm_call"]
+  answer_contains: ["loop", "None", "multiply"]
+  must_call_final: true

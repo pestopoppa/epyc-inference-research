@@ -1,0 +1,83 @@
+[2026-02-19 18:04:44] Output directory: benchmarks/results/eval/perf_parallel_tools_validation_20260219_180444
+[2026-02-19 18:04:44] API URL: http://127.0.0.1:8000
+[2026-02-19 18:04:44] Resume from stage: ws3b
+[2026-02-19 18:04:44] STEP START: ws3b_ab_off_seed_901
+---- ws3b_ab_off_seed_901 ----
+2026-02-19 18:05:02,581 [INFO] Starting 3-way routing evaluation: session=3way_20260219_180444
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1456, in <module>
+    main()
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1196, in main
+    results = run_batch_3way(
+              ^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 378, in run_batch_3way
+    raise HealthCheckError(f"API unreachable: {url}")
+seeding_types.HealthCheckError: API unreachable: http://localhost:8000
+[2026-02-19 18:05:02] STEP FAIL(1): ws3b_ab_off_seed_901
+[2026-02-19 18:05:02] STEP START: ws3b_ab_off_seed_902
+---- ws3b_ab_off_seed_902 ----
+2026-02-19 18:05:19,489 [INFO] Starting 3-way routing evaluation: session=3way_20260219_180502
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1456, in <module>
+    main()
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1196, in main
+    results = run_batch_3way(
+              ^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 378, in run_batch_3way
+    raise HealthCheckError(f"API unreachable: {url}")
+seeding_types.HealthCheckError: API unreachable: http://localhost:8000
+[2026-02-19 18:05:19] STEP FAIL(1): ws3b_ab_off_seed_902
+[2026-02-19 18:05:19] STEP START: ws3b_ab_off_seed_903
+---- ws3b_ab_off_seed_903 ----
+2026-02-19 18:05:36,498 [INFO] Starting 3-way routing evaluation: session=3way_20260219_180519
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1456, in <module>
+    main()
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1196, in main
+    results = run_batch_3way(
+              ^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 378, in run_batch_3way
+    raise HealthCheckError(f"API unreachable: {url}")
+seeding_types.HealthCheckError: API unreachable: http://localhost:8000
+[2026-02-19 18:05:36] STEP FAIL(1): ws3b_ab_off_seed_903
+[2026-02-19 18:05:36] STEP START: ws3b_ab_on_seed_901
+---- ws3b_ab_on_seed_901 ----
+2026-02-19 18:05:53,390 [INFO] Starting 3-way routing evaluation: session=3way_20260219_180536
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1456, in <module>
+    main()
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1196, in main
+    results = run_batch_3way(
+              ^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 378, in run_batch_3way
+    raise HealthCheckError(f"API unreachable: {url}")
+seeding_types.HealthCheckError: API unreachable: http://localhost:8000
+[2026-02-19 18:05:53] STEP FAIL(1): ws3b_ab_on_seed_901
+[2026-02-19 18:05:53] STEP START: ws3b_ab_on_seed_902
+---- ws3b_ab_on_seed_902 ----
+2026-02-19 18:06:10,235 [INFO] Starting 3-way routing evaluation: session=3way_20260219_180553
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1456, in <module>
+    main()
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1196, in main
+    results = run_batch_3way(
+              ^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 378, in run_batch_3way
+    raise HealthCheckError(f"API unreachable: {url}")
+seeding_types.HealthCheckError: API unreachable: http://localhost:8000
+[2026-02-19 18:06:10] STEP FAIL(1): ws3b_ab_on_seed_902
+[2026-02-19 18:06:10] STEP START: ws3b_ab_on_seed_903
+---- ws3b_ab_on_seed_903 ----
+2026-02-19 18:06:27,186 [INFO] Starting 3-way routing evaluation: session=3way_20260219_180610
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1456, in <module>
+    main()
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 1196, in main
+    results = run_batch_3way(
+              ^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/claude/scripts/benchmark/seed_specialist_routing.py", line 378, in run_batch_3way
+    raise HealthCheckError(f"API unreachable: {url}")
+seeding_types.HealthCheckError: API unreachable: http://localhost:8000
+[2026-02-19 18:06:27] STEP FAIL(1): ws3b_ab_on_seed_903
+[2026-02-19 18:06:27] STEP START: reload_orchestrator_api(FRONTDOOR_TRACE=1 ORCHESTRATOR_FRONTDOOR_TRACE=1 DELEGATION_TRACE=1 ORCHESTRATOR_DELEGATION_TRACE=1)
+---- reload_orchestrator_api(FRONTDOOR_TRACE=1 ORCHESTRATOR_FRONTDOOR_TRACE=1 DELEGATION_TRACE=1 ORCHESTRATOR_DELEGATION_TRACE=1) ----

@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,19.68,0,Repetitive garbage (>100 json blocks)
+agentic,t1_q2_error_handling,19.68,3,Clarifying question (correct approach)
+agentic,t1_q3_nested_params,19.68,3,Correct JSON tool call with nested params
+agentic,t2_q1_ambiguous,19.68,1,Tool call present but repetitive (27 blocks)
+agentic,t2_q2_error_chain,19.68,1,Reasonable tool choice but repetitive (21 blocks)
+agentic,t2_q3_schema_edge,19.68,3,Correct API call with proper null body
+agentic,t2_q4_orchestration,19.68,2,Deployment plan present but truncated
+agentic,t3_q1_competing_constraints,19.68,2,Detailed plan but no executable tool calls
+agentic,t3_q2_multi_agent_coordination,19.68,3,Complete orchestration plan with JSON
+agentic,t3_q3_adversarial_robustness,19.68,3,Comprehensive security analysis
+coder,t1_q1_algorithm,19.68,3,Code solution present
+coder,t1_q2_refactor,19.68,3,Code solution present
+coder,t1_q3_test,19.68,3,Code solution present
+coder,t2_q1_design,19.68,3,Code solution present
+coder,t2_q2_debug_complex,19.68,3,Code solution present
+coder,t2_q3_optimize,19.68,3,Code solution present
+coder,t2_q4_system,19.68,3,Code solution present
+coder,t3_q1_concurrent_correctness,19.68,3,Code solution present
+coder,t3_q2_distributed_consistency,19.68,2,Code explanation present
+coder,t3_q3_algorithmic_hardness,19.68,3,Code solution present
+general,t1_q1_json,19.68,3,Formatted response present
+general,t1_q2_multistep,19.68,3,Formatted response present
+general,t1_q3_compare,19.68,2,"General response, format unclear"
+general,t2_q1_synthesis,19.68,2,"General response, format unclear"
+general,t2_q2_transform,19.68,3,Formatted response present
+general,t2_q3_schedule,19.68,3,Formatted response present
+general,t2_q4_inconsistency,19.68,3,Formatted response present
+general,t3_q1_policy_analysis,19.68,2,"General response, format unclear"
+general,t3_q2_system_failure,19.68,3,Formatted response present
+general,t3_q3_strategic_communication,19.68,3,Formatted response present
+instruction_precision,t1_q1_negative_instruction,19.68,2,"Response present, compliance needs verification"
+instruction_precision,t1_q2_word_limit,19.68,2,"Response present, compliance needs verification"
+instruction_precision,t1_q3_structured_format,19.68,2,"Response present, compliance needs verification"
+instruction_precision,t1_q4_multiple_constraints,19.68,2,"Response present, compliance needs verification"
+instruction_precision,t2_q1_resist_elaboration,19.68,2,"Response present, compliance needs verification"
+instruction_precision,t2_q2_maintain_format,19.68,2,"Response present, compliance needs verification"
+instruction_precision,t2_q3_empty_handling,19.68,2,"Response present, compliance needs verification"
+instruction_precision,t2_q4_conflicting_constraints,19.68,2,"Response present, compliance needs verification"
+instruction_precision,t3_q1_self_referential,19.68,2,"Response present, compliance needs verification"
+instruction_precision,t3_q2_cascading_constraints,19.68,2,"Response present, compliance needs verification"
+instruction_precision,t3_q3_meta_instruction,19.68,2,"Response present, compliance needs verification"
+math,t1_q1_word_problem,19.68,3,Mathematical reasoning and proof present
+math,t1_q2_system_equations,19.68,3,Mathematical reasoning and proof present
+math,t1_q3_probability,19.68,3,Mathematical reasoning and proof present
+math,t2_q1_optimization,19.68,3,Mathematical reasoning and proof present
+math,t2_q2_proof,19.68,3,Mathematical reasoning and proof present
+math,t2_q3_calculus,19.68,3,Mathematical reasoning and proof present
+math,t2_q4_statistics,19.68,3,Mathematical reasoning and proof present
+math,t3_q1_analysis,19.68,3,Mathematical reasoning and proof present
+math,t3_q2_combinatorics,19.68,3,Mathematical reasoning and proof present
+math,t3_q3_probability_theory,19.68,3,Mathematical reasoning and proof present
+thinking,t1_q1_multistep,19.68,3,Detailed reasoning present
+thinking,t1_q2_hypothesis,19.68,3,Detailed reasoning present
+thinking,t1_q3_planning,19.68,3,Detailed reasoning present
+thinking,t2_q1_paradox,19.68,3,Detailed reasoning present
+thinking,t2_q2_counterfactual,19.68,3,Detailed reasoning present
+thinking,t2_q3_formal,19.68,3,Detailed reasoning present
+thinking,t2_q4_metacognition,19.68,3,Detailed reasoning present
+thinking,t3_q1_methodological_critique,19.68,3,Detailed reasoning present
+thinking,t3_q2_causal_inference,19.68,3,Detailed reasoning present
+thinking,t3_q3_reasoning_trap,19.68,3,Detailed reasoning present

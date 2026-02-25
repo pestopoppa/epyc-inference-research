@@ -1,0 +1,88 @@
+[2026-02-19 14:34:57] Output directory: benchmarks/results/eval/perf_parallel_tools_validation_20260219_143457
+[2026-02-19 14:34:57] API URL: http://127.0.0.1:8000
+[2026-02-19 14:34:57] STEP START: api_health_initial
+---- api_health_initial ----
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+curl: (7) Failed to connect to 127.0.0.1 port 8000 after 0 ms: Couldn't connect to server
+[2026-02-19 14:35:27] STEP FAIL(1): api_health_initial
+[2026-02-19 14:35:27] STEP START: ws2_sweep_dry_run
+---- ws2_sweep_dry_run ----
+Concurrent Inference Sweep
+  n_predict: 128
+  warmup batches: 2
+  measured batches: 5
+  roles: frontdoor, coder, worker, architect_general, fast_worker
+
+  [DRY-RUN MODE]
+
+============================================================
+Role: frontdoor | Port: 8080 | Qwen3-Coder-30B-A3B (3B active MoE)
+Current -np: 1 | Test concurrency: [1, 2, 3]
+============================================================
+  [DRY-RUN] concurrency=1 ✓
+  [DRY-RUN] concurrency=2 ⚠ >np
+  [DRY-RUN] concurrency=3 ⚠ >np
+
+============================================================
+Role: coder | Port: 8081 | Qwen2.5-Coder-32B (dense)
+Current -np: 1 | Test concurrency: [1, 2]
+============================================================
+  [DRY-RUN] concurrency=1 ✓
+  [DRY-RUN] concurrency=2 ⚠ >np
+
+============================================================
+Role: worker | Port: 8082 | Qwen2.5-7B-f16
+Current -np: 2 | Test concurrency: [1, 2, 3, 4]
+============================================================
+  [DRY-RUN] concurrency=1 ✓
+  [DRY-RUN] concurrency=2 ✓
+  [DRY-RUN] concurrency=3 ⚠ >np
+  [DRY-RUN] concurrency=4 ⚠ >np
+
+============================================================
+Role: architect_general | Port: 8083 | Qwen3-235B-A22B
+Current -np: 1 | Test concurrency: [1, 2]
+============================================================
+  [DRY-RUN] concurrency=1 ✓
+  [DRY-RUN] concurrency=2 ⚠ >np
+
+============================================================
+Role: fast_worker | Port: 8102 | Qwen2.5-1.5B
+Current -np: 4 | Test concurrency: [1, 2, 4, 6, 8]
+============================================================
+  [DRY-RUN] concurrency=1 ✓
+  [DRY-RUN] concurrency=2 ✓
+  [DRY-RUN] concurrency=4 ✓
+  [DRY-RUN] concurrency=6 ⚠ >np
+  [DRY-RUN] concurrency=8 ⚠ >np
+[2026-02-19 14:35:28] STEP PASS: ws2_sweep_dry_run
+[2026-02-19 14:35:28] STEP START: ws2_sweep_live
+---- ws2_sweep_live ----

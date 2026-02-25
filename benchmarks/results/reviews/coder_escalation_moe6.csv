@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,15.80,3,Correct tool call sequence: grep then read
+agentic,t1_q2_error_handling,10.94,2,Attempts error handling but adds unnecessary explanation
+agentic,t1_q3_nested_params,15.03,2,JSON structure issues with nested quotes
+agentic,t2_q1_ambiguous,14.40,2,Asks clarification appropriately but verbose
+agentic,t2_q2_error_chain,14.33,2,Reasonable diagnosis of database issue but truncated
+agentic,t2_q3_schema_edge,15.17,2,"Duplicated JSON output, formatting issues"
+agentic,t2_q4_orchestration,14.65,2,Deployment plan present but format issues
+agentic,t3_q1_competing_constraints,14.66,2,Understands constraints but incomplete solution
+agentic,t3_q2_multi_agent_coordination,13.09,2,Good orchestration understanding but lacks detail
+agentic,t3_q3_adversarial_robustness,10.69,3,Excellent security analysis with specific examples
+coder,t1_q1_algorithm,10.42,3,Correctly identifies both binary search bugs with fixes
+coder,t1_q2_refactor,10.50,2,Provides optimizations but has repetitive constraint text
+coder,t1_q3_test,14.59,3,Comprehensive pytest test cases with edge cases
+coder,t2_q1_design,10.24,3,Correct LRU cache with doubly-linked list and O(1) operations
+coder,t2_q2_debug_complex,14.15,3,Identifies race condition and provides asyncio.Lock solution
+coder,t2_q3_optimize,10.43,3,Correct O(n) hash map optimization from O(n²)
+coder,t2_q4_system,13.45,3,Sliding window rate limiter with edge case handling
+coder,t3_q1_concurrent_correctness,10.17,3,Identifies ABA problem with detailed explanation and fix
+coder,t3_q2_distributed_consistency,10.84,3,Comprehensive conflict resolution strategies with scenarios
+coder,t3_q3_algorithmic_hardness,10.28,3,Strong theoretical analysis with proofs
+general,t1_q1_json,15.85,3,Correct JSON parsing with all required fields
+general,t1_q2_multistep,14.97,3,"All steps completed: dedup, sort, number, count"
+general,t1_q3_compare,11.22,2,Good comparison but excessively verbose
+general,t2_q1_synthesis,11.24,2,Reasonable synthesis but wordy and budget math unclear
+general,t2_q2_transform,15.36,3,Correct YAML transformation with proper nesting
+general,t2_q3_schedule,10.55,2,Calendar logic present but incomplete
+general,t2_q4_inconsistency,9.75,2,Identifies inconsistencies but verbose
+general,t3_q1_policy_analysis,10.86,3,Strong policy analysis with multiple stakeholder views
+general,t3_q2_system_failure,10.94,3,Excellent root cause analysis methodology
+general,t3_q3_strategic_communication,10.25,2,Good strategy but truncated execution
+instruction_precision,t1_q1_negative_instruction,14.17,3,Correctly follows negative instruction
+instruction_precision,t1_q2_word_limit,14.60,3,Adheres to exact word limit
+instruction_precision,t1_q3_structured_format,16.14,3,Maintains required bullet point format
+instruction_precision,t1_q4_multiple_constraints,14.65,3,Satisfies all constraints simultaneously
+instruction_precision,t2_q1_resist_elaboration,14.33,0,Completely fails: adds 3000+ chars when asked for number only
+instruction_precision,t2_q2_maintain_format,15.26,3,Maintains bullet format throughout
+instruction_precision,t2_q3_empty_handling,15.48,3,Correctly handles empty/null input
+instruction_precision,t2_q4_conflicting_constraints,13.92,2,Attempts resolution but unclear priority
+instruction_precision,t3_q1_self_referential,14.01,0,"Fails self-reference: recounts multiple times, never converges"
+instruction_precision,t3_q2_cascading_constraints,13.88,2,Partial success with cascading constraints
+instruction_precision,t3_q3_meta_instruction,15.53,2,Attempts meta-instruction but incomplete
+math,t1_q1_word_problem,14.60,3,Correct word problem solution
+math,t1_q2_system_equations,14.08,3,Correct system of equations solution
+math,t1_q3_probability,14.34,3,Correct probability calculation
+math,t2_q1_optimization,13.55,3,Correct calculus optimization with derivative
+math,t2_q2_proof,11.78,3,Valid mathematical proof by induction
+math,t2_q3_calculus,14.47,3,Correct integration using integration by parts
+math,t2_q4_statistics,11.93,3,Correct hypothesis test with proper conclusion
+math,t3_q1_analysis,10.95,2,Attempts complex analysis but incomplete derivation
+math,t3_q2_combinatorics,12.01,3,Correct answer e with detailed explanation
+math,t3_q3_probability_theory,9.46,2,Understands problem but derivation incomplete
+thinking,t1_q1_multistep,10.60,3,Correct multi-step logical reasoning
+thinking,t1_q2_hypothesis,9.87,3,Sound hypothesis generation with evidence
+thinking,t1_q3_planning,10.20,3,Logical planning with proper dependencies
+thinking,t2_q1_paradox,12.53,3,Correct paradox resolution
+thinking,t2_q2_counterfactual,13.17,3,Strong counterfactual reasoning
+thinking,t2_q3_formal,11.40,3,Valid formal logic proof
+thinking,t2_q4_metacognition,10.36,3,Good metacognitive analysis
+thinking,t3_q1_methodological_critique,11.06,3,Excellent methodological critique
+thinking,t3_q2_causal_inference,11.84,2,Understands DAG/confounding but analysis has errors
+thinking,t3_q3_reasoning_trap,10.36,2,Identifies some traps but incomplete analysis

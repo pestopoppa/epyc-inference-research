@@ -1,0 +1,471 @@
+model,question_id,score,score_reason
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q1_word_problem,10,All three answers correct with working
+Hermes-4-70B-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q1_word_problem,2,Attempted but incorrect
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen2.5-72B.Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t1_q1_word_problem,10,All three answers correct with working
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q1_word_problem,10,All three answers correct with working
+gemma-3-12b-it-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+gemma-3-27B-it-QAT-Q4_0,t1_q1_word_problem,10,All three answers correct with working
+GLM-4.6-Q4_K_S-00001-of-00005,t1_q1_word_problem,10,All three answers correct with working
+Meta-Llama-3.1-8B.Q4_K_S,t1_q1_word_problem,2,Attempted but incorrect
+Meta-Llama-3-8B-Instruct-fp16,t1_q1_word_problem,10,All three answers correct with working
+Qwen2.5-7B.Q4_K_S,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-32B-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Hermes-4-70B-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen2.5-72B.Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-32B-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q1_word_problem,5,Only first answer correct
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q1_word_problem,5,Only first answer correct
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q1_word_problem,10,All three answers correct with working
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q1_word_problem,10,All three answers correct with working
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Phi-4-reasoning-plus-Q4_K_M,t1_q1_word_problem,2,Attempted but incorrect
+Phi-4-reasoning-plus-Q8_0,t1_q1_word_problem,2,Attempted but incorrect
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-4B-Thinking-2507-Q8_0,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q1_word_problem,10,All three answers correct with working
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q1_word_problem,10,All three answers correct with working
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q2_system_equations,10,All 4 solutions found with valid method
+Hermes-4-70B-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q2_system_equations,0,Very short response
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen2.5-72B.Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t1_q2_system_equations,10,All 4 solutions found with valid method
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q2_system_equations,10,All 4 solutions found with valid method
+gemma-3-12b-it-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+gemma-3-27B-it-QAT-Q4_0,t1_q2_system_equations,10,All 4 solutions found with valid method
+GLM-4.6-Q4_K_S-00001-of-00005,t1_q2_system_equations,10,All 4 solutions found with valid method
+Meta-Llama-3.1-8B.Q4_K_S,t1_q2_system_equations,0,Very short response
+Meta-Llama-3-8B-Instruct-fp16,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen2.5-7B.Q4_K_S,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-32B-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Hermes-4-70B-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen2.5-72B.Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-32B-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q2_system_equations,2,Attempted but no correct solutions
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q2_system_equations,2,Attempted but no correct solutions
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q2_system_equations,10,All 4 solutions found with valid method
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q2_system_equations,10,All 4 solutions found with valid method
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Phi-4-reasoning-plus-Q4_K_M,t1_q2_system_equations,0,Very short response
+Phi-4-reasoning-plus-Q8_0,t1_q2_system_equations,0,Very short response
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-4B-Thinking-2507-Q8_0,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q2_system_equations,10,All 4 solutions found with valid method
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q2_system_equations,7,Found 2 solutions
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q2_system_equations,7,Found 2 solutions
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q2_system_equations,10,All 4 solutions found with valid method
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q3_probability,2,Attempted but incorrect
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q3_probability,2,Attempted but incorrect
+Hermes-4-70B-Q4_K_M,t1_q3_probability,10,Both probabilities correct
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q3_probability,10,Both probabilities correct
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen2.5-72B.Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t1_q3_probability,2,Attempted but incorrect
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t1_q3_probability,10,Both probabilities correct
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q3_probability,10,Both probabilities correct
+gemma-3-12b-it-Q4_K_M,t1_q3_probability,10,Both probabilities correct
+gemma-3-27B-it-QAT-Q4_0,t1_q3_probability,10,Both probabilities correct
+GLM-4.6-Q4_K_S-00001-of-00005,t1_q3_probability,10,Both probabilities correct
+Meta-Llama-3.1-8B.Q4_K_S,t1_q3_probability,2,Attempted but incorrect
+Meta-Llama-3-8B-Instruct-fp16,t1_q3_probability,2,Attempted but incorrect
+Qwen2.5-7B.Q4_K_S,t1_q3_probability,2,Attempted but incorrect
+Qwen3-32B-Q4_K_M,t1_q3_probability,10,Both probabilities correct
+Hermes-4-70B-Q4_K_M,t1_q3_probability,10,Both probabilities correct
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q3_probability,10,Both probabilities correct
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen2.5-72B.Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q3_probability,2,Attempted but incorrect
+Qwen3-32B-Q4_K_M,t1_q3_probability,10,Both probabilities correct
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q3_probability,2,Attempted but incorrect
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t1_q3_probability,10,Both probabilities correct
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q3_probability,10,Both probabilities correct
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q3_probability,10,Both probabilities correct
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q3_probability,10,Both probabilities correct
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t1_q3_probability,10,Both probabilities correct
+Phi-4-reasoning-plus-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Phi-4-reasoning-plus-Q8_0,t1_q3_probability,2,Attempted but incorrect
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q3_probability,2,Attempted but incorrect
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q3_probability,2,Attempted but incorrect
+Qwen3-4B-Thinking-2507-Q8_0,t1_q3_probability,10,Both probabilities correct
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q3_probability,2,Attempted but incorrect
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q3_probability,2,Attempted but incorrect
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Hermes-4-70B-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q1_optimization,2,Attempted but incorrect
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen2.5-72B.Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t2_q1_optimization,10,Correct dimensions and max area with calculus
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q1_optimization,10,Correct dimensions and max area with calculus
+gemma-3-12b-it-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+gemma-3-27B-it-QAT-Q4_0,t2_q1_optimization,10,Correct dimensions and max area with calculus
+GLM-4.6-Q4_K_S-00001-of-00005,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Meta-Llama-3.1-8B.Q4_K_S,t2_q1_optimization,2,Attempted but incorrect
+Meta-Llama-3-8B-Instruct-fp16,t2_q1_optimization,8,Correct dimensions found
+Qwen2.5-7B.Q4_K_S,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-32B-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Hermes-4-70B-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen2.5-72B.Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-32B-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q1_optimization,2,Attempted but incorrect
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q1_optimization,2,Attempted but incorrect
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q1_optimization,10,Correct dimensions and max area with calculus
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q1_optimization,10,Correct dimensions and max area with calculus
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Phi-4-reasoning-plus-Q4_K_M,t2_q1_optimization,2,Attempted but incorrect
+Phi-4-reasoning-plus-Q8_0,t2_q1_optimization,2,Attempted but incorrect
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-4B-Thinking-2507-Q8_0,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q1_optimization,8,Correct dimensions found
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q1_optimization,8,Correct dimensions found
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q1_optimization,10,Correct dimensions and max area with calculus
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Hermes-4-70B-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen2.5-72B.Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+gemma-3-12b-it-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+gemma-3-27B-it-QAT-Q4_0,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+GLM-4.6-Q4_K_S-00001-of-00005,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Meta-Llama-3.1-8B.Q4_K_S,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Meta-Llama-3-8B-Instruct-fp16,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen2.5-7B.Q4_K_S,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-32B-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Hermes-4-70B-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen2.5-72B.Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-32B-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Phi-4-reasoning-plus-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Phi-4-reasoning-plus-Q8_0,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-4B-Thinking-2507-Q8_0,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q2_proof,10,Correctly identifies n=1->2 failure with overlap explanation
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Hermes-4-70B-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q3_calculus,2,Attempted but incorrect
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen2.5-72B.Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+gemma-3-12b-it-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+gemma-3-27B-it-QAT-Q4_0,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+GLM-4.6-Q4_K_S-00001-of-00005,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Meta-Llama-3.1-8B.Q4_K_S,t2_q3_calculus,7,"Correct antiderivative, answer unclear"
+Meta-Llama-3-8B-Instruct-fp16,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen2.5-7B.Q4_K_S,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-32B-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Hermes-4-70B-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen2.5-72B.Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-32B-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q3_calculus,2,Attempted but incorrect
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q3_calculus,2,Attempted but incorrect
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Phi-4-reasoning-plus-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Phi-4-reasoning-plus-Q8_0,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-4B-Thinking-2507-Q8_0,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q3_calculus,2,Attempted but incorrect
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q3_calculus,2,Attempted but incorrect
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q3_calculus,10,Correct answer 10 with antiderivative shown
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q4_statistics,8,3/4 statistics correct
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q4_statistics,10,All 4 statistics correct
+Hermes-4-70B-Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q4_statistics,3,Attempted but mostly incorrect
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+Qwen2.5-72B.Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q4_statistics,6,2/4 statistics correct
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q4_statistics,6,2/4 statistics correct
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t2_q4_statistics,8,3/4 statistics correct
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t2_q4_statistics,8,3/4 statistics correct
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q4_statistics,6,2/4 statistics correct
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q4_statistics,8,3/4 statistics correct
+gemma-3-12b-it-Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+gemma-3-27B-it-QAT-Q4_0,t2_q4_statistics,8,3/4 statistics correct
+GLM-4.6-Q4_K_S-00001-of-00005,t2_q4_statistics,10,All 4 statistics correct
+Meta-Llama-3.1-8B.Q4_K_S,t2_q4_statistics,3,Attempted but mostly incorrect
+Meta-Llama-3-8B-Instruct-fp16,t2_q4_statistics,3,Attempted but mostly incorrect
+Qwen2.5-7B.Q4_K_S,t2_q4_statistics,6,2/4 statistics correct
+Qwen3-32B-Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+Hermes-4-70B-Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+Qwen2.5-72B.Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q4_statistics,8,3/4 statistics correct
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q4_statistics,10,All 4 statistics correct
+Qwen3-32B-Q4_K_M,t2_q4_statistics,10,All 4 statistics correct
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q4_statistics,6,2/4 statistics correct
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q4_statistics,8,3/4 statistics correct
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q4_statistics,3,Attempted but mostly incorrect
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q4_statistics,3,Attempted but mostly incorrect
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q4_statistics,8,3/4 statistics correct
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q4_statistics,6,2/4 statistics correct
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q4_statistics,8,3/4 statistics correct
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q4_statistics,10,All 4 statistics correct
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q4_statistics,8,3/4 statistics correct
+Phi-4-reasoning-plus-Q4_K_M,t2_q4_statistics,3,Attempted but mostly incorrect
+Phi-4-reasoning-plus-Q8_0,t2_q4_statistics,3,Attempted but mostly incorrect
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q4_statistics,10,All 4 statistics correct
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q4_statistics,10,All 4 statistics correct
+Qwen3-4B-Thinking-2507-Q8_0,t2_q4_statistics,10,All 4 statistics correct
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q4_statistics,10,All 4 statistics correct
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q4_statistics,6,2/4 statistics correct
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q4_statistics,6,2/4 statistics correct
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q4_statistics,6,2/4 statistics correct
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q4_statistics,8,3/4 statistics correct
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q1_analysis,10,All 3 parts correct
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q1_analysis,10,All 3 parts correct
+Hermes-4-70B-Q4_K_M,t3_q1_analysis,7,2/3 parts correct
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q1_analysis,7,2/3 parts correct
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q1_analysis,4,1/3 parts correct
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+Qwen2.5-72B.Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q1_analysis,7,2/3 parts correct
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t3_q1_analysis,10,All 3 parts correct
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t3_q1_analysis,7,2/3 parts correct
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q1_analysis,10,All 3 parts correct
+gemma-3-12b-it-Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+gemma-3-27B-it-QAT-Q4_0,t3_q1_analysis,7,2/3 parts correct
+GLM-4.6-Q4_K_S-00001-of-00005,t3_q1_analysis,7,2/3 parts correct
+Meta-Llama-3.1-8B.Q4_K_S,t3_q1_analysis,4,1/3 parts correct
+Meta-Llama-3-8B-Instruct-fp16,t3_q1_analysis,4,1/3 parts correct
+Qwen2.5-7B.Q4_K_S,t3_q1_analysis,7,2/3 parts correct
+Qwen3-32B-Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+Hermes-4-70B-Q4_K_M,t3_q1_analysis,7,2/3 parts correct
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q1_analysis,7,2/3 parts correct
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q1_analysis,7,2/3 parts correct
+Qwen2.5-72B.Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q1_analysis,7,2/3 parts correct
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q1_analysis,10,All 3 parts correct
+Qwen3-32B-Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q1_analysis,7,2/3 parts correct
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q1_analysis,4,1/3 parts correct
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q1_analysis,4,1/3 parts correct
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q1_analysis,7,2/3 parts correct
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q1_analysis,10,All 3 parts correct
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q1_analysis,7,2/3 parts correct
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+Phi-4-reasoning-plus-Q4_K_M,t3_q1_analysis,4,1/3 parts correct
+Phi-4-reasoning-plus-Q8_0,t3_q1_analysis,4,1/3 parts correct
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q1_analysis,10,All 3 parts correct
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q1_analysis,10,All 3 parts correct
+Qwen3-4B-Thinking-2507-Q8_0,t3_q1_analysis,7,2/3 parts correct
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q1_analysis,7,2/3 parts correct
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q1_analysis,4,1/3 parts correct
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q1_analysis,4,1/3 parts correct
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t3_q1_analysis,10,All 3 parts correct
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q1_analysis,7,2/3 parts correct
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Hermes-4-70B-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen2.5-72B.Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+gemma-3-12b-it-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+gemma-3-27B-it-QAT-Q4_0,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+GLM-4.6-Q4_K_S-00001-of-00005,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Meta-Llama-3.1-8B.Q4_K_S,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Meta-Llama-3-8B-Instruct-fp16,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen2.5-7B.Q4_K_S,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-32B-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Hermes-4-70B-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen2.5-72B.Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-32B-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Phi-4-reasoning-plus-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Phi-4-reasoning-plus-Q8_0,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-4B-Thinking-2507-Q8_0,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q2_combinatorics,8,Mentions sign-reversing involution approach
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Hermes-4-70B-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q3_probability_theory,6,Good approach but unclear final answer
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen2.5-72B.Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+gemma-3-12b-it-Q4_K_M,t3_q3_probability_theory,6,Good approach but unclear final answer
+gemma-3-27B-it-QAT-Q4_0,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+GLM-4.6-Q4_K_S-00001-of-00005,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Meta-Llama-3.1-8B.Q4_K_S,t3_q3_probability_theory,6,Good approach but unclear final answer
+Meta-Llama-3-8B-Instruct-fp16,t3_q3_probability_theory,6,Good approach but unclear final answer
+Qwen2.5-7B.Q4_K_S,t3_q3_probability_theory,6,Good approach but unclear final answer
+Qwen3-32B-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Hermes-4-70B-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen2.5-72B.Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-32B-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q3_probability_theory,6,Good approach but unclear final answer
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q3_probability_theory,6,Good approach but unclear final answer
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q3_probability_theory,6,Good approach but unclear final answer
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q3_probability_theory,6,Good approach but unclear final answer
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Phi-4-reasoning-plus-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Phi-4-reasoning-plus-Q8_0,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-4B-Thinking-2507-Q8_0,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q3_probability_theory,6,Good approach but unclear final answer
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q3_probability_theory,6,Good approach but unclear final answer
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q3_probability_theory,10,Correct E[N]=e with both proofs

@@ -1,0 +1,421 @@
+model,question_id,score,score_reason
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q4_orchestration,8,"Good plan, minor missing elements"
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q1_competing_constraints,10,Excellent robust plan
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q2_multi_agent_coordination,10,Excellent coordination design
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q3_nested_params,8,"Good nested JSON, minor issues"
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q4_orchestration,8,"Good plan, minor missing elements"
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q3_adversarial_robustness,8,Good security awareness
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q3_schema_edge,8,Good schema compliance
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q4_orchestration,10,Complete orchestration plan with error handling
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q1_competing_constraints,10,Excellent robust plan
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q2_multi_agent_coordination,10,Excellent coordination design
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q3_adversarial_robustness,8,Good security awareness
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q4_orchestration,10,Complete orchestration plan with error handling
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q1_competing_constraints,10,Excellent robust plan
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q2_multi_agent_coordination,10,Excellent coordination design
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t1_q1_sequential,3,JSON but missing required tools
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q3_schema_edge,8,Good schema compliance
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q4_orchestration,8,"Good plan, minor missing elements"
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Hermes-4-70B-Q4_K_M,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Hermes-4-70B-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Hermes-4-70B-Q4_K_M,t1_q3_nested_params,8,"Good nested JSON, minor issues"
+Hermes-4-70B-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Hermes-4-70B-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Hermes-4-70B-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Hermes-4-70B-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Hermes-4-70B-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Hermes-4-70B-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Hermes-4-70B-Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q3_nested_params,6,Partial nested JSON
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,6,Partial security understanding
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,8,Good security awareness
+Meta-Llama-3-8B-Instruct-fp16,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+Meta-Llama-3-8B-Instruct-fp16,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Meta-Llama-3-8B-Instruct-fp16,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Meta-Llama-3-8B-Instruct-fp16,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Meta-Llama-3-8B-Instruct-fp16,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Meta-Llama-3-8B-Instruct-fp16,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Meta-Llama-3-8B-Instruct-fp16,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Meta-Llama-3-8B-Instruct-fp16,t3_q1_competing_constraints,10,Excellent robust plan
+Meta-Llama-3-8B-Instruct-fp16,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Meta-Llama-3-8B-Instruct-fp16,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Meta-Llama-3.1-8B.Q4_K_S,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+Meta-Llama-3.1-8B.Q4_K_S,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Meta-Llama-3.1-8B.Q4_K_S,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Meta-Llama-3.1-8B.Q4_K_S,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Meta-Llama-3.1-8B.Q4_K_S,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Meta-Llama-3.1-8B.Q4_K_S,t2_q3_schema_edge,7,Good but missing body:null
+Meta-Llama-3.1-8B.Q4_K_S,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Meta-Llama-3.1-8B.Q4_K_S,t3_q1_competing_constraints,10,Excellent robust plan
+Meta-Llama-3.1-8B.Q4_K_S,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Meta-Llama-3.1-8B.Q4_K_S,t3_q3_adversarial_robustness,6,Partial security understanding
+Phi-4-reasoning-plus-Q4_K_M,t1_q1_sequential,3,JSON but missing required tools
+Phi-4-reasoning-plus-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Phi-4-reasoning-plus-Q4_K_M,t1_q3_nested_params,6,Partial nested JSON
+Phi-4-reasoning-plus-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Phi-4-reasoning-plus-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Phi-4-reasoning-plus-Q4_K_M,t2_q3_schema_edge,2,Poor schema compliance
+Phi-4-reasoning-plus-Q4_K_M,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Phi-4-reasoning-plus-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Phi-4-reasoning-plus-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Phi-4-reasoning-plus-Q4_K_M,t3_q3_adversarial_robustness,6,Partial security understanding
+Phi-4-reasoning-plus-Q8_0,t1_q1_sequential,3,JSON but missing required tools
+Phi-4-reasoning-plus-Q8_0,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Phi-4-reasoning-plus-Q8_0,t1_q3_nested_params,6,Partial nested JSON
+Phi-4-reasoning-plus-Q8_0,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Phi-4-reasoning-plus-Q8_0,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Phi-4-reasoning-plus-Q8_0,t2_q3_schema_edge,2,Poor schema compliance
+Phi-4-reasoning-plus-Q8_0,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Phi-4-reasoning-plus-Q8_0,t3_q1_competing_constraints,10,Excellent robust plan
+Phi-4-reasoning-plus-Q8_0,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Phi-4-reasoning-plus-Q8_0,t3_q3_adversarial_robustness,6,Partial security understanding
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q1_ambiguous,9,Chooses Slack with reasoning and JSON
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q2_error_chain,7,get_logs with JSON
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,8,Good security awareness
+Qwen2.5-72B.Q4_K_M,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Qwen2.5-72B.Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen2.5-72B.Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen2.5-72B.Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen2.5-72B.Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen2.5-72B.Q4_K_M,t2_q3_schema_edge,2,Poor schema compliance
+Qwen2.5-72B.Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen2.5-72B.Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen2.5-72B.Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen2.5-72B.Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Qwen2.5-7B.Q4_K_S,t1_q1_sequential,3,JSON but missing required tools
+Qwen2.5-7B.Q4_K_S,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen2.5-7B.Q4_K_S,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen2.5-7B.Q4_K_S,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen2.5-7B.Q4_K_S,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen2.5-7B.Q4_K_S,t2_q3_schema_edge,7,Good but missing body:null
+Qwen2.5-7B.Q4_K_S,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen2.5-7B.Q4_K_S,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen2.5-7B.Q4_K_S,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen2.5-7B.Q4_K_S,t3_q3_adversarial_robustness,8,Good security awareness
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q1_sequential,5,Only one tool present
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q2_multi_agent_coordination,8,Good coordination
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q3_schema_edge,6,Partial compliance
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,8,Good security awareness
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t1_q1_sequential,0,Vision model output /image interface instead of tool call
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t1_q2_error_handling,0,Vision model output /image interface
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t1_q3_nested_params,0,Vision model output /image interface
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t2_q1_ambiguous,0,Vision model output /image interface
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t2_q2_error_chain,0,Vision model output /image interface
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t2_q3_schema_edge,0,Vision model output /image interface
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t2_q4_orchestration,0,Vision model output /image interface
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t3_q1_competing_constraints,0,Vision model output /image interface
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,0,Vision model output /image interface
+Qwen2.5-VL-7B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,0,Vision model output /image interface
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q2_error_chain,6,restart_service with reasoning
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q1_sequential,5,Only one tool present
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q3_adversarial_robustness,8,Good security awareness
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q3_adversarial_robustness,8,Good security awareness
+Qwen3-32B-Q4_K_M,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Qwen3-32B-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-32B-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen3-32B-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-32B-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-32B-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen3-32B-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen3-32B-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-32B-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-32B-Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Qwen3-4B-Thinking-2507-Q8_0,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Qwen3-4B-Thinking-2507-Q8_0,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-4B-Thinking-2507-Q8_0,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen3-4B-Thinking-2507-Q8_0,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-4B-Thinking-2507-Q8_0,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-4B-Thinking-2507-Q8_0,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen3-4B-Thinking-2507-Q8_0,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Qwen3-4B-Thinking-2507-Q8_0,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-4B-Thinking-2507-Q8_0,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-4B-Thinking-2507-Q8_0,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q1_ambiguous,3,Only thinking
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q2_error_chain,7,get_logs with JSON
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q3_schema_edge,7,Good but missing body:null
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q3_adversarial_robustness,3,Only thinking
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q1_sequential,5,Only one tool present
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q3_schema_edge,7,Good but missing body:null
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q3_adversarial_robustness,6,Partial security understanding
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q3_nested_params,8,"Good nested JSON, minor issues"
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t1_q1_sequential,3,JSON but missing required tools
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t2_q3_schema_edge,2,Poor schema compliance
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003,t3_q3_adversarial_robustness,8,Good security awareness
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t1_q1_sequential,0,Vision model output /image interface instead of tool call
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t1_q2_error_handling,0,Vision model output /image interface
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t1_q3_nested_params,0,Vision model output /image interface
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t2_q1_ambiguous,0,Vision model output /image interface
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t2_q2_error_chain,0,Vision model output /image interface
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t2_q3_schema_edge,0,Vision model output /image interface
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t2_q4_orchestration,0,Vision model output /image interface
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t3_q1_competing_constraints,0,Vision model output /image interface
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,0,Vision model output /image interface
+Qwen3-VL-30B-A3B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,0,Vision model output /image interface
+Qwen3-VL-4B-Instruct-Q4_K_M,t1_q1_sequential,3,JSON but missing required tools
+Qwen3-VL-4B-Instruct-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-VL-4B-Instruct-Q4_K_M,t1_q3_nested_params,6,Partial nested JSON
+Qwen3-VL-4B-Instruct-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-VL-4B-Instruct-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-VL-4B-Instruct-Q4_K_M,t2_q3_schema_edge,2,Poor schema compliance
+Qwen3-VL-4B-Instruct-Q4_K_M,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Qwen3-VL-4B-Instruct-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-VL-4B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-VL-4B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,6,Partial security understanding
+Qwen3-VL-4B-Instruct-Q8_0,t1_q1_sequential,3,JSON but missing required tools
+Qwen3-VL-4B-Instruct-Q8_0,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-VL-4B-Instruct-Q8_0,t1_q3_nested_params,6,Partial nested JSON
+Qwen3-VL-4B-Instruct-Q8_0,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-VL-4B-Instruct-Q8_0,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-VL-4B-Instruct-Q8_0,t2_q3_schema_edge,2,Poor schema compliance
+Qwen3-VL-4B-Instruct-Q8_0,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Qwen3-VL-4B-Instruct-Q8_0,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-VL-4B-Instruct-Q8_0,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-VL-4B-Instruct-Q8_0,t3_q3_adversarial_robustness,6,Partial security understanding
+Qwen3-VL-8B-Instruct-Q4_K_M,t1_q1_sequential,3,JSON but missing required tools
+Qwen3-VL-8B-Instruct-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-VL-8B-Instruct-Q4_K_M,t1_q3_nested_params,6,Partial nested JSON
+Qwen3-VL-8B-Instruct-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-VL-8B-Instruct-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-VL-8B-Instruct-Q4_K_M,t2_q3_schema_edge,2,Poor schema compliance
+Qwen3-VL-8B-Instruct-Q4_K_M,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Qwen3-VL-8B-Instruct-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-VL-8B-Instruct-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-VL-8B-Instruct-Q4_K_M,t3_q3_adversarial_robustness,6,Partial security understanding
+Qwen3-VL-8B-Instruct-Q8_0,t1_q1_sequential,3,JSON but missing required tools
+Qwen3-VL-8B-Instruct-Q8_0,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3-VL-8B-Instruct-Q8_0,t1_q3_nested_params,6,Partial nested JSON
+Qwen3-VL-8B-Instruct-Q8_0,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3-VL-8B-Instruct-Q8_0,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3-VL-8B-Instruct-Q8_0,t2_q3_schema_edge,2,Poor schema compliance
+Qwen3-VL-8B-Instruct-Q8_0,t2_q4_orchestration,8,"Good plan, minor missing elements"
+Qwen3-VL-8B-Instruct-Q8_0,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3-VL-8B-Instruct-Q8_0,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3-VL-8B-Instruct-Q8_0,t3_q3_adversarial_robustness,6,Partial security understanding
+Qwen3_VL_2B.Q4_K_M,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+Qwen3_VL_2B.Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+Qwen3_VL_2B.Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+Qwen3_VL_2B.Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+Qwen3_VL_2B.Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+Qwen3_VL_2B.Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+Qwen3_VL_2B.Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+Qwen3_VL_2B.Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+Qwen3_VL_2B.Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+Qwen3_VL_2B.Q4_K_M,t3_q3_adversarial_robustness,6,Partial security understanding
+gemma-3-12b-it-Q4_K_M,t1_q1_sequential,5,Both tools but wrong order (read before grep)
+gemma-3-12b-it-Q4_K_M,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+gemma-3-12b-it-Q4_K_M,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+gemma-3-12b-it-Q4_K_M,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+gemma-3-12b-it-Q4_K_M,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+gemma-3-12b-it-Q4_K_M,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+gemma-3-12b-it-Q4_K_M,t2_q4_orchestration,10,Complete orchestration plan with error handling
+gemma-3-12b-it-Q4_K_M,t3_q1_competing_constraints,10,Excellent robust plan
+gemma-3-12b-it-Q4_K_M,t3_q2_multi_agent_coordination,10,Excellent coordination design
+gemma-3-12b-it-Q4_K_M,t3_q3_adversarial_robustness,10,Comprehensive security analysis
+gemma-3-27B-it-QAT-Q4_0,t1_q1_sequential,10,Perfect: grep then read with correct parameters
+gemma-3-27B-it-QAT-Q4_0,t1_q2_error_handling,10,Perfect: acknowledges error and asks for clarification
+gemma-3-27B-it-QAT-Q4_0,t1_q3_nested_params,10,Perfect nested JSON with all fields and correct types
+gemma-3-27B-it-QAT-Q4_0,t2_q1_ambiguous,10,Asks clarifying questions - best approach
+gemma-3-27B-it-QAT-Q4_0,t2_q2_error_chain,10,check_dns with reasoning and JSON - best approach
+gemma-3-27B-it-QAT-Q4_0,t2_q3_schema_edge,10,Perfect schema compliance with body:null
+gemma-3-27B-it-QAT-Q4_0,t2_q4_orchestration,10,Complete orchestration plan with error handling
+gemma-3-27B-it-QAT-Q4_0,t3_q1_competing_constraints,10,Excellent robust plan
+gemma-3-27B-it-QAT-Q4_0,t3_q2_multi_agent_coordination,10,Excellent coordination design
+gemma-3-27B-it-QAT-Q4_0,t3_q3_adversarial_robustness,10,Comprehensive security analysis

@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,12.27,1,Identified some methodological issues but devolved into repetitive claims enumeration
+thinking,t3_q2_causal_inference,12.62,0,"Stuck in DAG redrawing loop, never answered questions"
+thinking,t3_q3_reasoning_trap,11.89,0,NOAA satellites loop
+thinking,t2_q1_paradox,12.24,0,Severe repetitive looping
+thinking,t2_q2_counterfactual,13.39,3,Complete structured answer addressing all three dimensions
+thinking,t2_q3_formal,15.18,3,Correct proof with explanation
+thinking,t2_q4_metacognition,10.8,0,"Stuck in restart loop, never reached conclusion"
+thinking,t1_q1_multistep,11.22,0,Empty math delimiter loop
+thinking,t1_q2_hypothesis,10.96,0,Satisfaction appeal loop
+thinking,t1_q3_planning,12.22,1,Started constraint analysis but did not complete
+coder,t3_q1_concurrent_correctness,12.49,0,Lock-free repetition loop
+coder,t3_q2_distributed_consistency,11.98,2,Listed conflict resolution strategies
+coder,t3_q3_algorithmic_hardness,11.76,3,Complete analysis of k-th smallest algorithms
+coder,t2_q1_design,11.42,2,Attempted LRU class but incomplete
+coder,t2_q2_debug_complex,12.59,3,Identified race condition and proposed lock solution
+coder,t2_q3_optimize,12.08,0,Stuck in example repetition loop
+coder,t2_q4_system,15.51,3,Rate limiter implementation present
+coder,t1_q1_algorithm,11.62,0,Mid variable loop
+coder,t1_q2_refactor,11.51,3,Optimized using set or Counter
+coder,t1_q3_test,11.0,0,Heyting repetition loop
+agentic,t3_q1_competing_constraints,16.35,2,Tool mentioned but no valid JSON
+agentic,t3_q2_multi_agent_coordination,16.5,2,Provided tool orchestration strategy
+agentic,t3_q3_adversarial_robustness,10.21,1,Discussed security but no concrete tool calls
+agentic,t2_q1_ambiguous,17.16,1,Clarification strategy but no tool call
+agentic,t2_q2_error_chain,16.13,3,Tool call structure present
+agentic,t2_q3_schema_edge,17.75,3,Tool call structure present
+agentic,t2_q4_orchestration,17.08,3,Tool call sequence present
+agentic,t1_q1_sequential,18.01,3,Tool call structure present
+agentic,t1_q2_error_handling,16.42,3,Tool call structure present
+agentic,t1_q3_nested_params,16.97,3,Tool call structure present
+general,t3_q1_policy_analysis,12.3,0,Metrics repetition loop
+general,t3_q2_system_failure,13.97,3,Analyzed distributed system failure
+general,t3_q3_strategic_communication,11.49,2,Drafted board communication strategy
+general,t2_q1_synthesis,11.1,2,Synthesized perspectives
+general,t2_q2_transform,16.94,1,Partial transformation
+general,t2_q3_schedule,11.67,2,Attempted meeting schedule
+general,t2_q4_inconsistency,11.01,3,Identified format inconsistencies
+general,t1_q1_json,17.32,3,Correct JSON output
+general,t1_q2_multistep,11.48,3,Completed multistep list processing
+general,t1_q3_compare,11.15,3,Compared both approaches with pros/cons
+math,t3_q1_analysis,12.94,3,Used complex exponentials approach
+math,t3_q2_combinatorics,12.88,2,Attempted combinatorial proof
+math,t3_q3_probability_theory,10.77,2,Attempted expected value calculation
+math,t2_q1_optimization,15.31,3,Correct optimization solution
+math,t2_q2_proof,9.94,3,Identified induction error
+math,t2_q3_calculus,17.01,3,Correct integral evaluation (14)
+math,t2_q4_statistics,14.83,2,Attempted calculations
+math,t1_q1_word_problem,15.57,3,Correct discount and tax calculations
+math,t1_q2_system_equations,11.14,3,Correct solution to system
+math,t1_q3_probability,12.81,2,Attempted probability calculations
+instruction_precision,t3_q1_self_referential,16.45,1,Partial attempt
+instruction_precision,t3_q2_cascading_constraints,15.43,2,Attempted word chain
+instruction_precision,t3_q3_meta_instruction,15.94,2,Followed some meta instructions
+instruction_precision,t2_q1_resist_elaboration,17.07,0,Failed instruction - added extra text
+instruction_precision,t2_q2_maintain_format,18.44,3,Maintained exact format
+instruction_precision,t2_q3_empty_handling,16.62,2,NONE present but with repetition
+instruction_precision,t2_q4_conflicting_constraints,16.48,1,Did not satisfy constraints
+instruction_precision,t1_q1_negative_instruction,16.92,0,Violated negative instruction
+instruction_precision,t1_q2_word_limit,18.36,1,Did not follow word limit
+instruction_precision,t1_q3_structured_format,17.31,2,Attempted correct format
+instruction_precision,t1_q4_multiple_constraints,16.63,1,Wrong number or poor formatting

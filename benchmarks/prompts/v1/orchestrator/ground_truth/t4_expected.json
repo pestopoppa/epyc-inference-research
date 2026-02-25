@@ -1,0 +1,37 @@
+{
+  "suite": "t4_adversarial",
+  "description": "Adversarial edge case tests - target >50% pass rate",
+  "tests": {
+    "infinite_loop_trap": {
+      "test_id": "t4_infinite_loop_trap",
+      "expected_behavior": "Must NOT enter infinite loop - terminates via max_turns or early abort",
+      "pass_criteria": {
+        "max_turns": 10,
+        "must_terminate": true,
+        "must_call_final": true,
+        "timeout_seconds": 120
+      }
+    },
+    "malformed_context": {
+      "test_id": "t4_malformed_context",
+      "expected_behavior": "Handles garbage/malicious input gracefully without crashing",
+      "pass_criteria": {
+        "max_turns": 5,
+        "must_not_crash": true,
+        "must_call_final": true,
+        "no_code_injection": true
+      }
+    },
+    "timeout_heavy": {
+      "test_id": "t4_timeout_heavy",
+      "expected_behavior": "Should not hang - either complete within time limit or return partial result",
+      "pass_criteria": {
+        "max_turns": 10,
+        "timeout_seconds": 120,
+        "must_not_hang": true,
+        "must_call_final": true,
+        "partial_result_acceptable": true
+      }
+    }
+  }
+}

@@ -1,0 +1,525 @@
+[2026-01-05 14:59:46] SESSION: Kernel development started
+[2026-01-05 14:59:46] PHASE: Setup complete - cloned llama.cpp to /workspace/kernel-dev/llama-cpp-dev
+[2026-01-05 15:00:39] ACTION: Analyzed simd-mappings.h
+[2026-01-05 15:00:39] FINDING: AVX-512 uses GGML_F32_STEP=64, GGML_F32_EPR=16 (16 floats per ZMM register)
+[2026-01-05 15:00:39] FINDING: Uses _mm512_fmadd_ps for FMA, _mm512_reduce_add_ps for horizontal sum
+[2026-01-05 15:00:39] FINDING: FP16 loads convert via _mm512_cvtph_ps (no native FP16 arithmetic)
+[2026-01-05 15:01:13] FINDING: Q4_K dot product (ggml_vec_dot_q4_K_q8_K) uses AVX2 only - NO AVX-512 implementation\!
+[2026-01-05 15:01:13] FINDING: This is a MAJOR optimization opportunity - could double throughput with ZMM registers
+[2026-01-05 15:10:00] PHASE: Analysis Complete - Summary of AVX-512 Status
+
+## CURRENT STATE:
+1. Q4_K dot product (ggml_vec_dot_q4_K_q8_K) - AVX2 ONLY, no AVX-512
+2. Q8_0/Q8_1 quantization - AVX2 ONLY
+3. repack.cpp - HAS AVX-512 for repacked tensor matmul
+4. vec.h - HAS AVX-512 for activation functions (exp, silu)
+5. llamafile/sgemm.cpp - Limited AVX-512 usage
+
+## KEY OPTIMIZATION OPPORTUNITIES:
+1. **HIGH IMPACT**: Add AVX-512 to ggml_vec_dot_q4_K_q8_K
+   - Current: Uses __m256i (32 bytes per op)
+   - Target: Use __m512i (64 bytes per op)
+   - Potential: 2x throughput improvement
+
+2. **VNNI USAGE**: repack.cpp already uses _mm512_dpbusd_epi32
+   - This is the int8 dot product instruction
+   - zen 5 has AVX-512 VNNI support
+   - Should be applied to quants.c
+
+## MEMORY ACCESS PATTERNS:
+- Q4_K uses 4-bit quantized weights
+- Inner loop processes QK_K/64 = 4 iterations
+- Each iteration loads 32 bytes of Q4 + 64 bytes of Q8
+- Current AVX2 inner loop structure suitable for AVX-512 widening
+
+## ZEN 5 CONSIDERATIONS:
+- TRUE 512-bit execution (single cycle, not double-pumped)
+- AVX-512 VNNI available
+- Improved prefetcher
+- 12-channel memory (~460 GB/s theoretical)
+
+
+[2026-01-05 15:25:00] ACTION: Created synthetic micro-benchmark: /workspace/kernel-dev/bench_q4k_dot.c
+[2026-01-05 15:25:00] NOTE: Devcontainer has no gcc - benchmark must be compiled on host
+
+## BENCHMARK STRUCTURE:
+- Implements both AVX2 (current) and AVX-512 (proposed) versions
+- Uses synthetic Q4_K and Q8_K blocks
+- Measures throughput for 100k iterations
+- Compares results for correctness
+
+## AVX-512 OPTIMIZATION STRATEGY:
+
+### Key Changes from AVX2:
+1. Use __m512i (64 bytes) instead of __m256i (32 bytes)
+2. Load 64 bytes Q4 data per iteration instead of 32
+3. Load 128 bytes Q8 data per iteration instead of 64
+4. Use _mm512_maddubs_epi16 for multiply-add
+5. Use _mm512_reduce_add_ps for horizontal sum (faster than multiple adds)
+
+### VNNI Optimization (if available):
+- Use _mm512_dpbusd_epi32 for direct int8 dot product
+- Eliminates intermediate int16 operations
+- Expected additional 30-50% speedup over non-VNNI AVX-512
+
+### Expected Performance:
+- AVX-512 basic: ~1.8x over AVX2 (due to 2x width but not perfect scaling)
+- AVX-512 VNNI: ~2.5x over AVX2 (direct int8 dot product)
+
+### Memory Access Pattern (unchanged from AVX2):
+- block_q4_K: 144 bytes (4 + 12 + 128)
+- block_q8_K: 292 bytes (4 + 256 + 32)
+- Inner loop: QK_K/64 = 4 iterations per block
+- Total per block: ~436 bytes
+
+
+[2026-01-05 15:35:00] ACTION: Created AVX-512 kernel design: /workspace/kernel-dev/q4k_avx512_kernel.c
+
+## FILES CREATED:
+1. /workspace/kernel-dev/bench_q4k_dot.c - Synthetic micro-benchmark
+2. /workspace/kernel-dev/q4k_avx512_kernel.c - AVX-512 kernel implementation
+
+## AVX-512 KERNEL DESIGN SUMMARY:
+
+### Inner Loop Changes (AVX2 -> AVX-512):
+| Aspect | AVX2 | AVX-512 |
+|--------|------|---------|
+| Register width | 256 bits | 512 bits |
+| Q4 bytes/iter | 32 | 64 |
+| Q8 bytes/iter | 64 | 128 |
+| Iterations | 4 | 2 |
+| SIMD type | __m256i | __m512i |
+
+### Key AVX-512 Intrinsics Used:
+- _mm512_loadu_si512: 64-byte unaligned load
+- _mm512_maddubs_epi16: uint8*int8 -> int16 pairs
+- _mm512_madd_epi16: int16*int16 -> int32 pairs (for scales)
+- _mm512_reduce_add_ps: efficient horizontal sum
+- _mm512_broadcast_i32x4: broadcast 128-bit scales to 512-bit
+- _mm512_shuffle_epi8: apply scale patterns
+
+### VNNI Additional Intrinsics:
+- _mm512_dpbusd_epi32: direct uint8*int8 dot product to int32
+
+## IDENTIFIED OPTIMIZATION OPPORTUNITIES:
+
+### 1. HIGH PRIORITY: Q4_K Dot Product (ggml_vec_dot_q4_K_q8_K)
+- Current: AVX2 only
+- Potential: 1.8-2.5x with AVX-512/VNNI
+- Files: arch/x86/quants.c (line 1741)
+- Status: Kernel designed, needs testing
+
+### 2. MEDIUM PRIORITY: Other K-quant dot products
+- Q5_K: Same pattern as Q4_K, similar gains expected
+- Q6_K: Same pattern, similar gains expected
+- Q2_K, Q3_K: Could benefit from AVX-512
+- Files: arch/x86/quants.c
+
+### 3. MEDIUM PRIORITY: Q8_0/Q8_1 quantization
+- Current: AVX2 only (quantize_row_q8_0, quantize_row_q8_1)
+- Potential: 2x with AVX-512 ZMM registers
+- Files: arch/x86/quants.c (lines 290, 388)
+
+### 4. LOW PRIORITY: Already has AVX-512
+- repack.cpp: Heavy AVX-512 usage (1294 intrinsics)
+- vec.h: Activation functions use AVX-512
+- amx/mmq.cpp: Intel AMX matmul
+
+## ZEN 5 SPECIFIC OPTIMIZATIONS TO CONSIDER:
+
+1. **Prefetch tuning**: Zen 5 has improved prefetcher, may need different prefetch distances
+2. **Loop unrolling**: Match Zen 5 decode width
+3. **Memory alignment**: Prefer 64-byte alignment for ZMM loads
+4. **NUMA awareness**: Already handled with numactl --interleave=all
+
+
+[2026-01-05 15:45:00] ACTION: Created comprehensive documentation
+[2026-01-05 15:45:00] FILE: /workspace/kernel-dev/AVX512_OPTIMIZATION_OPPORTUNITIES.md
+
+## SESSION SUMMARY
+
+### Completed Tasks:
+1. ✅ Set up isolated kernel-dev workspace
+2. ✅ Cloned llama.cpp for experimentation
+3. ✅ Analyzed AVX-512 codepaths in ggml-cpu
+4. ✅ Identified Q4_K dot product implementation (AVX2 only!)
+5. ✅ Documented SIMD strategy and memory access patterns
+6. ✅ Found where AVX-512 IS currently used (repack.cpp, vec.h, amx/)
+7. ✅ Created synthetic micro-benchmark
+8. ✅ Designed proper AVX-512 Q4_K kernel
+9. ✅ Documented all optimization opportunities
+
+### Critical Findings:
+- Q4_K dot product has NO AVX-512 implementation
+- Potential 1.8-2.5x speedup with AVX-512/VNNI
+- This affects ALL Q4_K model inference
+
+### Files Created:
+- /workspace/kernel-dev/bench_q4k_dot.c
+- /workspace/kernel-dev/q4k_avx512_kernel.c
+- /workspace/kernel-dev/AVX512_OPTIMIZATION_OPPORTUNITIES.md
+
+### Next Steps (for host machine testing):
+1. Compile benchmark with: gcc -O3 -mavx512f -mavx512vnni bench_q4k_dot.c
+2. Run on Zen 5 hardware
+3. Verify correctness
+4. Submit upstream PR to ggml-org/llama.cpp
+
+[2026-01-05 15:45:00] SESSION: Kernel development analysis complete
+
+[2026-01-05 16:00:00] BENCHMARK RESULTS:
+| Implementation | Time/call | Throughput      | Speedup  |
+|----------------|-----------|-----------------|----------|
+| AVX2           | 74.55 ns  | 13.41 M ops/sec | baseline |
+| AVX-512        | 35.99 ns  | 27.79 M ops/sec | 2.07x    |
+
+[2026-01-05 16:00:00] ISSUE: Correctness bug in AVX-512 kernel
+- AVX2 result: 561070.75
+- AVX-512 result: -12584.06
+- Need to debug data layout handling
+
+[2026-01-05 16:00:00] ACTION: Debugging AVX-512 kernel
+
+[2026-01-05 16:10:00] ACTION: Created fixed AVX-512 kernel: /workspace/kernel-dev/q4k_avx512_fixed.c
+
+## BUG ANALYSIS:
+The original AVX-512 kernel tried to process 2 iterations simultaneously by
+doubling the data width. This breaks because the Q4 data layout ties low/high
+nibbles together - they must be processed with their corresponding Q8 data.
+
+## FIX:
+Keep AVX2 for inner dot product (data is 256-bit aligned), but use AVX-512 for:
+1. Accumulator (512-bit vs 256-bit) - reduces register pressure
+2. Combine 2 iterations into 512-bit before accumulation
+3. Final reduction via _mm512_reduce_add_ps
+
+## EXPECTED IMPACT:
+- Correctness: Should now match AVX2 results
+- Speedup: May be slightly less than 2.07x due to hybrid approach
+- Still significant improvement from wider accumulator and efficient reduction
+
+
+[2026-01-05 17:00:00] CORRECTION: Fixed kernel provides 0% speedup (0.93x)
+[2026-01-05 17:00:00] ANALYSIS: AVX-512 "fix" keeps compute at AVX2 width, only widens accumulation
+
+## THE REAL CHALLENGE: Q4_K Data Layout
+
+### Memory Layout Per AVX2 Iteration:
+```
+Q4 load: [byte0, byte1, ..., byte31] (32 bytes)
+         Each byte = (high_nibble << 4) | low_nibble
+
+Extract:
+  q4l = [low0, low1, ..., low31]   (32 low nibbles)
+  q4h = [high0, high1, ..., high31] (32 high nibbles)
+
+Q8 load pattern:
+  q8l = Q8[0:31]   → multiplies with q4l
+  q8h = Q8[32:63]  → multiplies with q4h
+```
+
+### Why Naive 512-bit Fails:
+Loading 64 bytes Q4 gives us nibbles from two "groups":
+- Group A: Q4[0:31]  → low pairs with Q8[0:31], high pairs with Q8[32:63]
+- Group B: Q4[32:63] → low pairs with Q8[64:95], high pairs with Q8[96:127]
+
+After extraction:
+- 64 low nibbles: [lowA0..lowA31, lowB0..lowB31]
+- 64 high nibbles: [highA0..highA31, highB0..highB31]
+
+Required Q8 pairing:
+- For low:  [Q8[0:31], Q8[64:95]]   ← NON-CONTIGUOUS!
+- For high: [Q8[32:63], Q8[96:127]] ← NON-CONTIGUOUS!
+
+### Potential Solutions:
+
+1. **AVX-512 VBMI permute (Zen 5 has this!)**
+   - Use _mm512_permutex2var_epi8 to rearrange Q8 bytes
+   - Single instruction to create correct pairing
+   - Zen 5 has AVX-512 VBMI with single-cycle permutes
+
+2. **Extract/Insert approach**
+   - Use _mm512_extracti64x4_epi64 / _mm512_inserti64x4
+   - 4 extract + 2 insert = 6 instructions overhead
+   - May still win due to wider maddubs
+
+3. **Different loop structure**
+   - Process j and j+2 together (same Q8 layout pattern)
+   - But scales are different per iteration
+
+### Next Step: Implement VBMI-based kernel
+
+[2026-01-05 17:30:00] ACTION: Created AVX-512 VBMI kernel with proper data layout handling
+[2026-01-05 17:30:00] FILE: /workspace/kernel-dev/q4k_avx512_vbmi.c
+
+## TWO NEW AVX-512 APPROACHES:
+
+### 1. AVX-512 VBMI (inserti approach)
+- Load Q4 and Q8 at 256-bit width (correct pairing naturally)
+- Use _mm512_inserti64x4 to combine into 512-bit
+- Perform maddubs at 512-bit width
+- Processes 2 AVX2 iterations per 512-bit operation
+
+### 2. AVX-512 Full (permute approach)
+- Load Q4 and Q8 at full 512-bit width
+- Use _mm512_permutex2var_epi8 to rearrange Q8 bytes
+- This creates correct nibble-to-Q8 correspondence:
+  - Low nibbles (bytes 0-63) → Q8[0:31, 64:95] 
+  - High nibbles (bytes 0-63) → Q8[32:63, 96:127]
+- Single permute instruction vs 4 extract + 2 insert
+
+### Permute Index Design:
+```
+perm_low indices:
+  [0-31] → a[0:31]     (select from first operand)
+  [32-63] → b[0:31]    (select from second operand, indices 64-95)
+
+perm_high indices:
+  [0-31] → a[32:63]    (select from first operand, indices 32-63)  
+  [32-63] → b[32:63]   (select from second operand, indices 96-127)
+```
+
+### Expected Performance:
+- Permute approach may have 1-2 cycle latency per permute
+- But gains from 512-bit maddubs should outweigh
+- Zen 5 has optimized VBMI with good throughput
+
+### NEEDS HOST TESTING to verify:
+1. Correctness (both approaches should match AVX2)
+2. Performance (which approach is faster)
+
+
+[2026-01-05 18:00:00] FINAL RESULTS: AVX-512 Q4_K optimization NOT viable
+
+## HOST BENCHMARK RESULTS:
+
+| Implementation  | Time/call | vs AVX2 | Correct? |
+|-----------------|-----------|---------|----------|
+| AVX2 (baseline) | 76.30 ns  | 1.00x   | YES      |
+| AVX-512 VBMI    | 92.43 ns  | 0.83x   | YES      |
+| AVX-512 Full    | 96.24 ns  | 0.79x   | YES      |
+
+## ROOT CAUSE ANALYSIS:
+
+The Q4_K data format is **fundamentally optimized for 256-bit operations**.
+
+### Current Q4_K Layout:
+```
+block_q4_K.qs[128]:
+  byte[i] = low_nibble[i] | (high_nibble[i] << 4)
+  where high_nibble[i] corresponds to value[i+128]
+
+block_q8_K.qs[256]:
+  256 int8 values, contiguous
+```
+
+### Why AVX2 Works:
+- Load Q4[0:31] (32 bytes) → extract nibbles for values[0:31] and [32:63]
+- Load Q8[0:31] and Q8[32:63] separately → contiguous, perfect fit
+- Each 256-bit load gets exactly the data it needs
+
+### Why AVX-512 Fails:
+- Load Q4[0:63] (64 bytes) → nibbles for values spanning 4 regions
+- Need Q8 data from: [0:31], [32:63], [64:95], [96:127]
+- But nibble-to-Q8 correspondence requires: [0:31]+[64:95] and [32:63]+[96:127]
+- Permute overhead > benefit of wider registers
+
+## CONCLUSION:
+
+**No PR opportunity** - the data format would need redesign at the ggml level.
+
+The original 2.07x "speedup" was from a buggy kernel doing incorrect computation.
+Correct AVX-512 implementations are 17-21% SLOWER than AVX2.
+
+## ALTERNATIVE OPTIMIZATION TARGETS:
+
+Operations that ARE 512-bit friendly:
+1. Prefill (continuous token processing)
+2. Attention computation (large matrix ops)
+3. Non-quantized operations (FP32/FP16)
+4. Quantization (converting FP to Q4/Q8)
+5. Model loading/tensor repacking
+
+## SESSION COMPLETE
+
+Key learning: Data layout design determines SIMD efficiency more than instruction width.
+
+[2026-01-05 18:30:00] ANALYSIS: AVX-512 Optimization Opportunities (Non-Quantized)
+
+## CURRENT AVX-512 COVERAGE:
+
+### Already Optimized for AVX-512:
+- vec.cpp: ggml_vec_silu_f32, ggml_vec_soft_max_f32, ggml_vec_cvar_f32
+- vec.cpp: ggml_vec_dot_bf16 (AVX512BF16)
+- repack.cpp: Tensor repacking (1294 intrinsics)
+- amx/mmq.cpp: Intel AMX matmul (467 intrinsics)
+
+### Uses SIMD Abstraction (auto-AVX-512 via GGML_F32_VEC):
+- vec.cpp: ggml_vec_dot_f32, ggml_vec_dot_f16
+
+### AVX2 ONLY (no AVX-512):
+- vec.h: ggml_vec_add_f32 (lines 60-73) - only AVX2
+- x86/quants.c: quantize_row_q8_0 (lines 290-386) - AVX2 only
+- x86/quants.c: quantize_row_q8_1 (lines 388-488) - AVX2 only
+
+### NO SIMD at all (scalar loops):
+- vec.h: ggml_vec_add_f16, ggml_vec_sub_f16, ggml_vec_neg_f16
+- vec.h: ggml_vec_mul_f32, ggml_vec_mul_f16, ggml_vec_div_f32
+- vec.h: ggml_vec_set_f32, ggml_vec_cpy_f32, many others
+
+## HIGH-IMPACT OPTIMIZATION TARGETS:
+
+| Target | Current | Data Type | Est. Speedup | Difficulty |
+|--------|---------|-----------|--------------|------------|
+| quantize_row_q8_0 | AVX2 | F32→I8 | ~2x | MEDIUM |
+| quantize_row_q8_1 | AVX2 | F32→I8 | ~2x | MEDIUM |
+| ggml_vec_add_f32 | AVX2 | F32 | ~2x | EASY |
+| ggml_vec_mul_f32 | Scalar | F32 | ~16x | EASY |
+| ggml_vec_add_f16 | Scalar | F16 | ~32x | EASY |
+
+## WHY THESE ARE GOOD TARGETS:
+
+1. **Contiguous data**: No nibble packing issues like Q4_K
+2. **Simple operations**: Add, mul, quantize are straightforward
+3. **High frequency**: These are called in every forward pass
+4. **No data correspondence**: Each element processes independently
+
+## RECOMMENDED PRIORITY:
+
+1. **quantize_row_q8_0/q8_1**: Called during inference for activations
+   - AVX-512 can process 64 floats → 64 int8s per iteration
+   - Current AVX2 does 32 at a time
+
+2. **ggml_vec_add_f32**: Used in residual connections
+   - Easy win, just widen from __m256 to __m512
+
+3. **ggml_vec_mul_f32**: No SIMD at all currently!
+   - Huge potential (scalar → 512-bit)
+
+
+[2026-01-05 19:00:00] REFINED TARGETS: Based on user recommendations
+
+## USER'S STRATEGIC RECOMMENDATIONS:
+1. Add AVX-512 path to prefill (GEMM already has partial support)
+2. Custom Q8_0 AVX-512 for draft model - faster draft → higher speculation ceiling
+3. Tensor repacking at load time for 512-bit alignment
+
+## ANALYSIS RESULTS:
+
+### Target 1: Prefill/GEMM
+- llamafile/sgemm.cpp HAS AVX-512 infrastructure
+- But Q8_0 loads still use `_mm256_loadu_si256` (AVX2)
+- tinyBLAS_Q0_AVX template processes Q8_0 at 256-bit width
+- OPPORTUNITY: Upgrade to 512-bit loads in tinyBLAS
+
+### Target 2: Q8_0 for Draft Model (BEST TARGET)
+- ggml_vec_dot_q8_0_q8_0: AVX2 ONLY (arch/x86/quants.c:1011)
+- Q8_0 block: 34 bytes (2 byte scale + 32 byte int8s)
+- DATA IS CONTIGUOUS: No nibble packing issues!
+- AVX-512 can process 2 blocks at once (64 int8s)
+- POTENTIAL: ~2x speedup with clean implementation
+
+Q8_0 Data Layout (AVX-512 FRIENDLY):
+  block[0].qs[0:31]  → 32 contiguous int8s
+  block[1].qs[0:31]  → 32 contiguous int8s
+  Load 64 bytes → _mm512_loadu_si512 → 64 int8s in one register
+  _mm512_maddubs_epi16 → 32 int16 products
+  No permutation needed!
+
+### Target 3: Tensor Repacking
+- x86/repack.cpp already has heavy AVX-512 (1294 intrinsics)
+- Handles FP16→FP32 conversion at 512-bit width
+- Q8 repacking uses quantize_row_q8_0 (AVX2 only)
+- OPPORTUNITY: Add AVX-512 quantize_row_q8_0
+
+## RECOMMENDED IMPLEMENTATION ORDER:
+
+1. **ggml_vec_dot_q8_0_q8_0** - Draft model dot product
+   - Highest impact for speculative decoding
+   - Clean AVX-512 implementation possible
+   - No data layout issues
+
+2. **quantize_row_q8_0** - Activation quantization
+   - Used during inference
+   - Feeds into Q8_0 dot products
+   - Synergistic with target 1
+
+3. **tinyBLAS Q8_0 loads** - GEMM inner loop
+   - Depends on targets 1 & 2 working
+   - More complex refactoring
+
+
+[2026-01-05 20:47:45] PHASE: Implementation
+[2026-01-05 20:47:45] ACTION: Created Q8_0 AVX-512 dot product implementation
+[2026-01-05 20:47:45] FILE: /workspace/kernel-dev/bench_q8_0_avx512.c - Standalone benchmark
+[2026-01-05 20:47:45] FILE: /workspace/kernel-dev/patches/0002-avx512-q8_0-dot-product.patch - ggml patch
+[2026-01-05 20:47:45] DESIGN: Two implementation paths:
+  - AVX-512 VNNI: _mm512_dpbssd_epi32 (Zen 4+, Ice Lake+)
+  - AVX-512 F/BW: sign trick + _mm512_maddubs_epi16
+[2026-01-05 20:47:45] DESIGN: Process 2 Q8_0 blocks per iteration (64 int8 values)
+[2026-01-05 20:47:45] REASON: Q8_0 has contiguous int8s (no nibble packing unlike Q4_K)
+[2026-01-05 20:47:45] STATUS: Awaiting host testing (devcontainer lacks compiler)
+
+[2026-01-05 20:50:51] PHASE: Implementation Complete
+[2026-01-05 20:50:51] FILE: /workspace/kernel-dev/q8_0_avx512_kernels.c - Combined benchmark with:
+  - quantize_row_q8_0: scalar, AVX2, AVX-512
+  - vec_dot_q8_0: scalar, AVX2, AVX-512, AVX-512+VNNI
+[2026-01-05 20:50:51] REASON: Q8_0 has contiguous data layout (unlike Q4_K)
+[2026-01-05 20:50:51] EXPECTED: 1.3-2.0x speedup over AVX2 on Zen 5
+[2026-01-05 20:50:51] NEXT: Test on host (devcontainer lacks compiler)
+[2026-01-05 20:50:51] IMPACT: Faster draft model → higher speculation K → better throughput
+
+[2026-01-05 20:50:51] SESSION END: Q8_0 AVX-512 kernels complete, awaiting host test
+
+[2026-01-05 20:59:08] HOST VERIFICATION RESULTS:
+  Q4_K AVX-512: CONFIRMED NOT VIABLE (-17% to -21%)
+  Q8_0 AVX-512: +13-15% speedup (VERIFIED)
+  VNNI variant: BUG - _mm512_dpbssd_epi32 doesn't exist
+[2026-01-05 20:59:08] ANALYSIS: Gains modest due to memory bandwidth limits
+[2026-01-05 20:59:08] NEXT TARGET: Tree speculation (Track B) - higher potential impact
+
+[2026-01-05 21:02:50] PREFILL PROFILING RESULTS:
+
+llamafile/sgemm.cpp AVX-512 Analysis:
+
+TYPE               | AVX-512 Path | Register Width
+-------------------|--------------|---------------
+FP32               | YES          | __m512 (512-bit)
+FP16               | YES          | __m512 (512-bit)
+BF16               | YES          | __m512 (512-bit)
+Q8_0               | NO           | __m256 (256-bit only)
+Q4_0               | NO           | __m256 (256-bit only)
+Q5_0               | NO           | __m256 (256-bit only)
+IQ4_NL             | NO           | __m256 (256-bit only)
+
+KEY FINDING: tinyBLAS_Q0_AVX uses __m256 registers ONLY
+  - updot() uses _mm256_dpbusd_epi32 (256-bit VNNI) if available
+  - load() uses _mm256_loadu_si256 (256-bit loads)
+  - NO 512-bit path exists for quantized GEMM
+
+OPPORTUNITY: Implement tinyBLAS_Q0_AVX512 with:
+  - __m512i registers for 64 int8s at once
+  - _mm512_dpbusd_epi32 for 512-bit VNNI
+  - Expected: 1.5-2x improvement over AVX2 VNNI
+
+CAVEAT: Memory bandwidth may limit gains (like Q8_0 dot product)
+
+[2026-01-05 21:07:37] TREE SPECULATION RESEARCH:
+
+FINDING: Tree speculation ALREADY IMPLEMENTED in llama.cpp
+  - File: examples/speculative/speculative.cpp
+  - Parameters:
+    * -np, --parallel N : Number of tree branches
+    * --draft-p-split P : Probability threshold for branching (default 0.1)
+
+HOW IT WORKS:
+  1. Draft model generates tokens
+  2. If candidate probability > p_split, fork a new branch
+  3. Each branch maintains its own KV cache (via llama_memory_seq_cp)
+  4. Target model verifies all branches in parallel
+
+CREATED: /workspace/kernel-dev/scripts/bench_tree_speculation.sh
+  - Tests n_parallel: 1, 2, 4, 8
+  - Tests p_split: 0.05, 0.1, 0.2, 0.3
+
+NEXT: Run benchmark on host to find optimal parameters

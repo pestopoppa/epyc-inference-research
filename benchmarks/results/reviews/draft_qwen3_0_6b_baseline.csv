@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,90.1,0,Repetitive garbage output
+general,t3_q2_system_failure,95.0,0,Repetitive garbage output
+general,t3_q3_strategic_communication,92.1,0,Repetitive garbage output
+general,t2_q1_synthesis,98.8,0,Repetitive garbage output
+general,t2_q2_transform,98.1,0,Repetitive with incorrect data
+general,t2_q3_schedule,88.1,0,Confused output - no valid schedule
+general,t2_q4_inconsistency,90.7,0,Repetitive garbage output
+general,t1_q1_json,90.0,0,Repetitive garbage - no actual JSON
+general,t1_q2_multistep,93.9,0,Repetitive garbage output
+general,t1_q3_compare,96.0,2,Provides reasonable comparison of approaches
+thinking,t3_q1_methodological_critique,97.8,0,Repetitive garbage output
+thinking,t3_q2_causal_inference,93.8,0,Repetitive garbage output
+thinking,t3_q3_reasoning_trap,97.8,0,Repetitive boxed answer but confused
+thinking,t2_q1_paradox,91.7,0,Repetitive garbage output
+thinking,t2_q2_counterfactual,91.4,0,Repetitive garbage output
+thinking,t2_q3_formal,103.4,0,Repetitive garbage output
+thinking,t2_q4_metacognition,98.9,0,Repetitive garbage output
+thinking,t1_q1_multistep,104.3,0,Repetitive letter pattern garbage
+thinking,t1_q2_hypothesis,98.8,0,Repetitive garbage output
+thinking,t1_q3_planning,96.1,0,Repetitive dash pattern garbage

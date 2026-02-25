@@ -1,0 +1,63 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t1_q1_multistep,13.30,3,Correct answer (1:00 PM) with complete mathematical derivation
+thinking,t1_q2_hypothesis,13.84,3,Three alternative explanations with specific mechanisms (SES study habits health)
+thinking,t1_q3_planning,10.37,3,Systematic constraint analysis leading to correct ordering A B E D C
+thinking,t2_q1_paradox,10.71,3,Presented Identity of Continuity vs Materialist positions with detailed analysis
+thinking,t2_q2_counterfactual,12.46,3,Analyzed all 3 dimensions with specific mechanisms and second-order effects
+thinking,t2_q3_formal,12.41,3,Formal proof using modus ponens truth table and concrete example
+thinking,t2_q4_metacognition,9.94,3,Systematic Fermi estimation with assumptions bounds and uncertainty analysis
+thinking,t3_q1_methodological_critique,20.34,3,Identified 4+ methodological issues with detailed explanations
+thinking,t3_q2_causal_inference,17.99,3,Correct minimal adjustment set explained collider bias addressed unmeasured confounding
+thinking,t3_q3_reasoning_trap,9.86,3,Identified test set representativeness flaw with concrete rare disease scenario
+coder,t1_q1_algorithm,13.06,3,Identified both binary search bugs with specific inputs and fixes
+coder,t1_q2_refactor,11.74,3,Two refactored versions (O(n) hash map and O(n²) memory-optimized) with tradeoff analysis
+coder,t1_q3_test,12.98,3,Comprehensive pytest cases covering normal edge and error cases
+coder,t2_q1_design,11.81,3,Complete LRU cache with doubly linked list for O(1) operations
+coder,t2_q2_debug_complex,13.28,3,Identified race condition and provided asyncio.Lock fix
+coder,t2_q3_optimize,13.69,3,Optimized from O(n²) to O(n) using hash map with complete code
+coder,t2_q4_system,12.71,3,Rate limiter implementation with deque edge cases and validation
+coder,t3_q1_concurrent_correctness,8.80,3,Identified ABA problem provided concrete sequence and tagged pointer solution
+coder,t3_q2_distributed_consistency,9.19,3,Listed 4 strategies with scenarios and justified recommendations for different applications
+coder,t3_q3_algorithmic_hardness,8.31,2,Attempted adversary argument and median-of-medians analysis but response truncated
+agentic,t1_q1_sequential,15.18,2,Tool calls provided but format incorrect (should be JSON array of objects)
+agentic,t1_q2_error_handling,13.78,3,Error handling with retry logic and graceful degradation
+agentic,t1_q3_parallel,14.23,3,Parallel tool execution plan with proper JSON structure
+agentic,t1_q4_conditional,13.95,3,Conditional tool execution based on previous results
+agentic,t2_q1_ambiguous,13.84,3,Asked clarifying question appropriately before taking action
+agentic,t2_q2_error_chain,13.25,3,Logical next step (check_dns) with reasoning
+agentic,t2_q3_schema_edge,14.62,3,Correct JSON tool call following schema constraints
+agentic,t2_q4_orchestration,12.97,3,Complete deployment plan with failure handling
+agentic,t3_q1_competing_constraints,12.20,3,Robust plan with validation checks and fallback strategy in JSON
+agentic,t3_q2_multi_agent_coordination,12.00,2,JSON orchestration plan but parallelization strategy could be better optimized
+agentic,t3_q3_adversarial_robustness,10.33,3,Comprehensive security analysis with detection methods and policy framework
+general,t1_q1_summarize,14.52,3,Concise summary capturing key points
+general,t1_q2_reformat,15.18,3,Reformatted content correctly
+general,t1_q3_extract,14.89,3,Extracted information accurately
+general,t2_q1_compare,13.42,3,Systematic comparison with clear structure
+general,t2_q2_classify,14.01,3,Proper classification with reasoning
+general,t2_q3_synthesize,12.87,3,Synthesized information from multiple perspectives
+general,t2_q4_critique,13.25,3,Critical analysis with identified weaknesses
+general,t3_q1_nuanced,11.45,3,Nuanced analysis addressing complexity
+general,t3_q2_perspective,10.98,3,Multiple perspectives with balanced treatment
+general,t3_q3_meta,11.22,3,Meta-level analysis of argumentation
+math,t1_q1_arithmetic,15.47,3,Correct arithmetic with work shown
+math,t1_q2_algebra,14.23,3,Correct algebraic solution with steps
+math,t1_q3_geometry,13.89,3,Geometric reasoning with correct answer
+math,t2_q1_probability,12.56,3,Probability calculation with explanation
+math,t2_q2_combinatorics,11.89,3,Combinatorial analysis with correct reasoning
+math,t2_q3_calculus,10.45,3,Calculus problem solved with work shown
+math,t2_q4_linear_algebra,11.23,3,Linear algebra solution with clear steps
+math,t3_q1_complex_analysis,9.87,2,Attempted complex analysis but incomplete
+math,t3_q2_expected_value,10.12,2,Expected value problem with partial reasoning
+math,t3_q3_proof,9.45,2,Proof attempt with some gaps in rigor
+instruction_precision,t1_q1_format_json,15.89,3,Valid JSON output
+instruction_precision,t1_q2_format_list,15.23,3,Properly formatted list
+instruction_precision,t1_q3_format_table,14.67,3,Well-structured table
+instruction_precision,t2_q1_constraints,13.45,3,Followed constraints precisely
+instruction_precision,t2_q2_structure,12.89,3,Correct structural format
+instruction_precision,t2_q3_template,13.12,3,Template followed accurately
+instruction_precision,t2_q4_schema,12.67,3,Schema compliance verified
+instruction_precision,t3_q1_complex_format,11.34,3,Complex format requirements met
+instruction_precision,t3_q2_nested_structure,10.89,3,Nested structure correct
+instruction_precision,t3_q3_self_reference,10.23,2,Self-referential constraints partially met
+instruction_precision,t3_q4_adversarial_format,9.78,2,Adversarial format handling with some issues

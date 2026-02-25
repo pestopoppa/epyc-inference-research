@@ -1,0 +1,39 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t1_q2_sequence,123.4,3,Correct answer 42
+thinking,t2_q1_multistep,127.8,3,Good reasoning
+thinking,t2_q2_hypothesis,101.5,3,Good reasoning
+thinking,t2_q3_planning,119.0,3,Good reasoning
+thinking,t3_q1_paradox,118.0,3,Good reasoning
+thinking,t3_q2_counterfactual,117.6,3,Good reasoning
+thinking,t3_q3_formal,121.6,3,Good reasoning
+thinking,t3_q4_metacognition,120.2,3,Good reasoning
+general,t1_q1_reformat,137.4,3,Bullet list created
+general,t1_q2_summarize,135.8,2,Content generated
+general,t1_q3_extract,139.6,2,Content generated
+general,t2_q1_json,138.3,2,Content generated
+general,t2_q2_multistep,143.8,2,Content generated
+general,t2_q3_compare,132.4,2,Content generated
+general,t3_q1_synthesis,136.4,2,Content generated
+general,t3_q2_transform,145.0,2,Content generated
+general,t3_q3_schedule,133.3,2,Content generated
+general,t3_q4_inconsistency,135.5,2,Content generated
+math,t1_q1_arithmetic,144.1,2,Math work shown
+math,t1_q2_algebra,129.1,3,Correct x=5
+math,t1_q3_conversion,128.8,2,Math work shown
+math,t2_q1_word_problem,123.2,2,Math work shown
+math,t2_q2_system_equations,131.7,2,Math work shown
+math,t2_q3_probability,124.7,2,Math work shown
+math,t3_q1_optimization,126.7,2,Math work shown
+math,t3_q2_proof,124.7,2,Math work shown
+math,t3_q3_calculus,133.5,2,Math work shown
+math,t3_q4_statistics,127.0,2,Math work shown
+agentic,t1_q1_single_tool,153.9,3,Proper tool call
+agentic,t1_q2_multi_param,145.6,3,Proper tool call
+agentic,t1_q3_choose_tool,145.5,3,Proper tool call
+agentic,t2_q1_sequential,147.5,3,Proper tool call
+agentic,t2_q2_error_handling,146.1,3,Proper tool call
+agentic,t2_q3_nested_params,141.9,2,JSON structure
+agentic,t3_q1_ambiguous,141.7,2,JSON structure
+agentic,t3_q2_error_chain,130.8,2,JSON structure
+agentic,t3_q3_schema_edge,144.3,2,JSON structure
+agentic,t3_q4_orchestration,142.1,2,JSON structure

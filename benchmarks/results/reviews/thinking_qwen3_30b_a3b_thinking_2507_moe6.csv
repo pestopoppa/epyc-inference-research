@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t1_q1_multistep,21.08,3,Correct train meeting calculation with clear work shown
+thinking,t1_q2_hypothesis,17.62,3,Listed 3+ alternative explanations with specific reasoning
+thinking,t1_q3_planning,17.97,3,Valid plant watering orderings with clear reasoning
+thinking,t2_q1_paradox,21.31,2,Started response but appears truncated before completion
+thinking,t2_q2_counterfactual,18.37,3,Counterfactual analysis with specific mechanisms
+thinking,t2_q3_formal,18.25,3,Formal logical proof with example and explanation
+thinking,t2_q4_metacognition,17.97,3,Fermi estimation with assumptions and bounds
+thinking,t3_q1_methodological_critique,17.81,2,Identified methodological issues but response cut off mid-sentence
+thinking,t3_q2_causal_inference,17.75,2,Attempted DAG analysis but response truncated mid-answer
+thinking,t3_q3_reasoning_trap,17.64,2,Identified flaw concept but response cut off before concrete scenario completion
+coder,t1_q1_algorithm,18.07,3,Binary search bugs identified and fixed
+coder,t1_q2_refactor,18.15,3,Refactored duplicates function to O(n) with set
+coder,t1_q3_test,17.8,3,Comprehensive pytest test cases for divide function
+coder,t2_q1_design,17.64,3,LRU cache design with proper O(1) data structures
+coder,t2_q2_debug_complex,17.3,3,Identified async race condition and provided lock fix
+coder,t2_q3_optimize,18.01,3,Optimized count_pairs from O(n^2) to O(n) using hash map
+coder,t2_q4_system,17.92,3,Rate limiter implementation with tests
+coder,t3_q1_concurrent_correctness,17.05,3,ABA problem identified with versioning fix
+coder,t3_q2_distributed_consistency,17.58,3,4+ conflict resolution strategies with failure scenarios
+coder,t3_q3_algorithmic_hardness,18.11,3,k-th smallest proof and median-of-medians analysis
+agentic,t1_q1_sequential,18.1,3,Correct sequential tool calls in JSON format
+agentic,t1_q2_error_handling,17.21,3,Proper error handling with search fallback
+agentic,t1_q3_nested_params,21.74,3,Correct nested parameter tool call structure
+agentic,t2_q1_ambiguous,17.81,3,Identified ambiguity and asked clarifying question
+agentic,t2_q2_error_chain,17.08,3,Multi-step error diagnosis and resolution
+agentic,t2_q3_schema_edge,17.76,3,Correct schema validation with null body for GET
+agentic,t2_q4_orchestration,17.12,3,Hotfix deployment orchestration with proper steps
+agentic,t3_q1_competing_constraints,16.97,3,Analysis of competing constraints with security/transparency trade-offs
+agentic,t3_q2_multi_agent_coordination,17.77,3,Multi-agent task delegation with time budget optimization
+agentic,t3_q3_adversarial_robustness,17.74,3,Identified injection attack and proposed sanitization
+general,t1_q1_json,22.23,3,Correct JSON extraction with all fields
+general,t1_q2_multistep,18.08,3,"Deduplicated, sorted, numbered list with count"
+general,t1_q3_compare,21.33,3,Clear comparison of microservices vs monolith
+general,t2_q1_synthesis,20.27,3,Unified recommendation balancing 3 perspectives
+general,t2_q2_transform,17.27,3,Correct nested YAML transformation by department
+general,t2_q3_schedule,16.31,3,Valid meeting schedule respecting all constraints
+general,t2_q4_inconsistency,17.06,3,Identified inconsistencies between 3 documents
+general,t3_q1_policy_analysis,17.24,2,Policy analysis started but truncated (unclosed thinking tag)
+general,t3_q2_system_failure,16.63,3,Correct system failure analysis with eventual consistency race
+general,t3_q3_strategic_communication,17.1,3,Board presentation strategy with balanced messaging
+math,t1_q1_word_problem,17.36,3,Discount and tax calculation with all steps shown
+math,t1_q2_system_equations,21.17,3,All real solutions found for system of equations
+math,t1_q3_probability,21.1,3,Probability calculations with correct combinatorics
+math,t2_q1_optimization,21.35,3,Optimization problem setup and solution
+math,t2_q2_proof,17.2,3,Identified error in horse color induction proof
+math,t2_q3_calculus,19.14,3,Definite integral evaluated with work shown
+math,t2_q4_statistics,17.35,3,"Mean, median, std dev calculated with outlier test"
+math,t3_q1_analysis,17.99,3,Function analysis with differentiability and limit
+math,t3_q2_combinatorics,17.81,2,Combinatorial identity proof attempted but may be incomplete
+math,t3_q3_probability_theory,17.28,3,Expected value proof with elegant argument (answer is e)
+instruction_precision,t1_q1_negative_instruction,22.35,2,Showed thinking process instead of 2 sentence answer
+instruction_precision,t1_q2_word_limit,22.28,2,Showed thinking instead of just 20-25 word answer
+instruction_precision,t1_q3_structured_format,22.19,2,Showed thinking instead of just formatted list
+instruction_precision,t1_q4_multiple_constraints,22.32,2,Showed thinking instead of just country list
+instruction_precision,t2_q1_resist_elaboration,23.09,1,Gave correct answer 4 but then elaborated when told not to
+instruction_precision,t2_q2_maintain_format,22.17,2,Showed thinking instead of just formatted error analysis
+instruction_precision,t2_q3_empty_handling,23.63,2,Showed thinking instead of just NONE
+instruction_precision,t2_q4_conflicting_constraints,22.22,2,Showed thinking instead of just the sentence
+instruction_precision,t3_q1_self_referential,21.94,2,Showed thinking instead of just the self-referential sentence
+instruction_precision,t3_q2_cascading_constraints,21.75,2,Showed thinking instead of just the word chain
+instruction_precision,t3_q3_meta_instruction,21.91,2,Showed thinking instead of just following valid instructions

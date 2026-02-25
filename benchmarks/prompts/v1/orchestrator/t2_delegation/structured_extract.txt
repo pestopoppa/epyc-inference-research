@@ -1,0 +1,17 @@
+Extract the following information as JSON: name, email, phone number.
+
+---
+test_id: t2_structured_extract
+context: |
+  Contact Information:
+  Name: John Smith
+  Email: john.smith@example.com
+  Phone: +1 (555) 123-4567
+  Address: 123 Main Street, Anytown, USA
+expected_behavior: Extracts structured data and returns valid JSON
+pass_criteria:
+  max_turns: 5
+  uses_function: ["peek", "llm_call"]
+  answer_contains: ["John Smith", "john.smith@example.com", "555"]
+  answer_is_valid_json: true
+  must_call_final: true

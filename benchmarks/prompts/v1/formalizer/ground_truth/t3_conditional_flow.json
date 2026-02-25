@@ -1,0 +1,122 @@
+{
+  "problem_id": "tool-t3-conditional-flow",
+  "original_task": "Check if the file /data/report.txt exists. If it does, update it with the new summary. If it doesn't exist, create it with the initial template.",
+  "formal_specification": {
+    "problem_type": "tool_orchestration",
+    "variables": [
+      {
+        "name": "file_path",
+        "type": "string",
+        "domain": "valid file path",
+        "description": "Path to the report file"
+      },
+      {
+        "name": "file_exists",
+        "type": "boolean",
+        "description": "Whether the file currently exists"
+      },
+      {
+        "name": "new_summary",
+        "type": "string",
+        "description": "Content to update/create the file with"
+      }
+    ],
+    "tool_sequence": [
+      {
+        "step": 0,
+        "tool": "file_exists",
+        "description": "Check if the report file exists",
+        "arguments": {
+          "path": "/data/report.txt"
+        },
+        "output_var": "exists",
+        "error_handling": "fail"
+      },
+      {
+        "step": 1,
+        "tool": "update_file",
+        "description": "Update existing file with new summary (conditional on exists=true)",
+        "arguments": {
+          "path": "/data/report.txt",
+          "content": "${new_summary}",
+          "mode": "append"
+        },
+        "depends_on": [0],
+        "output_var": "update_result",
+        "error_handling": "fail"
+      },
+      {
+        "step": 2,
+        "tool": "create_file",
+        "description": "Create file with initial template (conditional on exists=false)",
+        "arguments": {
+          "path": "/data/report.txt",
+          "content": "${initial_template}"
+        },
+        "depends_on": [0],
+        "output_var": "create_result",
+        "error_handling": "fail"
+      }
+    ],
+    "constraints": [
+      {
+        "expression": "exactly_one(step_1_executed, step_2_executed)",
+        "description": "Either update OR create, never both",
+        "hard": true
+      }
+    ],
+    "preconditions": [
+      "Parent directory /data/ exists and is writable",
+      "new_summary or initial_template is provided"
+    ],
+    "postconditions": [
+      "File /data/report.txt exists after execution",
+      "File contains appropriate content based on pre-existence"
+    ]
+  },
+  "edge_cases": [
+    {
+      "description": "File exists but is not writable",
+      "expected_behavior": "Return permission error",
+      "severity": "important"
+    },
+    {
+      "description": "Race condition: file deleted between check and write",
+      "expected_behavior": "Retry or handle gracefully",
+      "severity": "minor"
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "criterion": "Correctly detects file existence",
+      "testable": true,
+      "test_method": "Test with existing and non-existing files",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Updates existing file correctly",
+      "testable": true,
+      "test_method": "Verify content after update",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Creates new file with template",
+      "testable": true,
+      "test_method": "Verify file creation and content",
+      "priority": "must_have"
+    }
+  ],
+  "confidence": 0.85,
+  "ambiguities": [
+    {
+      "question": "What is the format of the initial template?",
+      "assumption": "Standard markdown report template",
+      "impact": "Affects file content structure"
+    },
+    {
+      "question": "Should update append or replace content?",
+      "assumption": "Append new summary to existing content",
+      "impact": "Determines update mode"
+    }
+  ]
+}

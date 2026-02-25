@@ -1,0 +1,31 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,13.81,3,Comprehensive structured analysis
+general,t3_q2_system_failure,36.37,0,"Prompt echo only, no answer"
+general,t3_q3_strategic_communication,0.0,3,Comprehensive structured analysis
+general,t2_q1_synthesis,0.0,0,Repetitive/nonsense generation failure
+general,t2_q2_transform,0.0,2,Substantial response
+general,t2_q3_schedule,50.98,0,"Prompt echo only, no answer"
+general,t2_q4_inconsistency,37.4,0,"Prompt echo only, no answer"
+general,t1_q1_json,21.04,0,"Prompt echo only, no answer"
+general,t1_q2_multistep,0.0,0,Repetitive/nonsense generation failure
+general,t1_q3_compare,31.09,0,"Prompt echo only, no answer"
+vl,t3_q1_scientific_diagram,10.32,1,Attempts VL analysis without image access (likely wrong)
+vl,t3_q2_architectural_blueprint,10.17,1,Attempts VL analysis without image access (likely wrong)
+vl,t3_q3_multi_image_temporal,10.65,1,Attempts VL analysis without image access (likely wrong)
+vl,t2_q1_math,10.55,0,Repetitive/nonsense generation failure
+vl,t2_q2_flowchart,11.27,1,Attempts VL analysis without image access (likely wrong)
+vl,t2_q3_diff,109.23,0,"Prompt echo only, no answer"
+vl,t2_q4_puzzle,10.63,1,Attempts VL analysis without image access (likely wrong)
+vl,t1_q1_chart,10.66,1,Attempts VL analysis without image access (likely wrong)
+vl,t1_q2_invoice,86.05,0,"Prompt echo only, no answer"
+vl,t1_q3_code,82.23,0,"Prompt echo only, no answer"
+agentic,t3_q1_competing_constraints,60.49,0,"Prompt echo only, no answer"
+agentic,t3_q2_multi_agent_coordination,62.34,0,"Prompt echo only, no answer"
+agentic,t3_q3_adversarial_robustness,54.64,0,"Prompt echo only, no answer"
+agentic,t2_q1_ambiguous,34.53,0,"Prompt echo only, no answer"
+agentic,t2_q2_error_chain,56.58,0,"Prompt echo only, no answer"
+agentic,t2_q3_schema_edge,37.46,0,"Prompt echo only, no answer"
+agentic,t2_q4_orchestration,52.98,0,"Prompt echo only, no answer"
+agentic,t1_q1_sequential,31.77,0,"Prompt echo only, no answer"
+agentic,t1_q2_error_handling,41.31,0,"Prompt echo only, no answer"
+agentic,t1_q3_nested_params,54.14,0,"Prompt echo only, no answer"

@@ -1,0 +1,27 @@
+Based on the provided whitepaper excerpt, here is an analysis of Figure 1:
+
+1.  **Type of Visualization:**
+    This is a **diagram** (specifically, a flow diagram or process diagram). It uses boxes and arrows to illustrate the relationship and transformation of borrowing capacity between two entities: Credit-LPs and Borrowers, within the context of the Twyne protocol.
+
+2.  **Key Components or Data Series Shown:**
+    The diagram illustrates two main entities:
+    *   **Credit-LP (Lender):** Represents a passive lender (Credit LP) who holds borrowing capacity but does not use it.
+        *   `Borrowing Capacity`: The total capacity available to the Credit-LP.
+        *   `Locked`: The portion of capacity that is currently locked (e.g., for other purposes or as collateral).
+    *   **Borrower:** Represents a borrower who can access borrowing power.
+        *   `Delegated Borrowing Capacity`: The borrowing capacity *received* from the Credit-LP through delegation.
+        *   `Own Borrowing Capacity`: The borrower's own capacity, which is *not* delegated.
+        *   `Locked`: The portion of the borrower's capacity that is locked (e.g., for other purposes or as collateral).
+        *   `New Borrowing Capacity`: The *sum* of delegated and own capacity, representing the borrower's total available borrowing power.
+
+    Arrows indicate the flow of value and action:
+    *   `Delegate unused capacity`: An arrow from the Credit-LP's "Borrowing Capacity" to the Borrower's "Delegated Borrowing Capacity".
+    *   `Earn Delegation APY`: An arrow from the Credit-LP's "Locked" box to the Borrower's "Locked" box, indicating that the Credit-LP earns a yield (Delegation APY) by delegating their capacity.
+
+3.  **Main Insight or Takeaway:**
+    The main insight is that Twyne enables a **trustless delegation mechanism**. Credit-LPs can delegate their unused borrowing power to borrowers, thereby:
+    *   **Increasing Borrowing Power for Borrowers:** Borrowers gain additional borrowing capacity without needing to deposit more collateral.
+    *   **Generating Yield for Lenders:** Credit-LPs earn a yield (Delegation APY) for delegating their unused capacity.
+    *   **Preserving Market Liquidity and Security:** Borrowers can access the same underlying lending market liquidity and security
+
+Speed: 16.60 t/s | 511 tokens generated

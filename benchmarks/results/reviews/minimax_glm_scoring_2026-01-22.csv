@@ -1,0 +1,4 @@
+model,thinking,general,math,agentic,coder,instruction_precision,long_context,total,pct_str,avg_tps,notes
+MiniMax-M2.1-Q4_K_M,8/10,8/10,9/10,9/10,8/10,4/11,-,46/61,75%,8.87,"Good reasoning, some repetition; JSON/tool calls correct; failed strict instruction following"
+MiniMax-M2.1-Q6_K,8/10,8/10,9/10,8/10,8/10,4/11,-,45/61,74%,8.20,"Similar quality to Q4; slightly slower; repetitive responses"
+GLM-4.7-Flash,3/10,6/10,7/10,4/10,5/10,1/11,-,26/61,43%,19.14,"CRITICAL: Severe repetition/degeneration loops; wrong tool format; AVOID for production"

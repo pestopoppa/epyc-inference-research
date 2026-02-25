@@ -1,0 +1,16 @@
+Find the secret code hidden in the document below.
+
+---
+test_id: t3_long_context_64k
+context_generator: |
+  # This is a placeholder - actual test generates ~64K tokens of text
+  # with "SECRET_CODE_XYZ123" hidden at position ~50K
+  # The benchmark script will generate the full context dynamically
+  CONTEXT_SIZE: 64000
+  SECRET_POSITION: 50000
+  SECRET_VALUE: "SECRET_CODE_XYZ123"
+expected_behavior: Handles large context, finds needle in haystack
+pass_criteria:
+  max_turns: 10
+  answer_contains: ["SECRET_CODE_XYZ123"]
+  must_call_final: true

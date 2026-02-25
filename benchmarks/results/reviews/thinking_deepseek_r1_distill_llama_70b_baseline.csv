@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,0,2,Identifies confounding variables but truncated mid-analysis
+thinking,t3_q2_causal_inference,0,2,Good causal reasoning setup but incomplete
+thinking,t3_q3_reasoning_trap,0,2,Identifies the flaw correctly but truncated
+thinking,t2_q1_paradox,0,2,Sets up Ship of Theseus analysis but incomplete
+thinking,t2_q2_counterfactual,0,2,Good counterfactual structure but truncated
+thinking,t2_q3_formal,0,2,Correct logical approach but incomplete proof
+thinking,t2_q4_metacognition,0,2,Good Fermi estimation approach but truncated
+thinking,t1_q1_multistep,0,2,Correct problem setup and approach but incomplete
+thinking,t1_q2_hypothesis,0,2,Identifies confounders correctly but truncated
+thinking,t1_q3_planning,0,2,Good constraint analysis approach but incomplete
+coder,t3_q1_concurrent_correctness,0,2,Correctly identifies ABA problem but truncated
+coder,t3_q2_distributed_consistency,0,2,Lists conflict resolution strategies but incomplete
+coder,t3_q3_algorithmic_hardness,0,2,Correct adversary argument approach but truncated
+coder,t2_q1_design,0,2,Correct LRU cache approach (OrderedDict) but incomplete
+coder,t2_q2_debug_complex,0,2,Identifies race condition correctly but truncated
+coder,t2_q3_optimize,0,2,Correct hash map optimization approach but incomplete
+coder,t2_q4_system,0,2,Good rate limiter design approach but truncated
+coder,t1_q1_algorithm,0,2,Identifies binary search bugs but incomplete
+coder,t1_q2_refactor,0,2,Correct optimization approaches but truncated
+coder,t1_q3_test,0,2,Good pytest structure but incomplete
+agentic,t3_q1_competing_constraints,0,2,Good schema validation approach but truncated
+agentic,t3_q2_multi_agent_coordination,0,2,Correct orchestration logic but incomplete
+agentic,t3_q3_adversarial_robustness,0,2,Identifies security issues correctly but truncated
+agentic,t2_q1_ambiguous,0,2,Chooses Slack correctly with reasoning but truncated
+agentic,t2_q2_error_chain,0,2,Correct troubleshooting sequence but truncated
+agentic,t2_q3_schema_edge,0,3,Correct JSON tool call output present
+agentic,t2_q4_orchestration,0,2,Good deployment plan structure but truncated
+agentic,t1_q1_sequential,0,2,Correct tool sequence but truncated
+agentic,t1_q2_error_handling,0,2,Appropriate error response but truncated
+agentic,t1_q3_nested_params,0,2,Correct nested JSON structure but truncated
+general,t3_q1_policy_analysis,0,2,Identifies policy failure modes but truncated
+general,t3_q2_system_failure,0,2,Correct eventual consistency analysis but truncated
+general,t3_q3_strategic_communication,0,2,Good communication strategy setup but truncated
+general,t2_q1_synthesis,0,2,Correct synthesis approach but truncated
+general,t2_q2_transform,0,1,Starts transformation but minimal progress
+general,t2_q3_schedule,0,2,Correct scheduling approach but incomplete
+general,t2_q4_inconsistency,0,2,Identifies inconsistencies correctly but truncated
+general,t1_q1_json,1.02,3,Complete valid JSON output
+general,t1_q2_multistep,0,2,Good list processing approach but truncated
+general,t1_q3_compare,0,2,Good comparison structure but truncated
+math,t3_q1_analysis,0,2,Correct convergence analysis approach but truncated
+math,t3_q2_combinatorics,0,2,Good proof setup but incomplete
+math,t3_q3_probability_theory,0,2,Correct expected value approach but truncated
+math,t2_q1_optimization,0,2,Correct optimization setup but incomplete
+math,t2_q2_proof,0,2,Identifies induction flaw correctly but truncated
+math,t2_q3_calculus,0,2,Correct integration steps but incomplete
+math,t2_q4_statistics,0,2,Correct calculation approach but truncated
+math,t1_q1_word_problem,0,2,Correct discount/tax calculations but truncated
+math,t1_q2_system_equations,0,2,Correct substitution method but incomplete
+math,t1_q3_probability,0,2,Correct probability approach but truncated
+instruction_precision,t3_q1_self_referential,0,1,Understands constraints but minimal output
+instruction_precision,t3_q2_cascading_constraints,0,1,Understands word chain logic but no output
+instruction_precision,t3_q3_meta_instruction,0,1,Starts parsing but incomplete
+instruction_precision,t2_q1_resist_elaboration,0,1,Shows number 4 but adds unwanted reasoning
+instruction_precision,t2_q2_maintain_format,0,1,Starts format analysis but no output
+instruction_precision,t2_q3_empty_handling,0,1,Understands task but no output
+instruction_precision,t2_q4_conflicting_constraints,0,1,Understands constraints but no output
+instruction_precision,t1_q1_negative_instruction,0,1,Starts explanation but incomplete
+instruction_precision,t1_q2_word_limit,0.9,3,Complete 29-word response within limit
+instruction_precision,t1_q3_structured_format,0,1,Understands format but no output
+instruction_precision,t1_q4_multiple_constraints,0,1,Understands requirements but no output

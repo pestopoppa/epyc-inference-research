@@ -1,0 +1,110 @@
+schema_version: 1
+meta:
+  started: '2026-01-07T20:48:32.061707'
+  last_updated: '2026-01-07T23:14:00.047514'
+  description: Layered optimization checkpoint for orchestrator parameters
+layers:
+  frontdoor:
+    status: complete
+    optimal_params: &id001
+      temperature: 0.0736042256959058
+      speculative_k: 31
+      entropy_threshold: 4.09045566671701
+    metrics:
+      parse_success_rate: 1.0
+      task_completion_rate: 0.0
+      avg_turns: 1.0
+      latency_ms: 6.797412759624422
+      schema_validation_rate: 0.0
+      execution_success_rate: 1.0
+      escalation_accuracy: 0.0
+    trials_run: 5
+    best_score: 1.0
+    notes: 'Parameters: temperature [0.0, 0.5], speculative_k [8, 32], entropy_threshold
+      [4.0, 6.0]
+
+      Metric: parse_success_rate * (1/avg_turns) * (1/latency)
+
+      '
+  formalizer:
+    status: complete
+    optimal_params: &id002
+      temperature: 0.19014286128198324
+    metrics:
+      parse_success_rate: 1.0
+      task_completion_rate: 0.0
+      avg_turns: 1.0
+      latency_ms: 4.824333707801998
+      schema_validation_rate: 0.0
+      execution_success_rate: 1.0
+      escalation_accuracy: 0.0
+    trials_run: 5
+    best_score: 0.5
+    notes: 'Parameters: temperature [0.0, 0.2]
+
+      Metric: schema_validation_rate * (1/latency)
+
+      '
+  specialists:
+    status: complete
+    optimal_params: &id003
+      temperature: 0.3394633936788146
+      speculative_k: 10
+      early_abort_tokens: 65
+    metrics:
+      parse_success_rate: 1.0
+      task_completion_rate: 0.0
+      avg_turns: 1.0
+      latency_ms: 3.16013153642416
+      schema_validation_rate: 0.0
+      execution_success_rate: 1.0
+      escalation_accuracy: 0.0
+    trials_run: 5
+    best_score: 0.3
+    notes: 'Parameters: temperature [0.1, 0.5], speculative_k [8, 24], early_abort_tokens
+      [50, 150]
+
+      Metric: task_completion_rate * escalation_accuracy * (1/latency)
+
+      '
+  workers:
+    status: complete
+    optimal_params: &id004
+      temperature: 0.49279757672456204
+      repetition_threshold: 0.2697316968394073
+    metrics:
+      parse_success_rate: 1.0
+      task_completion_rate: 0.0
+      avg_turns: 1.0
+      latency_ms: 6.331223179586232
+      schema_validation_rate: 0.0
+      execution_success_rate: 1.0
+      escalation_accuracy: 0.0
+    trials_run: 5
+    best_score: 1.0
+    notes: 'Parameters: temperature [0.2, 0.6], repetition_threshold [0.15, 0.35]
+
+      Metric: execution_success_rate * (1/latency)
+
+      '
+history:
+- layer: frontdoor
+  completed: '2026-01-07T20:48:35.761241'
+  trials: 5
+  score: 1.0
+  params: *id001
+- layer: formalizer
+  completed: '2026-01-07T21:20:52.524050'
+  trials: 5
+  score: 0.5
+  params: *id002
+- layer: specialists
+  completed: '2026-01-07T23:13:43.488155'
+  trials: 5
+  score: 0.3
+  params: *id003
+- layer: workers
+  completed: '2026-01-07T23:14:00.046830'
+  trials: 5
+  score: 1.0
+  params: *id004

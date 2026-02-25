@@ -1,0 +1,41 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t1_q1_reformat,116.7,3,Bullet list created
+general,t1_q2_summarize,109.5,2,Content generated
+general,t1_q3_extract,111.2,2,Content generated
+general,t2_q1_json,111.8,2,Content generated
+general,t2_q2_multistep,116.0,2,Content generated
+general,t2_q3_compare,106.4,2,Content generated
+general,t3_q1_synthesis,105.5,2,Content generated
+general,t3_q2_transform,107.7,2,Content generated
+general,t3_q3_schedule,105.0,2,Content generated
+general,t3_q4_inconsistency,106.1,2,Content generated
+thinking,t1_q1_logic,95.9,3,Good reasoning
+thinking,t1_q2_sequence,100.5,3,Correct answer 42
+thinking,t1_q3_deduction,93.2,3,Good reasoning
+thinking,t2_q1_multistep,93.5,3,Good reasoning
+thinking,t2_q2_hypothesis,97.7,3,Good reasoning
+thinking,t2_q3_planning,91.7,3,Good reasoning
+thinking,t3_q1_paradox,91.6,3,Good reasoning
+thinking,t3_q2_counterfactual,99.0,3,Good reasoning
+thinking,t3_q3_formal,93.7,3,Good reasoning
+thinking,t3_q4_metacognition,94.7,3,Good reasoning
+agentic,t1_q1_single_tool,109.7,3,Proper tool call
+agentic,t1_q2_multi_param,115.4,3,Proper tool call
+agentic,t1_q3_choose_tool,107.2,3,Proper tool call
+agentic,t2_q1_sequential,110.2,3,Proper tool call
+agentic,t2_q2_error_handling,114.6,3,Proper tool call
+agentic,t2_q3_nested_params,109.8,2,JSON structure
+agentic,t3_q1_ambiguous,107.2,2,JSON structure
+agentic,t3_q2_error_chain,99.7,2,JSON structure
+agentic,t3_q3_schema_edge,107.9,2,JSON structure
+agentic,t3_q4_orchestration,104.4,2,JSON structure
+math,t1_q1_arithmetic,119.0,2,Math work shown
+math,t1_q2_algebra,104.9,3,Correct x=5
+math,t1_q3_conversion,97.6,2,Math work shown
+math,t2_q1_word_problem,89.1,2,Math work shown
+math,t2_q2_system_equations,114.1,2,Math work shown
+math,t2_q3_probability,98.8,2,Math work shown
+math,t3_q1_optimization,101.6,2,Math work shown
+math,t3_q2_proof,98.8,2,Math work shown
+math,t3_q3_calculus,100.7,2,Math work shown
+math,t3_q4_statistics,90.0,2,Math work shown

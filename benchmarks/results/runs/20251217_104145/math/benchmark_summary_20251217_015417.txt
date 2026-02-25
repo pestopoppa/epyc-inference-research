@@ -1,0 +1,177 @@
+Math Benchmark Summary
+Generated: Wed Dec 17 01:54:19 AM CET 2025
+==============================================
+
+Models Tested:
+  DeepSeek-R1-Llama-8B: PASS
+  DeepSeek-R1-Llama-70B: PASS
+  Qwen2.5-Math-72B: PASS
+  DeepSeek-R1-Qwen-7B: PASS
+  DeepSeek-R1-Qwen-14B: PASS
+  Qwen2.5-Math-7B: PASS
+  Qwen2.5-72B-Instruct: PASS
+  Qwen3-Next-80B-A3B: PASS
+
+Speed Summary by Model and Config:
+
+--- Qwen2.5-Math-7B (dense) ---
+  Config: baseline
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+
+--- Qwen2.5-Math-72B (dense) ---
+  Config: baseline
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+
+--- DeepSeek-R1-Qwen-7B (dense) ---
+  Config: baseline
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+
+--- DeepSeek-R1-Qwen-14B (dense) ---
+  Config: baseline
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+
+--- DeepSeek-R1-Llama-8B (dense) ---
+  Config: baseline
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+
+--- DeepSeek-R1-Llama-70B (dense) ---
+  Config: baseline
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+
+--- Qwen2.5-72B-Instruct (dense) ---
+  Config: baseline
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+
+--- Qwen3-Next-80B-A3B (qwen3moe) ---
+  Config: baseline
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+  Config: moe2
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+  Config: moe4
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+  Config: moe6
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+  Config: moe8
+    t1_q1_arithmetic: N/A
+    t1_q2_algebra: N/A
+    t1_q3_conversion: N/A
+    t2_q1_word_problem: N/A
+    t2_q2_system_equations: N/A
+    t2_q3_probability: N/A
+    t3_q1_optimization: N/A
+    t3_q2_proof: N/A
+    t3_q3_calculus: N/A
+    t3_q4_statistics: N/A
+
+==============================================
+MoE Speedup Analysis (baseline vs moe4)
+==============================================
+
+Model: Qwen3-Next-80B-A3B
+
+==============================================
+SPECIALIZED vs GENERAL MODEL COMPARISON
+==============================================
+(Compare Qwen2.5-Math vs Qwen2.5-Instruct on same problems)
+
+Review output quality to determine if specialized math models
+outperform general models on T2-T3 problems.

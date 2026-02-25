@@ -1,0 +1,68 @@
+[
+  {
+    "id": "fmt_01",
+    "prompt": "List the top 5 programming languages by popularity in 2025. Format as a JSON array of objects with 'rank', 'name', and 'reason' fields.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "expected_format": "json",
+    "source": "instruction_precision.yaml",
+    "rubric": {
+      "format_check": "valid JSON array with exactly 5 objects, each having rank/name/reason",
+      "content_check": ["Python in top 3", "JavaScript in top 5"],
+      "pass_if": "parseable JSON array of 5 objects with all 3 required fields"
+    }
+  },
+  {
+    "id": "fmt_02",
+    "prompt": "Compare Python, Rust, and Go across 5 dimensions. Present as a markdown table with columns: Language, Performance, Safety, Ecosystem, Learning Curve, Best For.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "expected_format": "table",
+    "source": "instruction_precision.yaml",
+    "rubric": {
+      "format_check": "markdown table with | delimiters, header row, separator row, 3 data rows",
+      "columns_required": ["Language", "Performance", "Safety", "Ecosystem", "Learning Curve", "Best For"],
+      "pass_if": "valid markdown table with all 6 columns and 3 language rows"
+    }
+  },
+  {
+    "id": "fmt_03",
+    "prompt": "Give me a bulleted list of 7 design patterns, each with a one-line description. Use exactly this format: '- **PatternName**: description'",
+    "role": "frontdoor",
+    "mode": "direct",
+    "expected_format": "bulleted_list",
+    "source": "instruction_precision.yaml",
+    "rubric": {
+      "format_check": "exactly 7 lines matching '- **Name**: description' pattern",
+      "valid_patterns": ["Singleton", "Factory", "Observer", "Strategy", "Decorator", "Adapter", "Command", "Builder", "Proxy", "Facade"],
+      "pass_if": "7 bullet points in exact format with real design pattern names"
+    }
+  },
+  {
+    "id": "fmt_04",
+    "prompt": "Write a haiku about recursion. Output ONLY the haiku, nothing else.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "expected_format": "exact_lines_3",
+    "source": "instruction_precision.yaml",
+    "rubric": {
+      "format_check": "exactly 3 lines, no preamble or explanation",
+      "syllable_check": "5-7-5 syllable pattern (approximate)",
+      "content_check": "relates to recursion/self-reference",
+      "pass_if": "3 lines only, about recursion, approximately 5-7-5 syllables"
+    }
+  },
+  {
+    "id": "fmt_05",
+    "prompt": "Explain quicksort. Structure your answer with exactly these sections: ## Algorithm, ## Complexity, ## When to Use, ## Code Example",
+    "role": "frontdoor",
+    "mode": "direct",
+    "expected_format": "sections",
+    "source": "instruction_precision.yaml",
+    "rubric": {
+      "required_sections": ["## Algorithm", "## Complexity", "## When to Use", "## Code Example"],
+      "content_check": {"Algorithm": "partition + recursive calls", "Complexity": "O(n log n) average, O(n²) worst", "Code Example": "contains pivot selection + partition logic"},
+      "pass_if": "all 4 ## sections present with technically correct content"
+    }
+  }
+]

@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,56.77,3,Identifies 4 valid methodological issues with correct explanations
+thinking,t3_q2_causal_inference,56.77,2,Correct on adjustment set and Yellow Fingers but IV approach for unmeasured confounders is incorrect
+thinking,t3_q3_reasoning_trap,56.77,3,Identifies test set bias correctly with specific generalization scenario
+thinking,t2_q1_paradox,56.77,3,Presents 3 philosophical positions with good analysis and reasoning
+thinking,t2_q2_counterfactual,56.77,3,Analyzes 3 dimensions with specific mechanisms and second-order effects
+thinking,t2_q3_formal,56.77,3,Correct proof of transitivity with concrete example
+thinking,t2_q4_metacognition,56.77,3,Complete Fermi estimation with assumptions bounds and uncertainty reduction
+thinking,t1_q1_multistep,56.77,3,Correct calculation with clear step-by-step work
+thinking,t1_q2_hypothesis,56.77,3,Provides 3 specific alternative explanations for correlation
+thinking,t1_q3_planning,56.77,2,Finds 3 valid orderings but doesn't list them explicitly as requested
+coder,t3_q1_concurrent_correctness,56.77,2,Identifies ABA problem and provides tagged pointer fix but code has bugs
+coder,t3_q2_distributed_consistency,56.77,2,Lists 4 strategies with scenarios but recommendations lack depth
+coder,t3_q3_algorithmic_hardness,56.77,1,Attempts to derive recurrence but math is incorrect and incomplete
+coder,t2_q1_design,56.77,3,Complete LRU cache with OrderedDict and correct O(1) complexity
+coder,t2_q2_debug_complex,56.77,0,Only echoes the prompt without providing solution
+coder,t2_q3_optimize,56.77,3,Correct O(n) optimization with hash set and explanation
+coder,t2_q4_system,56.77,3,Working rate limiter with deque and edge case handling
+coder,t1_q1_algorithm,56.77,3,Identifies both binary search bugs with fixes
+coder,t1_q2_refactor,56.77,3,Two refactored versions with complexity analysis and tradeoffs
+coder,t1_q3_test,56.77,3,Complete pytest test cases covering normal edge and error cases
+agentic,t3_q1_competing_constraints,56.77,2,Provides JSON plan but doesn't fully address robust validation strategy
+agentic,t3_q2_multi_agent_coordination,56.77,3,Complete orchestration design with phases context passing and failure handling
+agentic,t3_q3_adversarial_robustness,56.77,3,Identifies security concerns with detailed technical responses and policy design
+agentic,t2_q1_ambiguous,56.77,3,Chooses appropriate tool with justification and correct JSON
+agentic,t2_q2_error_chain,56.77,3,Logical next action with reasoning and correct JSON
+agentic,t2_q3_schema_edge,56.77,3,Correct tool call following all schema constraints
+agentic,t2_q4_orchestration,56.77,3,Complete deployment plan with failure handling as structured JSON
+agentic,t1_q1_sequential,56.77,3,Correct ordered tool calls as JSON array
+agentic,t1_q2_error_handling,56.77,1,Incorrect response searches for user ID instead of asking for clarification
+agentic,t1_q3_nested_params,56.77,2,JSON structure mostly correct but has extra tool field not in schema
+general,t3_q1_policy_analysis,56.77,3,Identifies 3 failure modes with amendments and tradeoff analysis
+general,t3_q2_system_failure,56.77,3,Correct explanation of double-charge mechanism with architectural fixes
+general,t3_q3_strategic_communication,56.77,3,Complete board statement addressing all 4 requirements with appropriate tone
+general,t2_q1_synthesis,56.77,3,Concrete phased recommendation synthesizing all 3 perspectives
+general,t2_q2_transform,56.77,3,Provides nested YAML structure with working Python code
+general,t2_q3_schedule,56.77,2,Provides valid schedule but doesn't verify no back-to-back constraint fully
+general,t2_q4_inconsistency,56.77,2,Partial response identifying body format difference but incomplete
+general,t1_q1_json,56.77,3,Correctly extracts and formats JSON data from text
+general,t1_q2_multistep,56.77,3,Complete multi-step analysis with logical reasoning
+general,t1_q3_compare,56.77,3,Compares documents and identifies key differences
+math,t3_q1_analysis,56.77,2,Discusses differentiability and convergence but closed form and limit are incomplete
+math,t3_q2_combinatorics,56.77,1,Describes combinatorial approach conceptually but doesn't provide actual proof
+math,t3_q3_probability_theory,56.77,2,Gets correct answer e but proofs are incomplete with missing steps
+math,t2_q1_optimization,56.77,3,Correct optimization setup and solution with calculus
+math,t2_q2_proof,56.77,0,Only echoes the prompt without providing answer to questions
+math,t2_q3_calculus,56.77,3,Correct integral calculation with clear steps
+math,t2_q4_statistics,56.77,3,Complete statistics calculations with correct mean median SD and outlier analysis
+math,t1_q1_word_problem,56.77,3,Correct discount and tax calculation with percentage
+math,t1_q2_system_equations,56.77,3,Correct solution finding all 4 real solutions with clear method
+math,t1_q3_probability,56.77,3,Correct probability calculations for both questions
+instruction_precision,t3_q1_self_referential,56.77,0,Fails the self-referential constraint and doesn't produce valid sentence
+instruction_precision,t3_q2_cascading_constraints,56.77,1,Attempts the task but solution violates length constraint Dud is 3 letters not descending
+instruction_precision,t3_q3_meta_instruction,56.77,1,Partial attempt but doesn't fully satisfy meta-instruction requirements
+instruction_precision,t2_q1_resist_elaboration,56.77,2,Provides answer but adds some elaboration beyond requested brevity
+instruction_precision,t2_q2_maintain_format,56.77,3,Maintains exact format as requested
+instruction_precision,t2_q3_empty_handling,56.77,3,Correctly handles empty input per instruction
+instruction_precision,t2_q4_conflicting_constraints,56.77,2,Attempts to resolve conflict but doesn't explicitly acknowledge impossibility
+instruction_precision,t1_q1_negative_instruction,56.77,2,Follows negative instruction but adds extra text not requested
+instruction_precision,t1_q2_word_limit,56.77,2,Close to word limit but slightly over
+instruction_precision,t1_q3_structured_format,56.77,3,Follows structured format exactly as requested
+instruction_precision,t1_q4_multiple_constraints,56.77,2,Satisfies most constraints but misses one or two details

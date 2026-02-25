@@ -1,0 +1,617 @@
+# Debug suite: General Knowledge / MMLU-style
+# Sources: Hand-written multiple-choice in MMLU style (NOT from actual MMLU dataset)
+# Provenance: Questions are original, inspired by MMLU format but not extracted
+#   from the benchmark. To use real MMLU data, download via HuggingFace datasets.
+# Scoring: multiple_choice (A/B/C/D)
+
+suite: general
+version: "1.0"
+scoring_default:
+  method: multiple_choice
+
+questions:
+  # ── MMLU: Miscellaneous ──────────────────────────────────────────
+
+  - id: mmlu_misc_001
+    tier: 1
+    prompt: |
+      What is the capital of Australia?
+
+      A) Sydney
+      B) Melbourne
+      C) Canberra
+      D) Brisbane
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_misc_002
+    tier: 1
+    prompt: |
+      Which planet is known as the Red Planet?
+
+      A) Venus
+      B) Mars
+      C) Jupiter
+      D) Saturn
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_misc_003
+    tier: 1
+    prompt: |
+      What is the chemical formula for water?
+
+      A) CO2
+      B) NaCl
+      C) H2O
+      D) O2
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  # ── MMLU: History ────────────────────────────────────────────────
+
+  - id: mmlu_hist_001
+    tier: 1
+    prompt: |
+      In which year did World War II end?
+
+      A) 1943
+      B) 1944
+      C) 1945
+      D) 1946
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_hist_002
+    tier: 2
+    prompt: |
+      The Treaty of Westphalia (1648) is most significant for
+      establishing which principle?
+
+      A) Freedom of the seas
+      B) State sovereignty
+      C) Universal suffrage
+      D) Free trade
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  # ── MMLU: Science ────────────────────────────────────────────────
+
+  - id: mmlu_sci_001
+    tier: 1
+    prompt: |
+      What is the speed of light in a vacuum (approximately)?
+
+      A) 300,000 km/s
+      B) 150,000 km/s
+      C) 30,000 km/s
+      D) 3,000 km/s
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "A"
+    scoring_method: multiple_choice
+
+  - id: mmlu_sci_002
+    tier: 2
+    prompt: |
+      Which of the following is NOT a fundamental force in physics?
+
+      A) Gravity
+      B) Electromagnetism
+      C) Centrifugal force
+      D) Strong nuclear force
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_sci_003
+    tier: 2
+    prompt: |
+      DNA replication is described as semi-conservative because:
+
+      A) Only half of the DNA is replicated each time.
+      B) Each new double helix contains one original and one new strand.
+      C) The process conserves energy by only partially unwinding.
+      D) Half of the bases are newly synthesized.
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_sci_004
+    tier: 2
+    prompt: |
+      What is the most abundant gas in Earth's atmosphere?
+
+      A) Oxygen
+      B) Carbon dioxide
+      C) Nitrogen
+      D) Argon
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  # ── MMLU: Computer Science ───────────────────────────────────────
+
+  - id: mmlu_cs_001
+    tier: 2
+    prompt: |
+      What is the time complexity of binary search on a sorted array of
+      n elements?
+
+      A) O(1)
+      B) O(log n)
+      C) O(n)
+      D) O(n log n)
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_cs_002
+    tier: 2
+    prompt: |
+      Which data structure uses FIFO (First In, First Out) ordering?
+
+      A) Stack
+      B) Queue
+      C) Binary tree
+      D) Hash table
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_cs_003
+    tier: 3
+    prompt: |
+      In the context of the CAP theorem for distributed systems, what
+      does the 'P' stand for?
+
+      A) Performance
+      B) Persistence
+      C) Partition tolerance
+      D) Parallelism
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  # ── MMLU: Philosophy ─────────────────────────────────────────────
+
+  - id: mmlu_phil_001
+    tier: 3
+    prompt: |
+      Which philosopher is most closely associated with the concept of
+      the "categorical imperative"?
+
+      A) John Stuart Mill
+      B) Aristotle
+      C) Immanuel Kant
+      D) Friedrich Nietzsche
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_phil_002
+    tier: 3
+    prompt: |
+      The "Ship of Theseus" thought experiment primarily deals with
+      which philosophical concept?
+
+      A) Free will
+      B) Personal identity
+      C) The existence of God
+      D) The nature of knowledge
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  # ── MMLU: Economics ──────────────────────────────────────────────
+
+  - id: mmlu_econ_001
+    tier: 2
+    prompt: |
+      In economics, what does GDP stand for?
+
+      A) General Domestic Production
+      B) Gross Domestic Product
+      C) General Distribution of Products
+      D) Gross Distribution of Production
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_econ_002
+    tier: 3
+    prompt: |
+      According to the law of diminishing marginal returns, as more
+      units of a variable input are added to fixed inputs:
+
+      A) Total output always decreases.
+      B) Marginal output eventually decreases.
+      C) Average output always increases.
+      D) Fixed costs increase proportionally.
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_econ_003
+    tier: 3
+    prompt: |
+      A natural monopoly most commonly arises because of:
+
+      A) Government regulation preventing competition.
+      B) High fixed costs and economies of scale.
+      C) Patent protection on key technologies.
+      D) Exclusive control of essential raw materials.
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_misc_004
+    tier: 1
+    prompt: |
+      What is the capital of Canada?
+
+      A) Toronto
+      B) Vancouver
+      C) Ottawa
+      D) Montreal
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_misc_006
+    tier: 2
+    prompt: |
+      In which year did the Berlin Wall fall?
+
+      A) 1987
+      B) 1989
+      C) 1991
+      D) 1985
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_misc_007
+    tier: 2
+    prompt: |
+      What is the SI unit of electric current?
+
+      A) Volt
+      B) Ohm
+      C) Ampere
+      D) Watt
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_misc_008
+    tier: 2
+    prompt: |
+      Who wrote "Pride and Prejudice"?
+
+      A) Charlotte Brontë
+      B) Emily Brontë
+      C) Jane Austen
+      D) George Eliot
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_misc_009
+    tier: 3
+    prompt: |
+      What is the name of the logical fallacy where one assumes that because two events occurred together, one caused the other?
+
+      A) Ad hominem
+      B) Post hoc ergo propter hoc
+      C) Straw man
+      D) False dilemma
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_misc_010
+    tier: 3
+    prompt: |
+      In game theory, what is a Nash equilibrium?
+
+      A) A strategy where all players cooperate
+      B) A state where no player can improve by unilaterally changing strategy
+      C) The optimal solution for zero-sum games
+      D) A strategy that maximizes social welfare
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_hist_003
+    tier: 1
+    prompt: |
+      Who was the first President of the United States?
+
+      A) Thomas Jefferson
+      B) John Adams
+      C) George Washington
+      D) Benjamin Franklin
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_hist_004
+    tier: 1
+    prompt: |
+      The Renaissance began in which country?
+
+      A) France
+      B) Spain
+      C) Italy
+      D) England
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_hist_005
+    tier: 2
+    prompt: |
+      The Treaty of Versailles ended which war?
+
+      A) World War I
+      B) World War II
+      C) Franco-Prussian War
+      D) Napoleonic Wars
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "A"
+    scoring_method: multiple_choice
+
+  - id: mmlu_hist_006
+    tier: 2
+    prompt: |
+      Which empire was ruled by Suleiman the Magnificent?
+
+      A) Byzantine Empire
+      B) Ottoman Empire
+      C) Mughal Empire
+      D) Persian Empire
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_hist_007
+    tier: 3
+    prompt: |
+      The Edict of Nantes, issued in 1598, granted religious tolerance to which group in France?
+
+      A) Catholics
+      B) Huguenots (Protestants)
+      C) Jews
+      D) Muslims
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_hist_008
+    tier: 3
+    prompt: |
+      The Sykes-Picot Agreement of 1916 divided territories of which empire?
+
+      A) Ottoman Empire
+      B) Austro-Hungarian Empire
+      C) Russian Empire
+      D) British Empire
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "A"
+    scoring_method: multiple_choice
+
+  - id: mmlu_sci_005
+    tier: 1
+    prompt: |
+      What is the chemical symbol for gold?
+
+      A) Go
+      B) Gd
+      C) Au
+      D) Ag
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_sci_008
+    tier: 2
+    prompt: |
+      Which type of bond involves the sharing of electron pairs between atoms?
+
+      A) Ionic bond
+      B) Covalent bond
+      C) Metallic bond
+      D) Hydrogen bond
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_sci_009
+    tier: 3
+    prompt: |
+      What is the name of the phenomenon where a system's energy levels are restricted to discrete values?
+
+      A) Quantization
+      B) Discretization
+      C) Digitization
+      D) Normalization
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "A"
+    scoring_method: multiple_choice
+
+  - id: mmlu_sci_010
+    tier: 3
+    prompt: |
+      In thermodynamics, what does the second law state about entropy in an isolated system?
+
+      A) Entropy always decreases
+      B) Entropy remains constant
+      C) Entropy always increases or remains constant
+      D) Entropy can increase or decrease depending on temperature
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_cs_004
+    tier: 1
+    prompt: |
+      What does CPU stand for?
+
+      A) Central Processing Unit
+      B) Computer Personal Unit
+      C) Central Program Utility
+      D) Computational Processing Unit
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "A"
+    scoring_method: multiple_choice
+
+  - id: mmlu_cs_006
+    tier: 2
+    prompt: |
+      Which data structure uses LIFO (Last In, First Out) ordering?
+
+      A) Queue
+      B) Stack
+      C) Heap
+      D) Tree
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_cs_007
+    tier: 3
+    prompt: |
+      In computational complexity theory, what does NP stand for?
+
+      A) Non-Polynomial
+      B) Nearly Polynomial
+      C) Nondeterministic Polynomial
+      D) Non-Predictable
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: mmlu_cs_008
+    tier: 3
+    prompt: |
+      What is the halting problem in computability theory?
+
+      A) Determining if a program will run in polynomial time
+      B) Determining if a program will terminate on a given input
+      C) Determining if a program is syntactically correct
+      D) Determining if a program produces correct output
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_phil_003
+    tier: 2
+    prompt: |
+      Who wrote "Critique of Pure Reason"?
+
+      A) René Descartes
+      B) Immanuel Kant
+      C) Georg Hegel
+      D) Friedrich Nietzsche
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_phil_004
+    tier: 2
+    prompt: |
+      What is the philosophical position that only one's own mind is sure to exist?
+
+      A) Solipsism
+      B) Nihilism
+      C) Dualism
+      D) Empiricism
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "A"
+    scoring_method: multiple_choice
+
+  - id: mmlu_phil_005
+    tier: 3
+    prompt: |
+      In ethics, what is the principle of double effect primarily concerned with?
+
+      A) Actions with two positive outcomes
+      B) Actions with one intended good effect and one foreseen but unintended bad effect
+      C) Actions that affect two different people
+      D) Actions with duplicated consequences
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_econ_005
+    tier: 2
+    prompt: |
+      In economics, what is opportunity cost?
+
+      A) The monetary cost of an action
+      B) The cost of the next best alternative foregone
+      C) The total cost of all alternatives
+      D) The difference between price and cost
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: mmlu_econ_006
+    tier: 3
+    prompt: |
+      What is the Coase theorem primarily about?
+
+      A) The relationship between price and demand
+      B) How property rights and bargaining can resolve externalities efficiently
+      C) The optimal taxation of public goods
+      D) The equilibrium in competitive markets
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice

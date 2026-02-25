@@ -1,0 +1,1264 @@
+# Debug suite: Long Context / Needle-in-Haystack
+# Sources: Synthetic needle-in-haystack (standard benchmark pattern)
+# Scoring: substring (check if needle appears in response)
+#
+# Each question embeds a specific "needle" fact in a long context.
+# The model must find and return the needle.
+
+suite: long_context
+version: "1.0"
+scoring_default:
+  method: substring
+  config:
+    case_sensitive: false
+
+questions:
+  - id: needle_001
+    tier: 1
+    prompt: |
+      Read the following passage carefully and answer the question at the end.
+
+      The history of computing dates back to ancient civilizations. The
+      abacus, invented around 2400 BCE, was one of the first computing
+      devices. In the 17th century, Blaise Pascal created the Pascaline,
+      a mechanical calculator. Charles Babbage designed the Analytical
+      Engine in the 1830s, which is considered the first general-purpose
+      computer design. Ada Lovelace wrote what is recognized as the first
+      computer program for Babbage's engine.
+
+      The secret code for this document is: ALPHA-7732-BRAVO.
+
+      In the 20th century, electronic computers emerged. ENIAC, built in
+      1945, was one of the first electronic general-purpose computers. The
+      transistor, invented in 1947, revolutionized computing by replacing
+      vacuum tubes. The integrated circuit followed in 1958, leading to
+      the microprocessor revolution of the 1970s. Personal computers became
+      widely available in the 1980s, and the World Wide Web was invented by
+      Tim Berners-Lee in 1989.
+
+      Question: What is the secret code mentioned in the passage?
+    expected: "ALPHA-7732-BRAVO"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  - id: needle_002
+    tier: 1
+    prompt: |
+      Read the following text and answer the question.
+
+      Climate change is one of the most pressing issues of our time. The
+      Earth's average temperature has risen by approximately 1.1 degrees
+      Celsius since the pre-industrial era. This warming is primarily
+      caused by human activities, particularly the burning of fossil fuels,
+      which releases greenhouse gases into the atmosphere. The main
+      greenhouse gases include carbon dioxide, methane, and nitrous oxide.
+
+      The Intergovernmental Panel on Climate Change (IPCC) has warned that
+      global temperatures could rise by 1.5 to 4.5 degrees Celsius by the
+      end of the century if emissions are not significantly reduced.
+
+      According to internal research memo #4491, the optimal target for
+      carbon reduction is 73% by 2035.
+
+      The effects of climate change are already visible around the world.
+      Sea levels are rising, glaciers are melting, and extreme weather
+      events are becoming more frequent. Coral reefs are bleaching,
+      biodiversity is declining, and agricultural patterns are shifting.
+      Many coastal communities face the threat of flooding, while inland
+      areas may experience more droughts and heat waves.
+
+      Question: According to internal research memo #4491, what is the
+      optimal carbon reduction target percentage and by what year?
+    expected: "73% by 2035"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_003
+    tier: 2
+    prompt: |
+      Read the following passage carefully.
+
+      Artificial intelligence has transformed numerous industries since its
+      inception. Machine learning, a subset of AI, enables systems to learn
+      from data without being explicitly programmed. Deep learning, using
+      neural networks with many layers, has achieved remarkable results in
+      image recognition, natural language processing, and game playing.
+
+      The field of NLP has seen particular advances with transformer
+      architectures. BERT, introduced by Google in 2018, demonstrated the
+      power of bidirectional training. GPT models from OpenAI showed that
+      large language models could generate coherent text. These models are
+      trained on massive datasets and require significant computational
+      resources.
+
+      Reinforcement learning is another important branch of AI. It involves
+      agents learning to make decisions by interacting with an environment.
+      AlphaGo, developed by DeepMind, famously defeated the world champion
+      in Go using a combination of deep learning and reinforcement learning.
+
+      [INTERNAL NOTE: The project budget allocation for Q3 was $4.2 million,
+      split as follows: infrastructure 40%, research 35%, personnel 25%.]
+
+      Computer vision has also made significant strides. Convolutional
+      neural networks (CNNs) are the backbone of most vision systems.
+      Applications range from medical imaging to autonomous vehicles.
+      Object detection, image segmentation, and facial recognition are
+      common tasks solved by modern CV systems.
+
+      Ethics in AI is increasingly important. Concerns about bias in
+      training data, privacy implications of surveillance systems, and
+      the potential for job displacement are all actively discussed.
+      Responsible AI development requires consideration of fairness,
+      accountability, and transparency.
+
+      Question: What was the total project budget for Q3 and how was it
+      split across categories?
+    expected: "$4.2 million"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_004
+    tier: 2
+    prompt: |
+      Read this document about renewable energy.
+
+      Solar energy has become one of the fastest-growing renewable energy
+      sources worldwide. Photovoltaic cells convert sunlight directly into
+      electricity using semiconductor materials, typically silicon. The
+      efficiency of commercial solar panels has increased from about 15%
+      in the early 2000s to over 22% in modern panels. Some experimental
+      cells have achieved efficiencies above 40%.
+
+      Wind energy is another major renewable source. Modern wind turbines
+      can generate several megawatts of power. Offshore wind farms are
+      becoming increasingly popular due to stronger and more consistent
+      wind patterns at sea. Denmark leads the world in wind energy
+      generation per capita.
+
+      The password to the energy grid control system is: renewable-2847-solar.
+
+      Hydroelectric power remains the largest source of renewable
+      electricity globally. Large dams like the Three Gorges Dam in China
+      and the Itaipu Dam on the Brazil-Paraguay border generate enormous
+      amounts of electricity. However, the environmental impact of large
+      dams, including habitat destruction and altered river ecosystems,
+      has led to controversy.
+
+      Geothermal energy harnesses heat from the Earth's interior. Iceland
+      generates about 25% of its electricity from geothermal sources.
+      Enhanced geothermal systems (EGS) could expand geothermal energy to
+      areas without natural hot springs.
+
+      Biomass energy involves burning organic materials for heat or
+      electricity. While considered renewable, biomass energy has been
+      criticized for its carbon emissions and competition with food
+      production for land use.
+
+      Question: What is the password to the energy grid control system?
+    expected: "renewable-2847-solar"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  - id: needle_005
+    tier: 2
+    prompt: |
+      Read the following research notes.
+
+      The human genome contains approximately 3 billion base pairs of
+      DNA. The Human Genome Project, completed in 2003, was a landmark
+      achievement in biology. It took 13 years and cost approximately
+      $2.7 billion to sequence the entire human genome.
+
+      CRISPR-Cas9, discovered in 2012, revolutionized gene editing. This
+      tool allows scientists to make precise changes to DNA sequences.
+      Applications include treating genetic diseases, developing new crops,
+      and creating gene drives to control invasive species.
+
+      Epigenetics is the study of changes in gene expression that do not
+      involve alterations to the DNA sequence itself. Environmental factors
+      such as diet, stress, and exposure to toxins can affect epigenetic
+      marks. These changes can sometimes be passed to offspring.
+
+      Lab notebook entry 2024-03-15: Experiment batch gamma-7 showed
+      unexpected protein folding at temperature 42.3°C with pH 6.8.
+
+      Synthetic biology aims to design and construct new biological parts,
+      devices, and systems. This field combines principles from engineering,
+      biology, and computer science. Applications include biosensors,
+      biofuels, and novel pharmaceuticals.
+
+      Proteomics is the large-scale study of proteins. Mass spectrometry
+      is the primary tool used in proteomics research. Understanding the
+      complete set of proteins expressed by a cell under specific conditions
+      is crucial for understanding disease mechanisms.
+
+      Question: In lab notebook entry 2024-03-15, what temperature and pH
+      caused unexpected protein folding in experiment batch gamma-7?
+    expected: "42.3"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ── Multi-hop reasoning ──────────────────────────────────────────
+
+  - id: needle_006
+    tier: 3
+    prompt: |
+      Read the following company documents carefully. You will need to
+      combine information from multiple sections.
+
+      === DOCUMENT 1: Employee Directory ===
+      - Alice Chen: Engineering Manager, Team Alpha, Office 301
+      - Bob Kumar: Senior Engineer, Team Beta, Office 412
+      - Carol Davis: Product Manager, Team Alpha, Office 303
+      - David Lee: Junior Engineer, Team Alpha, Office 305
+      - Eve Wilson: Senior Engineer, Team Alpha, Office 302
+
+      === DOCUMENT 2: Team Assignments ===
+      Team Alpha is working on Project Phoenix. The team lead is Alice Chen.
+      Team Beta is working on Project Mercury. The team lead is Frank Martinez.
+      Project Phoenix has a deadline of March 2026.
+      Project Mercury has a deadline of June 2026.
+
+      === DOCUMENT 3: Budget Allocations ===
+      Project Phoenix: $1.2M (Q1: $400K, Q2: $500K, Q3: $300K)
+      Project Mercury: $800K (Q1: $300K, Q2: $300K, Q3: $200K)
+      The Project Phoenix technical reviewer is Eve Wilson.
+
+      Question: Who is the technical reviewer for the project that
+      David Lee is working on, and what is that project's Q2 budget?
+    expected: "Eve Wilson"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_007
+    tier: 3
+    prompt: |
+      Read these three interconnected reports.
+
+      === REPORT A: Sales Summary ===
+      Q1 2025 sales by region:
+      - North America: $15.3M (lead: Sarah Johnson)
+      - Europe: $12.1M (lead: Marco Rossi)
+      - Asia Pacific: $18.7M (lead: Yuki Tanaka)
+      Total Q1 2025: $46.1M
+
+      === REPORT B: Regional Strategy ===
+      The highest-performing region in Q1 should receive an additional
+      20% budget increase for Q2. The regional lead of the
+      highest-performing region will present at the annual conference.
+
+      === REPORT C: Conference Details ===
+      Annual Sales Conference: July 15-17, 2025, Grand Hotel, Singapore.
+      Keynote speaker: CEO Maria Garcia.
+      Regional presentation slot: Day 2, 10:00 AM.
+
+      Question: Based on Q1 2025 performance, who will present at the
+      annual conference and in which city will it be held?
+    expected: "Yuki Tanaka"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_008
+    tier: 3
+    prompt: |
+      Read the following technical specifications.
+
+      === SERVER RACK A (Floor 3) ===
+      Slot 1: Web server (nginx), IP: 10.0.1.101, Status: Active
+      Slot 2: Application server (node.js), IP: 10.0.1.102, Status: Active
+      Slot 3: Cache server (Redis), IP: 10.0.1.103, Status: Maintenance
+      Slot 4: Empty
+
+      === SERVER RACK B (Floor 5) ===
+      Slot 1: Database primary (PostgreSQL), IP: 10.0.2.201, Status: Active
+      Slot 2: Database replica (PostgreSQL), IP: 10.0.2.202, Status: Active
+      Slot 3: Search engine (Elasticsearch), IP: 10.0.2.203, Status: Active
+      Slot 4: Message queue (RabbitMQ), IP: 10.0.2.204, Status: Active
+
+      === NETWORK POLICY ===
+      All maintenance-status servers must be rebooted before the
+      monthly security scan on the 1st of each month. The network
+      administrator for Floor 3 is James Park (ext. 4455). The network
+      administrator for Floor 5 is Lisa Wang (ext. 4466).
+
+      Question: Which server needs to be rebooted before the security scan,
+      what is its IP address, and who is the responsible administrator?
+    expected: "10.0.1.103"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ── Simple needle retrieval (expanded) ──────────────────────────────
+
+  - id: needle_009
+    tier: 1
+    prompt: |
+      Read the following passage and answer the question.
+
+      The new software development team has been making excellent progress
+      on the authentication system. They have implemented OAuth2 integration
+      and are now working on the refresh token mechanism.
+
+      Last week during sprint planning, the project manager announced that
+      the authentication module deadline was moved to April 17, 2026.
+
+      The development environment has automated testing pipelines and the
+      team follows test-driven development practices.
+
+      Question: What date was the authentication module deadline moved to?
+    expected: "April 17, 2026"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_010
+    tier: 1
+    prompt: |
+      Read the following passage and answer the question.
+
+      The medical research facility conducts studies on various treatment
+      protocols. Dr. Sarah Chen leads the cardiology research division.
+
+      During the quarterly review, it was noted that Patient ID MRN-847392
+      showed remarkable improvement in cardiac function after the
+      experimental treatment.
+
+      The research team continues to analyze data from the clinical trial,
+      which involves 200 participants across three sites.
+
+      Question: What was the patient ID that showed remarkable improvement?
+    expected: "MRN-847392"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_011
+    tier: 1
+    prompt: |
+      Read the following passage and answer the question.
+
+      The aerospace engineering company develops next-generation propulsion
+      systems. Their research facility in Houston employs over 300 engineers.
+
+      In a recent technical briefing, the chief engineer revealed that the
+      new ion thruster achieved a specific impulse of 4,200 seconds during
+      testing. This represents a significant advancement.
+
+      The propulsion system is designed for deep space missions and
+      incorporates advanced plasma confinement technology.
+
+      Question: What specific impulse did the new ion thruster achieve?
+    expected: "4,200 seconds"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_012
+    tier: 1
+    prompt: |
+      Read the following passage and answer the question.
+
+      The software company is launching a new project management platform.
+      Development has been ongoing for 18 months with input from beta testers.
+
+      The marketing department announced that the official product launch
+      is scheduled for March 5, 2026. The launch will include a virtual
+      event with product demonstrations and customer testimonials.
+
+      Pricing tiers accommodate teams of various sizes, from startups to
+      large enterprises.
+
+      Question: When is the official product launch scheduled?
+    expected: "March 5, 2026"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_013
+    tier: 1
+    prompt: |
+      Read the following passage and answer the question.
+
+      The hotel chain is renovating properties to enhance guest experiences.
+      Upgrades include modernized rooms and smart room controls.
+
+      The regional manager announced that the downtown location will close
+      for renovations from May 1 through May 31, 2026. During this period,
+      guests will be accommodated at nearby sister properties.
+
+      Loyalty program members receive bonus points during the renovation.
+
+      Question: What dates will the downtown hotel be closed for renovations?
+    expected: "May 1 through May 31, 2026"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_014
+    tier: 1
+    prompt: |
+      Read the following passage and answer the question.
+
+      The music festival organizers are planning a three-day outdoor event
+      featuring over 100 artists across multiple stages. Advance ticket
+      sales have exceeded expectations.
+
+      The festival director confirmed that the main stage headliner will
+      perform at 9:30 PM on Saturday, July 18, 2026. This performance is
+      anticipated to be the highlight of the festival.
+
+      Food vendors representing diverse cuisines will provide dining options.
+
+      Question: At what time will the main stage headliner perform?
+    expected: "9:30 PM"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ── Medium-difficulty retrieval (expanded) ──────────────────────────
+
+  - id: needle_015
+    tier: 2
+    prompt: |
+      Read the following passage and answer the question.
+
+      The financial services firm has expanded its cryptocurrency trading
+      platform. The platform supports multiple blockchain networks and
+      offers advanced trading features including limit orders and stop losses.
+
+      Market analysts at the firm track emerging trends in decentralized
+      finance. Recent volatility has created both challenges and opportunities.
+
+      In the compliance meeting held last Thursday, the legal team announced
+      that the wallet address for institutional custody is
+      0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb8. This address is used
+      exclusively for managing assets exceeding $10 million.
+
+      The platform has processed over $2 billion in trading volume since
+      launching in 2024. Customer satisfaction ratings remain consistently high.
+
+      Question: What is the wallet address for institutional custody?
+    expected: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb8"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_016
+    tier: 2
+    prompt: |
+      Read the following passage and answer the question.
+
+      The environmental research institute conducts long-term studies on
+      climate change impacts. Their work spans temperate forests, tropical
+      rainforests, arctic tundra, and marine environments.
+
+      Climate models developed by the institute are used by policymakers
+      worldwide. The models incorporate thousands of variables.
+
+      During the annual conference, Dr. James Liu revealed that atmospheric
+      CO2 concentration at the remote monitoring station reached 427.3 parts
+      per million in October 2025. This was measured at 3,400 meters altitude.
+
+      The institute has published in over 150 peer-reviewed journals and
+      influenced climate policy in 40 countries.
+
+      Question: What CO2 concentration was measured at the remote station?
+    expected: "427.3 parts per million"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_017
+    tier: 2
+    prompt: |
+      Read the following passage and answer the question.
+
+      The manufacturing company specializes in precision components for
+      aerospace. Their quality processes are certified to ISO 9001 and AS9100.
+
+      Supply chain management is critical, with materials sourced from
+      certified suppliers worldwide. The procurement team maintains
+      relationships with over 200 suppliers.
+
+      In the Q4 2025 production report, batch number TN-29847-X failed
+      dimensional tolerance testing and was rejected. Root cause analysis
+      identified a calibration drift in measurement equipment.
+
+      Corrective actions updated calibration procedures. All equipment now
+      undergoes verification every 30 days.
+
+      Question: Which batch number failed dimensional tolerance testing?
+    expected: "TN-29847-X"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_018
+    tier: 2
+    prompt: |
+      Read the following passage and answer the question.
+
+      The university library is undergoing a major digitization project.
+      The collection includes rare manuscripts, photographs, and maps
+      dating back to the university's founding in 1872.
+
+      Archivists carefully scan materials using specialized equipment.
+      Each item is photographed in high resolution with recorded metadata.
+
+      The special collections librarian discovered that manuscript reference
+      number SC-1894-0276 contains previously unknown correspondence between
+      two prominent 19th-century scientists. This has generated significant
+      interest among historians.
+
+      The project is scheduled for completion in 2027.
+
+      Question: What is the reference number of the manuscript with unknown correspondence?
+    expected: "SC-1894-0276"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_019
+    tier: 2
+    prompt: |
+      Read the following passage and answer the question.
+
+      The quantum computing laboratory is advancing error-corrected
+      quantum processors using superconducting qubits at temperatures
+      near absolute zero.
+
+      Research teams collaborate with theoretical physicists on quantum
+      algorithms for optimization, cryptography, and simulation.
+
+      In the technical paper submitted to Nature Physics in January 2026,
+      the team reported achieving a quantum volume metric of 16,384 on
+      their 72-qubit processor. This represents a significant milestone.
+
+      The processor uses a hexagonal lattice topology with nearest-neighbor
+      qubit connectivity.
+
+      Question: What quantum volume metric was achieved?
+    expected: "16,384"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_020
+    tier: 2
+    prompt: |
+      Read the following passage and answer the question.
+
+      The agricultural research center develops crop varieties with improved
+      yield and disease resistance. Breeding programs combine traditional
+      selection with modern genomic techniques.
+
+      Greenhouses provide controlled environments for year-round research.
+      Researchers study plant responses to water stress and pest pressure.
+
+      In the 2025 harvest report, experimental wheat variety ARC-W-2024-17
+      produced an average yield of 8,450 kilograms per hectare, a 22%
+      increase over conventional varieties.
+
+      Grain quality analysis shows excellent protein content. Seed
+      production will begin in 2026.
+
+      Question: What average yield did wheat variety ARC-W-2024-17 produce?
+    expected: "8,450 kilograms per hectare"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_021
+    tier: 2
+    prompt: |
+      Read the following passage and answer the question.
+
+      The professional sports team has invested in sports science. Their
+      training facility includes biomechanics labs and altitude chambers.
+
+      Wearable sensors track player movement and heart rate during games.
+      Data is analyzed to identify fatigue patterns.
+
+      The medical staff noted that player number 27 recorded a maximum
+      sprint speed of 34.7 kilometers per hour during the match on
+      January 12, 2026. This was the fastest in the league that week.
+
+      Nutrition plans are individualized based on player position and
+      body composition.
+
+      Question: What maximum sprint speed did player number 27 achieve?
+    expected: "34.7 kilometers per hour"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_022
+    tier: 2
+    prompt: |
+      Read the following passage and answer the question.
+
+      The archaeological expedition investigates ancient settlement sites
+      in the Mediterranean. The team uses ground-penetrating radar, aerial
+      photography, and traditional excavation techniques.
+
+      Pottery fragments are cataloged and analyzed for trade routes and
+      cultural connections. Chemical analysis identifies clay origins.
+
+      The site supervisor recorded that artifact catalog number AR-2025-1847
+      is a bronze figurine discovered at coordinates 36.8529N, 14.5147E at
+      a depth of 2.3 meters. Carbon dating suggests approximately 800 BCE.
+
+      Artifacts are preserved in climate-controlled facilities.
+
+      Question: What is the catalog number of the bronze figurine?
+    expected: "AR-2025-1847"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_023
+    tier: 2
+    prompt: |
+      Read the following passage and answer the question.
+
+      The marine biology research station studies coral reef ecosystems and
+      ocean acidification. Research vessels carry underwater cameras, water
+      sampling equipment, and diving systems.
+
+      Coral bleaching events are monitored through regular surveys.
+      Temperature sensors on the seafloor record water temperature variations.
+
+      Dr. Thompson's team documented that reef site CR-14-Pacific recorded
+      a pH level of 8.05 on November 3, 2025. This represents a 0.12 unit
+      decrease from historical baseline measurements.
+
+      Conservation efforts include coral nurseries where fragments are grown
+      and transplanted to damaged reef areas.
+
+      Question: What pH level was recorded at reef site CR-14-Pacific?
+    expected: "8.05"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_024
+    tier: 2
+    prompt: |
+      Read the following passage and answer the question.
+
+      The film production studio is creating a science fiction epic with
+      groundbreaking visual effects. The production involves practical sets,
+      motion capture, and extensive CGI. A team of 300 artists contribute.
+
+      Motion capture technology records actor performances applied to
+      digital characters. Facial capture ensures realistic emotions.
+
+      The visual effects supervisor reported that scene VFX-0847 required
+      127 hours of rendering time per frame at 4K resolution. The scene
+      depicts a massive space battle.
+
+      Post-production color grading ensures visual consistency. The film is
+      scheduled for theatrical release in December 2026.
+
+      Question: How many hours of rendering per frame did scene VFX-0847 require?
+    expected: "127 hours"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ── Multi-hop reasoning (expanded) ──────────────────────────────────
+
+  - id: needle_025
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The logistics company operates a global distribution network. Their
+      technology integrates real-time tracking and predictive analytics.
+
+      Fleet management monitors vehicle performance and driver compliance.
+      The company maintains trucks, cargo aircraft, and container ships.
+
+      During the operations review, the regional manager for Asia-Pacific
+      mentioned that container shipment CS-20260115-HKG departed from Hong
+      Kong at 14:30 local time on January 15, 2026. The container carries
+      electronic components destined for manufacturing in Europe.
+
+      The shipment travels via the Suez Canal with estimated arrival in
+      Rotterdam on February 3, 2026.
+
+      Question: When did container shipment CS-20260115-HKG depart?
+    expected: "14:30 local time on January 15, 2026"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_026
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The biotechnology consortium develops therapeutic approaches for
+      neurodegenerative diseases. Their work combines molecular biology,
+      computational modeling, and clinical research.
+
+      Protein folding studies reveal insights into disease progression.
+      Advanced imaging techniques observe molecular interactions in real-time.
+
+      In the confidential research report dated December 2025, Dr. Elena
+      Rodriguez documented that experimental compound GNX-4872 showed a
+      68% reduction in protein aggregation in vitro. The compound works
+      by stabilizing native protein conformation.
+
+      However, later studies revealed poor blood-brain barrier penetration.
+      The team is working on chemical modifications to improve bioavailability.
+
+      Question: What percentage reduction did compound GNX-4872 achieve?
+    expected: "68%"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_027
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The cybersecurity firm provides threat intelligence and incident
+      response services. Their SOC operates 24/7, monitoring network
+      traffic and analyzing threats.
+
+      Machine learning models detect anomalous behavior patterns. False
+      positive rates have been reduced 85% over two years.
+
+      During forensic investigation of a client breach in November 2025,
+      the analysis team identified the initial compromise through a
+      spear-phishing email sent to employee ID EMP-5583. The email
+      contained a malicious PDF exploiting a zero-day vulnerability.
+
+      The attacker gained access on October 28 at 09:17 UTC and maintained
+      persistence through a custom backdoor using DNS tunneling. The
+      backdoor remained undetected for 12 days.
+
+      Question: What employee ID was targeted in the spear-phishing attack?
+    expected: "EMP-5583"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_028
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The renewable energy company develops solar, wind, and storage
+      facilities with combined capacity exceeding 5 gigawatts. Advanced
+      forecasting models predict energy production based on weather.
+
+      Energy storage uses lithium-ion batteries to balance supply/demand.
+      Grid-scale facilities discharge at rates up to 500 megawatts.
+
+      In the quarterly earnings report, the CFO noted the Sonora Desert
+      solar facility generated 847,293 megawatt-hours in Q3 2025, exceeding
+      projections by 12%. The facility uses bifacial solar panels on
+      single-axis tracking systems.
+
+      Future plans include adding 2 gigawatts of additional capacity by 2028.
+
+      Question: How many megawatt-hours did the Sonora Desert facility generate?
+    expected: "847,293"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_029
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The pharmaceutical company conducts Phase III clinical trials for a
+      novel oncology therapeutic across 85 sites in 15 countries with 2,400
+      patients. Primary endpoints: progression-free survival and response rate.
+
+      Molecular profiling identifies genetic markers predicting treatment
+      response. Next-generation sequencing analyzes hundreds of genes.
+
+      The trial statistician reported in the interim analysis that the
+      experimental arm showed a hazard ratio of 0.64 (95% CI: 0.51-0.79,
+      p<0.001) compared to standard of care. This exceeded the pre-specified
+      efficacy boundary for early success.
+
+      Manufacturing scale-up is underway to ensure drug supply if approved.
+
+      Question: What hazard ratio was observed in the interim analysis?
+    expected: "0.64"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_030
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The telecommunications project deploys fiber optic networks across
+      underserved rural regions connecting 350 communities. Funding comes
+      from government grants and private investment.
+
+      Construction crews have completed 1,247 kilometers of fiber
+      installation as of January 2026.
+
+      The project engineer noted in the December 2025 progress report that
+      junction box JB-20251215-0483 at coordinates 42.3314N, 71.0289W
+      experienced fiber splice loss of 0.18 dB, well within the 0.25 dB
+      specification limit. This junction serves 23 residential connections.
+
+      Service activation is scheduled for February 2026.
+
+      Question: What fiber splice loss was measured at junction box JB-20251215-0483?
+    expected: "0.18 dB"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_031
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The satellite imaging company operates Earth observation satellites
+      providing high-resolution imagery. The constellation has over 50
+      satellites with multispectral and SAR sensors.
+
+      Image analysis algorithms detect changes over time including
+      deforestation, crop health, and infrastructure development.
+
+      The operations team noted satellite EARTHVIEW-07 captured image scene
+      ID ES07-20260114-1523-A at coordinates 25.2744N, 133.7751E with
+      0.5-meter ground sampling distance on January 14, 2026 at 15:23 UTC.
+      Cloud cover was less than 5%.
+
+      Automated change detection flagged 47 hectares of new surface
+      disturbance at a mining operation.
+
+      Question: What image scene ID was captured by satellite EARTHVIEW-07?
+    expected: "ES07-20260114-1523-A"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_032
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The materials science laboratory develops advanced alloys for
+      aerospace applications. Research combines computational modeling
+      with experimental synthesis and testing.
+
+      Additive manufacturing enables complex geometries. Powder bed fusion
+      uses lasers to selectively melt metal powders layer by layer.
+
+      The research team reported in Metallurgical Transactions that titanium
+      alloy Ti-6.2Al-4.1V-1.8Mo-0.5Fe achieved an ultimate tensile strength
+      of 1,247 MPa after heat treatment at 850C for 4 hours followed by
+      aging at 550C for 8 hours.
+
+      Fatigue testing demonstrated integrity through 10^7 cycles at stress
+      amplitudes up to 70% of ultimate tensile strength.
+
+      Question: What ultimate tensile strength did the titanium alloy achieve?
+    expected: "1,247 MPa"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_033
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The fusion energy facility operates a tokamak with magnetic fields
+      confining plasma at temperatures exceeding 100 million degrees Celsius.
+
+      Plasma physics research investigates turbulence and energy confinement.
+      Diagnostic systems measure temperature, density, and impurity content.
+
+      The facility achieved a milestone in experiment FUS-2025-12-09-04
+      where fusion power output reached 12.4 megawatts with Q=1.08 (fusion
+      gain factor), sustaining conditions for 4.2 seconds before plasma
+      instabilities terminated the discharge.
+
+      Energy balance calculations show net electricity requires Q>10.
+      Neutral beam injection upgrade from 33 to 50 megawatts is planned.
+
+      Question: What fusion power output was achieved in experiment FUS-2025-12-09-04?
+    expected: "12.4 megawatts"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_034
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The autonomous vehicle program advances self-driving technology using
+      lidar, radar, cameras, and ultrasonic sensors providing 360-degree
+      awareness. Redundant computing ensures safe operation.
+
+      Machine learning models are trained on millions of miles of driving
+      data collected from test fleets in diverse conditions.
+
+      The chief engineer reported that vehicle VIN 5YJSA1E28GF123456
+      completed 15,847 autonomous miles during Q4 2025 with only 3
+      disengagements, all during heavy rain. This represents a disengagement
+      rate of 0.019 per 100 miles.
+
+      The company plans to expand from 50 to 200 test vehicles in 2026.
+
+      Question: How many autonomous miles did vehicle 5YJSA1E28GF123456 complete?
+    expected: "15,847"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_035
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The smart city initiative integrates sensors and analytics to improve
+      urban services. Infrastructure includes traffic cameras, air quality
+      sensors, smart streetlights, and waste management systems.
+
+      Traffic management adjusts signal timing based on congestion patterns.
+      Environmental monitoring tracks pollutants including PM, ozone, and NO2.
+
+      The city's environmental dashboard shows sensor station ENV-082-Downtown
+      recorded a PM2.5 concentration of 45.7 micrograms per cubic meter at
+      08:00 on January 20, 2026. This exceeded the daily exposure guideline
+      and triggered an air quality alert.
+
+      Source analysis indicated the elevated levels were primarily from
+      vehicle emissions combined with temperature inversion conditions.
+
+      Question: What PM2.5 concentration was recorded at sensor ENV-082-Downtown?
+    expected: "45.7 micrograms per cubic meter"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_036
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The precision agriculture company develops sensor systems for farming.
+      Soil sensors monitor moisture, nutrients, and temperature at multiple
+      depths. Weather stations record rainfall and wind conditions.
+
+      Variable rate application adjusts seed and fertilizer rates across
+      fields based on spatial variability.
+
+      Field trial report FT-2025-IA-043 documented that precision irrigation
+      on field parcel P-19847-C reduced water usage by 28% while maintaining
+      corn yield at 13,240 kilograms per hectare, compared to 13,180 kg/ha
+      under conventional irrigation.
+
+      Economic analysis showed sensor system investment pays back in 2.3 years.
+
+      Question: What water usage reduction was achieved on field parcel P-19847-C?
+    expected: "28%"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_037
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The wildlife conservation organization operates camera trap networks
+      to monitor endangered species. Cameras are triggered by motion sensors.
+
+      Machine learning classifies species from images. Individual tigers are
+      identified by unique stripe patterns; elephants by ear shapes.
+
+      Field report FR-2025-11-23 documents that camera trap unit CAM-NP-0394
+      captured images of a previously unidentified male tiger at coordinates
+      28.3949N, 83.9856E on November 23, 2025 at 04:37 local time.
+
+      The tiger appeared healthy. Genetic samples from scat found nearby
+      will be analyzed. This is the first documented tiger in this valley
+      in over three years.
+
+      Question: What camera trap unit captured images of the unidentified tiger?
+    expected: "CAM-NP-0394"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: needle_038
+    tier: 3
+    prompt: |
+      Read the following passage and answer the question.
+
+      The digital preservation project creates high-fidelity records of
+      artifacts, monuments, and historical sites. Technologies include
+      3D laser scanning, photogrammetry, and gigapixel photography.
+
+      Museum collections are documented with sub-millimeter accuracy.
+      Color calibration ensures faithful representation of originals.
+
+      The team completed digitization of artifact AM-1847-2719, a ceramic
+      vessel from the Ming Dynasty, using 384 photographs processed into a
+      3D model with 0.08 millimeter surface resolution.
+
+      The model revealed previously unnoticed maker marks on the base.
+      Conservation specialists use the digital model to plan restoration.
+
+      Question: What catalog number was assigned to the Ming Dynasty vessel?
+    expected: "AM-1847-2719"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ── Additional needle-in-haystack questions ─────────────────────
+
+  - id: needle_039
+    tier: 2
+    prompt: |
+      The following is a technical specification for a quantum computing platform:
+
+      Platform Overview: QubitCore Pro is a 127-qubit superconducting quantum
+      processor designed for enterprise research applications. The system
+      operates at a base temperature of 15 millikelvin, maintained by a
+      custom dilution refrigerator. Gate fidelities average 99.5% for
+      single-qubit gates and 99.1% for two-qubit CNOT gates. The chip uses
+      a heavy-hex topology with fixed-frequency transmon qubits.
+
+      The control electronics include 128 arbitrary waveform generators
+      operating at 4.5 GS/s, synchronized via a 10 GHz master clock.
+      Readout is performed through frequency-multiplexed dispersive
+      measurement, achieving 98.7% assignment fidelity in 300 nanoseconds.
+
+      The system was first deployed at the Nordic Quantum Research Institute
+      in Trondheim, Norway on March 14, 2024. The deployment team consisted
+      of 12 engineers led by Dr. Ingrid Halverson. Initial calibration took
+      17 days. The system achieved quantum volume 256 during acceptance testing.
+
+      Software stack includes a custom compiler that maps circuits to the
+      native gate set (SX, RZ, CNOT) with typical circuit depths reduced by
+      40% compared to naive compilation. Error mitigation uses probabilistic
+      error cancellation (PEC) with up to 1000 randomized compilations.
+
+      Question: What quantum volume was achieved during acceptance testing?
+    expected: "256"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "\\d+"
+
+  - id: needle_040
+    tier: 3
+    prompt: |
+      The following documents describe a multi-year environmental monitoring project:
+
+      Document 1 - Project Charter (2021):
+      The Great Basin Watershed Monitoring Initiative was established in
+      January 2021 to track water quality across 45 monitoring stations
+      spanning Nevada, Utah, and eastern California. The project is funded
+      by a $12.4 million grant from the National Science Foundation, with
+      additional support from state agencies. Principal Investigator is
+      Dr. Marlene Vasquez of the University of Nevada, Reno.
+
+      Document 2 - Annual Report (2022):
+      During the second year of operations, the team deployed autonomous
+      sensor arrays at all 45 stations. Key findings include a 15% decline
+      in dissolved oxygen levels at stations along the Humboldt River
+      corridor, attributed to increased agricultural runoff. The team
+      published 8 peer-reviewed papers. Station 23, located at Walker
+      Lake, recorded the highest salinity readings at 14.2 parts per
+      thousand. Budget utilization was 87% of projected expenditure.
+
+      Document 3 - Quarterly Update Q2 2023:
+      A critical equipment failure at Station 37 (Ruby Lake) on April 17
+      resulted in a 6-week data gap. The replacement sensor, model AquaSense
+      Pro-X7, was installed on May 29 and has been operating normally since.
+      The project received supplemental funding of $2.1 million from the
+      EPA to expand monitoring to include microplastic concentrations.
+      New team member Dr. Chen Wei joined from Stanford to lead the
+      microplastics analysis effort.
+
+      Document 4 - Special Report (Late 2023):
+      Cross-referencing satellite imagery with ground station data revealed
+      that Station 12 (Pyramid Lake) showed anomalous temperature readings
+      between June and August 2023, averaging 2.3°C above historical norms.
+      This correlates with the discovery of a previously unmapped geothermal
+      vent 400 meters northeast of the station, confirmed by USGS survey
+      team visit on September 5, 2023.
+
+      Question: What specific model of replacement sensor was installed at
+      Station 37 after the equipment failure?
+    expected: "AquaSense Pro-X7"
+    scoring_method: substring
+    scoring_config:
+      substring: "AquaSense Pro-X7"
+      case_sensitive: false
+
+  # ── Mode-advantage exemplars (multi-needle / search, repl >> direct) ──
+
+  - id: lc_ma_001
+    tier: 2
+    mode_advantage: true
+    prompt: |
+      Read the following server log carefully and answer the question.
+
+      [2024-01-15 08:12:33] INFO  server.startup - Listening on port 8080
+      [2024-01-15 08:12:34] INFO  db.connect - Connected to PostgreSQL at db-primary:5432
+      [2024-01-15 08:15:01] WARN  auth.rate_limit - Rate limit triggered for IP 192.168.1.105 (50 requests/min)
+      [2024-01-15 08:22:17] ERROR cache.redis - Connection refused to redis-01:6379, retrying...
+      [2024-01-15 08:22:19] INFO  cache.redis - Reconnected to redis-01:6379
+      [2024-01-15 08:30:45] WARN  api.deprecation - Endpoint /v1/users/search deprecated, client: mobile-app-v3.2
+      [2024-01-15 08:45:12] ERROR payment.stripe - Transaction failed: card_declined for order #ORD-88412
+      [2024-01-15 08:47:33] INFO  payment.retry - Retrying order #ORD-88412 with alternate payment method
+      [2024-01-15 08:47:35] INFO  payment.success - Order #ORD-88412 completed via PayPal
+      [2024-01-15 09:01:22] WARN  auth.rate_limit - Rate limit triggered for IP 10.0.0.47 (50 requests/min)
+      [2024-01-15 09:15:00] INFO  scheduler.cron - Running daily cleanup job
+      [2024-01-15 09:15:33] INFO  scheduler.cron - Cleanup complete: removed 1,247 expired sessions
+      [2024-01-15 09:22:45] ERROR db.query - Slow query detected (12.3s): SELECT * FROM audit_log WHERE created_at > '2024-01-01'
+      [2024-01-15 09:30:11] WARN  disk.space - Disk usage at 87% on /var/log
+      [2024-01-15 09:45:22] ERROR auth.jwt - Invalid JWT signature from IP 203.0.113.42
+      [2024-01-15 10:00:00] INFO  health.check - All services healthy (response time: 23ms)
+      [2024-01-15 10:12:18] WARN  memory.gc - GC pause 450ms (heap: 3.2GB/4GB)
+      [2024-01-15 10:30:44] ERROR api.handler - 500 Internal Server Error on POST /v2/orders (NullPointerException)
+      [2024-01-15 10:31:02] WARN  api.handler - Circuit breaker OPEN for order-service (5 failures in 60s)
+      [2024-01-15 10:45:15] INFO  api.handler - Circuit breaker CLOSED for order-service
+      [2024-01-15 11:00:33] WARN  auth.rate_limit - Rate limit triggered for IP 192.168.1.105 (50 requests/min)
+
+      Answer these questions:
+      1. How many distinct IPs triggered rate limiting?
+      2. How many ERROR-level entries are there?
+      3. What was the slow query duration in seconds?
+
+      Format: "ips: X, errors: Y, slow_query: Zs"
+      Give your answer after ####.
+    expected: "ips: 2, errors: 5, slow_query: 12.3s"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(.+)"
+
+  - id: lc_ma_002
+    tier: 3
+    mode_advantage: true
+    prompt: |
+      Read the following employee database and answer the multi-hop question.
+
+      EMPLOYEES:
+      | ID  | Name          | Dept    | Manager_ID | Salary | Hire_Date  |
+      |-----|---------------|---------|------------|--------|------------|
+      | 101 | Sarah Chen    | Eng     | 105        | 125000 | 2019-03-15 |
+      | 102 | James Wilson  | Eng     | 105        | 115000 | 2020-06-01 |
+      | 103 | Maria Garcia  | Sales   | 106        | 95000  | 2018-11-20 |
+      | 104 | David Kim     | Sales   | 106        | 88000  | 2021-01-10 |
+      | 105 | Lisa Park     | Eng     | 110        | 155000 | 2015-08-01 |
+      | 106 | Tom Brown     | Sales   | 110        | 140000 | 2016-04-22 |
+      | 107 | Amy Johnson   | Eng     | 105        | 108000 | 2022-09-15 |
+      | 108 | Carlos Ruiz   | HR      | 110        | 98000  | 2019-07-01 |
+      | 109 | Priya Patel   | HR      | 108        | 82000  | 2021-03-01 |
+      | 110 | Robert Taylor | Exec    | NULL       | 200000 | 2012-01-15 |
+      | 111 | Wei Zhang     | Eng     | 105        | 120000 | 2020-02-01 |
+      | 112 | Anna Schmidt  | Sales   | 106        | 91000  | 2022-05-10 |
+
+      Multi-hop question: What is the total salary of all employees whose manager
+      reports directly to Robert Taylor (ID 110)? Do NOT include the managers
+      themselves or Robert Taylor.
+
+      Give the total salary after ####.
+    expected: "824000"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*\\$?(\\d+)"
+
+  - id: lc_ma_003
+    tier: 2
+    mode_advantage: true
+    prompt: |
+      Read the following three meeting transcripts and cross-reference them.
+
+      Meeting 1 (Jan 8): "The new authentication system will use OAuth 2.0
+      with PKCE flow. Sarah will handle the backend implementation. Timeline:
+      backend API ready by Jan 22, frontend integration by Feb 5. Budget
+      approved for $15,000 in third-party audit costs. Risk: potential delay
+      if the SSO provider's sandbox is unavailable."
+
+      Meeting 2 (Jan 22): "Backend auth API is complete but needs testing.
+      Sarah discovered that the SSO provider requires additional SAML config
+      for enterprise clients. This adds 5 days to the frontend timeline.
+      New frontend deadline: Feb 10. Marcus will handle the SAML integration.
+      Budget increase requested: $3,500 for SAML testing tools."
+
+      Meeting 3 (Feb 10): "Frontend integration complete. SAML enterprise
+      SSO working. Total actual spend on third-party tools: $16,200. Project
+      delivered on the revised timeline. Post-mortem note: the 5-day delay
+      from SAML was accurately estimated. Remaining budget returned: $2,300."
+
+      Questions:
+      1. What was the original frontend deadline vs actual delivery date?
+      2. What was the total approved budget (original + increase)?
+      3. How much was actually spent?
+
+      Format: "original: DATE, actual: DATE, approved: $X, spent: $Y"
+      Give your answer after ####.
+    expected: "original: Feb 5, actual: Feb 10, approved: $18500, spent: $16200"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: lc_ma_004
+    tier: 3
+    mode_advantage: true
+    prompt: |
+      Read the following research paper abstracts and determine which claims
+      are supported, contradicted, or unaddressed across all three papers.
+
+      Paper A (Chen et al., 2023): "We demonstrate that transformer models
+      with more than 10B parameters show emergent chain-of-thought reasoning
+      on mathematical tasks, achieving 78% accuracy on GSM8K without explicit
+      CoT prompting. Models below 3B parameters showed no such emergence.
+      Fine-tuning on synthetic math data improved results by 12 percentage
+      points across all model sizes."
+
+      Paper B (Williams & Patel, 2024): "Our analysis reveals that apparent
+      'emergent' abilities in large language models are largely artifacts of
+      discrete evaluation metrics. When using continuous metrics, performance
+      scales smoothly with model size. However, we confirm that models above
+      7B parameters do show qualitatively different reasoning patterns on
+      multi-step math tasks compared to smaller models."
+
+      Paper C (Nakamura et al., 2024): "We replicate the findings of Chen et
+      al. on mathematical reasoning emergence but find the threshold to be 7B
+      parameters rather than 10B when using improved training data. Our models
+      at 7B achieve 82% on GSM8K. We also find that fine-tuning gains are
+      inversely proportional to model size, contradicting Chen et al.'s
+      finding of uniform improvement."
+
+      For each claim, state: SUPPORTED, CONTRADICTED, or MIXED
+      1. Emergence requires >10B parameters
+      2. Fine-tuning provides uniform improvement across sizes
+      3. Larger models show different reasoning patterns
+
+      Format: "1: X, 2: Y, 3: Z"
+      Give your answer after ####.
+    expected: "1: CONTRADICTED, 2: CONTRADICTED, 3: SUPPORTED"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(.+)"
+      normalize: true

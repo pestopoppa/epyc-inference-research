@@ -1,0 +1,2 @@
+{"feature": "architect_delegation", "verdict": "PASS", "quality_delta": 0.0, "latency_delta_s": -1.6920006601139903e-05, "tps_delta": 0.0, "memory_delta_mb": -0.0625, "timestamp": "2026-02-19T21:24:07+00:00"}
+{"feature": "architect_delegation", "verdict": "PASS", "quality_delta": 0.0, "latency_delta_s": -25.5885505330225, "tps_delta": -14.281276872458712, "memory_delta_mb": -0.25, "timestamp": "2026-02-19T21:43:14+00:00"}

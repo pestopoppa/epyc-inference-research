@@ -1,0 +1,46 @@
+{
+  "suite": "t1_routing",
+  "description": "Basic routing tests - must pass 100%",
+  "tests": {
+    "direct_answer": {
+      "test_id": "t1_direct_answer",
+      "expected_behavior": "Direct answer without sub-LM calls",
+      "pass_criteria": {
+        "max_turns": 2,
+        "answer_contains": ["4"],
+        "no_llm_calls": true,
+        "must_call_final": true
+      }
+    },
+    "context_peek": {
+      "test_id": "t1_context_peek",
+      "expected_behavior": "Uses peek() to examine context beginning",
+      "pass_criteria": {
+        "max_turns": 3,
+        "uses_function": ["peek"],
+        "answer_contains": ["The"],
+        "must_call_final": true
+      }
+    },
+    "context_grep": {
+      "test_id": "t1_context_grep",
+      "expected_behavior": "Uses grep() to search context",
+      "pass_criteria": {
+        "max_turns": 4,
+        "uses_function": ["grep"],
+        "answer_contains": ["ERROR", "error"],
+        "must_call_final": true
+      }
+    },
+    "simple_delegate": {
+      "test_id": "t1_simple_delegate",
+      "expected_behavior": "Single llm_call for summarization",
+      "pass_criteria": {
+        "max_turns": 4,
+        "uses_function": ["llm_call"],
+        "llm_calls_count": {"min": 1, "max": 2},
+        "must_call_final": true
+      }
+    }
+  }
+}

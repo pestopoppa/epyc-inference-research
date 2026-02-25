@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t1_q1_multistep,21.58,2,General response generated
+thinking,t1_q2_hypothesis,23.88,2,General response generated
+thinking,t1_q3_planning,14.37,2,General response generated
+thinking,t2_q1_paradox,18.24,3,Presented multiple philosophical positions with analysis
+thinking,t2_q2_counterfactual,22.27,3,Analyzed all three dimensions with mechanisms
+thinking,t2_q3_formal,22.74,3,Correct formal proof with example
+thinking,t2_q4_metacognition,22.94,3,Systematic approach with assumptions and bounds
+thinking,t3_q1_methodological_critique,17.83,3,Correctly identified multiple methodological issues with good explanations
+thinking,t3_q2_causal_inference,20.49,3,Correct adjustment set and collider analysis
+thinking,t3_q3_reasoning_trap,19.59,3,Identified flaw and provided concrete scenario
+coder,t1_q1_algorithm,12.98,1,Attempted but incomplete code
+coder,t1_q2_refactor,9.73,3,Complete code implementation with structure
+coder,t1_q3_test,23.36,3,Complete code implementation with structure
+coder,t2_q1_design,22.38,3,Complete code implementation with structure
+coder,t2_q2_debug_complex,23.82,3,Complete code implementation with structure
+coder,t2_q3_optimize,21.59,3,Complete code implementation with structure
+coder,t2_q4_system,21.59,3,Complete code implementation with structure
+coder,t3_q1_concurrent_correctness,18.66,3,Comprehensive ABA problem analysis with code
+coder,t3_q2_distributed_consistency,13.07,1,Response appears truncated or corrupted
+coder,t3_q3_algorithmic_hardness,13.07,3,Complete algorithmic hardness proof
+agentic,t1_q1_sequential,25.18,3,Tool call structure present
+agentic,t1_q2_error_handling,24.69,3,Tool call structure present
+agentic,t1_q3_nested_params,24.96,3,Tool call structure present
+agentic,t2_q1_ambiguous,24.38,3,Tool call structure present
+agentic,t2_q2_error_chain,23.29,3,Tool call structure present
+agentic,t2_q3_schema_edge,24.44,3,Tool call structure present
+agentic,t2_q4_orchestration,23.36,3,Tool call structure present
+agentic,t3_q1_competing_constraints,21.64,3,Tool call structure present
+agentic,t3_q2_multi_agent_coordination,22.18,3,Tool call structure present
+agentic,t3_q3_adversarial_robustness,16.56,3,Tool call structure present
+general,t1_q1_json,16.41,2,Partial response generated
+general,t1_q2_multistep,24.66,3,Correctly processed list with all steps
+general,t1_q3_compare,19.75,3,Complete response generated
+general,t2_q1_synthesis,25.28,3,Complete response generated
+general,t2_q2_transform,24.38,3,Complete response generated
+general,t2_q3_schedule,12.47,3,Complete response generated
+general,t2_q4_inconsistency,11.58,3,Complete response generated
+general,t3_q1_policy_analysis,13.44,3,Complete response generated
+general,t3_q2_system_failure,14.17,3,Complete response generated
+general,t3_q3_strategic_communication,21.39,3,Complete response generated
+math,t1_q1_word_problem,13.29,3,Mathematical solution with work shown
+math,t1_q2_system_equations,13.74,3,Mathematical solution with work shown
+math,t1_q3_probability,13.72,3,Mathematical solution with work shown
+math,t2_q1_optimization,14.11,3,Mathematical solution with work shown
+math,t2_q2_proof,9.71,3,Mathematical solution with work shown
+math,t2_q3_calculus,15.04,3,Mathematical solution with work shown
+math,t2_q4_statistics,14.71,3,Mathematical solution with work shown
+math,t3_q1_analysis,20.46,3,Mathematical solution with work shown
+math,t3_q2_combinatorics,12.17,3,Mathematical solution with work shown
+math,t3_q3_probability_theory,10.29,3,Mathematical solution with work shown
+instruction_precision,t1_q1_negative_instruction,17.37,2,General response generated
+instruction_precision,t1_q2_word_limit,14.82,2,General response generated
+instruction_precision,t1_q3_structured_format,16.18,3,Followed format precisely
+instruction_precision,t1_q4_multiple_constraints,17.52,1,Wrong approach or answer
+instruction_precision,t2_q1_resist_elaboration,16.84,3,Followed instruction precisely - number only
+instruction_precision,t2_q2_maintain_format,16.91,2,"Response generated, format compliance unclear"
+instruction_precision,t2_q3_empty_handling,17.6,2,General response generated
+instruction_precision,t2_q4_conflicting_constraints,15.07,2,"Response generated, format compliance unclear"
+instruction_precision,t3_q1_self_referential,15.99,2,General response generated
+instruction_precision,t3_q2_cascading_constraints,14.2,2,"Response generated, format compliance unclear"
+instruction_precision,t3_q3_meta_instruction,16.09,2,General response generated

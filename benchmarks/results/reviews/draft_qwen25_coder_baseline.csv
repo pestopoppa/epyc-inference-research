@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,179.7,1,Lists generic failure modes but lacks depth
+general,t3_q2_system_failure,183.0,1,Wrong explanation - misses actual idempotency timing issue
+general,t3_q3_strategic_communication,166.3,1,Generic statement - doesn't address specific board context
+general,t2_q1_synthesis,166.8,1,Provides recommendations but too generic
+general,t2_q2_transform,158.3,0,Repetitive garbage output - adds random employees
+general,t2_q3_schedule,164.3,1,Starts reasoning approach but incomplete
+general,t2_q4_inconsistency,176.0,0,Says No Inconsistencies Found - completely wrong
+general,t1_q1_json,181.2,3,Correct JSON output with all required fields
+general,t1_q2_multistep,161.4,0,Repetitive garbage - repeats Date endlessly
+general,t1_q3_compare,90.5,0,Empty response - only EOG tokens
+thinking,t3_q1_methodological_critique,60.5,0,Almost no response - just partial prompt repeat
+thinking,t3_q2_causal_inference,120.6,1,Wrong answer - incorrect adjustment set
+thinking,t3_q3_reasoning_trap,128.7,2,Addresses validation vs test issue - partially correct
+thinking,t2_q1_paradox,149.5,1,Starts philosophical discussion but confused
+thinking,t2_q2_counterfactual,137.7,2,Reasonable analysis structure for counterfactual
+thinking,t2_q3_formal,146.2,3,Correct transitivity proof structure
+thinking,t2_q4_metacognition,139.2,1,Starts estimation approach but very thin
+thinking,t1_q1_multistep,146.2,1,Starts calculation but no final answer
+thinking,t1_q2_hypothesis,136.8,1,Starts analysis but doesn't provide clear alternatives
+thinking,t1_q3_planning,144.7,1,Uses code approach but doesn't complete solution

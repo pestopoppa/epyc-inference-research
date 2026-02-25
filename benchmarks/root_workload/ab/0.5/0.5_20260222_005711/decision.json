@@ -1,0 +1,12 @@
+{
+  "decision": "REVISE",
+  "reasons": [
+    "meets quality floor but does not satisfy keep thresholds"
+  ],
+  "combined_deltas": {
+    "delta_quality": 0.07999999999999996,
+    "delta_cost": -0.056915486221677324,
+    "delta_latency": 0.06261893525621663,
+    "delta_manual_intervention": -0.04999999999999999
+  }
+}

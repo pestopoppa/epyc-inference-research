@@ -1,0 +1,1006 @@
+# Debug suite: Coder
+# Sources: MIXED provenance
+#   - humaneval_001 through humaneval_004: Verbatim from OpenAI HumanEval (problems 0-3)
+#   - humaneval_005 through humaneval_015: Hand-written (NOT from HumanEval)
+#   - mbpp_001 through mbpp_014: Hand-written (NOT from MBPP; mostly LeetCode-style)
+#   - code_hard_001+: Hand-written algorithm problems
+# Scoring: code_execution (run against test cases)
+
+suite: coder
+version: "1.0"
+scoring_default:
+  method: code_execution
+  config:
+    language: python
+    timeout: 10
+
+questions:
+  # ── HumanEval-style ──────────────────────────────────────────────
+
+  - id: humaneval_001
+    tier: 1
+    prompt: |
+      Write a Python function `has_close_elements(numbers, threshold)` that
+      checks whether any two numbers in the list are closer to each other
+      than the given threshold.
+
+      >>> has_close_elements([1.0, 2.0, 3.0], 0.5)
+      False
+      >>> has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3)
+      True
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert has_close_elements([1.0, 2.0, 3.0], 0.5) == False
+        assert has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3) == True
+        assert has_close_elements([1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.3) == True
+        assert has_close_elements([1.0, 2.0, 3.9, 4.0, 5.0, 2.2], 0.05) == False
+        assert has_close_elements([1.0, 2.0, 5.9, 4.0, 5.0], 0.95) == True
+        assert has_close_elements([1.0, 2.0, 5.9, 4.0, 5.0], 0.8) == False
+        assert has_close_elements([], 1.0) == False
+        print("All tests passed!")
+
+  - id: humaneval_002
+    tier: 1
+    prompt: |
+      Write a Python function `separate_paren_groups(paren_string)` that
+      takes a string of nested parentheses and returns a list of separate
+      balanced groups. Ignore spaces.
+
+      >>> separate_paren_groups('( ) (( )) (( )( ))')
+      ['()', '(())', '(()())']
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert separate_paren_groups('( ) (( )) (( )( ))') == ['()', '(())', '(()())']
+        assert separate_paren_groups('() (()) () ((()))') == ['()', '(())', '()', '((()))']
+        assert separate_paren_groups('(()(()))') == ['(()(()))']
+        print("All tests passed!")
+
+  - id: humaneval_003
+    tier: 1
+    prompt: |
+      Write a Python function `truncate_number(number)` that returns the
+      decimal part of a positive floating point number.
+
+      >>> truncate_number(3.5)
+      0.5
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert abs(truncate_number(3.5) - 0.5) < 1e-9
+        assert abs(truncate_number(1.25) - 0.25) < 1e-9
+        assert abs(truncate_number(123.0) - 0.0) < 1e-9
+        print("All tests passed!")
+
+  - id: humaneval_004
+    tier: 1
+    prompt: |
+      Write a Python function `below_zero(operations)` that takes a list
+      of deposit and withdrawal operations starting from zero balance.
+      Return True if the balance goes below zero at any point.
+
+      >>> below_zero([1, 2, 3])
+      False
+      >>> below_zero([1, 2, -4, 5])
+      True
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert below_zero([1, 2, 3]) == False
+        assert below_zero([1, 2, -4, 5]) == True
+        assert below_zero([1, 2, -3, 1, 2, -3]) == True
+        assert below_zero([]) == False
+        assert below_zero([1]) == False
+        assert below_zero([-1]) == True
+        print("All tests passed!")
+
+  # ── MBPP-style ───────────────────────────────────────────────────
+
+  - id: mbpp_001
+    tier: 1
+    prompt: |
+      Write a Python function `is_palindrome(s)` that checks if a string
+      is a palindrome, ignoring case and non-alphanumeric characters.
+
+      >>> is_palindrome("A man, a plan, a canal: Panama")
+      True
+      >>> is_palindrome("race a car")
+      False
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert is_palindrome("A man, a plan, a canal: Panama") == True
+        assert is_palindrome("race a car") == False
+        assert is_palindrome("") == True
+        assert is_palindrome("a") == True
+        assert is_palindrome("ab") == False
+        assert is_palindrome("aba") == True
+        assert is_palindrome("Madam") == True
+        print("All tests passed!")
+
+  - id: mbpp_002
+    tier: 2
+    prompt: |
+      Write a Python function `flatten(lst)` that takes a nested list and
+      returns a flat list. Handle arbitrary nesting depth.
+
+      >>> flatten([1, [2, [3, 4], 5], 6])
+      [1, 2, 3, 4, 5, 6]
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert flatten([1, [2, [3, 4], 5], 6]) == [1, 2, 3, 4, 5, 6]
+        assert flatten([]) == []
+        assert flatten([1, 2, 3]) == [1, 2, 3]
+        assert flatten([[1], [2], [3]]) == [1, 2, 3]
+        assert flatten([[[1]], [[2, [3]]]]) == [1, 2, 3]
+        print("All tests passed!")
+
+  - id: mbpp_003
+    tier: 2
+    prompt: |
+      Write a Python function `most_frequent(lst)` that returns the most
+      frequently occurring element in a list. If there's a tie, return
+      any of the most frequent elements.
+
+      >>> most_frequent([1, 2, 2, 3, 3, 3])
+      3
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert most_frequent([1, 2, 2, 3, 3, 3]) == 3
+        assert most_frequent([1]) == 1
+        assert most_frequent([1, 1, 2, 2, 2]) == 2
+        assert most_frequent(['a', 'b', 'a']) == 'a'
+        print("All tests passed!")
+
+  - id: mbpp_004
+    tier: 2
+    prompt: |
+      Write a Python function `merge_sorted(lst1, lst2)` that merges two
+      sorted lists into a single sorted list without using the built-in
+      sort function.
+
+      >>> merge_sorted([1, 3, 5], [2, 4, 6])
+      [1, 2, 3, 4, 5, 6]
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert merge_sorted([1, 3, 5], [2, 4, 6]) == [1, 2, 3, 4, 5, 6]
+        assert merge_sorted([], [1, 2, 3]) == [1, 2, 3]
+        assert merge_sorted([1, 2, 3], []) == [1, 2, 3]
+        assert merge_sorted([], []) == []
+        assert merge_sorted([1, 1, 1], [1, 1]) == [1, 1, 1, 1, 1]
+        assert merge_sorted([1], [2]) == [1, 2]
+        print("All tests passed!")
+
+  - id: mbpp_005
+    tier: 2
+    prompt: |
+      Write a Python function `roman_to_int(s)` that converts a Roman
+      numeral string to an integer.
+
+      >>> roman_to_int("MCMXCIV")
+      1994
+      >>> roman_to_int("III")
+      3
+      >>> roman_to_int("IV")
+      4
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert roman_to_int("III") == 3
+        assert roman_to_int("IV") == 4
+        assert roman_to_int("IX") == 9
+        assert roman_to_int("LVIII") == 58
+        assert roman_to_int("MCMXCIV") == 1994
+        assert roman_to_int("MMXXIII") == 2023
+        print("All tests passed!")
+
+  # ── Harder problems ──────────────────────────────────────────────
+
+  - id: code_hard_001
+    tier: 3
+    prompt: |
+      Write a Python function `longest_common_subsequence(s1, s2)` that
+      returns the length of the longest common subsequence of two strings.
+
+      >>> longest_common_subsequence("abcde", "ace")
+      3
+      >>> longest_common_subsequence("abc", "def")
+      0
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert longest_common_subsequence("abcde", "ace") == 3
+        assert longest_common_subsequence("abc", "def") == 0
+        assert longest_common_subsequence("abc", "abc") == 3
+        assert longest_common_subsequence("", "abc") == 0
+        assert longest_common_subsequence("abcd", "abdc") == 3
+        assert longest_common_subsequence("oxcpqrsvwf", "shmtulqrypy") == 2
+        print("All tests passed!")
+
+  - id: code_hard_002
+    tier: 3
+    prompt: |
+      Write a Python function `eval_rpn(tokens)` that evaluates a
+      mathematical expression in Reverse Polish Notation. The tokens are
+      a list of strings, where each string is either an integer or one of
+      '+', '-', '*', '/'. Division truncates toward zero.
+
+      >>> eval_rpn(["2", "1", "+", "3", "*"])
+      9
+      >>> eval_rpn(["4", "13", "5", "/", "+"])
+      6
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert eval_rpn(["2", "1", "+", "3", "*"]) == 9
+        assert eval_rpn(["4", "13", "5", "/", "+"]) == 6
+        assert eval_rpn(["10", "6", "9", "3", "+", "-11", "*", "/", "*", "17", "+", "5", "+"]) == 22
+        assert eval_rpn(["3"]) == 3
+        print("All tests passed!")
+
+  - id: code_hard_003
+    tier: 3
+    prompt: |
+      Write a Python function `min_window(s, t)` that finds the minimum
+      window substring of s that contains all characters of t. Return ""
+      if no such window exists.
+
+      >>> min_window("ADOBECODEBANC", "ABC")
+      "BANC"
+      >>> min_window("a", "aa")
+      ""
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert min_window("ADOBECODEBANC", "ABC") == "BANC"
+        assert min_window("a", "a") == "a"
+        assert min_window("a", "aa") == ""
+        assert min_window("ab", "b") == "b"
+        assert min_window("", "a") == ""
+        print("All tests passed!")
+
+  # ── HumanEval-inspired (expanded) ──────────────────────────────────
+
+  - id: humaneval_005
+    tier: 1
+    prompt: |
+      Write a Python function `max_element(lst)` that returns the maximum
+      element in a non-empty list of integers.
+
+      >>> max_element([1, 5, 3, 2])
+      5
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert max_element([1, 5, 3, 2]) == 5
+        assert max_element([-1, -5, -3]) == -1
+        assert max_element([42]) == 42
+        print("All tests passed!")
+
+  - id: humaneval_006
+    tier: 1
+    prompt: |
+      Write a Python function `is_even(n)` that returns True if n is even,
+      False otherwise.
+
+      >>> is_even(4)
+      True
+      >>> is_even(7)
+      False
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert is_even(4) == True
+        assert is_even(7) == False
+        assert is_even(0) == True
+        assert is_even(-2) == True
+        print("All tests passed!")
+
+  - id: humaneval_007
+    tier: 1
+    prompt: |
+      Write a Python function `reverse_string(s)` that returns the reverse
+      of the input string.
+
+      >>> reverse_string("hello")
+      "olleh"
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert reverse_string("hello") == "olleh"
+        assert reverse_string("world") == "dlrow"
+        assert reverse_string("a") == "a"
+        assert reverse_string("") == ""
+        print("All tests passed!")
+
+  - id: humaneval_008
+    tier: 1
+    prompt: |
+      Write a Python function `count_vowels(s)` that counts the number of
+      vowels (a, e, i, o, u) in a string, case-insensitive.
+
+      >>> count_vowels("hello")
+      2
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert count_vowels("hello") == 2
+        assert count_vowels("AEIOU") == 5
+        assert count_vowels("xyz") == 0
+        assert count_vowels("Programming") == 3
+        print("All tests passed!")
+
+  - id: humaneval_009
+    tier: 1
+    prompt: |
+      Write a Python function `factorial(n)` that computes n! (n factorial).
+      Assume n >= 0.
+
+      >>> factorial(5)
+      120
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert factorial(5) == 120
+        assert factorial(0) == 1
+        assert factorial(1) == 1
+        assert factorial(10) == 3628800
+        print("All tests passed!")
+
+  - id: humaneval_010
+    tier: 1
+    prompt: |
+      Write a Python function `sum_list(lst)` that returns the sum of all
+      elements in a list of numbers.
+
+      >>> sum_list([1, 2, 3, 4])
+      10
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert sum_list([1, 2, 3, 4]) == 10
+        assert sum_list([]) == 0
+        assert sum_list([5]) == 5
+        assert sum_list([-1, -2, -3]) == -6
+        print("All tests passed!")
+
+  - id: humaneval_012
+    tier: 1
+    prompt: |
+      Write a Python function `find_min(lst)` that returns the minimum
+      element in a non-empty list of numbers.
+
+      >>> find_min([3, 1, 4, 1, 5])
+      1
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert find_min([3, 1, 4, 1, 5]) == 1
+        assert find_min([10]) == 10
+        assert find_min([-5, -2, -8]) == -8
+        print("All tests passed!")
+
+  - id: humaneval_013
+    tier: 1
+    prompt: |
+      Write a Python function `remove_duplicates(lst)` that returns a new
+      list with duplicates removed, preserving the original order.
+
+      >>> remove_duplicates([1, 2, 2, 3, 1])
+      [1, 2, 3]
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert remove_duplicates([1, 2, 2, 3, 1]) == [1, 2, 3]
+        assert remove_duplicates([]) == []
+        assert remove_duplicates([5]) == [5]
+        assert remove_duplicates([1, 1, 1]) == [1]
+        print("All tests passed!")
+
+  - id: humaneval_014
+    tier: 1
+    prompt: |
+      Write a Python function `multiply_list(lst)` that returns the product
+      of all elements in a list of numbers. Return 1 for an empty list.
+
+      >>> multiply_list([2, 3, 4])
+      24
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert multiply_list([2, 3, 4]) == 24
+        assert multiply_list([]) == 1
+        assert multiply_list([5]) == 5
+        assert multiply_list([-2, 3]) == -6
+        print("All tests passed!")
+
+  - id: humaneval_015
+    tier: 1
+    prompt: |
+      Write a Python function `flatten_list(lst)` that flattens a nested
+      list one level deep.
+
+      >>> flatten_list([[1, 2], [3, 4]])
+      [1, 2, 3, 4]
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert flatten_list([[1, 2], [3, 4]]) == [1, 2, 3, 4]
+        assert flatten_list([[1], [2], [3]]) == [1, 2, 3]
+        assert flatten_list([[]]) == []
+        print("All tests passed!")
+
+  # ── MBPP-inspired (expanded) ────────────────────────────────────────
+
+  - id: mbpp_006
+    tier: 2
+    prompt: |
+      Write a Python function `fibonacci(n)` that returns the nth Fibonacci
+      number. F(0) = 0, F(1) = 1, F(n) = F(n-1) + F(n-2) for n >= 2.
+
+      >>> fibonacci(6)
+      8
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert fibonacci(0) == 0
+        assert fibonacci(1) == 1
+        assert fibonacci(6) == 8
+        assert fibonacci(10) == 55
+        print("All tests passed!")
+
+  - id: mbpp_007
+    tier: 2
+    prompt: |
+      Write a Python function `prime_factors(n)` that returns a list of
+      prime factors of n in ascending order. Assume n > 1.
+
+      >>> prime_factors(12)
+      [2, 2, 3]
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert prime_factors(12) == [2, 2, 3]
+        assert prime_factors(13) == [13]
+        assert prime_factors(100) == [2, 2, 5, 5]
+        assert prime_factors(30) == [2, 3, 5]
+        print("All tests passed!")
+
+  - id: mbpp_008
+    tier: 2
+    prompt: |
+      Write a Python function `is_prime(n)` that returns True if n is a
+      prime number, False otherwise. Assume n >= 2.
+
+      >>> is_prime(7)
+      True
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert is_prime(2) == True
+        assert is_prime(7) == True
+        assert is_prime(10) == False
+        assert is_prime(97) == True
+        print("All tests passed!")
+
+  - id: mbpp_009
+    tier: 2
+    prompt: |
+      Write a Python function `longest_common_prefix(strs)` that finds the
+      longest common prefix string amongst an array of strings. Return ""
+      if there is no common prefix.
+
+      >>> longest_common_prefix(["flower", "flow", "flight"])
+      "fl"
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert longest_common_prefix(["flower", "flow", "flight"]) == "fl"
+        assert longest_common_prefix(["dog", "racecar", "car"]) == ""
+        assert longest_common_prefix(["a"]) == "a"
+        print("All tests passed!")
+
+  - id: mbpp_010
+    tier: 2
+    prompt: |
+      Write a Python function `merge_sorted_lists(lst1, lst2)` that merges
+      two sorted lists into one sorted list.
+
+      >>> merge_sorted_lists([1, 3, 5], [2, 4, 6])
+      [1, 2, 3, 4, 5, 6]
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert merge_sorted_lists([1, 3, 5], [2, 4, 6]) == [1, 2, 3, 4, 5, 6]
+        assert merge_sorted_lists([], [1, 2]) == [1, 2]
+        assert merge_sorted_lists([1], [2]) == [1, 2]
+        print("All tests passed!")
+
+  - id: mbpp_011
+    tier: 2
+    prompt: |
+      Write a Python function `rotate_list(lst, k)` that rotates a list
+      to the right by k positions.
+
+      >>> rotate_list([1, 2, 3, 4, 5], 2)
+      [4, 5, 1, 2, 3]
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert rotate_list([1, 2, 3, 4, 5], 2) == [4, 5, 1, 2, 3]
+        assert rotate_list([1, 2, 3], 0) == [1, 2, 3]
+        assert rotate_list([1, 2], 3) == [2, 1]
+        assert rotate_list([1], 5) == [1]
+        print("All tests passed!")
+
+  - id: mbpp_012
+    tier: 2
+    prompt: |
+      Write a Python function `find_missing_number(lst)` that finds the
+      missing number in a list containing n distinct numbers in the range
+      [0, n]. The list has exactly one number missing.
+
+      >>> find_missing_number([0, 1, 3])
+      2
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert find_missing_number([0, 1, 3]) == 2
+        assert find_missing_number([1, 2, 3, 4]) == 0
+        assert find_missing_number([0]) == 1
+        assert find_missing_number([0, 1, 2, 3, 5]) == 4
+        print("All tests passed!")
+
+  - id: mbpp_013
+    tier: 2
+    prompt: |
+      Write a Python function `valid_parentheses(s)` that determines if
+      a string of parentheses (), {}, [] is valid. Valid means each opening
+      bracket has a corresponding closing bracket in the correct order.
+
+      >>> valid_parentheses("()[]{}")
+      True
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert valid_parentheses("()[]{}") == True
+        assert valid_parentheses("([{}])") == True
+        assert valid_parentheses("(]") == False
+        assert valid_parentheses("([)]") == False
+        assert valid_parentheses("") == True
+        print("All tests passed!")
+
+  - id: mbpp_014
+    tier: 2
+    prompt: |
+      Write a Python function `two_sum(nums, target)` that finds two numbers
+      in the list that add up to the target. Return their indices as a tuple.
+      Assume exactly one solution exists.
+
+      >>> two_sum([2, 7, 11, 15], 9)
+      (0, 1)
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert two_sum([2, 7, 11, 15], 9) == (0, 1)
+        assert two_sum([3, 2, 4], 6) == (1, 2)
+        assert two_sum([3, 3], 6) == (0, 1)
+        print("All tests passed!")
+
+  # ── Harder problems (expanded) ──────────────────────────────────────
+
+  - id: code_hard_004
+    tier: 3
+    prompt: |
+      Write a Python function `longest_palindromic_substring(s)` that finds
+      the longest palindromic substring in s.
+
+      >>> longest_palindromic_substring("babad")
+      "bab"  # or "aba"
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        def is_palindrome(s):
+            return s == s[::-1]
+        result1 = longest_palindromic_substring("babad")
+        assert is_palindrome(result1) and len(result1) == 3
+        result2 = longest_palindromic_substring("cbbd")
+        assert result2 == "bb"
+        result3 = longest_palindromic_substring("a")
+        assert result3 == "a"
+        print("All tests passed!")
+
+  - id: code_hard_005
+    tier: 3
+    prompt: |
+      Write a Python function `permutations(lst)` that generates all
+      permutations of a list. Return as a list of lists.
+
+      >>> sorted(permutations([1, 2, 3]))
+      [[1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]]
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        result = permutations([1, 2, 3])
+        expected = [[1, 2, 3], [1, 3, 2], [2, 1, 3], [2, 3, 1], [3, 1, 2], [3, 2, 1]]
+        assert sorted(result) == sorted(expected)
+        result2 = permutations([1])
+        assert result2 == [[1]]
+        print("All tests passed!")
+
+  - id: code_hard_006
+    tier: 3
+    prompt: |
+      Write a Python function `quick_sort(lst)` that implements the quicksort
+      algorithm to sort a list of numbers in ascending order.
+
+      >>> quick_sort([3, 6, 8, 10, 1, 2, 1])
+      [1, 1, 2, 3, 6, 8, 10]
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert quick_sort([3, 6, 8, 10, 1, 2, 1]) == [1, 1, 2, 3, 6, 8, 10]
+        assert quick_sort([]) == []
+        assert quick_sort([1]) == [1]
+        assert quick_sort([5, 2, 9, 1, 5, 6]) == [1, 2, 5, 5, 6, 9]
+        print("All tests passed!")
+
+  - id: code_hard_007
+    tier: 3
+    prompt: |
+      Write a Python function `binary_search(lst, target)` that implements
+      binary search on a sorted list. Return the index if found, -1 otherwise.
+
+      >>> binary_search([1, 2, 3, 4, 5], 3)
+      2
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert binary_search([1, 2, 3, 4, 5], 3) == 2
+        assert binary_search([1, 2, 3, 4, 5], 6) == -1
+        assert binary_search([1, 2, 3, 4, 5], 1) == 0
+        assert binary_search([], 1) == -1
+        print("All tests passed!")
+
+  - id: code_hard_008
+    tier: 3
+    prompt: |
+      Write a Python function `dijkstra(graph, start)` that implements
+      Dijkstra's shortest path algorithm. Graph is a dict of dicts:
+      {node: {neighbor: weight}}. Return dict of shortest distances.
+
+      >>> graph = {'A': {'B': 1, 'C': 4}, 'B': {'C': 2, 'D': 5}, 'C': {'D': 1}, 'D': {}}
+      >>> dijkstra(graph, 'A')
+      {'A': 0, 'B': 1, 'C': 3, 'D': 4}
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        graph = {'A': {'B': 1, 'C': 4}, 'B': {'C': 2, 'D': 5}, 'C': {'D': 1}, 'D': {}}
+        result = dijkstra(graph, 'A')
+        assert result == {'A': 0, 'B': 1, 'C': 3, 'D': 4}
+        graph2 = {'A': {'B': 1}, 'B': {'C': 1}, 'C': {}}
+        result2 = dijkstra(graph2, 'A')
+        assert result2 == {'A': 0, 'B': 1, 'C': 2}
+        print("All tests passed!")
+
+  # ── Additional coding problems (HumanEval/MBPP inspired) ────────
+
+  - id: code_hard_009
+    tier: 3
+    prompt: |
+      Write a Python function `matrix_multiply(A, B)` that multiplies two
+      matrices represented as lists of lists. Return the resulting matrix.
+      Assume dimensions are compatible (A is m×n, B is n×p).
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      test_code: |
+        result = matrix_multiply([[1, 2], [3, 4]], [[5, 6], [7, 8]])
+        assert result == [[19, 22], [43, 50]], f"Got {result}"
+        result2 = matrix_multiply([[1, 0], [0, 1]], [[5, 6], [7, 8]])
+        assert result2 == [[5, 6], [7, 8]], f"Identity failed: {result2}"
+        result3 = matrix_multiply([[2]], [[3]])
+        assert result3 == [[6]], f"1x1 failed: {result3}"
+
+  - id: code_hard_010
+    tier: 2
+    prompt: |
+      Write a Python function `is_balanced(s)` that checks if a string
+      containing only '(', ')', '{', '}', '[', ']' has balanced brackets.
+      Return True if balanced, False otherwise.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      test_code: |
+        assert is_balanced("()[]{}") == True
+        assert is_balanced("(]") == False
+        assert is_balanced("([)]") == False
+        assert is_balanced("{[]}") == True
+        assert is_balanced("") == True
+        assert is_balanced("((()))") == True
+
+  - id: code_hard_011
+    tier: 2
+    prompt: |
+      Write a Python function `group_anagrams(words)` that takes a list of
+      strings and groups anagrams together. Return a list of lists, where
+      each inner list contains words that are anagrams of each other.
+      Order within groups doesn't matter.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      test_code: |
+        result = group_anagrams(["eat", "tea", "tan", "ate", "nat", "bat"])
+        result_sorted = [sorted(g) for g in result]
+        result_sorted.sort()
+        assert result_sorted == [['ate', 'eat', 'tea'], ['bat'], ['nat', 'tan']], f"Got {result_sorted}"
+
+  - id: code_hard_012
+    tier: 1
+    prompt: |
+      Write a Python function `celsius_to_fahrenheit(c)` that converts
+      a temperature from Celsius to Fahrenheit. Return the result as a float.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      test_code: |
+        assert celsius_to_fahrenheit(0) == 32.0
+        assert celsius_to_fahrenheit(100) == 212.0
+        assert celsius_to_fahrenheit(-40) == -40.0
+        assert abs(celsius_to_fahrenheit(37) - 98.6) < 0.01
+
+  # ── Mode-advantage exemplars (iterative-fix, repl >> direct) ────────
+
+  - id: coder_ma_001
+    tier: 2
+    mode_advantage: true
+    prompt: |
+      The following function is supposed to implement run-length encoding
+      but produces wrong output. Fix it.
+
+      ```python
+      def rle_encode(s):
+          if not s:
+              return ""
+          result = []
+          count = 1
+          for i in range(1, len(s)):
+              if s[i] == s[i-1]:
+                  count += 1
+              else:
+                  result.append(f"{count}{s[i]}")
+                  count = 1
+          result.append(f"{count}{s[-1]}")
+          return "".join(result)
+      ```
+
+      Write the corrected function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert rle_encode("aaabbc") == "3a2b1c"
+        assert rle_encode("a") == "1a"
+        assert rle_encode("aaa") == "3a"
+        assert rle_encode("abcd") == "1a1b1c1d"
+        assert rle_encode("") == ""
+        assert rle_encode("aabbbcccc") == "2a3b4c"
+        print("All tests passed!")
+
+  - id: coder_ma_002
+    tier: 3
+    mode_advantage: true
+    prompt: |
+      Write a Python function that converts a Roman numeral string to an integer.
+      Support I, V, X, L, C, D, M (values 1 to 3999).
+
+      ```python
+      def roman_to_int(s):
+          """Convert Roman numeral string to integer."""
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert roman_to_int("III") == 3
+        assert roman_to_int("IV") == 4
+        assert roman_to_int("IX") == 9
+        assert roman_to_int("XLII") == 42
+        assert roman_to_int("MCMXCIV") == 1994
+        assert roman_to_int("MMMCMXCIX") == 3999
+        assert roman_to_int("LVIII") == 58
+        assert roman_to_int("CDXLIV") == 444
+        print("All tests passed!")
+
+  - id: coder_ma_003
+    tier: 2
+    mode_advantage: true
+    prompt: |
+      What does this code print? Trace through carefully.
+
+      ```python
+      def f(n, memo={}):
+          if n in memo:
+              return memo[n]
+          if n <= 1:
+              return n
+          memo[n] = f(n-1, memo) + f(n-2, memo)
+          return memo[n]
+
+      results = []
+      for x in [10, 5, 15]:
+          results.append(f(x))
+      print(results[0], results[1], results[2])
+      ```
+
+      Give the exact output after ####.
+    expected: "55 5 610"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(.+)"
+
+  - id: coder_ma_004
+    tier: 3
+    mode_advantage: true
+    prompt: |
+      Write a Python function that checks if a given sudoku board is valid.
+      The board is a 9x9 list of lists, with 0 representing empty cells.
+      Check rows, columns, and 3x3 sub-boxes.
+
+      ```python
+      def is_valid_sudoku(board):
+          """Return True if the board state is valid (no conflicts)."""
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        valid = [
+            [5,3,0,0,7,0,0,0,0],
+            [6,0,0,1,9,5,0,0,0],
+            [0,9,8,0,0,0,0,6,0],
+            [8,0,0,0,6,0,0,0,3],
+            [4,0,0,8,0,3,0,0,1],
+            [7,0,0,0,2,0,0,0,6],
+            [0,6,0,0,0,0,2,8,0],
+            [0,0,0,4,1,9,0,0,5],
+            [0,0,0,0,8,0,0,7,9],
+        ]
+        assert is_valid_sudoku(valid) == True
+        # Duplicate in row
+        invalid_row = [row[:] for row in valid]
+        invalid_row[0][0] = 3  # conflicts with (0,1)
+        assert is_valid_sudoku(invalid_row) == False
+        # Duplicate in column
+        invalid_col = [row[:] for row in valid]
+        invalid_col[1][0] = 5  # conflicts with (0,0)
+        assert is_valid_sudoku(invalid_col) == False
+        # Duplicate in 3x3 box
+        invalid_box = [row[:] for row in valid]
+        invalid_box[1][1] = 5  # conflicts with (0,0) in top-left box
+        assert is_valid_sudoku(invalid_box) == False
+        print("All tests passed!")

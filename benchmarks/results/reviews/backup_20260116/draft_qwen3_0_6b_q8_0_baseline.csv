@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,73.5,1,Just echoes prompt structure without substantive analysis
+general,t3_q2_system_failure,63.2,1,Echoes questions without answering them
+general,t3_q3_strategic_communication,67.2,1,Lists constraints without actual statement
+general,t2_q1_synthesis,67.9,1,Echoes perspectives without synthesizing
+general,t2_q2_transform,65.3,0,No YAML transformation produced
+general,t2_q3_schedule,67.0,1,Says impossible but problem is solvable
+general,t2_q4_inconsistency,65.8,1,Wrong - says no inconsistencies when there are clear ones
+general,t1_q1_json,66.7,3,Correct JSON output
+general,t1_q2_multistep,70.0,0,Wrong question answered (lists not trains)
+general,t1_q3_compare,64.4,2,Reasonable microservices comparison
+thinking,t3_q1_methodological_critique,66.0,1,Vague methodological issues identified
+thinking,t3_q2_causal_inference,67.9,0,Just lists questions without answering
+thinking,t3_q3_reasoning_trap,65.2,2,Identifies the overfitting flaw correctly
+thinking,t2_q1_paradox,68.4,2,Basic philosophical positions presented
+thinking,t2_q2_counterfactual,66.8,1,Lists dimensions without analysis
+thinking,t2_q3_formal,68.8,1,Begins proof but doesn't complete it
+thinking,t2_q4_metacognition,70.9,1,Lists steps without actual estimation
+thinking,t1_q1_multistep,74.0,2,Correct approach shown but answer unclear
+thinking,t1_q2_hypothesis,73.0,1,Echoes prompt without alternatives
+thinking,t1_q3_planning,64.8,0,No orderings listed

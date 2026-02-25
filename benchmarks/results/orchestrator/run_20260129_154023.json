@@ -1,0 +1,134 @@
+{
+  "run_id": "20260129_154023",
+  "timestamp": "2026-01-29T16:31:26.165796",
+  "args": {
+    "phase": [
+      2
+    ],
+    "optimize": false,
+    "suite": [
+      "all"
+    ],
+    "start_stack": false,
+    "restart_api": true,
+    "stop_after": false,
+    "dry_run": false,
+    "api_url": "http://localhost:8000",
+    "timeout": 120
+  },
+  "phases": [
+    {
+      "phase": 2,
+      "name": "Orchestrator Benchmark",
+      "passed": true,
+      "details": {
+        "suites": {
+          "thinking": {
+            "exit_code": 0,
+            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_thinking_20260129_154023.json",
+            "quality_pass_rate": 100.0,
+            "avg_speedup": 0,
+            "avg_tps": 38.57972973557619,
+            "avg_latency_ms": 37129.7114723362,
+            "prompts_compared": 10
+          },
+          "coder": {
+            "exit_code": 0,
+            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_coder_20260129_154023.json",
+            "quality_pass_rate": 90.0,
+            "avg_speedup": 0,
+            "avg_tps": 38.590889007834924,
+            "avg_latency_ms": 37493.3753185207,
+            "prompts_compared": 10
+          },
+          "general": {
+            "exit_code": 0,
+            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_general_20260129_154023.json",
+            "quality_pass_rate": 80.0,
+            "avg_speedup": 0,
+            "avg_tps": 40.51532097201136,
+            "avg_latency_ms": 25306.269040028565,
+            "prompts_compared": 10
+          },
+          "math": {
+            "exit_code": 0,
+            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_math_20260129_154023.json",
+            "quality_pass_rate": 80.0,
+            "avg_speedup": 0,
+            "avg_tps": 40.04001798290419,
+            "avg_latency_ms": 30012.10207133554,
+            "prompts_compared": 10
+          },
+          "agentic": {
+            "exit_code": 0,
+            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_agentic_20260129_154023.json",
+            "quality_pass_rate": 80.0,
+            "avg_speedup": 0,
+            "avg_tps": 36.81114482745024,
+            "avg_latency_ms": 28800.447757123038,
+            "prompts_compared": 10
+          },
+          "instruction_precision": {
+            "exit_code": 0,
+            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_instruction_precision_20260129_154023.json",
+            "quality_pass_rate": 72.72727272727273,
+            "avg_speedup": 0,
+            "avg_tps": 38.02974395083907,
+            "avg_latency_ms": 27754.156110575423,
+            "prompts_compared": 11
+          },
+          "long_context": {
+            "exit_code": 0,
+            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_long_context_20260129_154023.json",
+            "quality_pass_rate": 55.55555555555556,
+            "avg_speedup": 0,
+            "avg_tps": 25.00936857512625,
+            "avg_latency_ms": 55711.95358534654,
+            "prompts_compared": 9
+          },
+          "vl": {
+            "exit_code": 0,
+            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_vl_20260129_154023.json",
+            "quality_pass_rate": 66.66666666666666,
+            "avg_speedup": 0,
+            "avg_tps": 4.446652553413129,
+            "avg_latency_ms": 55589.67516280245,
+            "prompts_compared": 12
+          }
+        },
+        "timestamp": "20260129_154023",
+        "telemetry": {
+          "total_tasks": 0,
+          "role_usage": {},
+          "routing_strategy": {},
+          "escalations": [],
+          "escalation_count": 0,
+          "outcomes": {
+            "success": 0,
+            "failure": 0
+          },
+          "avg_latency_s": 0.0,
+          "latency_p50_s": 0.0,
+          "latency_p95_s": 0.0,
+          "tool_usage": {},
+          "exploration_count": 0,
+          "exploration_tokens": 0,
+          "formalizer": {
+            "invocations": 0,
+            "total_pages": 0,
+            "total_elapsed_sec": 0.0,
+            "errors": 0
+          }
+        }
+      },
+      "duration_s": 3063.0850353350397,
+      "error": null
+    }
+  ],
+  "summary": {
+    "total_phases": 1,
+    "passed": 1,
+    "failed": 0,
+    "total_duration_s": 3063.0850353350397
+  }
+}

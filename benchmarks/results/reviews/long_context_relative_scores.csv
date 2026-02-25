@@ -1,0 +1,42 @@
+model,question_id,score,score_reason
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q1_needle,0,Empty response or unrelated output (generated code instead of analysis)
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q1_needle,10,Found correct API key with exact value
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q1_needle,10,Found correct API key with exact value
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q1_needle,10,Found correct API key with exact value
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q1_needle,10,Found correct API key with exact value
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q2_multi_file,5,Identified bugs but did not trace full data flow
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q2_multi_file,8,Traced data flow and identified bugs
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q2_multi_file,8,Traced data flow and identified bugs
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q2_multi_file,8,Traced data flow and identified bugs
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q2_multi_file,8,Traced data flow and identified bugs
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q3_extraction,7,Extracted dates and amounts but missing party names
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q3_extraction,9,"Extracted dates, amounts, and parties comprehensively"
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q3_extraction,5,Partial extraction - missing some categories
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q3_extraction,0,Empty or echoed document without extraction
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q3_extraction,9,"Extracted dates, amounts, and parties comprehensively"
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q1_deep_needle,0,Empty or minimal response
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q1_deep_needle,10,Found correct server (node-7) and exact time (03:47:22)
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q1_deep_needle,2,Did not locate the critical error needle
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q2_synthesis,7,Good analysis but integration could be stronger
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q2_synthesis,9,Comprehensive synthesis across all 4 documents
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q2_synthesis,9,Comprehensive synthesis across all 4 documents
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q3_architecture,9,Comprehensive architecture analysis with patterns and hierarchy
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q3_architecture,9,Comprehensive architecture analysis with patterns and hierarchy
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q3_architecture,2,Did not provide architecture analysis
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q1_multi_hop_reasoning,9,Excellent multi-hop reasoning with most elements correct
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q1_multi_hop_reasoning,9,Excellent multi-hop reasoning with most elements correct
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q1_multi_hop_reasoning,9,Excellent multi-hop reasoning with most elements correct
+gemma-3-27B-it-QAT-Q4_0,t3_q1_multi_hop_reasoning,9,Excellent multi-hop reasoning with most elements correct
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q1_multi_hop_reasoning,9,Excellent multi-hop reasoning with most elements correct
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q2_contradiction_detection,9,Comprehensive contradiction detection with reliability analysis
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q2_contradiction_detection,9,Comprehensive contradiction detection with reliability analysis
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q2_contradiction_detection,9,Comprehensive contradiction detection with reliability analysis
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q2_contradiction_detection,9,Comprehensive contradiction detection with reliability analysis
+gemma-3-27B-it-QAT-Q4_0,t3_q2_contradiction_detection,9,Comprehensive contradiction detection with reliability analysis
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q2_contradiction_detection,9,Comprehensive contradiction detection with reliability analysis
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q3_evolving_requirements,9,Excellent requirements tracking with attribution and scope creep analysis
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q3_evolving_requirements,9,Excellent requirements tracking with attribution and scope creep analysis
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q3_evolving_requirements,0,Empty or minimal response
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q3_evolving_requirements,9,Excellent requirements tracking with attribution and scope creep analysis
+gemma-3-27B-it-QAT-Q4_0,t3_q3_evolving_requirements,9,Excellent requirements tracking with attribution and scope creep analysis
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q3_evolving_requirements,9,Excellent requirements tracking with attribution and scope creep analysis

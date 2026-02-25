@@ -1,0 +1,47 @@
+{
+  "suite": "t2_delegation",
+  "description": "Delegation tests - target >90% pass rate",
+  "tests": {
+    "parallel_summarize": {
+      "test_id": "t2_parallel_summarize",
+      "expected_behavior": "Uses llm_batch() for parallel summarization",
+      "pass_criteria": {
+        "max_turns": 6,
+        "uses_function": ["llm_batch"],
+        "must_call_final": true,
+        "answer_structure": "combined_summary"
+      }
+    },
+    "iterative_refine": {
+      "test_id": "t2_iterative_refine",
+      "expected_behavior": "Multiple llm_call rounds for iterative improvement",
+      "pass_criteria": {
+        "max_turns": 8,
+        "uses_function": ["llm_call"],
+        "llm_calls_count": {"min": 2, "max": 5},
+        "must_call_final": true
+      }
+    },
+    "code_explain": {
+      "test_id": "t2_code_explain",
+      "expected_behavior": "Analyzes code and explains clearly",
+      "pass_criteria": {
+        "max_turns": 6,
+        "uses_function": ["llm_call"],
+        "answer_contains_any": ["bubble", "sort", "swap", "loop", "O(n"],
+        "must_call_final": true
+      }
+    },
+    "structured_extract": {
+      "test_id": "t2_structured_extract",
+      "expected_behavior": "Extracts information to JSON format",
+      "pass_criteria": {
+        "max_turns": 5,
+        "uses_function": ["llm_call"],
+        "answer_is_valid_json": true,
+        "json_has_keys": ["name", "email"],
+        "must_call_final": true
+      }
+    }
+  }
+}

@@ -1,0 +1,1 @@
+ba16f2ed9813b8453914d0c84756def8c43876229d354bec0501b25087601d41  /mnt/raid0/llm/models/DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf

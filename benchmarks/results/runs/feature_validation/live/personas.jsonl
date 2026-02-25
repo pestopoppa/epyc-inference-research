@@ -1,0 +1,1 @@
+{"feature": "personas", "verdict": "FAIL_LATENCY", "quality_delta": 0.0, "latency_delta_s": 20.565114297001855, "tps_delta": -35.13557989111432, "memory_delta_mb": -0.23828125, "timestamp": "2026-02-19T23:00:52+00:00"}

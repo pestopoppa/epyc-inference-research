@@ -1,0 +1,23 @@
+
+Based on the provided image, here is an analysis of the figure and its context.
+
+### 1) Type of Figure
+The figure is a **flowchart**. More specifically, it is a **systemic operational flowchart** that illustrates the lifecycle and interaction of different components within the Twyne protocol. It is not a mathematical or algorithmic diagram, but rather a process map that shows the sequence of states and the conditions under which a position (or "borrower position") transitions from one state to another.
+
+### 2) Key Components
+The diagram is composed of several key components that represent the operational states and processes:
+
+-   **State Machine (Left Side):** This is the primary lifecycle of a borrower's position, showing the progression from initial setup to final settlement.
+    -   **Created:** The initial state where a position is created.
+    -   **Funded:** The state where the position is funded with collateral.
+    -   **Active - Healthy:** The primary operational state where the position is active and considered healthy.
+    -   **Rebalance Needed:** A state indicating that the position is no longer healthy and requires a rebalance to maintain its health.
+    -   **At Risk:** A state that is entered when the position's health deteriorates beyond a critical threshold.
+    -   **Liquidation Needed:** The final state in the operational sequence, where the position is at risk of being liquidated.
+
+-   **External Processes (Right Side):** These are the mechanisms that can affect the position's health.
+    -   **Position Management:** A process that can move a position from "At Risk" back to "Active - Healthy" if the position's health improves.
+    -   **Interest Accrual:** A process that causes a position to move from "Active - Healthy" to "Rebalance Needed" as interest accumulates over time.
+
+-   **
+

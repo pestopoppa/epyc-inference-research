@@ -1,0 +1,16 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,122.74,2,Identifies reasonable issues but lacks rigor for T3 difficulty
+thinking,t3_q2_causal_inference,107.21,1,Misidentifies Yellow Fingers as confounder (should be collider). Wrong on minimal adjustment set
+thinking,t3_q3_reasoning_trap,108.07,2,Identifies overfitting concept but scenario is weak
+thinking,t2_q1_paradox,119.34,2,Reasonable philosophical discussion with multiple positions
+thinking,t2_q2_counterfactual,118.32,3,Good analysis across all three dimensions
+thinking,t2_q3_formal,112.85,3,Correct proof of hypothetical syllogism with valid example
+thinking,t2_q4_metacognition,117.66,2,Reasonable estimation approach but lacks depth
+thinking,t1_q1_multistep,112.38,3,Correct answer: 11:34 AM with valid work shown
+thinking,t1_q2_hypothesis,122.17,3,Three valid alternative explanations provided
+thinking,t1_q3_planning,109.39,1,Final answer wrong - lists one ordering when multiple exist
+general,t3_q1_policy_analysis,118.0,2,Reasonable policy analysis but somewhat generic
+general,t3_q2_system_failure,108.18,2,Understands race condition but explanation is confused
+general,t3_q3_strategic_communication,108.49,3,Good executive communication format
+general,t2_q1_synthesis,109.46,2,Recommends 3-month timeline - doesn't address 2-week urgency
+general,t2_q2_transform,114.11,1,Malformed YAML with duplicate keys and wrong grouping

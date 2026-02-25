@@ -1,0 +1,60 @@
+{
+  "suite": "t3_escalation",
+  "description": "Escalation tests - target >70% pass rate",
+  "tests": {
+    "complex_code_gen": {
+      "test_id": "t3_complex_code_gen",
+      "expected_behavior": "Triggers escalation to coder specialist for complex code",
+      "pass_criteria": {
+        "max_turns": 10,
+        "escalation_triggered": true,
+        "escalation_to": "coder",
+        "answer_contains_any": ["class", "def", "LRU", "lock", "thread"],
+        "must_call_final": true
+      }
+    },
+    "architecture_design": {
+      "test_id": "t3_architecture_design",
+      "expected_behavior": "Triggers escalation to architect specialist",
+      "pass_criteria": {
+        "max_turns": 10,
+        "escalation_triggered": true,
+        "escalation_to": "architect",
+        "answer_contains_any": ["microservice", "API", "database", "scale", "load"],
+        "must_call_final": true
+      }
+    },
+    "failure_recovery": {
+      "test_id": "t3_failure_recovery",
+      "expected_behavior": "Recovers from malformed input and produces valid output",
+      "pass_criteria": {
+        "max_turns": 8,
+        "handles_error": true,
+        "answer_is_valid_json": true,
+        "json_has_keys": ["name", "age"],
+        "must_call_final": true
+      }
+    },
+    "long_context_64k": {
+      "test_id": "t3_long_context_64k",
+      "expected_behavior": "Handles large context and finds needle in haystack",
+      "pass_criteria": {
+        "max_turns": 10,
+        "answer_contains": ["SECRET_CODE_XYZ123"],
+        "must_call_final": true
+      }
+    },
+    "ambiguous_task": {
+      "test_id": "t3_ambiguous_task",
+      "expected_behavior": "Recognizes ambiguity and handles appropriately",
+      "pass_criteria": {
+        "max_turns": 8,
+        "one_of": [
+          {"asks_clarification": true},
+          {"answer_contains_any": ["type hints", "docstring", "validation", "error handling", "typing", "documentation"]}
+        ],
+        "must_call_final": true
+      }
+    }
+  }
+}

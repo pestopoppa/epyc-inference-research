@@ -1,0 +1,31 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t1_q1_json,,0,No answer - only prompt echo
+general,t1_q2_multistep,,0,No answer - output degrades into repetition
+general,t1_q3_compare,12.65,2,Good comparison but truncated mid-sentence
+general,t2_q1_synthesis,,0,Empty output (only dashes)
+general,t2_q2_transform,9.97,1,Understands task but no actual YAML output
+general,t2_q3_schedule,150.21,0,No answer - only prompt echo
+general,t2_q4_inconsistency,92.08,0,No answer - only prompt echo
+general,t3_q1_policy_analysis,,3,"Comprehensive analysis with 3 failure modes, mechanisms, amendments, and trade-offs"
+general,t3_q2_system_failure,130.29,0,No answer - only prompt echo
+general,t3_q3_strategic_communication,,2,Good opening statement covering all points but degrades into repetition
+vl,t1_q1_chart,12.08,1,Generic explanation without actual image data - cannot process image
+vl,t1_q2_invoice,133.01,0,No answer - only prompt echo
+vl,t1_q3_code,99.29,0,No answer - only prompt echo
+vl,t2_q1_math,11.36,2,Solves example equations correctly but not the actual handwritten one
+vl,t2_q2_flowchart,12.48,1,Generic response acknowledging flowchart but cannot describe actual content
+vl,t2_q3_diff,122.83,0,No answer - only prompt echo
+vl,t2_q4_puzzle,12.24,1,Generic pattern discussion without solving actual puzzle
+vl,t3_q1_scientific_diagram,11.0,1,Generic analysis framework but cannot see actual figure
+vl,t3_q2_architectural_blueprint,10.94,1,Attempts analysis with assumed coordinates but cannot see actual blueprint
+vl,t3_q3_multi_image_temporal,10.9,1,Generic temporal analysis without actual image data
+agentic,t1_q1_sequential,119.89,0,No answer - only prompt echo
+agentic,t1_q2_error_handling,144.12,0,No answer - only prompt echo
+agentic,t1_q3_nested_params,161.38,0,No answer - only prompt echo
+agentic,t2_q1_ambiguous,114.7,0,No answer - only prompt echo
+agentic,t2_q2_error_chain,171.34,0,No answer - only prompt echo (truncated at [end of te)
+agentic,t2_q3_schema_edge,131.86,0,No answer - only prompt echo
+agentic,t2_q4_orchestration,191.47,0,No answer - only prompt echo
+agentic,t3_q1_competing_constraints,152.65,0,No answer - prompt echo (truncated)
+agentic,t3_q2_multi_agent_coordination,180.83,0,No answer - prompt echo (truncated)
+agentic,t3_q3_adversarial_robustness,133.51,0,No answer - prompt echo (truncated)

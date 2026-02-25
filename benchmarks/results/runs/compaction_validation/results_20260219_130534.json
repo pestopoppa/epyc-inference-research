@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-02-19T13:05:34",
+  "tests": [
+    {
+      "name": "baseline_small",
+      "error": "http_504: {\"answer\":\"[ERROR: Inference lock timeout (request deadline exceeded) (role=frontdoor, mode=exclusive, lock=/mnt/raid0/llm/tmp/heavy_model.lock, request=chat-6bb0c0b0)]\",\"turns\":1,\"tokens_used\":850,\"elapsed_seconds\":97.54277249000734,\"mock_mode\":false,\"real_mode\":true,\"cache_stats\":{\"frontdoor\":{\"router_total_routes\":0,\"router_hit_rate\":0.0,\"backend_hit_rate\":0.0,\"backend_token_savings\":0.0,\"total_prompt_tokens\":0,\"cached_prompt_tokens\":0,\"slot_stats\":[{\"slot_id\":0,\"prefix_hash\":\"\",\"hit_count\":0",
+      "pass": false
+    },
+    {
+      "name": "c1_medium_context",
+      "context_chars": 15069,
+      "answer_chars": 0,
+      "elapsed_s": 37.5,
+      "tool_results_cleared": 0,
+      "compaction_triggered": false,
+      "compaction_tokens_saved": 0,
+      "mode": "direct",
+      "has_answer": false,
+      "pass": true
+    },
+    {
+      "name": "c1_large_context",
+      "context_chars": 25025,
+      "answer_chars": 0,
+      "elapsed_s": 57.4,
+      "tool_results_cleared": 0,
+      "compaction_triggered": false,
+      "compaction_tokens_saved": 0,
+      "mode": "direct",
+      "has_answer": false,
+      "pass": true
+    }
+  ]
+}

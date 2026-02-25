@@ -1,0 +1,34 @@
+encoding image slice...
+image slice encoded in 26309 ms
+decoding image batch 1/2, n_tokens_batch = 2048
+image decoded (batch 1/2) in 4048 ms
+decoding image batch 2/2, n_tokens_batch = 1609
+image decoded (batch 2/2) in 4543 ms
+
+This figure from a DeFi whitepaper is a **contour plot with color gradients and overlayed theoretical/empirical boundaries**, designed to visualize the relationship between two variables — liquidation incentive (i) and closing factor (c) — and the resulting CLP (Collateral Liquidation Profit) losses.
+
+---
+
+### 1. Type of Visualization
+
+This is a **2D contour plot** (also called a heatmap or surface plot), where:
+- The x-axis represents the **Liquidation Incentive (i)**.
+- The y-axis represents the **Closing Factor (c)**.
+- The color gradient (from blue to red) represents the **Expected CLP Loss** (in decimals, where -1 = 100% loss).
+- Overlayed lines represent theoretical and simulated loss frontiers.
+
+It is a **simulation-based validation plot**, comparing theoretical predictions (a) and (b) with empirical results from simulations (c) and (d).
+
+---
+
+### 2. Key Components or Data Series
+
+- **Color Gradient (Contour Plot)**: Shows the expected CLP loss for each combination of (i, c). The reddest areas indicate the highest losses, while blue areas indicate minimal or no losses.
+- **Black Dashed Line**: The **Theoretical CLP-Loss Frontier** — the boundary of the theoretical minimum loss region, derived from Equation 64.
+- **Black Solid Line (in c and d)**: The **Toxic Liquidation Frontier** — a region where liquidation spirals occur, leading to “bad debt” (i.e., losses that are not captured by the theoretical model).
+- **“No Losses” Region**: A vertical band on the left (low i) where CLP losses are zero — this is the region where liquidation incentives are too low to trigger losses.
+- **“CLP Losses” Region**: The area to the right of the frontier where losses are incurred.
+- **Labels**: “(a) ρ = 0.98”, “(b) ρ = 1”, “(c) ρ = 0.98 (simulation)”, “(d) ρ = 1 (simulation)” — indicating different values of the parameter ρ (likely a risk or correlation parameter).
+- **Color Bars**: Show the scale of CLP Loss (in decimals).
+
+---

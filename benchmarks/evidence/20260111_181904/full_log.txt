@@ -1,0 +1,153 @@
+[2026-01-11 18:19:04.690] Output directory: /mnt/raid0/llm/claude/benchmarks/evidence/20260111_181904
+
+================================================================================
+[2026-01-11 18:19:04.693] [0;32mPAGED ATTENTION COMPREHENSIVE BENCHMARK EVIDENCE[0m
+================================================================================
+[2026-01-11 18:19:04.695] Script started
+[2026-01-11 18:19:04.696] Purpose: Collect ALL evidence for PR #18747 reviewers
+
+================================================================================
+[2026-01-11 18:19:04.699] [0;32m1. SYSTEM INFORMATION[0m
+================================================================================
+[2026-01-11 18:19:04.701] Hostname: Beelzebub
+[2026-01-11 18:19:04.703] Kernel: 6.14.0-37-generic
+[2026-01-11 18:19:04.705] Date/Time: 2026-01-11T18:19:04+01:00
+[2026-01-11 18:19:04.706] 
+[2026-01-11 18:19:04.707] CPU Information:
+Architecture:                            x86_64
+CPU op-mode(s):                          32-bit, 64-bit
+Address sizes:                           52 bits physical, 57 bits virtual
+Byte Order:                              Little Endian
+CPU(s):                                  192
+On-line CPU(s) list:                     0-191
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 9655 96-Core Processor
+CPU family:                              26
+Model:                                   2
+Thread(s) per core:                      2
+Core(s) per socket:                      96
+Socket(s):                               1
+Stepping:                                1
+Frequency boost:                         enabled
+CPU(s) scaling MHz:                      51%
+CPU max MHz:                             4510.0000
+CPU min MHz:                             1200.0000
+BogoMIPS:                                5199.87
+Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx_vnni avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd amd_ppin cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq la57 rdpid bus_lock_detect movdiri movdir64b overflow_recov succor smca fsrm avx512_vp2intersect flush_l1d debug_swap amd_lbr_pmc_freeze
+Virtualization:                          AMD-V
+L1d cache:                               4.5 MiB (96 instances)
+L1i cache:                               3 MiB (96 instances)
+L2 cache:                                96 MiB (96 instances)
+L3 cache:                                384 MiB (12 instances)
+NUMA node(s):                            2
+NUMA node0 CPU(s):                       0-47,96-143
+NUMA node1 CPU(s):                       48-95,144-191
+Vulnerability Gather data sampling:      Not affected
+Vulnerability Ghostwrite:                Not affected
+Vulnerability Indirect target selection: Not affected
+Vulnerability Itlb multihit:             Not affected
+Vulnerability L1tf:                      Not affected
+Vulnerability Mds:                       Not affected
+Vulnerability Meltdown:                  Not affected
+Vulnerability Mmio stale data:           Not affected
+Vulnerability Reg file data sampling:    Not affected
+Vulnerability Retbleed:                  Not affected
+Vulnerability Spec rstack overflow:      Mitigation; IBPB on VMEXIT only
+Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+Vulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; PBRSB-eIBRS Not affected; BHI Not affected
+Vulnerability Srbds:                     Not affected
+Vulnerability Tsa:                       Not affected
+Vulnerability Tsx async abort:           Not affected
+Vulnerability Vmscape:                   Mitigation; IBPB on VMEXIT
+[2026-01-11 18:19:04.730] 
+[2026-01-11 18:19:04.731] Memory Information:
+               total        used        free      shared  buff/cache   available
+Mem:           1.1Ti        51Gi       314Gi        11Mi       775Gi       1.1Ti
+Swap:          8.0Gi       212Mi       7.8Gi
+[2026-01-11 18:19:04.734] 
+[2026-01-11 18:19:04.735] NUMA Topology:
+available: 2 nodes (0-1)
+node 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 96 97 98 99 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137 138 139 140 141 142 143
+node 0 size: 580105 MB
+node 0 free: 168499 MB
+node 1 cpus: 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163 164 165 166 167 168 169 170 171 172 173 174 175 176 177 178 179 180 181 182 183 184 185 186 187 188 189 190 191
+node 1 size: 580512 MB
+node 1 free: 153475 MB
+node distances:
+node   0   1 
+  0:  10  12 
+  1:  12  10 
+
+================================================================================
+[2026-01-11 18:19:04.762] [0;32m2. SOFTWARE VERSIONS[0m
+================================================================================
+[2026-01-11 18:19:04.763] llama.cpp directory: /mnt/raid0/llm/llama.cpp-experimental
+[2026-01-11 18:19:04.764] 
+[2026-01-11 18:19:04.765] Git commit:
+commit: 0b633c35de91a2e4ee7c81f8262ab834b054b9b1
+date: 2026-01-11 01:42:06 +0100
+subject: refactor: trim verbose comments in llama-kv-block.h
+[2026-01-11 18:19:04.770] 
+[2026-01-11 18:19:04.771] Git branch:
+feature/paged-attention
+[2026-01-11 18:19:04.773] 
+[2026-01-11 18:19:04.774] Git status (uncommitted changes):
+?? PR_SUBMISSION.md
+?? PR_SUBMISSION.md~
+
+================================================================================
+[2026-01-11 18:19:04.781] [0;32m3. MODEL VERIFICATION[0m
+================================================================================
+
+[2026-01-11 18:19:04.784] [0;36m--- Verifying small_qwen3_1.7b ---[0m
+[2026-01-11 18:19:04.785] Path: /mnt/raid0/llm/models/Qwen3-1.7B-Q8_0.gguf
+[2026-01-11 18:19:04.786] Exists: YES
+[2026-01-11 18:19:04.788] Size: 1.8G
+[2026-01-11 18:19:04.790] Modified: 2025-12-15 22:04:33.387473581 +0100
+[2026-01-11 18:19:04.793] Computing SHA256...
+061b54daade076b5d3362dac252678d17da8c68f07560be70818cace6590cb1a  /mnt/raid0/llm/models/Qwen3-1.7B-Q8_0.gguf
+
+[2026-01-11 18:19:05.780] [0;36m--- Verifying medium_deepseek_32b ---[0m
+[2026-01-11 18:19:05.782] Path: /mnt/raid0/llm/models/DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf
+[2026-01-11 18:19:05.783] Exists: YES
+[2026-01-11 18:19:05.786] Size: 19G
+[2026-01-11 18:19:05.788] Modified: 2025-12-13 02:03:23.400259711 +0100
+[2026-01-11 18:19:05.791] Computing SHA256...
+ba16f2ed9813b8453914d0c84756def8c43876229d354bec0501b25087601d41  /mnt/raid0/llm/models/DeepSeek-R1-Distill-Qwen-32B-Q4_K_M.gguf
+
+[2026-01-11 18:19:16.091] [0;36m--- Verifying large_llama_70b ---[0m
+[2026-01-11 18:19:16.093] Path: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3.1-70B-Instruct-GGUF/Meta-Llama-3.1-70B-Instruct-Q4_K_M.gguf
+[2026-01-11 18:19:16.094] Exists: YES
+[2026-01-11 18:19:16.097] Size: 40G
+[2026-01-11 18:19:16.099] Modified: 2025-12-13 22:24:01.320018106 +0100
+[2026-01-11 18:19:16.103] Skipping SHA256 for large model (39GB) - would take too long
+[2026-01-11 18:19:16.104] Skipping speed benchmarks (--memory-only flag set)
+
+================================================================================
+[2026-01-11 18:19:16.107] [0;32m5. MEMORY BENCHMARKS (llama-cli verbose)[0m
+================================================================================
+[2026-01-11 18:19:16.109] Note: Memory tests use shorter generation to complete faster
+
+[2026-01-11 18:19:16.111] [0;36m--- Memory: small_qwen3_1.7b ---[0m
+[2026-01-11 18:19:16.112] Running BASELINE memory test...
+[2026-01-11 18:19:16.113] Capturing KV cache size from verbose output...
+[2026-01-11 18:20:16.121] Captured 0 memory-related lines
+[2026-01-11 18:20:16.123] 
+[2026-01-11 18:20:16.124] Running PAGED memory test (block_size=64, max_blocks=100)...
+[2026-01-11 18:21:16.133] Captured 0 memory-related lines
+
+[2026-01-11 18:21:16.136] [0;36m--- Memory: medium_deepseek_32b ---[0m
+[2026-01-11 18:21:16.137] Running BASELINE memory test...
+[2026-01-11 18:21:16.139] Capturing KV cache size from verbose output...
+[2026-01-11 18:22:16.148] Captured 0 memory-related lines
+[2026-01-11 18:22:16.149] 
+[2026-01-11 18:22:16.151] Running PAGED memory test (block_size=64, max_blocks=100)...
+[2026-01-11 18:23:16.159] Captured 0 memory-related lines
+
+[2026-01-11 18:23:16.162] [0;36m--- Memory: large_llama_70b ---[0m
+[2026-01-11 18:23:16.164] Running BASELINE memory test...
+[2026-01-11 18:23:16.165] Capturing KV cache size from verbose output...
+[2026-01-11 18:24:16.172] Captured 0 memory-related lines
+[2026-01-11 18:24:16.173] 
+[2026-01-11 18:24:16.175] Running PAGED memory test (block_size=64, max_blocks=100)...

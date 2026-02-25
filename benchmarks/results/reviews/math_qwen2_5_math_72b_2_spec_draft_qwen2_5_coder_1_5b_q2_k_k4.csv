@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t1_q2_hypothesis,41.48,3,Three valid alternative explanations provided
+thinking,t3_q1_methodological_critique,41.48,3,Multiple methodological issues identified with explanations
+thinking,t3_q2_causal_inference,41.48,1,Correct answer but filled with repetitive brackets
+thinking,t3_q3_reasoning_trap,41.48,1,Attempted analysis but filled with repetitive brackets
+thinking,t2_q1_paradox,41.48,2,Multiple philosophical positions but truncated by repetition
+thinking,t2_q2_counterfactual,41.48,2,All three dimensions analyzed but corrupted output
+thinking,t2_q3_formal,41.48,3,Correct proof with formal reasoning and modus ponens
+thinking,t2_q4_metacognition,41.48,3,Complete Fermi estimation with bounds
+thinking,t1_q1_multistep,41.48,2,Substantial response with reasoning
+thinking,t1_q3_planning,41.48,2,Constraint reasoning attempted
+coder,t3_q1_concurrent_correctness,41.48,1,Good ABA explanation but corrupted by repetitive brackets
+coder,t3_q2_distributed_consistency,41.48,2,Four strategies identified but corrupted output
+coder,t3_q3_algorithmic_hardness,41.48,2,Adversary argument present but verbose with corruption
+coder,t2_q1_design,41.48,3,Complete LRU cache implementation with code
+coder,t2_q2_debug_complex,41.48,2,Code present but quality degraded
+coder,t2_q3_optimize,41.48,2,Optimization approach with code
+coder,t2_q4_system,41.48,2,System design response
+coder,t1_q1_algorithm,41.48,3,Code block present with algorithm
+coder,t1_q2_refactor,41.48,2,Refactoring code present
+coder,t1_q3_test,41.48,2,Test code generated
+agentic,t3_q1_competing_constraints,41.48,2,Tool-related response
+agentic,t3_q2_multi_agent_coordination,41.48,2,Multi-agent analysis
+agentic,t3_q3_adversarial_robustness,41.48,2,Robustness discussion
+agentic,t2_q1_ambiguous,41.48,2,Ambiguity handling
+agentic,t2_q2_error_chain,41.48,2,Error handling response
+agentic,t2_q3_schema_edge,41.48,2,Schema discussion
+agentic,t2_q4_orchestration,41.48,2,Orchestration response
+agentic,t1_q1_sequential,41.48,2,Sequential tool use
+agentic,t1_q2_error_handling,41.48,2,Error handling approach
+agentic,t1_q3_nested_params,41.48,2,Parameter handling
+general,t3_q1_policy_analysis,41.48,3,Substantial policy analysis response
+general,t3_q2_system_failure,41.48,3,Detailed system failure analysis
+general,t3_q3_strategic_communication,41.48,3,Strategic communication response
+general,t2_q1_synthesis,41.48,3,Synthesis response with detail
+general,t2_q2_transform,41.48,3,Transformation response
+general,t2_q3_schedule,41.48,3,Scheduling response
+general,t2_q4_inconsistency,41.48,3,Inconsistency analysis
+general,t1_q1_json,41.48,3,JSON structure present
+general,t1_q2_multistep,41.48,3,Multi-step response
+general,t1_q3_compare,41.48,3,Comparison response
+math,t3_q1_analysis,41.48,3,Complete solution with boxed answer for limit
+math,t3_q2_combinatorics,41.48,1,Combinatorial proof attempted but corrupted by repetition
+math,t3_q3_probability_theory,41.48,1,Probability approach but corrupted output
+math,t2_q1_optimization,41.48,3,Optimization problem solved with boxed answer
+math,t2_q2_proof,41.48,3,Mathematical proof with boxed conclusion
+math,t2_q3_calculus,41.48,3,Calculus solution with derivation
+math,t2_q4_statistics,41.48,3,Statistical analysis with conclusion
+math,t1_q1_word_problem,41.48,3,Word problem solved correctly
+math,t1_q2_system_equations,41.48,3,System of equations solved
+math,t1_q3_probability,41.48,3,Probability calculation with answer
+instruction_precision,t3_q1_self_referential,41.48,2,Response generated but format unclear
+instruction_precision,t3_q2_cascading_constraints,41.48,2,Constraint handling
+instruction_precision,t3_q3_meta_instruction,41.48,2,Meta-instruction following
+instruction_precision,t2_q1_resist_elaboration,41.48,2,Elaboration resistance attempt
+instruction_precision,t2_q2_maintain_format,41.48,2,Format maintenance attempt
+instruction_precision,t2_q3_empty_handling,41.48,2,Empty case handling
+instruction_precision,t2_q4_conflicting_constraints,41.48,2,Constraint conflict handling
+instruction_precision,t1_q1_negative_instruction,41.48,2,Negative instruction following
+instruction_precision,t1_q2_word_limit,41.48,2,Word limit compliance
+instruction_precision,t1_q3_structured_format,41.48,2,Structured format attempt
+instruction_precision,t1_q4_multiple_constraints,41.48,2,Multiple constraint handling

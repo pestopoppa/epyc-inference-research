@@ -1,0 +1,191 @@
+{
+  "problem_id": "arch-t1-simple-app",
+  "original_task": "Build me a real-time chat application that can handle millions of concurrent users.",
+  "formal_specification": {
+    "problem_type": "architecture",
+    "variables": [
+      {
+        "name": "concurrent_users",
+        "type": "int",
+        "domain": "concurrent_users >= 1000000",
+        "description": "Target number of simultaneous connected users"
+      }
+    ],
+    "architecture": {
+      "components": [
+        {
+          "name": "client",
+          "role": "Web/mobile frontend for user interaction",
+          "technology": "React/React Native",
+          "scaling": "horizontal"
+        },
+        {
+          "name": "load_balancer",
+          "role": "Distribute WebSocket connections across servers",
+          "technology": "HAProxy/nginx with sticky sessions",
+          "scaling": "horizontal"
+        },
+        {
+          "name": "api_gateway",
+          "role": "REST API for non-realtime operations",
+          "technology": "Kong/API Gateway",
+          "scaling": "horizontal"
+        },
+        {
+          "name": "websocket_server",
+          "role": "Handle persistent WebSocket connections",
+          "technology": "Node.js/Go with socket.io or ws",
+          "scaling": "horizontal"
+        },
+        {
+          "name": "message_broker",
+          "role": "Pub/sub for message distribution across servers",
+          "technology": "Redis Pub/Sub or Kafka",
+          "scaling": "horizontal"
+        },
+        {
+          "name": "presence_service",
+          "role": "Track online/offline user status",
+          "technology": "Redis with TTL keys",
+          "scaling": "horizontal"
+        },
+        {
+          "name": "message_store",
+          "role": "Persistent storage for chat history",
+          "technology": "Cassandra/ScyllaDB",
+          "scaling": "horizontal"
+        },
+        {
+          "name": "cache",
+          "role": "Cache recent messages and user data",
+          "technology": "Redis Cluster",
+          "scaling": "horizontal"
+        }
+      ],
+      "interfaces": [
+        {
+          "from": "client",
+          "to": "load_balancer",
+          "protocol": "WebSocket",
+          "async": true
+        },
+        {
+          "from": "load_balancer",
+          "to": "websocket_server",
+          "protocol": "WebSocket",
+          "async": true
+        },
+        {
+          "from": "websocket_server",
+          "to": "message_broker",
+          "protocol": "pub/sub",
+          "async": true
+        },
+        {
+          "from": "websocket_server",
+          "to": "presence_service",
+          "protocol": "Redis protocol",
+          "async": true
+        },
+        {
+          "from": "websocket_server",
+          "to": "message_store",
+          "protocol": "CQL",
+          "async": true
+        },
+        {
+          "from": "websocket_server",
+          "to": "cache",
+          "protocol": "Redis protocol",
+          "async": false
+        }
+      ],
+      "data_flow": [
+        {
+          "path": ["client", "load_balancer", "websocket_server", "message_broker", "websocket_server", "client"],
+          "data_type": "chat_message",
+          "description": "Real-time message delivery path"
+        },
+        {
+          "path": ["websocket_server", "message_store"],
+          "data_type": "message",
+          "description": "Message persistence (async write)"
+        }
+      ],
+      "quality_attributes": [
+        {
+          "attribute": "scalability",
+          "requirement": "Handle 1M+ concurrent WebSocket connections",
+          "priority": "critical"
+        },
+        {
+          "attribute": "latency",
+          "requirement": "Message delivery under 100ms p99",
+          "priority": "critical"
+        },
+        {
+          "attribute": "availability",
+          "requirement": "99.9% uptime",
+          "priority": "high"
+        },
+        {
+          "attribute": "consistency",
+          "requirement": "Eventual consistency for message ordering",
+          "priority": "medium"
+        }
+      ]
+    },
+    "constraints": [
+      {
+        "expression": "message_delivery_latency <= 100ms",
+        "description": "Real-time feel requires sub-100ms delivery",
+        "hard": true
+      },
+      {
+        "expression": "connection_capacity >= 1000000",
+        "description": "Must support millions of concurrent connections",
+        "hard": true
+      }
+    ]
+  },
+  "acceptance_criteria": [
+    {
+      "criterion": "Supports 1M+ concurrent WebSocket connections",
+      "testable": true,
+      "test_method": "Load testing with k6 or Gatling",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Message delivery under 100ms p99",
+      "testable": true,
+      "test_method": "Latency benchmarking",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Horizontal scaling works without downtime",
+      "testable": true,
+      "test_method": "Scale up/down during load test",
+      "priority": "should_have"
+    }
+  ],
+  "confidence": 0.80,
+  "ambiguities": [
+    {
+      "question": "What chat features are required (1:1, group, channels)?",
+      "assumption": "All three: 1:1, groups, and public channels",
+      "impact": "Affects message routing logic"
+    },
+    {
+      "question": "What is the message retention policy?",
+      "assumption": "Keep all messages indefinitely",
+      "impact": "Affects storage scaling strategy"
+    }
+  ],
+  "related_concepts": [
+    "WebSocket protocol",
+    "Pub/sub messaging patterns",
+    "Horizontal scaling",
+    "Consistent hashing for sharding",
+    "CAP theorem trade-offs"
+  ]
+}

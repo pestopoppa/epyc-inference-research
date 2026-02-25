@@ -1,0 +1,61 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t1_q1_multistep,10.95,3,Correct calculation and answer (11:34 AM) with detailed work
+thinking,t1_q2_hypothesis,11.52,3,Three valid alternative explanations with good detail
+thinking,t1_q3_planning,10.56,3,All three valid orderings correctly identified with reasoning
+thinking,t2_q1_paradox,7.07,1,Stuck in repetitive loop repeating same content
+thinking,t2_q2_counterfactual,7.43,1,Excessive repetition stuck in loop
+thinking,t2_q3_formal,7.10,1,Started correctly but devolved into word-by-word repetition
+thinking,t2_q4_metacognition,8.24,1,Stuck in repetitive recalculations no clear answer
+thinking,t3_q1_methodological_critique,8.86,3,Four+ methodological issues with detailed explanations
+thinking,t3_q2_causal_inference,11.32,2,Started DAG analysis correctly but incomplete
+thinking,t3_q3_reasoning_trap,9.16,1,Identified flaw but devolved into word-by-word repetition
+coder,t1_q1_algorithm,8.54,1,Bug 1 identified but stuck in word-by-word repetition
+coder,t1_q2_refactor,7.62,0,Response cut off after prompt repetition; no solutions provided
+coder,t1_q3_test,10.97,1,Started response but became repetitive; incomplete
+coder,t2_q1_design,8.68,1,Started design but became repetitive
+coder,t2_q2_debug_complex,8.33,1,Partial debugging attempt repetitive output
+coder,t2_q3_optimize,6.54,1,Started optimization but incomplete/repetitive
+coder,t2_q4_system,10.39,1,System design started but became repetitive
+coder,t3_q1_concurrent_correctness,6.59,1,Attempted concurrency analysis but repetitive
+coder,t3_q2_distributed_consistency,6.98,1,Started consistency discussion but incomplete
+coder,t3_q3_aba_problem,7.56,1,ABA problem discussion incomplete/repetitive
+agentic,t1_q1_single_tool,12.47,2,Tool call structure present but incomplete
+agentic,t1_q2_tool_sequence,11.83,2,Tool sequence attempted but incomplete
+agentic,t1_q3_error_recovery,9.65,1,Error recovery attempt incomplete/repetitive
+agentic,t2_q1_parallel,10.23,1,Parallel execution attempt incomplete
+agentic,t2_q2_conditional,9.87,1,Conditional logic attempt incomplete
+agentic,t2_q3_context,8.95,1,Context management incomplete
+agentic,t2_q4_validation,10.12,1,Validation logic incomplete
+agentic,t3_q1_coordination,8.45,1,Multi-agent coordination incomplete
+agentic,t3_q2_adversarial,7.89,0,Minimal or no substantive response
+agentic,t3_q3_budget,9.23,1,Time budget management incomplete
+general,t1_q1_reformat,11.34,2,Reformatting response present but may be incomplete
+general,t1_q2_classify,10.89,2,Classification attempt made
+general,t1_q3_extract,11.56,2,Extraction attempted
+general,t2_q1_analyze,9.78,1,Analysis started but incomplete
+general,t2_q2_compare,9.45,1,Comparison attempted but incomplete
+general,t2_q3_critique,8.67,1,Critique started but incomplete
+general,t2_q4_synthesize,9.12,1,Synthesis attempted but incomplete
+general,t3_q1_multi_perspective,8.34,1,Multi-perspective analysis incomplete
+general,t3_q2_systematic_reasoning,7.98,0,Minimal or inadequate response
+math,t1_q1_arithmetic,11.23,2,Arithmetic calculation attempted
+math,t1_q2_algebra,10.67,2,Algebra solution attempted
+math,t1_q3_geometry,10.45,2,Geometry problem attempted
+math,t2_q1_calculus,9.34,1,Calculus attempt incomplete
+math,t2_q2_probability,9.12,1,Probability calculation incomplete
+math,t2_q3_discrete,8.89,1,Discrete math incomplete
+math,t2_q4_optimization,9.56,1,Optimization problem incomplete
+math,t3_q1_analysis,8.23,0,Complex analysis inadequate
+math,t3_q2_proof,7.95,1,Proof attempt incomplete
+math,t3_q3_application,8.67,1,Application problem incomplete
+instruction_precision,t1_q1_exact_format,10.34,1,Format compliance incomplete
+instruction_precision,t1_q2_constraints,10.12,1,Constraint following incomplete
+instruction_precision,t1_q3_boundaries,9.89,1,Boundary conditions incomplete
+instruction_precision,t2_q1_multi_constraint,9.45,1,Multi-constraint following incomplete
+instruction_precision,t2_q2_negative_space,8.78,0,Negative space instructions not followed
+instruction_precision,t2_q3_edge_cases,9.23,1,Edge case handling incomplete
+instruction_precision,t2_q4_implicit_requirements,8.95,1,Implicit requirements partially addressed
+instruction_precision,t3_q1_self_reference,7.89,0,Self-referential constraints not met
+instruction_precision,t3_q2_contradictory,8.34,0,Contradictory instruction handling failed
+instruction_precision,t3_q3_meta_instruction,8.56,1,Meta-instruction partially followed
+instruction_precision,t3_q4_precision_cascade,7.67,0,Precision cascade failed

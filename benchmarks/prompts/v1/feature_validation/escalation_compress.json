@@ -1,0 +1,73 @@
+[
+  {
+    "id": "esc_01",
+    "prompt": "Given a large codebase with 50+ microservices, design a migration strategy from monolithic database to service-specific databases. Consider data consistency, migration order, rollback plans, and monitoring. The current system handles 10k requests/second with 99.9% SLA.",
+    "role": "architect_general",
+    "mode": "direct",
+    "context_size": "large",
+    "source": "long_context.yaml",
+    "rubric": {
+      "must_cover": ["strangler fig pattern or similar incremental approach", "data consistency during dual-write period", "migration order (least-coupled first)", "rollback mechanism", "monitoring/alerting during cutover"],
+      "sla_awareness": "must acknowledge 99.9% SLA constraint and minimize downtime",
+      "pass_if": "phased migration plan with rollback strategy that addresses SLA constraint"
+    }
+  },
+  {
+    "id": "esc_02",
+    "prompt": "Review and optimize this 500-line Python module that implements a custom ORM with connection pooling, query caching, and migration support. Focus on performance bottlenecks and potential race conditions in the connection pool.",
+    "role": "architect_coding",
+    "mode": "direct",
+    "context_size": "large",
+    "source": "long_context.yaml",
+    "rubric": {
+      "must_identify": ["connection pool thread safety (lock contention)", "cache invalidation strategy", "N+1 query pattern risk", "connection leak on exception"],
+      "must_suggest": ["asyncio connection pool or bounded semaphore", "prepared statement caching", "connection context manager for leak prevention"],
+      "pass_if": "identifies >=2 race conditions and suggests concrete pool optimization"
+    }
+  },
+  {
+    "id": "esc_03",
+    "prompt": "Design a real-time collaborative editing system similar to Google Docs. Cover conflict resolution (OT vs CRDT), persistence layer, presence awareness, offline support, and scalability to 1M concurrent documents.",
+    "role": "architect_general",
+    "mode": "direct",
+    "context_size": "large",
+    "source": "general.yaml",
+    "rubric": {
+      "must_cover": ["OT vs CRDT tradeoff with justified choice", "WebSocket for real-time sync", "persistence (event log or snapshots)", "presence protocol", "offline queue + conflict resolution on reconnect"],
+      "scale_consideration": "sharding strategy for 1M documents",
+      "pass_if": "chooses OT or CRDT with justification, covers >=4 of the 5 required topics"
+    }
+  },
+  {
+    "id": "esc_04",
+    "prompt": "Analyze the trade-offs between different consensus algorithms (Raft, Paxos, PBFT) for a distributed key-value store that needs to handle network partitions gracefully while maintaining linearizability.",
+    "role": "architect_general",
+    "mode": "direct",
+    "context_size": "medium",
+    "source": "general.yaml",
+    "rubric": {
+      "raft": ["leader-based, simpler than Paxos", "strong consistency", "single leader bottleneck"],
+      "paxos": ["leaderless possible (Multi-Paxos has leader)", "proven correct", "complex implementation"],
+      "pbft": ["Byzantine fault tolerant", "3f+1 nodes for f faults", "high message complexity O(n²)"],
+      "recommendation": "Raft for crash faults (simpler), PBFT only if Byzantine tolerance needed",
+      "pass_if": "accurate comparison of >=2 algorithms with linearizability consideration"
+    }
+  },
+  {
+    "id": "esc_05",
+    "prompt": "Implement a complete rate limiter service with sliding window, token bucket, and leaky bucket algorithms. Include distributed coordination via Redis, graceful degradation, and observability hooks.",
+    "role": "architect_coding",
+    "mode": "direct",
+    "context_size": "medium",
+    "source": "coder.yaml",
+    "rubric": {
+      "algorithms": {
+        "sliding_window": "time-bucketed counter with window slide",
+        "token_bucket": "tokens refill at rate r, burst capacity b",
+        "leaky_bucket": "fixed-rate drain, queue on overflow"
+      },
+      "must_include": ["Redis MULTI/EXEC or Lua script for atomicity", "fallback on Redis failure (local rate limit)", "metrics (rejected count, queue depth, latency)"],
+      "pass_if": "implements >=2 algorithms with Redis coordination and graceful degradation"
+    }
+  }
+]

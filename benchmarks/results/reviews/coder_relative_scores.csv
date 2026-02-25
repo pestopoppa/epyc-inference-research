@@ -1,0 +1,405 @@
+model,question_id,score,score_reason
+architect_coding,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+architect_coding,t1_q2_refactor,6,Hash-based solution; O(n) analysis; Tradeoff explained
+architect_coding,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+architect_coding,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+architect_coding,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+architect_coding,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+architect_coding,t2_q4_system,6,Data structure correct; Implementation correct; Class design
+architect_coding,t3_q1_concurrent_correctness,10,ABA problem identified; Scenario provided; Incorrect behavior explained; Valid fix approach; Fix code provided
+architect_coding,t3_q2_distributed_consistency,9,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+architect_coding,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+architect_general,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+architect_general,t1_q2_refactor,9,Hash-based solution; O(n) analysis; Sort-based solution; O(n log n) analysis; Tradeoff explained
+architect_general,t1_q3_test,10,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned; Parametrized tests
+architect_general,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+architect_general,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+architect_general,t2_q3_optimize,8,Hash-based approach; Complement logic; O(n) achieved; Duplicates handled
+architect_general,t2_q4_system,7,Data structure correct; Implementation correct; Thread safety considered; Class design
+architect_general,t3_q1_concurrent_correctness,10,ABA problem identified; Scenario provided; Incorrect behavior explained; Valid fix approach; Fix code provided
+architect_general,t3_q2_distributed_consistency,10,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast; CAP theorem mentioned
+architect_general,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+architect_hermes_4_70b,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+architect_hermes_4_70b,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+architect_hermes_4_70b,t1_q3_test,10,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned; Parametrized tests
+architect_hermes_4_70b,t2_q1_design,3,O(1) complexity stated; Design explained
+architect_hermes_4_70b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+architect_hermes_4_70b,t2_q3_optimize,8,Hash-based approach; Complement logic; O(n) achieved; Duplicates handled
+architect_hermes_4_70b,t2_q4_system,9,Correct algorithm named; Data structure correct; Implementation correct; Thread safety considered
+architect_hermes_4_70b,t3_q1_concurrent_correctness,8,ABA problem identified; Incorrect behavior explained; Valid fix approach; Fix code provided
+architect_hermes_4_70b,t3_q2_distributed_consistency,8,2 strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+architect_hermes_4_70b,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+architect_meta_llama_3_1_70b,t1_q1_algorithm,8,Bug1 fix present; Bug2 fix present; Test inputs provided; Complete fixed code
+architect_meta_llama_3_1_70b,t1_q2_refactor,6,Hash-based solution; O(n) analysis; Tradeoff explained
+architect_meta_llama_3_1_70b,t1_q3_test,10,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned; Parametrized tests
+architect_meta_llama_3_1_70b,t2_q1_design,9,Correct data structure; O(1) complexity stated; API implemented; Design explained
+architect_meta_llama_3_1_70b,t2_q2_debug_complex,0,Empty or prompt-only response
+architect_meta_llama_3_1_70b,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+architect_meta_llama_3_1_70b,t2_q4_system,6,Data structure correct; Implementation correct; Class design
+architect_meta_llama_3_1_70b,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+architect_meta_llama_3_1_70b,t3_q2_distributed_consistency,8,2 strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+architect_meta_llama_3_1_70b,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+architect_meta_llama_3_70b,t1_q1_algorithm,5,Bug1 fix present; Test inputs provided; Complete fixed code
+architect_meta_llama_3_70b,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+architect_meta_llama_3_70b,t1_q3_test,0,Empty or prompt-only response
+architect_meta_llama_3_70b,t2_q1_design,5,O(1) complexity stated; API implemented; Design explained
+architect_meta_llama_3_70b,t2_q2_debug_complex,0,Empty or prompt-only response
+architect_meta_llama_3_70b,t2_q3_optimize,0,Empty or prompt-only response
+architect_meta_llama_3_70b,t2_q4_system,7,Data structure correct; Implementation correct; Thread safety considered; Class design
+architect_meta_llama_3_70b,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+architect_meta_llama_3_70b,t3_q2_distributed_consistency,8,2 strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+architect_meta_llama_3_70b,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+architect_qwen2_5_72b,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+architect_qwen2_5_72b,t1_q2_refactor,6,Hash-based solution; O(n) analysis; Tradeoff explained
+architect_qwen2_5_72b,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+architect_qwen2_5_72b,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+architect_qwen2_5_72b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+architect_qwen2_5_72b,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+architect_qwen2_5_72b,t2_q4_system,6,Data structure correct; Implementation correct; Class design
+architect_qwen2_5_72b,t3_q1_concurrent_correctness,7,ABA problem identified; Scenario provided; Valid fix approach
+architect_qwen2_5_72b,t3_q2_distributed_consistency,8,2 strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+architect_qwen2_5_72b,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+architect_qwen2_5_72b_q4_k_m,t1_q1_algorithm,7,Bug1 correct (infinite loop + fix); Test inputs provided; Complete fixed code
+architect_qwen2_5_72b_q4_k_m,t1_q2_refactor,1,Tradeoff explained
+architect_qwen2_5_72b_q4_k_m,t1_q3_test,7,Pytest with assertions; Exception testing correct; Edge cases mentioned
+architect_qwen2_5_72b_q4_k_m,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+architect_qwen2_5_72b_q4_k_m,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+architect_qwen2_5_72b_q4_k_m,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+architect_qwen2_5_72b_q4_k_m,t2_q4_system,6,Data structure correct; Implementation correct; Class design
+architect_qwen2_5_72b_q4_k_m,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+architect_qwen2_5_72b_q4_k_m,t3_q2_distributed_consistency,9,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+architect_qwen2_5_72b_q4_k_m,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+coder_escalation,t1_q1_algorithm,5,Bug1 fix present; Test inputs provided; Complete fixed code
+coder_escalation,t1_q2_refactor,10,Hash-based solution; O(n) analysis; Sort-based solution; O(n log n) analysis; Two versions provided; Tradeoff explained
+coder_escalation,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+coder_escalation,t2_q1_design,6,O(1) complexity stated; API implemented; Implementation details correct; Design explained
+coder_escalation,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+coder_escalation,t2_q3_optimize,10,Hash-based approach; Complement logic; O(n) achieved; Correct implementation; Duplicates handled
+coder_escalation,t2_q4_system,10,Correct algorithm named; Data structure correct; Implementation correct; Thread safety considered; Class design
+coder_escalation,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+coder_escalation,t3_q2_distributed_consistency,9,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+coder_escalation,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+coder_primary,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+coder_primary,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+coder_primary,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+coder_primary,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+coder_primary,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+coder_primary,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+coder_primary,t2_q4_system,7,Data structure correct; Implementation correct; Thread safety considered; Class design
+coder_primary,t3_q1_concurrent_correctness,8,ABA problem identified; Incorrect behavior explained; Valid fix approach; Fix code provided
+coder_primary,t3_q2_distributed_consistency,9,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+coder_primary,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+coder_qwen3_coder_30b_a3b,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+coder_qwen3_coder_30b_a3b,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+coder_qwen3_coder_30b_a3b,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+coder_qwen3_coder_30b_a3b,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+coder_qwen3_coder_30b_a3b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+coder_qwen3_coder_30b_a3b,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+coder_qwen3_coder_30b_a3b,t2_q4_system,10,Correct algorithm named; Data structure correct; Implementation correct; Thread safety considered; Class design
+coder_qwen3_coder_30b_a3b,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+coder_qwen3_coder_30b_a3b,t3_q2_distributed_consistency,9,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+coder_qwen3_coder_30b_a3b,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+frontdoor,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+frontdoor,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+frontdoor,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+frontdoor,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+frontdoor,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+frontdoor,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+frontdoor,t2_q4_system,10,Correct algorithm named; Data structure correct; Implementation correct; Thread safety considered; Class design
+frontdoor,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+frontdoor,t3_q2_distributed_consistency,10,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast; CAP theorem mentioned
+frontdoor,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+general_deepseek_r1_0528_qwen3_8b,t1_q1_algorithm,8,Bug1 fix present; Bug2 fix present; Test inputs provided; Complete fixed code
+general_deepseek_r1_0528_qwen3_8b,t1_q2_refactor,4,Hash-based solution; Tradeoff explained
+general_deepseek_r1_0528_qwen3_8b,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+general_deepseek_r1_0528_qwen3_8b,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+general_deepseek_r1_0528_qwen3_8b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+general_deepseek_r1_0528_qwen3_8b,t2_q3_optimize,10,Hash-based approach; Complement logic; O(n) achieved; Correct implementation; Duplicates handled
+general_deepseek_r1_0528_qwen3_8b,t2_q4_system,8,Correct algorithm named; Data structure correct; Implementation correct
+general_deepseek_r1_0528_qwen3_8b,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+general_deepseek_r1_0528_qwen3_8b,t3_q2_distributed_consistency,9,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+general_deepseek_r1_0528_qwen3_8b,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+general_gemma_3_12b_it,t1_q1_algorithm,8,Bug1 fix present; Bug2 fix present; Test inputs provided; Complete fixed code
+general_gemma_3_12b_it,t1_q2_refactor,6,Hash-based solution; O(n) analysis; Tradeoff explained
+general_gemma_3_12b_it,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+general_gemma_3_12b_it,t2_q1_design,5,O(1) complexity stated; API implemented; Design explained
+general_gemma_3_12b_it,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+general_gemma_3_12b_it,t2_q3_optimize,9,Hash-based approach; Complement logic; O(n) achieved; Correct implementation
+general_gemma_3_12b_it,t2_q4_system,7,Data structure correct; Implementation correct; Thread safety considered; Class design
+general_gemma_3_12b_it,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+general_gemma_3_12b_it,t3_q2_distributed_consistency,9,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+general_gemma_3_12b_it,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+general_gemma_3_27b_it_qat,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+general_gemma_3_27b_it_qat,t1_q2_refactor,6,Hash-based solution; O(n) analysis; Tradeoff explained
+general_gemma_3_27b_it_qat,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+general_gemma_3_27b_it_qat,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+general_gemma_3_27b_it_qat,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+general_gemma_3_27b_it_qat,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+general_gemma_3_27b_it_qat,t2_q4_system,6,Data structure correct; Implementation correct; Class design
+general_gemma_3_27b_it_qat,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+general_gemma_3_27b_it_qat,t3_q2_distributed_consistency,9,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+general_gemma_3_27b_it_qat,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+general_glm_4_6,t2_q1_design,8,Correct data structure; O(1) complexity stated; Implementation details correct; Design explained
+general_glm_4_6,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+general_glm_4_6,t3_q2_distributed_consistency,9,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+general_glm_4_6,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+general_meta_llama_3_1_8b_q4_k_s,t1_q1_algorithm,0,Minimal correct content
+general_meta_llama_3_1_8b_q4_k_s,t1_q2_refactor,1,Tradeoff explained
+general_meta_llama_3_1_8b_q4_k_s,t1_q3_test,0,Empty or prompt-only response
+general_meta_llama_3_1_8b_q4_k_s,t2_q1_design,0,Empty or prompt-only response
+general_meta_llama_3_1_8b_q4_k_s,t2_q2_debug_complex,0,Empty or prompt-only response
+general_meta_llama_3_1_8b_q4_k_s,t2_q3_optimize,0,Empty or prompt-only response
+general_meta_llama_3_1_8b_q4_k_s,t2_q4_system,0,Partial implementation
+general_meta_llama_3_1_8b_q4_k_s,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+general_meta_llama_3_1_8b_q4_k_s,t3_q2_distributed_consistency,5,Failure scenarios; Shopping cart recommendation; Banking contrast
+general_meta_llama_3_1_8b_q4_k_s,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+general_meta_llama_3_8b_instruct_fp16,t1_q1_algorithm,7,Bug1 correct (infinite loop + fix); Test inputs provided; Complete fixed code
+general_meta_llama_3_8b_instruct_fp16,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+general_meta_llama_3_8b_instruct_fp16,t1_q3_test,10,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned; Parametrized tests
+general_meta_llama_3_8b_instruct_fp16,t2_q1_design,9,Correct data structure; O(1) complexity stated; API implemented; Design explained
+general_meta_llama_3_8b_instruct_fp16,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+general_meta_llama_3_8b_instruct_fp16,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+general_meta_llama_3_8b_instruct_fp16,t2_q4_system,0,Partial implementation
+general_meta_llama_3_8b_instruct_fp16,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+general_meta_llama_3_8b_instruct_fp16,t3_q2_distributed_consistency,7,Some strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+general_meta_llama_3_8b_instruct_fp16,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+general_qwen2_5_7b_q4_k_s,t1_q1_algorithm,5,Bug1 fix present; Test inputs provided; Complete fixed code
+general_qwen2_5_7b_q4_k_s,t1_q2_refactor,6,Hash-based solution; O(n) analysis; Tradeoff explained
+general_qwen2_5_7b_q4_k_s,t1_q3_test,7,Pytest with assertions; Exception testing correct; Edge cases mentioned
+general_qwen2_5_7b_q4_k_s,t2_q1_design,5,O(1) complexity stated; API implemented; Design explained
+general_qwen2_5_7b_q4_k_s,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+general_qwen2_5_7b_q4_k_s,t2_q3_optimize,4,Complement logic; O(n) achieved
+general_qwen2_5_7b_q4_k_s,t2_q4_system,6,Data structure correct; Implementation correct; Class design
+general_qwen2_5_7b_q4_k_s,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+general_qwen2_5_7b_q4_k_s,t3_q2_distributed_consistency,5,Failure scenarios; Shopping cart recommendation; Banking contrast
+general_qwen2_5_7b_q4_k_s,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+general_qwen3_32b,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+general_qwen3_32b,t1_q2_refactor,10,Hash-based solution; O(n) analysis; Sort-based solution; O(n log n) analysis; Two versions provided; Tradeoff explained
+general_qwen3_32b,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+general_qwen3_32b,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+general_qwen3_32b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+general_qwen3_32b,t2_q3_optimize,8,Hash-based approach; Complement logic; O(n) achieved; Duplicates handled
+general_qwen3_32b,t2_q4_system,10,Correct algorithm named; Data structure correct; Implementation correct; Thread safety considered; Class design
+general_qwen3_32b,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+general_qwen3_32b,t3_q2_distributed_consistency,10,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast; CAP theorem mentioned
+general_qwen3_32b,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+ingest_hermes_4_70b,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+ingest_hermes_4_70b,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+ingest_hermes_4_70b,t1_q3_test,10,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned; Parametrized tests
+ingest_hermes_4_70b,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+ingest_hermes_4_70b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+ingest_hermes_4_70b,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+ingest_hermes_4_70b,t2_q4_system,9,Correct algorithm named; Data structure correct; Implementation correct; Thread safety considered
+ingest_hermes_4_70b,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+ingest_hermes_4_70b,t3_q2_distributed_consistency,9,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+ingest_hermes_4_70b,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+ingest_llama_3_1_70b,t1_q1_algorithm,8,Bug1 fix present; Bug2 fix present; Test inputs provided; Complete fixed code
+ingest_llama_3_1_70b,t1_q2_refactor,6,Hash-based solution; O(n) analysis; Tradeoff explained
+ingest_llama_3_1_70b,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Edge cases mentioned; Parametrized tests
+ingest_llama_3_1_70b,t2_q1_design,9,Correct data structure; O(1) complexity stated; API implemented; Design explained
+ingest_llama_3_1_70b,t2_q2_debug_complex,0,Empty or prompt-only response
+ingest_llama_3_1_70b,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+ingest_llama_3_1_70b,t2_q4_system,6,Data structure correct; Implementation correct; Class design
+ingest_llama_3_1_70b,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+ingest_llama_3_1_70b,t3_q2_distributed_consistency,9,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+ingest_llama_3_1_70b,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+ingest_long_context,t1_q1_algorithm,8,Bug1 correct (infinite loop + fix); Overflow mentioned; Test inputs provided; Complete fixed code
+ingest_long_context,t1_q2_refactor,10,Hash-based solution; O(n) analysis; Sort-based solution; Two versions provided; Tradeoff explained
+ingest_long_context,t1_q3_test,10,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned; Parametrized tests
+ingest_long_context,t2_q1_design,0,Empty or prompt-only response
+ingest_long_context,t2_q2_debug_complex,0,Empty or prompt-only response
+ingest_long_context,t2_q3_optimize,0,Empty or prompt-only response
+ingest_long_context,t2_q4_system,9,Correct algorithm named; Data structure correct; Implementation correct; Class design
+ingest_long_context,t3_q1_concurrent_correctness,10,ABA problem identified; Scenario provided; Incorrect behavior explained; Valid fix approach; Fix code provided
+ingest_long_context,t3_q2_distributed_consistency,10,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast; CAP theorem mentioned
+ingest_long_context,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+ingest_qwen2_5_72b,t1_q1_algorithm,7,Bug1 correct (infinite loop + fix); Test inputs provided; Complete fixed code
+ingest_qwen2_5_72b,t1_q2_refactor,1,Tradeoff explained
+ingest_qwen2_5_72b,t1_q3_test,7,Pytest with assertions; Exception testing correct; Edge cases mentioned
+ingest_qwen2_5_72b,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+ingest_qwen2_5_72b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+ingest_qwen2_5_72b,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+ingest_qwen2_5_72b,t2_q4_system,6,Data structure correct; Implementation correct; Class design
+ingest_qwen2_5_72b,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+ingest_qwen2_5_72b,t3_q2_distributed_consistency,9,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+ingest_qwen2_5_72b,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+ingest_qwen2_5_coder_32b,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+ingest_qwen2_5_coder_32b,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+ingest_qwen2_5_coder_32b,t1_q3_test,8,Pytest with assertions; Exception testing correct; Negative numbers tested; Edge cases mentioned
+ingest_qwen2_5_coder_32b,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+ingest_qwen2_5_coder_32b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+ingest_qwen2_5_coder_32b,t2_q3_optimize,9,Hash-based approach; Complement logic; O(n) achieved; Correct implementation
+ingest_qwen2_5_coder_32b,t2_q4_system,7,Data structure correct; Implementation correct; Thread safety considered; Class design
+ingest_qwen2_5_coder_32b,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+ingest_qwen2_5_coder_32b,t3_q2_distributed_consistency,9,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+ingest_qwen2_5_coder_32b,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+ingest_qwen3_30b_thinking,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+ingest_qwen3_30b_thinking,t1_q2_refactor,9,Hash-based solution; O(n) analysis; Sort-based solution; O(n log n) analysis; Tradeoff explained
+ingest_qwen3_30b_thinking,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+ingest_qwen3_30b_thinking,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+ingest_qwen3_30b_thinking,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+ingest_qwen3_30b_thinking,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+ingest_qwen3_30b_thinking,t2_q4_system,9,Correct algorithm named; Data structure correct; Implementation correct; Class design
+ingest_qwen3_30b_thinking,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+ingest_qwen3_30b_thinking,t3_q2_distributed_consistency,9,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+ingest_qwen3_30b_thinking,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+ingest_qwen3_32b,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Overflow mentioned; Test inputs provided; Complete fixed code
+ingest_qwen3_32b,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+ingest_qwen3_32b,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+ingest_qwen3_32b,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+ingest_qwen3_32b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+ingest_qwen3_32b,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+ingest_qwen3_32b,t2_q4_system,10,Correct algorithm named; Data structure correct; Implementation correct; Thread safety considered; Class design
+ingest_qwen3_32b,t3_q1_concurrent_correctness,10,ABA problem identified; Scenario provided; Incorrect behavior explained; Valid fix approach; Fix code provided
+ingest_qwen3_32b,t3_q2_distributed_consistency,9,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+ingest_qwen3_32b,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+ingest_qwen3_coder_30b,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+ingest_qwen3_coder_30b,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+ingest_qwen3_coder_30b,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+ingest_qwen3_coder_30b,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+ingest_qwen3_coder_30b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+ingest_qwen3_coder_30b,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+ingest_qwen3_coder_30b,t2_q4_system,10,Correct algorithm named; Data structure correct; Implementation correct; Thread safety considered; Class design
+ingest_qwen3_coder_30b,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+ingest_qwen3_coder_30b,t3_q2_distributed_consistency,10,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast; CAP theorem mentioned
+ingest_qwen3_coder_30b,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+math_qwen2_5_math_72b,t1_q1_algorithm,3,Bug1 identified (no fix); Test inputs provided
+math_qwen2_5_math_72b,t1_q2_refactor,6,Hash-based solution; O(n) analysis; Tradeoff explained
+math_qwen2_5_math_72b,t1_q3_test,7,Pytest with assertions; Zero division tested; Negative numbers tested; Edge cases mentioned
+math_qwen2_5_math_72b,t2_q1_design,8,Correct data structure; O(1) complexity stated; Implementation details correct; Design explained
+math_qwen2_5_math_72b,t2_q2_debug_complex,8,Race condition identified; Lock solution correct; Complete fixed code
+math_qwen2_5_math_72b,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+math_qwen2_5_math_72b,t2_q4_system,6,Data structure correct; Implementation correct; Class design
+math_qwen2_5_math_72b,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+math_qwen2_5_math_72b,t3_q2_distributed_consistency,7,Some strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+math_qwen2_5_math_72b,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+math_qwen2_5_math_72b_2,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+math_qwen2_5_math_72b_2,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+math_qwen2_5_math_72b_2,t1_q3_test,8,Pytest with assertions; Exception testing correct; Negative numbers tested; Edge cases mentioned
+math_qwen2_5_math_72b_2,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+math_qwen2_5_math_72b_2,t2_q2_debug_complex,8,Race condition identified; Lock solution correct; Complete fixed code
+math_qwen2_5_math_72b_2,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+math_qwen2_5_math_72b_2,t2_q4_system,6,Data structure correct; Implementation correct; Class design
+math_qwen2_5_math_72b_2,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+math_qwen2_5_math_72b_2,t3_q2_distributed_consistency,7,Some strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+math_qwen2_5_math_72b_2,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+thinking_deepseek_r1_distill_llama_70b,t1_q1_algorithm,2,Bug1 identified (no fix)
+thinking_deepseek_r1_distill_llama_70b,t1_q2_refactor,5,O(n) analysis; Two versions provided; Tradeoff explained
+thinking_deepseek_r1_distill_llama_70b,t1_q3_test,5,Zero division tested; Negative numbers tested; Floats tested; Edge cases mentioned
+thinking_deepseek_r1_distill_llama_70b,t2_q1_design,7,Correct data structure; O(1) complexity stated; Design explained
+thinking_deepseek_r1_distill_llama_70b,t2_q2_debug_complex,5,Race condition identified; Explanation provided
+thinking_deepseek_r1_distill_llama_70b,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+thinking_deepseek_r1_distill_llama_70b,t2_q4_system,2,Data structure correct
+thinking_deepseek_r1_distill_llama_70b,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+thinking_deepseek_r1_distill_llama_70b,t3_q2_distributed_consistency,8,2 strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+thinking_deepseek_r1_distill_llama_70b,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+thinking_deepseek_r1_distill_qwen_14b,t1_q1_algorithm,3,Bug1 identified (no fix); Test inputs provided
+thinking_deepseek_r1_distill_qwen_14b,t1_q2_refactor,6,O(n) analysis; Sort-based solution; O(n log n) analysis; Tradeoff explained
+thinking_deepseek_r1_distill_qwen_14b,t1_q3_test,10,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned; Parametrized tests
+thinking_deepseek_r1_distill_qwen_14b,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+thinking_deepseek_r1_distill_qwen_14b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+thinking_deepseek_r1_distill_qwen_14b,t2_q3_optimize,8,Hash-based approach; Complement logic; O(n) achieved; Duplicates handled
+thinking_deepseek_r1_distill_qwen_14b,t2_q4_system,2,Data structure correct
+thinking_deepseek_r1_distill_qwen_14b,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+thinking_deepseek_r1_distill_qwen_14b,t3_q2_distributed_consistency,10,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast; CAP theorem mentioned
+thinking_deepseek_r1_distill_qwen_14b,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t1_q2_refactor,9,Hash-based solution; O(n) analysis; Sort-based solution; O(n log n) analysis; Tradeoff explained
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t1_q3_test,10,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned; Parametrized tests
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t2_q1_design,8,Correct data structure; O(1) complexity stated; Implementation details correct; Design explained
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t2_q3_optimize,10,Hash-based approach; Complement logic; O(n) achieved; Correct implementation; Duplicates handled
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t2_q4_system,6,Correct algorithm named; Data structure correct; Thread safety considered
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t3_q2_distributed_consistency,7,Some strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+thinking_deepseek_r1_distill_qwen_32b,t1_q1_algorithm,7,Bug1 correct (infinite loop + fix); Test inputs provided; Complete fixed code
+thinking_deepseek_r1_distill_qwen_32b,t1_q2_refactor,10,Hash-based solution; O(n) analysis; Sort-based solution; O(n log n) analysis; Two versions provided; Tradeoff explained
+thinking_deepseek_r1_distill_qwen_32b,t1_q3_test,10,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned; Parametrized tests
+thinking_deepseek_r1_distill_qwen_32b,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+thinking_deepseek_r1_distill_qwen_32b,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+thinking_deepseek_r1_distill_qwen_32b,t2_q3_optimize,7,Hash-based approach; Complement logic; O(n) achieved
+thinking_deepseek_r1_distill_qwen_32b,t2_q4_system,10,Correct algorithm named; Data structure correct; Implementation correct; Thread safety considered; Class design
+thinking_deepseek_r1_distill_qwen_32b,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+thinking_deepseek_r1_distill_qwen_32b,t3_q2_distributed_consistency,9,2 strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast; CAP theorem mentioned
+thinking_deepseek_r1_distill_qwen_32b,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+thinking_phi_4_reasoning_plus,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+thinking_phi_4_reasoning_plus,t1_q2_refactor,1,Tradeoff explained
+thinking_phi_4_reasoning_plus,t1_q3_test,0,Empty or prompt-only response
+thinking_phi_4_reasoning_plus,t2_q1_design,0,Empty or prompt-only response
+thinking_phi_4_reasoning_plus,t2_q2_debug_complex,0,Empty or prompt-only response
+thinking_phi_4_reasoning_plus,t2_q3_optimize,0,Empty or prompt-only response
+thinking_phi_4_reasoning_plus,t2_q4_system,0,Empty or prompt-only response
+thinking_phi_4_reasoning_plus,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+thinking_phi_4_reasoning_plus,t3_q2_distributed_consistency,9,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+thinking_phi_4_reasoning_plus,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+thinking_phi_4_reasoning_plus_q8,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+thinking_phi_4_reasoning_plus_q8,t1_q2_refactor,1,Tradeoff explained
+thinking_phi_4_reasoning_plus_q8,t1_q3_test,0,Empty or prompt-only response
+thinking_phi_4_reasoning_plus_q8,t2_q1_design,0,Empty or prompt-only response
+thinking_phi_4_reasoning_plus_q8,t2_q2_debug_complex,0,Empty or prompt-only response
+thinking_phi_4_reasoning_plus_q8,t2_q3_optimize,0,Empty or prompt-only response
+thinking_phi_4_reasoning_plus_q8,t2_q4_system,0,Empty or prompt-only response
+thinking_phi_4_reasoning_plus_q8,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+thinking_phi_4_reasoning_plus_q8,t3_q2_distributed_consistency,5,Failure scenarios; Shopping cart recommendation; Banking contrast
+thinking_phi_4_reasoning_plus_q8,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+thinking_qwen3_30b_a3b_thinking_2507,t1_q1_algorithm,7,Bug1 correct (infinite loop + fix); Test inputs provided; Complete fixed code
+thinking_qwen3_30b_a3b_thinking_2507,t1_q2_refactor,6,Hash-based solution; O(n) analysis; Tradeoff explained
+thinking_qwen3_30b_a3b_thinking_2507,t1_q3_test,9,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned
+thinking_qwen3_30b_a3b_thinking_2507,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+thinking_qwen3_30b_a3b_thinking_2507,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+thinking_qwen3_30b_a3b_thinking_2507,t2_q3_optimize,8,Hash-based approach; Complement logic; O(n) achieved; Duplicates handled
+thinking_qwen3_30b_a3b_thinking_2507,t2_q4_system,6,Correct algorithm named; Data structure correct; Thread safety considered
+thinking_qwen3_30b_a3b_thinking_2507,t3_q1_concurrent_correctness,8,ABA problem identified; Incorrect behavior explained; Valid fix approach; Fix code provided
+thinking_qwen3_30b_a3b_thinking_2507,t3_q2_distributed_consistency,10,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast; CAP theorem mentioned
+thinking_qwen3_30b_a3b_thinking_2507,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t1_q1_algorithm,7,Bug1 correct (infinite loop + fix); Test inputs provided; Complete fixed code
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t1_q2_refactor,6,Hash-based solution; O(n) analysis; Tradeoff explained
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t1_q3_test,10,Pytest with assertions; Exception testing correct; Negative numbers tested; Floats tested; Edge cases mentioned; Parametrized tests
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t2_q3_optimize,6,Hash-based approach; O(n) achieved; Duplicates handled
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t2_q4_system,8,Correct algorithm named; Implementation correct; Thread safety considered; Class design
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t3_q2_distributed_consistency,10,3+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast; CAP theorem mentioned
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+thinking_reasoning,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Overflow mentioned; Test inputs provided; Complete fixed code
+thinking_reasoning,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Sort-based solution; Tradeoff explained
+thinking_reasoning,t1_q3_test,9,Pytest with assertions; Zero division tested; Negative numbers tested; Floats tested; Edge cases mentioned; Parametrized tests
+thinking_reasoning,t2_q1_design,0,Empty or prompt-only response
+thinking_reasoning,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+thinking_reasoning,t2_q3_optimize,0,Empty or prompt-only response
+thinking_reasoning,t2_q4_system,10,Correct algorithm named; Data structure correct; Implementation correct; Thread safety considered; Class design
+thinking_reasoning,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+thinking_reasoning,t3_q2_distributed_consistency,9,4+ strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+thinking_reasoning,t3_q3_algorithmic_hardness,10,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence correct; Group size 5 explained; Randomized analysis
+toolrunner,t1_q1_algorithm,8,Bug1 fix present; Bug2 fix present; Test inputs provided; Complete fixed code
+toolrunner,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+toolrunner,t1_q3_test,4,Zero division tested; Negative numbers tested; Edge cases mentioned
+toolrunner,t2_q1_design,5,O(1) complexity stated; API implemented; Design explained
+toolrunner,t2_q2_debug_complex,8,Race condition identified; Lock solution correct; Complete fixed code
+toolrunner,t2_q3_optimize,2,O(n) achieved
+toolrunner,t2_q4_system,5,Implementation correct; Thread safety considered; Class design
+toolrunner,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+toolrunner,t3_q2_distributed_consistency,8,2 strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+toolrunner,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+worker_general,t1_q1_algorithm,8,Bug1 fix present; Bug2 fix present; Test inputs provided; Complete fixed code
+worker_general,t1_q2_refactor,8,Hash-based solution; O(n) analysis; Two versions provided; Tradeoff explained
+worker_general,t1_q3_test,4,Zero division tested; Negative numbers tested; Edge cases mentioned
+worker_general,t2_q1_design,5,O(1) complexity stated; API implemented; Design explained
+worker_general,t2_q2_debug_complex,8,Race condition identified; Lock solution correct; Complete fixed code
+worker_general,t2_q3_optimize,2,O(n) achieved
+worker_general,t2_q4_system,5,Implementation correct; Thread safety considered; Class design
+worker_general,t3_q1_concurrent_correctness,7,ABA problem identified; Valid fix approach; Fix code provided
+worker_general,t3_q2_distributed_consistency,8,2 strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+worker_general,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis
+worker_summarize,t1_q1_algorithm,10,Bug1 correct (infinite loop + fix); Bug2 fix present; Test inputs provided; Complete fixed code
+worker_summarize,t1_q2_refactor,10,Hash-based solution; O(n) analysis; Sort-based solution; Two versions provided; Tradeoff explained
+worker_summarize,t1_q3_test,8,Pytest with assertions; Exception testing correct; Negative numbers tested; Edge cases mentioned
+worker_summarize,t2_q1_design,10,Correct data structure; O(1) complexity stated; API implemented; Implementation details correct; Design explained
+worker_summarize,t2_q2_debug_complex,10,Race condition identified; Lock solution correct; Explanation provided; Complete fixed code
+worker_summarize,t2_q3_optimize,9,Hash-based approach; Complement logic; O(n) achieved; Correct implementation
+worker_summarize,t2_q4_system,6,Data structure correct; Implementation correct; Class design
+worker_summarize,t3_q1_concurrent_correctness,9,ABA problem identified; Scenario provided; Valid fix approach; Fix code provided
+worker_summarize,t3_q2_distributed_consistency,8,2 strategies listed; Failure scenarios; Shopping cart recommendation; Banking contrast
+worker_summarize,t3_q3_algorithmic_hardness,9,Adversary argument; Lower bound correct; Median-of-medians mentioned; Recurrence attempted; Group size 5 explained; Randomized analysis

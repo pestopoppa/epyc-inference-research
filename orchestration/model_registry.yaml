@@ -1,0 +1,3618 @@
+# =============================================================================
+# Model Registry Configuration
+# =============================================================================
+#
+# Path Configuration:
+#   All paths are relative to the base paths defined here or can be overridden
+#   via environment variables (see .env.example):
+#     - ORCHESTRATOR_PATHS_LLM_ROOT (default: /mnt/raid0/llm)
+#     - ORCHESTRATOR_PATHS_MODEL_BASE (default: ${LLM_ROOT}/lmstudio/models)
+#     - ORCHESTRATOR_PATHS_LLAMA_CPP_BIN (default: ${LLM_ROOT}/llama.cpp/build/bin)
+#
+# Model Downloads:
+#   Models with huggingface_id can be downloaded via:
+#     python scripts/setup/download_models.py --tier hot
+#
+# =============================================================================
+
+runtime_defaults:
+  quantization: Q4_K_M
+  draft_quantization: Q8_0
+  context_length: 8192
+  temperature: 0.2
+  threads: 96
+  numa_policy: interleave=all
+  # Base path for models - override with ORCHESTRATOR_PATHS_MODEL_BASE env var
+  model_base_path: /mnt/raid0/llm/lmstudio/models
+  binaries:
+    # Binary path - override with ORCHESTRATOR_PATHS_LLAMA_CPP_BIN env var
+    base_dir: /mnt/raid0/llm/llama.cpp/build/bin
+    completion: llama-completion
+    speculative: llama-speculative
+    lookup: llama-lookup
+    cli: llama-cli
+    server: llama-server
+    mtmd: llama-mtmd-cli
+    qwen2vl: llama-qwen2vl-cli
+    bench: llama-bench
+    embedding: llama-embedding
+    perplexity: llama-perplexity
+    quantize: llama-quantize
+  server_defaults:
+    port: 8080
+    context_length: 65536
+    startup_timeout: 600
+    request_timeout: 600  # Increased from 300 - architect_general needs ~300s on hard questions
+    parallel_slots: 4
+    flash_attention: true
+    ubatch_size: 8192
+  corpus_retrieval:
+    enabled: true        # A/B validated: +8.7pp/32B, +15.6pp/480B. Per-role via lookup flag.
+    index_path: /mnt/raid0/llm/cache/corpus/v3_sharded  # Sharded SQLite v3 (in-progress build, falls back gracefully). mvp_index kept as backup.
+    max_snippets: 3
+    max_chars: 3000
+    # rag_enabled: ABANDONED. Prompt-level RAG hurts quality on 7B (-0.96) AND 32B (-1.38).
+  prefix_cache:
+    enabled: true
+    prefix_length: 4096  # Was 256. Role prompts are 1000-5000 tokens; need longer prefix for cache hits.
+    canonicalize: true
+    cache_dir: /mnt/raid0/llm/cache/prefixes
+  context_limits:
+    default: 65536
+    llama2: 4096
+    llama3: 8192
+    llama3_instruct: 131072
+    qwen2: 131072
+    qwen3: 131072
+    deepseek_r1: 65536
+    gemma3: 131072
+  llm:
+    # Conservative nested-call rollout map (feature-gated by depth_model_overrides).
+    # depth 0 never overrides; depth 1+ may route to cheaper worker roles only.
+    depth_role_overrides: "1:worker_general,2:worker_math"
+    depth_override_max_depth: 3
+  timeouts:
+    # Single source of truth for ALL timeouts in the system
+    default: 600  # Fallback for any unspecified timeout
+
+    # Per-role inference timeouts (seconds) — differentiated by model size/speed
+    # Workers (7B @ 44 t/s, 1.5B @ fast) get short timeouts so circuit breaker
+    # opens quickly; architects (235B/480B) keep 600s for complex reasoning.
+    roles:
+      worker_explore: 60       # 7B @ 44 t/s — expected <5s, 60s = 12x headroom
+      worker_math: 60
+      worker_vision: 60
+      worker_summarize: 120    # 32B summarization, longer outputs
+      worker_general: 60
+      worker_coder: 30         # semantic alias for fast coding worker (port 8102)
+      worker_code: 60
+      worker_fast: 30          # 1.5B — expected <2s, 30s = 15x headroom
+      frontdoor: 180           # 30B MoE @ 18 t/s — raised from 90 to accommodate pipeline stages
+      coder_escalation: 120    # 32B @ 39 t/s — 500 tok ~45s. 120s = 2.5x headroom
+      vision_escalation: 120   # 30B MoE VL, multimodal processing
+      ingest_long_context: 300 # 80B SSM, long document ingestion
+      architect_general: 600   # 235B MoE, complex multi-step reasoning
+      architect_coding: 600    # 480B MoE, complex multi-step reasoning
+
+    # Server/connection timeouts
+    server:
+      request: 600
+      connect: 5
+      health_check: 5
+      stack_startup: 300  # Wait for orchestrator stack
+
+    # Service timeouts
+    services:
+      ocr_single_page: 120
+      ocr_pdf: 600
+      vision_inference: 120
+      vision_figure: 60
+      gradio_client: 300
+      ffmpeg_version: 5
+      ffmpeg_probe: 30
+      ffmpeg_extract: 600
+      exiftool: 30
+
+    # Worker pool timeouts
+    pools:
+      warm_keepalive: 300  # 5 minutes warm pool timeout
+      client_total: 300  # HTTP client total timeout
+      client_connect: 10  # HTTP client connect timeout
+
+    # Benchmark/optimization timeouts
+    benchmark:
+      test_execution: 300
+      optuna_trial: 300
+      seeding_default: 600
+      # Model-size based timeouts for full_optimization_benchmark.sh
+      timeout_small: 120  # <2B models
+      timeout_medium: 180  # 2B-14B models
+      timeout_large: 300  # 14B-72B models
+      timeout_huge: 600  # 72B-100B models
+      timeout_giant: 1200  # >100B models (235B, 480B)
+
+    # REPL environment timeouts
+    repl:
+      session: 600  # REPL session timeout (document processing can be slow)
+      tool_execution: 30  # Per-tool execution limit
+      shell_command: 30  # External shell command timeout
+      restricted_executor: 120  # Sandboxed code execution
+
+    # Gate-specific timeouts (quality gates)
+    gates:
+      format: 30  # Code formatting check
+      lint: 60  # Linting (ruff, etc.)
+      typecheck: 120  # Type checking (mypy, pyright)
+      unit: 180  # Unit test execution
+
+    # Tool-specific timeouts
+    tools:
+      web_fetch: 30  # HTTP fetch for external URLs
+      lint: 60  # Code linting
+      base_default: 60  # Default tool timeout
+      formalizer: 60  # Input formalization
+      gate_runner: 60  # Gate execution (default per-gate)
+
+    # External service timeouts
+    external:
+      mcp_client: 30  # MCP server communication
+      review_service: 15  # Proactive review checks
+
+    # Health check timeouts
+    health:
+      server_startup: 120  # Wait for server to become healthy
+      quick_check: 10  # Fast health probe
+      vision_server: 120  # Vision model startup (larger)
+      worker_server: 90  # Worker model startup
+
+    # Script/CLI timeouts
+    scripts:
+      executor_default: 180  # Default script execution
+      onboard_health: 60  # Model onboarding health check
+      temperature_opt: 180  # Temperature optimization trial
+      orchestrator_phase: 3600  # Full benchmark phase
+
+    # Backend protocol defaults
+    backends:
+      inference_default: 120  # Default inference request timeout
+      document_page: 120  # Per-page document processing
+  paged_attention:
+    description: "CPU paged attention for memory-bound large models (70B+)"
+    enabled_threshold_gb: 39  # Models >= 39GB benefit from paged attention
+    default_block_size: 64    # Optimal for 70B+ models (+76% generation speedup)
+    env_vars:
+      LLAMA_PAGED_ATTN: "${block_size}"
+      LLAMA_PAGED_ATTN_MAX_BLOCKS: "${max_blocks}"  # Optional memory reduction
+    benefits:
+      speedup: "+76% generation speedup on 70B+ models via block prefetching"
+      memory_savings: "Up to 80% KV cache reduction with max_blocks"
+    notes: "PR #18747 submitted upstream. Cherry-picked to production-consolidated."
+  repl_memory:
+    description: "MemRL-inspired episodic memory for learned orchestration"
+    enabled: true
+    database:
+      # FAISS backend (default): stores episodic.db + embeddings.faiss + id_map.npy
+      # NumPy backend (fallback): stores episodic.db + embeddings.npy
+      path: /mnt/raid0/llm/claude/orchestration/repl_memory/sessions
+      use_faiss: true  # O(log n) search; set to false for O(n) NumPy fallback
+    embedding:
+      # BGE-large-en-v1.5: Purpose-built for embeddings, 1024 dims, better MTEB scores
+      # Parallel fan-out to 6 instances (ports 8090-8095) for redundancy
+      model_path: /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf
+      dim: 1024
+      threads: 8
+      fallback_enabled: true
+      # Parallel embedding servers (2026-02-05): 6 instances for redundancy
+      server_urls:
+        - "http://127.0.0.1:8090"
+        - "http://127.0.0.1:8091"
+        - "http://127.0.0.1:8092"
+        - "http://127.0.0.1:8093"
+        - "http://127.0.0.1:8094"
+        - "http://127.0.0.1:8095"
+      server_url: "http://127.0.0.1:8090"  # Primary (for single-server fallback)
+      use_server: true  # Try HTTP server first (2-5ms vs 50-200ms subprocess)
+      pooling: cls  # BGE uses CLS token pooling
+    retrieval:
+      semantic_k: 20
+      min_similarity: 0.3
+      min_q_value: 0.3
+      q_weight: 0.7
+      top_n: 5
+      confidence_threshold: 0.6
+    scoring:
+      learning_rate: 0.1
+      success_reward: 1.0
+      failure_reward: 0.0  # xRouter-style: incorrect = zero reward (was -0.5)
+      partial_reward: 0.3
+      cost_penalty_lambda: 0.15  # Cost weight for correctness-gated penalty
+      min_interval_seconds: 300
+      batch_size: 50
+    persistence:
+      # Write-behind optimization (2026-01-27): async flush every 10s
+      flush_interval: 10.0  # Seconds between FAISS index flushes
+      sync_on_shutdown: true  # Always flush on SIGTERM/close()
+    logging:
+      progress_dir: /mnt/raid0/llm/claude/logs/progress
+      buffer_size: 10
+    cold_start:
+      min_samples: 3
+      fallback_to_rules: true
+      bootstrap_days: 30
+    claude_as_judge:
+      enabled: false
+      model_path: null
+      judge_binary: null
+    # Graphiti-inspired graph enhancements (2026-01-27)
+    failure_graph:
+      enabled: true
+      description: "Kuzu graph for failure pattern tracking (anti-memory)"
+      db_path: /mnt/raid0/llm/claude/orchestration/repl_memory/kuzu_db
+      # Scoring: actions linked to unmitigated failures get penalty
+      penalty_weight: 0.3  # score *= (1 - penalty_weight * failure_risk)
+    hypothesis_graph:
+      enabled: true
+      description: "Kuzu graph for hypothesis confidence tracking"
+      db_path: /mnt/raid0/llm/claude/orchestration/repl_memory/kuzu_db
+      # Confidence update: asymptotic toward 1.0 on success, 0.0 on failure
+      confidence_delta: 0.1
+      low_confidence_threshold: 0.2  # Warn when confidence < this
+    graph_cache:
+      # TTL cache for graph penalty lookups (2026-01-27)
+      enabled: true
+      ttl_seconds: 60  # Cache entries expire after 60s
+      maxsize: 500  # Max cached entries per cache type
+  three_stage_summarization:
+    description: "Two-stage pipeline (Stage 0 compression DISABLED due to quality regression)"
+    enabled: true
+    threshold_tokens: 5000         # Minimum tokens to trigger (estimated from chars/4)
+    multi_doc_discount: 0.7        # Lower threshold for multi-document tasks
+    context_reduction_target: 0.15 # Stage 2 receives ~15% of original context
+    stage1_role: frontdoor         # Fast draft generation
+    stage2_role: ingest_long_context  # Quality review with large model
+    compression:  # Stage 0: LLMLingua-2 extractive compression
+      enabled: false               # DISABLED - causes quality regression
+      model: microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank
+      device: cpu
+      min_chars: 30000
+      target_ratio: 0.5
+      stage1_context_limit: 20000
+      cache_model: true
+      expected_latency_ms: 50
+      quality_regression_notes: |
+        DISABLED 2026-01-27: LLMLingua-2 extractive compression causes:
+        - Prompt leakage in output
+        - Hallucinated citations [1], [2]
+        - Typos ("tokenizeize", "cUSTODY")
+        - 140s vs 74s (slower, not faster)
+        Root cause: Extractive compression produces choppy text that confuses LLM.
+        RECOMMENDATION: Wait for Cmprsr (abstractive) weights to become available.
+    cache:
+      enabled: true
+      ttl_hours: 24
+      dir: /mnt/raid0/llm/cache/drafts
+    expected_speedup:
+      10k_tokens: "1.4x"           # Modest speedup at lower sizes
+      20k_tokens: "1.5x"
+      50k_tokens: "1.6x"           # Prefill savings accumulate
+      multi_doc_5x10k: "3.9x"
+    notes: |
+      Three-stage pipeline: Stage 0 (compress) → Stage 1 (draft) → Stage 2 (review)
+      Stage 0 benefit: quality improvement from representative sampling vs truncation.
+      Breakeven at ~5K tokens. Below this threshold, overhead dominates.
+      Stage 1 captures grep hits during exploration for Stage 2 context.
+      Caching enables instant Stage 2 for repeated documents.
+  # Backwards compatibility alias
+  two_stage_summarization:
+    description: "Alias for three_stage_summarization (deprecated)"
+    redirect_to: three_stage_summarization
+server_mode:
+  # Production topology - orchestrator_stack.py launcher
+  # Port 8000: Orchestrator API (uvicorn)
+  # Ports 8080-8085: Model servers (llama-server)
+
+  # HOT tier - always resident (~40GB total)
+  frontdoor:
+    url: http://localhost:8080
+    port: 8080
+    slots: 2  # Aligned with admission limit=2 (sweep 2026-02-19: optimal at 2, p95 ok)
+    model_role: frontdoor
+    shared_with: []
+    description: Root LM - generates Python code each turn
+    model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
+    draft_model: jukofyork-Qwen3-Coder-0.75B-Instruct-Q8_0.gguf
+    memory_gb: 20
+    tier: hot
+    acceleration:
+      type: moe_expert_reduction
+      experts: 6
+      override_key: qwen3moe.expert_used_count
+      lookup: true
+      corpus_retrieval: true  # v3 full corpus: +16% avg speed, +5.6pp acceptance (was -12% with MVP index)
+    throughput: 47.11  # t/s (MoE6 + spec + lookup, verified 2026-02-13)
+
+  coder_escalation:
+    url: http://localhost:8081
+    port: 8081
+    slots: 1  # Sweep 2026-02-19: p95 1.98x at concurrency=2, serial only
+    model_role: coder_escalation
+    description: Escalation code generation with spec decode + prompt lookup fallback
+    model: Qwen2.5-Coder-32B-Q4_K_M.gguf
+    draft_model: Qwen2.5-Coder-0.5B-Instruct-Q8_0.gguf
+    memory_gb: 20
+    tier: hot
+    acceleration:
+      type: speculative_decoding
+      draft_max: 24
+      lookup: true  # Prompt n-gram lookup as fallback (--lookup flag, commit 8e35dbc01)
+      corpus_retrieval: true  # A/B: +8.7pp acceptance, +6% speed
+    throughput: 39.44  # t/s combined spec+lookup (5.4x), was 33 spec-only (5.2x)
+
+  worker:
+    url: http://localhost:8082
+    port: 8082
+    slots: 1  # Sweep 2026-02-19: all concurrent levels (2-4) rejected on p95; serial optimal
+    model_role: worker_general
+    shared_with: [worker_math, toolrunner]
+    description: Parallel workers for file-level tasks
+    model: Qwen2.5-7B-Instruct-f16.gguf
+    draft_model: Qwen2.5-Coder-0.5B-Q8_0.gguf
+    memory_gb: 16
+    tier: hot
+    acceleration:
+      type: speculative_decoding
+      draft_max: 24
+      lookup: true  # Prompt n-gram lookup as fallback (--lookup flag)
+      corpus_retrieval: false  # 7B saturated (94-100% acceptance baseline). +1% speed = noise.
+    throughput: 43.9  # t/s measured with spec decode (2026-01-28)
+    concurrency_benchmark:  # 2026-02-15, 256-token generation, spec+lookup
+      1_concurrent: 103.7  # t/s per-request
+      2_concurrent: 91.0   # t/s per-request, 170.6 aggregate (1.76x, optimal)
+      3_concurrent: 95.7   # t/s per-request, 136.8 aggregate (3rd queues behind 2 slots)
+      4_concurrent: 78.9   # t/s per-request, 139.9 aggregate
+      optimal: 2  # matches -np 2 server config
+
+  # WARM tier - mmap preloaded, loaded on demand (~430GB total)
+  architect_general:
+    url: http://localhost:8083
+    port: 8083
+    slots: 1  # Serial — admission=1, no wasted KV
+    model_role: architect_general
+    description: System architecture decisions - large MoE (full experts for quality)
+    model: Qwen3-235B-A22B-Q4_K_M.gguf
+    draft_model: Qwen_Qwen3-0.6B-Q8_0.gguf
+    memory_gb: 134
+    tier: warm
+    acceleration:
+      type: speculative_decoding
+      draft_k: 16
+    throughput: 6.08  # t/s (full experts + spec, quality over speed, verified 2026-02-13)
+
+  architect_coding:
+    url: http://localhost:8084
+    port: 8084
+    slots: 1  # Serial — admission=1, no wasted KV
+    model_role: architect_coding
+    description: Hardest coding escalation - largest MoE (full experts for quality)
+    model: Qwen3-Coder-480B-A35B-Instruct-Q4_K_M.gguf
+    draft_model: Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0.gguf
+    memory_gb: 272
+    tier: warm
+    acceleration:
+      type: speculative_decoding
+      draft_k: 16
+      lookup: true  # A/B best result: +15.6pp acceptance, +17% speed with corpus
+      corpus_retrieval: true  # A/B BEST: +15.6pp acceptance (74.9→90.5%), +17% speed (8.3→9.7 t/s)
+    throughput: 9.00  # t/s (full experts + spec, quality over speed, verified 2026-02-13)
+
+  ingest_long_context:
+    url: http://localhost:8085
+    port: 8085
+    slots: 1  # Serial — admission=1, no wasted KV
+    model_role: ingest_long_context
+    description: Long document synthesis & summarization - SSM+MoE hybrid (NO speculation!)
+    model: Qwen3-Next-80B-A3B-Q4_K_M.gguf
+    memory_gb: 46
+    tier: warm
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4  # MoE4 for quality (MoE2 degrades output)
+      override_key: qwen3next.expert_used_count
+    throughput: 6.3  # t/s measured 2026-01-26 on 10K context summarization
+    notes: "SSM architecture - incompatible with speculative decoding. Best summarization quality (tested vs Qwen2.5-Coder-32B, Qwen3-32B)."
+
+  # Voice recognition service (separate from LLM inference)
+  voice_server:
+    url: http://localhost:9000
+    port: 9000
+    model_role: voice_transcription
+    description: Speech-to-text using faster-whisper (OpenAI-compatible API)
+    model: large-v3-turbo
+    model_type: whisper
+    memory_gb: 4
+    tier: hot
+    languages: [en, it, de, fr]
+    acceleration:
+      type: int8_quantization
+      vad_filter: true
+      vad_min_silence_ms: 300
+    throughput: 2.8  # RTF ~0.35x (2.8x real-time on CPU int8, verified 2026-01-16)
+    latency_target_ms: 500
+    launch_script: scripts/voice/start_whisper_server.sh
+    notes: "Standalone Python server (not llama.cpp). Serves Aider, Claude Code, orchestrator."
+
+  # Document processing service (llama.cpp GGUF - 19x faster than PyTorch)
+  document_formalizer:
+    url: http://localhost:9001
+    port: 9001
+    model_role: document_preprocessing
+    description: PDF/document OCR with figure localization using llama.cpp
+    model: LightOnOCR-2-1B-bbox-Q4_K_M.gguf
+    mmproj: LightOnOCR-2-1B-bbox-mmproj-F16.gguf
+    model_type: gguf_vlm
+    huggingface_id: lightonai/LightOnOCR-2-1B-bbox
+    model_path: /mnt/raid0/llm/models/LightOnOCR-2-1B-bbox-Q4_K_M.gguf
+    mmproj_path: /mnt/raid0/llm/models/LightOnOCR-2-1B-bbox-mmproj-F16.gguf
+    memory_gb: 10  # 8 workers × ~1.2 GB each
+    tier: warm
+    default_params:
+      output_format: bbox
+      max_pages: 100
+      dpi: 200
+    acceleration:
+      type: worker_pool
+      workers: 8
+      threads_per_worker: 12
+      notes: "More workers > more threads for throughput. 8×12 is 15% faster than 4×24."
+    throughput: 0.17  # pages/sec on EPYC 9655 (8×12 config)
+    baseline_throughput: 0.009  # PyTorch CPU baseline
+    speedup: 19x  # vs PyTorch CPU
+    launch_script: scripts/document/start_lightonocr_llama.sh
+    launch_quirks:
+      - "llama-mtmd-cli requires BOTH --image AND -p flags for non-interactive mode"
+      - "Empty -p '' causes 'invalid argument' - use -p 'OCR' or similar"
+      - "Vision encoding is fixed ~8s bottleneck regardless of thread count"
+      - "BOS token is comma (,) - unusual but works correctly"
+      - "Default context 16384 uses ~1.8 GB KV cache per worker"
+    env_vars:
+      LIGHTONOCR_WORKERS: "8"
+      LIGHTONOCR_THREADS: "12"
+      LIGHTONOCR_MAX_TOKENS: "2048"
+      LIGHTONOCR_TIMEOUT: "300"  # Increased from 120s for complex pages
+    notes: "GGUF conversion via llama.cpp (native LightOnOCR support). PyTorch version deprecated. Uses Pixtral vision encoder + Qwen3 text decoder."
+    benchmark_date: 2026-01-24
+    quirks:
+      - "2026-01-24: Increased timeout from 120s to 300s - complex pages with figures can take 24-30s each"
+      - "Use server-side /v1/document/pdf endpoint for PDFs - client-side per-page requests add HTTP overhead"
+
+  # Multi-vector retrieval — dual containers (Phase 4)
+  # Code and docs use separate models optimized for each content type.
+  # Embeddings are model-specific and cannot be mixed across containers.
+  nextplaid_code:
+    url: http://localhost:8088
+    port: 8088
+    model_role: code_retrieval
+    description: Multi-vector code search using ColBERT late interaction (code-optimized)
+    model: lightonai/LateOn-Code
+    model_type: onnx_int8
+    docker_image: ghcr.io/lightonai/next-plaid:cpu-1.0.4
+    memory_gb: 1.2  # ~1.2GB (Docker + 130M ONNX model + mmap'd indices)
+    tier: always  # Starts with infrastructure, soft dependency
+    indices: [code]
+    health_endpoint: /health
+    launch_command: >
+      docker run -d --name nextplaid-code
+      -p 8088:8080
+      -v /mnt/raid0/llm/claude/cache/next-plaid/code-indices:/data/indices
+      -v /mnt/raid0/llm/cache/huggingface:/root/.cache/huggingface
+      ghcr.io/lightonai/next-plaid:cpu-1.0.4
+      --host 0.0.0.0 --port 8080 --index-dir /data/indices
+      --model lightonai/LateOn-Code --int8
+    reindex_command: python3 scripts/nextplaid/index_codebase.py --code-only
+    notes: "LateOn-Code 130M, 128-dim token embeddings. +11.2% vs LateOn-Code-edge on MTEB Code (74.12 vs 66.64). AST-chunked code units."
+
+  nextplaid_docs:
+    url: http://localhost:8089
+    port: 8089
+    model_role: doc_retrieval
+    description: Multi-vector doc search using ColBERT late interaction (text-optimized)
+    model: lightonai/GTE-ModernColBERT-v1
+    model_type: onnx_int8
+    docker_image: ghcr.io/lightonai/next-plaid:cpu-1.0.4
+    memory_gb: 0.5  # ~500MB (Docker + 149M ONNX INT8 model + mmap'd indices)
+    tier: always
+    indices: [docs]
+    health_endpoint: /health
+    launch_command: >
+      docker run -d --name nextplaid-docs
+      -p 8089:8080
+      -v /mnt/raid0/llm/claude/cache/next-plaid/docs-indices:/data/indices
+      -v /mnt/raid0/llm/cache/huggingface:/root/.cache/huggingface
+      ghcr.io/lightonai/next-plaid:cpu-1.0.4
+      --host 0.0.0.0 --port 8080 --index-dir /data/indices
+      --model lightonai/GTE-ModernColBERT-v1 --int8
+    reindex_command: python3 scripts/nextplaid/index_codebase.py --docs-only
+    notes: "GTE-ModernColBERT-v1 (149M, 128-dim, BEIR 54.67, LongEmbed 88.39). Upgraded from answerai-colbert-small-v1 (33M, 96-dim) on 2026-02-20. Uses [Q]/[D] prefixes (handled by container). A/B: 5/10 queries better, 0 worse. Latency 28→50ms."
+    # Previous model: lightonai/answerai-colbert-small-v1-onnx (33M, 96-dim)
+    # Rollback: swap --model flag and reindex. Index is dimension-specific (128 vs 96).
+
+  # Development mode - single small model for all roles
+  dev:
+    frontdoor:
+      url: http://localhost:8080
+      slots: 4
+      model: Qwen2.5-Coder-0.5B-Q8_0.gguf
+      description: Dev frontdoor - fast small model
+    worker:
+      url: http://localhost:8082
+      slots: 4
+      model: Qwen2.5-Coder-0.5B-Q8_0.gguf
+      description: Dev worker - fast small model
+
+# =============================================================================
+# Worker Pool Configuration (Heterogeneous parallel workers)
+# =============================================================================
+worker_pool:
+  enabled: true
+  description: "Heterogeneous worker pool for parallel task execution"
+  prompt_lookup: true  # Enable ngram lookup for all workers
+
+  # Scaling parameters
+  expansion_threshold: 4  # Concurrent tasks to trigger WARM expansion
+  warm_timeout_seconds: 300  # Shutdown idle WARM workers after 5 minutes
+  health_check_interval: 30
+
+  # Model paths
+  model_base_path: /mnt/raid0/llm/lmstudio/models
+
+  workers:
+    # === HOT WORKERS (Always resident, ~9GB total) ===
+    explore:
+      port: 8082
+      model: Qwen/Qwen2.5-7B-Instruct-GGUF/Qwen2.5-7B-Instruct-Q4_K_M.gguf
+      tier: hot
+      threads: 24
+      slots: 2
+      memory_gb: 4.4
+      task_types: [explore, summarize, understand]
+      description: "Directory crawling, file summaries, codebase understanding"
+      expected_tps: 15
+
+    code:
+      port: 8092
+      model: Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
+      tier: hot
+      threads: 24
+      slots: 2
+      memory_gb: 4.4
+      task_types: [code_impl, refactor, test_gen]
+      description: "Code implementation, following architect instructions"
+      expected_tps: 18
+
+    # === WARM WORKER (Load on demand, ~1GB) ===
+    fast:
+      port: 8102
+      model: Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/Qwen2.5-Coder-1.5B-Instruct-Q8_0.gguf
+      tier: warm
+      threads: 16
+      slots: 4
+      memory_gb: 1.0
+      task_types: [boilerplate, transform, parallel_burst]
+      description: "Simple transformations, boilerplate, high-volume parallel (4 concurrent slots)"
+      expected_tps: 60
+
+  launch_flags:
+    - "--flash-attn on"
+    - "--lookup-ngram-min 3"
+
+  resource_summary:
+    hot_memory_gb: 8.8  # 2 × 4.4GB
+    warm_memory_gb: 2.0  # 2 × 1.0GB
+    hot_threads: 48  # 2 × 24
+    warm_threads: 24  # 2 × 12
+    total_slots: 8  # 4 workers × 2 slots
+
+  notes: |
+    Heterogeneous pool design:
+    - HOT workers (7B) provide quality for complex tasks
+    - WARM workers (1.5B) provide 4x speed for simple tasks
+    - WARM workers spin up automatically when parallelism > 4
+    - Prompt lookup enabled by default for all workers
+    Integration: src/services/worker_pool.py
+
+roles:
+  # =============================================================================
+  # LOCAL ROLES (llama.cpp inference)
+  # =============================================================================
+  # All local roles use backend.type: local (default if not specified)
+  # External API roles (anthropic, openai) defined at end of roles section
+  # =============================================================================
+
+  frontdoor:
+    tier: A
+    description: Primary interactive orchestrator - high quality, always resident
+    backend:
+      type: local
+    model:
+      name: Qwen3-Coder-30B-A3B-Instruct
+      huggingface_id: lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF
+      path: lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 17.5
+      architecture: moe
+    candidate_roles:
+    - frontdoor
+    - coder
+    - general
+    - ingest
+    acceleration:
+      type: moe_expert_reduction
+      experts: 6
+      override_key: qwen3moe.expert_used_count
+      speculative_decoding:
+        type: speculative_decoding
+        draft_role: draft_qwen3_coder_0_75b
+        k: 16
+        lookup: true
+        notes: >
+          jukofyork vocab transplant draft VERIFIED (2026-02-13).
+          BOS matched (comma token 11). 70-77% acceptance.
+          MoE6 + spec + lookup = 47.11 t/s (best config).
+        benchmarked: 2026-02-13
+    performance:
+      baseline_tps: 29.28
+      moe6_baseline_tps: 30.84
+      moe6_spec_tps: 37.08
+      moe6_spec_lookup_tps: 47.11
+      full_spec_tps: 41.75
+      optimized_tps: 47.11
+      quality_pct: 90
+      speedup: 1.61x
+      spec_acceptance_moe6: 70.1%
+      spec_acceptance_full: 78.1%
+      spec_acceptance_moe6_lookup: 77.4%
+    memory:
+      residency: hot
+      pinned: true
+    tool_permissions:
+      web_access: true
+      allowed_categories: [web, file, data]
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.3
+    system_prompt_suffix: |
+      Provide clear, user-friendly explanations.
+      Elaborate on specialist outputs when presenting to users.
+      Be direct — avoid filler, repetition, and unnecessary preamble.
+  coder_escalation:
+    tier: B
+    description: Coding escalation target - dense coder with spec decode + prompt lookup
+    model:
+      name: Qwen2.5-Coder-32B-Instruct
+      huggingface_id: lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF
+      path: lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 20
+      architecture: dense
+    candidate_roles:
+    - coder
+    - general
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen2_5_coder_0_5b
+      k: 24
+      lookup: true  # Prompt n-gram lookup fallback (production-consolidated 8e35dbc01)
+    performance:
+      baseline_tps: 7.28  # No spec, no lookup
+      spec_only_tps: 37.84  # Spec decode only (5.2x)
+      combined_tps: 39.44  # Spec + lookup fallback (5.4x)
+      lookup_only_tps: 10.75  # Lookup only, no draft (1.48x)
+      speedup: 5.4x  # Combined mode vs baseline
+    memory:
+      residency: warm
+      pinned: false
+    escalation_from: frontdoor
+    use_cases:
+    - First failure from frontdoor on code tasks
+    - Multi-file refactoring requiring broader context
+    - Architecture-level code decisions
+    - Complex debugging spanning multiple components
+    benchmark_date: 2025-12-16
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.2
+    system_prompt_suffix: |
+      Output code only. No explanations unless requested.
+      Include minimal inline comments. No boilerplate or filler.
+      Handle edge cases explicitly.
+  ingest_long_context:
+    tier: B
+    description: Large document ingestion, synthesis & summarization - SSM+MoE hybrid
+    model:
+      name: Qwen3-Next-80B-A3B-Instruct
+      huggingface_id: lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF
+      path: lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 45
+      architecture: ssm_moe_hybrid
+    candidate_roles:
+    - ingest
+    - summarization  # Best summary quality (tested 2026-01-26)
+    - architect
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4  # MoE4 for quality (tested 2026-01-26: 6.29 t/s, best output)
+      override_key: qwen3next.expert_used_count
+    constraints:
+      forbid:
+      - speculative_decoding
+      - prompt_lookup
+      - eagle
+      reason: SSM requires consecutive positions - incompatible with ALL speculation
+        methods
+    performance:
+      baseline_tps: 10.12
+      optimized_tps: 6.29  # MoE4 on 10K context (2026-01-26)
+      speedup: n/a  # MoE4 trades speed for quality
+      summarization_benchmark: "73.8s for 464 tokens on Twyne whitepaper (10K context)"
+    memory:
+      residency: warm
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.2
+    system_prompt_suffix: |
+      Synthesize key points from the provided documents.
+      Use structured headings for organization.
+      Cite source locations when referencing specific content.
+      Be thorough but not verbose — prioritize signal over volume.
+  architect_general:
+    tier: B
+    description: System architecture, invariants, acceptance tests - emits IR only
+    model:
+      name: Qwen3-235B-A22B
+      huggingface_id: lmstudio-community/Qwen3-235B-A22B-GGUF
+      path: lmstudio-community/Qwen3-235B-A22B-GGUF/Qwen3-235B-A22B-Q4_K_M-00001-of-00004.gguf
+      quant: Q4_K_M
+      size_gb: 133
+      split_count: 4
+      architecture: moe
+    candidate_roles:
+    - architect
+    - general
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen3_0_6b_q8_0
+      k: 16
+      notes: >
+        0.6B Q8_0 draft VERIFIED (2026-02-13).
+        BOS matched (both 151643). 52-55% acceptance.
+        Full experts + spec = recommended (quality over speed).
+        MoE4+spec was 8.21 t/s but full+spec at 6.08 preserves quality.
+      benchmarked: 2026-02-13
+    performance:
+      baseline_tps: 5.30
+      moe4_baseline_tps: 3.87
+      moe4_spec_tps: 8.21
+      full_spec_tps: 6.08
+      optimized_tps: 6.08
+      speedup: 1.15x
+      spec_acceptance_moe4: 54.8%
+      spec_acceptance_full: 52.7%
+    memory:
+      residency: warm
+      pinned: false
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "133GB model is memory-bound, benefits from block prefetching"
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.1
+    system_prompt_suffix: |
+      Be maximally concise. Use bullet points, not prose.
+      Output structured plans, not narrative.
+      Other agents will elaborate — stop once the decision is clear.
+  architect_coding:
+    tier: B
+    description: Hardest coding/architecture escalation - IR-first
+    model:
+      name: Qwen3-Coder-480B-A35B-Instruct
+      huggingface_id: lmstudio-community/Qwen3-Coder-480B-A35B-Instruct-GGUF
+      path: lmstudio-community/Qwen3-Coder-480B-A35B-Instruct-GGUF/Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008.gguf
+      quant: Q4_K_M
+      size_gb: 271
+      split_count: 8
+      architecture: moe
+      max_context: 131072
+    candidate_roles:
+    - architect
+    - coder
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen3_coder_0_75b
+      k: 16
+      notes: >
+        jukofyork vocab transplant draft VERIFIED (2026-02-13).
+        BOS matched (both comma token 11). 74-82% acceptance.
+        Full experts + spec = recommended (quality over speed for architect role).
+        MoE3+spec was 12.74 t/s but full+spec at 9.00 preserves full quality.
+      benchmarked: 2026-02-13
+    constraints:
+      notes: >
+        Prompt lookup works mechanically (18.4% accept on refactoring)
+        but is net-negative on speed due to MoE verification overhead.
+        Spec decode (74-82% accept) is the correct acceleration method.
+        SSM ban does NOT apply — MoE is architecture-agnostic for lookup.
+    performance:
+      baseline_tps: 6.53
+      full_spec_tps: 9.00
+      moe3_baseline_tps: 5.91
+      moe3_spec_tps: 12.74
+      moe3_spec_lookup_tps: 13.05
+      optimized_tps: 9.00
+      speedup: 1.38x
+      spec_acceptance_full: 80.5%
+      spec_acceptance_refactor: 74.2%
+      spec_acceptance_novel: 57.4%
+      spec_acceptance_summarize: 46.7%
+      moe2_tps: 11.51
+      moe4_tps: 9.25
+      moe5_tps: 8.5
+      legacy_baseline_tps: 2.25
+    memory:
+      residency: warm
+      pinned: false
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "271GB model is heavily memory-bound, estimated +15-25% speedup"
+    benchmark_date: 2025-12-21
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.1
+    system_prompt_suffix: |
+      Be maximally concise. Use bullet points, not prose.
+      Output structured plans with file paths.
+      Specialists will implement details — stop once the design is clear.
+  thinking_reasoning:
+    tier: B
+    description: Deep reasoning and chain-of-thought - SSM+MoE hybrid thinking model
+    model:
+      name: Qwen3-Next-80B-A3B-Thinking
+      path: unsloth/Qwen3-Next-80B-A3B-Thinking-GGUF/Qwen3-Next-80B-A3B-Thinking-Q4_K_S.gguf
+      quant: Q4_K_S
+      size_gb: 45
+      architecture: ssm_moe_hybrid
+    candidate_roles:
+    - thinking
+    - ingest
+    - architect
+    acceleration:
+      type: moe_expert_reduction
+      experts: 2
+      override_key: qwen3next.expert_used_count
+    constraints:
+      forbid:
+      - speculative_decoding
+      - prompt_lookup
+      - eagle
+      reason: SSM requires consecutive positions - incompatible with ALL speculation
+        methods
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: warm
+      pinned: false
+    benchmark_date: null
+    notes: Thinking variant optimized for chain-of-thought reasoning. Use for complex
+      multi-step problems.
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.3
+    system_prompt_suffix: |
+      Think step by step. Show your reasoning process.
+      For complex problems, break down into sub-problems.
+      Verify your answer before concluding.
+      Reason carefully but stop once the conclusion is reached — no restating.
+  minimax_m21_q4:
+    tier: B
+    description: MiniMax M2.1 Q4_K_M - 230B MoE (256 experts, 8 active) with thinking
+    model:
+      name: MiniMax-M2.1
+      path: unsloth/MiniMax-M2.1-GGUF/Q4_K_M/MiniMax-M2.1-Q4_K_M-00001-of-00003.gguf
+      quant: Q4_K_M
+      size_gb: 129
+      split_count: 3
+      architecture: moe
+      max_context: 196608
+      vocab_size: 200064
+    candidate_roles:
+    - architect
+    - thinking
+    - general
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      baseline_experts: 8
+      override_key: minimax-m2.expert_used_count
+    constraints:
+      forbid:
+      - speculative_decoding
+      reason: Unique vocab (200K) - no compatible draft model exists
+    performance:
+      baseline_tps: 9.52
+      prompt_tps: 40.51
+      optimized_tps: 13.64
+      optimized_prompt_tps: 59.94
+      speedup: 1.43x
+    memory:
+      residency: warm
+      pinned: false
+      total_with_kv_gb: 180
+    benchmark_date: 2026-01-19
+    launch_quirks:
+      jinja_required: true
+      use_llama_completion: true
+      thinking_tags: true
+    notes: |
+      Reasoning model with <think> tags. Requires --jinja flag.
+      Use llama-completion (not llama-cli) to avoid interactive mode.
+      256 experts may cause sparse memory access patterns (lower speed than expected).
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.3
+    system_prompt_suffix: |
+      Think step by step. Show your reasoning process.
+      For complex problems, break down into sub-problems.
+      Reason carefully but stop once the conclusion is reached — no restating.
+  minimax_m21_q6:
+    tier: B
+    description: MiniMax M2.1 Q6_K - 230B MoE (256 experts, 8 active) with thinking - higher quality
+    model:
+      name: MiniMax-M2.1
+      path: unsloth/MiniMax-M2.1-GGUF/Q6_K/MiniMax-M2.1-Q6_K-00001-of-00004.gguf
+      quant: Q6_K
+      size_gb: 175
+      split_count: 4
+      architecture: moe
+      max_context: 196608
+      vocab_size: 200064
+    candidate_roles:
+    - architect
+    - thinking
+    - general
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      baseline_experts: 8
+      override_key: minimax-m2.expert_used_count
+    constraints:
+      forbid:
+      - speculative_decoding
+      reason: Unique vocab (200K) - no compatible draft model exists
+    performance:
+      baseline_tps: null  # Not yet tested
+      prompt_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+      total_with_kv_gb: 225
+    benchmark_date: null
+    launch_quirks:
+      jinja_required: true
+      use_llama_completion: true
+      thinking_tags: true
+    notes: |
+      Higher quality Q6_K variant. Same quirks as Q4_K_M.
+      Requires --jinja flag. Use llama-completion to avoid interactive mode.
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.3
+    system_prompt_suffix: |
+      Think step by step. Show your reasoning process.
+      For complex problems, break down into sub-problems.
+      Reason carefully but stop once the conclusion is reached — no restating.
+  glm_47_flash:
+    tier: B
+    description: GLM-4.7-Flash Q4_K_M - 30B MoE (64 experts, 4 active) with deepseek2 MLA architecture
+    model:
+      name: GLM-4.7-Flash
+      path: unsloth/GLM-4.7-Flash-GGUF/GLM-4.7-Flash-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 18
+      split_count: 1
+      architecture: deepseek2
+      max_context: 131072
+      vocab_size: 151552
+    candidate_roles:
+    - frontdoor
+    - general
+    - coder
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      baseline_experts: 4
+      override_key: null  # Already uses 4 experts by default
+    constraints:
+      forbid:
+      - speculative_decoding
+      reason: MLA (Multi-head Latent Attention) incompatible with spec decode
+    performance:
+      baseline_tps: 27.88
+      prompt_tps: 91.53
+      optimized_tps: 27.88
+      speedup: 1.0x
+    memory:
+      residency: hot
+      pinned: false
+      total_with_kv_gb: 25
+    benchmark_date: 2026-01-22
+    launch_quirks:
+      jinja_required: true
+      use_llama_completion: true
+    notes: |
+      Uses deepseek2 architecture with MLA (Multi-head Latent Attention).
+      Very fast at 27.88 t/s - excellent frontdoor candidate.
+      Requires --jinja flag.
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.3
+  glm_47_reap:
+    tier: B
+    description: GLM-4.7-REAP Q4_K_M - 218B MoE (96 experts, 8 active) reasoning model
+    model:
+      name: GLM-4.7-REAP-218B-A32B
+      path: unsloth/GLM-4.7-REAP-218B-A32B-GGUF/Q4_K_M/GLM-4.7-REAP-218B-A32B-Q4_K_M-00001-of-00003.gguf
+      quant: Q4_K_M
+      size_gb: 125
+      split_count: 3
+      architecture: glm4moe
+      max_context: 131072
+      vocab_size: 151552
+    candidate_roles:
+    - architect
+    - thinking
+    - general
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      baseline_experts: 8
+      override_key: glm4moe.expert_used_count
+    constraints:
+      forbid:
+      - speculative_decoding
+      reason: Unique architecture - no compatible draft model
+    performance:
+      baseline_tps: 4.50
+      prompt_tps: 16.19
+      optimized_tps: null  # MoE reduction not yet tested
+      speedup: null
+    memory:
+      residency: warm
+      pinned: false
+      total_with_kv_gb: 160
+    benchmark_date: 2026-01-22
+    launch_quirks:
+      jinja_required: true
+      use_llama_completion: true
+    notes: |
+      218B reasoning model with 96 experts (8 active = 32B active params).
+      Uses glm4moe architecture. Requires --jinja flag.
+      MoE expert reduction likely beneficial - needs testing.
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.3
+  worker_general:
+    tier: C
+    description: Boilerplate, rewrites, doc polish, small diffs
+    model:
+      name: Meta-Llama-3-8B-Instruct
+      path: lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 4.7
+      architecture: dense
+    candidate_roles:
+    - worker
+    - general
+    constraints:
+      forbid:
+      - speculative_decoding
+    acceleration:
+      type: prompt_lookup
+      ngram_min: 3
+    performance:
+      baseline_tps: 17.52
+      optimized_tps: 37.07
+      speedup: 2.1x
+    memory:
+      residency: hot
+      pinned: true
+      max_instances: 2
+    tool_permissions:
+      web_access: false
+      allowed_categories: [file, data]
+      forbidden_tools: [write_file]
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.3
+  worker_math:
+    tier: C
+    description: Edge cases, invariants, property-test generation
+    model:
+      name: Qwen2.5-Math-7B-Instruct
+      path: lmstudio-community/Qwen2.5-Math-7B-Instruct-GGUF/Qwen2.5-Math-7B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 4.4
+      architecture: dense
+    candidate_roles:
+    - math
+    - worker
+    - thinking
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen25
+      k: 8
+    performance:
+      baseline_tps: 12.44
+      optimized_tps: 48.5
+      speedup: 3.9x
+    memory:
+      residency: hot
+      pinned: true
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.0
+    system_prompt_suffix: |
+      Show work step by step.
+      Output final answer on last line.
+  worker_vision:
+    tier: C
+    port: 8086
+    description: "Agentic vision tasks - dedicated VL server with mmproj"
+    model:
+      name: Qwen2.5-VL-7B-Instruct
+      path: lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf
+      mmproj_path: lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-model-f16.gguf
+      quant: Q4_K_M
+      size_gb: 4.4
+      architecture: dense
+    candidate_roles:
+    - vision
+    - agentic_vision  # Only model that supports tool calls
+    acceleration:
+      type: baseline
+      disallowed:
+        - speculative_decoding
+        - prompt_lookup
+      reason: VL models with mmproj not supported by llama-speculative binary
+      notes: Manual spec decode achieved 57.1 t/s with --temp 0.7 (needs llama-cli workaround)
+    performance:
+      baseline_tps: 15.28
+      optimized_tps: 20.0
+      speedup: 1.3x
+      vl_score: "29/36 (81%)"
+      benchmark_date: 2026-01-27
+    memory:
+      residency: hot
+      pinned: false
+    server:
+      endpoint: "http://localhost:8086"
+      api_format: openai_multimodal  # /v1/chat/completions with image_url content
+    notes: |
+      Only VL model that supports tool calls (agentic tasks).
+      For document figure analysis, use vision_qwen3_vl_4b (94% vs 81%).
+      Keep for: screenshot analysis, UI automation, tool-using vision tasks.
+      Server uses /v1/chat/completions with image_url content type.
+  vision_escalation:
+    tier: B
+    port: 8087
+    description: "Complex vision - dedicated VL MoE server with mmproj"
+    model:
+      name: Qwen3-VL-30B-A3B-Instruct
+      path: lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf
+      mmproj_path: lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf
+      quant: Q4_K_M
+      size_gb: 18.0
+      architecture: qwen3vlmoe
+    candidate_roles:
+    - vision
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      override_key: qwen3vlmoe.expert_used_count
+    performance:
+      baseline_tps: 19.0
+      optimized_tps: 27.6
+      speedup: 1.45x
+      vl_score: "27/36 (75%)"
+      benchmark_date: 2026-01-27
+    memory:
+      residency: hot
+      pinned: false
+    server:
+      endpoint: "http://localhost:8087"
+      api_format: openai_multimodal  # /v1/chat/completions with image_url content
+    escalation:
+      from: worker_vision
+      auto_wired: false  # NOT currently auto-triggered - request manually
+      triggers:
+      - math or equations in image
+      - complex multi-step diagram
+      - video longer than 10 minutes
+      - GUI automation failure
+      - cross-reference multiple image regions
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "30B VL MoE benefits from paged attention for image-heavy workloads"
+    notes: |
+      75% accuracy - LOWER than 4B (94%) due to OCR issues ("Centric" error).
+      Faster than 4B (27.6 t/s vs 18 t/s) but less accurate.
+      Consider vision_qwen3_vl_8b (86%) as alternative escalation target.
+      Good for: extended reasoning on complex diagrams, multi-image comparison.
+      WARNING: 0% agentic - cannot do tool calls.
+  worker_summarize:
+    tier: C
+    description: Document summarization (96% quality) - fastest with spec decode or
+      prompt lookup
+    model:
+      name: Qwen2.5-Coder-32B-Instruct
+      path: lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 18.5
+      architecture: dense
+    candidate_roles:
+    - coder
+    - frontdoor
+    - ingest
+    - general
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen25_coder
+      k: 8
+      alternative:
+        type: prompt_lookup
+        ngram_min: 3
+        optimized_tps: 95.18
+        best_for: Document QA, summarization where output contains source excerpts
+    performance:
+      baseline_tps: 3.1
+      optimized_tps: 172.4
+      speedup: 55.9x
+      quality_score: 66/69 (96%)
+      lookup_tps: 95.18
+      lookup_speedup: 12.7x
+    memory:
+      residency: warm
+      pinned: false
+    benchmark_date: 2026-01-06
+    notes: Spec decode 172 t/s for general tasks; prompt lookup 95 t/s for document
+      QA with source material
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.2
+    system_prompt_suffix: |
+      Produce concise summaries. Focus on key points.
+      For document QA, cite specific sections.
+  toolrunner:
+    tier: C
+    description: Summarize tool outputs, triage logs, propose next commands
+    model:
+      name: Meta-Llama-3-8B-Instruct
+      path: lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 4.7
+      architecture: dense
+    candidate_roles:
+    - worker
+    - general
+    constraints:
+      forbid:
+      - speculative_decoding
+    acceleration:
+      type: none
+    performance:
+      baseline_tps: 17.52
+    memory:
+      residency: hot
+      pinned: true
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.2
+    system_prompt_suffix: |
+      Summarize tool output briefly. Focus on actionable results.
+      Propose next command if appropriate.
+  draft_qwen25_coder:
+    tier: D
+    description: Default draft for Qwen2.5-Coder family
+    model:
+      name: Qwen2.5-Coder-0.5B
+      path: lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 0.5
+      architecture: dense
+    candidate_roles:
+    - draft
+    compatible_targets:
+    - Qwen2.5-Coder-32B
+    - Qwen2.5-Coder-14B
+    - Qwen2.5-Coder-7B
+    performance:
+      raw_tps: 85
+    memory:
+      residency: hot
+      pinned: true
+  draft_qwen25:
+    tier: D
+    description: Default draft for Qwen2.5 (non-coder) family
+    model:
+      name: Qwen2.5-0.5B
+      path: QuantFactory/Qwen2.5-0.5B-GGUF/Qwen2.5-0.5B.Q8_0.gguf
+      quant: Q8_0
+      size_gb: 0.5
+      architecture: dense
+    candidate_roles:
+    - draft
+    compatible_targets:
+    - Qwen2.5-72B
+    - Qwen2.5-Math-72B
+    - Qwen2.5-Math-7B
+    - Qwen2.5-VL-7B
+    memory:
+      residency: hot
+      pinned: true
+  draft_gemma3:
+    tier: D
+    description: Draft model for Gemma-3 family
+    model:
+      name: Gemma-3-1B-IT
+      path: /mnt/raid0/llm/models/gemma-3-1b-it-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 1.0
+      architecture: dense
+    candidate_roles:
+    - draft
+    compatible_targets:
+    - Gemma-3-12B
+    - Gemma-3-27B
+    - Gemma-3-27B-QAT
+    performance:
+      raw_tps: 41
+      acceptance_rate: 0.42-0.81
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: 2026-01-09
+    notes: "Works with upstream llama.cpp (b7684+) and PR #18720. 42-81% acceptance rate. 64 token vocab diff is safe."
+  architect_hermes_4_70b:
+    tier: B
+    description: Architect model - Hermes-4-70B-Q4_K_M
+    model:
+      name: Hermes-4-70B-Q4_K_M
+      path: lmstudio-community/Hermes-4-70B-GGUF/Hermes-4-70B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 39.6
+      architecture: dense
+    candidate_roles:
+    - architect
+    - frontdoor
+    - general
+    - ingest
+    memory:
+      residency: cold
+      pinned: false
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "70B dense model benefits from block prefetching"
+  architect_meta_llama_3_1_70b:
+    tier: B
+    description: Architect model - Meta-Llama-3.1-70B-Instruct (90% quality, 40x spec
+      speedup)
+    deprecated: true
+    deprecated_date: 2026-02-17
+    deprecated_reason: "GGUF deleted — model and PARD draft both removed from disk"
+    model:
+      name: Meta-Llama-3.1-70B-Instruct-Q4_K_M
+      path: lmstudio-community/Meta-Llama-3.1-70B-Instruct-GGUF/Meta-Llama-3.1-70B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 39.6
+      architecture: dense
+    candidate_roles:
+    - architect
+    - general
+    - ingest
+    acceleration:
+      type: speculative_decoding
+      draft_model: PARD-Llama-3.2-1B-Instruct-Q4_0
+      draft_path: fernandoruiz/PARD-Llama-3.2-1B-Q4_0-GGUF/pard-llama-3.2-1b-q4_0.gguf
+      k: 24
+    performance:
+      baseline_tps: 2.1
+      optimized_tps: 84.3
+      speedup: 40.1x
+      quality_score: 165/183 (90%)
+    memory:
+      residency: cold
+      pinned: false
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "70B dense model benefits from block prefetching (+19% measured on Llama-70B)"
+    benchmark_date: 2026-01-06
+    notes: Highest quality architect model with excellent spec decode support
+  architect_meta_llama_3_70b:
+    tier: B
+    description: Architect model - Meta-Llama-3-70B-Instruct-Q4_K_M
+    deprecated: true
+    deprecated_date: 2026-02-17
+    deprecated_reason: "GGUF deleted — model and PARD draft both removed from disk"
+    model:
+      name: Meta-Llama-3-70B-Instruct-Q4_K_M
+      path: lmstudio-community/Meta-Llama-3-70B-Instruct-GGUF/Meta-Llama-3-70B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 39.6
+      architecture: dense
+    candidate_roles:
+    - architect
+    - general
+    - ingest
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_pard_llama_3_2_1b_q8_0
+      k: 16
+    memory:
+      residency: cold
+      pinned: false
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "70B dense model benefits from block prefetching"
+  architect_qwen2_5_72b:
+    tier: B
+    description: Architect model - Qwen2.5-72B-Instruct-Q4_K_M (87% quality, 76x spec
+      speedup)
+    model:
+      name: Qwen2.5-72B-Instruct-Q4_K_M
+      path: lmstudio-community/Qwen2.5-72B-Instruct-GGUF/Qwen2.5-72B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 44.2
+      architecture: dense
+    candidate_roles:
+    - architect
+    - frontdoor
+    - general
+    - ingest
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen25
+      k: 16
+    performance:
+      baseline_tps: 1.9
+      optimized_tps: 147.8
+      speedup: 76.2x
+      quality_score: 173/198 (87%)
+    memory:
+      residency: cold
+      pinned: false
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "72B dense model benefits from block prefetching"
+    benchmark_date: 2026-01-06
+  architect_qwen2_5_72b_q4_k_m:
+    tier: B
+    description: Architect model - Qwen2.5-72B.Q4_K_M
+    model:
+      name: Qwen2.5-72B.Q4_K_M
+      path: mradermacher/Qwen2.5-72B-GGUF/Qwen2.5-72B.Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 44.2
+      architecture: dense
+    candidate_roles:
+    - architect
+    - general
+    - ingest
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen25
+      k: 16
+    memory:
+      residency: cold
+      pinned: false
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "72B dense model benefits from block prefetching"
+  coder_qwen3_coder_30b_a3b:
+    tier: B
+    description: Coder model - Qwen3-Coder-30B-A3B-Instruct-Q4_K_M
+    model:
+      name: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M
+      path: unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 17.3
+      architecture: moe
+    candidate_roles:
+    - frontdoor
+    - coder
+    - general
+    - ingest
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      override_key: qwen3moe.expert_used_count
+      alternative:
+        type: speculative_decoding
+        draft_role: draft_qwen3_coder_0_75b
+        k: 16
+    memory:
+      residency: cold
+      pinned: false
+  math_qwen2_5_math_72b:
+    tier: B
+    description: Math model - Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002
+    model:
+      name: Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002
+      path: tensorblock/Qwen2.5-Math-72B-Instruct-GGUF/Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002.gguf
+      quant: Q6_K
+      size_gb: 32.5
+      architecture: dense
+    candidate_roles:
+    - math
+    - architect
+    - thinking
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen25
+      k: 16
+    memory:
+      residency: cold
+      pinned: false
+  math_qwen2_5_math_72b_2:
+    tier: B
+    description: Math model - Qwen2.5-Math-72B-Instruct (77% quality, 80x spec speedup)
+    model:
+      name: Qwen2.5-Math-72B-Instruct-Q4_K_M
+      path: lmstudio-community/Qwen2.5-Math-72B-Instruct-GGUF/Qwen2.5-Math-72B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 44.2
+      architecture: dense
+    candidate_roles:
+    - math
+    - architect
+    - thinking
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen25
+      k: 24
+    performance:
+      baseline_tps: 2.0
+      optimized_tps: 158.8
+      speedup: 80.6x
+      quality_score: 141/183 (77%)
+    memory:
+      residency: cold
+      pinned: false
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "72B dense model benefits from block prefetching"
+    benchmark_date: 2026-01-06
+  thinking_deepseek_r1_distill_llama_70b:
+    tier: B
+    description: Thinking model - DeepSeek-R1-Distill-Llama-70B-Q4_K_M
+    deprecated: true
+    deprecated_date: 2026-02-17
+    deprecated_reason: "GGUF deleted — already in deprecated_models list (deleted 2026-01-18), entry retained for history"
+    model:
+      name: DeepSeek-R1-Distill-Llama-70B-Q4_K_M
+      path: unsloth/DeepSeek-R1-Distill-Llama-70B-GGUF/DeepSeek-R1-Distill-Llama-70B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 39.6
+      architecture: dense
+    candidate_roles:
+    - thinking
+    - architect
+    - general
+    constraints:
+      forbid:
+      - speculative_decoding
+    memory:
+      residency: cold
+      pinned: false
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "70B dense model benefits from block prefetching"
+  thinking_deepseek_r1_distill_llama_8b:
+    tier: B
+    description: Thinking model - DeepSeek-R1-Distill-Llama-8B-Q4_K_M
+    deprecated: true
+    deprecated_date: 2026-02-17
+    deprecated_reason: "GGUF deleted — unsloth directory cleaned"
+    model:
+      name: DeepSeek-R1-Distill-Llama-8B-Q4_K_M
+      path: unsloth/DeepSeek-R1-Distill-Llama-8B-GGUF/DeepSeek-R1-Distill-Llama-8B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 4.6
+      architecture: dense
+    candidate_roles:
+    - thinking
+    - worker
+    constraints:
+      forbid:
+      - speculative_decoding
+    memory:
+      residency: cold
+      pinned: false
+  thinking_deepseek_r1_distill_qwen_14b:
+    tier: B
+    description: Thinking model - DeepSeek-R1-Distill-Qwen-14B-Q4_K_M
+    deprecated: true
+    deprecated_date: 2026-02-17
+    deprecated_reason: "lmstudio-community GGUF deleted; bartowski Q6_K_L retained as thinking_deepseek_r1_distill_qwen_14b_q6kl"
+    model:
+      name: DeepSeek-R1-Distill-Qwen-14B-Q4_K_M
+      path: lmstudio-community/DeepSeek-R1-Distill-Qwen-14B-GGUF/DeepSeek-R1-Distill-Qwen-14B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 8.4
+      architecture: dense
+    candidate_roles:
+    - thinking
+    - general
+    - worker
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_deepseek_r1_distill_qwen_1_5b_q80
+      k: 16
+    memory:
+      residency: cold
+      pinned: false
+  thinking_deepseek_r1_distill_qwen_32b:
+    tier: B
+    description: Thinking model - DeepSeek-R1-Distill-Qwen-32B (81% quality, 36x spec
+      speedup)
+    model:
+      name: DeepSeek-R1-Distill-Qwen-32B-Q6_K
+      path: bartowski/DeepSeek-R1-Distill-Qwen-32B-GGUF/DeepSeek-R1-Distill-Qwen-32B-Q6_K.gguf
+      quant: Q6_K
+      size_gb: 25.0
+      architecture: dense
+    candidate_roles:
+    - thinking
+    - coder
+    - general
+    - architect
+    acceleration:
+      type: speculative_decoding
+      draft_model: DeepSeek-R1-Distill-Qwen-1.5B
+      draft_path: lmstudio-community/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf
+      k: 16
+    performance:
+      baseline_tps: 2.0
+      optimized_tps: 72.2
+      speedup: 35.9x
+      quality_score: 39/48 (81%)
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: 2026-01-06
+    notes: Best thinking model for spec decode - same tokenizer as draft
+  thinking_deepseek_r1_distill_qwen_7b:
+    tier: B
+    description: Thinking model - DeepSeek-R1-Distill-Qwen-7B-Q4_K_M
+    model:
+      name: DeepSeek-R1-Distill-Qwen-7B-Q4_K_M
+      path: lmstudio-community/DeepSeek-R1-Distill-Qwen-7B-GGUF/DeepSeek-R1-Distill-Qwen-7B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 4.4
+      architecture: dense
+    candidate_roles:
+    - thinking
+    - worker
+    memory:
+      residency: cold
+      pinned: false
+  thinking_qwen3_30b_a3b_thinking_2507:
+    tier: B
+    description: Thinking model - Qwen3-30B-A3B-Thinking-2507-Q8_0
+    model:
+      name: Qwen3-30B-A3B-Thinking-2507-Q8_0
+      path: unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/Qwen3-30B-A3B-Thinking-2507-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 30.3
+      architecture: moe
+      baseline_experts: 8
+    candidate_roles:
+    - thinking
+    - coder
+    - ingest
+    forbidden_configs:
+    - speculative_decoding  # Missing BOS token in GGUF prevents spec decode
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      override_key: qwen3moe.expert_used_count
+    memory:
+      residency: cold
+      pinned: false
+  thinking_qwen3_4b_thinking_2507:
+    tier: B
+    description: Thinking model - Qwen3-4B-Thinking-2507-Q8_0
+    model:
+      name: Qwen3-4B-Thinking-2507-Q8_0
+      path: lmstudio-community/Qwen3-4B-Thinking-2507-GGUF/Qwen3-4B-Thinking-2507-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 4.0
+      architecture: dense
+    candidate_roles:
+    - thinking
+    - worker
+    memory:
+      residency: cold
+      pinned: false
+  thinking_phi_4_reasoning_plus:
+    tier: B
+    description: Thinking model - Phi-4-reasoning-plus (14.7B, 128K context, tool use)
+    model:
+      name: Phi-4-reasoning-plus-Q4_K_M
+      path: lmstudio-community/Phi-4-reasoning-plus-GGUF/Phi-4-reasoning-plus-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 8.5
+      architecture: dense
+    candidate_roles:
+    - thinking
+    - general
+    - agentic
+    memory:
+      residency: cold
+      pinned: false
+    notes: "Microsoft Phi-4-reasoning-plus. 14.7B params, 128K context. Trained for reasoning and tool use."
+  thinking_phi_4_reasoning_plus_q8:
+    tier: B
+    description: Thinking model - Phi-4-reasoning-plus Q8_0 (14.7B, 128K context, tool use)
+    model:
+      name: Phi-4-reasoning-plus-Q8_0
+      path: lmstudio-community/Phi-4-reasoning-plus-GGUF/Phi-4-reasoning-plus-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 15.0
+      architecture: dense
+    candidate_roles:
+    - thinking
+    - general
+    - agentic
+    memory:
+      residency: cold
+      pinned: false
+    notes: "Microsoft Phi-4-reasoning-plus Q8_0. Higher quality quant. 14.7B params, 128K context."
+  general_deepseek_r1_0528_qwen3_8b:
+    tier: C
+    description: General model - DeepSeek-R1-0528-Qwen3-8B-Q8_0
+    model:
+      name: DeepSeek-R1-0528-Qwen3-8B-Q8_0
+      path: lmstudio-community/DeepSeek-R1-0528-Qwen3-8B-GGUF/DeepSeek-R1-0528-Qwen3-8B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 8.1
+      architecture: dense
+    candidate_roles:
+    - thinking
+    - general
+    - worker
+    acceleration:
+      type: baseline
+      disallowed:
+        - speculative_decoding
+      reason: DeepSeek-R1 uses DeepSeek vocab, not Qwen3 vocab despite architecture name
+    memory:
+      residency: cold
+      pinned: false
+  general_gemma_3_12b_it:
+    tier: C
+    description: General model - gemma-3-12b-it-Q4_K_M
+    model:
+      name: gemma-3-12b-it-Q4_K_M
+      path: lmstudio-community/gemma-3-12b-it-GGUF/gemma-3-12b-it-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 6.8
+      architecture: dense
+    candidate_roles:
+    - general
+    - worker
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_gemma3
+      k: 8
+    memory:
+      residency: cold
+      pinned: false
+  general_gemma_3_27b_it_qat:
+    tier: C
+    description: General model - gemma-3-27B-it-QAT-Q4_0 (42-81% spec decode acceptance)
+    model:
+      name: gemma-3-27B-it-QAT-Q4_0
+      path: lmstudio-community/gemma-3-27B-it-qat-GGUF/gemma-3-27B-it-QAT-Q4_0.gguf
+      quant: Q4_0
+      size_gb: 14.5
+      architecture: dense
+    candidate_roles:
+    - general
+    - frontdoor
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_gemma3
+      k: 8
+    performance:
+      baseline_tps: null
+      optimized_tps: 12.26
+      acceptance_rate: 0.42
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: 2026-01-09
+    notes: "Spec decode working after PR #18720 (SWA forward-masking). Prompt lookup needs SWA fix (see handoffs/blocked/swa_prompt_lookup.md)."
+  general_glm_4_6:
+    tier: C
+    deprecated: true
+    deprecation_reason: "MTP support blocked on PR #15225. No acceleration possible without MTP. Use Qwen3-32B or Llama-3.1-70B instead."
+    description: General model - GLM-4.6-Q4_K_S-00001-of-00005
+    model:
+      name: GLM-4.6-Q4_K_S-00001-of-00005
+      path: unsloth/GLM-4.6-GGUF/GLM-4.6-Q4_K_S-00001-of-00005.gguf
+      quant: Q4_K_S
+      size_gb: 46.2
+      architecture: dense
+    candidate_roles:
+    - general
+    - architect
+    - ingest
+    memory:
+      residency: cold
+      pinned: false
+  general_meta_llama_3_1_8b_q4_k_s:
+    tier: C
+    description: General model - Meta-Llama-3.1-8B.Q4_K_S
+    model:
+      name: Meta-Llama-3.1-8B.Q4_K_S
+      path: QuantFactory/Meta-Llama-3.1-8B-GGUF/Meta-Llama-3.1-8B.Q4_K_S.gguf
+      quant: Q4_K_S
+      size_gb: 4.4
+      architecture: dense
+    candidate_roles:
+    - general
+    - worker
+    constraints:
+      forbid:
+      - speculative_decoding
+    memory:
+      residency: cold
+      pinned: false
+  general_meta_llama_3_8b_instruct_fp16:
+    tier: C
+    description: General model - Meta-Llama-3-8B-Instruct-fp16
+    model:
+      name: Meta-Llama-3-8B-Instruct-fp16
+      path: bartowski/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-fp16.gguf
+      quant: fp16
+      size_gb: 15.0
+      architecture: dense
+    candidate_roles:
+    - general
+    - worker
+    constraints:
+      forbid:
+      - speculative_decoding
+    memory:
+      residency: cold
+      pinned: false
+  general_qwen2_5_7b_q4_k_s:
+    tier: C
+    description: General model - Qwen2.5-7B.Q4_K_S
+    model:
+      name: Qwen2.5-7B.Q4_K_S
+      path: QuantFactory/Qwen2.5-7B-GGUF/Qwen2.5-7B.Q4_K_S.gguf
+      quant: Q4_K_S
+      size_gb: 4.2
+      architecture: dense
+    candidate_roles:
+    - general
+    - worker
+    memory:
+      residency: cold
+      pinned: false
+  general_qwen3_32b:
+    tier: C
+    description: General model - Qwen3-32B-Q4_K_M
+    model:
+      name: Qwen3-32B-Q4_K_M
+      path: lmstudio-community/Qwen3-32B-GGUF/Qwen3-32B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 18.4
+      architecture: dense
+    candidate_roles:
+    - general
+    - frontdoor
+    - coder
+    - ingest
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen3_0_6b_q8_0
+      k: 16
+    memory:
+      residency: cold
+      pinned: false
+  formalizer:
+    tier: B
+    description: Problem formalizer - converts vague tasks to formal specifications
+    model:
+      name: MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0
+      path: mradermacher/MathSmith-Hard-Problem-Synthesizer-Qwen3-8B-GGUF/MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0.gguf
+      quant: Q8_0
+      size_gb: 8.1
+      architecture: dense
+    candidate_roles:
+    - formalizer
+    - math
+    constraints:
+      forbid:
+      - speculative_decoding
+    memory:
+      residency: warm
+      pinned: false
+    output_format: FormalizationIR
+    notes: 'MathSmith is designed to synthesize challenging math problems from concept-explanation
+      pairs.
+
+      New use case: Runtime formalization preprocessing - converts vague task descriptions
+      into
+
+      formal specifications with constraints, edge cases, and testable acceptance
+      criteria.
+
+      This enables downstream specialists (coder, math, architect) to work on well-defined
+      problems.
+
+      Reference: https://arxiv.org/html/2508.05592v1
+
+      '
+  formalizer_q4:
+    tier: B
+    description: Problem formalizer (Q4_K_M) - smaller quantization for faster preprocessing
+    model:
+      name: MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M
+      path: /mnt/raid0/llm/models/MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 4.7
+      architecture: dense
+    candidate_roles:
+    - formalizer
+    - math
+    constraints:
+      forbid:
+      - speculative_decoding
+    memory:
+      residency: warm
+      pinned: false
+    output_format: FormalizationIR
+    notes: Smaller quantization of MathSmith. Use for faster preprocessing when memory
+      is constrained. Same capabilities as Q8_0 version.
+  tool_formalizer_xlam2:
+    tier: D
+    description: Tool sequence formalizer - xLAM-2 (newest, outperforms GPT-4o on BFCL)
+    model:
+      name: xLAM-2-1B-fc-r-Q4_K_M
+      path: /mnt/raid0/llm/models/xLAM-2-1B-fc-r-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 0.9
+      architecture: dense
+    candidate_roles:
+    - tool_formalizer
+    - agentic
+    performance:
+      prompt_tps: 91.2
+      gen_tps: 9.4
+    memory:
+      residency: warm
+      pinned: false
+    benchmark_date: 2026-01-06
+    notes: Salesforce xLAM-2 for function calling. Best for tool sequence formalization.
+      See research/formalizer_handoff.md for evaluation plan.
+  tool_formalizer_xlam1:
+    tier: D
+    description: Tool sequence formalizer - xLAM-1 (older version, smaller)
+    model:
+      name: xLAM-1b-fc-r-Q4_K_M
+      path: /mnt/raid0/llm/models/xLAM-1b-fc-r.Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 0.8
+      architecture: dense
+    candidate_roles:
+    - tool_formalizer
+    - agentic
+    memory:
+      residency: cold
+      pinned: false
+    notes: Older xLAM version. Use xLAM-2 unless testing compatibility.
+  tool_formalizer_nexusraven:
+    tier: C
+    description: Tool formalizer - NexusRaven-V2-13B (best for complex/nested functions)
+    model:
+      name: nexusraven-v2-13b-Q4_K_M
+      path: /mnt/raid0/llm/models/nexusraven-v2-13b.Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 7.4
+      architecture: dense
+    candidate_roles:
+    - tool_formalizer
+    - agentic
+    memory:
+      residency: cold
+      pinned: false
+    notes: 7% better than GPT-4 on complex function calling. Use for nested/composite
+      tool sequences. Generates explanations (can disable to save tokens).
+  vision_qwen3_vl_235b_a22b_thinking:
+    tier: C
+    deprecated: true
+    deprecation_reason: "56% VL score due to timeout truncation. 4B (94%) is faster and better."
+    description: Vision model - Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003
+    model:
+      name: Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003
+      path: unsloth/Qwen3-VL-235B-A22B-Thinking-GGUF/Qwen3-VL-235B-A22B-Thinking-Q4_K_S-00001-of-00003.gguf
+      mmproj_path: unsloth/Qwen3-VL-235B-A22B-Thinking-GGUF/mmproj-F32.gguf
+      quant: Q4_K_S
+      size_gb: 46.2
+      architecture: qwen3vlmoe
+    candidate_roles:
+    - vision
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      override_key: qwen3vlmoe.expert_used_count
+    constraints:
+      forbid:
+      - speculative_decoding
+      - prompt_lookup
+      reason: VL model - no compatible text-only drafts
+    memory:
+      residency: cold
+      pinned: false
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "235B VL model is memory-bound, benefits from block prefetching"
+  vision_qwen3_vl_235b:
+    tier: B
+    deprecated: true
+    deprecation_reason: "133GB for minimal benefit. 4B (94%) outperforms on document figures."
+    description: Vision model - Qwen3-VL-235B-A22B-Instruct (largest non-thinking VL)
+    model:
+      name: Qwen3-VL-235B-A22B-Instruct
+      path: lmstudio-community/Qwen3-VL-235B-A22B-Instruct-GGUF/Qwen3-VL-235B-A22B-Instruct-Q4_K_M-00001-of-00004.gguf
+      mmproj_path: lmstudio-community/Qwen3-VL-235B-A22B-Instruct-GGUF/mmproj-Qwen3-VL-235B-A22B-Instruct-F16.gguf
+      quant: Q4_K_M
+      size_gb: 133
+      architecture: qwen3vlmoe
+    candidate_roles:
+    - vision
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      override_key: qwen3vlmoe.expert_used_count
+    constraints:
+      forbid:
+      - speculative_decoding
+      - prompt_lookup
+      reason: VL model + MoE - use expert reduction only
+    memory:
+      residency: cold
+      pinned: false
+    paged_attention:
+      recommended: true
+      block_size: 64
+      reason: "235B VL MoE benefits from paged attention"
+  vision_qwen3_vl_4b:
+    tier: C
+    description: "RECOMMENDED for document figure analysis - Qwen3-VL-4B-Instruct"
+    model:
+      name: Qwen3-VL-4B-Instruct-Q4_K_M
+      path: lmstudio-community/Qwen3-VL-4B-Instruct-GGUF/Qwen3-VL-4B-Instruct-Q4_K_M.gguf
+      mmproj_path: lmstudio-community/Qwen3-VL-4B-Instruct-GGUF/mmproj-Qwen3-VL-4B-Instruct-F16.gguf
+      quant: Q4_K_M
+      size_gb: 2.3
+      architecture: qwen3vl
+    candidate_roles:
+    - vision
+    - figure_analysis  # Best for document figure description
+    constraints:
+      forbid:
+      - speculative_decoding
+      - prompt_lookup
+      reason: VL model - no compatible text-only drafts
+    performance:
+      baseline_tps: 18.0
+      vl_score: "34/36 (94%)"
+      benchmark_date: 2026-01-27
+    memory:
+      residency: warm  # Small enough for WARM tier (2.3GB)
+      pinned: false
+    notes: |
+      Best VL model for document figure analysis (94% accuracy).
+      Outperforms larger 30B/235B models on OCR and chart reading.
+      Use with document summary context (~8K chars) for optimal results.
+      WARNING: 0% agentic - cannot do tool calls. Use Qwen2.5-VL-7B for agentic vision.
+  vision_qwen3_vl_8b:
+    tier: C
+    description: "Vision model - Qwen3-VL-8B-Instruct - Good balance of quality/speed"
+    model:
+      name: Qwen3-VL-8B-Instruct-Q4_K_M
+      path: lmstudio-community/Qwen3-VL-8B-Instruct-GGUF/Qwen3-VL-8B-Instruct-Q4_K_M.gguf
+      mmproj_path: lmstudio-community/Qwen3-VL-8B-Instruct-GGUF/mmproj-Qwen3-VL-8B-Instruct-F16.gguf
+      quant: Q4_K_M
+      size_gb: 4.7
+      architecture: qwen3vl
+    candidate_roles:
+    - vision
+    - vision_escalation  # Better quality than 30B for complex figures
+    constraints:
+      forbid:
+      - speculative_decoding
+      - prompt_lookup
+      reason: VL model - no compatible text-only drafts
+    performance:
+      baseline_tps: 15.4
+      vl_score: "31/36 (86%)"
+      benchmark_date: 2026-01-27
+    memory:
+      residency: cold
+      pinned: false
+    notes: |
+      Good balance of quality (86%) and speed.
+      Better than 30B-A3B on chart interpretation despite smaller size.
+      WARNING: 0% agentic - cannot do tool calls.
+  draft_co_rewarding_ii_qwen3_1_7b_base_math_q8_0:
+    tier: D
+    deprecated: true
+    description: Draft model - Co-rewarding-II-Qwen3-1.7B-Base-MATH.Q8_0
+    model:
+      name: Co-rewarding-II-Qwen3-1.7B-Base-MATH.Q8_0
+      path: mradermacher/Co-rewarding-II-Qwen3-1.7B-Base-MATH-GGUF/Co-rewarding-II-Qwen3-1.7B-Base-MATH.Q8_0.gguf
+      quant: Q8_0
+      size_gb: 2.0
+      architecture: dense
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen3
+  draft_deepseek_r1_distill_qwen_1_5b:
+    tier: D
+    description: Draft model - DeepSeek-R1-Distill-Qwen-1.5B-Q8_0
+    model:
+      name: DeepSeek-R1-Distill-Qwen-1.5B-Q8_0
+      path: lmstudio-community/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 1.8
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - DeepSeek-R1-Distill-Qwen
+  draft_pard_deepseek_r1_distill_qwen_1_5b_q5_k_s:
+    tier: D
+    description: Draft model - PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S
+    model:
+      name: PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S
+      path: mradermacher/PARD-DeepSeek-R1-Distill-Qwen-1.5B-GGUF/PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S.gguf
+      quant: Q4_K_M
+      size_gb: 1.2
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - DeepSeek-R1-Distill-Qwen
+  draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0:
+    tier: D
+    description: Draft model - PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0
+    model:
+      name: PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0
+      path: mradermacher/PARD-DeepSeek-R1-Distill-Qwen-1.5B-GGUF/PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0.gguf
+      quant: Q8_0
+      size_gb: 1.8
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - DeepSeek-R1-Distill-Qwen
+  draft_pard_llama_3_2_1b_q4_0:
+    tier: D
+    description: Draft model - pard-llama-3.2-1b-q4_0
+    deprecated: true
+    deprecated_date: 2026-02-17
+    deprecated_reason: "Orphaned draft — no Llama 3.2 target model on disk. GGUF deleted."
+    model:
+      name: pard-llama-3.2-1b-q4_0
+      path: fernandoruiz/PARD-Llama-3.2-1B-Q4_0-GGUF/pard-llama-3.2-1b-q4_0.gguf
+      quant: Q4_0
+      size_gb: 0.9
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - llama
+    - meta-llama
+  draft_pard_llama_3_2_1b_q8_0:
+    tier: D
+    description: Draft model - PARD-Llama-3.2-1B.Q8_0
+    deprecated: true
+    deprecated_date: 2026-02-17
+    deprecated_reason: "Orphaned draft — no Llama 3.2 target model on disk. GGUF deleted."
+    model:
+      name: PARD-Llama-3.2-1B.Q8_0
+      path: mradermacher/PARD-Llama-3.2-1B-GGUF/PARD-Llama-3.2-1B.Q8_0.gguf
+      quant: Q8_0
+      size_gb: 1.5
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - llama
+    - meta-llama
+  draft_pard_qwen3_0_6b_q4_0:
+    tier: D
+    description: Draft model - pard-qwen3-0.6b-q4_0
+    model:
+      name: pard-qwen3-0.6b-q4_0
+      path: fernandoruiz/PARD-Qwen3-0.6B-Q4_0-GGUF/pard-qwen3-0.6b-q4_0.gguf
+      quant: Q4_0
+      size_gb: 0.4
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen3-32b
+    - qwen3-235b
+    - qwen3-4b
+    # REMOVED: qwen3-30b-a3b-thinking - missing BOS token in GGUF
+    notes: Generic Qwen3 draft. NOT compatible with Qwen3-Coder or Qwen3-Thinking (BOS mismatch).
+  draft_qwen2_0_5b_q2_k:
+    tier: D
+    deprecated: true
+    deprecation_reason: "Qwen2 tokenizer (151,936 vocab) incompatible with Qwen2.5 (152,064 vocab). No Qwen2 targets in registry."
+    description: Draft model - Qwen2-0.5B.Q2_K (INCOMPATIBLE with Qwen2.5)
+    model:
+      name: Qwen2-0.5B.Q2_K
+      path: QuantFactory/Qwen2-0.5B-GGUF/Qwen2-0.5B.Q2_K.gguf
+      quant: Q2_K
+      size_gb: 0.3
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets: []  # No compatible targets - Qwen2 ≠ Qwen2.5
+  draft_qwen2_5_coder_0_5b:
+    tier: D
+    description: Draft model - Qwen2.5-Coder-0.5B-Q4_K_M
+    model:
+      name: Qwen2.5-Coder-0.5B-Q4_K_M
+      path: lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 0.4
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen2.5
+    - qwen2-
+  draft_qwen2_5_coder_1_5b_q2_k:
+    tier: D
+    description: Draft model - Qwen2.5-Coder-1.5B.Q2_K
+    model:
+      name: Qwen2.5-Coder-1.5B.Q2_K
+      path: QuantFactory/Qwen2.5-Coder-1.5B-GGUF/Qwen2.5-Coder-1.5B.Q2_K.gguf
+      quant: Q2_K
+      size_gb: 0.6
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen2.5
+    - qwen2-
+  draft_qwen2_5_coder_1_5b_q4_k_m:
+    tier: D
+    description: Draft model - Qwen2.5-Coder-1.5B.Q4_K_M
+    model:
+      name: Qwen2.5-Coder-1.5B.Q4_K_M
+      path: QuantFactory/Qwen2.5-Coder-1.5B-GGUF/Qwen2.5-Coder-1.5B.Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 0.9
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen2.5
+    - qwen2-
+  draft_qwen2_5_math_1_5b:
+    tier: D
+    description: Draft model - Qwen2.5-Math-1.5B-Instruct-Q4_K_M
+    model:
+      name: Qwen2.5-Math-1.5B-Instruct-Q4_K_M
+      path: tensorblock/Qwen2.5-Math-1.5B-Instruct-GGUF/Qwen2.5-Math-1.5B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 0.9
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen2.5
+    - qwen2-
+  draft_qwen3_0_6b:
+    tier: D
+    deprecated: true
+    deprecated_reason: Q2_K quant causes token errors with Qwen3-Thinking models. Use draft_qwen3_0_6b_q8_0 instead.
+    description: Draft model - Qwen3-0.6B-Q2_K (DEPRECATED - use Q8_0)
+    model:
+      name: Qwen3-0.6B-Q2_K
+      path: unsloth/Qwen3-0.6B-GGUF/Qwen3-0.6B-Q2_K.gguf
+      quant: Q2_K
+      size_gb: 0.3
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets: []
+  draft_qwen3_1_7b:
+    tier: D
+    description: Draft model - Qwen3-1.7B-Q4_K_M
+    model:
+      name: Qwen3-1.7B-Q4_K_M
+      path: lmstudio-community/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 1.2
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen3-32b
+    - qwen3-235b
+    - qwen3-4b
+    # REMOVED: qwen3-30b-a3b-thinking - missing BOS token in GGUF
+    notes: Generic Qwen3 draft. NOT compatible with Qwen3-Coder or Qwen3-Thinking (BOS mismatch).
+  draft_qwen3_coder_0_75b:
+    tier: D
+    description: Draft model for Qwen3-Coder family (jukofyork) - vocab transplant for 480B BOS fix
+    model:
+      name: Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0
+      path: /mnt/raid0/llm/models/Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0.gguf
+      quant: Q4_0
+      size_gb: 0.45
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen3-coder-30b-a3b
+    - qwen3-coder-480b-a35b
+    notes: >
+      VERIFIED (2026-02-13) — works with ALL Qwen3-Coder targets. BOS=comma (token 11) matches.
+      30B-A3B: 70-78% accept (MoE6+spec+lookup = 47.11 t/s).
+      480B-A35B: 74-82% accept (full+spec = 9.00 t/s).
+      Previous testing (2026-01-28) showed 15%/8.65% — likely a build or config issue at the time.
+  draft_qwen3_1_7b_q8_0:
+    tier: D
+    description: Draft model - Qwen3-1.7B-Q8_0 (higher quality for spec decode)
+    model:
+      name: Qwen3-1.7B-Q8_0
+      path: /mnt/raid0/llm/models/Qwen3-1.7B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 1.7
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen3-32b
+    - qwen3-235b
+    - qwen3-4b
+    # REMOVED: qwen3-30b-a3b-thinking - missing BOS token in GGUF
+    notes: >
+      Generic Qwen3 draft. NOT compatible with Qwen3-Coder or Qwen3-Thinking (BOS mismatch).
+      BENCHMARKED: 1.7B→32B=31% accept (2.4x). 1.7B→235B=21% accept (SLOWER — use 0.6B instead).
+      The 0.6B Q8_0 draft is strictly superior for 235B (55% vs 21% acceptance).
+  draft_qwen3_0_6b_q8_0:
+    tier: D
+    description: Draft model - Qwen3-0.6B-Q8_0 (production draft for 235B architect)
+    model:
+      name: Qwen_Qwen3-0.6B-Q8_0
+      path: /mnt/raid0/llm/models/Qwen_Qwen3-0.6B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 0.75
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen3-32b
+    - qwen3-235b
+    - qwen3-4b
+    # REMOVED: qwen3-30b-a3b-thinking - missing BOS token in GGUF
+    notes: >
+      Generic Qwen3 draft. BOS=151643 matches standard Qwen3 models.
+      NOT compatible with Qwen3-Coder (BOS=comma) or Qwen3-Thinking (missing BOS).
+      BENCHMARKED (2026-02-13): 0.6B→235B = 53-55% accept (6.08 t/s full+spec).
+      Dramatically outperforms 1.7B draft (55% vs 21%) — smaller draft wins on CPU.
+  draft_qwen3_embedding_0_6b:
+    tier: D
+    deprecated: true
+    description: Draft model - Qwen3-Embedding-0.6B-Q8_0
+    model:
+      name: Qwen3-Embedding-0.6B-Q8_0
+      path: Qwen/Qwen3-Embedding-0.6B-GGUF/Qwen3-Embedding-0.6B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 0.6
+      architecture: dense
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen3
+  draft_qwen3_vl_1b_merged_q8_0:
+    tier: D
+    deprecated: true
+    description: Draft model - qwen3-vl-1b-merged-q8_0
+    model:
+      name: qwen3-vl-1b-merged-q8_0
+      path: Novaciano/Qwen3-VL-1B-Merged-Q8_0-GGUF/qwen3-vl-1b-merged-q8_0.gguf
+      quant: Q8_0
+      size_gb: 0.7
+      architecture: dense
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen3
+  draft_deepseek_r1_distill_qwen_1_5b_q80:
+    tier: D
+    description: Draft model - DeepSeek-R1-Distill-Qwen-1.5B-Q8_0
+    deprecated: true
+    deprecated_date: 2026-02-17
+    deprecated_reason: "unsloth GGUF deleted — use draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0 (mradermacher) instead"
+    model:
+      name: DeepSeek-R1-Distill-Qwen-1.5B-Q8_0
+      path: unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/DeepSeek-R1-Distill-Qwen-1.5B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 1.8
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - DeepSeek-R1-Distill-Qwen
+  thinking_deepseek_r1_distill_qwen_14b_q6kl:
+    tier: B
+    description: Thinking model - DeepSeek-R1-Distill-Qwen-14B-Q6_K_L
+    model:
+      name: DeepSeek-R1-Distill-Qwen-14B-Q6_K_L
+      path: bartowski/DeepSeek-R1-Distill-Qwen-14B-GGUF/DeepSeek-R1-Distill-Qwen-14B-Q6_K_L.gguf
+      quant: Q6_K_L
+      size_gb: 11.6
+      architecture: dense
+    candidate_roles:
+    - thinking
+    - general
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_deepseek_r1_distill_qwen_1_5b_q80
+      k: 16
+    memory:
+      residency: cold
+      pinned: false
+  draft_qwen2_5_math_1_5b_q6k:
+    tier: D
+    description: Draft model - Qwen2.5-Math-1.5B-Instruct-Q6_K
+    model:
+      name: Qwen2.5-Math-1.5B-Instruct-Q6_K
+      path: tensorblock/Qwen2.5-Math-1.5B-Instruct-GGUF/Qwen2.5-Math-1.5B-Instruct-Q6_K.gguf
+      quant: Q6_K
+      size_gb: 1.2
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen2.5
+    - qwen2-
+  draft_qwen2_5_0_5b_instruct_f16:
+    tier: D
+    description: Qwen2.5-0.5B-Instruct FP16 - benchmarking only (FP16 not recommended for draft)
+    model:
+      name: Qwen2.5-0.5B-Instruct-f16
+      path: /mnt/raid0/llm/models/Qwen2.5-0.5B-Instruct-f16.gguf
+      quant: f16
+      size_gb: 0.9
+      architecture: dense
+    candidate_roles:
+    - draft
+    - benchmark
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen2.5
+    - qwen2-
+    notes: "FP16 quantization - slower than Q4/Q8 variants. Added for benchmarking purposes only."
+
+  # =============================================================================
+  # Embedder Models (Tier D - Supporting)
+  # =============================================================================
+  embedder_bge_large_en_v1_5:
+    tier: D
+    description: BGE-large-en-v1.5 - Purpose-built embedding model (1024 dims)
+    model:
+      name: bge-large-en-v1.5-f16
+      path: /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf
+      quant: f16
+      size_gb: 0.64
+      architecture: bert
+      embedding_dim: 1024
+    candidate_roles:
+    - embedder
+    server_config:
+      ports: [8090, 8091, 8092, 8093, 8094, 8095]  # 6 parallel instances
+      threads_per_instance: 4
+      context_size: 512
+      parallel_slots: 4
+      pooling: cls  # BERT-style CLS token pooling
+    memory:
+      residency: hot
+      pinned: true
+      total_gb: 4.0  # 6 instances × ~670MB
+    notes: |
+      Parallel BGE embedder (2026-02-05):
+      - 6 instances for redundancy and reduced latency
+      - Probe-first approach: health probe all servers, first responder gets request
+      - CLS pooling (standard BERT approach)
+      - Source: CompendiumLabs/bge-large-en-v1.5-gguf
+
+  thinking_qwen3_30b_a3b_thinking_2507_q4ks:
+    tier: B
+    description: Thinking model - Qwen3-30B-A3B-Thinking-2507-Q4_K_S
+    model:
+      name: Qwen3-30B-A3B-Thinking-2507-Q4_K_S
+      path: unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/Qwen3-30B-A3B-Thinking-2507-Q4_K_S.gguf
+      quant: Q4_K_S
+      size_gb: 16.3
+      architecture: moe
+      baseline_experts: 8
+    candidate_roles:
+    - thinking
+    - coder
+    - ingest
+    forbidden_configs:
+    - speculative_decoding  # Missing BOS token in GGUF prevents spec decode
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      override_key: qwen3moe.expert_used_count
+    memory:
+      residency: cold
+      pinned: false
+  vision_qwen3_vl_4b_q80:
+    tier: C
+    description: Vision model - Qwen3-VL-4B-Instruct-Q8_0
+    model:
+      name: Qwen3-VL-4B-Instruct-Q8_0
+      path: lmstudio-community/Qwen3-VL-4B-Instruct-GGUF/Qwen3-VL-4B-Instruct-Q8_0.gguf
+      mmproj_path: lmstudio-community/Qwen3-VL-4B-Instruct-GGUF/mmproj-Qwen3-VL-4B-Instruct-F16.gguf
+      quant: Q8_0
+      size_gb: 4.0
+      architecture: qwen3vl
+    candidate_roles:
+    - vision
+    constraints:
+      forbid:
+      - speculative_decoding
+      - prompt_lookup
+      reason: VL model - no compatible text-only drafts
+    memory:
+      residency: cold
+      pinned: false
+  vision_qwen3_vl_8b_q80:
+    tier: C
+    description: Vision model - Qwen3-VL-8B-Instruct-Q8_0
+    model:
+      name: Qwen3-VL-8B-Instruct-Q8_0
+      path: lmstudio-community/Qwen3-VL-8B-Instruct-GGUF/Qwen3-VL-8B-Instruct-Q8_0.gguf
+      mmproj_path: lmstudio-community/Qwen3-VL-8B-Instruct-GGUF/mmproj-Qwen3-VL-8B-Instruct-F16.gguf
+      quant: Q8_0
+      size_gb: 8.1
+      architecture: qwen3vl
+    candidate_roles:
+    - vision
+    constraints:
+      forbid:
+      - speculative_decoding
+      - prompt_lookup
+      reason: VL model - no compatible text-only drafts
+    memory:
+      residency: cold
+      pinned: false
+  ingest_qwen3_32b:
+    tier: B
+    description: Ingest candidate - Qwen3-32B-Q4_K_M
+    model:
+      name: Qwen3-32B-Q4_K_M
+      path: lmstudio-community/Qwen3-32B-GGUF/Qwen3-32B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 18.4
+      architecture: dense
+    candidate_roles:
+    - general
+    - frontdoor
+    - coder
+    - ingest
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen3_0_6b_q8_0
+      k: 16
+    memory:
+      residency: cold
+      pinned: false
+  ingest_qwen2_5_coder_32b:
+    tier: B
+    description: Ingest candidate - Qwen2.5-Coder-32B (72% quality, 51x spec speedup)
+    model:
+      name: Qwen2.5-Coder-32B-Instruct
+      path: lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 18.5
+      architecture: dense
+    candidate_roles:
+    - coder
+    - frontdoor
+    - ingest
+    - general
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen25_coder
+      k: 16
+    performance:
+      baseline_tps: 3.4
+      optimized_tps: 174.6
+      speedup: 50.9x
+      quality_score: 132/183 (72%)
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: 2026-01-06
+    notes: Fastest spec decode config - prioritize speed over quality
+  ingest_qwen3_coder_30b:
+    tier: B
+    description: Ingest candidate - Qwen3-Coder-30B-A3B-Instruct-Q4_K_M
+    model:
+      name: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M
+      path: unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 17.3
+      architecture: moe
+    candidate_roles:
+    - frontdoor
+    - coder
+    - general
+    - ingest
+    memory:
+      residency: cold
+      pinned: false
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      override_key: qwen3moe.expert_used_count
+      alternative:
+        type: speculative_decoding
+        draft_role: draft_qwen3_coder_0_75b
+        k: 16
+  ingest_llama_3_1_70b:
+    tier: B
+    description: Ingest candidate - Meta-Llama-3.1-70B (81% quality, 41x spec speedup)
+    deprecated: true
+    deprecated_date: 2026-02-17
+    deprecated_reason: "GGUF deleted — model and PARD draft both removed from disk"
+    model:
+      name: Meta-Llama-3.1-70B-Instruct-Q4_K_M
+      path: lmstudio-community/Meta-Llama-3.1-70B-Instruct-GGUF/Meta-Llama-3.1-70B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 39.6
+      architecture: dense
+    candidate_roles:
+    - architect
+    - general
+    - ingest
+    acceleration:
+      type: speculative_decoding
+      draft_model: PARD-Llama-3.2-1B-Instruct-Q4_0
+      draft_path: fernandoruiz/PARD-Llama-3.2-1B-Q4_0-GGUF/pard-llama-3.2-1b-q4_0.gguf
+      k: 24
+    performance:
+      baseline_tps: 2.1
+      optimized_tps: 85.8
+      speedup: 40.9x
+      quality_score: 149/183 (81%)
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: 2026-01-06
+  ingest_qwen2_5_72b:
+    tier: B
+    description: Ingest candidate - Qwen2.5-72B.Q4_K_M
+    model:
+      name: Qwen2.5-72B.Q4_K_M
+      path: mradermacher/Qwen2.5-72B-GGUF/Qwen2.5-72B.Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 44.2
+      architecture: dense
+    candidate_roles:
+    - architect
+    - general
+    - ingest
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen25
+      k: 16
+    memory:
+      residency: cold
+      pinned: false
+  ingest_hermes_4_70b:
+    tier: B
+    description: Ingest candidate - Hermes-4-70B-Q4_K_M
+    model:
+      name: Hermes-4-70B-Q4_K_M
+      path: lmstudio-community/Hermes-4-70B-GGUF/Hermes-4-70B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 39.6
+      architecture: dense
+    candidate_roles:
+    - architect
+    - frontdoor
+    - general
+    - ingest
+    memory:
+      residency: cold
+      pinned: false
+  ingest_qwen3_30b_thinking:
+    tier: B
+    description: Ingest candidate - Qwen3-30B-A3B-Thinking-2507-Q8_0
+    model:
+      name: Qwen3-30B-A3B-Thinking-2507-Q8_0
+      path: unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/Qwen3-30B-A3B-Thinking-2507-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 30.3
+      architecture: moe
+    candidate_roles:
+    - thinking
+    - coder
+    - ingest
+    forbidden_configs:
+    - speculative_decoding  # Missing BOS token in GGUF prevents spec decode
+    memory:
+      residency: cold
+      pinned: false
+    acceleration:
+      type: moe_expert_reduction
+      experts: 4
+      override_key: qwen3moe.expert_used_count
+  ingest_glm_4_6:
+    tier: B
+    deprecated: true
+    deprecation_reason: "MTP support blocked on PR #15225. No acceleration possible without MTP. Use Qwen3-32B or Llama-3.1-70B instead."
+    description: Ingest candidate - GLM-4.6-Q4_K_S-00001-of-00005
+    model:
+      name: GLM-4.6-Q4_K_S-00001-of-00005
+      path: unsloth/GLM-4.6-GGUF/GLM-4.6-Q4_K_S-00001-of-00005.gguf
+      quant: Q4_K_S
+      size_gb: 46.2
+      architecture: dense
+    candidate_roles:
+    - general
+    - architect
+    - ingest
+    memory:
+      residency: cold
+      pinned: false
+
+  # =============================================================================
+  # EXTERNAL API BACKENDS
+  # =============================================================================
+  # These roles use external APIs (Anthropic, OpenAI) instead of local inference.
+  # Requires environment variables: ANTHROPIC_API_KEY, OPENAI_API_KEY
+  # See src/backends/anthropic.py and src/backends/openai.py for implementation.
+  # =============================================================================
+
+  external_claude_sonnet:
+    tier: B
+    description: Anthropic Claude 3.5 Sonnet - external API backend
+    backend:
+      type: anthropic
+      api_model: claude-3-5-sonnet-20241022
+      fallback_role: coder_escalation  # Local fallback if API unavailable
+    model:
+      name: Claude-3.5-Sonnet
+      path: ""  # No local path - API only
+      quant: API
+      size_gb: 0
+      architecture: external_api
+    candidate_roles:
+    - coder
+    - general
+    - architect
+    acceleration:
+      type: none  # API handles optimization
+    performance:
+      baseline_tps: 80  # Typical API throughput
+    memory:
+      residency: external
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.2
+
+  external_claude_opus:
+    tier: B
+    description: Anthropic Claude Opus 4.5 - external API backend for hard tasks
+    backend:
+      type: anthropic
+      api_model: claude-opus-4-5-20251101
+      fallback_role: architect_general  # Local fallback if API unavailable
+    model:
+      name: Claude-Opus-4.5
+      path: ""  # No local path - API only
+      quant: API
+      size_gb: 0
+      architecture: external_api
+    candidate_roles:
+    - architect
+    - coder
+    - general
+    acceleration:
+      type: none  # API handles optimization
+    performance:
+      baseline_tps: 40  # Typical API throughput
+    memory:
+      residency: external
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.2
+
+  external_gpt4o:
+    tier: B
+    description: OpenAI GPT-4o - external API backend
+    backend:
+      type: openai
+      api_model: gpt-4o
+      fallback_role: coder_escalation  # Local fallback if API unavailable
+    model:
+      name: GPT-4o
+      path: ""  # No local path - API only
+      quant: API
+      size_gb: 0
+      architecture: external_api
+    candidate_roles:
+    - coder
+    - general
+    acceleration:
+      type: none  # API handles optimization
+    performance:
+      baseline_tps: 100  # Typical API throughput
+    memory:
+      residency: external
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.2
+
+  external_gpt4o_mini:
+    tier: C
+    description: OpenAI GPT-4o-mini - external API backend (faster, cheaper)
+    backend:
+      type: openai
+      api_model: gpt-4o-mini
+      fallback_role: worker_general  # Local fallback if API unavailable
+    model:
+      name: GPT-4o-mini
+      path: ""  # No local path - API only
+      quant: API
+      size_gb: 0
+      architecture: external_api
+    candidate_roles:
+    - worker
+    - general
+    acceleration:
+      type: none  # API handles optimization
+    performance:
+      baseline_tps: 150  # Typical API throughput
+    memory:
+      residency: external
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.2
+
+process_layout:
+  hot_resident:
+  - frontdoor
+  - draft_qwen25_coder
+  - draft_qwen25
+  - worker_general
+  - worker_math
+  - toolrunner
+  warm_mmap:
+  - ingest_long_context
+  - architect_general
+  - architect_coding
+  - worker_vision
+  - worker_summarize
+escalation_chains:
+  coder:
+    description: Code generation escalation path
+    chain:
+    - frontdoor
+    - coder_escalation
+    - architect_coding
+    triggers:
+    - error_categories:
+      - timeout
+      - inference_error
+      - internal_error
+    - output_too_short: 50
+    - explicit_request: true
+    max_escalations: 2
+  general:
+    description: General task escalation path
+    chain:
+    - worker_general
+    - frontdoor
+    - architect_general
+    triggers:
+    - error_categories:
+      - timeout
+      - inference_error
+    - explicit_request: true
+    max_escalations: 2
+routing_hints:
+- if: task_type == 'chat' and priority == 'interactive'
+  use:
+  - frontdoor
+- if: task_type == 'code'
+  use:
+  - coder_escalation
+  escalate_to: architect_coding
+- if: task_type == 'code' and 'refactor' in objective
+  use:
+  - coder_escalation
+  - worker_general
+  escalate_to: architect_coding
+- if: task_type == 'code' and escalation.triggered
+  use:
+  - coder_escalation
+  escalate_to: architect_coding
+- if: task_type == 'ingest'
+  use:
+  - ingest_long_context
+- if: task_type == 'doc' and priority == 'interactive'
+  use:
+  - frontdoor
+  - worker_general
+- if: task_type == 'doc' and 'summarize' in objective
+  use:
+  - worker_summarize
+- if: task_type == 'manage'
+  use:
+  - frontdoor
+  - toolrunner
+  - worker_general
+- if: '''math'' in constraints or ''invariant'' in objective'
+  use:
+  - worker_math
+- if: '''image'' in inputs or ''screenshot'' in inputs or ''ui'' in objective'
+  use:
+  - worker_vision
+- if: '''math'' in objective and (''image'' in inputs or ''diagram'' in inputs)'
+  use:
+  - vision_escalation
+- if: '''video'' in inputs and priority != ''interactive'''
+  use:
+  - vision_escalation
+- if: task_type in ['code', 'math'] and complexity == 'high'
+  preprocess: formalizer
+  use:
+  - coder_escalation
+  - worker_math
+- if: '''optimize'' in objective or ''constraint'' in objective'
+  preprocess: formalizer
+  use:
+  - worker_math
+  - coder_escalation
+- if: '''prove'' in objective or ''verify'' in objective'
+  preprocess: formalizer
+  use:
+  - worker_math
+  - thinking_reasoning
+- if: '''algorithm'' in objective and ''design'' in objective'
+  preprocess: formalizer
+  use:
+  - architect_qwen2_5_72b
+  - coder_escalation
+- if: ambiguity_score > 0.7
+  preprocess: formalizer
+  notes: Frontdoor detects vague requirements needing formalization
+- if: escalation.max_level == 'B3'
+  use:
+  - architect_general
+- if: escalation.max_level == 'B3' and task_type == 'code'
+  use:
+  - architect_coding
+command_templates:
+  speculative_decoding: "numactl --interleave=all \\\n  /mnt/raid0/llm/llama.cpp/build/bin/llama-speculative\
+    \ \\\n  -m {model_path} \\\n  -md {draft_path} \\\n  --draft-max {k} \\\n  -t\
+    \ {threads} \\\n  -n 100 \\\n  --temp {temperature}\n"
+  moe_expert_reduction: "numactl --interleave=all \\\n  /mnt/raid0/llm/llama.cpp/build/bin/llama-completion\
+    \ \\\n  -m {model_path} \\\n  --override-kv {override_key}=int:{experts} \\\n\
+    \  -t {threads} \\\n  -n 100 \\\n  --temp {temperature}\n"
+  prompt_lookup: "numactl --interleave=all \\\n  /mnt/raid0/llm/llama.cpp/build/bin/llama-lookup\
+    \ \\\n  -m {model_path} \\\n  --draft-max {k} \\\n  -t {threads} \\\n  -n 100\
+    \ \\\n  --temp {temperature}\n"
+  baseline: "numactl --interleave=all \\\n  /mnt/raid0/llm/llama.cpp/build/bin/llama-completion\
+    \ \\\n  -m {model_path} \\\n  -t {threads} \\\n  -n 100 \\\n  --temp {temperature}\n"
+  vision: "numactl --interleave=all \\\n  /mnt/raid0/llm/llama.cpp/build/bin/llama-mtmd-cli\
+    \ \\\n  -m {model_path} \\\n  --mmproj {mmproj_path} \\\n  -t {threads}\n"
+  server_start: "numactl --interleave=all \\\n  /mnt/raid0/llm/llama.cpp/build/bin/llama-server\
+    \ \\\n  -m {model_path} \\\n  -t {threads} \\\n  --host 127.0.0.1 \\\n  --port\
+    \ {port} \\\n  -c {context_length}\n"
+  server_start_moe: "numactl --interleave=all \\\n  /mnt/raid0/llm/llama.cpp/build/bin/llama-server\
+    \ \\\n  -m {model_path} \\\n  -t {threads} \\\n  --host 127.0.0.1 \\\n  --port\
+    \ {port} \\\n  -c {context_length} \\\n  --override-kv {override_key}=int:{experts}\n"
+runtime_quirks:
+  qwen25_coder_32b_instruct:
+    description: Qwen2.5-Coder-32B-Instruct
+    quirks:
+    - issue: llama-speculative errors with 'invalid argument:' when wrapped in timeout
+      workaround: Run without timeout wrapper, or use llama-cli instead
+      discovered: 2025-12-16
+    - issue: Low speculative decoding acceptance rate (~16%)
+      workaround: Use MoE models instead for high throughput
+      discovered: 2025-12-16
+    - issue: Baseline generation very slow (7 t/s) on CPU
+      workaround: Not recommended for high-throughput tasks - use Qwen3-Coder-30B-A3B
+        instead
+      discovered: 2025-12-16
+  qwen3_coder_30b_a3b:
+    description: Qwen3-Coder-30B-A3B-Instruct
+    quirks:
+    - issue: Requires MoE expert override key specific to architecture
+      workaround: Use --override-kv qwen3moe.expert_used_count=int:4
+      discovered: 2025-12-16
+  qwen3_coder_53b_a3b:
+    description: Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2
+    quirks:
+    - issue: Larger model, slower than 30B variant despite similar quality
+      workaround: Use for complex tasks only, prefer 30B for standard coding
+      discovered: 2025-12-16
+  qwen3_coder_480b:
+    description: Qwen3-Coder-480B-A35B-Instruct
+    quirks:
+    - issue: BOS token mismatch - standard drafts incompatible
+      solution: jukofyork vocab transplant draft (draft_qwen3_coder_0_75b) — BOS matched (comma token 11)
+      status: VERIFIED WORKING (2026-02-13) — 74-82% acceptance, 2.16x speedup
+      discovered: 2025-12-15
+      updated: 2026-02-13
+    - issue: Prompt lookup net-negative despite working mechanically
+      details: 18.4% acceptance on refactoring, but -34% speed due to MoE verification overhead
+      workaround: Use spec decode instead (74% acceptance, +2.16x speed)
+      discovered: 2026-02-13
+    - issue: MOE2 (2 experts) produces garbage output despite being faster
+      workaround: Use MOE3 (3 experts) - 10.30 t/s with good quality (+58% speedup)
+      discovered: 2025-12-21
+      explanation: "With parallel repack enabled (no OMP_NUM_THREADS=1):\n- Baseline:\
+        \ 6.53 t/s (good output)\n- MOE3: 10.30 t/s (+58% speedup, good output) \u2713\
+        \ OPTIMAL\n- MOE4: 9.25 t/s (+42% speedup, good output) \u2713 Safe fallback\n\
+        - MOE5: 8.50 t/s (+30% speedup, good output)\n- MOE2: 11.51 t/s (+76% speedup,\
+        \ GARBAGE output) \u2717 UNUSABLE\nThe 480B model needs at least 3 experts\
+        \ for coherent output.\n"
+  qwen3_thinking_models:
+    description: Qwen3-*-Thinking-2507 models (unsloth fine-tunes)
+    quirks:
+    - issue: Missing BOS token metadata in GGUF prevents speculative decoding
+      workaround: Use MoE expert reduction only (no spec decode)
+      discovered: 2026-01-12
+      explanation: >
+        The Qwen3-Thinking-2507 models from unsloth have tokenizer.ggml.eos_token_id
+        but no tokenizer.ggml.bos_token_id in their GGUF metadata. Since all draft
+        models have BOS tokens defined, llama.cpp speculative decoding fails with
+        "draft model special tokens must match target model to use speculation".
+        MoE expert reduction still works normally for these models.
+  qwen2_vs_qwen2_5:
+    description: Qwen2 and Qwen2.5 tokenizer incompatibility
+    quirks:
+    - issue: Qwen2 drafts crash with Qwen2.5 targets (vocab mismatch)
+      workaround: Use Qwen2.5 drafts only (draft_qwen25, draft_qwen25_coder)
+      discovered: 2026-01-09
+      explanation: |
+        Qwen2: vocab_size=151,936, eos=151643
+        Qwen2.5: vocab_size=152,064, eos=151645
+        The 128 token difference causes crashes when target generates token ID >= 151,936.
+  qwen2_5_72b:
+    description: Qwen2.5-72B-Instruct and Qwen2.5-Math-72B
+    quirks:
+    - issue: Speculative decoding shows ~2% acceptance with ALL tested draft models
+      workaround: Do not use speculative decoding - use baseline or prompt lookup
+        only
+      discovered: 2025-12-31
+      explanation: 'Tested draft models (all showed ~2% acceptance):
+
+        - Qwen2.5-Coder-0.5B (2.4%)
+
+        - Qwen2.5-Coder-1.5B Q4_K_M (2.4%)
+
+        - Qwen2.5-Coder-1.5B Q2_K (2.2%)
+
+        - Qwen2.5-0.5B base (2.3%)
+
+        - Qwen2.5-Math-1.5B (2.3%)
+
+        - Qwen2.5-Math-1.5B Q6K (2.3%)
+
+        All Qwen2.5 variants share the same tokenizer, so this is not a vocab mismatch.
+
+        Root cause unclear - possibly generation pattern differences in 72B models.
+
+        For comparison: Qwen2.5-Coder-32B achieves 11x speedup with the same drafts.
+
+        '
+  minimax_m21:
+    description: MiniMax M2.1 (230B MoE, 256 experts, 8 active)
+    quirks:
+    - issue: Chat template requires Jinja engine
+      workaround: Always use --jinja flag
+      discovered: 2026-01-19
+    - issue: llama-cli enters interactive mode by default
+      workaround: Use llama-completion instead of llama-cli for non-interactive use
+      discovered: 2026-01-19
+    - issue: Model outputs <think> tags (reasoning model)
+      workaround: Parse and strip tags for non-reasoning use, or let model reason
+      discovered: 2026-01-19
+    - issue: 256 experts causes sparse memory access patterns
+      workaround: Expected speed ~9.5 t/s despite 10B active params (lower than Qwen3 MoE)
+      discovered: 2026-01-19
+    - issue: Split across 3-4 GGUF files depending on quant
+      workaround: Point to first file (-00001-of-000XX), others auto-loaded
+      discovered: 2026-01-19
+    - issue: Unique vocab (200,064 tokens)
+      workaround: No compatible draft model - speculative decoding NOT possible
+      discovered: 2026-01-19
+  glm_47_flash:
+    description: GLM-4.7-Flash (30B MoE, 64 experts, 4 active, deepseek2 arch)
+    quirks:
+    - issue: Chat template requires Jinja engine
+      workaround: Always use --jinja flag
+      discovered: 2026-01-22
+    - issue: llama-cli may enter interactive mode
+      workaround: Use llama-completion for non-interactive use
+      discovered: 2026-01-22
+    - issue: Uses deepseek2 architecture with MLA (Multi-head Latent Attention)
+      workaround: No speculative decoding support - MLA incompatible
+      discovered: 2026-01-22
+    - issue: Already uses 4 experts by default (optimal)
+      workaround: No MoE reduction needed - already at minimum
+      discovered: 2026-01-22
+  glm_47_reap:
+    description: GLM-4.7-REAP-218B-A32B (218B MoE, 96 experts, 8 active, glm4moe arch)
+    quirks:
+    - issue: Chat template requires Jinja engine
+      workaround: Always use --jinja flag
+      discovered: 2026-01-22
+    - issue: llama-cli may enter interactive mode
+      workaround: Use llama-completion for non-interactive use
+      discovered: 2026-01-22
+    - issue: Split across 3 GGUF files (Q4_K_M)
+      workaround: Point to first file (-00001-of-00003), others auto-loaded
+      discovered: 2026-01-22
+    - issue: Uses glm4moe architecture - unique to GLM models
+      workaround: MoE override key is glm4moe.expert_used_count (needs testing)
+      discovered: 2026-01-22
+    - issue: No compatible draft model for speculative decoding
+      workaround: Use MoE expert reduction only
+      discovered: 2026-01-22
+  qwen3_next_80b:
+    description: Qwen3-Next-80B-A3B-Instruct (SSM+MoE hybrid)
+    quirks:
+    - issue: SSM models incompatible with all speculation methods
+      workaround: Only MoE expert reduction available, no spec decode
+      discovered: 2025-12-15
+  qwen3_235b_a22b:
+    description: Qwen3-235B-A22B (architect_general)
+    quirks:
+    - issue: Quality degrades severely at 2 experts
+      workaround: Use 4 experts minimum for coherent output
+      discovered: 2025-12-15
+    - issue: Split model (4 parts) - loading takes ~30s
+      workaround: Keep warm via mmap for faster reload
+      discovered: 2025-12-15
+  meta_llama_3_8b:
+    description: Meta-Llama-3-8B-Instruct (worker_general, toolrunner)
+    quirks:
+    - issue: None known - stable model
+      workaround: N/A
+      discovered: 2025-12-16
+  qwen25_math_7b:
+    description: Qwen2.5-Math-7B-Instruct (worker_math)
+    quirks:
+    - issue: Best with temperature 0.5 for spec decode
+      workaround: Use --temp 0.5 with speculative decoding for 7.3x speedup
+      discovered: 2025-12-15
+  qwen25_vl_7b:
+    description: Qwen2.5-VL-7B-Instruct (worker_vision)
+    quirks:
+    - issue: Best with temperature 0.7 for spec decode
+      workaround: Use --temp 0.7 for 57.1 t/s (3.7x speedup)
+      discovered: 2025-12-15
+    - issue: Requires mmproj file for vision
+      workaround: Use -m MODEL --mmproj mmproj-model-f16.gguf
+      discovered: 2025-12-15
+  qwen3_vl_30b:
+    description: Qwen3-VL-30B-A3B-Instruct (vision_escalation)
+    quirks:
+    - issue: MoE vision model - requires override key for expert reduction
+      workaround: Use --override-kv qwen3vlmoe.expert_used_count=int:4
+      discovered: 2025-12-16
+    - issue: Requires mmproj file for vision
+      workaround: Use --mmproj mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf
+      discovered: 2025-12-16
+    - issue: Cold load takes ~15-20s for 18GB model
+      workaround: Schedule for batch/non-interactive tasks, or pre-warm
+      discovered: 2025-12-16
+  qwen25_coder_0_5b:
+    description: Qwen2.5-Coder-0.5B (draft_qwen25_coder)
+    quirks:
+    - issue: Incompatible with Qwen3 MoE models
+      workaround: Only use with Qwen2.5 dense models
+      discovered: 2025-12-16
+  qwen25_0_5b:
+    description: Qwen2.5-0.5B-Instruct (draft_qwen25)
+    quirks:
+    - issue: Best K varies by target model
+      workaround: K=24 for 32B, K=16 for 72B, K=8 for 7B
+      discovered: 2025-12-15
+  gemma3_spec_decode:
+    description: Gemma-3 family speculative decoding notes
+    quirks:
+    - issue: "RESOLVED: Earlier crash was MTP-branch specific, not upstream"
+      workaround: Use upstream llama.cpp b7684+ (works correctly)
+      discovered: 2026-01-09
+      resolved: 2026-01-09
+      explanation: |
+        The crash was caused by MTP-branch-specific code that incorrectly cast
+        llama_kv_cache_iswa_context* to llama_kv_cache_context*. This code does
+        not exist in upstream llama.cpp master. Tested working with 20.8% acceptance
+        rate on Gemma-3-27B-QAT + Gemma-3-1B-IT draft.
+    - issue: "Vocab mismatch between Gemma-3-1B and Gemma-3-27B-QAT (64 tokens)"
+      workaround: Works despite mismatch - target vocab is superset of draft
+      discovered: 2026-01-09
+  general_llama_speculative:
+    description: llama-speculative binary general quirks
+    quirks:
+    - issue: 'May print ''decode: n_tokens == 0'' errors'
+      workaround: Usually non-fatal, generation still completes
+      discovered: 2025-12-16
+    - issue: Timeout wrapper can cause 'invalid argument' errors
+      workaround: Use 'env OMP_NUM_THREADS=1' prefix with timeout
+      discovered: 2025-12-16
+  general_llama_cli:
+    description: llama-cli binary - AVOID FOR BENCHMARKING
+    quirks:
+    - issue: Auto-enables interactive/conversation mode for Instruct models with chat
+        templates
+      workaround: Use llama-completion instead, or add --no-conversation flag
+      discovered: 2025-12-16
+    - issue: Hangs waiting for user input after prompt completion
+      workaround: Use llama-completion for non-interactive generation
+      discovered: 2025-12-16
+    - issue: Different behavior between versions - flags change frequently
+      workaround: Prefer llama-completion for reliable, reproducible benchmarks
+      discovered: 2025-12-16
+  general_timeout_commands:
+    description: Using timeout with llama.cpp commands
+    quirks:
+    - issue: '''timeout: failed to run command OMP_NUM_THREADS=1'' error'
+      workaround: Use 'timeout N env OMP_NUM_THREADS=1 ...' (put env after timeout)
+      discovered: 2025-12-16
+    - issue: OMP_NUM_THREADS=1 before timeout doesn't work
+      workaround: timeout runs in subshell, use 'env' to pass env vars
+      discovered: 2025-12-16
+  lightonocr_2_1b_bbox:
+    description: LightOnOCR-2-1B-bbox (document_formalizer)
+    quirks:
+    - issue: llama-mtmd-cli enters interactive chat mode without --image and -p flags
+      workaround: Always provide BOTH --image AND -p flags for non-interactive OCR
+      discovered: 2026-01-20
+    - issue: Empty -p "" causes "invalid argument" error
+      workaround: Use -p "OCR" or -p "Extract text" - never empty prompt
+      discovered: 2026-01-20
+    - issue: Vision encoding bottleneck ~8s regardless of thread count
+      workaround: Use worker pool for throughput (8×12 threads > 4×24 threads)
+      discovered: 2026-01-20
+    - issue: BOS token is comma (,) - unusual but functional
+      workaround: No action needed - works correctly despite unusual token
+      discovered: 2026-01-20
+    - issue: Default context 16384 uses ~1.8 GB KV cache per worker
+      workaround: Memory budget ~10GB for 8 workers
+      discovered: 2026-01-20
+    - issue: PyTorch version extremely slow (0.009 pg/s)
+      workaround: Use GGUF version via llama.cpp for 19x speedup (0.17 pg/s)
+      discovered: 2026-01-20
+# Models deleted 2026-01-18 during MiniMax M2.1 download cleanup
+# Based on BLIND_RESCORE_2026-01-16.md analysis
+deprecated_models:
+  - model: Meta-Llama-3-70B-Instruct-Q4_K_M
+    path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-70B-Instruct-GGUF/
+    size_gb: 40
+    blind_score: "36%"
+    reason: "Very poor quality, superseded by Llama 3.1-70B (86.3%)"
+    deleted: 2026-01-18
+
+  - model: Hermes-4-70B-Q4_K_M
+    path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Hermes-4-70B-GGUF/
+    size_gb: 40
+    blind_score: "85.2%"
+    reason: "Superseded by Llama 3.1-70B (86.3%), marginal quality difference"
+    deleted: 2026-01-18
+
+  - model: DeepSeek-R1-Distill-Llama-70B-Q4_K_M
+    path_was: /mnt/raid0/llm/lmstudio/models/unsloth/DeepSeek-R1-Distill-Llama-70B-GGUF/
+    size_gb: 40
+    blind_score: "67%"
+    reason: "Severe truncation issues, 1.0 t/s - too slow and low quality"
+    deleted: 2026-01-18
+
+  - model: Qwen2.5-72B.Q4_K_M
+    path_was: /mnt/raid0/llm/lmstudio/models/mradermacher/Qwen2.5-72B-GGUF/
+    size_gb: 45
+    blind_score: "n/a"
+    reason: "Base model (not instruct) - keep Qwen2.5-72B-Instruct instead"
+    deleted: 2026-01-18
+
+  - model: Qwen2.5-Math-72B-Instruct-Q6_K
+    path_was: /mnt/raid0/llm/lmstudio/models/tensorblock/Qwen2.5-Math-72B-Instruct-GGUF/
+    size_gb: 61
+    blind_score: "77%"
+    reason: "Q6_K duplicate, Q4_K_M version exists and performs better"
+    deleted: 2026-01-18
+
+  - model: gemma-3-27B-it-QAT-Q4_0
+    path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/gemma-3-27B-it-qat-GGUF/
+    size_gb: 15
+    blind_score: "77%"
+    reason: "SWA (Sliding Window Attention) breaks speculative decoding"
+    deleted: 2026-01-18
+
+  - model: Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2
+    path_was: /mnt/raid0/llm/lmstudio/models/mradermacher/Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L-i1-GGUF/
+    size_gb: 30
+    blind_score: "baseline 22%, moe6 97%"
+    reason: "Inverted quality curve - community finetune broke default expert routing. Must use MoE6 to work, not production-ready."
+    deleted: 2026-01-18
+
+  - model: Qwen3-Coder-30B-A3B-Instruct-GGUF (lmstudio-community duplicate)
+    path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/
+    size_gb: 18
+    blind_score: "n/a"
+    reason: "Duplicate - unsloth version retained for production"
+    deleted: 2026-01-18
+
+  - model: Qwen3-Next-80B-A3B-Instruct-Q2_K
+    path_was: /mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct-Q2_K.gguf
+    size_gb: 28
+    blind_score: "n/a"
+    reason: "Lower quality Q2_K quant - Q4_K_M version retained"
+    deleted: 2026-01-18
+
+  - model: DeepSeek-R1-Distill-Qwen-32B (duplicates in models/)
+    path_was: /mnt/raid0/llm/models/DeepSeek-R1-Distill-Qwen-32B-*.gguf
+    size_gb: 31
+    blind_score: "85%"
+    reason: "Duplicate - lmstudio version retained"
+    deleted: 2026-01-18
+
+  # --- 2026-02-17 disk cleanup ---
+
+  - model: MiniMax-M2.1-GGUF
+    path_was: /mnt/raid0/llm/lmstudio/models/unsloth/MiniMax-M2.1-GGUF/
+    size_gb: 304
+    reason: "Not in registry, never used in orchestrator"
+    deleted: 2026-02-17
+
+  - model: GLM-4.7-REAP-218B-A32B-GGUF
+    path_was: /mnt/raid0/llm/lmstudio/models/unsloth/GLM-4.7-REAP-218B-A32B-GGUF/
+    size_gb: 123
+    reason: "Not in registry"
+    deleted: 2026-02-17
+
+  - model: Qwen3-30B-A3B-Thinking-2507-GGUF
+    path_was: /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/
+    size_gb: 47
+    reason: "Not in registry, non-Coder variant"
+    deleted: 2026-02-17
+
+  - model: Qwen3-Next-80B-A3B-Thinking-GGUF
+    path_was: /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3-Next-80B-A3B-Thinking-GGUF/
+    size_gb: 43
+    reason: "Duplicate — lmstudio-community Q4_K_M version in use for orchestrator"
+    deleted: 2026-02-17
+
+  - model: Qwen2.5-72B-Instruct-GGUF
+    path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-72B-Instruct-GGUF/
+    size_gb: 45
+    reason: "No compatible draft model for speculative decoding"
+    deleted: 2026-02-17
+
+  - model: Qwen2.5-Math-72B-Instruct-GGUF
+    path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-Math-72B-Instruct-GGUF/
+    size_gb: 45
+    reason: "No compatible draft model for speculative decoding"
+    deleted: 2026-02-17
+
+  - model: Meta-Llama-3.1-70B-Instruct-GGUF
+    path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3.1-70B-Instruct-GGUF/
+    size_gb: 40
+    reason: "Not in active orchestrator roles, PARD draft also deleted"
+    deleted: 2026-02-17
+
+  - model: Phi-4-reasoning-plus-GGUF
+    path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Phi-4-reasoning-plus-GGUF/
+    size_gb: 23
+    reason: "Not in registry"
+    deleted: 2026-02-17
+
+  - model: Meta-Llama-3-8B-Instruct-GGUF (bartowski duplicate)
+    path_was: /mnt/raid0/llm/lmstudio/models/bartowski/Meta-Llama-3-8B-Instruct-GGUF/
+    size_gb: 15
+    reason: "Duplicate — lmstudio-community version retained"
+    deleted: 2026-02-17
+
+  - model: PARD-Llama-3.2-1B (all copies)
+    path_was: /mnt/raid0/llm/lmstudio/models/mradermacher/PARD-Llama-3.2-1B-GGUF/, fernandoruiz/, hf/, hf-cache/
+    size_gb: 3.2
+    reason: "Orphaned draft — no Llama 3.2 target model on disk"
+    deleted: 2026-02-17
+
+  - model: Co-rewarding-II-Qwen3-1.7B-Base-MATH-GGUF
+    path_was: /mnt/raid0/llm/lmstudio/models/mradermacher/Co-rewarding-II-Qwen3-1.7B-Base-MATH-GGUF/
+    size_gb: 2.1
+    reason: "One-off math experiment"
+    deleted: 2026-02-17
+
+  - model: EAGLE-1 (entire eagle/ directory)
+    path_was: /mnt/raid0/llm/eagle/
+    size_gb: 17
+    reason: "Deprecated track — 0% acceptance rate due to quantization mismatch"
+    deleted: 2026-02-17
+
+optimized_params:
+  frontdoor:
+    temperature: 0.0736042256959058
+    speculative_k: 31
+    entropy_threshold: 4.09045566671701
+  formalizer:
+    temperature: 0.19014286128198324
+  specialists:
+    temperature: 0.3394633936788146
+    speculative_k: 10
+    early_abort_tokens: 65
+  workers:
+    temperature: 0.49279757672456204
+    repetition_threshold: 0.2697316968394073
+  _meta:
+    optimized: '2026-01-07T23:14:00.047514'
+    schema_version: 1
+
+# =============================================================================
+# OBSERVATIONS & FINDINGS
+# =============================================================================
+# System-level hardening observations, KV cache optimizations, and alignment rules
+
+observations:
+  slot_admission_alignment_2026_02_20:
+    title: "Slot/admission alignment: eliminated 50% KV cache waste across all backends"
+    type: bugfix
+    date: 2026-02-20
+    status: implemented
+    summary: |
+      Every backend had 2x more llama-server slots than admission controller allowed.
+      KV cache partitioned across all slots meant 50% was wasted on idle slots.
+
+      Alignment based on concurrent_sweep_20260219 results:
+      - frontdoor: 4→2 slots (sweep optimal at 2, p95 1.33x)
+      - coder_escalation: 4→1 slots + admission 2→1 (p95 1.98x at concurrency=2 — serial only)
+      - worker: 8→1 slots + admission 4→1 (all concurrent levels rejected on p95)
+      - architect_general: 2→1 slots
+      - architect_coding: 2→1 slots
+      - ingest: 2→1 slots
+      - frontdoor timeout: 90→180s
+
+    rule: "admission limit = server slots — no wasted KV cache on idle slots"
+    impact: "50% reduction in idle KV cache pressure across all backends"
+    sweep_date: 2026-02-19
+    sweep_data: concurrent_sweep_20260219_144159.summary.json
+
+  backend_saturation_504_429_investigation:
+    title: "Backend saturation handoff: 504/429 under sequential load with 6 hypotheses"
+    type: discovery
+    date: 2026-02-20
+    status: active
+    location: handoffs/active/backend-saturation-504-429.md
+    summary: |
+      10 prompts back-to-back causes 504 Gateway Timeout and 429 Too Many Requests after prompt 5-7.
+
+      6 hypotheses identified:
+      - H1: cumulative KV cache pressure (LIKELY)
+      - H2: feature pipeline latency amplification (CONTRIBUTING)
+      - H3: admission/circuit breaker cascade (CONTRIBUTING)
+      - H4: uvicorn worker starvation (POSSIBLE)
+      - H5: config reload not applied (CONFIRMED for timeout)
+      - H6: spec decode contention under concurrent load (POSSIBLE)
+
+    investigation: 6-step playbook with shell commands and timeline of all prior hardening work Feb 11-20
+    related_files:
+      - src/api/admission.py
+      - scripts/server/orchestrator_stack.py
+      - docs/reference/agent-config/ORCHESTRATION_DEBUG_PLAYBOOK.md

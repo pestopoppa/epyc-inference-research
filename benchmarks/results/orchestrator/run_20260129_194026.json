@@ -1,0 +1,37 @@
+{
+  "run_id": "20260129_194026",
+  "timestamp": "2026-01-29T19:48:14.893525",
+  "args": {
+    "phase": [
+      2
+    ],
+    "optimize": false,
+    "suite": [
+      "instruction_precision",
+      "long_context",
+      "vl"
+    ],
+    "start_stack": false,
+    "restart_api": true,
+    "stop_after": false,
+    "dry_run": false,
+    "api_url": "http://localhost:8000",
+    "timeout": 120
+  },
+  "phases": [
+    {
+      "phase": 2,
+      "name": "Orchestrator Benchmark",
+      "passed": false,
+      "details": {},
+      "duration_s": 0.0,
+      "error": "interrupted by user"
+    }
+  ],
+  "summary": {
+    "total_phases": 1,
+    "passed": 0,
+    "failed": 1,
+    "total_duration_s": 0.0
+  }
+}

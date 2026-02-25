@@ -1,0 +1,49 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,22.03,0,"Excessive repetition, incoherent"
+thinking,t3_q2_causal_inference,22.45,0,Model breakdown: 'I'm getting confused'
+thinking,t3_q3_reasoning_trap,22.56,0,"Excessive repetition, incoherent"
+thinking,t2_q1_paradox,22.50,0,Model breakdown: 'I've got to stop'
+thinking,t2_q2_counterfactual,22.60,0,"Excessive repetition, incoherent"
+thinking,t2_q3_formal,23.71,0,"Excessive repetition, incoherent"
+thinking,t2_q4_metacognition,22.82,0,"Excessive repetition, incoherent"
+thinking,t1_q2_hypothesis,22.34,0,"Excessive repetition, incoherent"
+coder,t3_q1_concurrent_correctness,20.89,1,Contains code attempt but quality unclear
+coder,t2_q1_design,21.52,1,Contains code attempt but quality unclear
+coder,t2_q2_debug_complex,22.73,1,Contains code attempt but quality unclear
+coder,t2_q3_optimize,21.51,1,Contains code attempt but quality unclear
+coder,t2_q4_system,22.29,1,Contains code attempt but quality unclear
+coder,t1_q1_algorithm,21.97,1,Contains code attempt but quality unclear
+coder,t1_q3_test,22.65,1,Contains code attempt but quality unclear
+agentic,t3_q1_competing_constraints,21.52,1,Structured attempt but unclear if correct
+agentic,t3_q2_multi_agent_coordination,21.94,1,Structured attempt but unclear if correct
+agentic,t3_q3_adversarial_robustness,21.69,0,"Excessive repetition, incoherent"
+agentic,t2_q2_error_chain,21.16,0,"Excessive repetition, incoherent"
+agentic,t2_q3_schema_edge,22.82,0,"Excessive repetition, incoherent"
+agentic,t2_q4_orchestration,21.97,0,"Excessive repetition, incoherent"
+agentic,t1_q1_sequential,22.75,0,"Excessive repetition, incoherent"
+agentic,t1_q2_error_handling,21.91,0,"Excessive repetition, incoherent"
+agentic,t1_q3_nested_params,23.02,0,Rambling or incoherent response
+general,t3_q1_policy_analysis,23.07,0,"Excessive repetition, incoherent"
+general,t3_q2_system_failure,23.37,0,Model breakdown: 'I'm getting confused'
+general,t3_q3_strategic_communication,21.39,0,Model breakdown: 'I've got to stop'
+general,t2_q1_synthesis,22.99,0,"Excessive repetition, incoherent"
+general,t2_q2_transform,23.26,0,"Excessive repetition, incoherent"
+general,t2_q3_schedule,22.19,1,Structured attempt but unclear if correct
+general,t1_q1_json,22.11,0,"Excessive repetition, incoherent"
+general,t1_q2_multistep,22.81,1,Structured attempt but unclear if correct
+general,t1_q3_compare,23.23,0,"Excessive repetition, incoherent"
+math,t3_q1_analysis,22.84,0,No mathematical content in math question
+math,t3_q3_probability_theory,23.64,0,Model breakdown: 'I'm getting confused'
+math,t2_q2_proof,22.52,1,Attempts mathematical proof/derivation
+math,t1_q1_word_problem,23.02,0,No mathematical content in math question
+instruction_precision,t3_q1_self_referential,29.76,1,Structured attempt but unclear if correct
+instruction_precision,t3_q2_cascading_constraints,30.31,1,Structured attempt but unclear if correct
+instruction_precision,t3_q3_meta_instruction,30.12,0,"Excessive repetition, incoherent"
+instruction_precision,t2_q1_resist_elaboration,31.58,0,Rambling or incoherent response
+instruction_precision,t2_q2_maintain_format,30.65,0,Rambling or incoherent response
+instruction_precision,t2_q3_empty_handling,31.43,0,Rambling or incoherent response
+instruction_precision,t2_q4_conflicting_constraints,30.77,1,Structured attempt but unclear if correct
+instruction_precision,t1_q1_negative_instruction,31.24,0,Rambling or incoherent response
+instruction_precision,t1_q2_word_limit,30.92,0,Rambling or incoherent response
+instruction_precision,t1_q3_structured_format,30.75,0,Rambling or incoherent response
+instruction_precision,t1_q4_multiple_constraints,31.22,1,Structured attempt but unclear if correct

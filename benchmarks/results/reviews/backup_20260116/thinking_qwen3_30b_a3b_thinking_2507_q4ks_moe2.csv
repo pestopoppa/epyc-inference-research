@@ -1,0 +1,16 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,18.96,2,Good analysis with structure
+agentic,t3_q2_multi_agent_coordination,16.9,2,Good analysis with structure
+agentic,t3_q3_adversarial_robustness,17.74,2,Good analysis with structure
+agentic,t2_q1_ambiguous,21.1,3,Full thinking chain with analysis
+agentic,t2_q2_error_chain,18.96,2,Good analysis with structure
+agentic,t2_q3_schema_edge,17.24,2,Partial analysis
+agentic,t2_q4_orchestration,17.3,2,Good analysis with structure
+agentic,t1_q1_sequential,17.09,2,Good analysis with structure
+agentic,t1_q2_error_handling,21.6,2,Partial analysis
+agentic,t1_q3_nested_params,19.49,2,Partial analysis
+long_context,t3_q1_multi_hop_reasoning,0,2,Partial analysis
+long_context,t3_q2_contradiction_detection,1.31,2,Partial analysis
+long_context,t3_q3_evolving_requirements,0,2,Partial analysis
+long_context,t2_q1_deep_needle,0,2,Partial analysis
+long_context,t2_q2_synthesis,0,2,Good analysis with structure

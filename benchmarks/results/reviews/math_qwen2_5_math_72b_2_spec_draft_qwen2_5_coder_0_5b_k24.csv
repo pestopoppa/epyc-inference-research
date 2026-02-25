@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t1_q2_hypothesis,124.0,3,Three valid alternative explanations provided
+thinking,t3_q1_methodological_critique,124.0,3,Multiple methodological issues identified with explanations
+thinking,t3_q2_causal_inference,124.0,1,Correct answer but filled with repetitive brackets
+thinking,t3_q3_reasoning_trap,124.0,1,Attempted analysis but filled with repetitive brackets
+thinking,t2_q1_paradox,124.0,2,Multiple philosophical positions but truncated by repetition
+thinking,t2_q2_counterfactual,124.0,2,All three dimensions analyzed but corrupted output
+thinking,t2_q3_formal,124.0,3,Correct proof with formal reasoning and modus ponens
+thinking,t2_q4_metacognition,124.0,3,Complete Fermi estimation with bounds
+thinking,t1_q1_multistep,124.0,2,Substantial response with reasoning
+thinking,t1_q3_planning,124.0,2,Constraint reasoning attempted
+coder,t3_q1_concurrent_correctness,124.0,1,Good ABA explanation but corrupted by repetitive brackets
+coder,t3_q2_distributed_consistency,124.0,2,Four strategies identified but corrupted output
+coder,t3_q3_algorithmic_hardness,124.0,2,Adversary argument present but verbose with corruption
+coder,t2_q1_design,124.0,3,Complete LRU cache implementation with code
+coder,t2_q2_debug_complex,124.0,2,Code present but quality degraded
+coder,t2_q3_optimize,124.0,2,Optimization approach with code
+coder,t2_q4_system,124.0,2,System design response
+coder,t1_q1_algorithm,124.0,3,Code block present with algorithm
+coder,t1_q2_refactor,124.0,2,Refactoring code present
+coder,t1_q3_test,124.0,2,Test code generated
+agentic,t3_q1_competing_constraints,124.0,2,Tool-related response
+agentic,t3_q2_multi_agent_coordination,124.0,2,Multi-agent analysis
+agentic,t3_q3_adversarial_robustness,124.0,2,Robustness discussion
+agentic,t2_q1_ambiguous,124.0,2,Ambiguity handling
+agentic,t2_q2_error_chain,124.0,2,Error handling response
+agentic,t2_q3_schema_edge,124.0,2,Schema discussion
+agentic,t2_q4_orchestration,124.0,2,Orchestration response
+agentic,t1_q1_sequential,124.0,2,Sequential tool use
+agentic,t1_q2_error_handling,124.0,2,Error handling approach
+agentic,t1_q3_nested_params,124.0,2,Parameter handling
+general,t3_q1_policy_analysis,124.0,3,Substantial policy analysis response
+general,t3_q2_system_failure,124.0,3,Detailed system failure analysis
+general,t3_q3_strategic_communication,124.0,3,Strategic communication response
+general,t2_q1_synthesis,124.0,3,Synthesis response with detail
+general,t2_q2_transform,124.0,3,Transformation response
+general,t2_q3_schedule,124.0,3,Scheduling response
+general,t2_q4_inconsistency,124.0,3,Inconsistency analysis
+general,t1_q1_json,124.0,3,JSON structure present
+general,t1_q2_multistep,124.0,3,Multi-step response
+general,t1_q3_compare,124.0,3,Comparison response
+math,t3_q1_analysis,124.0,3,Complete solution with boxed answer for limit
+math,t3_q2_combinatorics,124.0,1,Combinatorial proof attempted but corrupted by repetition
+math,t3_q3_probability_theory,124.0,1,Probability approach but corrupted output
+math,t2_q1_optimization,124.0,3,Optimization problem solved with boxed answer
+math,t2_q2_proof,124.0,3,Mathematical proof with boxed conclusion
+math,t2_q3_calculus,124.0,3,Calculus solution with derivation
+math,t2_q4_statistics,124.0,3,Statistical analysis with conclusion
+math,t1_q1_word_problem,124.0,3,Word problem solved correctly
+math,t1_q2_system_equations,124.0,3,System of equations solved
+math,t1_q3_probability,124.0,3,Probability calculation with answer
+instruction_precision,t3_q1_self_referential,124.0,2,Response generated but format unclear
+instruction_precision,t3_q2_cascading_constraints,124.0,2,Constraint handling
+instruction_precision,t3_q3_meta_instruction,124.0,2,Meta-instruction following
+instruction_precision,t2_q1_resist_elaboration,124.0,2,Elaboration resistance attempt
+instruction_precision,t2_q2_maintain_format,124.0,2,Format maintenance attempt
+instruction_precision,t2_q3_empty_handling,124.0,2,Empty case handling
+instruction_precision,t2_q4_conflicting_constraints,124.0,2,Constraint conflict handling
+instruction_precision,t1_q1_negative_instruction,124.0,2,Negative instruction following
+instruction_precision,t1_q2_word_limit,124.0,2,Word limit compliance
+instruction_precision,t1_q3_structured_format,124.0,2,Structured format attempt
+instruction_precision,t1_q4_multiple_constraints,124.0,2,Multiple constraint handling

@@ -1,0 +1,27 @@
+question_id,score,reason
+agentic/t1_q1_sequential,1,FAILED: gave explanation when asked for JSON array only
+agentic/t3_q2_multi_agent_coordination,2,Addresses multi-agent task
+agentic/t3_q3_adversarial_robustness,2,Good security analysis
+general/t1_q1_json,1,FAILED: gave explanation when asked for JSON only
+general/t1_q2_multistep,2,Good case-insensitive dedup reasoning
+general/t1_q3_compare,2,Addresses comparison appropriately
+general/t2_q1_synthesis,2,Good multi-stakeholder synthesis
+general/t2_q2_transform,2,Addresses YAML nesting
+general/t2_q3_schedule,2,Good constraint handling for scheduling
+general/t2_q4_inconsistency,2,Identifies form-encoded vs JSON inconsistency
+general/t3_q1_policy_analysis,2,Good critique of accuracy-only metrics
+general/t3_q2_system_failure,2,Identifies eventual consistency root cause
+general/t3_q3_strategic_communication,2,Good strategic framing approach
+math/t1_q1_word_problem,3,Excellent: correct discount/tax calculation
+math/t1_q2_algebra,3,Excellent: perfect step-by-step algebra
+math/t3_q3_probability_theory,2,Good approach to E[N] problem
+thinking/t1_q1_multistep,2,Correct step-by-step train problem setup
+thinking/t1_q2_hypothesis,2,Good confounding variable identification
+thinking/t1_q3_planning,3,Excellent constraint analysis with block handling
+thinking/t2_q1_paradox,2,Good philosophical positions explored
+thinking/t2_q2_counterfactual,2,Structured counterfactual analysis
+thinking/t2_q3_formal,3,Excellent: hypothetical syllogism + modus ponens proof
+thinking/t2_q4_metacognition,2,Good Fermi estimation approach
+thinking/t3_q1_methodological_critique,2,Identifies selection bias correctly
+thinking/t3_q2_causal_inference,2,Good DAG analysis for adjustment set
+thinking/t3_q3_reasoning_trap,2,Identifies test set distribution issue

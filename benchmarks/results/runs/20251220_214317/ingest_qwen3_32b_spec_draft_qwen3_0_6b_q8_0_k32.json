@@ -1,0 +1,29 @@
+{
+  "model_role": "ingest_qwen3_32b",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-32B-GGUF/Qwen3-32B-Q4_K_M.gguf",
+  "config_name": "spec_draft_qwen3_0_6b_q8_0_k32",
+  "run_id": "20251220_214317",
+  "timestamp": "2026-01-17T05:16:07.897553",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 5.680096119367002,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 5.680096119367002,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

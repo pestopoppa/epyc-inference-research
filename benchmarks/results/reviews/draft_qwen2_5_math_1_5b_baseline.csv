@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,49.5,2,Reasonable failure modes identified
+general,t3_q2_system_failure,52.6,1,Confused response - mentions x86 chip incorrectly
+general,t3_q3_strategic_communication,49.6,2,Reasonable board opening statement
+general,t2_q1_synthesis,57.0,1,Doesn't actually synthesize perspectives
+general,t2_q2_transform,57.1,0,Adds extra employees - incorrect transformation
+general,t2_q3_schedule,56.6,1,Good approach but has mixed language issues
+general,t2_q4_inconsistency,55.6,1,Has corrupted characters in response
+general,t1_q1_json,57.6,1,Uses Python code approach instead of direct JSON
+general,t1_q2_multistep,51.0,0,Repetitive garbage output
+general,t1_q3_compare,58.3,2,Good comparison structure for approaches
+thinking,t3_q1_methodological_critique,52.4,2,Identifies measurement error as issue
+thinking,t3_q2_causal_inference,49.8,2,Good - identifies Gene as adjustment variable
+thinking,t3_q3_reasoning_trap,51.8,2,Good - identifies accuracy alone insufficient
+thinking,t2_q1_paradox,57.2,2,Discusses Plenism vs Monism reasonably
+thinking,t2_q2_counterfactual,50.3,1,Has corrupted characters but reasonable structure
+thinking,t2_q3_formal,56.9,3,Good hypothetical syllogism proof
+thinking,t2_q4_metacognition,56.0,2,Good estimation approach with calculations
+thinking,t1_q1_multistep,58.4,2,Good step-by-step calculation approach
+thinking,t1_q2_hypothesis,51.3,2,Good alternative explanations identified
+thinking,t1_q3_planning,57.9,2,Good constraint analysis with reasoning

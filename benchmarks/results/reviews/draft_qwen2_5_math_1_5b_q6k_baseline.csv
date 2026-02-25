@@ -1,0 +1,20 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,62.5,2,Good failure modes identified with minor language issues
+general,t3_q2_system_failure,52.3,1,Discusses idempotency but confused explanation
+general,t3_q3_strategic_communication,53.0,1,Generic description without concrete statement
+general,t2_q1_synthesis,59.6,1,Attempts analysis but doesn't synthesize
+general,t2_q2_transform,63.0,0,Adds extra employees - incorrect transformation
+general,t2_q3_schedule,59.7,1,Good approach but incomplete solution
+general,t2_q4_inconsistency,53.2,1,Has corrupted characters in response
+general,t1_q1_json,53.3,1,Uses Python approach instead of direct JSON
+general,t1_q2_multistep,54.0,0,Repetitive garbage output
+general,t1_q3_compare,60.0,2,Good comparison with clear structure
+thinking,t3_q1_methodological_critique,62.3,2,Good - identifies sample size issue
+thinking,t3_q2_causal_inference,53.9,2,Good - discusses backdoor paths concept
+thinking,t3_q3_reasoning_trap,54.0,2,Good - identifies accuracy isn't sufficient alone
+thinking,t2_q1_paradox,52.3,0,Repetitive Chinese character garbage
+thinking,t2_q3_formal,62.2,3,Good proof with truth tables approach
+thinking,t2_q4_metacognition,54.0,2,Reasonable estimation approach
+thinking,t1_q1_multistep,62.9,2,Good step-by-step calculation
+thinking,t1_q2_hypothesis,59.4,2,Good alternative explanations identified
+thinking,t1_q3_planning,59.8,2,Good constraint analysis

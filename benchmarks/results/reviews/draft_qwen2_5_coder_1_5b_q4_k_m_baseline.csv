@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,58.1,2,Good identification of overfitting and data leakage issues
+general,t3_q2_system_failure,55.9,3,Correctly identifies replica lag causing double-charges
+general,t3_q3_strategic_communication,47.0,2,Good structure for board opening statement
+general,t2_q1_synthesis,51.3,1,Asks good questions but doesn't synthesize
+general,t2_q2_transform,58.4,0,Adds extra employees - incorrect transformation
+general,t2_q3_schedule,57.0,1,Attempts schedule but has logical issues
+general,t2_q4_inconsistency,46.0,3,Correctly identifies JSON vs form-encoded inconsistency
+general,t1_q1_json,43.6,3,Correct JSON with all required fields
+general,t1_q2_multistep,58.1,2,Partially correct - didn't remove duplicates properly
+general,t1_q3_compare,54.1,2,Good comparison structure for approaches
+thinking,t3_q1_methodological_critique,217.5,0,Empty response
+thinking,t3_q2_causal_inference,248.2,0,Empty response
+thinking,t3_q3_reasoning_trap,305.5,0,Empty response
+thinking,t2_q1_paradox,214.3,0,Empty response
+thinking,t2_q2_counterfactual,57.0,2,Good counterfactual analysis
+thinking,t2_q3_formal,57.3,3,Good transitivity proof with clear steps
+thinking,t2_q4_metacognition,200.9,0,Empty response
+thinking,t1_q1_multistep,56.2,2,Good step-by-step calculation approach
+thinking,t1_q2_hypothesis,56.6,2,Good alternative explanations identified
+thinking,t1_q3_planning,50.7,2,Good systematic approach to constraints

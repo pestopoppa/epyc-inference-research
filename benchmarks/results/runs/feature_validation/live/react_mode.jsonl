@@ -1,0 +1,1 @@
+{"feature": "react_mode", "verdict": "PASS", "quality_delta": 0.0, "latency_delta_s": -36.76985643597436, "tps_delta": -35.13557989111432, "memory_delta_mb": -0.23046875, "timestamp": "2026-02-19T23:07:59+00:00"}

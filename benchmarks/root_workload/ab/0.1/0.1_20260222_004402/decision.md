@@ -1,0 +1,16 @@
+# A/B Decision
+
+- **Decision**: `REVISE`
+- **Inputs**:
+  - `summary_codex.json`: `benchmarks/root_workload/ab/0.1/0.1_20260222_004402/summary_codex.json`
+  - `summary_claude_code.json`: `benchmarks/root_workload/ab/0.1/0.1_20260222_004402/summary_claude_code.json`
+  - `summary_combined.json`: `benchmarks/root_workload/ab/0.1/0.1_20260222_004402/summary_combined.json`
+
+## Reasons
+- meets quality floor but does not satisfy keep thresholds
+
+## Combined Deltas
+- `delta_quality`: `0.020000`
+- `delta_cost`: `-0.030888`
+- `delta_latency`: `-0.023071`
+- `delta_manual_intervention`: `0.010000`

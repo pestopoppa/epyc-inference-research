@@ -1,0 +1,1 @@
+This getUserProfile function should never return null for valid user IDs. If the user doesn't exist, throw an exception.

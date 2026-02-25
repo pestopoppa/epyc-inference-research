@@ -1,0 +1,1 @@
+{"feature": "model_fallback", "verdict": "PASS", "quality_delta": 0.0, "latency_delta_s": -1.4759134619671386, "tps_delta": -15.24713720497915, "memory_delta_mb": -0.21875, "timestamp": "2026-02-19T22:44:23+00:00"}

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "persona_01",
+    "prompt": "Explain quantum entanglement to a 10-year-old.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "persona": "teacher",
+    "source": "general.yaml",
+    "rubric": {
+      "tone": "simple language, analogies, no jargon",
+      "must_convey": ["two particles linked", "measuring one affects the other", "distance doesn't matter"],
+      "bad_signals": ["wave function collapse", "Bell's inequality", "Hilbert space"],
+      "pass_if": "age-appropriate explanation with >=1 analogy, no advanced physics terms"
+    }
+  },
+  {
+    "id": "persona_02",
+    "prompt": "Review this code for security vulnerabilities:\ndef login(user, pw):\n    query = f\"SELECT * FROM users WHERE name='{user}' AND pass='{pw}'\"",
+    "role": "coder_escalation",
+    "mode": "direct",
+    "persona": "security_auditor",
+    "source": "coder.yaml",
+    "rubric": {
+      "must_identify": ["SQL injection via f-string interpolation", "plaintext password comparison (no hashing)"],
+      "should_mention": ["parameterized queries / prepared statements", "bcrypt/argon2 for password hashing", "input validation"],
+      "fix": "cursor.execute('SELECT * FROM users WHERE name=? AND pass=?', (user, hashed_pw))",
+      "pass_if": "identifies SQL injection + suggests parameterized queries"
+    }
+  },
+  {
+    "id": "persona_03",
+    "prompt": "What are the pros and cons of Kubernetes vs Docker Swarm for a small startup?",
+    "role": "frontdoor",
+    "mode": "direct",
+    "persona": "devops_engineer",
+    "source": "general.yaml",
+    "rubric": {
+      "k8s_pros": ["ecosystem/community", "auto-scaling", "service mesh support"],
+      "k8s_cons": ["complexity", "steep learning curve", "resource overhead"],
+      "swarm_pros": ["simplicity", "built into Docker", "faster setup"],
+      "swarm_cons": ["limited features", "smaller community", "less enterprise support"],
+      "recommendation": "Swarm for MVP/small team, K8s when scaling",
+      "pass_if": "balanced comparison with startup-specific recommendation"
+    }
+  },
+  {
+    "id": "persona_04",
+    "prompt": "Explain the CAP theorem and its practical implications.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "persona": "distributed_systems_expert",
+    "source": "general.yaml",
+    "rubric": {
+      "must_define": ["Consistency", "Availability", "Partition tolerance"],
+      "must_explain": "can only guarantee 2 of 3 during network partition",
+      "examples": {"CP": "HBase, MongoDB (strict)", "AP": "Cassandra, DynamoDB", "CA": "single-node RDBMS (no partition tolerance)"},
+      "pass_if": "correct CAP definition + >=2 real system examples mapped to CP/AP"
+    }
+  },
+  {
+    "id": "persona_05",
+    "prompt": "Write a brief technical blog post about WebAssembly's potential.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "persona": "tech_writer",
+    "source": "general.yaml",
+    "rubric": {
+      "structure": ["title/hook", "what is Wasm", "use cases", "limitations", "conclusion"],
+      "must_mention": ["near-native performance", "language-agnostic (C/C++/Rust)", "browser + server-side (WASI)"],
+      "tone": "accessible but technical, blog-appropriate",
+      "pass_if": "structured blog post with >=3 use cases and balanced view of limitations"
+    }
+  }
+]

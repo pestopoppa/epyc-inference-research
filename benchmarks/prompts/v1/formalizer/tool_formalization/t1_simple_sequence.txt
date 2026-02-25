@@ -1,0 +1,1 @@
+Download the file at https://example.com/data.csv and analyze it to find the average of the "price" column.

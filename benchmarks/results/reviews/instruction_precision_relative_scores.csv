@@ -1,0 +1,331 @@
+model,question_id,score,score_reason
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q2_word_limit,10,Exactly 24 words in range 20-25
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q3_structured_format,10,Perfect format: 9 valid entries
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q4_multiple_constraints,5,"Has 6 countries, not exactly 5"
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q2_maintain_format,6,Correct format but echoes prompt
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q4_conflicting_constraints,4,2/4 constraints
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q2_cascading_constraints,1,Only found 0 words
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q2_word_limit,2,"39 words total, failed constraint"
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q3_structured_format,0,No valid format entries found or echoed prompt
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q4_multiple_constraints,1,Failed to produce valid country list
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q4_conflicting_constraints,4,2/4 constraints
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q2_cascading_constraints,1,Only found 0 words
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q2_word_limit,10,Exactly 24 words in range 20-25
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q3_structured_format,4,Only 2 valid formatted entries
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q4_multiple_constraints,5,"Has 6 countries, not exactly 5"
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q4_conflicting_constraints,7,"3/4 constraints: words=9, A=True, data=False, no_store=True"
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q2_cascading_constraints,1,Only found 0 words
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q3_meta_instruction,5,Has 42 and some hi
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q2_word_limit,6,"26 words, close to 20-25 range"
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q3_structured_format,4,Only 2 valid formatted entries
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q4_multiple_constraints,1,Failed to produce valid country list
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q2_maintain_format,6,Correct format but echoes prompt
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q4_conflicting_constraints,10,"All 4 constraints met: 8 words, starts A, ends data, no store"
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q2_cascading_constraints,1,Only found 0 words
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q2_word_limit,1,Echoed prompt or no clear answer
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q3_structured_format,4,Only 1 valid formatted entries
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q4_multiple_constraints,5,"Has 6 countries, not exactly 5"
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q2_maintain_format,6,Correct format but echoes prompt
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q4_conflicting_constraints,10,"All 4 constraints met: 10 words, starts A, ends data, no store"
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q2_cascading_constraints,1,Only found 0 words
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Hermes-4-70B-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Hermes-4-70B-Q4_K_M,t1_q2_word_limit,6,"27 words, close to 20-25 range"
+Hermes-4-70B-Q4_K_M,t1_q3_structured_format,10,Perfect format: 83 valid entries
+Hermes-4-70B-Q4_K_M,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+Hermes-4-70B-Q4_K_M,t2_q1_resist_elaboration,0,No answer or wrong answer
+Hermes-4-70B-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Hermes-4-70B-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Hermes-4-70B-Q4_K_M,t2_q4_conflicting_constraints,4,2/4 constraints
+Hermes-4-70B-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Hermes-4-70B-Q4_K_M,t3_q2_cascading_constraints,4,2/4 constraints met
+Hermes-4-70B-Q4_K_M,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q2_word_limit,6,"26 words, close to 20-25 range"
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q3_structured_format,0,No valid format entries found or echoed prompt
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q4_conflicting_constraints,4,2/4 constraints
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q2_cascading_constraints,1,Only found 0 words
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q3_meta_instruction,5,Has 42 and some hi
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q2_word_limit,1,Echoed prompt or no clear answer
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q3_structured_format,4,Only 2 valid formatted entries
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q4_conflicting_constraints,4,2/4 constraints
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q2_cascading_constraints,1,Only found 2 words
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Meta-Llama-3-8B-Instruct-fp16,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Meta-Llama-3-8B-Instruct-fp16,t1_q2_word_limit,1,Echoed prompt or no clear answer
+Meta-Llama-3-8B-Instruct-fp16,t1_q3_structured_format,4,Only 2 valid formatted entries
+Meta-Llama-3-8B-Instruct-fp16,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+Meta-Llama-3-8B-Instruct-fp16,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Meta-Llama-3-8B-Instruct-fp16,t2_q2_maintain_format,6,Correct format but echoes prompt
+Meta-Llama-3-8B-Instruct-fp16,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Meta-Llama-3-8B-Instruct-fp16,t2_q4_conflicting_constraints,4,2/4 constraints
+Meta-Llama-3-8B-Instruct-fp16,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Meta-Llama-3-8B-Instruct-fp16,t3_q2_cascading_constraints,1,Only found 2 words
+Meta-Llama-3-8B-Instruct-fp16,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q2_word_limit,2,"40 words total, failed constraint"
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q3_structured_format,4,Only 2 valid formatted entries
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q4_conflicting_constraints,4,2/4 constraints
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q2_cascading_constraints,7,3/4 constraints met
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Meta-Llama-3.1-8B.Q4_K_S,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Meta-Llama-3.1-8B.Q4_K_S,t1_q2_word_limit,1,Echoed prompt or no clear answer
+Meta-Llama-3.1-8B.Q4_K_S,t1_q3_structured_format,10,Perfect format: 27 valid entries
+Meta-Llama-3.1-8B.Q4_K_S,t1_q4_multiple_constraints,1,Failed to produce valid country list
+Meta-Llama-3.1-8B.Q4_K_S,t2_q1_resist_elaboration,0,No answer or wrong answer
+Meta-Llama-3.1-8B.Q4_K_S,t2_q2_maintain_format,6,Correct format but echoes prompt
+Meta-Llama-3.1-8B.Q4_K_S,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Meta-Llama-3.1-8B.Q4_K_S,t2_q4_conflicting_constraints,1,Echoed prompt or no valid sentence
+Meta-Llama-3.1-8B.Q4_K_S,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Meta-Llama-3.1-8B.Q4_K_S,t3_q2_cascading_constraints,1,Only found 0 words
+Meta-Llama-3.1-8B.Q4_K_S,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Phi-4-reasoning-plus-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Phi-4-reasoning-plus-Q4_K_M,t1_q2_word_limit,2,"12 words total, failed constraint"
+Phi-4-reasoning-plus-Q4_K_M,t1_q3_structured_format,0,No valid format entries found or echoed prompt
+Phi-4-reasoning-plus-Q4_K_M,t1_q4_multiple_constraints,1,Failed to produce valid country list
+Phi-4-reasoning-plus-Q4_K_M,t2_q1_resist_elaboration,0,No answer or wrong answer
+Phi-4-reasoning-plus-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Phi-4-reasoning-plus-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Phi-4-reasoning-plus-Q4_K_M,t2_q4_conflicting_constraints,1,Echoed prompt or no valid sentence
+Phi-4-reasoning-plus-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Phi-4-reasoning-plus-Q4_K_M,t3_q2_cascading_constraints,1,Only found 0 words
+Phi-4-reasoning-plus-Q4_K_M,t3_q3_meta_instruction,5,Has 42 and some hi
+Phi-4-reasoning-plus-Q8_0,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Phi-4-reasoning-plus-Q8_0,t1_q2_word_limit,2,"12 words total, failed constraint"
+Phi-4-reasoning-plus-Q8_0,t1_q3_structured_format,0,No valid format entries found or echoed prompt
+Phi-4-reasoning-plus-Q8_0,t1_q4_multiple_constraints,1,Failed to produce valid country list
+Phi-4-reasoning-plus-Q8_0,t2_q1_resist_elaboration,0,No answer or wrong answer
+Phi-4-reasoning-plus-Q8_0,t2_q2_maintain_format,6,Correct format but echoes prompt
+Phi-4-reasoning-plus-Q8_0,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Phi-4-reasoning-plus-Q8_0,t2_q4_conflicting_constraints,1,Echoed prompt or no valid sentence
+Phi-4-reasoning-plus-Q8_0,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Phi-4-reasoning-plus-Q8_0,t3_q2_cascading_constraints,1,Only found 0 words
+Phi-4-reasoning-plus-Q8_0,t3_q3_meta_instruction,5,Has 42 and some hi
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q1_negative_instruction,10,Valid explanation without forbidden words
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q2_word_limit,10,Exactly 25 words in range 20-25
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q3_structured_format,10,Perfect format: 3 valid entries
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q4_multiple_constraints,5,"Has 6 countries, not exactly 5"
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q1_resist_elaboration,5,Contains 4 but with extra content
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q2_maintain_format,10,Perfect format with all three labels
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q3_empty_handling,10,Exact match: NONE
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q4_conflicting_constraints,7,"3/4 constraints: words=12, A=True, data=True, no_store=True"
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q2_cascading_constraints,4,2/4 constraints met
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q3_meta_instruction,3,Partial correct output
+Qwen2.5-72B.Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen2.5-72B.Q4_K_M,t1_q2_word_limit,2,"32 words total, failed constraint"
+Qwen2.5-72B.Q4_K_M,t1_q3_structured_format,3,Contains data but wrong format
+Qwen2.5-72B.Q4_K_M,t1_q4_multiple_constraints,1,Failed to produce valid country list
+Qwen2.5-72B.Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen2.5-72B.Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen2.5-72B.Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen2.5-72B.Q4_K_M,t2_q4_conflicting_constraints,4,2/4 constraints
+Qwen2.5-72B.Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen2.5-72B.Q4_K_M,t3_q2_cascading_constraints,1,Only found 0 words
+Qwen2.5-72B.Q4_K_M,t3_q3_meta_instruction,5,Has 42 and some hi
+Qwen2.5-7B.Q4_K_S,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen2.5-7B.Q4_K_S,t1_q2_word_limit,2,"37 words total, failed constraint"
+Qwen2.5-7B.Q4_K_S,t1_q3_structured_format,0,No valid format entries found or echoed prompt
+Qwen2.5-7B.Q4_K_S,t1_q4_multiple_constraints,1,Failed to produce valid country list
+Qwen2.5-7B.Q4_K_S,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen2.5-7B.Q4_K_S,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen2.5-7B.Q4_K_S,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen2.5-7B.Q4_K_S,t2_q4_conflicting_constraints,1,Echoed prompt or no valid sentence
+Qwen2.5-7B.Q4_K_S,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen2.5-7B.Q4_K_S,t3_q2_cascading_constraints,1,Only found 0 words
+Qwen2.5-7B.Q4_K_S,t3_q3_meta_instruction,5,Has 42 and some hi
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q2_word_limit,2,"31 words total, failed constraint"
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q3_structured_format,10,Perfect format: 3 valid entries
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q4_conflicting_constraints,4,2/4 constraints
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q2_cascading_constraints,4,2/4 constraints met
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q3_meta_instruction,5,Has 42 and some hi
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q2_word_limit,1,Echoed prompt or no clear answer
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q3_structured_format,10,Perfect format: 23 valid entries
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q4_multiple_constraints,1,Failed to produce valid country list
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q4_conflicting_constraints,4,2/4 constraints
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q2_cascading_constraints,1,Only found 0 words
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q2_word_limit,1,Echoed prompt or no clear answer
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q3_structured_format,4,Only 1 valid formatted entries
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q4_multiple_constraints,1,Failed to produce valid country list
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q4_conflicting_constraints,1,Echoed prompt or no valid sentence
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q2_cascading_constraints,1,Only found 0 words
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q3_meta_instruction,5,Has 42 and some hi
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q2_word_limit,6,"30 words, close to 20-25 range"
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q3_structured_format,10,Perfect format: 3 valid entries
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q4_multiple_constraints,5,"Has 6 countries, not exactly 5"
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q2_maintain_format,10,Perfect format with all three labels
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q4_conflicting_constraints,4,2/4 constraints
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q2_cascading_constraints,2,Only 1/4 constraints
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q3_meta_instruction,3,Partial correct output
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q2_word_limit,10,Exactly 24 words in range 20-25
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q3_structured_format,7,Has 9 entries but has bullets/numbers
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q4_multiple_constraints,5,"Has 6 countries, not exactly 5"
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q4_conflicting_constraints,10,"All 4 constraints met: 8 words, starts A, ends data, no store"
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q2_cascading_constraints,1,Only found 0 words
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q2_word_limit,10,Exactly 23 words in range 20-25
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q3_structured_format,7,Has 9 entries but has bullets/numbers
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q4_conflicting_constraints,10,"All 4 constraints met: 7 words, starts A, ends data, no store"
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q2_cascading_constraints,1,Only found 0 words
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Qwen3-32B-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen3-32B-Q4_K_M,t1_q2_word_limit,10,Exactly 22 words in range 20-25
+Qwen3-32B-Q4_K_M,t1_q3_structured_format,10,Perfect format: 38 valid entries
+Qwen3-32B-Q4_K_M,t1_q4_multiple_constraints,1,Failed to produce valid country list
+Qwen3-32B-Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen3-32B-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen3-32B-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen3-32B-Q4_K_M,t2_q4_conflicting_constraints,10,"All 4 constraints met: 6 words, starts A, ends data, no store"
+Qwen3-32B-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen3-32B-Q4_K_M,t3_q2_cascading_constraints,1,Only found 0 words
+Qwen3-32B-Q4_K_M,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q2_word_limit,2,"35 words total, failed constraint"
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q3_structured_format,4,Only 1 valid formatted entries
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q4_conflicting_constraints,4,2/4 constraints
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q2_cascading_constraints,4,2/4 constraints met
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q1_negative_instruction,10,Valid explanation without forbidden words
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q2_word_limit,6,"19 words, close to 20-25 range"
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q3_structured_format,10,Perfect format: 3 valid entries
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q1_resist_elaboration,10,Exact match: 4
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q2_maintain_format,10,Perfect format with all three labels
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q3_empty_handling,10,Exact match: NONE
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q4_conflicting_constraints,1,Echoed prompt or no valid sentence
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q2_cascading_constraints,2,Only 1/4 constraints
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q3_meta_instruction,7,Has 42 and 7x hi but may have invalid outputs
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q2_word_limit,1,Echoed prompt or no clear answer
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q3_structured_format,4,Only 1 valid formatted entries
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q4_multiple_constraints,5,"Has 4 countries, not exactly 5"
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q1_resist_elaboration,0,No answer or wrong answer
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q4_conflicting_constraints,7,"3/4 constraints: words=5, A=False, data=True, no_store=True"
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q2_cascading_constraints,2,Only 1/4 constraints
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q2_word_limit,2,"41 words total, failed constraint"
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q3_structured_format,4,Only 1 valid formatted entries
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q4_conflicting_constraints,4,2/4 constraints
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q2_cascading_constraints,1,Only found 0 words
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q2_word_limit,1,Echoed prompt or no clear answer
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q3_structured_format,10,Perfect format: 18 valid entries
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q2_maintain_format,6,Correct format but echoes prompt
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q4_conflicting_constraints,10,"All 4 constraints met: 7 words, starts A, ends data, no store"
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q2_cascading_constraints,1,Only found 0 words
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"
+gemma-3-12b-it-Q4_K_M,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+gemma-3-12b-it-Q4_K_M,t1_q2_word_limit,6,"18 words, close to 20-25 range"
+gemma-3-12b-it-Q4_K_M,t1_q3_structured_format,10,Perfect format: 3 valid entries
+gemma-3-12b-it-Q4_K_M,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+gemma-3-12b-it-Q4_K_M,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+gemma-3-12b-it-Q4_K_M,t2_q2_maintain_format,6,Correct format but echoes prompt
+gemma-3-12b-it-Q4_K_M,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+gemma-3-12b-it-Q4_K_M,t2_q4_conflicting_constraints,4,2/4 constraints
+gemma-3-12b-it-Q4_K_M,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+gemma-3-12b-it-Q4_K_M,t3_q2_cascading_constraints,7,3/4 constraints met
+gemma-3-12b-it-Q4_K_M,t3_q3_meta_instruction,5,Has 42 and some hi
+gemma-3-27B-it-QAT-Q4_0,t1_q1_negative_instruction,0,"Contains forbidden word(s): sunlight, sun, solar"
+gemma-3-27B-it-QAT-Q4_0,t1_q2_word_limit,10,Exactly 21 words in range 20-25
+gemma-3-27B-it-QAT-Q4_0,t1_q3_structured_format,10,Perfect format: 3 valid entries
+gemma-3-27B-it-QAT-Q4_0,t1_q4_multiple_constraints,10,5 European countries in alphabetical order
+gemma-3-27B-it-QAT-Q4_0,t2_q1_resist_elaboration,1,Contains 4 but with extensive elaboration
+gemma-3-27B-it-QAT-Q4_0,t2_q2_maintain_format,6,Correct format but echoes prompt
+gemma-3-27B-it-QAT-Q4_0,t2_q3_empty_handling,3,Contains variant of NONE with extra content
+gemma-3-27B-it-QAT-Q4_0,t2_q4_conflicting_constraints,4,2/4 constraints
+gemma-3-27B-it-QAT-Q4_0,t3_q1_self_referential,2,Attempted but wrong comma count or forbidden words
+gemma-3-27B-it-QAT-Q4_0,t3_q2_cascading_constraints,2,Only 1/4 constraints
+gemma-3-27B-it-QAT-Q4_0,t3_q3_meta_instruction,10,"Correct: 42 and 7x hi, no invalid outputs"

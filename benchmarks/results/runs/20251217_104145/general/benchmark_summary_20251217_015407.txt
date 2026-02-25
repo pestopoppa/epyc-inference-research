@@ -1,0 +1,187 @@
+General/Instruct Benchmark Summary
+Generated: Wed Dec 17 01:54:09 AM CET 2025
+==============================================
+
+Models Tested:
+  Llama-3.1-70B-Instruct: PASS
+  Qwen2.5-Coder-32B: PASS
+  Llama-3-8B-Instruct: PASS
+  Qwen2.5-72B-Instruct: PASS
+  Qwen3-30B-A3B: PASS
+  Qwen3-Next-80B-A3B: PASS
+
+Speed Summary by Model and Config:
+
+--- Qwen2.5-72B-Instruct (dense) ---
+  Config: baseline
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+
+--- Llama-3.1-70B-Instruct (dense) ---
+  Config: baseline
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+
+--- Llama-3-8B-Instruct (dense) ---
+  Config: baseline
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+
+--- Qwen2.5-Coder-32B (dense) ---
+  Config: baseline
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+
+--- Qwen3-Next-80B-A3B (qwen3moe) ---
+  Config: baseline
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+  Config: moe2
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+  Config: moe4
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+  Config: moe6
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+  Config: moe8
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+
+--- Qwen3-30B-A3B (qwen3moe) ---
+  Config: baseline
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+  Config: moe2
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+  Config: moe4
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+  Config: moe6
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+  Config: moe8
+    t1_q1_reformat: N/A
+    t1_q2_summarize: N/A
+    t1_q3_extract: N/A
+    t2_q1_json: N/A
+    t2_q2_multistep: N/A
+    t2_q3_compare: N/A
+    t3_q1_synthesis: N/A
+    t3_q2_transform: N/A
+    t3_q3_schedule: N/A
+    t3_q4_inconsistency: N/A
+
+==============================================
+MoE Speedup Analysis (baseline vs moe4)
+==============================================
+
+Model: Qwen3-Next-80B-A3B
+
+Model: Qwen3-30B-A3B

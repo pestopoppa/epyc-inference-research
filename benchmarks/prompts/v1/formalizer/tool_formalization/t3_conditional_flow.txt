@@ -1,0 +1,1 @@
+Check if the file /data/report.txt exists. If it does, update it with the new summary. If it doesn't exist, create it with the initial template.

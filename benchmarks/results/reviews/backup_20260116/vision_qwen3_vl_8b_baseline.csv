@@ -1,0 +1,31 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,13.9,3,Good analysis with failure modes and amendments
+general,t3_q2_system_failure,141.4,0,Just echoed the question - no actual response
+general,t3_q3_strategic_communication,13.1,3,Good board statement with conviction
+general,t2_q1_synthesis,14.8,3,Good phased approach recommendation
+general,t2_q2_transform,15.0,3,Correct YAML transformation with departments
+general,t2_q3_schedule,13.0,1,Working through constraints but truncated
+general,t2_q4_inconsistency,107.3,0,Just echoed the question - no actual response
+general,t1_q1_json,63.8,0,Just echoed - no JSON output
+general,t1_q2_multistep,13.2,3,Correct list processing with count=5
+general,t1_q3_compare,84.0,0,Just echoed the question - no actual response
+vl,t3_q1_scientific_diagram,13.7,3,Good time-course data analysis
+vl,t3_q2_architectural_blueprint,14.4,1,Asks for input but no actual analysis
+vl,t3_q3_multi_image_temporal,13.6,3,Good temporal deforestation analysis
+vl,t2_q1_math,14.8,3,Correct solution x=2 with steps
+vl,t2_q2_flowchart,13.6,2,Good flowchart purpose description
+vl,t2_q3_diff,14.9,1,Says no differences found but needs images
+vl,t2_q4_puzzle,14.1,0,Number sequence garbage output
+vl,t1_q1_chart,14.6,3,Good bar chart analysis and estimation
+vl,t1_q2_invoice,15.1,3,Correct JSON extraction from invoice
+vl,t1_q3_code,14.4,3,Correctly identifies division by zero bug
+agentic,t3_q1_competing_constraints,158.6,0,Just echoed prompt - no actual response
+agentic,t3_q2_multi_agent_coordination,167.9,0,Just echoed prompt - no actual response
+agentic,t3_q3_adversarial_robustness,146.9,0,Just echoed prompt - no actual response
+agentic,t2_q1_ambiguous,101.8,0,Just echoed prompt - no actual response
+agentic,t2_q2_error_chain,147.4,0,Just echoed prompt - no actual response
+agentic,t2_q3_schema_edge,106.6,0,Just echoed prompt - no actual response
+agentic,t2_q4_orchestration,150.7,0,Just echoed prompt - no actual response
+agentic,t1_q1_sequential,70.4,0,Just echoed prompt - no actual response
+agentic,t1_q2_error_handling,96.5,0,Just echoed prompt - no actual response
+agentic,t1_q3_nested_params,132.7,0,Just echoed prompt - no actual response

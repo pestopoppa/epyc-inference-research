@@ -1,0 +1,16 @@
+Parse the following malformed JSON and extract the user data.
+
+---
+test_id: t3_failure_recovery
+context: |
+  {"users": [
+    {"name": "Alice", "age": 30},
+    {"name": "Bob", age: 25},  // missing quotes around age
+    {"name": "Charlie", "age": 35}
+  }
+expected_behavior: Initial parse fails, should recover and handle malformed input
+pass_criteria:
+  max_turns: 8
+  answer_contains: ["Alice", "Bob", "Charlie"]
+  handles_error: true
+  must_call_final: true

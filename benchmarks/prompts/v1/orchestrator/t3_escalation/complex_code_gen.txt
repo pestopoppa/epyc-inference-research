@@ -1,0 +1,16 @@
+Implement a thread-safe LRU cache with the following requirements:
+- Support get(key) and put(key, value) operations
+- O(1) time complexity for both operations
+- Configurable max size
+- Automatic eviction of least recently used items
+- Thread-safe with minimal lock contention
+
+---
+test_id: t3_complex_code_gen
+expected_behavior: Should trigger escalation to coder specialist due to complexity
+pass_criteria:
+  max_turns: 10
+  uses_function: ["llm_call"]
+  answer_contains: ["class", "def get", "def put", "lock", "OrderedDict"]
+  code_is_valid_python: true
+  must_call_final: true

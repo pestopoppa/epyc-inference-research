@@ -1,0 +1,151 @@
+{"prompt_id": "gpqa_Organic Chemistry_0183", "suite": "gpqa", "session": "3way_20260211_125230", "timestamp": "2026-02-11T11:53:31.147698+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0023", "suite": "gpqa", "session": "3way_20260211_125953", "timestamp": "2026-02-11T12:02:17.863451+00:00"}
+{"prompt_id": "usaco_silver_360_bronze_wormholes", "suite": "usaco", "session": "3way_20260211_125953", "timestamp": "2026-02-11T12:18:44.075819+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0204", "suite": "gpqa", "session": "3way_20260211_145159", "timestamp": "2026-02-11T13:53:21.084239+00:00"}
+{"prompt_id": "usaco_silver_1036_bronze_social_distancing_ii", "suite": "usaco", "session": "3way_20260211_145159", "timestamp": "2026-02-11T15:24:55.560226+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0177", "suite": "gpqa", "session": "3way_20260211_205721", "timestamp": "2026-02-11T19:59:24.935575+00:00"}
+{"prompt_id": "usaco_silver_119_gold_symmetry", "suite": "usaco", "session": "3way_20260211_205721", "timestamp": "2026-02-11T21:21:07.717270+00:00"}
+{"prompt_id": "leetcode_sum-of-total-strength-of-wizards", "suite": "livecodebench", "session": "3way_20260211_205721", "timestamp": "2026-02-12T01:03:08.421925+00:00"}
+{"prompt_id": "debugbench_partition-string-into-substrings-with-values-at-most-k_python", "suite": "debugbench", "session": "3way_20260211_205721", "timestamp": "2026-02-12T04:30:31.430589+00:00"}
+{"prompt_id": "ma_hard_comp_005", "suite": "mode_advantage_hard", "session": "3way_20260211_205721", "timestamp": "2026-02-12T09:09:05.710120+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0447", "suite": "gpqa", "session": "3way_20260213_144247", "timestamp": "2026-02-13T13:43:54.282643+00:00"}
+{"prompt_id": "arc_Mercury_7130655", "suite": "thinking", "session": "3way_20260215_230412", "timestamp": "2026-02-15T22:06:07.311904+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0227", "suite": "gpqa", "session": "3way_20260215_231219", "timestamp": "2026-02-15T22:16:02.088631+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0430", "suite": "gpqa", "session": "3way_20260215_232300", "timestamp": "2026-02-15T22:24:08.251323+00:00"}
+{"prompt_id": "usaco_silver_1259_gold_strongest_friendship_group", "suite": "usaco", "session": "3way_20260215_232300", "timestamp": "2026-02-15T22:42:03.016055+00:00"}
+{"prompt_id": "leetcode_my-calendar-i", "suite": "livecodebench", "session": "3way_20260215_232300", "timestamp": "2026-02-15T22:47:33.606786+00:00"}
+{"prompt_id": "debugbench_ugly-number-ii_cpp", "suite": "debugbench", "session": "3way_20260215_232300", "timestamp": "2026-02-15T22:51:31.426080+00:00"}
+{"prompt_id": "ma_hard_reason_011", "suite": "mode_advantage_hard", "session": "3way_20260215_232300", "timestamp": "2026-02-15T22:56:23.065456+00:00"}
+{"prompt_id": "gsm8k_01182", "suite": "math", "session": "3way_20260215_232300", "timestamp": "2026-02-15T22:57:50.528314+00:00"}
+{"prompt_id": "hotpot_comparison_5ac561315542993e66e823a9", "suite": "hotpotqa", "session": "3way_20260215_232300", "timestamp": "2026-02-15T22:59:26.156832+00:00"}
+{"prompt_id": "simpleqa_general_00292", "suite": "simpleqa", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:01:15.772251+00:00"}
+{"prompt_id": "agentic_ma_001", "suite": "agentic", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:05:37.222865+00:00"}
+{"prompt_id": "mbpp_0206", "suite": "coder", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:09:31.635879+00:00"}
+{"prompt_id": "lc_ma_001", "suite": "long_context", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:10:57.902967+00:00"}
+{"prompt_id": "ma_swe_013", "suite": "mode_advantage", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:17:52.666250+00:00"}
+{"prompt_id": "hellaswag_05495", "suite": "thinking", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:19:30.646554+00:00"}
+{"prompt_id": "mmlu_global_facts_02641", "suite": "general", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:20:08.046060+00:00"}
+{"prompt_id": "ifeval_3572", "suite": "instruction_precision", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:21:08.663910+00:00"}
+{"prompt_id": "vl_chart_test_2180", "suite": "vl", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:22:24.063729+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0276", "suite": "gpqa", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:24:57.344013+00:00"}
+{"prompt_id": "usaco_silver_382_gold_cow_curling", "suite": "usaco", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:35:51.782100+00:00"}
+{"prompt_id": "leetcode_check-if-a-number-is-majority-element-in-a-sorted-array", "suite": "livecodebench", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:43:23.583816+00:00"}
+{"prompt_id": "debugbench_longest-common-prefix_cpp", "suite": "debugbench", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:47:01.500557+00:00"}
+{"prompt_id": "ma_hard_synth_009", "suite": "mode_advantage_hard", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:49:04.650589+00:00"}
+{"prompt_id": "gsm8k_00381", "suite": "math", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:50:32.237689+00:00"}
+{"prompt_id": "hotpot_bridge_5a88fa9e5542993b751ca8de", "suite": "hotpotqa", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:52:24.351144+00:00"}
+{"prompt_id": "simpleqa_general_03397", "suite": "simpleqa", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:54:04.147426+00:00"}
+{"prompt_id": "bfcl_006", "suite": "agentic", "session": "3way_20260215_232300", "timestamp": "2026-02-15T23:59:58.358704+00:00"}
+{"prompt_id": "humaneval_HumanEval_146", "suite": "coder", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:02:29.222450+00:00"}
+{"prompt_id": "needle_006", "suite": "long_context", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:04:17.631445+00:00"}
+{"prompt_id": "ma_multi_004", "suite": "mode_advantage", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:05:11.429454+00:00"}
+{"prompt_id": "hellaswag_27247", "suite": "thinking", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:06:43.385048+00:00"}
+{"prompt_id": "mmlu_high_school_biology_02938", "suite": "general", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:08:13.091252+00:00"}
+{"prompt_id": "ifeval_3063", "suite": "instruction_precision", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:14:57.893229+00:00"}
+{"prompt_id": "vl_chart_test_2348", "suite": "vl", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:16:32.686290+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0093", "suite": "gpqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:17:45.775650+00:00"}
+{"prompt_id": "usaco_silver_785_bronze_out_of_place", "suite": "usaco", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:26:17.045401+00:00"}
+{"prompt_id": "leetcode_check-if-all-as-appears-before-all-bs", "suite": "livecodebench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:31:29.516353+00:00"}
+{"prompt_id": "debugbench_restore-ip-addresses_python", "suite": "debugbench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:37:19.939133+00:00"}
+{"prompt_id": "ma_hard_synth_013", "suite": "mode_advantage_hard", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:38:59.791742+00:00"}
+{"prompt_id": "gsm8k_00864", "suite": "math", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:42:57.085450+00:00"}
+{"prompt_id": "hotpot_bridge_5ae60530554299546bf8301e", "suite": "hotpotqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:44:23.470881+00:00"}
+{"prompt_id": "simpleqa_general_03014", "suite": "simpleqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:46:36.951757+00:00"}
+{"prompt_id": "agentic_ma_002", "suite": "agentic", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:48:08.337715+00:00"}
+{"prompt_id": "humaneval_HumanEval_125", "suite": "coder", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:51:25.210625+00:00"}
+{"prompt_id": "lc_ma_002", "suite": "long_context", "session": "3way_20260215_232300", "timestamp": "2026-02-16T00:53:55.789671+00:00"}
+{"prompt_id": "ma_swe_021", "suite": "mode_advantage", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:02:17.960245+00:00"}
+{"prompt_id": "hellaswag_40783", "suite": "thinking", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:04:34.330138+00:00"}
+{"prompt_id": "mmlu_professional_law_10831", "suite": "general", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:06:28.809712+00:00"}
+{"prompt_id": "ifeval_295", "suite": "instruction_precision", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:10:17.856303+00:00"}
+{"prompt_id": "vl_chart_test_2076", "suite": "vl", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:12:06.056092+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0399", "suite": "gpqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:16:10.853025+00:00"}
+{"prompt_id": "usaco_silver_817_platinum_new_barns", "suite": "usaco", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:25:43.631537+00:00"}
+{"prompt_id": "leetcode_the-employee-that-worked-on-the-longest-task", "suite": "livecodebench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:31:30.522657+00:00"}
+{"prompt_id": "debugbench_intervals-between-identical-elements_cpp", "suite": "debugbench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:37:47.094077+00:00"}
+{"prompt_id": "ma_hard_synth_012", "suite": "mode_advantage_hard", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:39:24.358068+00:00"}
+{"prompt_id": "gsm8k_00545", "suite": "math", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:41:06.690791+00:00"}
+{"prompt_id": "hotpot_bridge_5a8db788554299653c1aa145", "suite": "hotpotqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:42:45.594119+00:00"}
+{"prompt_id": "simpleqa_general_00334", "suite": "simpleqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:45:52.075122+00:00"}
+{"prompt_id": "bfcl_041", "suite": "agentic", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:47:00.784340+00:00"}
+{"prompt_id": "mbpp_0490", "suite": "coder", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:57:27.910104+00:00"}
+{"prompt_id": "needle_040", "suite": "long_context", "session": "3way_20260215_232300", "timestamp": "2026-02-16T01:58:35.255959+00:00"}
+{"prompt_id": "ma_comp_011", "suite": "mode_advantage", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:01:13.492373+00:00"}
+{"prompt_id": "hellaswag_12017", "suite": "thinking", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:02:39.208765+00:00"}
+{"prompt_id": "mmlu_public_relations_13107", "suite": "general", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:03:48.127564+00:00"}
+{"prompt_id": "ifeval_1019", "suite": "instruction_precision", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:04:37.038380+00:00"}
+{"prompt_id": "vl_chart_test_2128", "suite": "vl", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:05:38.388513+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0267", "suite": "gpqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:07:18.745448+00:00"}
+{"prompt_id": "usaco_silver_1065_gold_replication", "suite": "usaco", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:21:27.053321+00:00"}
+{"prompt_id": "leetcode_unique-paths-ii", "suite": "livecodebench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:25:58.336894+00:00"}
+{"prompt_id": "debugbench_minimum-total-cost-to-make-arrays-unequal_cpp", "suite": "debugbench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:31:50.239195+00:00"}
+{"prompt_id": "ma_hard_comp_012", "suite": "mode_advantage_hard", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:34:17.944328+00:00"}
+{"prompt_id": "gsm8k_00489", "suite": "math", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:35:35.072170+00:00"}
+{"prompt_id": "hotpot_bridge_5ae73ddb554299572ea5478d", "suite": "hotpotqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:37:26.100032+00:00"}
+{"prompt_id": "simpleqa_general_04205", "suite": "simpleqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:39:48.362810+00:00"}
+{"prompt_id": "bfcl_005", "suite": "agentic", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:40:55.059760+00:00"}
+{"prompt_id": "mbpp_0222", "suite": "coder", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:43:38.716144+00:00"}
+{"prompt_id": "needle_005", "suite": "long_context", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:45:25.638646+00:00"}
+{"prompt_id": "ma_multi_002", "suite": "mode_advantage", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:48:12.505386+00:00"}
+{"prompt_id": "hellaswag_25096", "suite": "thinking", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:49:17.344843+00:00"}
+{"prompt_id": "mmlu_high_school_microeconomics_04588", "suite": "general", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:50:36.670890+00:00"}
+{"prompt_id": "ifeval_1180", "suite": "instruction_precision", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:52:44.476857+00:00"}
+{"prompt_id": "vl_chart_test_2160", "suite": "vl", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:56:07.040897+00:00"}
+{"prompt_id": "gpqa_Inorganic Chemistry_0152", "suite": "gpqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T02:58:41.259675+00:00"}
+{"prompt_id": "usaco_silver_967_silver_meetings", "suite": "usaco", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:18:16.952356+00:00"}
+{"prompt_id": "leetcode_minimum-degree-of-a-connected-trio-in-a-graph", "suite": "livecodebench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:27:47.446381+00:00"}
+{"prompt_id": "debugbench_erect-the-fence_java", "suite": "debugbench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:32:30.018215+00:00"}
+{"prompt_id": "ma_hard_comp_006", "suite": "mode_advantage_hard", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:33:24.327087+00:00"}
+{"prompt_id": "math500_Number Theory_00160", "suite": "math", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:34:54.426596+00:00"}
+{"prompt_id": "hotpot_comparison_5a7f9cb55542995d8a8ddec1", "suite": "hotpotqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:36:52.660245+00:00"}
+{"prompt_id": "simpleqa_general_03987", "suite": "simpleqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:38:30.441754+00:00"}
+{"prompt_id": "bfcl_008", "suite": "agentic", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:40:25.030012+00:00"}
+{"prompt_id": "humaneval_HumanEval_6", "suite": "coder", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:51:58.246143+00:00"}
+{"prompt_id": "needle_008", "suite": "long_context", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:53:07.761870+00:00"}
+{"prompt_id": "ma_swe_007", "suite": "mode_advantage", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:56:25.548106+00:00"}
+{"prompt_id": "hellaswag_45640", "suite": "thinking", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:57:57.414205+00:00"}
+{"prompt_id": "mmlu_professional_law_11748", "suite": "general", "session": "3way_20260215_232300", "timestamp": "2026-02-16T03:59:56.533080+00:00"}
+{"prompt_id": "gpqa_Statistical Mechanics_0080", "suite": "gpqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T04:03:13.289989+00:00"}
+{"prompt_id": "usaco_silver_284_silver_luxury_river_cruise", "suite": "usaco", "session": "3way_20260215_232300", "timestamp": "2026-02-16T04:24:08.821466+00:00"}
+{"prompt_id": "leetcode_richest-customer-wealth", "suite": "livecodebench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T04:30:46.340480+00:00"}
+{"prompt_id": "debugbench_longest-common-prefix_java", "suite": "debugbench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T04:34:00.437196+00:00"}
+{"prompt_id": "ma_hard_code_015", "suite": "mode_advantage_hard", "session": "3way_20260215_232300", "timestamp": "2026-02-16T04:45:55.971554+00:00"}
+{"prompt_id": "math500_Geometry_00013", "suite": "math", "session": "3way_20260215_232300", "timestamp": "2026-02-16T04:47:44.966709+00:00"}
+{"prompt_id": "hotpot_bridge_5ae75a4c5542997b22f6a6f1", "suite": "hotpotqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T04:49:40.795818+00:00"}
+{"prompt_id": "simpleqa_general_03308", "suite": "simpleqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T04:50:50.698843+00:00"}
+{"prompt_id": "bfcl_021", "suite": "agentic", "session": "3way_20260215_232300", "timestamp": "2026-02-16T04:51:41.566269+00:00"}
+{"prompt_id": "mbpp_0148", "suite": "coder", "session": "3way_20260215_232300", "timestamp": "2026-02-16T04:57:21.838234+00:00"}
+{"prompt_id": "needle_021", "suite": "long_context", "session": "3way_20260215_232300", "timestamp": "2026-02-16T04:58:06.397413+00:00"}
+{"prompt_id": "ma_esc_009", "suite": "mode_advantage", "session": "3way_20260215_232300", "timestamp": "2026-02-16T05:11:53.014573+00:00"}
+{"prompt_id": "hellaswag_31734", "suite": "thinking", "session": "3way_20260215_232300", "timestamp": "2026-02-16T05:13:46.232524+00:00"}
+{"prompt_id": "mmlu_miscellaneous_07590", "suite": "general", "session": "3way_20260215_232300", "timestamp": "2026-02-16T05:14:24.653926+00:00"}
+{"prompt_id": "ifeval_279", "suite": "instruction_precision", "session": "3way_20260215_232300", "timestamp": "2026-02-16T05:16:04.758020+00:00"}
+{"prompt_id": "vl_chart_test_0508", "suite": "vl", "session": "3way_20260215_232300", "timestamp": "2026-02-16T05:18:39.968471+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0112", "suite": "gpqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T05:23:41.681586+00:00"}
+{"prompt_id": "usaco_silver_814_gold_directory_traversal", "suite": "usaco", "session": "3way_20260215_232300", "timestamp": "2026-02-16T05:41:14.943133+00:00"}
+{"prompt_id": "leetcode_campus-bikes-ii", "suite": "livecodebench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T05:53:48.814886+00:00"}
+{"prompt_id": "debugbench_search-in-a-binary-search-tree_cpp", "suite": "debugbench", "session": "3way_20260215_232300", "timestamp": "2026-02-16T05:59:17.995825+00:00"}
+{"prompt_id": "ma_hard_code_005", "suite": "mode_advantage_hard", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:06:15.273842+00:00"}
+{"prompt_id": "gsm8k_00434", "suite": "math", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:08:21.249257+00:00"}
+{"prompt_id": "hotpot_comparison_5ac31456554299741d48a1b4", "suite": "hotpotqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:10:24.423287+00:00"}
+{"prompt_id": "simpleqa_general_02147", "suite": "simpleqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:12:06.067549+00:00"}
+{"prompt_id": "bfcl_020", "suite": "agentic", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:12:49.284015+00:00"}
+{"prompt_id": "mbpp_0161", "suite": "coder", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:16:20.107587+00:00"}
+{"prompt_id": "needle_020", "suite": "long_context", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:17:11.834769+00:00"}
+{"prompt_id": "ma_esc_014", "suite": "mode_advantage", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:23:48.966274+00:00"}
+{"prompt_id": "hellaswag_40484", "suite": "thinking", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:25:29.369392+00:00"}
+{"prompt_id": "mmlu_high_school_psychology_04950", "suite": "general", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:27:09.169946+00:00"}
+{"prompt_id": "ifeval_167", "suite": "instruction_precision", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:28:35.140592+00:00"}
+{"prompt_id": "vl_chart_test_1602", "suite": "vl", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:30:01.454707+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0348", "suite": "gpqa", "session": "3way_20260215_232300", "timestamp": "2026-02-16T06:35:43.616695+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0200", "suite": "gpqa", "session": "3way_20260216_084700", "timestamp": "2026-02-16T07:50:18.121825+00:00"}
+{"prompt_id": "usaco_silver_1214_platinum_phone_numbers", "suite": "usaco", "session": "3way_20260216_084700", "timestamp": "2026-02-16T08:08:29.364050+00:00"}
+{"prompt_id": "leetcode_reordered-power-of-2", "suite": "livecodebench", "session": "3way_20260216_084700", "timestamp": "2026-02-16T08:11:26.807543+00:00"}
+{"prompt_id": "debugbench_gray-code_cpp", "suite": "debugbench", "session": "3way_20260216_084700", "timestamp": "2026-02-16T08:44:19.440835+00:00"}
+{"prompt_id": "ma_hard_reason_015", "suite": "mode_advantage_hard", "session": "3way_20260216_084700", "timestamp": "2026-02-16T09:34:39.728230+00:00"}
+{"prompt_id": "math500_Intermediate Algebra_00103", "suite": "math", "session": "3way_20260216_084700", "timestamp": "2026-02-16T09:38:15.721458+00:00"}
+{"prompt_id": "hotpot_bridge_5a88e605554299206df2b39c", "suite": "hotpotqa", "session": "3way_20260216_084700", "timestamp": "2026-02-16T09:40:20.430252+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0371", "suite": "gpqa", "session": "3way_20260216_105435", "timestamp": "2026-02-16T09:55:50.845764+00:00"}
+{"prompt_id": "usaco_silver_1284_platinum_tractor_paths", "suite": "usaco", "session": "3way_20260216_105435", "timestamp": "2026-02-16T10:05:59.798193+00:00"}
+{"prompt_id": "leetcode_redundant-connection", "suite": "livecodebench", "session": "3way_20260216_105435", "timestamp": "2026-02-16T10:10:46.568355+00:00"}
+{"prompt_id": "debugbench_set-matrix-zeroes_java", "suite": "debugbench", "session": "3way_20260216_105435", "timestamp": "2026-02-16T10:16:32.492274+00:00"}

@@ -1,0 +1,326 @@
+version: 1
+domain: tool_compliance
+description: "Tests REPL tool usage - models must use provided tools instead of Python imports"
+created: "2026-01-24"
+updated: "2026-01-24"
+note: "Auto-score checks for forbidden patterns (import, os., pathlib) and required tools"
+
+# Roles to test: frontdoor, coder_primary, worker_general, ingest_long_context
+
+prompts:
+  # ============== TIER 1: Basic Tool Usage ==============
+  t1_q1_list_directory:
+    tier: 1
+    name: "List Directory Contents"
+    prompt: |
+      You have access to these REPL tools: list_dir(path), peek(n), grep(pattern), FINAL(answer)
+      NO IMPORTS ALLOWED - import/from statements are BLOCKED.
+
+      Task: List all files in /mnt/raid0/llm/claude/tmp
+      Write Python code that uses the available tools.
+    expected: "Uses list_dir() not os.listdir or pathlib"
+    auto_score: "contains_pattern:list_dir\\s*\\(;forbidden_pattern:import |os\\.listdir|pathlib\\."
+    reference_answer: |
+      result = list_dir('/mnt/raid0/llm/claude/tmp')
+      FINAL(result)
+
+      **Key requirements:**
+      - Must use list_dir() function (REPL tool)
+      - Must NOT use import os or os.listdir
+      - Must NOT use pathlib.Path().iterdir()
+      - Must call FINAL() with result
+
+      **Common violations:**
+      - `import os` then `os.listdir()`
+      - `from pathlib import Path` then `Path().iterdir()`
+      - Using glob.glob()
+    scoring:
+      - criterion: "Uses list_dir()"
+        weight: 50
+      - criterion: "No forbidden imports"
+        weight: 40
+      - criterion: "Calls FINAL()"
+        weight: 10
+
+  t1_q2_read_file:
+    tier: 1
+    name: "Read File Contents"
+    prompt: |
+      You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern), FINAL(answer)
+      NO IMPORTS ALLOWED - import/from statements are BLOCKED.
+
+      Task: Show the first 100 characters of /mnt/raid0/llm/claude/README.md
+      Write Python code that uses the available tools.
+    expected: "Uses peek() not open()"
+    auto_score: "contains_pattern:peek\\s*\\(;forbidden_pattern:import |open\\s*\\("
+    reference_answer: |
+      content = peek(100, file_path='/mnt/raid0/llm/claude/README.md')
+      FINAL(content)
+
+      **Key requirements:**
+      - Must use peek(n, file_path=path) function
+      - Must NOT use open() or with open()
+      - Must NOT use pathlib.Path().read_text()
+
+      **Common violations:**
+      - `with open(path, 'r') as f: f.read()`
+      - `Path(path).read_text()[:100]`
+    scoring:
+      - criterion: "Uses peek()"
+        weight: 50
+      - criterion: "No open() call"
+        weight: 40
+      - criterion: "Calls FINAL()"
+        weight: 10
+
+  t1_q3_search_pattern:
+    tier: 1
+    name: "Search for Pattern"
+    prompt: |
+      You have access to these REPL tools: list_dir(path), peek(n), grep(pattern), FINAL(answer)
+      NO IMPORTS ALLOWED - import/from statements are BLOCKED.
+
+      Task: Find all lines containing 'def test_' in the context
+      Write Python code that uses the available tools.
+    expected: "Uses grep() not re.findall"
+    auto_score: "contains_pattern:grep\\s*\\(;forbidden_pattern:import |re\\."
+    reference_answer: |
+      matches = grep(r'def test_')
+      FINAL(matches)
+
+      **Key requirements:**
+      - Must use grep(pattern) function
+      - Must NOT import re or use re.findall/re.search
+      - Pattern can be raw string r'...' or regular string
+
+      **Common violations:**
+      - `import re` then `re.findall()`
+      - Using subprocess to call grep
+    scoring:
+      - criterion: "Uses grep()"
+        weight: 50
+      - criterion: "No re module import"
+        weight: 40
+      - criterion: "Calls FINAL()"
+        weight: 10
+
+  # ============== TIER 2: File Metadata & Combined Tools ==============
+  t2_q1_file_metadata:
+    tier: 2
+    name: "Get File Metadata"
+    prompt: |
+      You have access to these REPL tools: list_dir(path), peek(n), grep(pattern), file_info(path), FINAL(answer)
+      NO IMPORTS ALLOWED - import/from statements are BLOCKED.
+
+      Task: Get the file size and modification date of /mnt/raid0/llm/claude/CLAUDE.md
+      Write Python code that uses the available tools.
+    expected: "Uses file_info() not os.stat"
+    auto_score: "contains_pattern:file_info\\s*\\(;forbidden_pattern:import |os\\.stat|os\\.path"
+    reference_answer: |
+      info = file_info('/mnt/raid0/llm/claude/CLAUDE.md')
+      FINAL(info)
+
+      **Key requirements:**
+      - Must use file_info(path) function
+      - Must NOT use os.stat() or os.path.getsize()
+      - Returns JSON with size, modified, type, etc.
+
+      **Common violations:**
+      - `import os` then `os.stat(path).st_size`
+      - `os.path.getmtime(path)`
+    scoring:
+      - criterion: "Uses file_info()"
+        weight: 50
+      - criterion: "No os module usage"
+        weight: 40
+      - criterion: "Calls FINAL()"
+        weight: 10
+
+  t2_q2_combined_list_and_read:
+    tier: 2
+    name: "List Then Read First File"
+    prompt: |
+      You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern), FINAL(answer)
+      NO IMPORTS ALLOWED - import/from statements are BLOCKED.
+
+      Task: List files in /mnt/raid0/llm/claude/logs/, then read the first 200 chars of the first file found.
+      Write Python code that uses the available tools.
+    expected: "Uses list_dir() then peek() with file_path"
+    auto_score: "contains_pattern:list_dir\\s*\\(.*\\);contains_pattern:peek\\s*\\(;forbidden_pattern:import |os\\."
+    reference_answer: |
+      import json
+
+      # Get directory listing
+      dir_result = list_dir('/mnt/raid0/llm/claude/logs/')
+      files = json.loads(dir_result)
+
+      # Get first file (filter for type=file)
+      file_entries = [f for f in files['files'] if f['type'] == 'file']
+      if file_entries:
+          first_file = files['path'] + '/' + file_entries[0]['name']
+          content = peek(200, file_path=first_file)
+          FINAL(content)
+      else:
+          FINAL("No files found")
+
+      **Note:** json is allowed since it's provided in REPL globals.
+
+      **Key requirements:**
+      - Must use list_dir() to get directory contents
+      - Must use peek(n, file_path=...) to read file content
+      - Must NOT use os.listdir or open()
+
+      **Common violations:**
+      - `os.listdir()` to get files
+      - `open()` to read content
+    scoring:
+      - criterion: "Uses list_dir()"
+        weight: 30
+      - criterion: "Uses peek()"
+        weight: 30
+      - criterion: "No forbidden patterns"
+        weight: 30
+      - criterion: "Calls FINAL()"
+        weight: 10
+
+  t2_q3_search_in_file:
+    tier: 2
+    name: "Search Pattern in Specific File"
+    prompt: |
+      You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern, file_path=None), FINAL(answer)
+      NO IMPORTS ALLOWED - import/from statements are BLOCKED.
+
+      Task: Find all lines containing 'class ' in /mnt/raid0/llm/claude/src/roles.py
+      Write Python code that uses the available tools.
+    expected: "Uses grep() with file_path parameter"
+    auto_score: "contains_pattern:grep\\s*\\([^)]*file_path;forbidden_pattern:import |open\\s*\\("
+    reference_answer: |
+      matches = grep(r'class ', file_path='/mnt/raid0/llm/claude/src/roles.py')
+      FINAL(matches)
+
+      **Key requirements:**
+      - Must use grep(pattern, file_path=...) function
+      - Must NOT open the file manually
+      - Must NOT use re module
+
+      **Common violations:**
+      - Opening file with open() then using re.findall()
+      - Using subprocess to call grep command
+    scoring:
+      - criterion: "Uses grep() with file_path"
+        weight: 50
+      - criterion: "No forbidden patterns"
+        weight: 40
+      - criterion: "Calls FINAL()"
+        weight: 10
+
+  # ============== TIER 3: Document Processing & Advanced ==============
+  t3_q1_ocr_document:
+    tier: 3
+    name: "OCR a PDF Document"
+    prompt: |
+      You have access to these REPL tools: ocr_document(path), peek(n), analyze_figure(image_path, prompt), FINAL(answer)
+      NO IMPORTS ALLOWED - import/from statements are BLOCKED.
+
+      Task: Extract text from /mnt/raid0/llm/tmp/document.pdf
+      Write Python code that uses the available tools.
+    expected: "Uses ocr_document() not PyPDF or pdfplumber"
+    auto_score: "contains_pattern:ocr_document\\s*\\(;forbidden_pattern:import |PyPDF|pdfplumber|fitz"
+    reference_answer: |
+      result = ocr_document('/mnt/raid0/llm/tmp/document.pdf')
+      FINAL(result)
+
+      **Key requirements:**
+      - Must use ocr_document(path) function
+      - Must NOT import PyPDF2, pdfplumber, fitz (pymupdf)
+      - Returns JSON with full_text, pages, figures
+
+      **Common violations:**
+      - `import PyPDF2` then `PdfReader()`
+      - `import pdfplumber` then `pdfplumber.open()`
+      - `import fitz` (pymupdf)
+    scoring:
+      - criterion: "Uses ocr_document()"
+        weight: 50
+      - criterion: "No PDF library imports"
+        weight: 40
+      - criterion: "Calls FINAL()"
+        weight: 10
+
+  t3_q2_llm_delegation:
+    tier: 3
+    name: "Delegate to Sub-LM"
+    prompt: |
+      You have access to these REPL tools: peek(n), grep(pattern), llm_call(prompt, role='worker'), llm_batch(prompts, role='worker'), FINAL(answer)
+      The context contains a long document.
+
+      Task: Split the context into 4 chunks and summarize each in parallel using llm_batch()
+      Write Python code that uses the available tools.
+    expected: "Uses llm_batch() for parallel processing"
+    auto_score: "contains_pattern:llm_batch\\s*\\(;forbidden_pattern:import |concurrent|threading|multiprocessing"
+    reference_answer: |
+      # Get context length
+      sample = peek(10)  # Just to confirm context exists
+
+      # Split into chunks (assuming context is available)
+      chunk_size = len(context) // 4
+      chunks = [context[i:i+chunk_size] for i in range(0, len(context), chunk_size)][:4]
+
+      # Create prompts for each chunk
+      prompts = [f"Summarize this section:\n{chunk[:4000]}" for chunk in chunks]
+
+      # Process in parallel
+      summaries = llm_batch(prompts, role='worker')
+      artifacts['summaries'] = summaries
+
+      FINAL("\n\n".join(summaries))
+
+      **Key requirements:**
+      - Must use llm_batch() for parallel processing
+      - Must NOT import concurrent.futures, threading, multiprocessing
+      - Should use context variable (provided by REPL)
+
+      **Common violations:**
+      - Using ThreadPoolExecutor for parallelism
+      - Sequential llm_call() in a loop
+    scoring:
+      - criterion: "Uses llm_batch()"
+        weight: 50
+      - criterion: "No threading/parallel imports"
+        weight: 30
+      - criterion: "Uses artifacts for state"
+        weight: 10
+      - criterion: "Calls FINAL()"
+        weight: 10
+
+  t3_q3_shell_command:
+    tier: 3
+    name: "Run Shell Command"
+    prompt: |
+      You have access to these REPL tools: run_shell(cmd), list_dir(path), peek(n), FINAL(answer)
+      NO IMPORTS ALLOWED - import/from statements are BLOCKED.
+
+      Task: Get the git status of the current directory
+      Write Python code that uses the available tools.
+    expected: "Uses run_shell() not subprocess"
+    auto_score: "contains_pattern:run_shell\\s*\\(;forbidden_pattern:import |subprocess\\.|os\\.system"
+    reference_answer: |
+      result = run_shell('git status')
+      FINAL(result)
+
+      **Key requirements:**
+      - Must use run_shell(cmd) function
+      - Must NOT import subprocess or use os.system()
+      - run_shell() only allows safe commands (git status is allowed)
+
+      **Common violations:**
+      - `import subprocess` then `subprocess.run()`
+      - `import os` then `os.system()`
+      - `os.popen()`
+    scoring:
+      - criterion: "Uses run_shell()"
+        weight: 50
+      - criterion: "No subprocess import"
+        weight: 40
+      - criterion: "Calls FINAL()"
+        weight: 10

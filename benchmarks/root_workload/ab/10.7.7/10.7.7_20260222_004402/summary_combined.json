@@ -1,0 +1,22 @@
+{
+  "A": {
+    "total_tasks": 100,
+    "quality_pass_rate": 0.88,
+    "cost_per_task": 2.00645952,
+    "p95_task_latency": 7.841973500000002,
+    "manual_intervention_rate": 0.1
+  },
+  "B": {
+    "total_tasks": 100,
+    "quality_pass_rate": 0.75,
+    "cost_per_task": 1.7649910800000002,
+    "p95_task_latency": 7.946783499999999,
+    "manual_intervention_rate": 0.04
+  },
+  "deltas": {
+    "delta_quality": -0.13,
+    "delta_cost": -0.12034553281194518,
+    "delta_latency": 0.013365258120292926,
+    "delta_manual_intervention": -0.060000000000000005
+  }
+}

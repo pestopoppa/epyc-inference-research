@@ -1,0 +1,67 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+coder,t3_q1_concurrent_correctness,1.85,3,Well-structured detailed response
+coder,t3_q2_distributed_consistency,1.94,3,Well-structured detailed response
+coder,t3_q3_algorithmic_hardness,1.86,3,Well-structured detailed response
+coder,t2_q1_design,1.88,3,Well-structured detailed response
+coder,t2_q2_debug_complex,1.95,3,Well-structured detailed response
+coder,t2_q3_optimize,1.94,3,Well-structured detailed response
+coder,t2_q4_system,1.96,3,Well-structured detailed response
+coder,t1_q1_algorithm,1.95,3,Well-structured detailed response
+coder,t1_q2_refactor,1.93,3,Well-structured detailed response
+coder,t1_q3_test,1.88,3,Well-structured detailed response
+thinking,t3_q1_methodological_critique,1.97,3,Well-structured detailed response
+thinking,t3_q2_causal_inference,1.95,3,Well-structured detailed response
+thinking,t3_q3_reasoning_trap,1.92,3,Well-structured detailed response
+thinking,t2_q1_paradox,1.93,3,Well-structured detailed response
+thinking,t2_q2_counterfactual,1.95,3,Well-structured detailed response
+thinking,t2_q3_formal,1.97,3,Well-structured detailed response
+thinking,t2_q4_metacognition,1.89,3,Well-structured detailed response
+thinking,t1_q1_multistep,1.94,3,Well-structured detailed response
+thinking,t1_q2_hypothesis,1.97,3,Well-structured detailed response
+thinking,t1_q3_planning,1.93,3,Well-structured detailed response
+math,t3_q1_analysis,1.86,3,Well-structured detailed response
+math,t3_q2_combinatorics,1.9,3,Well-structured detailed response
+math,t3_q3_probability_theory,1.91,3,Well-structured detailed response
+math,t2_q1_optimization,1.95,3,Well-structured detailed response
+math,t2_q2_proof,1.93,3,Well-structured detailed response
+math,t2_q3_calculus,1.95,3,Well-structured detailed response
+math,t2_q4_statistics,1.9,3,Well-structured detailed response
+math,t1_q1_word_problem,1.96,3,Well-structured detailed response
+math,t1_q2_system_equations,1.91,3,Well-structured detailed response
+math,t1_q3_probability,1.94,3,Well-structured detailed response
+instruction_precision,t3_q1_self_referential,1.96,3,Well-structured detailed response
+instruction_precision,t3_q2_cascading_constraints,2.12,1,Short response
+instruction_precision,t3_q3_meta_instruction,2.22,0,Empty or minimal output
+instruction_precision,t2_q1_resist_elaboration,1.96,3,Well-structured detailed response
+instruction_precision,t2_q2_maintain_format,2.04,2,Adequate response
+instruction_precision,t2_q3_empty_handling,4.01,0,Empty or minimal output
+instruction_precision,t2_q4_conflicting_constraints,2.14,1,Short response
+instruction_precision,t1_q1_negative_instruction,2.05,2,Adequate response
+instruction_precision,t1_q2_word_limit,2.08,2,Adequate response
+instruction_precision,t1_q3_structured_format,2.09,1,Short response
+instruction_precision,t1_q4_multiple_constraints,2.05,2,Adequate response
+general,t3_q1_policy_analysis,1.9,3,Well-structured detailed response
+general,t3_q2_system_failure,1.93,3,Well-structured detailed response
+general,t3_q3_strategic_communication,1.91,3,Well-structured detailed response
+general,t2_q1_synthesis,2.01,3,Well-structured detailed response
+general,t2_q2_transform,1.94,3,Well-structured detailed response
+general,t2_q3_schedule,1.94,3,Well-structured detailed response
+general,t2_q4_inconsistency,2.0,3,Well-structured detailed response
+general,t1_q1_json,2.04,2,Adequate response
+general,t1_q2_multistep,1.98,3,Well-structured detailed response
+general,t1_q3_compare,2.0,3,Well-structured detailed response
+agentic,t3_q1_competing_constraints,1.88,3,Well-structured detailed response
+agentic,t3_q2_multi_agent_coordination,1.87,3,Well-structured detailed response
+agentic,t3_q3_adversarial_robustness,1.84,3,Well-structured detailed response
+agentic,t2_q1_ambiguous,2.02,2,Adequate response
+agentic,t2_q2_error_chain,1.98,2,Adequate response
+agentic,t2_q3_schema_edge,2.01,2,Adequate response
+agentic,t2_q4_orchestration,1.95,3,Well-structured detailed response
+agentic,t1_q1_sequential,2.03,2,Adequate response
+agentic,t1_q2_error_handling,2.0,2,Adequate response
+agentic,t1_q3_nested_params,2.0,2,Adequate response
+long_context,t3_q2_contradiction_detection,0.84,3,Well-structured detailed response
+long_context,t3_q3_evolving_requirements,,1,Short response
+long_context,t1_q1_needle,1.23,3,Well-structured detailed response
+long_context,t1_q2_multi_file,1.24,3,Well-structured detailed response
+long_context,t1_q3_extraction,1.08,3,Well-structured detailed response

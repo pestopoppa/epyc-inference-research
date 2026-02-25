@@ -1,0 +1,257 @@
+# Benchmark Suite Manifest
+# Machine-readable documentation of benchmark suite sources
+# Used by reconstruct_suite.py to regenerate prompts from HuggingFace datasets
+
+version: "1.0"
+last_updated: "2026-02-03"
+
+suites:
+  general:
+    description: "General knowledge multiple-choice questions"
+    count: 14042
+    adapter: MMLUAdapter
+    sources:
+      - name: MMLU
+        huggingface_id: cais/mmlu
+        config: all
+        split: test
+        license: MIT
+        url: https://huggingface.co/datasets/cais/mmlu
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite general --sample 100
+
+  math:
+    description: "Mathematical reasoning problems"
+    count: 1819
+    adapter: MathAdapter
+    sources:
+      - name: GSM8K
+        huggingface_id: gsm8k
+        config: main
+        split: test
+        license: MIT
+        url: https://huggingface.co/datasets/gsm8k
+        count: 1319
+      - name: MATH-500
+        huggingface_id: HuggingFaceH4/MATH-500
+        split: test
+        license: MIT
+        url: https://huggingface.co/datasets/HuggingFaceH4/MATH-500
+        count: 500
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite math --sample 100
+
+  coder:
+    description: "Code generation and completion tasks"
+    count: 664
+    adapter: CoderAdapter
+    sources:
+      - name: HumanEval
+        huggingface_id: openai_humaneval
+        split: test
+        license: MIT
+        url: https://huggingface.co/datasets/openai_humaneval
+        count: 164
+      - name: MBPP
+        huggingface_id: mbpp
+        split: test
+        license: CC-BY-4.0
+        url: https://huggingface.co/datasets/mbpp
+        count: 500
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite coder --sample 100
+
+  thinking:
+    description: "Reasoning and commonsense inference"
+    count: 11214
+    adapter: ThinkingAdapter
+    sources:
+      - name: ARC-Challenge
+        huggingface_id: allenai/ai2_arc
+        config: ARC-Challenge
+        split: test
+        license: CC-BY-SA-4.0
+        url: https://huggingface.co/datasets/allenai/ai2_arc
+        count: 1172
+      - name: HellaSwag
+        huggingface_id: Rowan/hellaswag
+        split: validation
+        license: MIT
+        url: https://huggingface.co/datasets/Rowan/hellaswag
+        count: 10042
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite thinking --sample 100
+
+  instruction_precision:
+    description: "Instruction following with verifiable constraints"
+    count: 541
+    adapter: IFEvalAdapter
+    sources:
+      - name: IFEval
+        huggingface_id: google/IFEval
+        split: train
+        license: Apache-2.0
+        url: https://huggingface.co/datasets/google/IFEval
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite instruction_precision --sample 100
+
+  vl:
+    description: "Vision-language understanding (OCR, charts)"
+    count: 3500
+    adapter: VLAdapter
+    sources:
+      - name: OCRBench
+        huggingface_id: echo840/OCRBench
+        split: test
+        license: Apache-2.0
+        url: https://huggingface.co/datasets/echo840/OCRBench
+      - name: ChartQA
+        huggingface_id: ahmed-masry/ChartQA
+        split: test
+        license: GPL-3.0
+        url: https://huggingface.co/datasets/ahmed-masry/ChartQA
+    reconstruction_command: |
+      python scripts/benchmark/extract_vl_debug_suite.py --sample 100
+
+  gaia:
+    description: "Multi-step tool use and reasoning"
+    count: 165
+    adapter: GaiaAdapter
+    sources:
+      - name: GAIA
+        huggingface_id: gaia-benchmark/GAIA
+        config: 2023_all
+        split: validation
+        license: CC-BY-4.0
+        url: https://huggingface.co/datasets/gaia-benchmark/GAIA
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite gaia --sample 50
+
+  cruxeval:
+    description: "Code output/input prediction"
+    count: 1600
+    adapter: CRUXEvalAdapter
+    sources:
+      - name: CRUXEval
+        huggingface_id: cruxeval-org/cruxeval
+        split: test
+        license: MIT
+        url: https://huggingface.co/datasets/cruxeval-org/cruxeval
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite cruxeval --sample 100
+
+  bigcodebench:
+    description: "Multi-library coding tasks"
+    count: 1140
+    adapter: BigCodeBenchAdapter
+    sources:
+      - name: BigCodeBench
+        huggingface_id: bigcode/bigcodebench
+        split: v0.1.2
+        license: Apache-2.0
+        url: https://huggingface.co/datasets/bigcode/bigcodebench
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite bigcodebench --sample 100
+
+  gpqa:
+    description: "Graduate-level science questions"
+    count: 448
+    adapter: GPQAAdapter
+    sources:
+      - name: GPQA
+        huggingface_id: ankner/gpqa
+        split: train
+        license: CC-BY-4.0
+        url: https://huggingface.co/datasets/ankner/gpqa
+        note: "Ungated mirror of Idavidrein/gpqa"
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite gpqa --sample 100
+
+  simpleqa:
+    description: "Short factual questions"
+    count: 4326
+    adapter: SimpleQAAdapter
+    sources:
+      - name: SimpleQA
+        huggingface_id: MAISAAI/openai_simple_qa_test_set
+        split: train
+        license: MIT
+        url: https://huggingface.co/datasets/MAISAAI/openai_simple_qa_test_set
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite simpleqa --sample 100
+
+  hotpotqa:
+    description: "Multi-hop reasoning questions"
+    count: 7405
+    adapter: HotpotQAAdapter
+    sources:
+      - name: HotpotQA
+        huggingface_id: hotpotqa/hotpot_qa
+        config: distractor
+        split: validation
+        license: CC-BY-SA-4.0
+        url: https://huggingface.co/datasets/hotpotqa/hotpot_qa
+        note: "Filtered to 'hard' level only"
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite hotpotqa --sample 100
+
+  livecodebench:
+    description: "Competition programming (LeetCode)"
+    count: 2360
+    adapter: LiveCodeBenchAdapter
+    sources:
+      - name: LeetCode
+        huggingface_id: greengerong/leetcode
+        split: train
+        license: MIT
+        url: https://huggingface.co/datasets/greengerong/leetcode
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite livecodebench --sample 100
+
+  debugbench:
+    description: "Bug finding and fixing"
+    count: 4253
+    adapter: DebugBenchAdapter
+    sources:
+      - name: DebugBench
+        huggingface_id: Rtian/DebugBench
+        split: test
+        license: MIT
+        url: https://huggingface.co/datasets/Rtian/DebugBench
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite debugbench --sample 100
+
+  usaco:
+    description: "Olympiad-level competitive programming"
+    count: 307
+    adapter: USACOAdapter
+    sources:
+      - name: USACO
+        huggingface_id: codegenning/usacobench_formatted
+        split: test
+        license: MIT
+        url: https://huggingface.co/datasets/codegenning/usacobench_formatted
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite usaco --sample 50
+
+# YAML-only suites (no HuggingFace source)
+yaml_only_suites:
+  agentic:
+    description: "Tool calling and agent behavior"
+    source: benchmarks/prompts/v1/agentic.yaml
+    reason: "Custom-designed for orchestrator tool calling patterns"
+
+  long_context:
+    description: "Long context information retrieval"
+    source: benchmarks/prompts/v1/long_context.yaml
+    reason: "Synthetic documents with planted facts"
+
+  mode_advantage:
+    description: "Mode advantage testing (direct vs REPL)"
+    source: benchmarks/prompts/debug/mode_advantage.yaml
+    reason: "Custom-designed for mode comparison"
+
+  mode_advantage_hard:
+    description: "Hard mode advantage testing"
+    source: benchmarks/prompts/debug/mode_advantage_hard.yaml
+    reason: "Custom-designed for mode comparison"

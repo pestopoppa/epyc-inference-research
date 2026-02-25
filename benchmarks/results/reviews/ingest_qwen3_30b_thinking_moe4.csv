@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,19.89,3,Identifies SES and other confounds with detailed explanations
+thinking,t3_q2_causal_inference,19.13,3,Correctly identifies Gene as adjustment set with formal reasoning
+thinking,t3_q3_reasoning_trap,20.00,2,"Identifies test set bias, provides scenario"
+thinking,t2_q1_paradox,19.83,3,Presents both positions with clear arguments
+thinking,t2_q2_counterfactual,19.25,3,Addresses all three dimensions with mechanisms
+thinking,t2_q3_formal,19.82,3,Provides formal proof with correct inference rules
+thinking,t2_q4_metacognition,19.45,3,Complete Fermi estimation with assumptions and bounds
+thinking,t1_q1_multistep,19.90,3,Correct answer: 11:34 AM with work shown
+thinking,t1_q2_hypothesis,19.56,2,Substantial response generated
+thinking,t1_q3_planning,19.95,2,Substantial response generated
+coder,t3_q1_concurrent_correctness,18.80,3,Provides expert-level code with explanation
+coder,t3_q2_distributed_consistency,19.29,2,Provides code or substantial explanation
+coder,t3_q3_algorithmic_hardness,20.48,2,Provides code or substantial explanation
+coder,t2_q1_design,19.36,3,Complete code solution
+coder,t2_q2_debug_complex,19.32,3,Complete code solution
+coder,t2_q3_optimize,19.06,3,Complete code solution
+coder,t2_q4_system,20.22,3,Complete code solution
+coder,t1_q1_algorithm,19.37,3,Provides code solution
+coder,t1_q2_refactor,20.30,3,Provides code solution
+coder,t1_q3_test,20.97,3,Provides code solution
+agentic,t3_q1_competing_constraints,18.82,3,Tool call structure present
+agentic,t3_q2_multi_agent_coordination,19.43,3,Tool call structure present
+agentic,t3_q3_adversarial_robustness,19.51,3,Tool call structure present
+agentic,t2_q1_ambiguous,19.56,3,Tool call structure present
+agentic,t2_q2_error_chain,24.76,3,Tool call structure present
+agentic,t2_q3_schema_edge,21.01,3,Tool call structure present
+agentic,t2_q4_orchestration,19.93,3,Tool call structure present
+agentic,t1_q1_sequential,19.85,3,Tool call structure present
+agentic,t1_q2_error_handling,19.34,3,Tool call structure present
+agentic,t1_q3_nested_params,19.27,3,Tool call structure present
+general,t3_q1_policy_analysis,19.75,3,Comprehensive expert-level response
+general,t3_q2_system_failure,19.25,3,Comprehensive expert-level response
+general,t3_q3_strategic_communication,21.37,3,Comprehensive expert-level response
+general,t2_q1_synthesis,25.24,3,Good general response
+general,t2_q2_transform,19.78,3,Good general response
+general,t2_q3_schedule,18.64,3,Good general response
+general,t2_q4_inconsistency,22.13,3,Good general response
+general,t1_q1_json,28.21,3,Good general response
+general,t1_q2_multistep,20.44,3,Good general response
+general,t1_q3_compare,23.43,3,Good general response
+math,t3_q1_analysis,19.61,3,Formal mathematical proof present
+math,t3_q2_combinatorics,18.96,3,Formal mathematical proof present
+math,t3_q3_probability_theory,20.68,3,Formal mathematical proof present
+math,t2_q1_optimization,20.06,3,Complete mathematical solution
+math,t2_q2_proof,18.90,3,Complete mathematical solution
+math,t2_q3_calculus,22.32,3,Complete mathematical solution
+math,t2_q4_statistics,20.55,3,Complete mathematical solution
+math,t1_q1_word_problem,24.85,3,Complete mathematical solution
+math,t1_q2_system_equations,23.43,3,Complete mathematical solution
+math,t1_q3_probability,23.40,3,Complete mathematical solution
+instruction_precision,t3_q1_self_referential,25.22,2,Follows instructions
+instruction_precision,t3_q2_cascading_constraints,26.12,2,Follows instructions
+instruction_precision,t3_q3_meta_instruction,25.39,2,Follows instructions
+instruction_precision,t2_q1_resist_elaboration,25.85,2,Follows instructions
+instruction_precision,t2_q2_maintain_format,26.13,2,Follows instructions
+instruction_precision,t2_q3_empty_handling,26.49,2,Follows instructions
+instruction_precision,t2_q4_conflicting_constraints,25.03,2,Follows instructions
+instruction_precision,t1_q1_negative_instruction,25.39,2,Follows instructions
+instruction_precision,t1_q2_word_limit,25.87,2,Follows instructions
+instruction_precision,t1_q3_structured_format,23.63,1,Basic response
+instruction_precision,t1_q4_multiple_constraints,26.17,2,Follows instructions

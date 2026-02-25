@@ -1,0 +1,29 @@
+{
+  "model_role": "thinking_deepseek_r1_distill_qwen_14b",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/DeepSeek-R1-Distill-Qwen-14B-GGUF/DeepSeek-R1-Distill-Qwen-14B-Q4_K_M.gguf",
+  "config_name": "spec_draft_deepseek_r1_distill_qwen_1_5b_k32",
+  "run_id": "20251220_214317",
+  "timestamp": "2026-01-17T00:37:01.702700",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 4.907964385102579,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 4.907964385102579,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

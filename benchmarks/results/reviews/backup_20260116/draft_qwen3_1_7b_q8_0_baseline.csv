@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,43.8,1,Echoes prompt without analysis
+general,t3_q2_system_failure,43.7,1,Echoes questions without answers
+general,t3_q3_strategic_communication,39.9,1,Echoes prompt structure only
+general,t2_q1_synthesis,32.6,1,Incomplete synthesis
+general,t2_q2_transform,34.1,1,Incomplete transformation
+general,t2_q3_schedule,34.5,1,No valid schedule produced
+general,t2_q4_inconsistency,33.9,1,Incomplete analysis
+general,t1_q1_json,35.2,2,Partial JSON structure
+general,t1_q2_multistep,34.8,1,Incomplete solution
+general,t1_q3_compare,33.5,2,Basic comparison attempted
+thinking,t3_q1_methodological_critique,35.1,1,Echoes prompt without issues
+thinking,t3_q2_causal_inference,34.8,0,Just lists questions
+thinking,t3_q3_reasoning_trap,33.8,1,Echoes scenario without flaw ID
+thinking,t2_q1_paradox,36.2,1,Minimal philosophical content
+thinking,t2_q2_counterfactual,35.8,1,Limited analysis
+thinking,t2_q3_formal,37.1,1,Incomplete proof
+thinking,t2_q4_metacognition,36.5,1,Lists steps without estimates
+thinking,t1_q1_multistep,38.2,2,Shows work but unclear answer
+thinking,t1_q2_hypothesis,37.5,1,Limited alternatives
+thinking,t1_q3_planning,35.4,0,No valid orderings

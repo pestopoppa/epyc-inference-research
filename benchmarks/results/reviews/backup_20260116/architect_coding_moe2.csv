@@ -1,0 +1,34 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t1_q1_multistep,7.2,0,Incoherent - mixes train problem with unrelated sales tax content
+thinking,t1_q2_hypothesis,7.3,0,Garbled fragments - no coherent alternative explanations provided
+thinking,t1_q3_planning,9.1,0,Repetitive numbers instead of plant orderings - no valid solution
+thinking,t2_q1_paradox,7.3,1,Starts discussing Ship of Theseus but incomplete and rambling
+thinking,t2_q2_counterfactual,7.3,0,Incoherent meta-commentary instead of counterfactual analysis
+thinking,t2_q3_formal,7.2,1,Attempts proof structure but logic is confused and incomplete
+thinking,t2_q4_metacognition,7.4,0,Rambling about Fermi without actual estimation
+thinking,t3_q1_methodological_critique,7.3,0,Repetitive "MyText" garbage - completely broken output
+thinking,t3_q2_causal_inference,7.8,0,Repetitive numbers "100 100 100" - completely broken output
+thinking,t3_q3_reasoning_trap,8.4,1,Some relevant content about accuracy metrics but incoherent overall
+agentic,t1_q1_sequential,9.4,0,Malformed JSON - broken syntax with missing brackets
+agentic,t1_q2_error_handling,7.0,1,Attempts error analysis but incomplete and confused
+agentic,t1_q3_nested_params,6.9,0,Broken JSON structure
+agentic,t2_q1_ambiguous,7.5,0,Failed to identify ambiguity or ask clarifying question
+agentic,t2_q2_error_chain,7.6,0,No coherent error chain analysis
+agentic,t2_q3_schema_edge,7.7,0,Invalid schema response
+agentic,t2_q4_orchestration,7.8,0,Incomplete orchestration plan
+agentic,t3_q1_competing_constraints,8.1,0,Incoherent constraint handling
+agentic,t3_q2_multi_agent_coordination,8.2,0,No valid multi-agent plan
+agentic,t3_q3_adversarial_robustness,8.3,0,No security analysis
+coder,t1_q1_algorithm,7.0,1,Partially discusses binary search but confused explanation
+coder,t1_q2_refactor,8.9,2,Shows O(n) optimization with set - reasonable structure
+coder,t1_q3_test,8.4,2,Pytest structure present but incomplete test coverage
+coder,t2_q1_design,8.2,1,Attempts LRU cache but code has syntax errors
+coder,t2_q2_debug_complex,7.3,0,Claims no race condition exists - wrong analysis
+coder,t2_q3_optimize,8.2,2,Hash map approach is correct for pair counting
+coder,t2_q4_system,7.2,2,Rate limiter structure is reasonable
+coder,t3_q1_concurrent_correctness,1000000.0,0,Empty output - generation failed
+coder,t3_q2_distributed_consistency,7.1,0,Question repetition instead of answer
+coder,t3_q3_algorithmic_hardness,7.2,0,Question repetition instead of answer
+long_context,t1_q1_needle,2.0,0,Generic template instead of actual extracted values
+long_context,t1_q2_multi_file,2.1,0,No actual bug analysis - just template format
+long_context,t1_q3_extraction,1.5,0,Repetitive template garbage

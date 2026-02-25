@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,65.2,2,Detailed response
+general,t3_q2_system_failure,58.6,2,Detailed response
+general,t3_q3_strategic_communication,65.1,2,Detailed response
+general,t2_q1_synthesis,60.9,2,Detailed response
+general,t2_q2_transform,57.4,2,Detailed response
+general,t2_q3_schedule,58.2,2,Detailed response
+general,t2_q4_inconsistency,60.2,1,No JSON structure found
+general,t1_q1_json,62.7,3,Valid JSON structure present
+general,t1_q2_multistep,57.8,2,Detailed response
+general,t1_q3_compare,66.8,2,Detailed response
+thinking,t3_q1_methodological_critique,57.4,3,Detailed logical reasoning provided
+thinking,t3_q2_causal_inference,71.0,2,Detailed response
+thinking,t3_q3_reasoning_trap,68.5,2,Detailed response
+thinking,t2_q1_paradox,58.3,2,Detailed response
+thinking,t2_q2_counterfactual,58.6,3,Sequence answer with reasoning
+thinking,t2_q3_formal,58.0,2,Detailed response
+thinking,t2_q4_metacognition,55.1,2,Numeric answer present
+thinking,t1_q1_multistep,59.2,2,Detailed response
+thinking,t1_q2_hypothesis,46.9,2,Detailed response
+thinking,t1_q3_planning,36.7,2,Detailed response

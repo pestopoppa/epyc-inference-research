@@ -1,0 +1,21 @@
+question_id,score,reason
+general/t1_q1_json,0,BROKEN: repeated 'Let\'s see' loop
+general/t1_q2_multistep,2,Processing steps
+general/t1_q3_compare,2,Comparison
+general/t2_q1_synthesis,2,Synthesis
+general/t2_q2_transform,2,YAML transform
+general/t2_q3_schedule,2,Scheduling
+general/t2_q4_inconsistency,2,Finds issues
+general/t3_q1_policy_analysis,2,Policy critique
+general/t3_q2_system_failure,2,Root cause
+general/t3_q3_strategic_communication,2,Board prep
+thinking/t1_q1_multistep,1,Confused reasoning about direction
+thinking/t1_q2_hypothesis,2,Identifies confounders
+thinking/t1_q3_planning,2,Constraint analysis
+thinking/t2_q1_paradox,2,Philosophical positions
+thinking/t2_q2_counterfactual,2,Structured analysis
+thinking/t2_q3_formal,0,BROKEN: repeated 'please' loop
+thinking/t2_q4_metacognition,2,Fermi attempt
+thinking/t3_q1_methodological_critique,2,Standard critique
+thinking/t3_q2_causal_inference,2,Adjustment concept
+thinking/t3_q3_reasoning_trap,2,Test set issue

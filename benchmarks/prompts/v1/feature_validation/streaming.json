@@ -1,0 +1,61 @@
+[
+  {
+    "id": "stream_01",
+    "prompt": "List 10 common sorting algorithms with their average time complexity.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "source": "general.yaml",
+    "rubric": {
+      "must_include": {"bubble sort": "O(n²)", "quicksort": "O(n log n)", "merge sort": "O(n log n)", "heap sort": "O(n log n)", "insertion sort": "O(n²)"},
+      "pass_if": "lists 10 algorithms with correct average complexities for at least 8"
+    }
+  },
+  {
+    "id": "stream_02",
+    "prompt": "Write a Python decorator that memoizes function results.",
+    "role": "coder_escalation",
+    "mode": "repl",
+    "source": "coder.yaml",
+    "rubric": {
+      "must_contain": ["functools.wraps or manual wrapper", "cache dict", "check cache before calling", "store result in cache"],
+      "reference": "def memoize(func):\n    cache = {}\n    @functools.wraps(func)\n    def wrapper(*args):\n        if args not in cache:\n            cache[args] = func(*args)\n        return cache[args]\n    return wrapper",
+      "pass_if": "working decorator that caches results for repeated calls"
+    }
+  },
+  {
+    "id": "stream_03",
+    "prompt": "Explain how TLS 1.3 handshake works compared to TLS 1.2.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "source": "general.yaml",
+    "rubric": {
+      "tls13_improvements": ["1-RTT handshake (vs 2-RTT in 1.2)", "0-RTT resumption", "removed RSA key exchange", "mandatory forward secrecy (ECDHE)"],
+      "must_mention": ["fewer cipher suites (simplified)", "encrypted extensions", "no renegotiation"],
+      "pass_if": "correctly describes 1-RTT advantage and >=2 other TLS 1.3 improvements"
+    }
+  },
+  {
+    "id": "stream_04",
+    "prompt": "What are the key differences between processes and threads?",
+    "role": "frontdoor",
+    "mode": "direct",
+    "source": "general.yaml",
+    "rubric": {
+      "must_mention": ["separate address space (process) vs shared (thread)", "heavier creation cost for processes", "IPC needed for processes, shared memory for threads", "crash isolation (process crash doesn't kill others)"],
+      "pass_if": "covers memory isolation, creation cost, and communication differences"
+    }
+  },
+  {
+    "id": "stream_05",
+    "prompt": "Implement a simple LRU cache in Python with O(1) get and put.",
+    "role": "coder_escalation",
+    "mode": "repl",
+    "source": "coder.yaml",
+    "rubric": {
+      "must_use": "OrderedDict or doubly-linked list + hash map",
+      "operations": {"get": "O(1) lookup + move to end", "put": "O(1) insert/update, evict LRU if over capacity"},
+      "reference": "from collections import OrderedDict\nclass LRUCache:\n    def __init__(self, capacity):\n        self.cache = OrderedDict()\n        self.capacity = capacity\n    def get(self, key):\n        if key not in self.cache: return -1\n        self.cache.move_to_end(key)\n        return self.cache[key]\n    def put(self, key, value):\n        if key in self.cache: self.cache.move_to_end(key)\n        self.cache[key] = value\n        if len(self.cache) > self.capacity:\n            self.cache.popitem(last=False)",
+      "pass_if": "O(1) get and put with correct LRU eviction"
+    }
+  }
+]

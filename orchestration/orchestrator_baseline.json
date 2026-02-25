@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "created": null,
+    "description": "Baseline results from direct large model for quality comparison",
+    "benchmark_version": "v1",
+    "notes": "Fill in by running compare_orchestrator_direct.py --create-baseline"
+  },
+  "model": {
+    "name": null,
+    "path": null,
+    "acceleration": null
+  },
+  "prompts": {}
+}

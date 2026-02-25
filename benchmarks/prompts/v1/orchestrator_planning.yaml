@@ -1,0 +1,341 @@
+# Orchestrator Planning Benchmark
+# Claude-as-Judge evaluation for routing and planning quality
+# Used for MemRL Q-value graded rewards
+#
+# Scoring rubric (0-3):
+#   3 = Perfect routing/plan
+#   2 = Acceptable, could be optimized
+#   1 = Suboptimal, likely hurt performance
+#   0 = Completely wrong
+
+version: "1.0"
+benchmark_type: orchestrator_planning
+scoring_method: claude_as_judge
+
+# Routing evaluation questions
+routing:
+  t1_basic:
+    - id: op_r1_code_simple
+      query: "Fix the typo in the README file"
+      expected_routing: ["worker_general"]
+      wrong_routing: ["coder_primary", "architect_general"]
+      scoring_criteria:
+        - "Simple doc fix should go to worker tier, not specialist"
+        - "No code generation needed"
+
+    - id: op_r1_code_moderate
+      query: "Add a logout button to the user profile page"
+      expected_routing: ["coder_primary"]
+      wrong_routing: ["worker_general", "architect_general"]
+      scoring_criteria:
+        - "UI code change needs coder specialist"
+        - "Not complex enough for architect"
+
+    - id: op_r1_ingest
+      query: "Summarize this 50,000 word research paper and identify key claims"
+      expected_routing: ["ingest_long_context"]
+      wrong_routing: ["coder_primary", "worker_general"]
+      scoring_criteria:
+        - "Long document requires ingestion specialist"
+        - "50K words exceeds standard context"
+
+    - id: op_r1_math
+      query: "Prove that the sum of first n integers equals n(n+1)/2"
+      expected_routing: ["worker_math"]
+      wrong_routing: ["coder_primary", "worker_general"]
+      scoring_criteria:
+        - "Mathematical proof needs math specialist"
+        - "Not a coding task"
+
+    - id: op_r1_vision
+      query: "Extract the form fields from this screenshot of a signup page"
+      expected_routing: ["worker_vision"]
+      wrong_routing: ["coder_primary", "worker_general"]
+      scoring_criteria:
+        - "Image input requires vision specialist"
+        - "OCR/structure extraction task"
+
+  t2_nuanced:
+    - id: op_r2_refactor
+      query: "Refactor the authentication module to use JWT instead of sessions"
+      expected_routing: ["coder_primary", "worker_general"]
+      wrong_routing: ["worker_general"]
+      scoring_criteria:
+        - "Multi-file refactor needs specialist + workers"
+        - "Worker alone insufficient for architectural change"
+
+    - id: op_r2_debug
+      query: "The API returns 500 errors intermittently under load - investigate and fix"
+      expected_routing: ["coder_primary"]
+      wrong_routing: ["worker_general"]
+      scoring_criteria:
+        - "Complex debugging needs specialist"
+        - "May require architectural understanding"
+      escalation_hint: "May escalate to architect if root cause is architectural"
+
+    - id: op_r2_mixed
+      query: "Add dark mode support and document the theme system"
+      expected_routing: ["coder_primary", "worker_general"]
+      wrong_routing: ["worker_general"]
+      scoring_criteria:
+        - "Feature + documentation needs both"
+        - "Code change is non-trivial"
+
+  t3_complex:
+    - id: op_r3_architecture
+      query: "Design a microservices migration plan for the monolith"
+      expected_routing: ["architect_general"]
+      wrong_routing: ["coder_primary"]
+      scoring_criteria:
+        - "System design requires architect tier"
+        - "Not an implementation task"
+
+    - id: op_r3_ambiguous
+      query: "Make the app faster"
+      expected_routing: ["coder_primary"]
+      expected_assumptions:
+        - "Assumes profiling needed first"
+        - "May escalate to architect"
+      scoring_criteria:
+        - "Ambiguous task should start with investigation"
+        - "Should not go directly to architect without data"
+
+    - id: op_r3_multi_domain
+      query: "Create a dashboard showing API latency metrics from the logs with a visualization"
+      expected_routing: ["coder_primary", "ingest_long_context", "worker_vision"]
+      scoring_criteria:
+        - "Log processing needs ingestion"
+        - "Code for dashboard needs coder"
+        - "Visualization may need vision"
+
+# Plan quality evaluation questions
+planning:
+  t1_basic:
+    - id: op_p1_add_feature
+      query: "Add a delete button to the user profile"
+      expected_plan_elements:
+        - "Identify profile component location"
+        - "Add button to UI"
+        - "Create delete API endpoint"
+        - "Add confirmation dialog"
+        - "Handle success/error states"
+        - "Run tests"
+      wrong_plan_elements:
+        - "Immediately write code without exploration"
+        - "Skip confirmation dialog"
+        - "Skip error handling"
+
+    - id: op_p1_fix_bug
+      query: "Fix the broken login form validation"
+      expected_plan_elements:
+        - "Reproduce the bug"
+        - "Identify validation logic location"
+        - "Fix the validation rule"
+        - "Add test case for the fix"
+        - "Verify fix works"
+      wrong_plan_elements:
+        - "Rewrite entire login form"
+        - "Skip reproduction step"
+
+  t2_moderate:
+    - id: op_p2_refactor
+      query: "Refactor the database queries to use an ORM"
+      expected_plan_elements:
+        - "Audit existing raw queries"
+        - "Choose ORM (or document assumption)"
+        - "Create data models"
+        - "Migrate queries incrementally"
+        - "Run integration tests after each migration"
+        - "Remove raw query code"
+        - "Update documentation"
+      dependencies:
+        - "Models must exist before migration"
+        - "Tests must run after each step"
+      gates: ["lint", "typecheck", "unit", "integration"]
+
+    - id: op_p2_add_auth
+      query: "Add OAuth2 login with Google"
+      expected_plan_elements:
+        - "Research OAuth2 flow"
+        - "Add OAuth2 library"
+        - "Create Google credentials"
+        - "Implement callback handler"
+        - "Create/update user on login"
+        - "Store refresh tokens securely"
+        - "Add tests"
+      security_considerations:
+        - "Token storage"
+        - "CSRF protection"
+        - "Session management"
+
+  t3_complex:
+    - id: op_p3_migration
+      query: "Migrate from PostgreSQL to MongoDB"
+      expected_plan_elements:
+        - "Audit current schema"
+        - "Design document structure"
+        - "Create migration scripts"
+        - "Set up MongoDB instance"
+        - "Migrate data in batches"
+        - "Update application code"
+        - "Run parallel systems for validation"
+        - "Cut over with rollback plan"
+        - "Deprecate PostgreSQL"
+      wrong_plan_elements:
+        - "Direct cutover without parallel run"
+        - "Migrate all data at once"
+        - "Skip rollback plan"
+      escalation_required: true
+
+    - id: op_p3_distributed
+      query: "Add distributed caching with Redis for the API"
+      expected_plan_elements:
+        - "Identify cacheable endpoints"
+        - "Design cache invalidation strategy"
+        - "Set up Redis cluster"
+        - "Implement cache layer"
+        - "Add cache warming"
+        - "Monitor cache hit rate"
+        - "Handle cache failures gracefully"
+      architecture_decisions:
+        - "Write-through vs write-behind"
+        - "TTL strategy"
+        - "Cluster topology"
+
+# Escalation evaluation questions
+escalation:
+  t1_should_escalate:
+    - id: op_e1_arch_needed
+      scenario:
+        task: "Redesign the event system"
+        tier: "B1"
+        failure_count: 2
+        failure_type: "architectural_mismatch"
+      expected_decision: escalate
+      expected_to: "B3"
+      scoring_criteria:
+        - "Architectural issues should escalate to architect"
+        - "Two failures on design indicates need for higher reasoning"
+
+    - id: op_e1_persistent_fail
+      scenario:
+        task: "Fix flaky test"
+        tier: "C"
+        failure_count: 3
+        failure_type: "test_failure"
+      expected_decision: escalate
+      expected_to: "B1"
+      scoring_criteria:
+        - "Worker unable to fix should escalate to specialist"
+        - "Three failures indicates complexity"
+
+  t2_should_not_escalate:
+    - id: op_e2_transient
+      scenario:
+        task: "Update config file"
+        tier: "C"
+        failure_count: 1
+        failure_type: "typo"
+      expected_decision: retry
+      scoring_criteria:
+        - "Single failure from typo should retry"
+        - "No need to escalate for simple fix"
+
+    - id: op_e2_first_failure
+      scenario:
+        task: "Implement feature"
+        tier: "B1"
+        failure_count: 1
+        failure_type: "lint_error"
+      expected_decision: retry
+      scoring_criteria:
+        - "First lint failure should retry"
+        - "Give agent chance to self-correct"
+
+# Claude-as-Judge prompts
+judge_prompts:
+  routing:
+    system: |
+      You are evaluating the quality of orchestrator routing decisions.
+      Score from 0-3 based on whether the specialist selection matches the task requirements.
+
+    template: |
+      TASK:
+      - Type: {task_type}
+      - Objective: {objective}
+      - Priority: {priority}
+      - Has images: {has_images}
+
+      ROUTING DECISION: {routing}
+
+      EXPECTED ROUTING: {expected_routing}
+      WRONG ROUTING OPTIONS: {wrong_routing}
+
+      OUTCOME: {outcome}
+
+      Score the routing decision:
+      3 = Matches expected routing exactly
+      2 = Acceptable alternative routing
+      1 = Suboptimal but not completely wrong
+      0 = Matches wrong routing or completely inappropriate
+
+      Respond with:
+      SCORE: <0-3>
+      REASON: <brief explanation>
+
+  planning:
+    system: |
+      You are evaluating the quality of orchestrator task plans.
+      Score from 0-3 based on completeness, ordering, and appropriateness.
+
+    template: |
+      TASK:
+      - Objective: {objective}
+
+      PLAN STEPS:
+      {steps}
+
+      EXPECTED ELEMENTS:
+      {expected_elements}
+
+      MISSING ELEMENTS:
+      {missing_elements}
+
+      OUTCOME: {outcome}
+
+      Score the plan:
+      3 = All expected elements present, correctly ordered
+      2 = Most elements present, minor ordering issues
+      1 = Major gaps or incorrect dependencies
+      0 = Missing critical elements or incoherent
+
+      Respond with:
+      SCORE: <0-3>
+      REASON: <brief explanation>
+
+  escalation:
+    system: |
+      You are evaluating escalation decisions.
+      Score based on whether the decision was appropriate for the failure context.
+
+    template: |
+      SCENARIO:
+      - Task: {task}
+      - Current tier: {tier}
+      - Failure count: {failure_count}
+      - Failure type: {failure_type}
+
+      DECISION: {decision}
+      TARGET TIER: {target_tier}
+
+      EXPECTED: {expected_decision}
+
+      Score the decision:
+      3 = Correct decision with appropriate target
+      2 = Correct decision but suboptimal target
+      1 = Wrong decision but understandable
+      0 = Completely wrong decision
+
+      Respond with:
+      SCORE: <0-3>
+      REASON: <brief explanation>

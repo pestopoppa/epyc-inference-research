@@ -1,0 +1,11 @@
+Write a function to calculate factorial, then improve it to handle edge cases.
+
+---
+test_id: t2_iterative_refine
+expected_behavior: Multi-turn improvement - first draft then refinement
+pass_criteria:
+  max_turns: 8
+  uses_function: ["llm_call"]
+  llm_call_min_count: 2
+  answer_contains: ["def", "factorial", "if", "return"]
+  must_call_final: true

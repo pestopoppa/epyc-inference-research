@@ -1,0 +1,60 @@
+Claude-as-Judge Scoring Summary
+=================================
+
+Model: coder_primary (Qwen3-Coder-30B-A3B-Instruct-Q4_K_M)
+Configuration: moe6 (6 experts active)
+Run ID: 20251220_214317
+Review Date: 2026-01-07
+
+Overall Performance
+-------------------
+Total Score: 139/183 (76.0%)
+Average Tokens/Second: 17.56 t/s
+Total Questions: 61
+
+Score Distribution
+------------------
+  3 (Correct with good reasoning):  17 questions (27.9%)
+  2 (Partial/truncated):             44 questions (72.1%)
+  1 (Wrong but attempted):            0 questions (0.0%)
+  0 (Empty/no answer):                0 questions (0.0%)
+
+Per-Suite Breakdown
+-------------------
+Suite                     Score           Percentage    Questions
+----------------------------------------------------------------------
+agentic                   22/30           73.3%         10
+coder                     27/30           90.0%         10
+general                   22/30           73.3%         10
+instruction_precision     24/33           72.7%         11
+math                      21/30           70.0%         10
+thinking                  23/30           76.7%         10
+
+Key Findings
+------------
+
+Strengths:
+- Excellent performance on coder suite (90.0%)
+- Strong reasoning on thinking questions (76.7%)
+- Good agentic/tool use responses (73.3%)
+- Consistent output (0% empty or failed responses)
+- Balanced performance across all suites (70-90%)
+- No score=1 responses indicates consistent quality floor
+
+Weaknesses:
+- Math suite slightly lower (70.0%)
+- Most responses scored as "partial" (72.1% with score=2)
+- Some confusion on complex causal inference (T3 level)
+
+Notable Performance:
+- T3 methodological critique: Identified 6+ methodological issues
+- T3 causal inference: Showed reasoning but with some confusion
+- Coder tasks: Strong code generation, refactoring, and test writing
+- Instruction precision: Good format compliance (72.7%)
+
+Recommendations:
+- Model performs well as a code specialist (90% on coder suite)
+- Suitable for general reasoning tasks (73-77% on thinking/agentic)
+- Good for instruction-following tasks (72.7%)
+- Average speed of 17.56 t/s is acceptable for interactive use
+- Overall 76% score indicates strong general capability

@@ -1,0 +1,66 @@
+[
+  {
+    "id": "math_01",
+    "prompt": "Solve: integral of x^2 * e^x dx from 0 to 1",
+    "role": "frontdoor",
+    "mode": "direct",
+    "source": "math.yaml",
+    "rubric": {
+      "method": "integration by parts (tabular method or 3 applications)",
+      "exact_answer": "e - 2",
+      "numeric_answer": 0.71828,
+      "pass_if": "arrives at e - 2 ≈ 0.718 via integration by parts"
+    }
+  },
+  {
+    "id": "math_02",
+    "prompt": "Find all solutions to x^3 - 6x^2 + 11x - 6 = 0",
+    "role": "frontdoor",
+    "mode": "repl",
+    "source": "math.yaml",
+    "rubric": {
+      "solutions": [1, 2, 3],
+      "method": "factor as (x-1)(x-2)(x-3) = 0 or rational root theorem",
+      "pass_if": "finds all three roots: x = 1, 2, 3"
+    }
+  },
+  {
+    "id": "math_03",
+    "prompt": "Prove that the sum of the first n odd numbers equals n^2",
+    "role": "frontdoor",
+    "mode": "direct",
+    "source": "math.yaml",
+    "rubric": {
+      "valid_methods": ["mathematical induction", "telescoping sum", "geometric/visual proof", "algebraic: sum of (2k-1) for k=1..n"],
+      "key_step_induction": "assume sum(k=1..n) = n², show sum(k=1..n+1) = n² + (2n+1) = (n+1)²",
+      "pass_if": "provides a complete proof by any valid method"
+    }
+  },
+  {
+    "id": "math_04",
+    "prompt": "What is the eigenvalue decomposition of the matrix [[2,1],[1,2]]?",
+    "role": "frontdoor",
+    "mode": "repl",
+    "source": "math.yaml",
+    "rubric": {
+      "eigenvalues": [3, 1],
+      "eigenvectors": {"lambda_3": "[1,1] (normalized: [1/√2, 1/√2])", "lambda_1": "[1,-1] (normalized: [1/√2, -1/√2])"},
+      "decomposition": "A = PDP^(-1) where D=diag(3,1), P=[[1,1],[1,-1]]/√2",
+      "pass_if": "correct eigenvalues (3,1) and orthogonal eigenvectors"
+    }
+  },
+  {
+    "id": "math_05",
+    "prompt": "Simplify: (sin^2(x) + cos^2(x))^2 - 2*sin^2(x)*cos^2(x)",
+    "role": "frontdoor",
+    "mode": "direct",
+    "source": "math.yaml",
+    "rubric": {
+      "step1": "sin²x + cos²x = 1, so first term = 1² = 1",
+      "step2": "2sin²x·cos²x = sin²(2x)/2 (double angle)",
+      "simplified": "1 - sin²(2x)/2 = 1 - (1-cos(2x))/2·(1+cos(2x))/2... OR simply: sin⁴x + cos⁴x",
+      "final_answer": "sin⁴(x) + cos⁴(x) = 1 - 2sin²(x)cos²(x)",
+      "pass_if": "simplifies to sin⁴x + cos⁴x or equivalently 1 - sin²(2x)/2"
+    }
+  }
+]

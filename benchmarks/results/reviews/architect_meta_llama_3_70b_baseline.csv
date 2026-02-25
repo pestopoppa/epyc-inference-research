@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,14.66,0,Empty output - only echoed prompt
+thinking,t3_q2_causal_inference,13.6,0,Empty output - only echoed prompt
+thinking,t3_q3_reasoning_trap,25.33,0,Empty output - only echoed prompt
+thinking,t2_q1_paradox,19.11,0,Empty output - only echoed prompt
+thinking,t2_q2_counterfactual,17.93,0,Empty output - only echoed prompt
+thinking,t2_q3_formal,12.86,0,Empty output - only echoed prompt
+thinking,t2_q4_metacognition,18.19,0,Empty output - only echoed prompt
+thinking,t1_q1_multistep,17.57,0,Empty output - only echoed prompt
+thinking,t1_q2_hypothesis,17.64,0,Empty output - only echoed prompt
+thinking,t1_q3_planning,18.65,0,Empty output - only echoed prompt
+coder,t3_q1_concurrent_correctness,31.14,0,Empty output - only echoed prompt
+coder,t3_q2_distributed_consistency,N/A,2,Partial answer - listed strategies but cut off mid-sentence
+coder,t3_q3_algorithmic_hardness,N/A,2,Partial answer - started adversary argument but truncated
+coder,t2_q1_design,N/A,3,Correct LRU cache implementation with OrderedDict
+coder,t2_q2_debug_complex,16.43,0,Empty output - only echoed prompt
+coder,t2_q3_optimize,17.25,0,Empty output - only echoed prompt
+coder,t2_q4_system,N/A,3,Correct rate limiter implementation with deque and unit tests
+coder,t1_q1_algorithm,N/A,2,Identified bugs correctly but solution has issues
+coder,t1_q2_refactor,N/A,3,Correct optimized versions with complexity analysis
+coder,t1_q3_test,10.82,0,Empty output - only echoed prompt
+agentic,t3_q1_competing_constraints,29.63,0,Empty output - only echoed prompt
+agentic,t3_q2_multi_agent_coordination,36.37,0,Empty output - only echoed prompt
+agentic,t3_q3_adversarial_robustness,33.91,0,Empty output - only echoed prompt
+agentic,t2_q1_ambiguous,26.07,0,Empty output - only echoed prompt
+agentic,t2_q2_error_chain,35.1,0,Empty output - only echoed prompt
+agentic,t2_q3_schema_edge,2.28,3,Correct JSON tool call with proper null body and auth header
+agentic,t2_q4_orchestration,N/A,3,Valid deployment plan with proper error handling steps
+agentic,t1_q1_sequential,1.13,3,Correct tool call sequence in JSON array format
+agentic,t1_q2_error_handling,18.54,0,Empty output - only echoed prompt
+agentic,t1_q3_nested_params,1.13,3,Correct nested JSON structure with all required fields
+general,t3_q1_policy_analysis,N/A,2,Good failure mode analysis but truncated before amendments
+general,t3_q2_system_failure,18.34,0,Empty output - only echoed prompt
+general,t3_q3_strategic_communication,N/A,2,Reasonable opening statement but truncated mid-sentence
+general,t2_q1_synthesis,1.13,3,Good balanced recommendation addressing all three perspectives
+general,t2_q2_transform,N/A,2,Started correct YAML transformation but truncated
+general,t2_q3_schedule,20.78,0,Empty output - only echoed prompt
+general,t2_q4_inconsistency,15.32,0,Empty output - only echoed prompt
+general,t1_q1_json,1.14,3,Correct JSON extraction with all required fields
+general,t1_q2_multistep,1.13,1,Wrong output - showed counts in parentheses instead of numbered list
+general,t1_q3_compare,15.73,0,Empty output - only echoed prompt
+math,t3_q1_analysis,16.26,0,Empty output - only echoed prompt
+math,t3_q2_combinatorics,1.13,1,Stated answer without proof - no combinatorial reasoning
+math,t3_q3_probability_theory,18.62,0,Empty output - only echoed prompt
+math,t2_q1_optimization,1.32,2,Correct answer (100,50) but no work shown
+math,t2_q2_proof,31.18,0,Empty output - only echoed prompt
+math,t2_q3_calculus,2.47,2,Correct answer (8) but no work shown
+math,t2_q4_statistics,19.14,0,Empty output - only echoed prompt
+math,t1_q1_word_problem,20.06,0,Empty output - only echoed prompt
+math,t1_q2_system_equations,12.16,0,Empty output - only echoed prompt
+math,t1_q3_probability,18.33,0,Empty output - only echoed prompt
+instruction_precision,t3_q1_self_referential,21.45,0,Empty output - only echoed prompt
+instruction_precision,t3_q2_cascading_constraints,21.69,0,Empty output - only echoed prompt
+instruction_precision,t3_q3_meta_instruction,19.65,0,Empty output - only echoed prompt
+instruction_precision,t2_q1_resist_elaboration,2.47,3,Correct - output only the number 4
+instruction_precision,t2_q2_maintain_format,2.33,3,Correct format with all three required fields
+instruction_precision,t2_q3_empty_handling,N/A,1,Output NONE but then elaborated with examples
+instruction_precision,t2_q4_conflicting_constraints,1.14,3,Correct sentence meeting all constraints
+instruction_precision,t1_q1_negative_instruction,N/A,1,Failed constraint - did not mention sun but truncated and awkward
+instruction_precision,t1_q2_word_limit,1.14,2,Good description but likely not exactly 20-25 words
+instruction_precision,t1_q3_structured_format,7.55,0,Empty output - only echoed prompt
+instruction_precision,t1_q4_multiple_constraints,1.14,3,Correct - 5 countries in alphabetical order

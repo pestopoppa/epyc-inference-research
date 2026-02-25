@@ -1,0 +1,31 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,0.0,2,General response generated
+general,t3_q2_system_failure,0.0,2,General response generated
+general,t3_q3_strategic_communication,0.0,2,General response generated
+general,t2_q1_synthesis,0.0,2,General response generated
+general,t2_q2_transform,0.0,2,General response generated
+general,t2_q3_schedule,0.0,2,General response generated
+general,t2_q4_inconsistency,0.0,2,General response generated
+general,t1_q1_json,0.0,2,General response generated
+general,t1_q2_multistep,0.0,2,General response generated
+general,t1_q3_compare,0.0,2,General response generated
+vl,t3_q1_scientific_diagram,11.22,3,Image analysis present
+vl,t3_q2_architectural_blueprint,13.16,2,Visual description present
+vl,t3_q3_multi_image_temporal,13.64,3,Image analysis present
+vl,t2_q1_math,15.8,2,Visual description present
+vl,t2_q2_flowchart,15.03,2,Visual description present
+vl,t2_q3_diff,15.6,3,Image analysis present
+vl,t2_q4_puzzle,15.41,2,Visual description present
+vl,t1_q1_chart,15.45,3,Image analysis present
+vl,t1_q2_invoice,15.54,2,Visual description present
+vl,t1_q3_code,15.09,2,Visual description present
+agentic,t3_q1_competing_constraints,0.0,1,No tool call structure
+agentic,t3_q2_multi_agent_coordination,0.0,1,No tool call structure
+agentic,t3_q3_adversarial_robustness,0.0,1,No tool call structure
+agentic,t2_q1_ambiguous,0.0,1,No tool call structure
+agentic,t2_q2_error_chain,0.0,1,No tool call structure
+agentic,t2_q3_schema_edge,0.0,1,No tool call structure
+agentic,t2_q4_orchestration,0.0,1,No tool call structure
+agentic,t1_q1_sequential,0.0,1,No tool call structure
+agentic,t1_q2_error_handling,0.0,1,No tool call structure
+agentic,t1_q3_nested_params,0.0,1,No tool call structure

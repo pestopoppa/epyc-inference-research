@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,73.83,3,Correctly identified 4 methodological issues with explanations
+thinking,t3_q2_causal_inference,73.83,3,Correctly addressed all 3 parts of causal inference question
+thinking,t3_q3_reasoning_trap,73.83,3,Identified flaw and constructed detailed scenario
+thinking,t2_q1_paradox,73.83,1,"Response stuck in repetition loop, attempted answer but low quality"
+thinking,t2_q2_counterfactual,73.83,2,Reasonable thinking/reasoning response
+thinking,t2_q3_formal,73.83,2,Reasonable thinking/reasoning response
+thinking,t2_q4_metacognition,73.83,2,Reasonable thinking/reasoning response
+thinking,t1_q1_multistep,73.83,2,Reasonable thinking/reasoning response
+thinking,t1_q2_hypothesis,73.83,2,Reasonable thinking/reasoning response
+thinking,t1_q3_planning,73.83,2,Reasonable thinking/reasoning response
+coder,t3_q1_concurrent_correctness,73.83,3,Complete code solution with explanation
+coder,t3_q2_distributed_consistency,73.83,3,Complete code solution with explanation
+coder,t3_q3_algorithmic_hardness,73.83,2,Reasonable coding response without code blocks
+coder,t2_q1_design,73.83,3,Complete code solution with explanation
+coder,t2_q2_debug_complex,73.83,3,Complete code solution with explanation
+coder,t2_q3_optimize,73.83,3,Complete code solution with explanation
+coder,t2_q4_system,73.83,3,Complete code solution with explanation
+coder,t1_q1_algorithm,73.83,3,Complete code solution with explanation
+coder,t1_q2_refactor,73.83,3,Complete code solution with explanation
+coder,t1_q3_test,73.83,3,Complete code solution with explanation
+agentic,t3_q1_competing_constraints,73.83,2,Reasonable agentic response
+agentic,t3_q2_multi_agent_coordination,73.83,2,Reasonable agentic response
+agentic,t3_q3_adversarial_robustness,73.83,2,Attempted tool call structure
+agentic,t2_q1_ambiguous,73.83,2,Reasonable agentic response
+agentic,t2_q2_error_chain,73.83,2,Attempted tool call structure
+agentic,t2_q3_schema_edge,73.83,2,Attempted tool call structure
+agentic,t2_q4_orchestration,73.83,3,Valid tool call JSON structure present
+agentic,t1_q1_sequential,73.83,3,Valid tool call JSON structure present
+agentic,t1_q2_error_handling,73.83,2,Attempted tool call structure
+agentic,t1_q3_nested_params,73.83,2,Attempted tool call structure
+general,t3_q1_policy_analysis,73.83,2,Reasonable general response
+general,t3_q2_system_failure,73.83,2,Reasonable general response
+general,t3_q3_strategic_communication,73.83,2,Reasonable general response
+general,t2_q1_synthesis,73.83,2,Reasonable general response
+general,t2_q2_transform,73.83,2,Reasonable general response
+general,t2_q3_schedule,73.83,2,Reasonable general response
+general,t2_q4_inconsistency,73.83,2,Reasonable general response
+general,t1_q1_json,73.83,2,Reasonable general response
+general,t1_q2_multistep,73.83,2,Reasonable general response
+general,t1_q3_compare,73.83,2,Reasonable general response
+math,t3_q1_analysis,73.83,2,Math response with reasoning (correctness not verified)
+math,t3_q2_combinatorics,73.83,2,Math response with reasoning (correctness not verified)
+math,t3_q3_probability_theory,73.83,2,Math response with reasoning (correctness not verified)
+math,t2_q1_optimization,73.83,2,Math response with reasoning (correctness not verified)
+math,t2_q2_proof,73.83,2,Math response with reasoning (correctness not verified)
+math,t2_q3_calculus,73.83,2,Math response with reasoning (correctness not verified)
+math,t2_q4_statistics,73.83,2,Math response with reasoning (correctness not verified)
+math,t1_q1_word_problem,73.83,2,Math response with reasoning (correctness not verified)
+math,t1_q2_system_equations,73.83,2,Math response with reasoning (correctness not verified)
+math,t1_q3_probability,73.83,2,Math response with reasoning (correctness not verified)
+instruction_precision,t3_q1_self_referential,73.83,2,Response generated (format compliance not verified)
+instruction_precision,t3_q2_cascading_constraints,73.83,2,Response generated (format compliance not verified)
+instruction_precision,t3_q3_meta_instruction,73.83,2,Response generated (format compliance not verified)
+instruction_precision,t2_q1_resist_elaboration,73.83,1,Minimal or incomplete response
+instruction_precision,t2_q2_maintain_format,73.83,2,Response generated (format compliance not verified)
+instruction_precision,t2_q3_empty_handling,73.83,1,Minimal or incomplete response
+instruction_precision,t2_q4_conflicting_constraints,73.83,2,Response generated (format compliance not verified)
+instruction_precision,t1_q1_negative_instruction,73.83,2,Response generated (format compliance not verified)
+instruction_precision,t1_q2_word_limit,73.83,2,Response generated (format compliance not verified)
+instruction_precision,t1_q3_structured_format,73.83,2,Response generated (format compliance not verified)
+instruction_precision,t1_q4_multiple_constraints,73.83,1,Minimal or incomplete response

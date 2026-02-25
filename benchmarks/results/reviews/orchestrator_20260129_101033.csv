@@ -1,0 +1,83 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,29.5,1,Identifies only 2 of 4+ issues; truncated mid-sentence
+thinking,t3_q2_causal_inference,24.2,3,Correctly identifies minimal adjustment set as {Gene}; sound DAG analysis
+thinking,t3_q3_reasoning_trap,41.1,2,Identifies core flaw but truncated; incomplete explanation
+thinking,t2_q1_paradox,42.5,3,Multiple coherent philosophical positions; well-structured
+thinking,t2_q2_counterfactual,33.1,3,Analyzes all three dimensions with specific mechanisms
+thinking,t2_q3_formal,27.2,3,Valid formal proof with Modus Ponens; concrete example
+thinking,t2_q4_metacognition,28.3,3,Clear Fermi estimation with explicit assumptions and bounds
+thinking,t1_q1_multistep,41.8,2,Correct answer (11:34 AM) but no work shown as required
+thinking,t1_q2_hypothesis,27.5,0,Outputs directory listing JSON instead of hypothesis testing
+thinking,t1_q3_planning,30.2,3,Systematic constraint-checking approach; methodical reasoning
+coder,t3_q1_concurrent_correctness,35.1,2,Identifies ABA problem correctly but truncated at 1024 tokens
+coder,t3_q2_distributed_consistency,30.1,2,Starts correct LWW strategy but truncated before completing all 4
+coder,t3_q3_algorithmic_hardness,25.1,1,Mentions Stirling but wrong focus on permutations vs adversary argument
+coder,t2_q1_design,30.2,2,Correct LRU with OrderedDict but truncated before completing put()
+coder,t2_q2_debug_complex,0,0,Empty response - no answer
+coder,t2_q3_optimize,0,0,Empty response - no answer
+coder,t2_q4_system,0,0,Empty response - no answer
+coder,t1_q1_algorithm,0,0,Empty response - no answer
+coder,t1_q2_refactor,0,0,Empty response - no answer
+coder,t1_q3_test,0,0,Empty response - no answer
+general,t3_q1_policy_analysis,33.8,2,Started correct failure mode analysis but truncated mid-sentence
+general,t3_q2_system_failure,36.0,3,Correctly identifies replica lag and read-your-writes consistency
+general,t3_q3_strategic_communication,25.1,0,Returns directory listing instead of board meeting statement
+general,t2_q1_synthesis,35.4,1,JSON metadata output instead of synthesis recommendation
+general,t2_q2_transform,31.6,2,Correct YAML transformation code but truncated
+general,t2_q3_schedule,28.3,2,Correct constraint satisfaction approach but truncated
+general,t2_q4_inconsistency,36.2,3,Correctly identifies both key inconsistencies
+general,t1_q1_json,31.7,1,JSON structure present but incorrect values
+general,t1_q2_multistep,38.4,3,Correct deduplication, sorting, numbering, count
+general,t1_q3_compare,26.0,0,Repeats input verbatim instead of comparative synthesis
+math,t3_q1_analysis,33.9,2,Correct structure and closed form but truncated; lacks rigor
+math,t3_q2_combinatorics,27.7,0,Python code instead of combinatorial proof; wrong approach
+math,t3_q3_probability_theory,20.1,1,Simulation code instead of theoretical proof; aware of simplex
+math,t2_q1_optimization,37.9,3,Correct answers (x=100m y=50m area=5000) with clear presentation
+math,t2_q2_proof,32.3,3,Correctly identifies error at n=1->2 transition; sound reasoning
+math,t2_q3_calculus,35.4,1,Correct final answer (10) but no work shown
+math,t2_q4_statistics,27.1,2,Correct method but code instead of calculated values
+math,t1_q1_word_problem,38.2,3,All three answers correct with work shown
+math,t1_q2_system_equations,29.4,2,Correct substitution method but truncated before all solutions
+math,t1_q3_probability,26.3,1,Correct setup but truncated before final answers
+vl,t3_q1_chart_critique,0,0,Empty response - vision pipeline broken
+vl,t3_q2_multi_chart_synthesis,0,0,Empty response - vision pipeline broken
+vl,t3_q3_twyne_security,0,0,Empty response - vision pipeline broken
+vl,t3_q4_twyne_economic,0,0,Empty response - vision pipeline broken
+vl,t3_q5_document_forensics,0,0,Empty response - vision pipeline broken
+vl,t2_q1_calculation,0,0,Empty response - vision pipeline broken
+vl,t2_q2_comparison,33.9,1,Code for value comparison but wrong approach for chart analysis
+vl,t2_q3_trend_analysis,24.5,2,Valid np.diff code but should analyze chart image not write code
+vl,t2_q4_ratio_calculation,25.7,0,Directory listing JSON - completely unrelated
+vl,t2_q5_document_synthesis,25.0,1,Mock data approach; should extract from document image
+vl,t1_q1_scene_text,26.0,0,Role JSON and file listing instead of OCR
+vl,t1_q2_sign_reading,24.6,0,File listing JSON instead of sign reading
+agentic,t3_q1_competing_constraints,22.2,1,Started schema validation but incomplete; misunderstood robust plan
+agentic,t3_q2_multi_agent_coordination,23.7,3,Valid JSON plan with phases matching expected format
+agentic,t3_q3_adversarial_robustness,0,0,Empty response - no attempt
+agentic,t2_q1_ambiguous,24.0,1,Recognized ticket need but wrong tool choice for urgent outage
+agentic,t2_q2_error_chain,21.8,2,Correct tool (check_dns) but missing reasoning explanation
+agentic,t2_q3_schema_edge,23.0,0,Max turns without completing - orchestrator loop failure
+agentic,t2_q4_orchestration,24.2,1,Partial JSON plan missing required error handling sections
+agentic,t1_q1_sequential,25.6,0,Error JSON about file access; no tool call array
+agentic,t1_q2_error_handling,24.8,3,Correct search_users tool call to recover from 404
+agentic,t1_q3_nested_params,23.4,2,Correct nested JSON but hit max turns before final
+instruction_precision,t3_q1_self_referential,24.0,0,Code attempt but no actual sentence produced
+instruction_precision,t3_q2_cascading_constraints,24.5,1,5 words but violates non-increasing length rule
+instruction_precision,t3_q3_meta_instruction,22.3,0,Max turns without output - orchestrator failure
+instruction_precision,t2_q1_resist_elaboration,25.8,0,Extra text before number; violated only-number constraint
+instruction_precision,t2_q2_maintain_format,25.9,1,Correct format but prefixed with role JSON; violated no-other-text constraint
+instruction_precision,t2_q3_empty_handling,26.5,3,Correct function returning NONE when no emails
+instruction_precision,t2_q4_conflicting_constraints,26.1,1,Sentence structure debatable on constraint interpretation
+instruction_precision,t1_q1_negative_instruction,26.0,0,Used forbidden word "sunlight" in first sentence
+instruction_precision,t1_q2_word_limit,24.7,1,Response appears over word limit; not precise enough
+instruction_precision,t1_q3_structured_format,25.5,3,Correct LANGUAGE (YEAR) format one per line
+instruction_precision,t1_q4_multiple_constraints,25.7,1,5 countries alphabetically but Cyprus debatable as European
+long_context,t3_q1_multi_hop_reasoning,0,0,Empty - timeout/pipeline failure
+long_context,t3_q2_contradiction_detection,0,0,Empty - timeout/pipeline failure
+long_context,t3_q3_evolving_requirements,0,0,Empty - timeout/pipeline failure
+long_context,t2_q1_deep_needle,0,0,Empty - timeout/pipeline failure
+long_context,t2_q2_synthesis,0,0,Empty - timeout/pipeline failure
+long_context,t2_q3_architecture,0,0,Empty - timeout/pipeline failure
+long_context,t1_q1_needle,0,0,Empty - timeout/pipeline failure
+long_context,t1_q2_multi_file,0,0,Empty - timeout/pipeline failure
+long_context,t1_q3_extraction,0,0,Empty - timeout/pipeline failure

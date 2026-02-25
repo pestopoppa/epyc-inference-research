@@ -1,0 +1,2 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+speed_test,speed_measurement,45.51,1,Short response

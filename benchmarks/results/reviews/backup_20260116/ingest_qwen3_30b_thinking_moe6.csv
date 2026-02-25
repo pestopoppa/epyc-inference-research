@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,18.15,2,Detailed critique but truncated
+thinking,t3_q2_causal_inference,17.62,3,Detailed causal inference reasoning
+thinking,t3_q3_reasoning_trap,17.99,3,Detailed reasoning
+thinking,t2_q1_paradox,17.79,3,Detailed reasoning
+thinking,t2_q2_counterfactual,17.93,3,Detailed reasoning
+thinking,t2_q3_formal,17.58,3,Detailed reasoning
+thinking,t2_q4_metacognition,18.09,3,Detailed reasoning
+thinking,t1_q1_multistep,18.61,3,Detailed reasoning
+thinking,t1_q2_hypothesis,22.42,3,Detailed reasoning
+thinking,t1_q3_planning,18.13,3,Detailed reasoning
+coder,t3_q1_concurrent_correctness,17.81,3,Complete code solution
+coder,t3_q2_distributed_consistency,17.82,3,Discusses CAP/consistency trade-offs
+coder,t3_q3_algorithmic_hardness,17.94,2,Explanation without code
+coder,t2_q1_design,17.73,3,Complete code solution
+coder,t2_q2_debug_complex,17.77,3,Complete code solution
+coder,t2_q3_optimize,18.07,3,Complete code solution
+coder,t2_q4_system,18.11,3,Complete code solution
+coder,t1_q1_algorithm,17.35,3,Complete code solution
+coder,t1_q2_refactor,18.02,3,Complete code solution
+coder,t1_q3_test,18.31,3,Complete code solution
+agentic,t3_q1_competing_constraints,17.67,2,Tool call but truncated
+agentic,t3_q2_multi_agent_coordination,17.54,3,Detailed multi-agent strategy
+agentic,t3_q3_adversarial_robustness,17.33,3,Security-aware response
+agentic,t2_q1_ambiguous,22.14,2,Tool call but truncated
+agentic,t2_q2_error_chain,18.05,2,Tool call but truncated
+agentic,t2_q3_schema_edge,17.86,3,Tool call structure present
+agentic,t2_q4_orchestration,17.49,2,Tool call but truncated
+agentic,t1_q1_sequential,18.4,2,Tool call but truncated
+agentic,t1_q2_error_handling,20.52,2,Tool call but truncated
+agentic,t1_q3_nested_params,22.69,2,Tool call but truncated
+general,t3_q1_policy_analysis,19.0,3,Detailed response
+general,t3_q2_system_failure,17.34,3,Detailed response
+general,t3_q3_strategic_communication,18.09,3,Detailed response
+general,t2_q1_synthesis,21.52,3,Detailed response
+general,t2_q2_transform,17.51,3,Detailed response
+general,t2_q3_schedule,17.53,3,Detailed response
+general,t2_q4_inconsistency,19.26,3,Detailed response
+general,t1_q1_json,24.04,2,JSON structure but truncated
+general,t1_q2_multistep,16.64,3,Detailed response
+general,t1_q3_compare,22.2,3,Detailed response
+math,t3_q1_analysis,19.26,3,Detailed mathematical reasoning
+math,t3_q2_combinatorics,17.47,3,Detailed mathematical reasoning
+math,t3_q3_probability_theory,16.64,3,Detailed probability analysis
+math,t2_q1_optimization,21.92,3,Detailed mathematical reasoning
+math,t2_q2_proof,17.54,3,Detailed mathematical reasoning
+math,t2_q3_calculus,19.3,3,Detailed mathematical reasoning
+math,t2_q4_statistics,18.17,3,Detailed mathematical reasoning
+math,t1_q1_word_problem,21.38,3,Detailed mathematical reasoning
+math,t1_q2_system_equations,21.54,3,Detailed mathematical reasoning
+math,t1_q3_probability,21.53,3,Detailed probability analysis
+instruction_precision,t3_q1_self_referential,22.05,2,Instruction response
+instruction_precision,t3_q2_cascading_constraints,21.87,2,Instruction response
+instruction_precision,t3_q3_meta_instruction,21.89,2,Instruction response
+instruction_precision,t2_q1_resist_elaboration,22.51,2,Instruction response
+instruction_precision,t2_q2_maintain_format,22.25,2,Instruction response
+instruction_precision,t2_q3_empty_handling,22.57,2,Instruction response
+instruction_precision,t2_q4_conflicting_constraints,21.83,2,Instruction response
+instruction_precision,t1_q1_negative_instruction,22.97,2,Instruction response
+instruction_precision,t1_q2_word_limit,23.98,2,Instruction response
+instruction_precision,t1_q3_structured_format,22.54,2,Instruction response
+instruction_precision,t1_q4_multiple_constraints,22.99,2,Instruction response

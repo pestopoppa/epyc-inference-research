@@ -1,0 +1,31 @@
+question_id,score,reason
+thinking/t1_q1_multistep,3,Excellent: correct train problem 11:30 AM with clear algebra
+thinking/t1_q2_hypothesis,3,Excellent: identifies confounding variables for breakfast-score correlation
+thinking/t1_q3_planning,3,Excellent: systematic constraint-based enumeration for plant watering
+thinking/t2_q1_paradox,3,Excellent: detailed Ship of Theseus analysis with multiple philosophical positions
+thinking/t2_q2_counterfactual,3,Excellent: comprehensive counterfactual analysis across all dimensions
+thinking/t2_q3_formal,3,Excellent: correct hypothetical syllogism proof with concrete example
+thinking/t2_q4_metacognition,3,Excellent: clear Fermi estimation with explicit assumptions
+thinking/t3_q1_methodological_critique,3,Excellent: identifies selection bias confounding and other issues
+thinking/t3_q2_causal_inference,3,Excellent: correct minimal adjustment set and collider bias discussion
+thinking/t3_q3_reasoning_trap,3,Excellent: identifies test set distribution flaw with concrete scenario
+general/t1_q1_json,2,Good: correct JSON but llama.cpp debug output contamination
+general/t1_q2_multistep,3,Excellent: correct list processing with clear steps
+general/t1_q3_compare,2,Good: correct comparison but enters repetition pattern after answer
+general/t2_q1_synthesis,3,Excellent: balanced phased approach recommendation
+general/t2_q2_transform,3,Excellent: correct YAML grouping by department
+general/t2_q3_schedule,3,Excellent: thorough constraint analysis and valid schedule
+general/t2_q4_inconsistency,3,Excellent: identifies all body format and rate limit inconsistencies
+general/t3_q1_policy_analysis,3,Excellent: identifies failure modes with specific amendments
+general/t3_q2_system_failure,3,Excellent: correct replica lag double-charge explanation
+general/t3_q3_strategic_communication,3,Excellent: strategic board communication with data support
+math/t1_q1_word_problem,3,Excellent: correct $120 discount $129.60 final 86.4%
+math/t1_q2_system_equations,3,Excellent: correct x=2 y=3 using elimination
+math/t1_q3_probability,3,Excellent: correct probability calculations 2/9 and 1/3
+math/t2_q1_optimization,3,Excellent: correct 50m x 100m = 5000 sq m max area
+math/t2_q2_proof,3,Excellent: complete mathematical induction proof
+math/t2_q3_calculus,3,Excellent: correct integration and evaluation
+math/t2_q4_statistics,3,Excellent: correct mean median std dev and IQR analysis
+math/t3_q1_analysis,3,Excellent: proves differentiability and discusses closed form
+math/t3_q2_combinatorics,2,Good: attempts sign-reversing involution but incomplete
+math/t3_q3_probability_theory,2,Good: shows understanding of E[N]=e problem but incomplete proofs

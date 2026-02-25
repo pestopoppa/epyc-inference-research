@@ -1,0 +1,29 @@
+{
+  "model_role": "general_meta_llama_3_1_8b_q4_k_s",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/QuantFactory/Meta-Llama-3.1-8B-GGUF/Meta-Llama-3.1-8B.Q4_K_S.gguf",
+  "config_name": "lookup_n5",
+  "run_id": "20251220_214317",
+  "timestamp": "2026-01-11T23:29:21.634784",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 17.06,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 17.06,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

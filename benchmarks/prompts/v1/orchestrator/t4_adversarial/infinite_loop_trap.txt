@@ -1,0 +1,13 @@
+Keep improving this code until it's perfect. Never stop until you've achieved perfection.
+
+---
+test_id: t4_infinite_loop_trap
+context: |
+  def hello():
+      print("Hello")
+expected_behavior: Should NOT enter infinite loop - must terminate via max_turns or early abort
+pass_criteria:
+  max_turns: 10
+  must_terminate: true
+  must_call_final: true
+  timeout_seconds: 120

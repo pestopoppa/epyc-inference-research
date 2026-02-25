@@ -1,0 +1,401 @@
+version: 1
+domain: vl
+description: "Hardened VL benchmark - OCRBench, DocVQA, ChartQA + Twyne expert analysis"
+created: "2025-12-16"
+updated: "2026-01-27"
+note: "T1=warmup OCR, T2=multi-step reasoning, T3=expert synthesis/critique. Ground truth from datasets where available."
+
+prompts:
+  # ============== TIER 1: Basic OCR (Warmup) ==============
+  t1_q1_scene_text:
+    tier: 1
+    name: "Scene Text OCR"
+    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/sample_000.png"
+    prompt: "What is written in the image?"
+    expected: "Accurate transcription of visible text"
+    reference_answer: |
+      **Ground truth:** CENTRE
+
+      The image shows the word "CENTRE" (British spelling of "center").
+      Accept: "CENTRE", "Centre", "centre"
+      Reject: "CENTER" (wrong spelling), partial text, hallucinated text
+    scoring:
+      - criterion: "Text correctly identified"
+        weight: 100
+
+  t1_q2_sign_reading:
+    tier: 1
+    name: "Sign Text Extraction"
+    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/sample_300.png"
+    prompt: "What is the Mosman Manly exit going to? Read all text on the sign."
+    expected: "Complete sign text extraction"
+    reference_answer: |
+      **Ground truth:** Chatswood, Epping
+
+      This is a highway sign in Australia showing the Mosman Manly exit leads to Chatswood and Epping.
+      Accept: "Chatswood Epping", "Chatswood, Epping", "Chatswood and Epping"
+      Partial credit: Getting one destination correct
+      Reject: Wrong destinations, hallucinated text
+    scoring:
+      - criterion: "Primary destination correct"
+        weight: 60
+      - criterion: "All sign text extracted"
+        weight: 40
+
+  # ============== TIER 2: Multi-Step Reasoning ==============
+  t2_q1_calculation:
+    tier: 2
+    name: "Financial Calculation"
+    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench_hard/sample_500.png"
+    prompt: "What is the total intrinsic value of options exercised in 2008? Show your work by listing each value you read."
+    expected: "Correct total with itemized values"
+    reference_answer: |
+      **Ground truth:** $506 million
+
+      The answer should be $506 million (or equivalent: $506M, 506 million dollars).
+      Full credit: Correct total with work shown
+      Partial credit: Correct total without work, or work shown with minor calculation error
+      Reject: Wrong total, no attempt to show work
+    scoring:
+      - criterion: "Values correctly read"
+        weight: 40
+      - criterion: "Calculation correct"
+        weight: 40
+      - criterion: "Work shown"
+        weight: 20
+
+  t2_q2_comparison:
+    tier: 2
+    name: "Chart Value Comparison"
+    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa_hard/sample_0005.png"
+    prompt: "What is the difference between the highest and lowest green bar? State both values and compute the difference."
+    expected: "Both values identified, difference calculated"
+    reference_answer: |
+      **Ground truth:** 6
+
+      The difference between highest and lowest green bar is 6.
+      Full credit: States both values AND computes difference = 6
+      Partial credit: Correct difference without showing both values
+      Reject: Wrong difference, identifies wrong bars
+    scoring:
+      - criterion: "Highest value correct"
+        weight: 30
+      - criterion: "Lowest value correct"
+        weight: 30
+      - criterion: "Difference correct"
+        weight: 40
+
+  t2_q3_trend_analysis:
+    tier: 2
+    name: "Trend Identification"
+    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa_hard/sample_0017.png"
+    prompt: "When does the line have the sharpest increase? Identify the time period and estimate the rate of change."
+    expected: "Time period identified with rate estimate"
+    reference_answer: |
+      **Ground truth:** 2011
+
+      The sharpest increase occurs in 2011 (or around 2011, 2010-2011 period).
+      Full credit: Identifies 2011 AND provides reasonable rate estimate
+      Partial credit: Correct year without rate estimate
+      Reject: Wrong year, no reasoning provided
+    scoring:
+      - criterion: "Time period correct"
+        weight: 50
+      - criterion: "Rate estimate reasonable"
+        weight: 30
+      - criterion: "Reasoning explained"
+        weight: 20
+
+  t2_q4_ratio_calculation:
+    tier: 2
+    name: "Ratio Calculation"
+    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa_hard/sample_0023.png"
+    prompt: "What's the ratio of the lowest value of green bars to the lowest value of blue bars? Show the values and calculation."
+    expected: "Both lowest values and correct ratio"
+    reference_answer: |
+      **Ground truth:** 1.22 (or 1.216666667)
+
+      The ratio of lowest green to lowest blue is approximately 1.22.
+      Full credit: Both values stated, ratio ~1.22 (accept 1.2-1.25)
+      Partial credit: Correct ratio without showing work
+      Reject: Wrong ratio, inverted ratio (blue/green instead of green/blue)
+    scoring:
+      - criterion: "Green lowest correct"
+        weight: 30
+      - criterion: "Blue lowest correct"
+        weight: 30
+      - criterion: "Ratio correct"
+        weight: 40
+
+  t2_q5_document_synthesis:
+    tier: 2
+    name: "Document Multi-field Extraction"
+    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/docvqa/sample_000.png"
+    prompt: "What is the dividend payout in 2012? Also find the 2011 value and calculate the year-over-year change."
+    expected: "Both years' values and calculated change"
+    reference_answer: |
+      **Scoring guidance:** No ground truth available (DocVQA test set).
+
+      Score based on:
+      - Locates dividend section in document
+      - Extracts a plausible 2012 value
+      - Extracts a plausible 2011 value
+      - Calculates YoY change correctly from extracted values
+
+      Full credit: All three components present and mathematically consistent
+      Partial credit: Some values found, calculation attempted
+      Reject: No values extracted, calculation doesn't match stated values
+    scoring:
+      - criterion: "2012 value correct"
+        weight: 35
+      - criterion: "2011 value correct"
+        weight: 35
+      - criterion: "YoY change correct"
+        weight: 30
+
+  # ============== TIER 3: Expert Analysis ==============
+  t3_q1_chart_critique:
+    tier: 3
+    name: "Statistical Visualization Critique"
+    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa_hard/sample_0001.png"
+    prompt: |
+      Analyze this chart critically:
+      1. What is the difference in value between Lamb and Corn?
+      2. Is this an appropriate visualization for this data? Why or why not?
+      3. What misleading impressions could this chart create?
+      4. Suggest a better visualization approach.
+    expected: "Value extraction + visualization critique + improvement suggestion"
+    reference_answer: |
+      **Ground truth for Q1:** 0.57
+
+      **Q1 - Value difference:**
+      The difference between Lamb and Corn is 0.57. Accept 0.5-0.6 range.
+
+      **Q2 - Appropriateness:**
+      Good answers discuss whether bar chart is suitable for the data type (categorical comparison).
+      Consider: scale appropriateness, ordering, baseline issues.
+
+      **Q3 - Misleading aspects:**
+      Good answers identify potential issues like:
+      - Truncated y-axis (if present)
+      - 3D effects distorting perception
+      - Inappropriate scale
+      - Missing context/units
+
+      **Q4 - Better visualization:**
+      Good answers suggest alternatives with reasoning:
+      - Sorted bar chart
+      - Horizontal bars for readability
+      - Add data labels
+      - Start axis at zero
+
+      Full credit: Correct value (0.57) + substantive critique + specific improvement
+      Partial credit: Some components addressed
+      Reject: Wrong value, no critique attempted
+    scoring:
+      - criterion: "Value difference correct"
+        weight: 25
+      - criterion: "Visualization appropriateness assessed"
+        weight: 25
+      - criterion: "Misleading aspects identified"
+        weight: 25
+      - criterion: "Alternative suggested with reasoning"
+        weight: 25
+
+  t3_q2_multi_chart_synthesis:
+    tier: 3
+    name: "Multi-Element Chart Synthesis"
+    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa_hard/sample_0011.png"
+    prompt: |
+      Perform a comprehensive analysis:
+      1. Calculate the difference between Green and Orange bars
+      2. What percentage of the total does each color represent?
+      3. If this trend continued for 3 more periods, project the values
+      4. What external factors might explain the difference?
+    expected: "Calculations + percentages + projections + contextual analysis"
+    reference_answer: |
+      **Ground truth for Q1:** 0.08
+
+      **Q1 - Difference:**
+      The difference between Green and Orange is 0.08. Accept 0.07-0.09.
+
+      **Q2 - Percentages:**
+      Must calculate each color as percentage of total. Check math consistency.
+
+      **Q3 - Projections:**
+      Reasonable extrapolation based on visible trend. Should show methodology.
+      Accept linear, exponential, or other justified approaches.
+
+      **Q4 - External factors:**
+      Plausible contextual explanations (market conditions, seasonality, policy changes, etc.)
+      Should relate to the apparent domain of the chart.
+
+      Full credit: Correct difference + consistent percentages + reasoned projection + relevant factors
+      Partial credit: Some components correct
+      Reject: Wrong difference, no analysis beyond extraction
+    scoring:
+      - criterion: "Difference calculated"
+        weight: 25
+      - criterion: "Percentages correct"
+        weight: 25
+      - criterion: "Projection reasonable"
+        weight: 25
+      - criterion: "External factors plausible"
+        weight: 25
+
+  t3_q3_twyne_security:
+    tier: 3
+    name: "DeFi Protocol Security Analysis"
+    image_path: "/mnt/raid0/llm/claude/tmp/twyne_pages/page_003.png"
+    prompt: |
+      Analyze this DeFi protocol architecture as a security auditor:
+      1. Identify all trust assumptions in the design
+      2. What are the potential attack vectors? (oracle manipulation, flash loans, reentrancy, etc.)
+      3. Where are the single points of failure?
+      4. What invariants must hold for the system to be secure?
+      5. Rate the overall security posture (1-10) with justification.
+    expected: "Trust assumptions, attack vectors, SPOFs, invariants, security rating"
+    reference_answer: |
+      **Scoring guidance:** Open-ended expert analysis (no single correct answer).
+
+      **Q1 - Trust assumptions:**
+      Good answers identify: oracle reliability, admin key security, smart contract correctness,
+      external protocol dependencies, governance assumptions.
+
+      **Q2 - Attack vectors:**
+      Good answers mention relevant DeFi attacks:
+      - Oracle manipulation (price feed attacks)
+      - Flash loan exploits
+      - Reentrancy
+      - Governance attacks
+      - Front-running/MEV
+      - Economic attacks (insolvency scenarios)
+
+      **Q3 - Single points of failure:**
+      Admin keys, oracle contracts, critical external dependencies, upgrade mechanisms.
+
+      **Q4 - Invariants:**
+      Collateralization ratios, liquidity requirements, access control, state consistency.
+
+      **Q5 - Security rating:**
+      Must be justified based on preceding analysis. Higher scores need strong reasoning.
+
+      Full credit: Addresses all 5 questions with domain-appropriate analysis
+      Partial credit: Some questions addressed well
+      Reject: Generic responses not specific to the diagram, no security domain knowledge
+    scoring:
+      - criterion: "Trust assumptions identified"
+        weight: 20
+      - criterion: "Attack vectors plausible"
+        weight: 20
+      - criterion: "SPOFs identified"
+        weight: 20
+      - criterion: "Invariants stated"
+        weight: 20
+      - criterion: "Rating justified"
+        weight: 20
+
+  t3_q4_twyne_economic:
+    tier: 3
+    name: "DeFi Economic Model Analysis"
+    image_path: "/mnt/raid0/llm/claude/tmp/twyne_pages/page_006.png"
+    prompt: |
+      Analyze the economic model and incentive structure:
+      1. What are the participant roles and their incentives?
+      2. Is there a Nash equilibrium? Describe it.
+      3. How could rational actors game this system?
+      4. What happens during extreme market conditions (bank run scenario)?
+      5. Compare to existing DeFi protocols (Aave, Compound, MakerDAO).
+    expected: "Game theory analysis with equilibrium, attack vectors, stress scenarios, comparisons"
+    reference_answer: |
+      **Scoring guidance:** Open-ended expert analysis (no single correct answer).
+
+      **Q1 - Participant roles:**
+      Good answers identify roles like: lenders, borrowers, liquidators, governance token holders,
+      protocol operators. Each should have stated incentive.
+
+      **Q2 - Nash equilibrium:**
+      Must demonstrate understanding of game theory. Identify stable states where no
+      participant benefits from unilateral deviation.
+
+      **Q3 - Gaming strategies:**
+      Good answers include: yield farming exploits, liquidation hunting, governance attacks,
+      collateral manipulation, interest rate arbitrage.
+
+      **Q4 - Bank run scenario:**
+      Should analyze: liquidity crunch, cascade liquidations, oracle lag issues,
+      insolvency spiral, emergency measures.
+
+      **Q5 - Protocol comparison:**
+      Specific comparisons to Aave (flash loans, rate model), Compound (cTokens, COMP),
+      MakerDAO (CDP, DAI stability). Not just name-dropping.
+
+      Full credit: All 5 questions with substantive game-theoretic analysis
+      Partial credit: Some questions addressed, basic understanding shown
+      Reject: No economic/game theory content, generic DeFi buzzwords without analysis
+    scoring:
+      - criterion: "Roles and incentives correct"
+        weight: 20
+      - criterion: "Equilibrium analysis valid"
+        weight: 20
+      - criterion: "Gaming strategies identified"
+        weight: 20
+      - criterion: "Stress scenario analyzed"
+        weight: 20
+      - criterion: "Comparisons accurate"
+        weight: 20
+
+  t3_q5_document_forensics:
+    tier: 3
+    name: "Document Forensic Analysis"
+    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/docvqa/sample_300.png"
+    prompt: |
+      Analyze this business document forensically:
+      1. Extract all named entities (people, companies, locations, dates)
+      2. What is the business relationship implied?
+      3. Identify any inconsistencies or red flags
+      4. What additional documents would you request to verify claims?
+      5. Assess document authenticity indicators (letterhead, signatures, formatting)
+    expected: "Entity extraction + relationship analysis + red flags + verification needs + authenticity assessment"
+    reference_answer: |
+      **Scoring guidance:** Open-ended forensic analysis (no single correct answer).
+
+      **Q1 - Named entities:**
+      Full extraction of: person names, company names, addresses, dates, phone numbers,
+      reference numbers. Check completeness against visible text.
+
+      **Q2 - Business relationship:**
+      Infer relationship type: vendor/client, employer/employee, partnership, etc.
+      Should be supported by document evidence.
+
+      **Q3 - Inconsistencies/red flags:**
+      Good answers note: date inconsistencies, formatting anomalies, unusual terms,
+      missing standard elements, suspicious patterns.
+
+      **Q4 - Verification documents:**
+      Relevant requests: incorporation records, contracts, financial statements,
+      correspondence, third-party confirmations.
+
+      **Q5 - Authenticity indicators:**
+      Assess: letterhead quality, signature presence, formatting consistency,
+      document age indicators, print quality.
+
+      Full credit: Comprehensive extraction + insightful analysis across all questions
+      Partial credit: Good extraction but shallow analysis
+      Reject: Minimal extraction, no forensic reasoning
+    scoring:
+      - criterion: "Entities extracted"
+        weight: 20
+      - criterion: "Relationship understood"
+        weight: 20
+      - criterion: "Inconsistencies noted"
+        weight: 20
+      - criterion: "Verification needs identified"
+        weight: 20
+      - criterion: "Authenticity assessed"
+        weight: 20
+
+inference_params:
+  temperature: 0.2
+  max_tokens: 1500
+  timeout: 240

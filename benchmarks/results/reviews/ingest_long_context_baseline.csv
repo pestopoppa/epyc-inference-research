@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,9.57,3,Reasoning structure present
+thinking,t3_q2_causal_inference,9.5,3,Reasoning structure present
+thinking,t3_q3_reasoning_trap,9.56,2,Some reasoning present
+thinking,t2_q1_paradox,9.48,3,Reasoning structure present
+thinking,t2_q2_counterfactual,9.51,3,Reasoning structure present
+thinking,t2_q3_formal,9.86,3,Reasoning structure present
+thinking,t2_q4_metacognition,9.7,3,Reasoning structure present
+thinking,t1_q1_multistep,9.55,2,Some reasoning present
+thinking,t1_q2_hypothesis,9.56,3,Reasoning structure present
+thinking,t1_q3_planning,9.26,2,Some reasoning present
+instruction_precision,t3_q1_self_referential,9.52,2,General response generated
+instruction_precision,t3_q2_cascading_constraints,9.57,2,General response generated
+instruction_precision,t3_q3_meta_instruction,9.92,2,Brief response generated
+instruction_precision,t2_q1_resist_elaboration,14.53,0,Empty or minimal output
+instruction_precision,t2_q2_maintain_format,9.81,2,General response generated
+instruction_precision,t2_q3_empty_handling,19.52,0,Empty or minimal output
+instruction_precision,t2_q4_conflicting_constraints,9.85,2,Brief response generated
+instruction_precision,t1_q1_negative_instruction,9.92,2,General response generated
+instruction_precision,t1_q2_word_limit,10.02,2,General response generated
+instruction_precision,t1_q3_structured_format,10.08,1,Minimal attempt
+instruction_precision,t1_q4_multiple_constraints,10.44,1,Minimal attempt
+agentic,t3_q1_competing_constraints,9.67,1,No tool call structure
+agentic,t3_q2_multi_agent_coordination,9.35,1,No tool call structure
+agentic,t3_q3_adversarial_robustness,9.47,1,No tool call structure
+agentic,t2_q1_ambiguous,9.66,1,No tool call structure
+agentic,t2_q2_error_chain,9.54,3,Tool call structure present
+agentic,t2_q3_schema_edge,9.28,3,Tool call structure present
+agentic,t2_q4_orchestration,9.31,1,No tool call structure
+agentic,t1_q1_sequential,9.57,1,No tool call structure
+agentic,t1_q2_error_handling,9.42,1,No tool call structure
+agentic,t1_q3_nested_params,9.46,3,Tool call structure present
+long_context,t3_q1_multi_hop_reasoning,5.44,3,Detailed retrieval response
+long_context,t3_q2_contradiction_detection,5.86,3,Detailed retrieval response
+long_context,t3_q3_evolving_requirements,5.09,3,Detailed retrieval response
+long_context,t2_q1_deep_needle,3.57,3,Detailed retrieval response
+long_context,t2_q2_synthesis,5.33,3,Detailed retrieval response
+long_context,t2_q3_architecture,4.85,3,Detailed retrieval response
+long_context,t1_q1_needle,7.26,3,Detailed retrieval response
+long_context,t1_q2_multi_file,7.49,3,Detailed retrieval response
+long_context,t1_q3_extraction,6.86,3,Detailed retrieval response
+coder,t3_q1_concurrent_correctness,9.07,2,Code or explanation present
+coder,t3_q2_distributed_consistency,9.12,3,Code structure present
+coder,t3_q3_algorithmic_hardness,9.16,2,Code or explanation present
+coder,t2_q1_design,1000000.0,0,Empty or minimal output
+coder,t2_q2_debug_complex,1000000.0,0,Empty or minimal output
+coder,t2_q3_optimize,1000000.0,0,Empty or minimal output
+coder,t2_q4_system,9.23,3,Code structure present
+coder,t1_q1_algorithm,9.22,3,Code structure present
+coder,t1_q2_refactor,9.27,3,Code structure present
+coder,t1_q3_test,1000000.0,0,Empty or minimal output
+general,t3_q1_policy_analysis,9.17,2,General response generated
+general,t3_q2_system_failure,9.17,2,General response generated
+general,t3_q3_strategic_communication,9.18,2,General response generated
+general,t2_q1_synthesis,9.45,2,General response generated
+general,t2_q2_transform,9.11,2,General response generated
+general,t2_q3_schedule,9.18,2,General response generated
+general,t2_q4_inconsistency,9.17,2,General response generated
+general,t1_q1_json,9.22,2,General response generated
+general,t1_q2_multistep,9.13,2,General response generated
+general,t1_q3_compare,9.19,2,General response generated
+math,t3_q1_analysis,8.86,3,Mathematical reasoning present
+math,t3_q2_combinatorics,8.9,3,Mathematical reasoning present
+math,t3_q3_probability_theory,8.88,3,Mathematical reasoning present
+math,t2_q1_optimization,9.3,3,Mathematical reasoning present
+math,t2_q2_proof,9.4,3,Mathematical reasoning present
+math,t2_q3_calculus,9.56,3,Mathematical reasoning present
+math,t2_q4_statistics,9.33,3,Mathematical reasoning present
+math,t1_q1_word_problem,9.52,3,Mathematical reasoning present
+math,t1_q2_system_equations,9.28,3,Mathematical reasoning present
+math,t1_q3_probability,9.4,3,Mathematical reasoning present

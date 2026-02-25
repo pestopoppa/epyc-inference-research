@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+coder,t3_q1_concurrent_correctness,1.81,3,Code implementation present
+coder,t3_q2_distributed_consistency,1.51,3,Comprehensive response generated
+coder,t3_q3_algorithmic_hardness,1000000.0,0,Empty or minimal output
+coder,t2_q1_design,1.51,3,Comprehensive response generated
+coder,t2_q2_debug_complex,1.52,3,Comprehensive response generated
+coder,t2_q3_optimize,1.51,3,JSON structure with relevant content present
+coder,t2_q4_system,1.53,3,Code implementation present
+coder,t1_q1_algorithm,1.53,3,Code implementation present
+coder,t1_q2_refactor,1000000.0,0,Empty or minimal output
+coder,t1_q3_test,1.53,1,Missing expected JSON format
+thinking,t3_q1_methodological_critique,1.51,1,Missing expected JSON format
+thinking,t3_q2_causal_inference,1.54,3,Comprehensive response generated
+thinking,t3_q3_reasoning_trap,1.52,3,Comprehensive response generated
+thinking,t2_q1_paradox,1.51,3,Comprehensive response generated
+thinking,t2_q2_counterfactual,1.49,3,Comprehensive response generated
+thinking,t2_q3_formal,1.54,3,Comprehensive response generated
+thinking,t2_q4_metacognition,1.51,3,Comprehensive response generated
+thinking,t1_q1_multistep,1.51,3,Comprehensive response generated
+thinking,t1_q2_hypothesis,1.53,3,Comprehensive response generated
+thinking,t1_q3_planning,1.51,3,Comprehensive response generated
+math,t3_q1_analysis,1.52,2,JSON present but may be incomplete
+math,t3_q2_combinatorics,1.49,3,Comprehensive response generated
+math,t3_q3_probability_theory,1.45,3,Comprehensive response generated
+math,t2_q1_optimization,1.5,3,Comprehensive response generated
+math,t2_q2_proof,1.51,3,Comprehensive response generated
+math,t2_q3_calculus,1.52,3,Comprehensive response generated
+math,t2_q4_statistics,2.02,3,Comprehensive response generated
+math,t1_q1_word_problem,1.86,3,Comprehensive response generated
+math,t1_q2_system_equations,2.33,3,Comprehensive response generated
+math,t1_q3_probability,1.51,3,Comprehensive response generated
+instruction_precision,t3_q1_self_referential,1.57,2,Moderate response generated
+instruction_precision,t3_q2_cascading_constraints,1.55,2,Moderate response generated
+instruction_precision,t3_q3_meta_instruction,1.5,3,Comprehensive response generated
+instruction_precision,t2_q1_resist_elaboration,2.32,0,Empty or minimal output
+instruction_precision,t2_q2_maintain_format,1.57,2,Moderate response generated
+instruction_precision,t2_q3_empty_handling,1.76,1,Brief response generated
+instruction_precision,t2_q4_conflicting_constraints,1.51,3,Comprehensive response generated
+instruction_precision,t1_q1_negative_instruction,1.57,3,Comprehensive response generated
+instruction_precision,t1_q2_word_limit,1.6,2,Moderate response generated
+instruction_precision,t1_q3_structured_format,1.61,1,Brief response generated
+instruction_precision,t1_q4_multiple_constraints,1.51,3,Comprehensive response generated
+general,t3_q1_policy_analysis,1.49,3,Comprehensive response generated
+general,t3_q2_system_failure,1.52,3,Code implementation present
+general,t3_q3_strategic_communication,1.5,3,Comprehensive response generated
+general,t2_q1_synthesis,1.53,3,Comprehensive response generated
+general,t2_q2_transform,1.43,3,Comprehensive response generated
+general,t2_q3_schedule,1.51,3,Comprehensive response generated
+general,t2_q4_inconsistency,1.55,1,Missing expected JSON format
+general,t1_q1_json,1.57,2,JSON present but may be incomplete
+general,t1_q3_compare,1.63,3,Comprehensive response generated
+general,t1_q2_multistep,1.0,3,Comprehensive response generated
+agentic,t3_q1_competing_constraints,2.38,3,JSON structure with relevant content present
+agentic,t3_q2_multi_agent_coordination,1.54,3,JSON structure with relevant content present
+agentic,t3_q3_adversarial_robustness,1.55,3,Comprehensive response generated
+agentic,t2_q1_ambiguous,11.91,2,JSON present but may be incomplete
+agentic,t2_q2_error_chain,1.58,3,JSON structure with relevant content present
+agentic,t2_q3_schema_edge,1.62,3,JSON structure with relevant content present
+agentic,t2_q4_orchestration,1.59,3,JSON structure with relevant content present
+agentic,t1_q1_sequential,1.45,3,JSON structure with relevant content present
+agentic,t1_q2_error_handling,1.61,2,JSON present but may be incomplete
+agentic,t1_q3_nested_params,1.46,3,JSON structure with relevant content present

@@ -1,0 +1,2 @@
+{"feature": "parallel_execution", "verdict": "PASS", "quality_delta": 0.0, "latency_delta_s": -1.4049990568310022e-05, "tps_delta": 0.0, "memory_delta_mb": -0.08984375, "timestamp": "2026-02-19T21:24:07+00:00"}
+{"feature": "parallel_execution", "verdict": "PASS", "quality_delta": 0.0, "latency_delta_s": -25.766046355012804, "tps_delta": -14.281276872458712, "memory_delta_mb": -0.26953125, "timestamp": "2026-02-19T21:50:25+00:00"}

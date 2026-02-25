@@ -1,0 +1,571 @@
+model,question_id,score,score_reason
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q1_multistep,10,"Train problem: delay=True, 220=True, correct=True"
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q2_hypothesis,9,"Identified 4 confounds: SES, Sleep/routine, Reverse causation, Family"
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t1_q3_planning,9,Both valid orderings found
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q2_causal_inference,10,DAG analysis score
+DeepSeek-R1-0528-Qwen3-8B-Q8_0,t3_q3_reasoning_trap,7,Reasoning trap analysis
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q1_multistep,4,"Train problem: delay=False, 220=False, correct=False"
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q2_hypothesis,7,"Identified 2 confounds: SES, Family"
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t1_q3_planning,4,Attempted but incomplete
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q1_paradox,9,"Paradox: positions=True, stance=True"
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t2_q4_metacognition,8,Fermi estimation: 5 key elements
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q2_causal_inference,7,DAG analysis score
+DeepSeek-R1-Distill-Llama-70B-Q4_K_M,t3_q3_reasoning_trap,5,Reasoning trap analysis
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t1_q1_multistep,6,"Train problem: delay=True, 220=True, correct=False"
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Organization"
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t1_q3_planning,9,Both valid orderings found
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t3_q2_causal_inference,6,DAG analysis score
+DeepSeek-R1-Distill-Llama-8B-Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+DeepSeek-R1-Distill-Qwen-1.5B-Q8_0,t1_q1_multistep,7,"Train problem: delay=True, 220=True, correct=True"
+DeepSeek-R1-Distill-Qwen-1.5B-Q8_0,t1_q2_hypothesis,5,Identified 1 confound: SES
+DeepSeek-R1-Distill-Qwen-1.5B-Q8_0,t1_q3_planning,4,Attempted but incomplete
+DeepSeek-R1-Distill-Qwen-1.5B-Q8_0,t2_q1_paradox,7,"Paradox: positions=False, stance=True"
+DeepSeek-R1-Distill-Qwen-1.5B-Q8_0,t2_q2_counterfactual,7,Counterfactual: 3 dimensions
+DeepSeek-R1-Distill-Qwen-1.5B-Q8_0,t2_q3_formal,7,"Formal logic: proof=True, example=True"
+DeepSeek-R1-Distill-Qwen-1.5B-Q8_0,t2_q4_metacognition,7,Fermi estimation: 6 key elements
+DeepSeek-R1-Distill-Qwen-1.5B-Q8_0,t3_q1_methodological_critique,6,Methodological critique: 2 issues
+DeepSeek-R1-Distill-Qwen-1.5B-Q8_0,t3_q2_causal_inference,7,DAG analysis score
+DeepSeek-R1-Distill-Qwen-1.5B-Q8_0,t3_q3_reasoning_trap,5,Reasoning trap analysis
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q1_multistep,8,"Train problem: delay=True, 220=True, correct=True"
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q2_hypothesis,8,"Identified 4 confounds: SES, Reverse causation, Family, Organization"
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t1_q3_planning,4,Attempted but incomplete
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q1_paradox,8,"Paradox: positions=True, stance=True"
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q2_counterfactual,8,Counterfactual: 3 dimensions
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q3_formal,8,"Formal logic: proof=True, example=True"
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t2_q4_metacognition,8,Fermi estimation: 6 key elements
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q1_methodological_critique,8,Methodological critique: 5 issues
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q2_causal_inference,8,DAG analysis score
+DeepSeek-R1-Distill-Qwen-14B-Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q1_multistep,8,"Train problem: delay=True, 220=True, correct=True"
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q2_hypothesis,7,"Identified 2 confounds: Family, Organization"
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t1_q3_planning,6,One valid ordering found
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q1_paradox,8,"Paradox: positions=True, stance=True"
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q2_counterfactual,8,Counterfactual: 3 dimensions
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q3_formal,8,"Formal logic: proof=True, example=True"
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t2_q4_metacognition,8,Fermi estimation: 6 key elements
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q1_methodological_critique,8,Methodological critique: 5 issues
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q2_causal_inference,8,DAG analysis score
+DeepSeek-R1-Distill-Qwen-14B-Q6_K_L,t3_q3_reasoning_trap,7,Reasoning trap analysis
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q1_multistep,10,"Train problem: delay=True, 220=True, correct=True"
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q2_hypothesis,9,"Identified 5 confounds: SES, Sleep/routine, Reverse causation, Family, Organization"
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t1_q3_planning,9,Both valid orderings found
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q2_causal_inference,10,DAG analysis score
+DeepSeek-R1-Distill-Qwen-32B-Q6_K,t3_q3_reasoning_trap,6,Reasoning trap analysis
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t1_q1_multistep,8,"Train problem: delay=False, 220=False, correct=True"
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t1_q2_hypothesis,9,"Identified 4 confounds: SES, Sleep/routine, Reverse causation, Family"
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t1_q3_planning,4,Attempted but incomplete
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q1_paradox,9,"Paradox: positions=True, stance=True"
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t3_q1_methodological_critique,10,Methodological critique: 5 issues
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t3_q2_causal_inference,10,DAG analysis score
+DeepSeek-R1-Distill-Qwen-7B-Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Hermes-4-70B-Q4_K_M,t1_q1_multistep,10,"Train problem: delay=True, 220=True, correct=True"
+Hermes-4-70B-Q4_K_M,t1_q2_hypothesis,9,"Identified 4 confounds: SES, Reverse causation, Family, Organization"
+Hermes-4-70B-Q4_K_M,t1_q3_planning,9,Both valid orderings found
+Hermes-4-70B-Q4_K_M,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Hermes-4-70B-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Hermes-4-70B-Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Hermes-4-70B-Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+Hermes-4-70B-Q4_K_M,t3_q1_methodological_critique,10,Methodological critique: 5 issues
+Hermes-4-70B-Q4_K_M,t3_q2_causal_inference,9,DAG analysis score
+Hermes-4-70B-Q4_K_M,t3_q3_reasoning_trap,9,Reasoning trap analysis
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t1_q1_multistep,10,"Train problem: delay=True, 220=True, correct=True"
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t1_q2_hypothesis,7,"Identified 2 confounds: Sleep/routine, Reverse causation"
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t1_q3_planning,9,Both valid orderings found
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t3_q1_methodological_critique,10,Methodological critique: 5 issues
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t3_q2_causal_inference,10,DAG analysis score
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t1_q1_multistep,10,"Train problem: delay=True, 220=True, correct=True"
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t1_q2_hypothesis,7,"Identified 2 confounds: Reverse causation, Organization"
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t1_q3_planning,9,Both valid orderings found
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t3_q1_methodological_critique,10,Methodological critique: 5 issues
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t3_q2_causal_inference,9,DAG analysis score
+MathSmith-Hard-Problem-Synthesizer-Qwen3-8B.Q8_0,t3_q3_reasoning_trap,9,Reasoning trap analysis
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q1_multistep,0,Echo-only response (no answer generated)
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q2_hypothesis,3,No clear confounds identified
+Meta-Llama-3-70B-Instruct-Q4_K_M,t1_q3_planning,0,Echo-only response (no answer generated)
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q1_paradox,7,"Paradox: positions=False, stance=True"
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q2_counterfactual,9,Counterfactual: 3 dimensions
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q3_formal,0,Echo-only response (no answer generated)
+Meta-Llama-3-70B-Instruct-Q4_K_M,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q1_methodological_critique,2,Methodological critique: 0 issues
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q2_causal_inference,6,DAG analysis score
+Meta-Llama-3-70B-Instruct-Q4_K_M,t3_q3_reasoning_trap,5,Reasoning trap analysis
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q1_multistep,3,Wrong answer (11:20)
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q2_hypothesis,9,"Identified 4 confounds: SES, Sleep/routine, Family, Organization"
+Meta-Llama-3-8B-Instruct-Q4_K_M,t1_q3_planning,6,One valid ordering found
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q3_formal,9,"Formal logic: proof=True, example=True"
+Meta-Llama-3-8B-Instruct-Q4_K_M,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q2_causal_inference,8,DAG analysis score
+Meta-Llama-3-8B-Instruct-Q4_K_M,t3_q3_reasoning_trap,6,Reasoning trap analysis
+Meta-Llama-3-8B-Instruct-fp16,t1_q1_multistep,5,"Train problem: delay=False, 220=False, correct=False"
+Meta-Llama-3-8B-Instruct-fp16,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Organization"
+Meta-Llama-3-8B-Instruct-fp16,t1_q3_planning,6,One valid ordering found
+Meta-Llama-3-8B-Instruct-fp16,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Meta-Llama-3-8B-Instruct-fp16,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Meta-Llama-3-8B-Instruct-fp16,t2_q3_formal,9,"Formal logic: proof=True, example=True"
+Meta-Llama-3-8B-Instruct-fp16,t2_q4_metacognition,7,Fermi estimation: 4 key elements
+Meta-Llama-3-8B-Instruct-fp16,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+Meta-Llama-3-8B-Instruct-fp16,t3_q2_causal_inference,9,DAG analysis score
+Meta-Llama-3-8B-Instruct-fp16,t3_q3_reasoning_trap,6,Reasoning trap analysis
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q1_multistep,9,"Train problem: delay=True, 220=True, correct=True"
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q2_hypothesis,5,Identified 1 confound: Sleep/routine
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t1_q3_planning,4,Attempted but incomplete
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q1_methodological_critique,10,Methodological critique: 5 issues
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q2_causal_inference,8,DAG analysis score
+Meta-Llama-3.1-70B-Instruct-Q4_K_M,t3_q3_reasoning_trap,6,Reasoning trap analysis
+Meta-Llama-3.1-8B.Q4_K_S,t1_q1_multistep,4,"Train problem: delay=False, 220=False, correct=False"
+Meta-Llama-3.1-8B.Q4_K_S,t1_q2_hypothesis,3,No clear confounds identified
+Meta-Llama-3.1-8B.Q4_K_S,t1_q3_planning,4,Attempted but incomplete
+Meta-Llama-3.1-8B.Q4_K_S,t2_q1_paradox,7,"Paradox: positions=False, stance=True"
+Meta-Llama-3.1-8B.Q4_K_S,t2_q2_counterfactual,9,Counterfactual: 3 dimensions
+Meta-Llama-3.1-8B.Q4_K_S,t2_q3_formal,0,Echo-only response (no answer generated)
+Meta-Llama-3.1-8B.Q4_K_S,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Meta-Llama-3.1-8B.Q4_K_S,t3_q1_methodological_critique,6,Methodological critique: 3 issues
+Meta-Llama-3.1-8B.Q4_K_S,t3_q2_causal_inference,6,DAG analysis score
+Meta-Llama-3.1-8B.Q4_K_S,t3_q3_reasoning_trap,5,Reasoning trap analysis
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S,t1_q1_multistep,7,"Train problem: delay=True, 220=True, correct=True"
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S,t1_q2_hypothesis,5,Identified 1 confound: Sleep/routine
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S,t1_q3_planning,4,Attempted but incomplete
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S,t2_q1_paradox,7,"Paradox: positions=True, stance=True"
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S,t2_q2_counterfactual,7,Counterfactual: 3 dimensions
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S,t2_q3_formal,7,"Formal logic: proof=True, example=True"
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S,t2_q4_metacognition,7,Fermi estimation: 4 key elements
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S,t3_q1_methodological_critique,6,Methodological critique: 3 issues
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S,t3_q2_causal_inference,6,DAG analysis score
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q5_K_S,t3_q3_reasoning_trap,7,Reasoning trap analysis
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0,t1_q1_multistep,7,"Train problem: delay=True, 220=False, correct=True"
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0,t1_q2_hypothesis,5,Identified 1 confound: Sleep/routine
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0,t1_q3_planning,4,Attempted but incomplete
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0,t2_q1_paradox,7,"Paradox: positions=False, stance=True"
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0,t2_q2_counterfactual,7,Counterfactual: 3 dimensions
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0,t2_q3_formal,7,"Formal logic: proof=True, example=True"
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0,t2_q4_metacognition,7,Fermi estimation: 4 key elements
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0,t3_q1_methodological_critique,7,Methodological critique: 4 issues
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0,t3_q2_causal_inference,7,DAG analysis score
+PARD-DeepSeek-R1-Distill-Qwen-1.5B.Q8_0,t3_q3_reasoning_trap,6,Reasoning trap analysis
+PARD-Llama-3.2-1B.Q8_0,t1_q1_multistep,4,"Train problem: delay=False, 220=False, correct=False"
+PARD-Llama-3.2-1B.Q8_0,t1_q2_hypothesis,7,"Identified 2 confounds: SES, Family"
+PARD-Llama-3.2-1B.Q8_0,t1_q3_planning,4,Attempted but incomplete
+PARD-Llama-3.2-1B.Q8_0,t2_q1_paradox,7,"Paradox: positions=True, stance=True"
+PARD-Llama-3.2-1B.Q8_0,t2_q2_counterfactual,7,Counterfactual: 3 dimensions
+PARD-Llama-3.2-1B.Q8_0,t2_q3_formal,6,"Formal logic: proof=False, example=True"
+PARD-Llama-3.2-1B.Q8_0,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+PARD-Llama-3.2-1B.Q8_0,t3_q1_methodological_critique,7,Methodological critique: 5 issues
+PARD-Llama-3.2-1B.Q8_0,t3_q2_causal_inference,6,DAG analysis score
+PARD-Llama-3.2-1B.Q8_0,t3_q3_reasoning_trap,6,Reasoning trap analysis
+Phi-4-reasoning-plus-Q4_K_M,t1_q1_multistep,0,Echo-only response (no answer generated)
+Phi-4-reasoning-plus-Q4_K_M,t1_q2_hypothesis,3,No clear confounds identified
+Phi-4-reasoning-plus-Q4_K_M,t1_q3_planning,0,Echo-only response (no answer generated)
+Phi-4-reasoning-plus-Q4_K_M,t2_q1_paradox,7,"Paradox: positions=False, stance=True"
+Phi-4-reasoning-plus-Q4_K_M,t2_q2_counterfactual,9,Counterfactual: 3 dimensions
+Phi-4-reasoning-plus-Q4_K_M,t2_q3_formal,0,Echo-only response (no answer generated)
+Phi-4-reasoning-plus-Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+Phi-4-reasoning-plus-Q4_K_M,t3_q1_methodological_critique,3,Methodological critique: 1 issues
+Phi-4-reasoning-plus-Q4_K_M,t3_q2_causal_inference,6,DAG analysis score
+Phi-4-reasoning-plus-Q4_K_M,t3_q3_reasoning_trap,7,Reasoning trap analysis
+Phi-4-reasoning-plus-Q8_0,t1_q1_multistep,0,Echo-only response (no answer generated)
+Phi-4-reasoning-plus-Q8_0,t1_q2_hypothesis,3,No clear confounds identified
+Phi-4-reasoning-plus-Q8_0,t1_q3_planning,0,Echo-only response (no answer generated)
+Phi-4-reasoning-plus-Q8_0,t2_q1_paradox,7,"Paradox: positions=False, stance=True"
+Phi-4-reasoning-plus-Q8_0,t2_q2_counterfactual,9,Counterfactual: 3 dimensions
+Phi-4-reasoning-plus-Q8_0,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Phi-4-reasoning-plus-Q8_0,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Phi-4-reasoning-plus-Q8_0,t3_q1_methodological_critique,2,Methodological critique: 0 issues
+Phi-4-reasoning-plus-Q8_0,t3_q2_causal_inference,6,DAG analysis score
+Phi-4-reasoning-plus-Q8_0,t3_q3_reasoning_trap,6,Reasoning trap analysis
+Qwen2-0.5B.Q2_K,t1_q1_multistep,5,"Train problem: delay=False, 220=False, correct=False"
+Qwen2-0.5B.Q2_K,t1_q2_hypothesis,3,No clear confounds identified
+Qwen2-0.5B.Q2_K,t1_q3_planning,4,Attempted but incomplete
+Qwen2-0.5B.Q2_K,t2_q1_paradox,6,"Paradox: positions=False, stance=True"
+Qwen2-0.5B.Q2_K,t2_q2_counterfactual,6,Counterfactual: 3 dimensions
+Qwen2-0.5B.Q2_K,t2_q3_formal,6,"Formal logic: proof=False, example=True"
+Qwen2-0.5B.Q2_K,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Qwen2-0.5B.Q2_K,t3_q1_methodological_critique,3,Methodological critique: 0 issues
+Qwen2-0.5B.Q2_K,t3_q2_causal_inference,6,DAG analysis score
+Qwen2-0.5B.Q2_K,t3_q3_reasoning_trap,5,Reasoning trap analysis
+Qwen2.5-0.5B-Instruct-f16,t1_q1_multistep,2,Wrong answer (10:30)
+Qwen2.5-0.5B-Instruct-f16,t1_q2_hypothesis,2,Misunderstood question
+Qwen2.5-0.5B-Instruct-f16,t1_q3_planning,4,Attempted but incomplete
+Qwen2.5-0.5B-Instruct-f16,t2_q1_paradox,6,"Paradox: positions=False, stance=True"
+Qwen2.5-0.5B-Instruct-f16,t2_q2_counterfactual,6,Counterfactual: 3 dimensions
+Qwen2.5-0.5B-Instruct-f16,t2_q3_formal,6,"Formal logic: proof=False, example=True"
+Qwen2.5-0.5B-Instruct-f16,t2_q4_metacognition,6,Fermi estimation: 3 key elements
+Qwen2.5-0.5B-Instruct-f16,t3_q1_methodological_critique,5,Methodological critique: 2 issues
+Qwen2.5-0.5B-Instruct-f16,t3_q2_causal_inference,6,DAG analysis score
+Qwen2.5-0.5B-Instruct-f16,t3_q3_reasoning_trap,5,Reasoning trap analysis
+Qwen2.5-0.5B.Q8_0,t1_q1_multistep,4,"Train problem: delay=True, 220=False, correct=False"
+Qwen2.5-0.5B.Q8_0,t1_q2_hypothesis,5,Identified 1 confound: Sleep/routine
+Qwen2.5-0.5B.Q8_0,t1_q3_planning,4,Attempted but incomplete
+Qwen2.5-0.5B.Q8_0,t2_q1_paradox,6,"Paradox: positions=False, stance=True"
+Qwen2.5-0.5B.Q8_0,t2_q2_counterfactual,6,Counterfactual: 3 dimensions
+Qwen2.5-0.5B.Q8_0,t2_q3_formal,6,"Formal logic: proof=True, example=True"
+Qwen2.5-0.5B.Q8_0,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Qwen2.5-0.5B.Q8_0,t3_q1_methodological_critique,3,Methodological critique: 1 issues
+Qwen2.5-0.5B.Q8_0,t3_q2_causal_inference,6,DAG analysis score
+Qwen2.5-0.5B.Q8_0,t3_q3_reasoning_trap,5,Reasoning trap analysis
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q1_multistep,8,"Train problem: delay=False, 220=False, correct=True"
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Family"
+Qwen2.5-72B-Instruct-Q4_K_M,t1_q3_planning,8,Both valid orderings found
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q3_formal,9,"Formal logic: proof=True, example=True"
+Qwen2.5-72B-Instruct-Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q2_causal_inference,10,DAG analysis score
+Qwen2.5-72B-Instruct-Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen2.5-72B.Q4_K_M,t1_q1_multistep,8,"Train problem: delay=False, 220=True, correct=True"
+Qwen2.5-72B.Q4_K_M,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Family"
+Qwen2.5-72B.Q4_K_M,t1_q3_planning,4,Attempted but incomplete
+Qwen2.5-72B.Q4_K_M,t2_q1_paradox,9,"Paradox: positions=True, stance=True"
+Qwen2.5-72B.Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen2.5-72B.Q4_K_M,t2_q3_formal,9,"Formal logic: proof=True, example=True"
+Qwen2.5-72B.Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+Qwen2.5-72B.Q4_K_M,t3_q1_methodological_critique,10,Methodological critique: 5 issues
+Qwen2.5-72B.Q4_K_M,t3_q2_causal_inference,10,DAG analysis score
+Qwen2.5-72B.Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen2.5-7B.Q4_K_S,t1_q1_multistep,9,"Train problem: delay=True, 220=True, correct=True"
+Qwen2.5-7B.Q4_K_S,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Family"
+Qwen2.5-7B.Q4_K_S,t1_q3_planning,8,Both valid orderings found
+Qwen2.5-7B.Q4_K_S,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Qwen2.5-7B.Q4_K_S,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen2.5-7B.Q4_K_S,t2_q3_formal,9,"Formal logic: proof=True, example=True"
+Qwen2.5-7B.Q4_K_S,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Qwen2.5-7B.Q4_K_S,t3_q1_methodological_critique,10,Methodological critique: 5 issues
+Qwen2.5-7B.Q4_K_S,t3_q2_causal_inference,8,DAG analysis score
+Qwen2.5-7B.Q4_K_S,t3_q3_reasoning_trap,7,Reasoning trap analysis
+Qwen2.5-Coder-0.5B-Q4_K_M,t1_q1_multistep,3,"Train problem: delay=False, 220=False, correct=False"
+Qwen2.5-Coder-0.5B-Q4_K_M,t1_q2_hypothesis,6,"Identified 2 confounds: Reverse causation, Family"
+Qwen2.5-Coder-0.5B-Q4_K_M,t1_q3_planning,4,Attempted but incomplete
+Qwen2.5-Coder-0.5B-Q4_K_M,t2_q1_paradox,6,"Paradox: positions=False, stance=True"
+Qwen2.5-Coder-0.5B-Q4_K_M,t2_q2_counterfactual,6,Counterfactual: 3 dimensions
+Qwen2.5-Coder-0.5B-Q4_K_M,t2_q3_formal,6,"Formal logic: proof=False, example=True"
+Qwen2.5-Coder-0.5B-Q4_K_M,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Qwen2.5-Coder-0.5B-Q4_K_M,t3_q1_methodological_critique,4,Methodological critique: 1 issues
+Qwen2.5-Coder-0.5B-Q4_K_M,t3_q2_causal_inference,6,DAG analysis score
+Qwen2.5-Coder-0.5B-Q4_K_M,t3_q3_reasoning_trap,5,Reasoning trap analysis
+Qwen2.5-Coder-0.5B-Q8_0,t1_q1_multistep,4,"Train problem: delay=False, 220=False, correct=False"
+Qwen2.5-Coder-0.5B-Q8_0,t1_q2_hypothesis,5,Identified 1 confound: SES
+Qwen2.5-Coder-0.5B-Q8_0,t1_q3_planning,4,Attempted but incomplete
+Qwen2.5-Coder-0.5B-Q8_0,t2_q1_paradox,6,"Paradox: positions=False, stance=True"
+Qwen2.5-Coder-0.5B-Q8_0,t2_q2_counterfactual,6,Counterfactual: 3 dimensions
+Qwen2.5-Coder-0.5B-Q8_0,t2_q3_formal,6,"Formal logic: proof=True, example=True"
+Qwen2.5-Coder-0.5B-Q8_0,t2_q4_metacognition,6,Fermi estimation: 3 key elements
+Qwen2.5-Coder-0.5B-Q8_0,t3_q1_methodological_critique,2,Methodological critique: 0 issues
+Qwen2.5-Coder-0.5B-Q8_0,t3_q2_causal_inference,6,DAG analysis score
+Qwen2.5-Coder-0.5B-Q8_0,t3_q3_reasoning_trap,5,Reasoning trap analysis
+Qwen2.5-Coder-1.5B.Q2_K,t1_q1_multistep,3,"Train problem: delay=False, 220=False, correct=False"
+Qwen2.5-Coder-1.5B.Q2_K,t1_q2_hypothesis,3,No clear confounds identified
+Qwen2.5-Coder-1.5B.Q2_K,t1_q3_planning,4,Attempted but incomplete
+Qwen2.5-Coder-1.5B.Q2_K,t2_q1_paradox,7,"Paradox: positions=False, stance=True"
+Qwen2.5-Coder-1.5B.Q2_K,t2_q2_counterfactual,7,Counterfactual: 3 dimensions
+Qwen2.5-Coder-1.5B.Q2_K,t2_q3_formal,7,"Formal logic: proof=False, example=True"
+Qwen2.5-Coder-1.5B.Q2_K,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Qwen2.5-Coder-1.5B.Q2_K,t3_q1_methodological_critique,2,Methodological critique: 0 issues
+Qwen2.5-Coder-1.5B.Q2_K,t3_q2_causal_inference,6,DAG analysis score
+Qwen2.5-Coder-1.5B.Q2_K,t3_q3_reasoning_trap,5,Reasoning trap analysis
+Qwen2.5-Coder-1.5B.Q4_K_M,t1_q1_multistep,5,"Train problem: delay=False, 220=True, correct=False"
+Qwen2.5-Coder-1.5B.Q4_K_M,t1_q2_hypothesis,7,"Identified 2 confounds: SES, Family"
+Qwen2.5-Coder-1.5B.Q4_K_M,t1_q3_planning,4,Attempted but incomplete
+Qwen2.5-Coder-1.5B.Q4_K_M,t2_q1_paradox,7,"Paradox: positions=False, stance=True"
+Qwen2.5-Coder-1.5B.Q4_K_M,t2_q2_counterfactual,7,Counterfactual: 3 dimensions
+Qwen2.5-Coder-1.5B.Q4_K_M,t2_q3_formal,7,"Formal logic: proof=False, example=True"
+Qwen2.5-Coder-1.5B.Q4_K_M,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Qwen2.5-Coder-1.5B.Q4_K_M,t3_q1_methodological_critique,2,Methodological critique: 0 issues
+Qwen2.5-Coder-1.5B.Q4_K_M,t3_q2_causal_inference,6,DAG analysis score
+Qwen2.5-Coder-1.5B.Q4_K_M,t3_q3_reasoning_trap,5,Reasoning trap analysis
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q1_multistep,9,"Train problem: delay=True, 220=True, correct=True"
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Family"
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t1_q3_planning,6,One valid ordering found
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q1_paradox,9,"Paradox: positions=True, stance=True"
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q1_methodological_critique,10,Methodological critique: 5 issues
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q2_causal_inference,10,DAG analysis score
+Qwen2.5-Coder-32B-Instruct-Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen2.5-Math-1.5B-Instruct-Q4_K_M,t1_q1_multistep,7,"Train problem: delay=False, 220=False, correct=True"
+Qwen2.5-Math-1.5B-Instruct-Q4_K_M,t1_q2_hypothesis,3,No clear confounds identified
+Qwen2.5-Math-1.5B-Instruct-Q4_K_M,t1_q3_planning,4,Attempted but incomplete
+Qwen2.5-Math-1.5B-Instruct-Q4_K_M,t2_q1_paradox,7,"Paradox: positions=True, stance=True"
+Qwen2.5-Math-1.5B-Instruct-Q4_K_M,t2_q2_counterfactual,7,Counterfactual: 3 dimensions
+Qwen2.5-Math-1.5B-Instruct-Q4_K_M,t2_q3_formal,7,"Formal logic: proof=True, example=True"
+Qwen2.5-Math-1.5B-Instruct-Q4_K_M,t2_q4_metacognition,6,Fermi estimation: 3 key elements
+Qwen2.5-Math-1.5B-Instruct-Q4_K_M,t3_q1_methodological_critique,4,Methodological critique: 1 issues
+Qwen2.5-Math-1.5B-Instruct-Q4_K_M,t3_q2_causal_inference,6,DAG analysis score
+Qwen2.5-Math-1.5B-Instruct-Q4_K_M,t3_q3_reasoning_trap,7,Reasoning trap analysis
+Qwen2.5-Math-1.5B-Instruct-Q6_K,t1_q1_multistep,7,"Train problem: delay=False, 220=False, correct=True"
+Qwen2.5-Math-1.5B-Instruct-Q6_K,t1_q2_hypothesis,3,No clear confounds identified
+Qwen2.5-Math-1.5B-Instruct-Q6_K,t1_q3_planning,4,Attempted but incomplete
+Qwen2.5-Math-1.5B-Instruct-Q6_K,t2_q1_paradox,7,"Paradox: positions=False, stance=True"
+Qwen2.5-Math-1.5B-Instruct-Q6_K,t2_q2_counterfactual,7,Counterfactual: 3 dimensions
+Qwen2.5-Math-1.5B-Instruct-Q6_K,t2_q3_formal,7,"Formal logic: proof=True, example=True"
+Qwen2.5-Math-1.5B-Instruct-Q6_K,t2_q4_metacognition,6,Fermi estimation: 3 key elements
+Qwen2.5-Math-1.5B-Instruct-Q6_K,t3_q1_methodological_critique,4,Methodological critique: 1 issues
+Qwen2.5-Math-1.5B-Instruct-Q6_K,t3_q2_causal_inference,6,DAG analysis score
+Qwen2.5-Math-1.5B-Instruct-Q6_K,t3_q3_reasoning_trap,6,Reasoning trap analysis
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q1_multistep,8,"Train problem: delay=False, 220=True, correct=True"
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Family"
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t1_q3_planning,8,Both valid orderings found
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q2_causal_inference,8,DAG analysis score
+Qwen2.5-Math-72B-Instruct-Q4_K_M,t3_q3_reasoning_trap,5,Reasoning trap analysis
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q1_multistep,3,"Train problem: delay=False, 220=False, correct=False"
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Reverse causation"
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t1_q3_planning,4,Attempted but incomplete
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q1_paradox,9,"Paradox: positions=True, stance=True"
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t2_q4_metacognition,7,Fermi estimation: 4 key elements
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q2_causal_inference,6,DAG analysis score
+Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002,t3_q3_reasoning_trap,7,Reasoning trap analysis
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t1_q1_multistep,9,"Train problem: delay=True, 220=True, correct=True"
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t1_q2_hypothesis,5,Identified 1 confound: Sleep/routine
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t1_q3_planning,4,Attempted but incomplete
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q1_paradox,9,"Paradox: positions=True, stance=True"
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t2_q4_metacognition,6,Fermi estimation: 3 key elements
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t3_q1_methodological_critique,5,Methodological critique: 2 issues
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t3_q2_causal_inference,8,DAG analysis score
+Qwen2.5-Math-7B-Instruct-Q4_K_M,t3_q3_reasoning_trap,7,Reasoning trap analysis
+Qwen3-0.6B-Q2_K,t1_q1_multistep,0,Garbage/repetitive output
+Qwen3-0.6B-Q2_K,t1_q2_hypothesis,3,No clear confounds identified
+Qwen3-0.6B-Q2_K,t1_q3_planning,4,Attempted but incomplete
+Qwen3-0.6B-Q2_K,t2_q1_paradox,6,"Paradox: positions=False, stance=True"
+Qwen3-0.6B-Q2_K,t2_q2_counterfactual,6,Counterfactual: 3 dimensions
+Qwen3-0.6B-Q2_K,t2_q3_formal,6,"Formal logic: proof=False, example=True"
+Qwen3-0.6B-Q2_K,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Qwen3-0.6B-Q2_K,t3_q1_methodological_critique,2,Methodological critique: 0 issues
+Qwen3-0.6B-Q2_K,t3_q2_causal_inference,0,Garbage/repetitive output
+Qwen3-0.6B-Q2_K,t3_q3_reasoning_trap,5,Reasoning trap analysis
+Qwen3-1.7B-Q4_K_M,t1_q1_multistep,10,"Train problem: delay=True, 220=True, correct=True"
+Qwen3-1.7B-Q4_K_M,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Reverse causation, Organization"
+Qwen3-1.7B-Q4_K_M,t1_q3_planning,4,Attempted but incomplete
+Qwen3-1.7B-Q4_K_M,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Qwen3-1.7B-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen3-1.7B-Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Qwen3-1.7B-Q4_K_M,t2_q4_metacognition,8,Fermi estimation: 5 key elements
+Qwen3-1.7B-Q4_K_M,t3_q1_methodological_critique,8,Methodological critique: 4 issues
+Qwen3-1.7B-Q4_K_M,t3_q2_causal_inference,9,DAG analysis score
+Qwen3-1.7B-Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen3-1.7B-Q8_0,t1_q1_multistep,10,"Train problem: delay=True, 220=True, correct=True"
+Qwen3-1.7B-Q8_0,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Reverse causation, Family"
+Qwen3-1.7B-Q8_0,t1_q3_planning,9,Both valid orderings found
+Qwen3-1.7B-Q8_0,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Qwen3-1.7B-Q8_0,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen3-1.7B-Q8_0,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Qwen3-1.7B-Q8_0,t2_q4_metacognition,8,Fermi estimation: 5 key elements
+Qwen3-1.7B-Q8_0,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+Qwen3-1.7B-Q8_0,t3_q2_causal_inference,7,DAG analysis score
+Qwen3-1.7B-Q8_0,t3_q3_reasoning_trap,6,Reasoning trap analysis
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q1_multistep,8,"Train problem: delay=False, 220=False, correct=True"
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Family"
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t1_q3_planning,9,Both valid orderings found
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q1_methodological_critique,10,Methodological critique: 6 issues
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q2_causal_inference,10,DAG analysis score
+Qwen3-235B-A22B-Q4_K_M-00001-of-00004,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q1_multistep,8,"Train problem: delay=False, 220=False, correct=True"
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q2_hypothesis,8,"Identified 3 confounds: SES, Sleep/routine, Family"
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t1_q3_planning,4,Attempted but incomplete
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q1_paradox,8,"Paradox: positions=True, stance=True"
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q2_counterfactual,8,Counterfactual: 3 dimensions
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q3_formal,8,"Formal logic: proof=True, example=True"
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t2_q4_metacognition,8,Fermi estimation: 6 key elements
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q1_methodological_critique,8,Methodological critique: 5 issues
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q2_causal_inference,8,DAG analysis score
+Qwen3-30B-A3B-Thinking-2507-Q4_K_S,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q1_multistep,8,"Train problem: delay=False, 220=False, correct=True"
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q2_hypothesis,8,"Identified 4 confounds: SES, Sleep/routine, Family, Organization"
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t1_q3_planning,8,Both valid orderings found
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q1_paradox,8,"Paradox: positions=True, stance=True"
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q2_counterfactual,8,Counterfactual: 3 dimensions
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q3_formal,8,"Formal logic: proof=True, example=True"
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t2_q4_metacognition,8,Fermi estimation: 6 key elements
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q1_methodological_critique,8,Methodological critique: 4 issues
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q2_causal_inference,8,DAG analysis score
+Qwen3-30B-A3B-Thinking-2507-Q8_0,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen3-32B-Q4_K_M,t1_q1_multistep,9,"Train problem: delay=True, 220=True, correct=True"
+Qwen3-32B-Q4_K_M,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Family"
+Qwen3-32B-Q4_K_M,t1_q3_planning,9,Both valid orderings found
+Qwen3-32B-Q4_K_M,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Qwen3-32B-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen3-32B-Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Qwen3-32B-Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+Qwen3-32B-Q4_K_M,t3_q1_methodological_critique,8,Methodological critique: 4 issues
+Qwen3-32B-Q4_K_M,t3_q2_causal_inference,10,DAG analysis score
+Qwen3-32B-Q4_K_M,t3_q3_reasoning_trap,9,Reasoning trap analysis
+Qwen3-4B-Thinking-2507-Q8_0,t1_q1_multistep,8,"Train problem: delay=False, 220=True, correct=True"
+Qwen3-4B-Thinking-2507-Q8_0,t1_q2_hypothesis,8,"Identified 5 confounds: SES, Sleep/routine, Reverse causation, Family, Organization"
+Qwen3-4B-Thinking-2507-Q8_0,t1_q3_planning,8,Both valid orderings found
+Qwen3-4B-Thinking-2507-Q8_0,t2_q1_paradox,8,"Paradox: positions=True, stance=True"
+Qwen3-4B-Thinking-2507-Q8_0,t2_q2_counterfactual,8,Counterfactual: 3 dimensions
+Qwen3-4B-Thinking-2507-Q8_0,t2_q3_formal,8,"Formal logic: proof=True, example=True"
+Qwen3-4B-Thinking-2507-Q8_0,t2_q4_metacognition,8,Fermi estimation: 6 key elements
+Qwen3-4B-Thinking-2507-Q8_0,t3_q1_methodological_critique,8,Methodological critique: 5 issues
+Qwen3-4B-Thinking-2507-Q8_0,t3_q2_causal_inference,8,DAG analysis score
+Qwen3-4B-Thinking-2507-Q8_0,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q1_multistep,4,"Train problem: delay=False, 220=False, correct=False"
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q2_hypothesis,8,"Identified 4 confounds: SES, Sleep/routine, Family, Organization"
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t1_q3_planning,8,Both valid orderings found
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q1_paradox,8,"Paradox: positions=True, stance=True"
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q2_counterfactual,8,Counterfactual: 3 dimensions
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q3_formal,8,"Formal logic: proof=True, example=True"
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t2_q4_metacognition,8,Fermi estimation: 6 key elements
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q1_methodological_critique,8,Methodological critique: 4 issues
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q2_causal_inference,8,DAG analysis score
+Qwen3-Coder-30B-A3B-Instruct-Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q1_multistep,10,"Train problem: delay=True, 220=True, correct=True"
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Family"
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t1_q3_planning,4,Attempted but incomplete
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q1_methodological_critique,8,Methodological critique: 4 issues
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q2_causal_inference,10,DAG analysis score
+Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008,t3_q3_reasoning_trap,9,Reasoning trap analysis
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q1_multistep,8,"Train problem: delay=True, 220=False, correct=True"
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q2_hypothesis,8,"Identified 5 confounds: SES, Sleep/routine, Reverse causation, Family, Organization"
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t1_q3_planning,8,Both valid orderings found
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q1_paradox,8,"Paradox: positions=True, stance=True"
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q2_counterfactual,8,Counterfactual: 3 dimensions
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q3_formal,8,"Formal logic: proof=True, example=True"
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t2_q4_metacognition,8,Fermi estimation: 6 key elements
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q1_methodological_critique,8,Methodological critique: 6 issues
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q2_causal_inference,8,DAG analysis score
+Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L.i1-Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0,t1_q1_multistep,3,"Train problem: delay=False, 220=False, correct=False"
+Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0,t1_q2_hypothesis,3,No clear confounds identified
+Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0,t1_q3_planning,4,Attempted but incomplete
+Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0,t2_q1_paradox,7,"Paradox: positions=False, stance=True"
+Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0,t3_q1_methodological_critique,6,Methodological critique: 3 issues
+Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0,t3_q2_causal_inference,6,DAG analysis score
+Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0,t3_q3_reasoning_trap,5,Reasoning trap analysis
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q1_multistep,8,"Train problem: delay=True, 220=True, correct=True"
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q2_hypothesis,8,"Identified 3 confounds: SES, Sleep/routine, Family"
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t1_q3_planning,8,Both valid orderings found
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q1_paradox,8,"Paradox: positions=True, stance=True"
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q2_counterfactual,8,Counterfactual: 3 dimensions
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q3_formal,8,"Formal logic: proof=True, example=True"
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t2_q4_metacognition,8,Fermi estimation: 6 key elements
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q1_methodological_critique,8,Methodological critique: 5 issues
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q2_causal_inference,8,DAG analysis score
+Qwen3-Next-80B-A3B-Instruct-Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q1_multistep,8,"Train problem: delay=True, 220=True, correct=True"
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q2_hypothesis,8,"Identified 4 confounds: SES, Sleep/routine, Reverse causation, Organization"
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t1_q3_planning,8,Both valid orderings found
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q1_paradox,8,"Paradox: positions=True, stance=True"
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q2_counterfactual,8,Counterfactual: 3 dimensions
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q3_formal,8,"Formal logic: proof=True, example=True"
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t2_q4_metacognition,8,Fermi estimation: 6 key elements
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q1_methodological_critique,8,Methodological critique: 5 issues
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q2_causal_inference,8,DAG analysis score
+Qwen3-Next-80B-A3B-Thinking-Q4_K_S,t3_q3_reasoning_trap,8,Reasoning trap analysis
+Qwen_Qwen3-0.6B-Q8_0,t1_q1_multistep,6,"Train problem: delay=False, 220=False, correct=True"
+Qwen_Qwen3-0.6B-Q8_0,t1_q2_hypothesis,3,No clear confounds identified
+Qwen_Qwen3-0.6B-Q8_0,t1_q3_planning,4,Attempted but incomplete
+Qwen_Qwen3-0.6B-Q8_0,t2_q1_paradox,6,"Paradox: positions=True, stance=True"
+Qwen_Qwen3-0.6B-Q8_0,t2_q2_counterfactual,6,Counterfactual: 3 dimensions
+Qwen_Qwen3-0.6B-Q8_0,t2_q3_formal,6,"Formal logic: proof=True, example=True"
+Qwen_Qwen3-0.6B-Q8_0,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+Qwen_Qwen3-0.6B-Q8_0,t3_q1_methodological_critique,6,Methodological critique: 3 issues
+Qwen_Qwen3-0.6B-Q8_0,t3_q2_causal_inference,6,DAG analysis score
+Qwen_Qwen3-0.6B-Q8_0,t3_q3_reasoning_trap,5,Reasoning trap analysis
+gemma-3-12b-it-Q4_K_M,t1_q1_multistep,8,"Train problem: delay=False, 220=False, correct=True"
+gemma-3-12b-it-Q4_K_M,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Sleep/routine, Family"
+gemma-3-12b-it-Q4_K_M,t1_q3_planning,9,Both valid orderings found
+gemma-3-12b-it-Q4_K_M,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+gemma-3-12b-it-Q4_K_M,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+gemma-3-12b-it-Q4_K_M,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+gemma-3-12b-it-Q4_K_M,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+gemma-3-12b-it-Q4_K_M,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+gemma-3-12b-it-Q4_K_M,t3_q2_causal_inference,10,DAG analysis score
+gemma-3-12b-it-Q4_K_M,t3_q3_reasoning_trap,8,Reasoning trap analysis
+gemma-3-1b-it-Q8_0,t1_q1_multistep,7,"Train problem: delay=False, 220=True, correct=True"
+gemma-3-1b-it-Q8_0,t1_q2_hypothesis,7,"Identified 2 confounds: SES, Organization"
+gemma-3-1b-it-Q8_0,t1_q3_planning,7,Both valid orderings found
+gemma-3-1b-it-Q8_0,t2_q1_paradox,7,"Paradox: positions=True, stance=True"
+gemma-3-1b-it-Q8_0,t2_q2_counterfactual,7,Counterfactual: 3 dimensions
+gemma-3-1b-it-Q8_0,t2_q3_formal,7,"Formal logic: proof=False, example=True"
+gemma-3-1b-it-Q8_0,t2_q4_metacognition,7,Fermi estimation: 4 key elements
+gemma-3-1b-it-Q8_0,t3_q1_methodological_critique,7,Methodological critique: 4 issues
+gemma-3-1b-it-Q8_0,t3_q2_causal_inference,7,DAG analysis score
+gemma-3-1b-it-Q8_0,t3_q3_reasoning_trap,7,Reasoning trap analysis
+gemma-3-27B-it-QAT-Q4_0,t1_q1_multistep,8,"Train problem: delay=False, 220=False, correct=True"
+gemma-3-27B-it-QAT-Q4_0,t1_q2_hypothesis,9,"Identified 3 confounds: SES, Reverse causation, Organization"
+gemma-3-27B-it-QAT-Q4_0,t1_q3_planning,9,Both valid orderings found
+gemma-3-27B-it-QAT-Q4_0,t2_q1_paradox,10,"Paradox: positions=True, stance=True"
+gemma-3-27B-it-QAT-Q4_0,t2_q2_counterfactual,10,Counterfactual: 3 dimensions
+gemma-3-27B-it-QAT-Q4_0,t2_q3_formal,10,"Formal logic: proof=True, example=True"
+gemma-3-27B-it-QAT-Q4_0,t2_q4_metacognition,9,Fermi estimation: 6 key elements
+gemma-3-27B-it-QAT-Q4_0,t3_q1_methodological_critique,9,Methodological critique: 4 issues
+gemma-3-27B-it-QAT-Q4_0,t3_q2_causal_inference,8,DAG analysis score
+gemma-3-27B-it-QAT-Q4_0,t3_q3_reasoning_trap,8,Reasoning trap analysis
+pard-llama-3.2-1b-q4_0,t1_q1_multistep,3,"Train problem: delay=False, 220=False, correct=False"
+pard-llama-3.2-1b-q4_0,t1_q2_hypothesis,3,No clear confounds identified
+pard-llama-3.2-1b-q4_0,t1_q3_planning,4,Attempted but incomplete
+pard-llama-3.2-1b-q4_0,t2_q1_paradox,7,"Paradox: positions=True, stance=True"
+pard-llama-3.2-1b-q4_0,t2_q2_counterfactual,7,Counterfactual: 3 dimensions
+pard-llama-3.2-1b-q4_0,t2_q3_formal,7,"Formal logic: proof=False, example=True"
+pard-llama-3.2-1b-q4_0,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+pard-llama-3.2-1b-q4_0,t3_q1_methodological_critique,6,Methodological critique: 3 issues
+pard-llama-3.2-1b-q4_0,t3_q2_causal_inference,6,DAG analysis score
+pard-llama-3.2-1b-q4_0,t3_q3_reasoning_trap,5,Reasoning trap analysis
+pard-qwen3-0.6b-q4_0,t1_q1_multistep,3,"Train problem: delay=False, 220=False, correct=False"
+pard-qwen3-0.6b-q4_0,t1_q2_hypothesis,6,"Identified 2 confounds: Sleep/routine, Reverse causation"
+pard-qwen3-0.6b-q4_0,t1_q3_planning,2,Invalid ordering (E first)
+pard-qwen3-0.6b-q4_0,t2_q1_paradox,6,"Paradox: positions=True, stance=True"
+pard-qwen3-0.6b-q4_0,t2_q2_counterfactual,6,Counterfactual: 3 dimensions
+pard-qwen3-0.6b-q4_0,t2_q3_formal,6,"Formal logic: proof=False, example=True"
+pard-qwen3-0.6b-q4_0,t2_q4_metacognition,5,Fermi estimation: 2 key elements
+pard-qwen3-0.6b-q4_0,t3_q1_methodological_critique,6,Methodological critique: 4 issues
+pard-qwen3-0.6b-q4_0,t3_q2_causal_inference,6,DAG analysis score
+pard-qwen3-0.6b-q4_0,t3_q3_reasoning_trap,6,Reasoning trap analysis

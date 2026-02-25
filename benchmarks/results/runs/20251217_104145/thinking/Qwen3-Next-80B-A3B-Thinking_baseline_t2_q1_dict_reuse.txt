@@ -1,0 +1,242 @@
+build: 7404 (52392291b) with GNU 13.3.0 for Linux x86_64
+main: llama backend init
+main: load the model and apply lora adapter, if any
+llama_model_loader: loaded meta data with 53 key-value pairs and 807 tensors from /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3-Next-80B-A3B-Thinking-GGUF/Qwen3-Next-80B-A3B-Thinking-Q4_K_S.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen3next
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                     general.sampling.top_k i32              = 20
+llama_model_loader: - kv   3:                     general.sampling.top_p f32              = 0.950000
+llama_model_loader: - kv   4:                      general.sampling.temp f32              = 0.600000
+llama_model_loader: - kv   5:                               general.name str              = Qwen3-Next-80B-A3B-Thinking
+llama_model_loader: - kv   6:                           general.finetune str              = Thinking
+llama_model_loader: - kv   7:                           general.basename str              = Qwen3-Next-80B-A3B-Thinking
+llama_model_loader: - kv   8:                       general.quantized_by str              = Unsloth
+llama_model_loader: - kv   9:                         general.size_label str              = 80B-A3B
+llama_model_loader: - kv  10:                            general.license str              = apache-2.0
+llama_model_loader: - kv  11:                       general.license.link str              = https://huggingface.co/Qwen/Qwen3-Nex...
+llama_model_loader: - kv  12:                           general.repo_url str              = https://huggingface.co/unsloth
+llama_model_loader: - kv  13:                   general.base_model.count u32              = 1
+llama_model_loader: - kv  14:                  general.base_model.0.name str              = Qwen3 Next 80B A3B Thinking
+llama_model_loader: - kv  15:          general.base_model.0.organization str              = Qwen
+llama_model_loader: - kv  16:              general.base_model.0.repo_url str              = https://huggingface.co/Qwen/Qwen3-Nex...
+llama_model_loader: - kv  17:                               general.tags arr[str,2]       = ["unsloth", "text-generation"]
+llama_model_loader: - kv  18:                      qwen3next.block_count u32              = 48
+llama_model_loader: - kv  19:                   qwen3next.context_length u32              = 262144
+llama_model_loader: - kv  20:                 qwen3next.embedding_length u32              = 2048
+llama_model_loader: - kv  21:              qwen3next.feed_forward_length u32              = 5120
+llama_model_loader: - kv  22:             qwen3next.attention.head_count u32              = 16
+llama_model_loader: - kv  23:          qwen3next.attention.head_count_kv u32              = 2
+llama_model_loader: - kv  24:                   qwen3next.rope.freq_base f32              = 10000000.000000
+llama_model_loader: - kv  25: qwen3next.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  26:                qwen3next.expert_used_count u32              = 10
+llama_model_loader: - kv  27:             qwen3next.attention.key_length u32              = 256
+llama_model_loader: - kv  28:           qwen3next.attention.value_length u32              = 256
+llama_model_loader: - kv  29:                     qwen3next.expert_count u32              = 512
+llama_model_loader: - kv  30:       qwen3next.expert_feed_forward_length u32              = 512
+llama_model_loader: - kv  31: qwen3next.expert_shared_feed_forward_length u32              = 512
+llama_model_loader: - kv  32:                  qwen3next.ssm.conv_kernel u32              = 4
+llama_model_loader: - kv  33:                   qwen3next.ssm.state_size u32              = 128
+llama_model_loader: - kv  34:                  qwen3next.ssm.group_count u32              = 16
+llama_model_loader: - kv  35:               qwen3next.ssm.time_step_rank u32              = 32
+llama_model_loader: - kv  36:                   qwen3next.ssm.inner_size u32              = 4096
+llama_model_loader: - kv  37:             qwen3next.rope.dimension_count u32              = 64
+llama_model_loader: - kv  38:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  39:                         tokenizer.ggml.pre str              = qwen2
+llama_model_loader: - kv  40:                      tokenizer.ggml.tokens arr[str,151936]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  41:                  tokenizer.ggml.token_type arr[i32,151936]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  42:                      tokenizer.ggml.merges arr[str,151387]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  43:                tokenizer.ggml.eos_token_id u32              = 151645
+llama_model_loader: - kv  44:            tokenizer.ggml.padding_token_id u32              = 151654
+llama_model_loader: - kv  45:               tokenizer.ggml.add_bos_token bool             = false
+llama_model_loader: - kv  46:                    tokenizer.chat_template str              = {%- if tools %}\n    {{- '<|im_start|>...
+llama_model_loader: - kv  47:               general.quantization_version u32              = 2
+llama_model_loader: - kv  48:                          general.file_type u32              = 14
+llama_model_loader: - kv  49:                      quantize.imatrix.file str              = Qwen3-Next-80B-A3B-Thinking-GGUF/imat...
+llama_model_loader: - kv  50:                   quantize.imatrix.dataset str              = unsloth_calibration_Qwen3-Next-80B-A3...
+llama_model_loader: - kv  51:             quantize.imatrix.entries_count u32              = 540
+llama_model_loader: - kv  52:              quantize.imatrix.chunks_count u32              = 79
+llama_model_loader: - type  f32:  313 tensors
+llama_model_loader: - type q4_K:  291 tensors
+llama_model_loader: - type q5_K:  106 tensors
+llama_model_loader: - type q6_K:   49 tensors
+llama_model_loader: - type bf16:   48 tensors
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = Q4_K - Small
+print_info: file size   = 42.38 GiB (4.57 BPW) 
+load: printing all EOG tokens:
+load:   - 151643 ('<|endoftext|>')
+load:   - 151645 ('<|im_end|>')
+load:   - 151662 ('<|fim_pad|>')
+load:   - 151663 ('<|repo_name|>')
+load:   - 151664 ('<|file_sep|>')
+load: special tokens cache size = 26
+load: token to piece cache size = 0.9311 MB
+print_info: arch             = qwen3next
+print_info: vocab_only       = 0
+print_info: n_ctx_train      = 262144
+print_info: n_embd           = 2048
+print_info: n_embd_inp       = 2048
+print_info: n_layer          = 48
+print_info: n_head           = 16
+print_info: n_head_kv        = 2
+print_info: n_rot            = 64
+print_info: n_swa            = 0
+print_info: is_swa_any       = 0
+print_info: n_embd_head_k    = 256
+print_info: n_embd_head_v    = 256
+print_info: n_gqa            = 8
+print_info: n_embd_k_gqa     = 512
+print_info: n_embd_v_gqa     = 512
+print_info: f_norm_eps       = 0.0e+00
+print_info: f_norm_rms_eps   = 1.0e-06
+print_info: f_clamp_kqv      = 0.0e+00
+print_info: f_max_alibi_bias = 0.0e+00
+print_info: f_logit_scale    = 0.0e+00
+print_info: f_attn_scale     = 0.0e+00
+print_info: n_ff             = 5120
+print_info: n_expert         = 512
+print_info: n_expert_used    = 10
+print_info: n_expert_groups  = 0
+print_info: n_group_used     = 0
+print_info: causal attn      = 1
+print_info: pooling type     = 0
+print_info: rope type        = 2
+print_info: rope scaling     = linear
+print_info: freq_base_train  = 10000000.0
+print_info: freq_scale_train = 1
+print_info: n_ctx_orig_yarn  = 262144
+print_info: rope_yarn_log_mul= 0.0000
+print_info: rope_finetuned   = unknown
+print_info: ssm_d_conv       = 4
+print_info: ssm_d_inner      = 4096
+print_info: ssm_d_state      = 128
+print_info: ssm_dt_rank      = 32
+print_info: ssm_n_group      = 16
+print_info: ssm_dt_b_c_rms   = 0
+print_info: model type       = 80B.A3B
+print_info: model params     = 79.67 B
+print_info: general.name     = Qwen3-Next-80B-A3B-Thinking
+print_info: vocab type       = BPE
+print_info: n_vocab          = 151936
+print_info: n_merges         = 151387
+print_info: BOS token        = 11 ','
+print_info: EOS token        = 151645 '<|im_end|>'
+print_info: EOT token        = 151645 '<|im_end|>'
+print_info: PAD token        = 151654 '<|vision_pad|>'
+print_info: LF token         = 198 'Ċ'
+print_info: FIM PRE token    = 151659 '<|fim_prefix|>'
+print_info: FIM SUF token    = 151661 '<|fim_suffix|>'
+print_info: FIM MID token    = 151660 '<|fim_middle|>'
+print_info: FIM PAD token    = 151662 '<|fim_pad|>'
+print_info: FIM REP token    = 151663 '<|repo_name|>'
+print_info: FIM SEP token    = 151664 '<|file_sep|>'
+print_info: EOG token        = 151643 '<|endoftext|>'
+print_info: EOG token        = 151645 '<|im_end|>'
+print_info: EOG token        = 151662 '<|fim_pad|>'
+print_info: EOG token        = 151663 '<|repo_name|>'
+print_info: EOG token        = 151664 '<|file_sep|>'
+print_info: max token length = 256
+load_tensors: loading model tensors, this can take a while... (mmap = true)
+load_tensors:   CPU_Mapped model buffer size = 43395.75 MiB
+load_tensors:   CPU_REPACK model buffer size = 40567.78 MiB
+....................................................................................................
+common_init_result: added <|endoftext|> logit bias = -inf
+common_init_result: added <|im_end|> logit bias = -inf
+common_init_result: added <|fim_pad|> logit bias = -inf
+common_init_result: added <|repo_name|> logit bias = -inf
+common_init_result: added <|file_sep|> logit bias = -inf
+llama_context: constructing llama_context
+llama_context: n_seq_max     = 1
+llama_context: n_ctx         = 4096
+llama_context: n_ctx_seq     = 4096
+llama_context: n_batch       = 2048
+llama_context: n_ubatch      = 512
+llama_context: causal_attn   = 1
+llama_context: flash_attn    = auto
+llama_context: kv_unified    = false
+llama_context: freq_base     = 10000000.0
+llama_context: freq_scale    = 1
+llama_context: n_ctx_seq (4096) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+llama_context:        CPU  output buffer size =     0.58 MiB
+llama_kv_cache:        CPU KV buffer size =    96.00 MiB
+llama_kv_cache: size =   96.00 MiB (  4096 cells,  12 layers,  1/1 seqs), K (f16):   48.00 MiB, V (f16):   48.00 MiB
+llama_memory_recurrent:        CPU RS buffer size =    75.38 MiB
+llama_memory_recurrent: size =   75.38 MiB (     1 cells,  48 layers,  1 seqs), R (f32):    3.38 MiB, S (f32):   72.00 MiB
+llama_context: Flash Attention was auto, set to enabled
+llama_context:        CPU compute buffer size =   379.77 MiB
+llama_context: graph nodes  = 21985 (with bs=512), 8449 (with bs=1)
+llama_context: graph splits = 3394 (with bs=512), 1 (with bs=1)
+common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+main: llama threadpool init, n_threads = 96
+main: chat template is available, enabling conversation mode (disable it with -no-cnv)
+*** User-specified prompt will pre-start conversation, did you mean to set --system-prompt (-sys) instead?
+main: chat template example:
+<|im_start|>system
+You are a helpful assistant<|im_end|>
+<|im_start|>user
+Hello<|im_end|>
+<|im_start|>assistant
+Hi there<|im_end|>
+<|im_start|>user
+How are you?<|im_end|>
+<|im_start|>assistant
+
+
+system_info: n_threads = 96 (n_threads_batch = 96) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+
+main: interactive mode on.
+sampler seed: 595242473
+sampler params: 
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
+	top_k = 20, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.600
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000
+sampler chain: logits -> penalties -> dry -> top-n-sigma -> top-k -> typical -> top-p -> min-p -> xtc -> temp-ext -> dist 
+generate: n_ctx = 4096, n_batch = 2048, n_predict = 512, n_keep = 0
+
+== Running in interactive mode. ==
+ - Press Ctrl+C to interject at any time.
+ - Press Return to return control to the AI.
+ - To return control without starting a new line, end your input with '/'.
+ - If you want to submit another line, end your input with '\'.
+ - Not using system message. To change it, set a different value via -sys PROMPT
+
+user
+Python function called 1000x/sec creates a 1KB dict each call.
+Better to: A) Pre-allocate global dict and clear() each time, or B) Create new dict each time?
+Explain memory and performance implications in 2-3 sentences.
+assistant
+<think>
+We are comparing two options for a function that is called 1000 times per second and creates a 1KB dict each time.
+ Option A: Pre-allocate a global dict and clear() it each time.
+ Option B: Create a new dict each time.
+
+ Memory implications:
+ - Option A: The global dict is allocated once and then reused. Clearing it will free the memory for the key-value pairs but the underlying hash table might not shrink (so the allocated memory for the hash table might remain large). However, the total memory usage for the dict structure itself (the hash table) might stay constant at the size of the largest dict we've had (or the size it was when we last grew it). Since we are always creating a 1KB dict (which is about 1000 bytes of data, but the dict structure might be larger due to over-allocation), the memory for the dict structure might be fixed after the first few allocations.
+
+ - Option B: Creating a new dict each time means that the old dict becomes garbage and will be collected by the garbage collector. However, the memory usage might fluctuate because we are constantly allocating and deallocating. But note: the Python memory allocator might reuse memory from the deallocated dicts for new ones, so the total memory might not grow too much. However, there is a cost of frequent allocations and deallocations.
+
+ Performance implications:
+ - Option A: Clearing a dict is O(n) in the number of keys (but for a fixed size dict, it's constant time). However, the clear() operation might not free the underlying hash table, so the next time we add items, we might not need to resize (which is expensive). But if the dict is cleared and then we add the same number of items, it's efficient.
+
+ - Option B: Creating a new dict each time involves allocating a new hash table and then populating it. The allocation and deallocation of the dict object (and the hash table) is more expensive than just clearing. Also, the garbage collector has to run more often to clean up the old dicts.
+
+ However, note that for small dicts (like 1KB) the cost of allocation and deallocation might be low, but 1000 times per second (1000 Hz) is a high frequency. 
+
+ In practice, for a fixed size dict, pre-allocating and clearing (Option A) is generally more efficient because:
+   - It avoids the overhead of repeated memory allocations
+> EOF by user
+
+
+common_perf_print:    sampling time =      67.61 ms
+common_perf_print:    samplers time =      26.07 ms /   577 tokens
+common_perf_print:        load time =   24166.52 ms
+common_perf_print: prompt eval time =    1666.50 ms /    65 tokens (   25.64 ms per token,    39.00 tokens per second)
+common_perf_print:        eval time =   48320.94 ms /   511 runs   (   94.56 ms per token,    10.58 tokens per second)
+common_perf_print:       total time =   50158.62 ms /   576 tokens
+common_perf_print: unaccounted time =     103.58 ms /   0.2 %      (total - sampling - prompt eval - eval) / (total)
+common_perf_print:    graphs reused =          0
+llama_memory_breakdown_print: | memory breakdown [MiB] | total   free     self   model   context   compute    unaccounted |
+llama_memory_breakdown_print: |   - Host               |                 43946 = 43395 +     171 +     379                |
+llama_memory_breakdown_print: |   - CPU_REPACK         |                 40567 = 40567 +       0 +       0                |

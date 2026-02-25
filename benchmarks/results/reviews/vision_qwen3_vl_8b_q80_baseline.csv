@@ -1,0 +1,31 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,9.9,3,Good analysis with failure modes and amendments
+general,t3_q2_system_failure,37.5,0,Just echoed the question - no actual response
+general,t3_q3_strategic_communication,11.5,3,Good board statement with conviction
+general,t2_q1_synthesis,12.0,3,Good synthesis recommendation
+general,t2_q2_transform,11.5,3,Correct YAML transformation
+general,t2_q3_schedule,10.5,2,Good scheduling analysis
+general,t2_q4_inconsistency,27.2,0,Just echoed the question - no actual response
+general,t1_q1_json,14.0,0,Just echoed - no JSON output
+general,t1_q2_multistep,12.2,3,Correct list processing with count=6
+general,t1_q3_compare,12.3,3,Good microservices vs monolith comparison
+vl,t3_q1_scientific_diagram,11.2,3,Good scientific figure analysis
+vl,t3_q2_architectural_blueprint,11.9,1,Asks for input but no actual analysis
+vl,t3_q3_multi_image_temporal,11.4,3,Good temporal deforestation analysis
+vl,t2_q1_math,12.3,3,Correct solution x=5 with steps
+vl,t2_q2_flowchart,11.7,2,Good flowchart vs process map comparison
+vl,t2_q3_diff,128.5,0,Just echoed - no actual response
+vl,t2_q4_puzzle,11.6,0,Sequence number garbage
+vl,t1_q1_chart,12.2,3,Good bar chart analysis
+vl,t1_q2_invoice,12.4,1,Hallucinated invoice data not from image
+vl,t1_q3_code,12.2,3,Correctly identifies division by zero bug
+agentic,t3_q1_competing_constraints,58.6,0,Just echoed prompt - no actual response
+agentic,t3_q2_multi_agent_coordination,57.1,0,Just echoed prompt - no actual response
+agentic,t3_q3_adversarial_robustness,47.8,0,Just echoed prompt - no actual response
+agentic,t2_q1_ambiguous,27.7,0,Just echoed prompt - no actual response
+agentic,t2_q2_error_chain,47.2,0,Just echoed prompt - no actual response
+agentic,t2_q3_schema_edge,26.2,0,Just echoed prompt - no actual response
+agentic,t2_q4_orchestration,41.3,0,Just echoed prompt - no actual response
+agentic,t1_q1_sequential,17.9,0,Just echoed prompt - no actual response
+agentic,t1_q2_error_handling,31.2,0,Just echoed prompt - no actual response
+agentic,t1_q3_nested_params,29.8,0,Just echoed prompt - no actual response

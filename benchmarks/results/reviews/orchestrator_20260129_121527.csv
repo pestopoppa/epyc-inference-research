@@ -1,0 +1,83 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,37.0,3,Comprehensive research design critique; identifies confounders and selection bias
+thinking,t3_q2_causal_inference,39.5,3,Sound DAG analysis; correctly identifies {Gene} as minimal adjustment set
+thinking,t3_q3_reasoning_trap,38.8,3,Identifies confounding variables flaw; specific examples given
+thinking,t2_q1_paradox,38.5,3,Well-structured Ship of Theseus analysis; multiple philosophical positions
+thinking,t2_q2_counterfactual,34.2,3,All three dimensions analyzed with specific mechanisms
+thinking,t2_q3_formal,39.7,3,Valid hypothetical syllogism proof; clearly structured
+thinking,t2_q4_metacognition,37.1,3,Clear Fermi estimation with explicit assumptions and bounds
+thinking,t1_q1_multistep,41.2,3,Correct approach with step-by-step work shown
+thinking,t1_q2_hypothesis,34.3,2,Lists alternative hypotheses but somewhat generic; lacks experimental design
+thinking,t1_q3_planning,33.2,3,Systematic constraint-checking; all valid orderings explored
+coder,t3_q1_concurrent_correctness,36.9,3,Full ABA problem explanation with sequence diagram
+coder,t3_q2_distributed_consistency,39.3,3,All 4 strategies covered: LWW vector clocks app-level CRDT
+coder,t3_q3_algorithmic_hardness,33.5,3,Correct adversary argument for Omega(n) lower bound
+coder,t2_q1_design,30.7,3,Complete LRU cache with get() and put()
+coder,t2_q2_debug_complex,28.0,3,Race condition identified; asyncio.Lock fix correct
+coder,t2_q3_optimize,24.7,3,Hash map O(n) solution; correct algorithm
+coder,t2_q4_system,29.5,3,Rate limiter with sliding window; complete implementation
+coder,t1_q1_algorithm,26.0,1,Traces binary search but confused about actual bug; wrong fix proposed
+coder,t1_q2_refactor,31.2,3,Set-based O(n) dedup; clean code
+coder,t1_q3_test,29.3,3,Comprehensive pytest test cases with edge cases
+general,t3_q1_policy_analysis,30.7,2,Started failure mode analysis but truncated; only 878 tokens
+general,t3_q2_system_failure,30.7,3,Correct replica lag diagnosis; read-your-writes fix
+general,t3_q3_strategic_communication,30.7,3,Proper board meeting statement; tone and structure correct
+general,t2_q1_synthesis,32.2,3,Phased approach balancing quick fix + long-term refactor
+general,t2_q2_transform,33.0,3,Correct YAML transformation with grouping
+general,t2_q3_schedule,27.2,3,Constraint satisfaction with all rules checked
+general,t2_q4_inconsistency,25.9,3,Both key inconsistencies identified (JSON vs form-encoded)
+general,t1_q1_json,29.5,1,JSON present but [DATE] placeholder instead of actual date
+general,t1_q2_multistep,33.0,3,Correct dedup sort number count
+general,t1_q3_compare,26.4,3,Good microservices vs monolith comparison
+math,t3_q1_analysis,28.2,3,Differentiability via Weierstrass M-test; correct structure
+math,t3_q2_combinatorics,27.9,2,Sign-reversing involution approach correct but proof incomplete
+math,t3_q3_probability_theory,26.1,3,E[N]=e derived; both direct calculation and geometric argument
+math,t2_q1_optimization,30.9,3,Correct x=100m y=50m area=5000m2
+math,t2_q2_proof,27.1,3,Correctly identifies n=1->2 induction step failure
+math,t2_q3_calculus,32.0,3,Full antiderivative work shown; answer=10
+math,t2_q4_statistics,29.4,3,Mean median std dev all calculated correctly
+math,t1_q1_word_problem,30.4,3,All three answers correct with work shown
+math,t1_q2_system_equations,31.8,2,Correct substitution but truncated before listing all 4 solutions
+math,t1_q3_probability,31.9,2,Correct setup but truncated before final numerical answers
+agentic,t3_q1_competing_constraints,24.9,2,CSV analysis code correct but prompt asked for robust plan not code
+agentic,t3_q2_multi_agent_coordination,24.3,1,Returns stock price JSON instead of multi-agent coordination plan
+agentic,t3_q3_adversarial_robustness,23.5,3,Security analysis correct; identifies command injection whitelisting approach
+agentic,t2_q1_ambiguous,25.8,1,Asks clarification questions but then errors out; LLM call failure
+agentic,t2_q2_error_chain,26.6,3,Correct check_dns tool with reasoning
+agentic,t2_q3_schema_edge,28.9,3,Correct API query JSON with proper null body
+agentic,t2_q4_orchestration,30.6,3,Complete deployment pipeline with git_checkout->test->build->deploy
+agentic,t1_q1_sequential,33.8,3,Correct tool call array (read_file->grep_search)
+agentic,t1_q2_error_handling,26.2,2,Good recovery strategy (search_users) but verbose; asks user instead of acting
+agentic,t1_q3_nested_params,30.4,3,Correct nested JSON with assignees array and metadata object
+instruction_precision,t3_q1_self_referential,33.1,1,Attempts self-referential sentence but word/letter counts are wrong
+instruction_precision,t3_q2_cascading_constraints,25.6,1,5 words present but violates non-increasing length rule (Needle breaks chain)
+instruction_precision,t3_q3_meta_instruction,27.4,3,Correct: echoes instructions then executes them
+instruction_precision,t2_q1_resist_elaboration,25.8,1,Output starts with system prompt preamble then 2 then elaborates; violated only-number rule
+instruction_precision,t2_q2_maintain_format,30.4,2,Correct ERROR_TYPE/ROOT_CAUSE/FIX format but wrong root cause
+instruction_precision,t2_q3_empty_handling,32.6,3,Correct NONE output with explanation
+instruction_precision,t2_q4_conflicting_constraints,20.2,2,7 words starts with A technical - meets most constraints
+instruction_precision,t1_q1_negative_instruction,26.2,3,Explains photosynthesis without using sunlight - uses light instead
+instruction_precision,t1_q2_word_limit,26.0,1,First sentence is 20 words but then continues far beyond limit
+instruction_precision,t1_q3_structured_format,32.9,3,Correct LANGUAGE (YEAR) format one per line
+instruction_precision,t1_q4_multiple_constraints,26.1,3,France Germany Italy Netherlands Spain - all European alphabetical exactly 5
+long_context,t3_q1_multi_hop_reasoning,11.0,1,Attempts multi-hop but all Not Found; pipeline produced digests but facts not located
+long_context,t3_q2_contradiction_detection,8.8,0,Timeout error after 120s; inference failed
+long_context,t3_q3_evolving_requirements,9.8,0,Timeout error after 120s; inference failed
+long_context,t2_q1_deep_needle,33.5,0,Worker returned 400 errors from port 8082; answer describes errors not content
+long_context,t2_q2_synthesis,7.7,0,Timeout error after 120s; inference failed
+long_context,t2_q3_architecture,9.9,2,Generic architecture analysis; identifies modular pattern but lacks specifics
+long_context,t1_q1_needle,18.2,3,Found the hardcoded API key correctly
+long_context,t1_q2_multi_file,12.4,1,Generic code analysis; lacks specific file content from context
+long_context,t1_q3_extraction,17.7,1,Extracts dates but uncertain accuracy; may hallucinate
+vl,t3_q1_chart_critique,0,3,Correct chart reading with values; identifies misleading impressions
+vl,t3_q2_multi_chart_synthesis,0,3,Reads GPI values correctly; calculates differences and percentages
+vl,t3_q3_twyne_security,11.4,2,Generic DeFi security analysis; not specific to Twyne architecture from image
+vl,t3_q4_twyne_economic,9.6,2,Identifies borrower/lender/liquidator but generic not Twyne-specific
+vl,t3_q5_document_forensics,11.6,2,Generic entity extraction; entities likely hallucinated
+vl,t2_q1_calculation,0,2,Starts calculation but truncated to 1 line of answer
+vl,t2_q2_comparison,0,3,Correct bar chart reading; Japan military role 29% vs 23% = 6% difference
+vl,t2_q3_trend_analysis,0,3,Identifies sharpest increase 2013-2014; estimates 300 increase
+vl,t2_q4_ratio_calculation,0,2,Identifies values but ratio calculation may be inaccurate
+vl,t2_q5_document_synthesis,0,0,Only fragment output truncated at 1 line
+vl,t1_q1_scene_text,0,0,Only extracts Centre - should find all text in scene
+vl,t1_q2_sign_reading,0,0,Reads wrong destinations; confuses sign content

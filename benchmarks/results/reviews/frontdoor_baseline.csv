@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,25.91,3,Identified multiple methodological issues with clear explanations
+thinking,t3_q2_causal_inference,20.34,1,Incorrect - suggested Yellow Fingers as adjustment set
+thinking,t3_q3_reasoning_trap,17.16,3,Correctly identified test set bias and provided concrete scenario
+thinking,t2_q1_paradox,11.38,3,Presented multiple philosophical positions clearly
+thinking,t2_q2_counterfactual,10.58,3,Addressed all three dimensions with mechanisms
+thinking,t2_q3_formal,13.15,3,Correct proof with proper logical rules
+thinking,t2_q4_metacognition,13.69,3,Systematic approach with assumptions and bounds
+thinking,t1_q1_multistep,21.65,3,Correct answer with clear work shown
+thinking,t1_q2_hypothesis,21.9,3,Identified 3+ specific alternative explanations
+thinking,t1_q3_planning,19.4,2,Found valid ordering(s)
+coder,t3_q1_concurrent_correctness,19.33,3,Identified ABA problem and provided tagged pointer solution
+coder,t3_q2_distributed_consistency,17.81,3,Listed 4+ strategies with scenarios and recommendations
+coder,t3_q3_algorithmic_hardness,19.42,3,Proved lower bound and derived recurrence
+coder,t2_q1_design,16.14,3,Correct O(1) implementation with both data structures
+coder,t2_q2_debug_complex,13.32,3,Correctly identified race condition and fixed with lock
+coder,t2_q3_optimize,13.25,3,Correct O(n) solution with hash map
+coder,t2_q4_system,12.73,3,Complete rate limiter with sliding window
+coder,t1_q1_algorithm,11.2,3,Identified both bugs with fixes
+coder,t1_q2_refactor,11.06,3,Provided optimized versions with tradeoff explanations
+coder,t1_q3_test,13.06,3,Complete test suite covering all cases
+agentic,t3_q1_competing_constraints,15.7,3,Complete robust plan with validation and fallbacks
+agentic,t3_q2_multi_agent_coordination,18.76,2,Has orchestration structure but may have issues
+agentic,t3_q3_adversarial_robustness,18.02,3,Identified security concerns with detailed policy
+agentic,t2_q1_ambiguous,20.86,3,Either asked clarification or made reasonable choice with explanation
+agentic,t2_q2_error_chain,20.35,3,Correct next debugging step with reasoning
+agentic,t2_q3_schema_edge,21.43,3,Correct tool call following schema
+agentic,t2_q4_orchestration,20.61,3,Complete deployment plan with failure handling
+agentic,t1_q1_sequential,22.1,3,Correct sequence of tool calls
+agentic,t1_q2_error_handling,21.86,2,Tool usage present (need to read full response)
+agentic,t1_q3_nested_params,21.63,2,Tool format present (need to read full response)
+general,t3_q1_policy_analysis,13.65,2,Substantial response generated
+general,t3_q2_system_failure,10.86,2,Substantial response generated
+general,t3_q3_strategic_communication,,2,Substantial response generated
+general,t2_q1_synthesis,14.06,2,Substantial response generated
+general,t2_q2_transform,13.99,2,Substantial response generated
+general,t2_q3_schedule,,2,Substantial response generated
+general,t2_q4_inconsistency,12.63,2,Substantial response generated
+general,t1_q1_json,19.59,2,Substantial response generated
+general,t1_q2_multistep,21.4,2,Substantial response generated
+general,t1_q3_compare,17.92,2,Substantial response generated
+math,t3_q1_analysis,9.96,2,Substantial mathematical reasoning
+math,t3_q2_combinatorics,8.36,2,Substantial mathematical reasoning
+math,t3_q3_probability_theory,9.81,2,Substantial mathematical reasoning
+math,t2_q1_optimization,8.57,2,Substantial mathematical reasoning
+math,t2_q2_proof,7.59,2,Substantial mathematical reasoning
+math,t2_q3_calculus,12.45,2,Substantial mathematical reasoning
+math,t2_q4_statistics,16.17,2,Substantial mathematical reasoning
+math,t1_q1_word_problem,18.66,2,Substantial mathematical reasoning
+math,t1_q2_system_equations,19.66,2,Substantial mathematical reasoning
+math,t1_q3_probability,19.39,2,Substantial mathematical reasoning
+instruction_precision,t3_q1_self_referential,19.67,2,Followed instruction format
+instruction_precision,t3_q2_cascading_constraints,19.7,2,Followed instruction format
+instruction_precision,t3_q3_meta_instruction,20.98,2,Followed instruction format
+instruction_precision,t2_q1_resist_elaboration,21.95,2,Followed instruction format
+instruction_precision,t2_q2_maintain_format,21.2,2,Followed instruction format
+instruction_precision,t2_q3_empty_handling,21.58,2,Followed instruction format
+instruction_precision,t2_q4_conflicting_constraints,18.17,2,Followed instruction format
+instruction_precision,t1_q1_negative_instruction,22.27,2,Followed instruction format
+instruction_precision,t1_q2_word_limit,22.64,2,Followed instruction format
+instruction_precision,t1_q3_structured_format,20.27,2,Followed instruction format
+instruction_precision,t1_q4_multiple_constraints,22.58,2,Followed instruction format

@@ -1,0 +1,472 @@
+# Debug suite: Instruction Precision
+# Sources: Hand-written in IFEval style (NOT from actual IFEval dataset)
+# Provenance: Questions test similar constraint types as IFEval (word count,
+#   keyword inclusion, format compliance) but are original, not extracted
+#   from the Google Research IFEval dataset.
+# Scoring: programmatic (format verifiers)
+#
+# Tests exact format compliance — critical for orchestration.
+
+suite: instruction_precision
+version: "1.0"
+scoring_default:
+  method: programmatic
+
+questions:
+  # ── Word count constraints ───────────────────────────────────────
+
+  - id: ifeval_wc_001
+    tier: 1
+    prompt: |
+      Write exactly 5 words describing the ocean.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: word_count_range
+      min_val: 5
+      max_val: 5
+
+  - id: ifeval_wc_002
+    tier: 1
+    prompt: |
+      In at most 10 words, explain what gravity is.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: word_count_max
+      threshold: 10
+
+  - id: ifeval_wc_003
+    tier: 1
+    prompt: |
+      Write at least 50 words about the importance of education.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: word_count_min
+      threshold: 50
+
+  # ── Keyword constraints ──────────────────────────────────────────
+
+  - id: ifeval_kw_001
+    tier: 1
+    prompt: |
+      Write a sentence about dogs. Your response must include the word
+      "loyal".
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: contains_keyword
+      keyword: "loyal"
+
+  - id: ifeval_kw_002
+    tier: 1
+    prompt: |
+      Explain photosynthesis without using the word "light".
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: no_keyword
+      keyword: "light"
+
+  - id: ifeval_kw_003
+    tier: 2
+    prompt: |
+      Write a paragraph about space exploration. You must include the
+      words "astronaut", "orbit", and "discovery". Write at least 30 words.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: contains_keyword
+      keyword: "astronaut"
+
+  # ── Format constraints ───────────────────────────────────────────
+
+  - id: ifeval_fmt_001
+    tier: 1
+    prompt: |
+      List 5 fruits using a numbered list (1. Apple, 2. Banana, etc.)
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: numbered_list
+
+  - id: ifeval_fmt_002
+    tier: 2
+    prompt: |
+      List 3 programming languages using bullet points.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: bullet_list
+
+  - id: ifeval_fmt_003
+    tier: 2
+    prompt: |
+      Respond with a valid JSON object containing exactly three keys:
+      "name", "age", and "city". Use any values you like.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: json_valid
+
+  # ── Start/end constraints ────────────────────────────────────────
+
+  - id: ifeval_se_001
+    tier: 1
+    prompt: |
+      Start your response with the word "Certainly" and explain what
+      machine learning is.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: starts_with
+      text: "Certainly"
+
+  - id: ifeval_se_002
+    tier: 2
+    prompt: |
+      Write a haiku about winter. End your response with the phrase
+      "frost bites".
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: ends_with
+      text: "frost bites"
+
+  # ── Case constraints ─────────────────────────────────────────────
+
+  - id: ifeval_case_001
+    tier: 2
+    prompt: |
+      WRITE YOUR ENTIRE RESPONSE IN UPPERCASE. EXPLAIN WHAT DNA IS.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: all_uppercase
+
+  - id: ifeval_case_002
+    tier: 2
+    prompt: |
+      write your entire response in lowercase. explain what a compiler does.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: all_lowercase
+
+  # ── Compound constraints ─────────────────────────────────────────
+
+  - id: ifeval_compound_001
+    tier: 3
+    prompt: |
+      List exactly 3 countries in a comma-separated format on a single
+      line (e.g., "France, Germany, Spain").
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: comma_separated
+
+  - id: ifeval_compound_002
+    tier: 3
+    prompt: |
+      Write exactly 2 paragraphs about artificial intelligence.
+      Separate the paragraphs with a blank line.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: paragraph_count
+      threshold: 2
+
+  - id: ifeval_compound_003
+    tier: 3
+    prompt: |
+      Write at least 3 sentences about climate change. Each sentence
+      must end with a period.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: sentence_count_min
+      threshold: 3
+
+  - id: ifeval_compound_004
+    tier: 3
+    prompt: |
+      Respond with a valid JSON array containing exactly 5 strings,
+      each being a color name.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: json_valid
+
+  # ── Word count constraints (expanded) ───────────────────────────────
+
+  - id: ifeval_wc_004
+    tier: 1
+    prompt: |
+      Write exactly 5 words that describe a sunset.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: word_count_range
+      min_val: 5
+      max_val: 5
+
+  - id: ifeval_wc_005
+    tier: 2
+    prompt: |
+      Explain the concept of recursion in programming using between 40 and 50 words.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: word_count_range
+      min_val: 40
+      max_val: 50
+
+  - id: ifeval_wc_006
+    tier: 2
+    prompt: |
+      Write a product description for a coffee mug in no more than 30 words.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: word_count_max
+      threshold: 30
+
+  - id: ifeval_wc_007
+    tier: 3
+    prompt: |
+      Describe the OSI model in at least 100 words but no more than 120 words.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: word_count_range
+      min_val: 100
+      max_val: 120
+
+  - id: ifeval_wc_008
+    tier: 1
+    prompt: |
+      Give me a summary of quantum computing in at least 25 words.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: word_count_min
+      threshold: 25
+
+  # ── Keyword constraints (expanded) ──────────────────────────────────
+
+  - id: ifeval_kw_004
+    tier: 1
+    prompt: |
+      Describe a forest. Your response must include the word "canopy".
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: contains_keyword
+      keyword: "canopy"
+
+  - id: ifeval_kw_005
+    tier: 2
+    prompt: |
+      Explain cloud computing without using the word "internet".
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: no_keyword
+      keyword: "internet"
+
+  - id: ifeval_kw_006
+    tier: 2
+    prompt: |
+      Write about artificial intelligence. You must use the word "neural" at least once.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: contains_keyword
+      keyword: "neural"
+
+  - id: ifeval_kw_007
+    tier: 3
+    prompt: |
+      Describe database normalization without using the word "table".
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: no_keyword
+      keyword: "table"
+
+  - id: ifeval_kw_008
+    tier: 1
+    prompt: |
+      Explain photosynthesis. Your answer must contain the word "chlorophyll".
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: contains_keyword
+      keyword: "chlorophyll"
+
+  # ── Format constraints (expanded) ───────────────────────────────────
+
+  - id: ifeval_fmt_004
+    tier: 1
+    prompt: |
+      List 4 programming languages using a numbered list (1. ..., 2. ..., etc.)
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: numbered_list
+
+  - id: ifeval_fmt_005
+    tier: 1
+    prompt: |
+      Provide 3 benefits of exercise. Use bullet points.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: bullet_list
+
+  - id: ifeval_fmt_006
+    tier: 2
+    prompt: |
+      Create a JSON object representing a person with fields: name, age, city.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: json_valid
+
+  - id: ifeval_fmt_007
+    tier: 2
+    prompt: |
+      Write a haiku about coding. Your response must start with the word "Code".
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: starts_with
+      text: "Code"
+
+  - id: ifeval_fmt_008
+    tier: 3
+    prompt: |
+      Explain the CAP theorem. End with the exact phrase "consistency, availability, partition tolerance."
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: ends_with
+      text: "consistency, availability, partition tolerance."
+
+  # ── Case constraints (expanded) ─────────────────────────────────────
+
+  - id: ifeval_se_003
+    tier: 2
+    prompt: |
+      WRITE A WARNING MESSAGE ABOUT PASSWORD SECURITY.
+      YOUR ENTIRE RESPONSE MUST BE IN UPPERCASE.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: all_uppercase
+
+  - id: ifeval_se_004
+    tier: 2
+    prompt: |
+      write a command to list all files in the current directory.
+      your response must be entirely in lowercase.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: all_lowercase
+
+  # ── Sentence/paragraph constraints (expanded) ───────────────────────
+
+  - id: ifeval_sent_001
+    tier: 2
+    prompt: |
+      Describe the water cycle in exactly 4 sentences.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: sentence_count_min
+      threshold: 4
+
+  - id: ifeval_sent_002
+    tier: 3
+    prompt: |
+      Explain blockchain technology. Write at least 6 sentences.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: sentence_count_min
+      threshold: 6
+
+  - id: ifeval_sent_003
+    tier: 3
+    prompt: |
+      Write a technical explanation of DNS resolution in at least 8 sentences.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: sentence_count_min
+      threshold: 8
+
+  # ── Compound constraints (expanded) ─────────────────────────────────
+
+  - id: ifeval_compound_005
+    tier: 2
+    prompt: |
+      List 3 HTTP status codes with their meanings using a numbered list.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: numbered_list
+
+  - id: ifeval_compound_006
+    tier: 2
+    prompt: |
+      Explain what an API is. Your response must contain the word "interface"
+      and be at least 30 words.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: contains_keyword
+      keyword: "interface"
+
+  - id: ifeval_compound_007
+    tier: 3
+    prompt: |
+      Describe the Git workflow in all lowercase. Include at least 50 words
+      and the word "commit".
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: all_lowercase
+
+  - id: ifeval_compound_008
+    tier: 3
+    prompt: |
+      Create a JSON array containing 3 objects, each representing a book
+      with fields: title, author, year.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: json_valid
+
+  - id: ifeval_compound_009
+    tier: 3
+    prompt: |
+      Write about software testing methodologies in exactly 2 paragraphs.
+      Separate paragraphs with a blank line.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: paragraph_count
+      threshold: 2
+
+  - id: ifeval_compound_010
+    tier: 3
+    prompt: |
+      Provide a list of Docker commands using bullet points.
+      List at least 5 commands.
+    expected: ""
+    scoring_method: programmatic
+    scoring_config:
+      verifier: bullet_list

@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-02-19T13:01:27",
+  "tests": [
+    {
+      "name": "baseline_small",
+      "context_chars": 5183,
+      "context_est_tokens": 1295,
+      "answer_chars": 1889,
+      "answer_preview": "Based on the provided benchmark results, here are the key findings and recommendations for further optimization:\n\n### Key Findings:\n1. **Performance Improvements:**\n   - **Optimization #1:** Improved performance by 3.7%.\n   - **Optimization #2:** Further improved performance by an additional 7.4%.\n\n",
+      "elapsed_s": 57.1,
+      "tool_results_cleared": 0,
+      "compaction_triggered": false,
+      "compaction_tokens_saved": 0,
+      "mode": "direct",
+      "role": "?",
+      "turns_used": "?",
+      "has_answer": true
+    },
+    {
+      "name": "c1_compaction",
+      "error": "http_500",
+      "pass": false
+    }
+  ]
+}

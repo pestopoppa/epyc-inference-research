@@ -1,0 +1,24 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,40.08,3,"Identifies 4 methodological issues (selection, confounding, measurement, publication bias) with clear mechanisms"
+thinking,t3_q2_causal_inference,40.08,1,"Correct on adjustment set {Gene}, but incorrect analysis of Yellow Fingers as collider"
+thinking,t3_q3_reasoning_trap,40.08,3,Correctly identifies generalization vs specialization flaw; concrete movie review scenario
+thinking,t2_q1_paradox,40.08,3,Two valid philosophical positions (continuity vs parts) with justified preference
+thinking,t2_q2_counterfactual,40.08,3,"Analyzes all 3 dimensions (speed, collaboration, reproducibility) with mechanisms and second-order effects"
+thinking,t2_q3_formal,40.08,3,Correct formal proof of transitivity using modus ponens
+thinking,t2_q4_metacognition,40.08,3,Systematic Fermi estimation with clear breakdown of assumptions for piano tuners
+thinking,t1_q1_multistep,40.08,3,Correct calculation showing trains meet at 11:00 AM with clear algebra
+thinking,t1_q2_hypothesis,40.08,3,"Three valid alternative explanations (SES, parental involvement, time management)"
+thinking,t1_q3_planning,40.08,3,Systematic case analysis finding all valid plant watering orderings
+coder,t3_q1_concurrent_correctness,40.08,3,"Explains ABA problem in lock-free stack and solutions (tagged pointers, hazard pointers)"
+coder,t3_q2_distributed_consistency,40.08,3,"Discusses conflict resolution strategies: LWW, vector clocks, CRDTs with trade-offs"
+coder,t3_q3_algorithmic_hardness,40.08,3,Proves Omega(n) lower bound for k-th smallest; describes Quickselect with expected O(n)
+coder,t2_q1_design,40.08,3,Correct LRU cache design using hashmap + doubly linked list for O(1) operations with code
+coder,t2_q2_debug_complex,40.08,3,Identifies async race condition; proposes asyncio.Lock solution with corrected code
+coder,t2_q3_optimize,40.08,3,Optimizes count_pairs from O(n^2) to O(n) using hashmap with working code
+coder,t2_q4_system,40.08,3,Token bucket rate limiter design with clear implementation details
+coder,t1_q1_algorithm,40.08,3,"Identifies both binary search bugs (off-by-one in right init, infinite loop) with fixes"
+coder,t1_q2_refactor,40.08,3,Refactors O(n^2) duplicate finder to O(n) using sets; discusses speed vs memory trade-offs
+coder,t1_q3_test,40.08,3,"Comprehensive pytest test cases covering normal, edge, and error cases"
+agentic,t3_q1_competing_constraints,40.08,3,"Structured plan handling competing constraints: security, no web for code, schema inference"
+agentic,t3_q2_multi_agent_coordination,40.08,2,"Multi-agent coordination with phases and context passing, but missing time budget optimization"
+agentic,t3_q3_adversarial_robustness,40.08,3,"Identifies command injection security concern; proposes validation, sandboxing, monitoring"

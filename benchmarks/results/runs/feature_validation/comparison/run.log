@@ -1,0 +1,23 @@
+Orchestrator healthy
+
+=== BASELINE (15 features OFF) ===
+  Features set to OFF
+  [baseline] gen_01: 51.8s 200 → worker_explore
+  [baseline] gen_02: 35.1s 200 → worker_explore
+  [baseline] gen_03: 91.5s 200 → frontdoor
+  [baseline] gen_04: 87.0s 200 → frontdoor
+  [baseline] gen_05: 35.6s 200 → worker_explore
+  [baseline] tool_01: 48.7s 200 → worker_explore
+  [baseline] tool_02: 105.3s 504 (timeout) → 
+  [baseline] tool_03: 89.7s 504 (timeout) → 
+  [baseline] tool_04: 92.5s 429 (timeout) → 
+  [baseline] tool_05: 75.2s 200 → worker_explore
+
+--- Cooldown (60s) ---
+
+=== CANDIDATE (15 features ON) ===
+  Features set to ON
+  [candidate] gen_01: 90.5s 504 (timeout) → 
+  [candidate] gen_02: 105.7s 504 (timeout) → 
+  [candidate] gen_03: 90.6s 504 (timeout) → 
+  [candidate] gen_04: 120.1s 0 (timed out) → 

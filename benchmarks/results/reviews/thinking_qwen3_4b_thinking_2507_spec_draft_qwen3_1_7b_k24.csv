@@ -1,0 +1,22 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t2_q1_json,46.4,2,Content generated
+general,t3_q1_synthesis,45.9,2,Content generated
+general,t3_q3_schedule,44.0,2,Content generated
+general,t3_q4_inconsistency,46.4,2,Content generated
+thinking,t1_q2_sequence,42.3,3,Correct answer 42
+thinking,t2_q1_multistep,41.8,3,Good reasoning
+thinking,t2_q2_hypothesis,42.9,3,Good reasoning
+thinking,t2_q3_planning,43.9,3,Good reasoning
+thinking,t3_q3_formal,43.8,3,Good reasoning
+agentic,t1_q2_multi_param,45.5,3,Proper tool call
+agentic,t2_q2_error_handling,44.4,3,Proper tool call
+agentic,t2_q3_nested_params,44.4,2,JSON structure
+agentic,t3_q3_schema_edge,46.6,2,JSON structure
+math,t1_q1_arithmetic,43.3,2,Math work shown
+math,t2_q1_word_problem,43.1,2,Math work shown
+math,t2_q2_system_equations,46.3,2,Math work shown
+math,t2_q3_probability,43.4,2,Math work shown
+math,t3_q1_optimization,43.3,2,Math work shown
+math,t3_q2_proof,44.3,2,Math work shown
+math,t3_q3_calculus,42.1,2,Math work shown
+math,t3_q4_statistics,44.6,2,Math work shown

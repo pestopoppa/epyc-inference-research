@@ -1,0 +1,61 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,13.9,1,Low coherence (12.6%)
+thinking,t3_q2_causal_inference,12.3,1,Moderate (15.2%)
+thinking,t3_q3_reasoning_trap,11.4,1,Moderate (19.6%)
+thinking,t2_q1_paradox,13.5,1,Low coherence (14.3%)
+thinking,t2_q2_counterfactual,16.4,2,Coherent (29.9%)
+thinking,t2_q3_formal,12.4,2,Coherent (61.9%)
+thinking,t2_q4_metacognition,12.3,1,Moderate (15.7%)
+thinking,t1_q1_multistep,13.2,1,Moderate (17.3%)
+thinking,t1_q2_hypothesis,14.2,0,Very low coherence (9.6%)
+thinking,t1_q3_planning,12.4,2,Coherent (68.6%)
+coder,t3_q1_concurrent_correctness,13.8,2,Code present
+coder,t3_q2_distributed_consistency,12.4,1,No clear code
+coder,t3_q3_algorithmic_hardness,14.9,1,No clear code
+coder,t2_q1_design,21.6,2,Code present
+coder,t2_q2_debug_complex,13.4,0,Very low coherence (5.0%)
+coder,t2_q3_optimize,20.1,2,Code present
+coder,t2_q4_system,14.3,0,Very low coherence (7.9%)
+coder,t1_q1_algorithm,12.8,2,Code present
+coder,t1_q2_refactor,11.5,1,Low coherence (14.2%)
+coder,t1_q3_test,20.3,2,Code present
+agentic,t3_q1_competing_constraints,12.8,2,Tool call attempted
+agentic,t3_q2_multi_agent_coordination,19.2,2,Tool call attempted
+agentic,t3_q3_adversarial_robustness,18.3,2,Tool call attempted
+agentic,t2_q1_ambiguous,14.5,1,Low coherence (13.1%)
+agentic,t2_q2_error_chain,12.6,2,Tool call attempted
+agentic,t2_q3_schema_edge,17.6,2,Tool call attempted
+agentic,t2_q4_orchestration,14.6,2,Tool call attempted
+agentic,t1_q1_sequential,12.6,2,Tool call attempted
+agentic,t1_q2_error_handling,19.5,2,Tool call attempted
+agentic,t1_q3_nested_params,20.4,2,Tool call attempted
+general,t3_q1_policy_analysis,14.4,1,Moderate (16.2%)
+general,t3_q2_system_failure,13.9,0,Severe repetition detected
+general,t3_q3_strategic_communication,16.6,2,Coherent (61.1%)
+general,t2_q1_synthesis,14.3,1,Low coherence (13.4%)
+general,t2_q2_transform,20.9,2,Coherent (61.3%)
+general,t2_q3_schedule,11.5,0,Very low coherence (4.1%)
+general,t2_q4_inconsistency,12.0,0,Very low coherence (4.0%)
+general,t1_q1_json,22.1,2,Coherent (70.6%)
+general,t1_q2_multistep,13.7,0,Very low coherence (6.1%)
+general,t1_q3_compare,13.2,1,Low coherence (10.1%)
+math,t3_q2_combinatorics,12.7,2,Math content
+math,t3_q3_probability_theory,13.2,2,Math content
+math,t2_q1_optimization,12.1,0,Very low coherence (6.9%)
+math,t2_q2_proof,13.2,2,Math content
+math,t2_q3_calculus,14.4,1,Low coherence (10.3%)
+math,t2_q4_statistics,13.5,1,Math unclear
+math,t1_q1_word_problem,20.3,2,Math content
+math,t1_q2_system_equations,14.0,1,Math content
+math,t1_q3_probability,12.0,2,Math content
+instruction_precision,t3_q1_self_referential,19.3,2,Instruction response
+instruction_precision,t3_q2_cascading_constraints,18.7,1,Instruction response
+instruction_precision,t3_q3_meta_instruction,22.3,2,Instruction response
+instruction_precision,t2_q1_resist_elaboration,20.7,2,Instruction response
+instruction_precision,t2_q2_maintain_format,19.5,2,Instruction response
+instruction_precision,t2_q3_empty_handling,19.0,2,Instruction response
+instruction_precision,t2_q4_conflicting_constraints,18.9,2,Instruction response
+instruction_precision,t1_q1_negative_instruction,20.3,2,Instruction response
+instruction_precision,t1_q2_word_limit,19.4,1,Instruction response
+instruction_precision,t1_q3_structured_format,19.6,1,Instruction response
+instruction_precision,t1_q4_multiple_constraints,21.2,2,Instruction response

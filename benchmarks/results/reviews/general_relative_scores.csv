@@ -1,0 +1,791 @@
+model,question_id,score,score_reason
+architect_coding,t1_q1_json,10,Perfect JSON output
+architect_general,t1_q1_json,7,Correct JSON but repeated multiple times
+architect_hermes_4_70b,t1_q1_json,8,Minor: department is Platform team not Platform
+architect_meta_llama_3_1_70b,t1_q1_json,10,Perfect JSON output
+architect_meta_llama_3_70b,t1_q1_json,10,Perfect JSON output
+architect_qwen2_5_72b,t1_q1_json,10,Perfect JSON output
+architect_qwen2_5_72b_q4_k_m,t1_q1_json,8,Minor: department is Platform team not Platform
+coder_escalation,t1_q1_json,10,Perfect JSON output
+coder_primary,t1_q1_json,10,Perfect JSON output
+coder_qwen3_coder_30b_a3b,t1_q1_json,10,Perfect JSON output
+draft_deepseek_r1_distill_qwen_1_5b,t1_q1_json,10,Perfect JSON output
+draft_deepseek_r1_distill_qwen_1_5b_q80,t1_q1_json,10,Perfect JSON output
+draft_gemma3,t1_q1_json,7,Correct JSON but repeated multiple times
+draft_pard_deepseek_r1_distill_qwen_1_5b_q5_k_s,t1_q1_json,6,Missing or wrong department field
+draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0,t1_q1_json,3,"Only thinking tags, no final JSON"
+draft_pard_llama_3_2_1b_q4_0,t1_q1_json,3,Name missing Chen - only Sarah
+draft_pard_llama_3_2_1b_q8_0,t1_q1_json,7,Correct JSON but added Python code
+draft_pard_qwen3_0_6b_q4_0,t1_q1_json,7,Correct JSON but added Python code
+draft_qwen25,t1_q1_json,10,Perfect JSON output
+draft_qwen25_coder,t1_q1_json,10,Perfect JSON output
+draft_qwen2_0_5b_q2_k,t1_q1_json,8,Minor: department is Platform team not Platform
+draft_qwen2_5_0_5b_instruct_f16,t1_q1_json,10,Perfect JSON output
+draft_qwen2_5_coder_0_5b,t1_q1_json,1,No valid JSON structure detected
+draft_qwen2_5_coder_1_5b_q2_k,t1_q1_json,2,Wrote code instead of JSON
+draft_qwen2_5_coder_1_5b_q4_k_m,t1_q1_json,8,Minor: department is Platform team not Platform
+draft_qwen2_5_math_1_5b,t1_q1_json,2,Wrote code instead of JSON
+draft_qwen2_5_math_1_5b_q6k,t1_q1_json,1,No valid JSON structure detected
+draft_qwen3_0_6b,t1_q1_json,1,No valid JSON structure detected
+draft_qwen3_0_6b_q8_0,t1_q1_json,7,Correct JSON but repeated multiple times
+draft_qwen3_1_7b,t1_q1_json,7,Correct JSON but repeated multiple times
+draft_qwen3_1_7b_q8_0,t1_q1_json,7,Correct JSON but repeated multiple times
+draft_qwen3_coder_0_75b,t1_q1_json,8,Minor: department is Platform team not Platform
+formalizer,t1_q1_json,8,Minor: department is Platform team not Platform
+formalizer_q4,t1_q1_json,8,Minor: department is Platform team not Platform
+frontdoor,t1_q1_json,10,Perfect JSON output
+general_deepseek_r1_0528_qwen3_8b,t1_q1_json,8,Minor: department is Platform team not Platform
+general_gemma_3_12b_it,t1_q1_json,10,Perfect JSON output
+general_gemma_3_27b_it_qat,t1_q1_json,10,Perfect JSON output
+general_meta_llama_3_1_8b_q4_k_s,t1_q1_json,1,No valid JSON structure detected
+general_meta_llama_3_8b_instruct_fp16,t1_q1_json,7,Correct JSON but added Python code
+general_qwen2_5_7b_q4_k_s,t1_q1_json,10,Perfect JSON output
+general_qwen3_32b,t1_q1_json,7,Correct JSON but repeated multiple times
+ingest_hermes_4_70b,t1_q1_json,8,Minor: department is Platform team not Platform
+ingest_llama_3_1_70b,t1_q1_json,10,Perfect JSON output
+ingest_long_context,t1_q1_json,10,Perfect JSON output
+ingest_qwen2_5_72b,t1_q1_json,8,Minor: department is Platform team not Platform
+ingest_qwen2_5_coder_32b,t1_q1_json,10,Perfect JSON output
+ingest_qwen3_30b_thinking,t1_q1_json,10,Perfect JSON output
+ingest_qwen3_32b,t1_q1_json,7,Correct JSON but repeated multiple times
+ingest_qwen3_coder_30b,t1_q1_json,10,Perfect JSON output
+math_qwen2_5_math_72b_2,t1_q1_json,7,Correct JSON but repeated multiple times
+math_qwen2_5_math_72b,t1_q1_json,1,No valid JSON structure detected
+thinking_deepseek_r1_distill_llama_70b,t1_q1_json,8,Minor: department is Platform team not Platform
+thinking_deepseek_r1_distill_llama_8b,t1_q1_json,8,Minor: department is Platform team not Platform
+thinking_deepseek_r1_distill_qwen_14b,t1_q1_json,8,Minor: department is Platform team not Platform
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t1_q1_json,8,Minor: department is Platform team not Platform
+thinking_deepseek_r1_distill_qwen_32b,t1_q1_json,10,Perfect JSON output
+thinking_deepseek_r1_distill_qwen_7b,t1_q1_json,10,Perfect JSON output
+thinking_phi_4_reasoning_plus,t1_q1_json,1,No valid JSON structure detected
+thinking_phi_4_reasoning_plus_q8,t1_q1_json,1,No valid JSON structure detected
+thinking_qwen3_30b_a3b_thinking_2507,t1_q1_json,1,No valid JSON structure detected
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t1_q1_json,10,Perfect JSON output
+thinking_qwen3_4b_thinking_2507,t1_q1_json,1,No valid JSON structure detected
+thinking_reasoning,t1_q1_json,10,Perfect JSON output
+tool_formalizer_nexusraven,t1_q1_json,10,Perfect JSON output
+tool_formalizer_xlam1,t1_q1_json,10,Perfect JSON output
+tool_formalizer_xlam2,t1_q1_json,10,Perfect JSON output
+toolrunner,t1_q1_json,7,Correct JSON but repeated multiple times
+vision_escalation,t1_q1_json,0,Wrong mode - interactive prompt
+vision_qwen3_vl_235b_a22b_thinking,t1_q1_json,10,Perfect JSON output
+vision_qwen3_vl_2b_q4_k_m,t1_q1_json,10,Perfect JSON output
+vision_qwen3_vl_4b,t1_q1_json,1,No valid JSON structure detected
+vision_qwen3_vl_4b_q80,t1_q1_json,1,No valid JSON structure detected
+vision_qwen3_vl_8b,t1_q1_json,1,No valid JSON structure detected
+vision_qwen3_vl_8b_q80,t1_q1_json,1,No valid JSON structure detected
+worker_general,t1_q1_json,7,Correct JSON but repeated multiple times
+worker_math,t1_q1_json,6,Missing or wrong department field
+worker_summarize,t1_q1_json,10,Perfect JSON output
+worker_vision,t1_q1_json,0,Wrong mode - interactive prompt
+architect_coding,t1_q2_multistep,4,Hallucinated extra items in list
+architect_general,t1_q2_multistep,10,"Correct: 4 unique items, numbered, with count"
+architect_hermes_4_70b,t1_q2_multistep,1,Repeated garbage output
+architect_meta_llama_3_1_70b,t1_q2_multistep,10,"Correct: 4 unique items, numbered, with count"
+architect_meta_llama_3_70b,t1_q2_multistep,6,Correct items but wrong or missing count
+architect_qwen2_5_72b,t1_q2_multistep,4,Hallucinated extra items in list
+architect_qwen2_5_72b_q4_k_m,t1_q2_multistep,1,Repeated garbage output
+coder_escalation,t1_q2_multistep,1,Repeated garbage output
+coder_primary,t1_q2_multistep,4,Hallucinated extra items in list
+coder_qwen3_coder_30b_a3b,t1_q2_multistep,4,Hallucinated extra items in list
+draft_deepseek_r1_distill_qwen_1_5b,t1_q2_multistep,1,Repeated garbage output
+draft_deepseek_r1_distill_qwen_1_5b_q80,t1_q2_multistep,1,Repeated garbage output
+draft_gemma3,t1_q2_multistep,1,Repeated garbage output
+draft_pard_deepseek_r1_distill_qwen_1_5b_q5_k_s,t1_q2_multistep,6,Correct items but wrong or missing count
+draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0,t1_q2_multistep,1,Repeated garbage output
+draft_pard_llama_3_2_1b_q4_0,t1_q2_multistep,1,Repeated garbage output
+draft_pard_llama_3_2_1b_q8_0,t1_q2_multistep,6,Correct items but wrong or missing count
+draft_pard_qwen3_0_6b_q4_0,t1_q2_multistep,4,Hallucinated extra items in list
+draft_qwen25,t1_q2_multistep,1,Repeated garbage output
+draft_qwen25_coder,t1_q2_multistep,1,Repeated garbage output
+draft_qwen2_0_5b_q2_k,t1_q2_multistep,1,Repeated garbage output
+draft_qwen2_5_0_5b_instruct_f16,t1_q2_multistep,6,Correct items but wrong or missing count
+draft_qwen2_5_coder_0_5b,t1_q2_multistep,1,Repeated garbage output
+draft_qwen2_5_coder_1_5b_q2_k,t1_q2_multistep,1,Repeated garbage output
+draft_qwen2_5_coder_1_5b_q4_k_m,t1_q2_multistep,6,Correct items but wrong or missing count
+draft_qwen2_5_math_1_5b,t1_q2_multistep,5,Added extra items not in original
+draft_qwen2_5_math_1_5b_q6k,t1_q2_multistep,1,Repeated garbage output
+draft_qwen3_0_6b,t1_q2_multistep,6,Correct items but wrong or missing count
+draft_qwen3_0_6b_q8_0,t1_q2_multistep,1,Repeated garbage output
+draft_qwen3_1_7b,t1_q2_multistep,1,Repeated garbage output
+draft_qwen3_1_7b_q8_0,t1_q2_multistep,5,Added extra items not in original
+draft_qwen3_coder_0_75b,t1_q2_multistep,1,Repeated garbage output
+formalizer,t1_q2_multistep,10,"Correct: 4 unique items, numbered, with count"
+formalizer_q4,t1_q2_multistep,6,Correct items but wrong or missing count
+frontdoor,t1_q2_multistep,4,Hallucinated extra items in list
+general_deepseek_r1_0528_qwen3_8b,t1_q2_multistep,6,Correct items but wrong or missing count
+general_gemma_3_12b_it,t1_q2_multistep,10,"Correct: 4 unique items, numbered, with count"
+general_gemma_3_27b_it_qat,t1_q2_multistep,4,Hallucinated extra items in list
+general_meta_llama_3_1_8b_q4_k_s,t1_q2_multistep,1,Repeated garbage output
+general_meta_llama_3_8b_instruct_fp16,t1_q2_multistep,6,Correct items but wrong or missing count
+general_qwen2_5_7b_q4_k_s,t1_q2_multistep,4,Hallucinated extra items in list
+general_qwen3_32b,t1_q2_multistep,4,Hallucinated extra items in list
+ingest_hermes_4_70b,t1_q2_multistep,1,Repeated garbage output
+ingest_llama_3_1_70b,t1_q2_multistep,6,Correct items but wrong or missing count
+ingest_long_context,t1_q2_multistep,1,Repeated garbage output
+ingest_qwen2_5_72b,t1_q2_multistep,1,Repeated garbage output
+ingest_qwen2_5_coder_32b,t1_q2_multistep,10,"Correct: 4 unique items, numbered, with count"
+ingest_qwen3_30b_thinking,t1_q2_multistep,5,Added extra items not in original
+ingest_qwen3_32b,t1_q2_multistep,4,Hallucinated extra items in list
+ingest_qwen3_coder_30b,t1_q2_multistep,4,Hallucinated extra items in list
+math_qwen2_5_math_72b_2,t1_q2_multistep,4,Hallucinated extra items in list
+math_qwen2_5_math_72b,t1_q2_multistep,5,Added extra items not in original
+thinking_deepseek_r1_distill_llama_70b,t1_q2_multistep,6,Correct items but wrong or missing count
+thinking_deepseek_r1_distill_llama_8b,t1_q2_multistep,10,"Correct: 4 unique items, numbered, with count"
+thinking_deepseek_r1_distill_qwen_14b,t1_q2_multistep,6,Correct items but wrong or missing count
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t1_q2_multistep,4,Hallucinated extra items in list
+thinking_deepseek_r1_distill_qwen_32b,t1_q2_multistep,10,"Correct: 4 unique items, numbered, with count"
+thinking_deepseek_r1_distill_qwen_7b,t1_q2_multistep,4,Hallucinated extra items in list
+thinking_phi_4_reasoning_plus,t1_q2_multistep,5,Added extra items not in original
+thinking_phi_4_reasoning_plus_q8,t1_q2_multistep,5,Added extra items not in original
+thinking_qwen3_30b_a3b_thinking_2507,t1_q2_multistep,5,Added extra items not in original
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t1_q2_multistep,5,Added extra items not in original
+thinking_qwen3_4b_thinking_2507,t1_q2_multistep,6,Correct items but wrong or missing count
+thinking_reasoning,t1_q2_multistep,5,Added extra items not in original
+tool_formalizer_nexusraven,t1_q2_multistep,6,Correct items but wrong or missing count
+tool_formalizer_xlam1,t1_q2_multistep,6,Correct items but wrong or missing count
+tool_formalizer_xlam2,t1_q2_multistep,6,Correct items but wrong or missing count
+toolrunner,t1_q2_multistep,10,"Correct: 4 unique items, numbered, with count"
+vision_escalation,t1_q2_multistep,0,Wrong mode - interactive prompt
+vision_qwen3_vl_235b_a22b_thinking,t1_q2_multistep,6,Correct items but wrong or missing count
+vision_qwen3_vl_2b_q4_k_m,t1_q2_multistep,6,Correct items but wrong or missing count
+vision_qwen3_vl_4b,t1_q2_multistep,1,Repeated garbage output
+vision_qwen3_vl_4b_q80,t1_q2_multistep,1,Repeated garbage output
+vision_qwen3_vl_8b,t1_q2_multistep,6,Correct items but wrong or missing count
+vision_qwen3_vl_8b_q80,t1_q2_multistep,4,Hallucinated extra items in list
+worker_general,t1_q2_multistep,10,"Correct: 4 unique items, numbered, with count"
+worker_math,t1_q2_multistep,6,Correct items but wrong or missing count
+worker_summarize,t1_q2_multistep,4,Hallucinated extra items in list
+worker_vision,t1_q2_multistep,0,Wrong mode - interactive prompt
+architect_coding,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+architect_general,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+architect_hermes_4_70b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+architect_meta_llama_3_1_70b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+architect_meta_llama_3_70b,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+architect_qwen2_5_72b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+architect_qwen2_5_72b_q4_k_m,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+coder_escalation,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+coder_primary,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+coder_qwen3_coder_30b_a3b,t1_q3_compare,9,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency
+draft_deepseek_r1_distill_qwen_1_5b,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+draft_deepseek_r1_distill_qwen_1_5b_q80,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+draft_gemma3,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+draft_pard_deepseek_r1_distill_qwen_1_5b_q5_k_s,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+draft_pard_llama_3_2_1b_q4_0,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+draft_pard_llama_3_2_1b_q8_0,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+draft_pard_qwen3_0_6b_q4_0,t1_q3_compare,7,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency
+draft_qwen25,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+draft_qwen25_coder,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+draft_qwen2_0_5b_q2_k,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+draft_qwen2_5_0_5b_instruct_f16,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+draft_qwen2_5_coder_0_5b,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+draft_qwen2_5_coder_1_5b_q2_k,t1_q3_compare,6,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; too verbose
+draft_qwen2_5_coder_1_5b_q4_k_m,t1_q3_compare,9,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency
+draft_qwen2_5_math_1_5b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+draft_qwen2_5_math_1_5b_q6k,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+draft_qwen3_0_6b,t1_q3_compare,7,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency
+draft_qwen3_0_6b_q8_0,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+draft_qwen3_1_7b,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+draft_qwen3_1_7b_q8_0,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+draft_qwen3_coder_0_75b,t1_q3_compare,9,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency
+formalizer,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+formalizer_q4,t1_q3_compare,9,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency
+frontdoor,t1_q3_compare,9,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency
+general_deepseek_r1_0528_qwen3_8b,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+general_gemma_3_12b_it,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+general_gemma_3_27b_it_qat,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+general_meta_llama_3_1_8b_q4_k_s,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+general_meta_llama_3_8b_instruct_fp16,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+general_qwen2_5_7b_q4_k_s,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+general_qwen3_32b,t1_q3_compare,9,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency
+ingest_hermes_4_70b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+ingest_llama_3_1_70b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+ingest_long_context,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+ingest_qwen2_5_72b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+ingest_qwen2_5_coder_32b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+ingest_qwen3_30b_thinking,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+ingest_qwen3_32b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+ingest_qwen3_coder_30b,t1_q3_compare,9,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency
+math_qwen2_5_math_72b_2,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+math_qwen2_5_math_72b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+thinking_deepseek_r1_distill_llama_70b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+thinking_deepseek_r1_distill_llama_8b,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+thinking_deepseek_r1_distill_qwen_14b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+thinking_deepseek_r1_distill_qwen_32b,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+thinking_deepseek_r1_distill_qwen_7b,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+thinking_phi_4_reasoning_plus,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+thinking_phi_4_reasoning_plus_q8,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+thinking_qwen3_30b_a3b_thinking_2507,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+thinking_qwen3_4b_thinking_2507,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+thinking_reasoning,t1_q3_compare,8,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; too verbose
+tool_formalizer_nexusraven,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+tool_formalizer_xlam1,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+tool_formalizer_xlam2,t1_q3_compare,9,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency
+toolrunner,t1_q3_compare,6,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; too verbose
+vision_escalation,t1_q3_compare,0,Wrong mode
+vision_qwen3_vl_235b_a22b_thinking,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+vision_qwen3_vl_2b_q4_k_m,t1_q3_compare,6,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; too verbose
+vision_qwen3_vl_4b,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+vision_qwen3_vl_4b_q80,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+vision_qwen3_vl_8b,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+vision_qwen3_vl_8b_q80,t1_q3_compare,8,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; appropriate length
+worker_general,t1_q3_compare,6,discusses both approaches; mentions scaling; contrasts complexity; mentions consistency; too verbose
+worker_math,t1_q3_compare,9,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency
+worker_summarize,t1_q3_compare,10,discusses both approaches; mentions scaling; shows trade-offs; contrasts complexity; mentions consistency; appropriate length
+worker_vision,t1_q3_compare,0,Wrong mode
+architect_coding,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+architect_general,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+architect_hermes_4_70b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+architect_meta_llama_3_1_70b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+architect_meta_llama_3_70b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+architect_qwen2_5_72b,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+architect_qwen2_5_72b_q4_k_m,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+coder_escalation,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+coder_primary,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+coder_qwen3_coder_30b_a3b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+draft_deepseek_r1_distill_qwen_1_5b,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_deepseek_r1_distill_qwen_1_5b_q80,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_gemma3,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+draft_pard_deepseek_r1_distill_qwen_1_5b_q5_k_s,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+draft_pard_llama_3_2_1b_q4_0,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+draft_pard_llama_3_2_1b_q8_0,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_pard_qwen3_0_6b_q4_0,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_qwen25,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_qwen25_coder,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+draft_qwen2_0_5b_q2_k,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_qwen2_5_0_5b_instruct_f16,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_qwen2_5_coder_0_5b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+draft_qwen2_5_coder_1_5b_q2_k,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+draft_qwen2_5_coder_1_5b_q4_k_m,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_qwen2_5_math_1_5b,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_qwen2_5_math_1_5b_q6k,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+draft_qwen3_0_6b,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_qwen3_0_6b_q8_0,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_qwen3_1_7b,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_qwen3_1_7b_q8_0,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+draft_qwen3_coder_0_75b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+formalizer,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+formalizer_q4,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+frontdoor,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+general_deepseek_r1_0528_qwen3_8b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+general_gemma_3_12b_it,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+general_gemma_3_27b_it_qat,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+general_meta_llama_3_1_8b_q4_k_s,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+general_meta_llama_3_8b_instruct_fp16,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+general_qwen2_5_7b_q4_k_s,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+general_qwen3_32b,t2_q1_synthesis,5,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation; response in wrong language
+ingest_hermes_4_70b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+ingest_llama_3_1_70b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+ingest_long_context,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+ingest_qwen2_5_72b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+ingest_qwen2_5_coder_32b,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+ingest_qwen3_30b_thinking,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+ingest_qwen3_32b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+ingest_qwen3_coder_30b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+math_qwen2_5_math_72b_2,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+math_qwen2_5_math_72b,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+thinking_deepseek_r1_distill_llama_70b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+thinking_deepseek_r1_distill_llama_8b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+thinking_deepseek_r1_distill_qwen_14b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+thinking_deepseek_r1_distill_qwen_32b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+thinking_deepseek_r1_distill_qwen_7b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+thinking_phi_4_reasoning_plus,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+thinking_phi_4_reasoning_plus_q8,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+thinking_qwen3_30b_a3b_thinking_2507,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+thinking_qwen3_4b_thinking_2507,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+thinking_reasoning,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+tool_formalizer_nexusraven,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+tool_formalizer_xlam1,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+tool_formalizer_xlam2,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+toolrunner,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+vision_escalation,t2_q1_synthesis,1,Weak synthesis
+vision_qwen3_vl_235b_a22b_thinking,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+vision_qwen3_vl_2b_q4_k_m,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+vision_qwen3_vl_4b,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+vision_qwen3_vl_4b_q80,t2_q1_synthesis,7,addresses 2-week urgency; addresses refactor need; considers budget constraint; concrete recommendation
+vision_qwen3_vl_8b,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+vision_qwen3_vl_8b_q80,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+worker_general,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+worker_math,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+worker_summarize,t2_q1_synthesis,9,addresses 2-week urgency; addresses refactor need; considers budget constraint; proposes phased approach; concrete recommendation
+worker_vision,t2_q1_synthesis,1,Weak synthesis
+architect_coding,t2_q2_transform,10,Correct YAML grouping with all data
+architect_general,t2_q2_transform,10,Correct YAML grouping with all data
+architect_hermes_4_70b,t2_q2_transform,10,Correct YAML grouping with all data
+architect_meta_llama_3_1_70b,t2_q2_transform,10,Correct YAML grouping with all data
+architect_meta_llama_3_70b,t2_q2_transform,10,Correct YAML grouping with all data
+architect_qwen2_5_72b,t2_q2_transform,10,Correct YAML grouping with all data
+architect_qwen2_5_72b_q4_k_m,t2_q2_transform,10,Correct YAML grouping with all data
+coder_escalation,t2_q2_transform,10,Correct YAML grouping with all data
+coder_primary,t2_q2_transform,10,Correct YAML grouping with all data
+coder_qwen3_coder_30b_a3b,t2_q2_transform,10,Correct YAML grouping with all data
+draft_deepseek_r1_distill_qwen_1_5b,t2_q2_transform,10,Correct YAML grouping with all data
+draft_deepseek_r1_distill_qwen_1_5b_q80,t2_q2_transform,10,Correct YAML grouping with all data
+draft_gemma3,t2_q2_transform,10,Correct YAML grouping with all data
+draft_pard_deepseek_r1_distill_qwen_1_5b_q5_k_s,t2_q2_transform,10,Correct YAML grouping with all data
+draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0,t2_q2_transform,10,Correct YAML grouping with all data
+draft_pard_llama_3_2_1b_q4_0,t2_q2_transform,6,Has all data but grouping unclear
+draft_pard_llama_3_2_1b_q8_0,t2_q2_transform,6,Has all data but grouping unclear
+draft_pard_qwen3_0_6b_q4_0,t2_q2_transform,6,Has all data but grouping unclear
+draft_qwen25,t2_q2_transform,10,Correct YAML grouping with all data
+draft_qwen25_coder,t2_q2_transform,6,Has all data but grouping unclear
+draft_qwen2_0_5b_q2_k,t2_q2_transform,6,Has all data but grouping unclear
+draft_qwen2_5_0_5b_instruct_f16,t2_q2_transform,6,Has all data but grouping unclear
+draft_qwen2_5_coder_0_5b,t2_q2_transform,6,Has all data but grouping unclear
+draft_qwen2_5_coder_1_5b_q2_k,t2_q2_transform,6,Has all data but grouping unclear
+draft_qwen2_5_coder_1_5b_q4_k_m,t2_q2_transform,6,Has all data but grouping unclear
+draft_qwen2_5_math_1_5b,t2_q2_transform,10,Correct YAML grouping with all data
+draft_qwen2_5_math_1_5b_q6k,t2_q2_transform,10,Correct YAML grouping with all data
+draft_qwen3_0_6b,t2_q2_transform,6,Has all data but grouping unclear
+draft_qwen3_0_6b_q8_0,t2_q2_transform,10,Correct YAML grouping with all data
+draft_qwen3_1_7b,t2_q2_transform,10,Correct YAML grouping with all data
+draft_qwen3_1_7b_q8_0,t2_q2_transform,6,Has all data but grouping unclear
+draft_qwen3_coder_0_75b,t2_q2_transform,6,Has all data but grouping unclear
+formalizer,t2_q2_transform,10,Correct YAML grouping with all data
+formalizer_q4,t2_q2_transform,10,Correct YAML grouping with all data
+frontdoor,t2_q2_transform,10,Correct YAML grouping with all data
+general_deepseek_r1_0528_qwen3_8b,t2_q2_transform,10,Correct YAML grouping with all data
+general_gemma_3_12b_it,t2_q2_transform,10,Correct YAML grouping with all data
+general_gemma_3_27b_it_qat,t2_q2_transform,10,Correct YAML grouping with all data
+general_meta_llama_3_1_8b_q4_k_s,t2_q2_transform,6,Has all data but grouping unclear
+general_meta_llama_3_8b_instruct_fp16,t2_q2_transform,10,Correct YAML grouping with all data
+general_qwen2_5_7b_q4_k_s,t2_q2_transform,6,Has all data but grouping unclear
+general_qwen3_32b,t2_q2_transform,10,Correct YAML grouping with all data
+ingest_hermes_4_70b,t2_q2_transform,10,Correct YAML grouping with all data
+ingest_llama_3_1_70b,t2_q2_transform,10,Correct YAML grouping with all data
+ingest_long_context,t2_q2_transform,10,Correct YAML grouping with all data
+ingest_qwen2_5_72b,t2_q2_transform,10,Correct YAML grouping with all data
+ingest_qwen2_5_coder_32b,t2_q2_transform,10,Correct YAML grouping with all data
+ingest_qwen3_30b_thinking,t2_q2_transform,10,Correct YAML grouping with all data
+ingest_qwen3_32b,t2_q2_transform,6,Has all data but grouping unclear
+ingest_qwen3_coder_30b,t2_q2_transform,10,Correct YAML grouping with all data
+math_qwen2_5_math_72b_2,t2_q2_transform,6,Has all data but grouping unclear
+math_qwen2_5_math_72b,t2_q2_transform,6,Has all data but grouping unclear
+thinking_deepseek_r1_distill_llama_70b,t2_q2_transform,6,Has all data but grouping unclear
+thinking_deepseek_r1_distill_llama_8b,t2_q2_transform,10,Correct YAML grouping with all data
+thinking_deepseek_r1_distill_qwen_14b,t2_q2_transform,10,Correct YAML grouping with all data
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t2_q2_transform,10,Correct YAML grouping with all data
+thinking_deepseek_r1_distill_qwen_32b,t2_q2_transform,10,Correct YAML grouping with all data
+thinking_deepseek_r1_distill_qwen_7b,t2_q2_transform,10,Correct YAML grouping with all data
+thinking_phi_4_reasoning_plus,t2_q2_transform,10,Correct YAML grouping with all data
+thinking_phi_4_reasoning_plus_q8,t2_q2_transform,10,Correct YAML grouping with all data
+thinking_qwen3_30b_a3b_thinking_2507,t2_q2_transform,10,Correct YAML grouping with all data
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t2_q2_transform,10,Correct YAML grouping with all data
+thinking_qwen3_4b_thinking_2507,t2_q2_transform,10,Correct YAML grouping with all data
+thinking_reasoning,t2_q2_transform,10,Correct YAML grouping with all data
+tool_formalizer_nexusraven,t2_q2_transform,6,Has all data but grouping unclear
+tool_formalizer_xlam1,t2_q2_transform,6,Has all data but grouping unclear
+tool_formalizer_xlam2,t2_q2_transform,6,Has all data but grouping unclear
+toolrunner,t2_q2_transform,10,Correct YAML grouping with all data
+vision_escalation,t2_q2_transform,2,Failed to transform schema
+vision_qwen3_vl_235b_a22b_thinking,t2_q2_transform,10,Correct YAML grouping with all data
+vision_qwen3_vl_2b_q4_k_m,t2_q2_transform,6,Has all data but grouping unclear
+vision_qwen3_vl_4b,t2_q2_transform,10,Correct YAML grouping with all data
+vision_qwen3_vl_4b_q80,t2_q2_transform,6,Has all data but grouping unclear
+vision_qwen3_vl_8b,t2_q2_transform,10,Correct YAML grouping with all data
+vision_qwen3_vl_8b_q80,t2_q2_transform,10,Correct YAML grouping with all data
+worker_general,t2_q2_transform,10,Correct YAML grouping with all data
+worker_math,t2_q2_transform,6,Has all data but grouping unclear
+worker_summarize,t2_q2_transform,10,Correct YAML grouping with all data
+worker_vision,t2_q2_transform,2,Failed to transform schema
+architect_coding,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+architect_general,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+architect_hermes_4_70b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+architect_meta_llama_3_1_70b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+architect_meta_llama_3_70b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+architect_qwen2_5_72b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+architect_qwen2_5_72b_q4_k_m,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+coder_escalation,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+coder_primary,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+coder_qwen3_coder_30b_a3b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_deepseek_r1_distill_qwen_1_5b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_deepseek_r1_distill_qwen_1_5b_q80,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_gemma3,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_pard_deepseek_r1_distill_qwen_1_5b_q5_k_s,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_pard_llama_3_2_1b_q4_0,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_pard_llama_3_2_1b_q8_0,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_pard_qwen3_0_6b_q4_0,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen25,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen25_coder,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen2_0_5b_q2_k,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen2_5_0_5b_instruct_f16,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen2_5_coder_0_5b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen2_5_coder_1_5b_q2_k,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen2_5_coder_1_5b_q4_k_m,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen2_5_math_1_5b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen2_5_math_1_5b_q6k,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen3_0_6b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen3_0_6b_q8_0,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen3_1_7b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen3_1_7b_q8_0,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+draft_qwen3_coder_0_75b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+formalizer,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+formalizer_q4,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+frontdoor,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+general_deepseek_r1_0528_qwen3_8b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+general_gemma_3_12b_it,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+general_gemma_3_27b_it_qat,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+general_meta_llama_3_1_8b_q4_k_s,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+general_meta_llama_3_8b_instruct_fp16,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+general_qwen2_5_7b_q4_k_s,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+general_qwen3_32b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+ingest_hermes_4_70b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+ingest_llama_3_1_70b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+ingest_long_context,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+ingest_qwen2_5_72b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+ingest_qwen2_5_coder_32b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+ingest_qwen3_30b_thinking,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+ingest_qwen3_32b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+ingest_qwen3_coder_30b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+math_qwen2_5_math_72b_2,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+math_qwen2_5_math_72b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_deepseek_r1_distill_llama_70b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_deepseek_r1_distill_llama_8b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_deepseek_r1_distill_qwen_14b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_deepseek_r1_distill_qwen_32b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_deepseek_r1_distill_qwen_7b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_phi_4_reasoning_plus,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_phi_4_reasoning_plus_q8,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_qwen3_30b_a3b_thinking_2507,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_qwen3_4b_thinking_2507,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+thinking_reasoning,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+tool_formalizer_nexusraven,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+tool_formalizer_xlam1,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+tool_formalizer_xlam2,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+toolrunner,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+vision_escalation,t2_q3_schedule,1,Incomplete scheduling
+vision_qwen3_vl_235b_a22b_thinking,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+vision_qwen3_vl_2b_q4_k_m,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+vision_qwen3_vl_4b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+vision_qwen3_vl_4b_q80,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+vision_qwen3_vl_8b,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+vision_qwen3_vl_8b_q80,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+worker_general,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+worker_math,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+worker_summarize,t2_q3_schedule,10,provides concrete schedule; considers Dave availability; considers Alice constraint; addresses back-to-back rule; identifies all meetings
+worker_vision,t2_q3_schedule,1,Incomplete scheduling
+architect_coding,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+architect_general,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+architect_hermes_4_70b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+architect_meta_llama_3_1_70b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+architect_meta_llama_3_70b,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+architect_qwen2_5_72b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+architect_qwen2_5_72b_q4_k_m,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+coder_escalation,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+coder_primary,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+coder_qwen3_coder_30b_a3b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+draft_deepseek_r1_distill_qwen_1_5b,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_deepseek_r1_distill_qwen_1_5b_q80,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_gemma3,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_pard_deepseek_r1_distill_qwen_1_5b_q5_k_s,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+draft_pard_llama_3_2_1b_q4_0,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_pard_llama_3_2_1b_q8_0,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+draft_pard_qwen3_0_6b_q4_0,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_qwen25,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_qwen25_coder,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_qwen2_0_5b_q2_k,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_qwen2_5_0_5b_instruct_f16,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_qwen2_5_coder_0_5b,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_qwen2_5_coder_1_5b_q2_k,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_qwen2_5_coder_1_5b_q4_k_m,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+draft_qwen2_5_math_1_5b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+draft_qwen2_5_math_1_5b_q6k,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+draft_qwen3_0_6b,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_qwen3_0_6b_q8_0,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+draft_qwen3_1_7b,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_qwen3_1_7b_q8_0,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+draft_qwen3_coder_0_75b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+formalizer,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+formalizer_q4,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+frontdoor,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+general_deepseek_r1_0528_qwen3_8b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+general_gemma_3_12b_it,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+general_gemma_3_27b_it_qat,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+general_meta_llama_3_1_8b_q4_k_s,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+general_meta_llama_3_8b_instruct_fp16,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+general_qwen2_5_7b_q4_k_s,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+general_qwen3_32b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+ingest_hermes_4_70b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+ingest_llama_3_1_70b,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+ingest_long_context,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+ingest_qwen2_5_72b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+ingest_qwen2_5_coder_32b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+ingest_qwen3_30b_thinking,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+ingest_qwen3_32b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+ingest_qwen3_coder_30b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+math_qwen2_5_math_72b_2,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+math_qwen2_5_math_72b,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+thinking_deepseek_r1_distill_llama_70b,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+thinking_deepseek_r1_distill_llama_8b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+thinking_deepseek_r1_distill_qwen_14b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+thinking_deepseek_r1_distill_qwen_32b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+thinking_deepseek_r1_distill_qwen_7b,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+thinking_phi_4_reasoning_plus,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+thinking_phi_4_reasoning_plus_q8,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+thinking_qwen3_30b_a3b_thinking_2507,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+thinking_qwen3_4b_thinking_2507,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+thinking_reasoning,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+tool_formalizer_nexusraven,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+tool_formalizer_xlam1,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+tool_formalizer_xlam2,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+toolrunner,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+vision_escalation,t2_q4_inconsistency,1,Missed key inconsistencies
+vision_qwen3_vl_235b_a22b_thinking,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+vision_qwen3_vl_2b_q4_k_m,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+vision_qwen3_vl_4b,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+vision_qwen3_vl_4b_q80,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+vision_qwen3_vl_8b,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+vision_qwen3_vl_8b_q80,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+worker_general,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+worker_math,t2_q4_inconsistency,9,identifies body format inconsistency; identifies rate limit inconsistency; clear presentation
+worker_summarize,t2_q4_inconsistency,10,identifies body format inconsistency; identifies rate limit inconsistency; shows rate calculation; clear presentation
+worker_vision,t2_q4_inconsistency,1,Missed key inconsistencies
+architect_coding,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+architect_general,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+architect_hermes_4_70b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+architect_meta_llama_3_1_70b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+architect_meta_llama_3_70b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+architect_qwen2_5_72b,t3_q1_policy_analysis,8,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; proposes specific amendments
+architect_qwen2_5_72b_q4_k_m,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+coder_escalation,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+coder_primary,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+coder_qwen3_coder_30b_a3b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_deepseek_r1_distill_qwen_1_5b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_deepseek_r1_distill_qwen_1_5b_q80,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_gemma3,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_pard_deepseek_r1_distill_qwen_1_5b_q5_k_s,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_pard_llama_3_2_1b_q4_0,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_pard_llama_3_2_1b_q8_0,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_pard_qwen3_0_6b_q4_0,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen25,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen25_coder,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen2_0_5b_q2_k,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen2_5_0_5b_instruct_f16,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen2_5_coder_0_5b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen2_5_coder_1_5b_q2_k,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen2_5_coder_1_5b_q4_k_m,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen2_5_math_1_5b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen2_5_math_1_5b_q6k,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen3_0_6b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen3_0_6b_q8_0,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen3_1_7b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen3_1_7b_q8_0,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+draft_qwen3_coder_0_75b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+formalizer,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+formalizer_q4,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+frontdoor,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+general_deepseek_r1_0528_qwen3_8b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+general_gemma_3_12b_it,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+general_gemma_3_27b_it_qat,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+general_meta_llama_3_1_8b_q4_k_s,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+general_meta_llama_3_8b_instruct_fp16,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+general_qwen2_5_7b_q4_k_s,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+general_qwen3_32b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+ingest_hermes_4_70b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+ingest_llama_3_1_70b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+ingest_long_context,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+ingest_qwen2_5_72b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+ingest_qwen2_5_coder_32b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+ingest_qwen3_30b_thinking,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+ingest_qwen3_32b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+ingest_qwen3_coder_30b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+math_qwen2_5_math_72b_2,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+math_qwen2_5_math_72b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_deepseek_r1_distill_llama_70b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_deepseek_r1_distill_llama_8b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_deepseek_r1_distill_qwen_14b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_deepseek_r1_distill_qwen_32b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_deepseek_r1_distill_qwen_7b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_phi_4_reasoning_plus,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_phi_4_reasoning_plus_q8,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_qwen3_30b_a3b_thinking_2507,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_qwen3_4b_thinking_2507,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+thinking_reasoning,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+tool_formalizer_nexusraven,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+tool_formalizer_xlam1,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+tool_formalizer_xlam2,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+toolrunner,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+vision_escalation,t3_q1_policy_analysis,1,Shallow policy analysis
+vision_qwen3_vl_235b_a22b_thinking,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+vision_qwen3_vl_2b_q4_k_m,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+vision_qwen3_vl_4b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+vision_qwen3_vl_4b_q80,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+vision_qwen3_vl_8b,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+vision_qwen3_vl_8b_q80,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+worker_general,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+worker_math,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+worker_summarize,t3_q1_policy_analysis,10,identifies gaming/overfitting risk; identifies explainability-accuracy tradeoff; critiques bias audit frequency; considers distribution shift; proposes specific amendments; discusses amendment tradeoffs
+worker_vision,t3_q1_policy_analysis,1,Shallow policy analysis
+architect_coding,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+architect_general,t3_q2_system_failure,10,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; proposes valid architectural fix; suggests monitoring solution
+architect_hermes_4_70b,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+architect_meta_llama_3_1_70b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+architect_meta_llama_3_70b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+architect_qwen2_5_72b,t3_q2_system_failure,4,identifies replica lag as cause; understands read/write split issue; explains testing blind spot
+architect_qwen2_5_72b_q4_k_m,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+coder_escalation,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+coder_primary,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+coder_qwen3_coder_30b_a3b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_deepseek_r1_distill_qwen_1_5b,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_deepseek_r1_distill_qwen_1_5b_q80,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_gemma3,t3_q2_system_failure,10,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; proposes valid architectural fix; suggests monitoring solution
+draft_pard_deepseek_r1_distill_qwen_1_5b_q5_k_s,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_pard_llama_3_2_1b_q4_0,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_pard_llama_3_2_1b_q8_0,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_pard_qwen3_0_6b_q4_0,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen25,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen25_coder,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen2_0_5b_q2_k,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen2_5_0_5b_instruct_f16,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen2_5_coder_0_5b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen2_5_coder_1_5b_q2_k,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen2_5_coder_1_5b_q4_k_m,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen2_5_math_1_5b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen2_5_math_1_5b_q6k,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen3_0_6b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen3_0_6b_q8_0,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen3_1_7b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen3_1_7b_q8_0,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+draft_qwen3_coder_0_75b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+formalizer,t3_q2_system_failure,10,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; proposes valid architectural fix; suggests monitoring solution
+formalizer_q4,t3_q2_system_failure,8,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; proposes valid architectural fix; suggests monitoring solution
+frontdoor,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+general_deepseek_r1_0528_qwen3_8b,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+general_gemma_3_12b_it,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+general_gemma_3_27b_it_qat,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+general_meta_llama_3_1_8b_q4_k_s,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+general_meta_llama_3_8b_instruct_fp16,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+general_qwen2_5_7b_q4_k_s,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+general_qwen3_32b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+ingest_hermes_4_70b,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+ingest_llama_3_1_70b,t3_q2_system_failure,8,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; proposes valid architectural fix; suggests monitoring solution
+ingest_long_context,t3_q2_system_failure,10,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; proposes valid architectural fix; suggests monitoring solution
+ingest_qwen2_5_72b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+ingest_qwen2_5_coder_32b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+ingest_qwen3_30b_thinking,t3_q2_system_failure,8,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; proposes valid architectural fix; suggests monitoring solution
+ingest_qwen3_32b,t3_q2_system_failure,10,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; proposes valid architectural fix; suggests monitoring solution
+ingest_qwen3_coder_30b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+math_qwen2_5_math_72b_2,t3_q2_system_failure,8,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; proposes valid architectural fix; suggests monitoring solution
+math_qwen2_5_math_72b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_deepseek_r1_distill_llama_70b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_deepseek_r1_distill_llama_8b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_deepseek_r1_distill_qwen_14b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_deepseek_r1_distill_qwen_32b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_deepseek_r1_distill_qwen_7b,t3_q2_system_failure,8,identifies race condition; identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_phi_4_reasoning_plus,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_phi_4_reasoning_plus_q8,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_qwen3_30b_a3b_thinking_2507,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_qwen3_4b_thinking_2507,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+thinking_reasoning,t3_q2_system_failure,8,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; proposes valid architectural fix; suggests monitoring solution
+tool_formalizer_nexusraven,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+tool_formalizer_xlam1,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+tool_formalizer_xlam2,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+toolrunner,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+vision_escalation,t3_q2_system_failure,1,Incomplete failure analysis
+vision_qwen3_vl_235b_a22b_thinking,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+vision_qwen3_vl_2b_q4_k_m,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+vision_qwen3_vl_4b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+vision_qwen3_vl_4b_q80,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+vision_qwen3_vl_8b,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+vision_qwen3_vl_8b_q80,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+worker_general,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+worker_math,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+worker_summarize,t3_q2_system_failure,6,identifies replica lag as cause; understands read/write split issue; explains testing blind spot; suggests monitoring solution
+worker_vision,t3_q2_system_failure,1,Incomplete failure analysis
+architect_coding,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+architect_general,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+architect_hermes_4_70b,t3_q3_strategic_communication,8,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; professional tone
+architect_meta_llama_3_1_70b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+architect_meta_llama_3_70b,t3_q3_strategic_communication,8,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; professional tone
+architect_qwen2_5_72b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+architect_qwen2_5_72b_q4_k_m,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+coder_escalation,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+coder_primary,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+coder_qwen3_coder_30b_a3b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+draft_deepseek_r1_distill_qwen_1_5b,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+draft_deepseek_r1_distill_qwen_1_5b_q80,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+draft_gemma3,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+draft_pard_deepseek_r1_distill_qwen_1_5b_q5_k_s,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_pard_deepseek_r1_distill_qwen_1_5b_q8_0,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_pard_llama_3_2_1b_q4_0,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+draft_pard_llama_3_2_1b_q8_0,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+draft_pard_qwen3_0_6b_q4_0,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+draft_qwen25,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_qwen25_coder,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_qwen2_0_5b_q2_k,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_qwen2_5_0_5b_instruct_f16,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_qwen2_5_coder_0_5b,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_qwen2_5_coder_1_5b_q2_k,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_qwen2_5_coder_1_5b_q4_k_m,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+draft_qwen2_5_math_1_5b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+draft_qwen2_5_math_1_5b_q6k,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_qwen3_0_6b,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_qwen3_0_6b_q8_0,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_qwen3_1_7b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+draft_qwen3_1_7b_q8_0,t3_q3_strategic_communication,8,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; professional tone
+draft_qwen3_coder_0_75b,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+formalizer,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+formalizer_q4,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+frontdoor,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+general_deepseek_r1_0528_qwen3_8b,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+general_gemma_3_12b_it,t3_q3_strategic_communication,8,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; professional tone
+general_gemma_3_27b_it_qat,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+general_meta_llama_3_1_8b_q4_k_s,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+general_meta_llama_3_8b_instruct_fp16,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+general_qwen2_5_7b_q4_k_s,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+general_qwen3_32b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+ingest_hermes_4_70b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+ingest_llama_3_1_70b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+ingest_long_context,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+ingest_qwen2_5_72b,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+ingest_qwen2_5_coder_32b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+ingest_qwen3_30b_thinking,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+ingest_qwen3_32b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+ingest_qwen3_coder_30b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+math_qwen2_5_math_72b_2,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+math_qwen2_5_math_72b,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+thinking_deepseek_r1_distill_llama_70b,t3_q3_strategic_communication,8,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; professional tone
+thinking_deepseek_r1_distill_llama_8b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+thinking_deepseek_r1_distill_qwen_14b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+thinking_deepseek_r1_distill_qwen_14b_q6kl,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+thinking_deepseek_r1_distill_qwen_32b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+thinking_deepseek_r1_distill_qwen_7b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+thinking_phi_4_reasoning_plus,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+thinking_phi_4_reasoning_plus_q8,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+thinking_qwen3_30b_a3b_thinking_2507,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+thinking_qwen3_4b_thinking_2507,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+thinking_reasoning,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+tool_formalizer_nexusraven,t3_q3_strategic_communication,9,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+tool_formalizer_xlam1,t3_q3_strategic_communication,7,acknowledges challenges; frames LOIs strategically; proposes 90-day milestones; professional tone
+tool_formalizer_xlam2,t3_q3_strategic_communication,8,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; professional tone
+toolrunner,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+vision_escalation,t3_q3_strategic_communication,1,Weak board communication
+vision_qwen3_vl_235b_a22b_thinking,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+vision_qwen3_vl_2b_q4_k_m,t3_q3_strategic_communication,8,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; professional tone
+vision_qwen3_vl_4b,t3_q3_strategic_communication,8,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; professional tone
+vision_qwen3_vl_4b_q80,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+vision_qwen3_vl_8b,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+vision_qwen3_vl_8b_q80,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+worker_general,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+worker_math,t3_q3_strategic_communication,8,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; professional tone
+worker_summarize,t3_q3_strategic_communication,10,acknowledges challenges; takes responsibility; frames LOIs strategically; proposes 90-day milestones; addresses leadership question; professional tone
+worker_vision,t3_q3_strategic_communication,1,Weak board communication

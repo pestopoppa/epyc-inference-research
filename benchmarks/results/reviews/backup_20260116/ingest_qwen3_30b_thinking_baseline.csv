@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,17.36,3,Identifies 4 methodological issues with clear explanations
+thinking,t3_q2_causal_inference,16.35,2,Good DAG analysis but truncated mid-explanation
+thinking,t3_q3_reasoning_trap,16.76,3,Correct flaw identification with concrete medical imaging scenario
+thinking,t2_q1_paradox,19.20,3,Two philosophical positions presented with clear reasoning
+thinking,t2_q2_counterfactual,16.34,2,Detailed analysis of first two dimensions but truncated
+thinking,t2_q3_formal,19.61,3,Correct formal proof with Modus Ponens and concrete example
+thinking,t2_q4_metacognition,16.01,2,Good Fermi estimation approach but truncated before bounds
+thinking,t1_q1_multistep,17.40,3,Correct answer (11:34 AM) with detailed work and verification
+thinking,t1_q2_hypothesis,17.41,3,Three specific alternative explanations with mechanisms
+thinking,t1_q3_planning,16.28,2,Correct constraint analysis but truncated mid-solution
+coder,t3_q1_concurrent_correctness,15.59,2,Understands ABA problem but truncated before fix
+coder,t3_q2_distributed_consistency,16.58,2,Lists strategies but truncated before all scenarios
+coder,t3_q3_algorithmic_hardness,16.19,1,Starts adversary argument but truncated early
+coder,t2_q1_design,16.24,2,Reasonable API design approach but truncated
+coder,t2_q2_debug_complex,18.07,3,Complete debugging analysis with correct identification
+coder,t2_q3_optimize,17.23,3,Complete optimization with analysis
+coder,t2_q4_system,16.67,2,System design started but truncated
+coder,t1_q1_algorithm,16.23,2,Algorithm approach correct but truncated
+coder,t1_q2_refactor,16.01,2,Refactoring started but truncated
+coder,t1_q3_test,15.93,2,Test approach correct but truncated
+agentic,t3_q1_competing_constraints,15.57,2,Multi-constraint handling but truncated
+agentic,t3_q2_multi_agent_coordination,15.48,2,Coordination approach but truncated
+agentic,t3_q3_adversarial_robustness,15.50,2,Adversarial handling but truncated
+agentic,t2_q1_ambiguous,19.44,3,Complete ambiguity handling
+agentic,t2_q2_error_chain,15.79,2,Error chain analysis but truncated
+agentic,t2_q3_schema_edge,15.91,2,Schema edge case but truncated
+agentic,t2_q4_orchestration,16.40,3,Complete orchestration response
+agentic,t1_q1_sequential,18.79,3,Complete sequential tool use
+agentic,t1_q2_error_handling,15.99,2,Error handling but truncated
+agentic,t1_q3_nested_params,19.71,3,Correct nested parameter handling
+general,t3_q1_policy_analysis,15.78,2,Policy analysis started but truncated
+general,t3_q2_system_failure,16.28,2,System failure analysis but truncated
+general,t3_q3_strategic_communication,16.89,3,Complete strategic communication response
+general,t2_q1_synthesis,19.43,3,Complete synthesis
+general,t2_q2_transform,17.18,3,Complete transformation
+general,t2_q3_schedule,15.94,2,Schedule analysis but truncated
+general,t2_q4_inconsistency,16.44,2,Inconsistency detection but truncated
+general,t1_q1_json,21.10,3,Correct JSON formatting
+general,t1_q2_multistep,15.67,2,Multistep reasoning but truncated
+general,t1_q3_compare,19.59,3,Complete comparison
+math,t3_q1_analysis,16.00,2,Mathematical analysis but truncated
+math,t3_q2_combinatorics,16.26,2,Combinatorics approach but truncated
+math,t3_q3_probability_theory,16.09,2,Probability theory but truncated
+math,t2_q1_optimization,19.28,3,Complete optimization problem
+math,t2_q2_proof,16.10,2,Proof started but truncated
+math,t2_q3_calculus,17.75,3,Complete calculus solution
+math,t2_q4_statistics,16.06,2,Statistics analysis but truncated
+math,t1_q1_word_problem,16.65,3,Correct word problem solution
+math,t1_q2_system_equations,18.86,3,Correct system of equations
+math,t1_q3_probability,19.64,3,Correct probability calculation
+instruction_precision,t3_q1_self_referential,19.62,1,Self-referential constraint not properly handled
+instruction_precision,t3_q2_cascading_constraints,19.43,1,Cascading constraints not fully satisfied
+instruction_precision,t3_q3_meta_instruction,19.41,1,Meta-instruction not precisely followed
+instruction_precision,t2_q1_resist_elaboration,20.54,2,Resisted elaboration but added some extra content
+instruction_precision,t2_q2_maintain_format,20.01,2,Format maintained partially but truncated
+instruction_precision,t2_q3_empty_handling,20.52,3,Correctly handles empty input
+instruction_precision,t2_q4_conflicting_constraints,19.82,3,Conflicting constraints resolved appropriately
+instruction_precision,t1_q1_negative_instruction,19.89,2,Negative instruction followed but truncated
+instruction_precision,t1_q2_word_limit,19.66,2,Word limit attempted but may have exceeded
+instruction_precision,t1_q3_structured_format,19.52,2,Structured format attempted but truncated
+instruction_precision,t1_q4_multiple_constraints,20.29,3,Multiple constraints satisfied

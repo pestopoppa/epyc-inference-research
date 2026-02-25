@@ -1,0 +1,1 @@
+{"feature": "binding_routing", "verdict": "FAIL_LATENCY", "quality_delta": 0.0, "latency_delta_s": 6.452285629027756, "tps_delta": -21.698561542434938, "memory_delta_mb": -0.0703125, "timestamp": "2026-02-19T22:23:30+00:00"}

@@ -1,0 +1,1 @@
+Design an order processing system for an e-commerce platform. It needs to handle payments, inventory, and shipping.

@@ -1,0 +1,260 @@
+Agentic/Tool-Use Benchmark Summary
+Generated: Wed Dec 17 01:54:14 AM CET 2025
+==============================================
+
+ORCHESTRATION ELIGIBILITY REQUIREMENTS:
+  - Worker: T1 score 4+
+  - Orchestrator: T1 score 5, T2 score 4+
+  - Architect: T1-T2 score 5, T3 score 4+
+
+Models Tested:
+  Qwen2.5-72B-Instruct: PASS (intended: architect)
+  Llama-3.1-70B-Instruct: PASS (intended: architect)
+  Llama-3-8B-Instruct: PASS (intended: worker)
+  Qwen2.5-Coder-32B: PASS (intended: coder_primary)
+  Qwen3-Next-80B-A3B: PASS (intended: architect)
+  Qwen3-30B-A3B: PASS (intended: escalation)
+  Qwen3-Coder-53B-A3B: PASS (intended: coder_primary)
+
+Speed Summary by Model and Config:
+
+--- Qwen2.5-72B-Instruct (dense) [intended: architect] ---
+  Config: baseline
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+
+--- Llama-3.1-70B-Instruct (dense) [intended: architect] ---
+  Config: baseline
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+
+--- Llama-3-8B-Instruct (dense) [intended: worker] ---
+  Config: baseline
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+
+--- Qwen2.5-Coder-32B (dense) [intended: coder_primary] ---
+  Config: baseline
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+
+--- Qwen3-Next-80B-A3B (qwen3moe) [intended: architect] ---
+  Config: baseline
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe2
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe4
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe6
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe8
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+
+--- Qwen3-30B-A3B (qwen3moe) [intended: escalation] ---
+  Config: baseline
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe2
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe4
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe6
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe8
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+
+--- Qwen3-Coder-53B-A3B (qwen3moe) [intended: coder_primary] ---
+  Config: baseline
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe2
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe4
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe6
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+  Config: moe8
+    t1_q1_single_tool: N/A
+    t1_q2_multi_param: N/A
+    t1_q3_choose_tool: N/A
+    t2_q1_sequential: N/A
+    t2_q2_error_handling: N/A
+    t2_q3_nested_params: N/A
+    t3_q1_ambiguous: N/A
+    t3_q2_error_chain: N/A
+    t3_q3_schema_edge: N/A
+    t3_q4_orchestration: N/A
+
+==============================================
+MoE Speedup Analysis (baseline vs moe4)
+==============================================
+
+Model: Qwen3-Next-80B-A3B
+
+Model: Qwen3-30B-A3B
+
+Model: Qwen3-Coder-53B-A3B
+
+==============================================
+ORCHESTRATION ELIGIBILITY ASSESSMENT
+==============================================
+(Manual review required - check T1/T2/T3 output quality)
+
+Review each model's output files to score quality.
+Models scoring below thresholds should be excluded from orchestration.

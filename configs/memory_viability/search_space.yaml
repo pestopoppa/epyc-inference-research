@@ -1,0 +1,37 @@
+version: 1
+name: memory_viability_search
+objective: maximize_uplift_pp
+
+parameters:
+  graph_variant:
+    choices:
+      - raw_graph_latest
+      - coarse_graph_level_category
+      - coarse_graph_category_only
+      - coarse_graph_category_top_payload
+      - coarse_graph_embedding_t075
+
+  motif_variant:
+    choices:
+      - level_category
+      - category_only
+      - embedding_t075
+
+  retrieval_k:
+    low: 4
+    high: 20
+    step: 2
+
+  edge_k:
+    low: 4
+    high: 16
+    step: 2
+
+  failure_motif_k:
+    choices: [0, 2, 4, 6, 8]
+
+  hypothesis_motif_k:
+    choices: [0, 2, 4, 6, 8]
+
+  memory_char_budget:
+    choices: [800, 1200, 1600, 2000, 2400]

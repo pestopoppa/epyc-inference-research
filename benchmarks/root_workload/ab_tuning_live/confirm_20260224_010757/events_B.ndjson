@@ -1,0 +1,1 @@
+{"task_id": "coder_001_humaneval_012", "task_class": "implementation_fix", "tier": 1, "arm": "B", "quality_pass": true, "cost": 0.03650805, "latency_s": 9.383933424018323, "routed_model": "haiku", "final_model": "haiku", "classified_as": "haiku", "classifier_cost": 0.0176734, "escalations": 0, "timeout": false, "error": ""}

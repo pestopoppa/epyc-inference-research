@@ -1,0 +1,11 @@
+Design a real-time collaborative document editing system like Google Docs.
+Include: system components, data flow, conflict resolution strategy, and scaling approach.
+
+---
+test_id: t3_architecture_design
+expected_behavior: Should trigger escalation to architect for system design
+pass_criteria:
+  max_turns: 10
+  uses_function: ["llm_call"]
+  answer_contains: ["CRDT", "WebSocket", "database", "sync"]
+  must_call_final: true

@@ -1,0 +1,299 @@
+[2026-01-11 12:34:28.233] Output directory: /mnt/raid0/llm/claude/benchmarks/evidence/20260111_123428
+
+================================================================================
+[2026-01-11 12:34:28.236] [0;32mPAGED ATTENTION BENCHMARK EVIDENCE[0m
+================================================================================
+[2026-01-11 12:34:28.238] Script started
+[2026-01-11 12:34:28.239] Purpose: Prove paged attention performance improvements are real
+
+================================================================================
+[2026-01-11 12:34:28.242] [0;32m1. SYSTEM INFORMATION[0m
+================================================================================
+[2026-01-11 12:34:28.247] Hostname: Beelzebub
+[2026-01-11 12:34:28.249] Kernel: 6.14.0-37-generic
+[2026-01-11 12:34:28.251] Date/Time: 2026-01-11T12:34:28+01:00
+[2026-01-11 12:34:28.254] Timezone: Europe/Paris
+[2026-01-11 12:34:28.256] 
+[2026-01-11 12:34:28.257] CPU Information:
+Architecture:                            x86_64
+CPU op-mode(s):                          32-bit, 64-bit
+Address sizes:                           52 bits physical, 57 bits virtual
+Byte Order:                              Little Endian
+CPU(s):                                  192
+On-line CPU(s) list:                     0-191
+Vendor ID:                               AuthenticAMD
+Model name:                              AMD EPYC 9655 96-Core Processor
+CPU family:                              26
+Model:                                   2
+Thread(s) per core:                      2
+Core(s) per socket:                      96
+Socket(s):                               1
+Stepping:                                1
+Frequency boost:                         enabled
+CPU(s) scaling MHz:                      52%
+CPU max MHz:                             4510.0000
+CPU min MHz:                             1200.0000
+BogoMIPS:                                5199.87
+Flags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx_vnni avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd amd_ppin cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq la57 rdpid bus_lock_detect movdiri movdir64b overflow_recov succor smca fsrm avx512_vp2intersect flush_l1d debug_swap amd_lbr_pmc_freeze
+Virtualization:                          AMD-V
+L1d cache:                               4.5 MiB (96 instances)
+L1i cache:                               3 MiB (96 instances)
+L2 cache:                                96 MiB (96 instances)
+L3 cache:                                384 MiB (12 instances)
+NUMA node(s):                            2
+NUMA node0 CPU(s):                       0-47,96-143
+NUMA node1 CPU(s):                       48-95,144-191
+Vulnerability Gather data sampling:      Not affected
+Vulnerability Ghostwrite:                Not affected
+Vulnerability Indirect target selection: Not affected
+Vulnerability Itlb multihit:             Not affected
+Vulnerability L1tf:                      Not affected
+Vulnerability Mds:                       Not affected
+Vulnerability Meltdown:                  Not affected
+Vulnerability Mmio stale data:           Not affected
+Vulnerability Reg file data sampling:    Not affected
+Vulnerability Retbleed:                  Not affected
+Vulnerability Spec rstack overflow:      Mitigation; IBPB on VMEXIT only
+Vulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl
+Vulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization
+Vulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; PBRSB-eIBRS Not affected; BHI Not affected
+Vulnerability Srbds:                     Not affected
+Vulnerability Tsa:                       Not affected
+Vulnerability Tsx async abort:           Not affected
+Vulnerability Vmscape:                   Mitigation; IBPB on VMEXIT
+[2026-01-11 12:34:28.283] 
+[2026-01-11 12:34:28.285] Memory Information:
+               total        used        free      shared  buff/cache   available
+Mem:           1.1Ti        40Gi       343Gi        11Mi       757Gi       1.1Ti
+Swap:          8.0Gi       212Mi       7.8Gi
+[2026-01-11 12:34:28.287] 
+[2026-01-11 12:34:28.288] NUMA Topology:
+available: 2 nodes (0-1)
+node 0 cpus: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 96 97 98 99 100 101 102 103 104 105 106 107 108 109 110 111 112 113 114 115 116 117 118 119 120 121 122 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137 138 139 140 141 142 143
+node 0 size: 580105 MB
+node 0 free: 207782 MB
+node 1 cpus: 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78 79 80 81 82 83 84 85 86 87 88 89 90 91 92 93 94 95 144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163 164 165 166 167 168 169 170 171 172 173 174 175 176 177 178 179 180 181 182 183 184 185 186 187 188 189 190 191
+node 1 size: 580512 MB
+node 1 free: 144066 MB
+node distances:
+node   0   1 
+  0:  10  12 
+  1:  12  10 
+
+================================================================================
+[2026-01-11 12:34:28.311] [0;32m2. SOFTWARE VERSIONS[0m
+================================================================================
+[2026-01-11 12:34:28.313] llama.cpp directory: /mnt/raid0/llm/llama.cpp
+[2026-01-11 12:34:28.314] 
+[2026-01-11 12:34:28.315] Git commit:
+commit: 85ee1d557f68faebedabca898b5b44f2df646acd
+date: 2026-01-11 02:17:29 +0100
+subject: docs: update paged attention handoff to mark PR submitted
+[2026-01-11 12:34:28.318] 
+[2026-01-11 12:34:28.319] Git branch:
+production-consolidated
+[2026-01-11 12:34:28.321] 
+[2026-01-11 12:34:28.322] Git status (uncommitted changes):
+?? ">>> Test 1: 4 experts"
+?? ">>> Test 1: Baseline (8 experts)"
+?? "Model: Qwen3-VL-235B-A22B-Thinking"
+?? "Started: $(date)"
+?? echo
+?? examples/eagle/
+?? ggml/src/ggml-cpu/arch/x86/avx512-helpers.h
+?? ggml/src/ggml-cpu/repack.cpp.bak
+?? perf.data
+?? tools/bench-kv-block/
+[2026-01-11 12:34:28.328] 
+[2026-01-11 12:34:28.329] llama-bench version:
+error: invalid parameter for argument: --version
+usage: /mnt/raid0/llm/llama.cpp/build/bin/llama-bench [options]
+
+options:
+  -h, --help
+  --numa <distribute|isolate|numactl>       numa mode (default: disabled)
+  -r, --repetitions <n>                     number of times to repeat each test (default: 5)
+  --prio <-1|0|1|2|3>                          process/thread priority (default: 0)
+  --delay <0...N> (seconds)                 delay between each test (default: 0)
+  -o, --output <csv|json|jsonl|md|sql>      output format printed to stdout (default: md)
+  -oe, --output-err <csv|json|jsonl|md|sql> output format printed to stderr (default: none)
+  --list-devices                            list available devices and exit
+  -v, --verbose                             verbose output
+  --progress                                print test progress indicators
+  --no-warmup                               skip warmup runs before benchmarking
+
+test parameters:
+  -m, --model <filename>                    (default: models/7B/ggml-model-q4_0.gguf)
+  -p, --n-prompt <n>                        (default: 512)
+  -n, --n-gen <n>                           (default: 128)
+  -pg <pp,tg>                               (default: )
+  -d, --n-depth <n>                         (default: 0)
+  -b, --batch-size <n>                      (default: 2048)
+  -ub, --ubatch-size <n>                    (default: 512)
+  -ctk, --cache-type-k <t>                  (default: f16)
+  -ctv, --cache-type-v <t>                  (default: f16)
+  -t, --threads <n>                         (default: 96)
+  -C, --cpu-mask <hex,hex>                  (default: 0x0)
+  --cpu-strict <0|1>                        (default: 0)
+  --poll <0...100>                          (default: 50)
+  -ngl, --n-gpu-layers <n>                  (default: 99)
+  -ncmoe, --n-cpu-moe <n>                   (default: 0)
+  -sm, --split-mode <none|layer|row>        (default: layer)
+  -mg, --main-gpu <i>                       (default: 0)
+  -nkvo, --no-kv-offload <0|1>              (default: 0)
+  -fa, --flash-attn <0|1>                   (default: 0)
+  -dev, --device <dev0/dev1/...>            (default: auto)
+  -mmp, --mmap <0|1>                        (default: 1)
+  -embd, --embeddings <0|1>                 (default: 0)
+  -ts, --tensor-split <ts0/ts1/..>          (default: 0)
+  -ot --override-tensor <tensor name pattern>=<buffer type>;...
+                                            (default: disabled)
+  -nopo, --no-op-offload <0|1>              (default: 0)
+  --no-host <0|1>                           (default: 0)
+
+Multiple values can be given for each parameter by separating them with ','
+or by specifying the parameter multiple times. Ranges can be given as
+'first-last' or 'first-last+step' or 'first-last*mult'.
+
+================================================================================
+[2026-01-11 12:34:28.337] [0;32m3. MODEL VERIFICATION[0m
+================================================================================
+[2026-01-11 12:34:28.338] Model path: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3.1-70B-Instruct-GGUF/Meta-Llama-3.1-70B-Instruct-Q4_K_M.gguf
+[2026-01-11 12:34:28.339] Model exists: YES
+[2026-01-11 12:34:28.342] Model size: 40G
+[2026-01-11 12:34:28.344] Model modified: 2025-12-13 22:24:01.320018106 +0100
+[2026-01-11 12:34:28.345] 
+[2026-01-11 12:34:28.346] Computing SHA256 checksum (this may take a moment)...
+f775c87029be95fb41df9e2882e6e938b73121c30ffc235ac6b6b880add49aa5  /mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3.1-70B-Instruct-GGUF/Meta-Llama-3.1-70B-Instruct-Q4_K_M.gguf
+
+================================================================================
+[2026-01-11 12:35:11.089] [0;32m4. BENCHMARK CONFIGURATION[0m
+================================================================================
+[2026-01-11 12:35:11.091] Benchmark parameters:
+[2026-01-11 12:35:11.092]   - Prompt tokens (pp): 1024
+[2026-01-11 12:35:11.093]   - Generation tokens (tg): 128
+[2026-01-11 12:35:11.094]   - Number of runs: 3
+[2026-01-11 12:35:11.096]   - Paged attention block size: 64
+[2026-01-11 12:35:11.097]   - llama-bench binary: /mnt/raid0/llm/llama.cpp/build/bin/llama-bench
+
+================================================================================
+[2026-01-11 12:35:11.100] [0;32m5. PRE-BENCHMARK SYSTEM STATE[0m
+================================================================================
+[2026-01-11 12:35:11.102] Memory before benchmark:
+               total        used        free      shared  buff/cache   available
+Mem:           1.1Ti        44Gi       340Gi        11Mi       757Gi       1.1Ti
+Swap:          8.0Gi       212Mi       7.8Gi
+[2026-01-11 12:35:11.105] 
+[2026-01-11 12:35:11.106] Load average:
+ 12:35:11 up 29 days, 21:52,  4 users,  load average: 28.45, 76.68, 91.23
+[2026-01-11 12:35:11.111] 
+[2026-01-11 12:35:11.112] Running processes (top 10 by memory):
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+daniele  4162339 14.8  0.0 80841880 939584 pts/5 Sl+  Jan08 634:29 claude
+daniele   710266  6.3  0.0 79507668 662072 pts/3 Sl+  Jan08 261:58 claude
+gdm      3019985  0.1  0.0 4011008 169328 tty1   Sl+  Jan04  10:33 /usr/bin/gnome-shell
+root        4483  0.1  0.0 6664628 122692 ?      Ssl   2025  46:19 /usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock
+root        2334  0.0  0.0 202848 90848 ?        S<s   2025   7:30 /usr/lib/systemd/systemd-journald
+root        5528  0.0  0.0 613432 68740 ?        Ssl   2025   7:29 /usr/libexec/fwupd/fwupd
+daniele  4163326  0.3  0.0 154464 64620 ?        Sl   12:32   0:00 python3 -m pytest tests/unit/ -v --tb=short
+daniele  4164170  0.4  0.0 154580 64612 ?        Sl   12:32   0:00 python3 -m pytest tests/unit/ -v --tb=short
+daniele  4175847  0.4  0.0 154464 64608 ?        Sl   12:33   0:00 python3 -m pytest tests/unit/ -v --tb=short
+daniele  4171086  0.4  0.0 154464 64592 ?        Sl   12:33   0:00 python3 -m pytest tests/unit/ -v --tb=short
+
+================================================================================
+[2026-01-11 12:35:11.202] [0;32m6. BASELINE BENCHMARK (NO PAGING)[0m
+================================================================================
+[2026-01-11 12:35:11.204] Starting baseline benchmark without paged attention...
+[2026-01-11 12:35:11.205] Command: /mnt/raid0/llm/llama.cpp/build/bin/llama-bench -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3.1-70B-Instruct-GGUF/Meta-Llama-3.1-70B-Instruct-Q4_K_M.gguf -p 1024 -n 128 -r 3
+[2026-01-11 12:35:11.207] 
+[2026-01-11 12:35:11.208] --- RAW OUTPUT START ---
+| model                          |       size |     params | backend    | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | ------: | --------------: | -------------------: |
+| llama 70B Q4_K - Medium        |  39.59 GiB |    70.55 B | CPU        |      96 |          pp1024 |         46.26 ± 0.60 |
+| llama 70B Q4_K - Medium        |  39.59 GiB |    70.55 B | CPU        |      96 |           tg128 |          0.98 ± 0.09 |
+
+build: 6b43356a1 (7699)
+[2026-01-11 12:43:27.247] --- RAW OUTPUT END ---
+[2026-01-11 12:43:27.254] 
+[2026-01-11 12:43:27.255] Baseline exit code: 0
+[2026-01-11 12:43:27.256] Baseline duration: 496.042736042 seconds
+[2026-01-11 12:43:27.258] 
+[2026-01-11 12:43:27.259] Memory after baseline:
+               total        used        free      shared  buff/cache   available
+Mem:           1.1Ti        23Gi       360Gi        11Mi       757Gi       1.1Ti
+Swap:          8.0Gi       212Mi       7.8Gi
+[2026-01-11 12:43:27.261] 
+[2026-01-11 12:43:27.262] Cooling down for 10 seconds before paged attention test...
+
+================================================================================
+[2026-01-11 12:43:37.266] [0;32m7. PAGED ATTENTION BENCHMARK (BLOCK_SIZE=64)[0m
+================================================================================
+[2026-01-11 12:43:37.268] Starting paged attention benchmark...
+[2026-01-11 12:43:37.270] Environment: LLAMA_PAGED_ATTN=64
+[2026-01-11 12:43:37.271] Command: LLAMA_PAGED_ATTN=64 /mnt/raid0/llm/llama.cpp/build/bin/llama-bench -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3.1-70B-Instruct-GGUF/Meta-Llama-3.1-70B-Instruct-Q4_K_M.gguf -p 1024 -n 128 -r 3
+[2026-01-11 12:43:37.273] 
+[2026-01-11 12:43:37.274] --- RAW OUTPUT START ---
+| model                          |       size |     params | backend    | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | ------: | --------------: | -------------------: |
+| llama 70B Q4_K - Medium        |  39.59 GiB |    70.55 B | CPU        |      96 |          pp1024 |         36.17 ± 0.41 |
+| llama 70B Q4_K - Medium        |  39.59 GiB |    70.55 B | CPU        |      96 |           tg128 |          0.84 ± 0.02 |
+
+build: 6b43356a1 (7699)
+[2026-01-11 12:53:30.583] --- RAW OUTPUT END ---
+[2026-01-11 12:53:30.587] 
+[2026-01-11 12:53:30.589] Paged attention exit code: 0
+[2026-01-11 12:53:30.590] Paged attention duration: 593.312433703 seconds
+[2026-01-11 12:53:30.591] 
+[2026-01-11 12:53:30.592] Memory after paged attention:
+               total        used        free      shared  buff/cache   available
+Mem:           1.1Ti        25Gi       359Gi        11Mi       757Gi       1.1Ti
+Swap:          8.0Gi       212Mi       7.8Gi
+
+================================================================================
+[2026-01-11 12:53:30.596] [0;32m8. RESULTS SUMMARY[0m
+================================================================================
+[2026-01-11 12:53:30.598] Benchmark completed successfully
+[2026-01-11 12:53:30.599] 
+[2026-01-11 12:53:30.600] Output files:
+total 56
+drwxrwxr-x 2 daniele daniele  4096 Jan 11 12:43 .
+drwxrwxr-x 3 daniele daniele  4096 Jan 11 12:34 ..
+-rw-rw-r-- 1 daniele daniele   527 Jan 11 12:43 baseline_raw.txt
+-rw-rw-r-- 1 daniele daniele 16978 Jan 11 12:53 full_log.txt
+-rw-rw-r-- 1 daniele daniele    41 Jan 11 12:34 git_commit.txt
+-rw-rw-r-- 1 daniele daniele   189 Jan 11 12:35 model_checksum.txt
+-rw-rw-r-- 1 daniele daniele   527 Jan 11 12:53 paged_raw.txt
+-rw-rw-r-- 1 daniele daniele  1545 Jan 11 12:34 proc_meminfo.txt
+-rw-rw-r-- 1 daniele daniele  3963 Jan 11 12:34 system_cpu.txt
+-rw-rw-r-- 1 daniele daniele   207 Jan 11 12:34 system_memory.txt
+[2026-01-11 12:53:30.602] 
+[2026-01-11 12:53:30.603] To verify these results, anyone can run:
+[2026-01-11 12:53:30.605]   1. Check out commit: 85ee1d557f68faebedabca898b5b44f2df646acd
+[2026-01-11 12:53:30.606]   2. Build llama.cpp: cmake -B build && cmake --build build
+[2026-01-11 12:53:30.607]   3. Run baseline: /mnt/raid0/llm/llama.cpp/build/bin/llama-bench -m <model> -p 1024 -n 128 -r 3
+[2026-01-11 12:53:30.608]   4. Run paged: LLAMA_PAGED_ATTN=64 /mnt/raid0/llm/llama.cpp/build/bin/llama-bench -m <model> -p 1024 -n 128 -r 3
+
+================================================================================
+[2026-01-11 12:53:30.610] [0;32m9. QUICK COMPARISON[0m
+================================================================================
+[2026-01-11 12:53:30.612] Baseline results (from /mnt/raid0/llm/claude/benchmarks/evidence/20260111_123428/baseline_raw.txt):
+| model                          |       size |     params | backend    | threads |            test |                  t/s |
+| llama 70B Q4_K - Medium        |  39.59 GiB |    70.55 B | CPU        |      96 |          pp1024 |         46.26 ± 0.60 |
+| llama 70B Q4_K - Medium        |  39.59 GiB |    70.55 B | CPU        |      96 |           tg128 |          0.98 ± 0.09 |
+[2026-01-11 12:53:30.614] 
+[2026-01-11 12:53:30.615] Paged attention results (from /mnt/raid0/llm/claude/benchmarks/evidence/20260111_123428/paged_raw.txt):
+| model                          |       size |     params | backend    | threads |            test |                  t/s |
+| llama 70B Q4_K - Medium        |  39.59 GiB |    70.55 B | CPU        |      96 |          pp1024 |         36.17 ± 0.41 |
+| llama 70B Q4_K - Medium        |  39.59 GiB |    70.55 B | CPU        |      96 |           tg128 |          0.84 ± 0.02 |
+
+================================================================================
+[2026-01-11 12:53:30.619] [0;32mBENCHMARK EVIDENCE COLLECTION COMPLETE[0m
+================================================================================
+[2026-01-11 12:53:30.620] All evidence saved to: /mnt/raid0/llm/claude/benchmarks/evidence/20260111_123428
+[2026-01-11 12:53:30.621] Full log: /mnt/raid0/llm/claude/benchmarks/evidence/20260111_123428/full_log.txt
+[2026-01-11 12:53:30.622] Baseline raw output: /mnt/raid0/llm/claude/benchmarks/evidence/20260111_123428/baseline_raw.txt
+[2026-01-11 12:53:30.623] Paged raw output: /mnt/raid0/llm/claude/benchmarks/evidence/20260111_123428/paged_raw.txt
+[2026-01-11 12:53:30.624] Model checksum: /mnt/raid0/llm/claude/benchmarks/evidence/20260111_123428/model_checksum.txt
+[2026-01-11 12:53:30.625] Git commit: /mnt/raid0/llm/claude/benchmarks/evidence/20260111_123428/git_commit.txt
+[2026-01-11 12:53:30.626] 
+[2026-01-11 12:53:30.628] Script finished at 2026-01-11T12:53:30+01:00

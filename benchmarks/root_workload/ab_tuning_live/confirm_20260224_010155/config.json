@@ -1,0 +1,55 @@
+{
+  "label": "haiku_first_with_escalation",
+  "description": "Send ALL tasks to Haiku first. Opus judges pass/fail (~10-20 output tokens). On FAIL, escalate Haiku\u2192Sonnet\u2192Opus. No pre-routing table needed \u2014 the judge IS the router.",
+  "enabled": {
+    "0.1": false,
+    "0.2": true,
+    "0.3": false,
+    "0.4": false,
+    "0.5": false,
+    "0.6": false,
+    "10.7.1": false,
+    "10.7.2": false,
+    "10.7.3": false,
+    "10.7.4": true,
+    "10.7.5": true,
+    "10.7.6": false,
+    "10.7.7": true,
+    "10.7.8": false,
+    "10.7.9": true,
+    "10.7.10": false,
+    "10.8": true
+  },
+  "scales": {
+    "0.2": 0.607,
+    "10.7.4": 1.157,
+    "10.7.5": 0.842,
+    "10.7.7": 0.674,
+    "10.7.9": 0.787,
+    "10.8": 1.0
+  },
+  "effect": {
+    "quality": -0.004,
+    "cost": -0.601,
+    "latency": -0.216,
+    "manual": -0.012
+  },
+  "routing_table_override": {
+    "implementation_fix:1": "haiku",
+    "implementation_fix:2": "haiku",
+    "implementation_fix:3": "haiku",
+    "planning_synthesis:1": "haiku",
+    "planning_synthesis:2": "haiku",
+    "planning_synthesis:3": "haiku",
+    "long_input:1": "haiku",
+    "long_input:2": "haiku",
+    "long_input:3": "haiku",
+    "read_search:1": "haiku",
+    "read_search:2": "haiku",
+    "read_search:3": "haiku",
+    "resume:1": "haiku",
+    "resume:2": "haiku",
+    "resume:3": "haiku"
+  },
+  "escalation": true
+}

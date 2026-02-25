@@ -1,0 +1,83 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,39.2,3,Comprehensive research design critique; identifies confounders and selection bias in bilingualism study
+thinking,t3_q2_causal_inference,40.7,3,Sound DAG analysis; correctly identifies minimal adjustment set with backdoor path reasoning
+thinking,t3_q3_reasoning_trap,39.6,3,Identifies confounding variables flaw; specific examples of model architecture and training differences
+thinking,t2_q1_paradox,40.6,3,Well-structured Ship of Theseus analysis; multiple philosophical positions covered
+thinking,t2_q2_counterfactual,34.2,3,All three dimensions analyzed with specific mechanisms; internet counterfactual well-explored
+thinking,t2_q3_formal,40.7,3,Valid hypothetical syllogism proof P->Q Q->R therefore P->R; clearly structured
+thinking,t2_q4_metacognition,37.3,3,Systematic Fermi estimation for piano tuners in Chicago with explicit assumptions
+thinking,t1_q1_multistep,43.5,3,Correct two-trains problem with step-by-step algebraic solution
+thinking,t1_q2_hypothesis,35.4,2,Lists alternative hypotheses (study habits socioeconomic factors) but hit 2048 token limit; somewhat generic
+thinking,t1_q3_planning,34.7,3,Systematic constraint-checking for plant watering order; all constraints explored
+coder,t3_q1_concurrent_correctness,38.8,3,Full ABA problem explanation with A->B->A sequence diagram in lock-free stack
+coder,t3_q2_distributed_consistency,41.1,3,All 4 strategies covered: LWW vector clocks app-level merging operational transforms
+coder,t3_q3_algorithmic_hardness,35.8,3,Correct adversary argument for Omega(n) lower bound on k-th smallest element
+coder,t2_q1_design,38.3,3,Complete LRU cache with O(1) get() and put() using hash map + doubly linked list
+coder,t2_q2_debug_complex,38.6,3,Race condition correctly identified in asyncio code; asyncio.Lock fix proposed
+coder,t2_q3_optimize,35.0,3,Hash map O(n) pair-sum solution with single-pass frequency counting
+coder,t2_q4_system,41.9,3,Rate limiter with sliding window deque; complete implementation with validation
+coder,t1_q1_algorithm,34.7,1,Traces binary search but analysis confused (says arr[mid]<target when arr[1]=2>1); wrong fix
+coder,t1_q2_refactor,41.8,3,Set-based O(n) dedup; clean implementation with seen/duplicates sets
+coder,t1_q3_test,39.9,3,Comprehensive pytest test cases for divide() with edge cases and ValueError checks
+general,t3_q1_policy_analysis,41.6,2,AI governance failure modes identified (accuracy gaming SHAP limitations) but truncated at 878 tokens
+general,t3_q2_system_failure,42.5,3,Correct replica lag diagnosis; read-your-writes consistency fix for double-charge race condition
+general,t3_q3_strategic_communication,42.2,3,Professional board meeting statement; acknowledges 40% miss pivots to Fortune 500 LOIs
+general,t2_q1_synthesis,43.9,3,Phased approach balancing quick fix (2-week hotfix) + long-term auth refactor
+general,t2_q2_transform,45.0,3,Correct flat-to-nested YAML transformation with department grouping
+general,t2_q3_schedule,37.5,3,Constraint satisfaction with all scheduling rules checked (Dave availability Alice block)
+general,t2_q4_inconsistency,33.1,3,Both key inconsistencies found (JSON vs form-encoded body format mismatch)
+general,t1_q1_json,39.6,1,System prompt echo + JSON with [DATE] placeholder instead of actual date
+general,t1_q2_multistep,45.5,3,Correct dedup sort number count pipeline with case-insensitive handling
+general,t1_q3_compare,34.4,3,Good microservices vs monolith comparison using mall analogy
+math,t3_q1_analysis,36.4,3,Differentiability of f(x)=sum(x^n/n!)sin(n) via Weierstrass M-test; correct uniform convergence
+math,t3_q2_combinatorics,37.3,2,Sign-reversing involution approach correct but proof likely incomplete at 1565 tokens
+math,t3_q3_probability_theory,34.3,3,E[N]=e derived correctly; both direct calculation and geometric argument shown
+math,t2_q1_optimization,41.3,3,Correct fencing problem setup: 2x+y=200 maximize xy; correct dimensions x=50 y=100 area=5000
+math,t2_q2_proof,36.3,3,Horse induction flaw correctly identified at n=1->2 step where sets don't overlap
+math,t2_q3_calculus,44.8,3,Full antiderivative work for 3x^2+2x-1; correct definite integral = 10
+math,t2_q4_statistics,40.3,3,Mean median std dev all calculated correctly for dataset 12 15 18 22 25 28 30 35
+math,t1_q1_word_problem,42.2,3,All three discount/tax answers correct with step-by-step work shown
+math,t1_q2_system_equations,43.7,3,Correct substitution x^2+y^2=25 xy=12; quartic->quadratic in u=x^2 properly set up
+math,t1_q3_probability,44.0,2,Correct combination setup for ball drawing but truncated before all three answers completed
+agentic,t3_q1_competing_constraints,31.8,2,CSV analysis code correct and routed to coder_primary but prompt asked for robust error-handling plan
+agentic,t3_q2_multi_agent_coordination,31.5,1,Returns stock price JSON instead of multi-agent coordination plan; wrong task type
+agentic,t3_q3_adversarial_robustness,30.4,3,Security analysis correct; identifies command injection risk and whitelisting approach
+agentic,t2_q1_ambiguous,34.8,1,Asks clarification questions but then encounters LLM call errors; unable to complete
+agentic,t2_q2_error_chain,35.4,3,Correct check_dns tool call with reasoning about staging DB connection failure
+agentic,t2_q3_schema_edge,39.6,3,Correct API query JSON with proper null body and Bearer auth header
+agentic,t2_q4_orchestration,41.3,3,Complete deployment pipeline: git_checkout->run_tests->build_image->deploy
+agentic,t1_q1_sequential,47.0,3,Correct tool call array: read_file then grep_search for /var/log/app.log
+agentic,t1_q2_error_handling,34.6,2,Good recovery strategy (search_users) but verbose; asks user instead of acting autonomously
+agentic,t1_q3_nested_params,41.7,3,Correct nested JSON: create_task with assignees array and metadata.tags object
+instruction_precision,t3_q1_self_referential,45.6,1,Attempts self-referential sentence but word and letter counts are incorrect
+instruction_precision,t3_q2_cascading_constraints,35.0,1,5 words present but violates non-increasing length rule (Needle=6 after Yarn=4)
+instruction_precision,t3_q3_meta_instruction,37.5,3,Correct: echoes bracketed instructions then executes them (hello 42 7x hi)
+instruction_precision,t2_q1_resist_elaboration,35.5,1,Starts with system prompt preamble then 2 then elaborates; violated only-number constraint
+instruction_precision,t2_q2_maintain_format,42.2,2,Correct ERROR_TYPE/ROOT_CAUSE/FIX format but root cause slightly imprecise (Runtime vs TypeError)
+instruction_precision,t2_q3_empty_handling,44.9,3,Correct NONE output with explanation for no emails in Hello world nice day
+instruction_precision,t2_q4_conflicting_constraints,25.7,2,7 words starting with A about technical topic; meets most constraints
+instruction_precision,t1_q1_negative_instruction,35.9,3,Explains photosynthesis without using forbidden word sunlight; uses light instead
+instruction_precision,t1_q2_word_limit,35.7,1,First sentence within limit but then continues far beyond word limit
+instruction_precision,t1_q3_structured_format,46.5,3,Correct LANGUAGE (YEAR) format one per line with descriptions
+instruction_precision,t1_q4_multiple_constraints,33.8,3,France Germany Italy Netherlands Spain: all European alphabetical exactly 5
+long_context,t3_q1_multi_hop_reasoning,24.2,1,Attempts multi-hop but all worker digests reported errors; synthesizes from failure data
+long_context,t3_q2_contradiction_detection,24.1,1,Template table structure produced but no actual contradictions extracted from content
+long_context,t3_q3_evolving_requirements,0.0,0,Timeout error after 120s; inference failed completely
+long_context,t2_q1_deep_needle,26.8,0,Worker returned Errno 111 (port 8102 down); answer describes infrastructure errors not document content
+long_context,t2_q2_synthesis,0.0,0,Timeout error after 120s; inference failed completely
+long_context,t2_q3_architecture,22.9,2,Generic distributed architecture analysis; identifies modular pattern but lacks document specifics
+long_context,t1_q1_needle,26.8,0,Says no credentials found — REGRESSION from Wave 1 score 3; workers failed (port 8102 down)
+long_context,t1_q2_multi_file,29.8,1,Acknowledges Errno 111 connection failure; generic code analysis without actual file content
+long_context,t1_q3_extraction,20.4,1,Reports server connection error; some extraction attempted but uncertain accuracy
+vl,t3_q1_chart_critique,0.0,3,Correct chart reading: Lamb 103.7 Corn 103.13 difference 0.57; identifies misleading impressions
+vl,t3_q2_multi_chart_synthesis,0.0,3,Reads GPI values correctly (Slovenia 1.00 Albania 0.96 Cameroon 0.79 LowIncome 0.71)
+vl,t3_q3_twyne_security,4.7,2,Generic DeFi security analysis (oracle manipulation reentrancy); not Twyne-specific
+vl,t3_q4_twyne_economic,5.0,2,Identifies lender/borrower/liquidator roles but generic AMM analysis not Twyne-specific
+vl,t3_q5_document_forensics,3.6,2,Generic entity extraction; acknowledges image unavailable; entities likely hallucinated
+vl,t2_q1_calculation,0.0,1,Starts intrinsic value calculation for 2008 options but truncated to 1 line
+vl,t2_q2_comparison,0.0,3,Correct bar chart reading: Japan military role 29% vs 23% = 6% difference
+vl,t2_q3_trend_analysis,0.0,3,Identifies sharpest increase 2013-2014; estimates 300 person increase
+vl,t2_q4_ratio_calculation,0.0,2,Identifies green 58% blue 42% values but ratio calculation may be inaccurate
+vl,t2_q5_document_synthesis,0.0,0,Fragment output: only starts ITC dividend sentence then truncated
+vl,t1_q1_scene_text,0.0,0,Only extracts Centre — should find all visible text in scene image
+vl,t1_q2_sign_reading,0.0,0,Reads wrong destinations; confuses Mosman Manly exit content

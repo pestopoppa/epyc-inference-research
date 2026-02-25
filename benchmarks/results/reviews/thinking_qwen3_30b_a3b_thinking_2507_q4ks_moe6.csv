@@ -1,0 +1,14 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+instruction_precision,t3_q1_self_referential,26.24,2,"Response generated, format needs manual review"
+instruction_precision,t3_q2_cascading_constraints,25.68,2,"Response generated, format needs manual review"
+instruction_precision,t3_q3_meta_instruction,26.64,2,"Response generated, format needs manual review"
+instruction_precision,t2_q1_resist_elaboration,27.64,2,"Response generated, format needs manual review"
+instruction_precision,t2_q2_maintain_format,25.86,2,"Response generated, format needs manual review"
+instruction_precision,t2_q3_empty_handling,29.78,2,"Response generated, format needs manual review"
+instruction_precision,t2_q4_conflicting_constraints,27.13,2,"Response generated, format needs manual review"
+instruction_precision,t1_q1_negative_instruction,27.62,2,"Response generated, format needs manual review"
+instruction_precision,t1_q2_word_limit,27.19,2,"Response generated, format needs manual review"
+instruction_precision,t1_q3_structured_format,28.39,2,"Response generated, format needs manual review"
+instruction_precision,t1_q4_multiple_constraints,26.59,2,"Response generated, format needs manual review"
+long_context,t3_q1_multi_hop_reasoning,1.19,2,Response to long context
+long_context,t3_q2_contradiction_detection,1.73,2,Response to long context

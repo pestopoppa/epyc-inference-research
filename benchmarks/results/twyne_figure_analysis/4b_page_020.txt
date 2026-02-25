@@ -1,0 +1,28 @@
+encoding image slice...
+image slice encoded in 26168 ms
+decoding image batch 1/2, n_tokens_batch = 2048
+image decoded (batch 1/2) in 3841 ms
+decoding image batch 2/2, n_tokens_batch = 1609
+image decoded (batch 2/2) in 4318 ms
+
+Here is an analysis of Figure 7 from the DeFi whitepaper:
+
+---
+
+**1. What type of visualization is this?**
+
+This is a **contour plot with a color gradient (heatmap)**, specifically a 2D surface plot. It visualizes a function of two variables (liquidity incentive `i` and closing factor `c`) and displays the resulting CLP losses as a color-coded surface. The black dashed line represents a theoretical frontier (loss frontier) derived from a specific equation.
+
+---
+
+**2. What are the key components or data series shown?**
+
+- **X-axis (Horizontal):** *Liquidity Incentive (i)* — a parameter that determines how much profit liquidators earn per liquidation. Values range from 0.000 to 0.200.
+- **Y-axis (Vertical):** *Closing Factor (c)* — a measure of how much of the borrower’s collateral is retained after liquidation. Values range from 0.0 to 1.0.
+- **Color Gradient (Right-side colorbar):** *CLP Loss* — the expected loss to the Collateral Lending Protocol (CLP) as a decimal value (e.g., -0.936 = 93.6% loss). The color scale ranges from blue (low loss, near 0) to red (high loss, near -0.936).
+- **Black Dashed Line:** *Theoretical CLP-loss Frontier* — the boundary representing the minimum possible loss for a given set of parameters, derived from Equation 38.
+- **Regions:**
+  - *“No Losses”* — the region in the top-left (low `i`, high `c`) where losses are near zero.
+  - *“CLP Losses”* — the region in the bottom-right (high `i`, low `c`) where losses are significant.
+
+---

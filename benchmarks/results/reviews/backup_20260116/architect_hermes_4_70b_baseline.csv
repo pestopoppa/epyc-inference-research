@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,3.2,3,Correct grep_search then read_file sequence
+agentic,t1_q2_error_handling,2.7,2,Attempts search but verbose/repetitive
+agentic,t1_q3_nested_params,1.2,2,JSON structure present but format issues
+agentic,t2_q1_ambiguous,1.8,3,Correctly asks clarifying question
+agentic,t2_q2_error_chain,25.1,3,Good error chain analysis
+agentic,t2_q3_schema_edge,1.7,3,Correct body:null for GET
+agentic,t2_q4_orchestration,2.1,3,Good deployment plan with error handlers
+agentic,t3_q1_competing_constraints,1.6,3,Step-by-step plan with validation
+agentic,t3_q2_multi_agent_coordination,1.6,3,Multi-phase plan with context passing
+agentic,t3_q3_adversarial_robustness,1.6,3,Good security analysis
+coder,t1_q1_algorithm,2.0,3,Identifies both bugs with fixes
+coder,t1_q2_refactor,1.8,3,Two versions with tradeoff explanations
+coder,t1_q3_test,1.8,3,Pytest with parametrize
+coder,t2_q1_design,2.0,3,LRU cache with O(1) explanation
+coder,t2_q2_debug_complex,2.1,3,Race condition identified and fixed
+coder,t2_q3_optimize,2.0,3,Hash-based O(n) solution
+coder,t2_q4_system,2.0,3,Thread-safe rate limiter
+coder,t3_q1_concurrent_correctness,1.9,3,ABA problem analysis with fix
+coder,t3_q2_distributed_consistency,2.2,3,4 strategies with tradeoffs
+coder,t3_q3_algorithmic_hardness,2.0,3,Omega(n) proof and analysis
+general,t1_q1_json,1.2,3,Correct JSON output
+general,t1_q2_multistep,2.9,2,Correct but repetitive output
+general,t1_q3_compare,3.2,3,Good comparison
+general,t2_q1_synthesis,2.9,3,Unified recommendation with timeline
+general,t2_q2_transform,3.2,3,Correct YAML transformation
+general,t2_q3_schedule,2.9,3,Valid schedule derived
+general,t2_q4_inconsistency,3.2,3,All inconsistencies identified
+general,t3_q1_policy_analysis,2.9,3,Thorough failure mode analysis
+general,t3_q2_system_failure,3.1,3,Double-charge mechanism explained
+general,t3_q3_strategic_communication,3.1,3,Professional board statement
+instruction_precision,t1_q1_negative_instruction,3.2,0,Fails - ignores all negative constraints
+instruction_precision,t1_q2_word_limit,3.2,1,Exceeds word limit significantly
+instruction_precision,t1_q3_structured_format,3.2,1,Lists 30+ instead of 3
+instruction_precision,t1_q4_multiple_constraints,1.2,3,Correct 5 countries alphabetically
+instruction_precision,t2_q1_resist_elaboration,3.2,1,Over-elaborates
+instruction_precision,t2_q2_maintain_format,1.2,2,Format mostly maintained
+instruction_precision,t2_q3_empty_handling,3.2,2,Handles but verbose
+instruction_precision,t2_q4_conflicting_constraints,1.2,2,Addresses conflicts
+instruction_precision,t3_q1_self_referential,3.1,1,Fails self-reference
+instruction_precision,t3_q2_cascading_constraints,3.1,1,Fails cascading
+instruction_precision,t3_q3_meta_instruction,3.1,1,Fails meta
+math,t1_q1_word_problem,1.2,2,Attempts solution
+math,t1_q2_system_equations,3.0,3,Correct solution
+math,t1_q3_probability,3.2,3,Probability calculated
+math,t2_q1_optimization,2.9,2,Optimization attempted
+math,t2_q2_proof,3.1,2,Proof structure present
+math,t2_q3_calculus,1.2,2,Calculus work shown
+math,t2_q4_statistics,3.1,2,Stats analysis
+math,t3_q1_analysis,3.0,2,Analysis attempted
+math,t3_q2_combinatorics,2.9,2,Combinatorics work
+math,t3_q3_probability_theory,2.9,2,Probability theory
+thinking,t1_q1_multistep,2.0,3,Multi-step reasoning
+thinking,t1_q2_hypothesis,1.2,3,Alternative hypotheses
+thinking,t1_q3_planning,2.0,3,Planning with constraints
+thinking,t2_q1_paradox,1.2,3,Paradox analysis
+thinking,t2_q2_counterfactual,2.1,3,Counterfactual reasoning
+thinking,t2_q3_formal,2.2,3,Formal logic
+thinking,t2_q4_metacognition,2.0,3,Fermi estimation
+thinking,t3_q1_methodological_critique,2.1,3,Study critique
+thinking,t3_q2_causal_inference,2.1,3,Causal analysis
+thinking,t3_q3_reasoning_trap,2.0,2,Reasoning trap partial

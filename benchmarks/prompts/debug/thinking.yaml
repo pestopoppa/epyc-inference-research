@@ -1,0 +1,603 @@
+# Debug suite: Thinking / Reasoning
+# Sources: MOSTLY hand-written
+#   - arc_001: Likely authentic ARC-Challenge question
+#   - arc_002 through arc_005: LLM-reconstructed (generation artifacts cleaned 2026-01-31)
+#   - arc_006+: Hand-written science quiz questions in ARC style
+#   - logic_001+: Hand-written classic logic puzzles (NOT from any benchmark)
+# Scoring: multiple_choice (A/B/C/D)
+
+suite: thinking
+version: "1.0"
+scoring_default:
+  method: multiple_choice
+
+questions:
+  # ── ARC-Challenge style ──────────────────────────────────────────
+
+  - id: arc_001
+    tier: 1
+    prompt: |
+      George wants to warm his hands quickly by rubbing them. Which skin
+      surface will produce the most heat?
+
+      A) dry palms
+      B) wet palms
+      C) palms covered with oil
+      D) palms covered with lotion
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "A"
+    scoring_method: multiple_choice
+
+  - id: arc_002
+    tier: 1
+    prompt: |
+      Which of the following is a property of ALL nonmetals?
+
+      A) They are gases at room temperature.
+      B) They are poor conductors of electricity.
+      C) They are transparent.
+      D) They are brittle when solid.
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: arc_003
+    tier: 1
+    prompt: |
+      Which factor will most likely cause a person to develop a fever?
+
+      A) a leg muscle strain
+      B) a bacterial infection
+      C) an increase in blood pressure
+      D) a decrease in body temperature
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: arc_004
+    tier: 1
+    prompt: |
+      A piece of copper wire and a piece of glass rod are both rubbed
+      with wool. Which statement best describes what happens?
+
+      A) Both become positively charged.
+      B) The copper wire becomes positively charged and the glass rod becomes negatively charged.
+      C) Electrons are transferred from the wool to both objects.
+      D) The copper wire does not become charged because it is a conductor.
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "D"
+    scoring_method: multiple_choice
+
+  - id: arc_005
+    tier: 1
+    prompt: |
+      As part of an experiment, an astronaut takes a scale to the Moon
+      and weighs himself. The scale reads 31 pounds. If the astronaut
+      has a mass of 84 kilograms, which is the best estimate of the
+      ratio of the Moon's gravitational force to Earth's?
+
+      A) 1/6
+      B) 1/3
+      C) 1/2
+      D) 2/3
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "A"
+    scoring_method: multiple_choice
+
+  - id: arc_006
+    tier: 1
+    prompt: |
+      A student is given a cup of hot water and a cup of cold water.
+      What will happen when the student places an ice cube in each cup?
+
+      A) The ice in the hot water melts faster.
+      B) The ice in the cold water melts faster.
+      C) The ice melts at the same rate in both cups.
+      D) The ice does not melt in either cup.
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "A"
+    scoring_method: multiple_choice
+
+  - id: arc_007
+    tier: 2
+    prompt: |
+      What is the main reason that the Sun appears brighter than other
+      stars?
+
+      A) It is hotter than other stars.
+      B) It is closer to Earth than other stars.
+      C) It is larger than other stars.
+      D) It has more energy than other stars.
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: arc_008
+    tier: 2
+    prompt: |
+      Which of these human activities does NOT contribute to the extinction
+      of species?
+
+      A) hunting wildlife for food
+      B) recycling paper products
+      C) cutting down forests
+      D) polluting waterways
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: arc_009
+    tier: 2
+    prompt: |
+      What is the basic unit of heredity?
+
+      A) cell
+      B) gene
+      C) DNA molecule
+      D) chromosome
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: arc_010
+    tier: 2
+    prompt: |
+      A car travels 300 miles on 10 gallons of gasoline. How far can the
+      car travel on 25 gallons of gasoline?
+
+      A) 120 miles
+      B) 750 miles
+      C) 1000 miles
+      D) 7500 miles
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  # ── Logic puzzles ────────────────────────────────────────────────
+
+  - id: logic_001
+    tier: 2
+    prompt: |
+      All roses are flowers. Some flowers fade quickly. Can we conclude
+      that some roses fade quickly?
+
+      A) Yes, this is a valid conclusion.
+      B) No, this is not a valid conclusion.
+      C) Only if all flowers fade quickly.
+      D) Only if roses are the only flowers.
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: logic_002
+    tier: 2
+    prompt: |
+      If it rains, the ground gets wet. The ground is wet. What can we
+      conclude?
+
+      A) It rained.
+      B) It might have rained, or something else made the ground wet.
+      C) It definitely did not rain.
+      D) The ground is always wet.
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: logic_003
+    tier: 3
+    prompt: |
+      In a room there are 3 people: Alice, Bob, and Charlie. Exactly one
+      of them is lying. Alice says: "Bob is lying." Bob says: "Charlie is
+      lying." Charlie says: "Alice is lying."
+
+      Who is telling the truth?
+
+      A) Only Alice
+      B) Only Bob
+      C) Only Charlie
+      D) Exactly two of them are telling the truth
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "D"
+    scoring_method: multiple_choice
+
+  - id: logic_004
+    tier: 3
+    prompt: |
+      Five people finished a race. Amy finished before Ben. Charlie
+      finished after Diana. Ben finished before Diana. Evan finished
+      last. What is the minimum possible position for Charlie?
+
+      A) 2nd
+      B) 3rd
+      C) 4th
+      D) 5th
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: logic_005
+    tier: 3
+    prompt: |
+      A bat and a ball cost $1.10 in total. The bat costs $1.00 more than
+      the ball. How much does the ball cost?
+
+      A) $0.10
+      B) $0.05
+      C) $0.01
+      D) $0.15
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: logic_006
+    tier: 3
+    prompt: |
+      If you overtake the person in 2nd place in a race, what position
+      are you in?
+
+      A) 1st place
+      B) 2nd place
+      C) 3rd place
+      D) It depends on when you overtook them
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: logic_007
+    tier: 3
+    prompt: |
+      A farmer has 17 sheep. All but 9 die. How many sheep does the
+      farmer have left?
+
+      A) 8
+      B) 9
+      C) 17
+      D) 0
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: arc_011
+    tier: 1
+    prompt: |
+      What is the primary function of red blood cells?
+
+      A) Fighting infections
+      B) Carrying oxygen
+      C) Clotting blood
+      D) Producing antibodies
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: arc_012
+    tier: 1
+    prompt: |
+      Which state of matter has a definite volume but no definite shape?
+
+      A) Solid
+      B) Liquid
+      C) Gas
+      D) Plasma
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: arc_013
+    tier: 1
+    prompt: |
+      What type of rock is formed from cooled lava or magma?
+
+      A) Sedimentary
+      B) Metamorphic
+      C) Igneous
+      D) Organic
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: arc_014
+    tier: 2
+    prompt: |
+      Which organelle is responsible for protein synthesis in a cell?
+
+      A) Mitochondria
+      B) Ribosome
+      C) Golgi apparatus
+      D) Nucleus
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: arc_015
+    tier: 2
+    prompt: |
+      What is the principle that states energy cannot be created or destroyed, only transformed?
+
+      A) Law of conservation of mass
+      B) Law of conservation of energy
+      C) Newton's third law
+      D) Law of universal gravitation
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: arc_016
+    tier: 2
+    prompt: |
+      In the water cycle, what process converts liquid water into water vapor?
+
+      A) Condensation
+      B) Precipitation
+      C) Evaporation
+      D) Sublimation
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: arc_017
+    tier: 2
+    prompt: |
+      Which of the following has the highest pH value?
+
+      A) Lemon juice
+      B) Pure water
+      C) Baking soda solution
+      D) Vinegar
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: arc_018
+    tier: 3
+    prompt: |
+      What is the name of the process by which certain bacteria convert atmospheric nitrogen into ammonia?
+
+      A) Nitrogen fixation
+      B) Nitrification
+      C) Denitrification
+      D) Ammonification
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "A"
+    scoring_method: multiple_choice
+
+  - id: arc_019
+    tier: 3
+    prompt: |
+      Which particle mediates the electromagnetic force in quantum field theory?
+
+      A) Gluon
+      B) Photon
+      C) W boson
+      D) Graviton
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: arc_020
+    tier: 3
+    prompt: |
+      In molecular biology, what is the role of the TATA box?
+
+      A) It codes for transfer RNA
+      B) It is a promoter sequence for transcription initiation
+      C) It signals translation termination
+      D) It binds ribosomes directly
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: logic_008
+    tier: 1
+    prompt: |
+      If all roses are flowers and some flowers are red, which statement must be true?
+
+      A) All roses are red
+      B) Some roses are red
+      C) Some flowers are roses
+      D) All red things are roses
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: logic_009
+    tier: 1
+    prompt: |
+      Tom is taller than Jerry. Jerry is taller than Spike. Who is the shortest?
+
+      A) Tom
+      B) Jerry
+      C) Spike
+      D) Cannot be determined
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: logic_010
+    tier: 1
+    prompt: |
+      If the statement "All cats are mammals" is true, which of the following must also be true?
+
+      A) All mammals are cats
+      B) Some mammals are cats
+      C) No non-mammals are cats
+      D) Some cats are not mammals
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: logic_011
+    tier: 1
+    prompt: |
+      A bag contains only red and blue marbles. If you pick one marble at random and it is red, what can you conclude?
+
+      A) All marbles in the bag are red
+      B) There are no blue marbles in the bag
+      C) There is at least one red marble in the bag
+      D) Red marbles are more common than blue marbles
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: logic_012
+    tier: 2
+    prompt: |
+      If "No politicians are honest" is false, which statement must be true?
+
+      A) All politicians are honest
+      B) Some politicians are honest
+      C) Some politicians are dishonest
+      D) No politicians are dishonest
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: logic_013
+    tier: 2
+    prompt: |
+      In a race, Anna finished before Beth but after Carol. David finished before Carol. Who finished first?
+
+      A) Anna
+      B) Beth
+      C) Carol
+      D) David
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "D"
+    scoring_method: multiple_choice
+
+  - id: logic_014
+    tier: 2
+    prompt: |
+      A clock shows 3:15. What is the angle between the hour and minute hands?
+
+      A) 0 degrees
+      B) 7.5 degrees
+      C) 15 degrees
+      D) 30 degrees
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "B"
+    scoring_method: multiple_choice
+
+  - id: logic_016
+    tier: 3
+    prompt: |
+      Four suspects are questioned. Exactly one is guilty. Their statements:
+      Alice: "Bob is guilty."
+      Bob: "Carol is guilty."
+      Carol: "David is guilty."
+      David: "I am innocent."
+      The guilty person lies; all innocent people tell the truth. Who is guilty?
+
+      A) Alice
+      B) Bob
+      C) Carol
+      D) David
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: logic_017
+    tier: 3
+    prompt: |
+      You have 12 identical-looking coins, one of which is counterfeit (either heavier or lighter). Using a balance scale exactly three times, can you always identify the counterfeit coin and determine if it is heavier or lighter?
+
+      A) Yes, it is always possible
+      B) No, you need at least four weighings
+      C) Yes, but only if the counterfeit is heavier
+      D) Yes, but you cannot determine if it is heavier or lighter
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "A"
+    scoring_method: multiple_choice
+
+  - id: logic_018
+    tier: 3
+    prompt: |
+      Consider the statement: "This statement is false." What type of logical construct is this?
+
+      A) Tautology
+      B) Contradiction
+      C) Paradox
+      D) Contingency
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: logic_020
+    tier: 3
+    prompt: |
+      A farmer has chickens and cows. He counts 30 heads and 74 legs total. How many chickens does he have?
+
+      A) 13
+      B) 17
+      C) 23
+      D) 7
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  - id: logic_021
+    tier: 3
+    prompt: |
+      Three boxes are labeled 'Apples', 'Oranges', and 'Mixed'. ALL labels are wrong. You pick one fruit from the box labeled 'Mixed' and get an apple. What does the box labeled 'Oranges' contain?
+
+      A) Oranges
+      B) Apples
+      C) Mixed fruits
+      D) Cannot be determined
+
+      Answer with the letter only (A, B, C, or D).
+    expected: "C"
+    scoring_method: multiple_choice
+
+  # ── Additional logic puzzle ──────────────────────────────────────
+
+  - id: logic_022
+    tier: 2
+    prompt: |
+      A farmer has a fox, a chicken, and a sack of grain. He needs to cross
+      a river in a boat that can only carry him and one item. If left alone,
+      the fox will eat the chicken, and the chicken will eat the grain.
+      What is the minimum number of one-way trips across the river the farmer
+      must make to get everything across safely?
+    expected: "7"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "\\d+"

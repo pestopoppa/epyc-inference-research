@@ -1,0 +1,20 @@
+
+Based on the provided image and text, here is an analysis of the figure.
+
+---
+
+### 1) Type
+This is a **comparative diagram** that illustrates the difference between two perspectives on Loan-to-Value (LTV) ratios in a decentralized finance (DeFi) protocol, specifically within the context of the Twyne protocol. It is a **financial and architectural comparison** that uses a visual metaphor of a lending scenario to explain the concept of "External LTV" versus "Internal LTV."
+
+### 2) Key Components
+The figure, labeled as Figure 3, is composed of the following key elements:
+
+-   **Visual Analogy:** The diagram uses a visual of a borrower's collateral and the amount they can borrow to represent the two LTV perspectives.
+    -   **$100 Deposited Collateral:** This is the total value of the asset the borrower has deposited into the protocol.
+    -   **$95 Possible to Borrow:** This represents the maximum amount the borrower can borrow against their collateral, which is the "Internal LTV Perspective."
+    -   **$10 Delegated Credit:** This is a separate pool of credit, represented as a separate box, which is part of the "External LTV Perspective." The text on the slide clarifies this is "delegated credit."
+
+-   **Perspective Labels:** The diagram explicitly labels the two LTV perspectives with their corresponding values and definitions:
+    -   **95% Internal LTV Perspective:** This is calculated as the ratio of the amount that can be borrowed ($95) to the value of the deposited collateral ($100). The text on the diagram and in the caption specifies this perspective *excludes* the delegated credit. The calculation is `$95 / $100 = 95%`.
+    -   **86% External LTV Perspective
+

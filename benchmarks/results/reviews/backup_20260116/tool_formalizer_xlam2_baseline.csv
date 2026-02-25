@@ -1,0 +1,11 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,45.68,2,Reasonable analysis with structure
+general,t3_q2_system_failure,55.49,2,Reasonable analysis with structure
+general,t3_q3_strategic_communication,48.85,2,Reasonable analysis with structure
+general,t2_q1_synthesis,49.5,2,Reasonable analysis with structure
+general,t2_q2_transform,59.62,2,Partial analysis or structure
+general,t2_q3_schedule,45.79,2,Partial analysis or structure
+general,t2_q4_inconsistency,47.71,2,Partial analysis or structure
+general,t1_q1_json,45.87,2,Partial analysis or structure
+general,t1_q2_multistep,49.49,2,Reasonable analysis with structure
+general,t1_q3_compare,56.24,2,Reasonable analysis with structure

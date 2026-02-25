@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,0.0,3,Comprehensive policy failure mode analysis
+general,t3_q2_system_failure,0.0,3,Good monitoring explanation with alerts
+general,t3_q3_strategic_communication,0.0,2,Truncated but good points made
+general,t2_q1_synthesis,2.8,3,Good phased approach recommendation
+general,t2_q2_transform,0.0,1,Reasoning but no actual YAML output
+general,t2_q3_schedule,0.0,1,Reasoning but truncated no final schedule
+general,t2_q4_inconsistency,2.8,3,Good inconsistencies identified
+general,t1_q1_json,2.9,3,Correct JSON with think tags
+general,t1_q2_multistep,0.0,0,Repetitive loop garbage output
+general,t1_q3_compare,2.9,3,Good microservices vs monolith comparison
+coder,t3_q1_concurrent_correctness,0.0,3,Tagged pointers solution for ABA
+coder,t3_q2_distributed_consistency,2.6,3,Good consistency strategy discussion
+coder,t3_q3_algorithmic_hardness,0.0,2,Discussing algorithm but truncated
+coder,t2_q1_design,2.7,3,Good LRU cache design
+coder,t2_q2_debug_complex,0.0,2,Reasoning about lock but truncated
+coder,t2_q3_optimize,0.0,2,Reasoning about optimization
+coder,t2_q4_system,0.0,2,Reasoning about rate limiter
+coder,t1_q1_algorithm,0.0,2,Analyzing bugs but verbose
+coder,t1_q2_refactor,0.0,2,Reasoning about refactoring
+coder,t1_q3_test,0.0,2,Discussing tests but no output
+math,t3_q1_analysis,0.0,2,Working on sum but incomplete
+math,t3_q2_combinatorics,0.0,2,Generating function approach
+math,t3_q3_probability_theory,0.0,2,E[N] approach started
+math,t2_q1_optimization,0.0,3,Correct 50x100 dimensions 5000 area
+math,t2_q2_proof,0.0,3,Correctly identifies n=1 error
+math,t2_q3_calculus,2.7,3,Correct integral evaluation = 10
+math,t2_q4_statistics,0.0,2,Calculating variance but verbose
+math,t1_q1_word_problem,0.0,3,Correct prices
+math,t1_q2_system_equations,0.0,3,All 4 solutions found
+math,t1_q3_probability,0.0,3,Correct probability reasoning
+agentic,t3_q1_competing_constraints,3.7,3,Good JSON plan with fallback
+agentic,t3_q2_multi_agent_coordination,4.4,3,Good multi-phase orchestration
+agentic,t3_q3_adversarial_robustness,4.5,3,Comprehensive security policy
+agentic,t2_q1_ambiguous,4.8,3,send_slack with JSON and reasoning
+agentic,t2_q2_error_chain,3.9,3,restart_service call with reasoning
+agentic,t2_q3_schema_edge,3.5,3,Correct API JSON structure
+agentic,t2_q4_orchestration,2.9,3,Deployment plan with rollback
+agentic,t1_q1_sequential,0.0,1,Confused reasoning no output
+agentic,t1_q2_error_handling,2.8,2,Asks for info instead of action
+agentic,t1_q3_nested_params,2.8,3,Correct nested JSON structure
+instruction_precision,t3_q1_self_referential,0.0,1,Working through but no valid sentence
+instruction_precision,t3_q2_cascading_constraints,0.0,1,Working through but no valid list
+instruction_precision,t3_q3_meta_instruction,0.0,0,Print loop garbage
+instruction_precision,t2_q1_resist_elaboration,4.7,1,Verbose reasoning instead of just 4
+instruction_precision,t2_q2_maintain_format,4.2,2,Format with think tags
+instruction_precision,t2_q3_empty_handling,6.2,2,NONE with think tags
+instruction_precision,t2_q4_conflicting_constraints,5.7,3,Good valid sentence
+instruction_precision,t1_q1_negative_instruction,4.8,3,Good uses light not sunlight
+instruction_precision,t1_q2_word_limit,6.1,3,Good definition
+instruction_precision,t1_q3_structured_format,6.0,3,Perfect LANGUAGE (YEAR) format
+instruction_precision,t1_q4_multiple_constraints,5.3,3,5 countries alphabetical
+thinking,t3_q1_methodological_critique,0.0,3,Good methodological critique
+thinking,t3_q2_causal_inference,4.4,3,Boxed correct answer
+thinking,t3_q3_reasoning_trap,3.1,3,Good generalization analysis
+thinking,t2_q1_paradox,2.6,3,Good Ship of Theseus analysis
+thinking,t2_q2_counterfactual,0.0,3,Good internet absence analysis
+thinking,t2_q3_formal,0.0,3,Correct modus ponens proof
+thinking,t2_q4_metacognition,0.0,3,Good Fermi estimation
+thinking,t1_q1_multistep,0.0,3,Correct 11:34 calculation
+thinking,t1_q2_hypothesis,2.7,3,Good confounders identified
+thinking,t1_q3_planning,0.0,2,Constraint reasoning but truncated

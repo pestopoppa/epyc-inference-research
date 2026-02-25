@@ -1,0 +1,62 @@
+[
+  {
+    "prompt_id": "async_retry",
+    "model": "30b",
+    "speed_tps": 24.971887726685424,
+    "tokens": 1024,
+    "draft_n": 1136,
+    "draft_accepted": 730,
+    "acceptance_rate": 64.3,
+    "wall_time": 41.23
+  },
+  {
+    "prompt_id": "bst_iterator",
+    "model": "30b",
+    "speed_tps": 24.45082118464993,
+    "tokens": 1024,
+    "draft_n": 1137,
+    "draft_accepted": 732,
+    "acceptance_rate": 64.4,
+    "wall_time": 42.19
+  },
+  {
+    "prompt_id": "lru_cache",
+    "model": "30b",
+    "speed_tps": 25.94549935027301,
+    "tokens": 1024,
+    "draft_n": 1168,
+    "draft_accepted": 758,
+    "acceptance_rate": 64.9,
+    "wall_time": 39.73
+  },
+  {
+    "prompt_id": "json_parser",
+    "model": "30b",
+    "speed_tps": 27.30848650420731,
+    "tokens": 1024,
+    "draft_n": 1129,
+    "draft_accepted": 772,
+    "acceptance_rate": 68.4,
+    "wall_time": 37.78
+  },
+  {
+    "prompt_id": "rate_limiter",
+    "model": "30b",
+    "speed_tps": 25.54176859885989,
+    "tokens": 1024,
+    "draft_n": 1164,
+    "draft_accepted": 785,
+    "acceptance_rate": 67.4,
+    "wall_time": 40.35
+  },
+  {
+    "prompt_id": "graph_shortest",
+    "model": "30b",
+    "speed_tps": 21.332908897333397,
+    "tokens": 1024,
+    "draft_n": 1062,
+    "draft_accepted": 731,
+    "acceptance_rate": 68.8,
+    "wall_time": 48.25
+  }
+]

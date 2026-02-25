@@ -1,0 +1,577 @@
+# Debug suite: Math
+# Sources: MIXED provenance
+#   - gsm8k_001 through gsm8k_015: Verbatim from GSM8K training set
+#   - gsm8k_016 through gsm8k_025: Hand-written in GSM8K style (NOT from dataset)
+#   - math_001 through math_015: Hand-written (NOT from MATH dataset)
+# Scoring: exact_match with numeric extraction
+#
+# Each question has a deterministic ground-truth answer.
+# The scorer extracts the final numeric answer and compares.
+
+suite: math
+version: "1.0"
+scoring_default:
+  method: exact_match
+  config:
+    extract_pattern: "#### (\\S+)"
+
+questions:
+  # ── GSM8K-style (grade school math) ──────────────────────────────
+
+  - id: gsm8k_001
+    tier: 1
+    prompt: |
+      Natalia sold clips to 48 of her friends in April, and then she sold
+      half as many clips in May. How many clips did Natalia sell altogether
+      in April and May?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "72"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_002
+    tier: 1
+    prompt: |
+      Weng earns $12 an hour for babysitting. Yesterday, she just did
+      50 minutes of babysitting. How much did she earn?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "10"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_003
+    tier: 1
+    prompt: |
+      Betty is saving money for a new wallet which costs $100. Betty has
+      only half of the money she needs. Her parents decided to give her
+      $15 for that purpose, and her grandparents twice as much as her
+      parents. How much more money does Betty need to buy the wallet?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "5"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_004
+    tier: 1
+    prompt: |
+      Julie is reading a 120-page book. Yesterday, she was able to read
+      12 pages and today, she read twice as many pages as yesterday. If
+      she wants to read half of the remaining pages tomorrow, how many
+      pages should she read?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "42"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_005
+    tier: 1
+    prompt: |
+      James writes a 3-page letter to 2 different friends twice a week.
+      How many pages does he write a year?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "624"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_006
+    tier: 1
+    prompt: |
+      Mark has a garden with flowers. He planted plants of three colors
+      in it. Ten of them are yellow, and there are 80% more of those in
+      purple. There are only 25% as many green flowers as there are
+      yellow and purple flowers. How many flowers does Mark have in his
+      garden?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "35"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_007
+    tier: 1
+    prompt: |
+      Albert is wondering how much pizza he can eat in one day. He buys
+      2 large pizzas and 2 small pizzas. A large pizza has 16 slices and
+      a small pizza has 8 slices. If he eats it all, how many pieces does
+      he eat that day?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "48"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_008
+    tier: 1
+    prompt: |
+      Ken created a care package to send to his brother, who was away at
+      boarding school. Ken placed a box on a scale, and then he poured in
+      enough jelly beans to bring the weight to 2 pounds. Then, he added
+      enough brownies to cause the weight to triple. Next, he added
+      another 2 pounds of jelly beans. And finally, he added enough gummy
+      worms to double the weight once again. What was the final weight of
+      the box of goodies, in pounds?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "16"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_009
+    tier: 2
+    prompt: |
+      Alexis is applying for a new job and bought a new set of business
+      clothes to wear to the interview. She went to a department store
+      with a budget of $200 and spent $30 less than her budget. If she
+      found a blouse for $35 and a pair of pants for $46, how much does
+      she have left to spend on a jacket?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "89"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_010
+    tier: 2
+    prompt: |
+      Tina makes $18.00 an hour. If she works more than 8 hours per
+      shift, she is eligible for overtime, which is paid by your hourly
+      wage + 1/2 your hourly wage. If she works 10 hours every day for 5
+      days, how much money does she make?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "990"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_011
+    tier: 2
+    prompt: |
+      A merchant wants to make a choice of purchase between 2 purchase
+      plans: jewelry worth $5,000 or electronic gadgets worth $8,000. His
+      financial advisor informs him that the jewelry market will go up by
+      2.5% while the electronic gadgets market will rise by 1.2% within
+      the same month. If the merchant is keen on maximizing profit at the
+      end of this month by making a choice, how much profit would he gain?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "125"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_012
+    tier: 2
+    prompt: |
+      Two trains leave San Rafael at the same time. They begin traveling
+      westward, both traveling for 80 miles. The next day, they travel
+      northward, covering 150 miles. What's the distance covered by each
+      train in the two days?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "230"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_013
+    tier: 2
+    prompt: |
+      Jill gets paid $20 per hour to teach and $30 to be a cheerleading
+      coach. If she works 50 weeks a year, 35 hours a week as a teacher
+      and 15 hours a week as a coach, what's her annual salary?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "57500"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_014
+    tier: 2
+    prompt: |
+      Claire makes a 3 egg omelet every morning for breakfast. How many
+      dozens of eggs will she need to buy to make omelets for 4 weeks?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "7"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_015
+    tier: 2
+    prompt: |
+      Marissa is hiking a 12-mile trail. She took 1 hour to walk the first
+      4 miles, then she took 30 minutes to walk the next 2 miles. If she
+      wants her average speed for the entire trail to be 4 miles per hour,
+      what speed (in miles per hour) does she need to walk the remaining
+      distance?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "6"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  # ── Harder math (MATH-style) ─────────────────────────────────────
+
+  - id: math_001
+    tier: 3
+    prompt: |
+      What is the remainder when 2^2023 is divided by 7?
+
+      Show your work, then give the final answer after ####.
+    expected: "2"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_002
+    tier: 3
+    prompt: |
+      How many positive integers less than 1000 are divisible by 3 but
+      not by 5?
+
+      Show your work, then give the final answer after ####.
+    expected: "267"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_003
+    tier: 3
+    prompt: |
+      What is the sum of all prime numbers between 1 and 50?
+
+      Show your work, then give the final answer after ####.
+    expected: "328"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_004
+    tier: 3
+    prompt: |
+      A fair coin is flipped 4 times. What is the probability of getting
+      exactly 2 heads? Express your answer as a simplified fraction.
+
+      Show your work, then give the final answer after ####.
+    expected: "3/8"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\S+)"
+
+  - id: math_005
+    tier: 3
+    prompt: |
+      Find the greatest common divisor of 1071 and 462.
+
+      Show your work, then give the final answer after ####.
+    expected: "21"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_016
+    tier: 1
+    prompt: |
+      A store sells notebooks for $3 each. Sarah buys 4 notebooks and
+      pays with a $20 bill. How much change does she receive?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "8"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_017
+    tier: 1
+    prompt: |
+      Jake has 15 apples. He gives 6 apples to his friend and then buys
+      12 more apples at the store. How many apples does Jake have now?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "21"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_018
+    tier: 1
+    prompt: |
+      A car travels at 60 miles per hour for 3 hours. How many miles
+      does it travel in total?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "180"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_019
+    tier: 1
+    prompt: |
+      Emily has 48 candies and wants to divide them equally among 6 friends.
+      How many candies will each friend receive?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "8"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_020
+    tier: 2
+    prompt: |
+      A rectangle has a length of 12 cm and a width of 5 cm. What is the
+      perimeter of the rectangle in centimeters?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "34"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_021
+    tier: 2
+    prompt: |
+      Tom saves $15 each week. After 8 weeks, he spends $45 on a gift.
+      How much money does he have left?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "75"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_022
+    tier: 2
+    prompt: |
+      A classroom has 24 students. If 3/8 of the students are wearing
+      glasses, how many students are wearing glasses?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "9"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_023
+    tier: 2
+    prompt: |
+      A bakery makes 144 cookies and packs them into boxes of 12 cookies each.
+      If each box sells for $8, how much money does the bakery make from
+      selling all the cookies?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "96"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_024
+    tier: 2
+    prompt: |
+      Lisa runs 6 kilometers on Monday, 9 kilometers on Wednesday, and
+      6 kilometers on Friday. What is her average distance per run in
+      kilometers?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "7"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: gsm8k_025
+    tier: 2
+    prompt: |
+      A movie theater has 18 rows with 15 seats in each row. If 234 seats
+      are occupied, how many seats are empty?
+
+      Show your work step by step, then give the final answer after ####.
+    expected: "36"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_006
+    tier: 3
+    prompt: |
+      What is the smallest positive integer n such that n^2 ends in 56?
+
+      Show your work, then give the final answer after ####.
+    expected: "44"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_007
+    tier: 3
+    prompt: |
+      Compute the value of: 1 - 2 + 3 - 4 + 5 - 6 + ... + 99 - 100
+
+      Show your work, then give the final answer after ####.
+    expected: "-50"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(-?\\d+)"
+
+  - id: math_008
+    tier: 3
+    prompt: |
+      How many positive integers less than 1000 are divisible by both
+      7 and 11?
+
+      Show your work, then give the final answer after ####.
+    expected: "12"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_009
+    tier: 3
+    prompt: |
+      If f(x) = 2x + 3 and g(x) = x^2 - 1, what is f(g(3))?
+
+      Show your work, then give the final answer after ####.
+    expected: "19"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_010
+    tier: 3
+    prompt: |
+      Find the sum of all prime numbers between 20 and 40 inclusive.
+
+      Show your work, then give the final answer after ####.
+    expected: "120"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_011
+    tier: 3
+    prompt: |
+      What is the remainder when 7^100 is divided by 6?
+
+      Show your work, then give the final answer after ####.
+    expected: "1"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_012
+    tier: 3
+    prompt: |
+      A regular hexagon has a perimeter of 48 cm. What is the length
+      of one side in centimeters?
+
+      Show your work, then give the final answer after ####.
+    expected: "8"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_013
+    tier: 3
+    prompt: |
+      Evaluate: (2^5) * (2^3) / (2^4)
+
+      Show your work, then give the final answer after ####.
+    expected: "16"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_014
+    tier: 3
+    prompt: |
+      How many two-digit positive integers have digits that sum to 9?
+
+      Show your work, then give the final answer after ####.
+    expected: "9"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_015
+    tier: 3
+    prompt: |
+      If x + y = 10 and x - y = 4, what is the value of x?
+
+      Show your work, then give the final answer after ####.
+    expected: "7"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  # ── Mode-advantage exemplars (computation-gated, react >> direct) ───
+
+  - id: math_ma_001
+    tier: 2
+    mode_advantage: true
+    prompt: |
+      Compute 13^11 mod 101.
+
+      Use a calculator or code if needed. Give the final answer after ####.
+    expected: "76"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_ma_002
+    tier: 3
+    mode_advantage: true
+    prompt: |
+      A loan of $25,000 at 6.5% annual interest compounded monthly is paid
+      over 48 months. What is the monthly payment? Round to 2 decimal places.
+
+      Use the formula: M = P * [r(1+r)^n] / [(1+r)^n - 1]
+      where r = annual_rate / 12
+
+      Give the monthly payment after ####.
+    expected: "592.87"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*\\$?([\\d.]+)"
+
+  - id: math_ma_003
+    tier: 2
+    mode_advantage: true
+    prompt: |
+      Compute the product of all prime numbers between 20 and 50.
+
+      Give the exact integer result after ####.
+    expected: "63392725189"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: math_ma_004
+    tier: 3
+    mode_advantage: true
+    prompt: |
+      What is the sum of all integers from 1 to 1000 that are divisible
+      by exactly two of {3, 5, 7}?
+
+      Give the final answer after ####.
+    expected: "56888"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"

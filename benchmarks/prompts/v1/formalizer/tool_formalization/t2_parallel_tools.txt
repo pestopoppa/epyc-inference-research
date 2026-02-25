@@ -1,0 +1,1 @@
+Fetch the current weather for New York, London, and Tokyo, then create a comparison table.

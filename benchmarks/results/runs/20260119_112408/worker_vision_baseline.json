@@ -1,0 +1,161 @@
+{
+  "model_role": "worker_vision",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+  "config_name": "baseline",
+  "run_id": "20260119_112408",
+  "timestamp": "2026-01-27T04:51:50.945207",
+  "results": {
+    "vl": {
+      "t3_q1_chart_critique": {
+        "question_id": "t3_q1_chart_critique",
+        "prompt": "Analyze this chart critically:\n1. What is the difference in value between Lamb and Corn?\n2. Is this an appropriate visualization for this data? Why or why not?\n3. What misleading impressions could this chart create?\n4. Suggest a better visualization approach.",
+        "response": "1. The difference in value between Lamb and Corn is:\n   - Lamb: 103.7\n   - Corn: 103.13\n   - Difference: 103.7 - 103.13 = 0.57\n\n2. This is an appropriate visualization for this data because it is a bar chart, which is effective for comparing the relative values of different categories. The bars are clearly labeled with their corresponding values, making it easy to compare the price indices of various food commodities.\n\n3. Misleading impressions this chart could create:\n   - The chart might give the impression that Lamb and Corn have very similar price indices, as their bars are almost identical in length. However, the difference is only 0.57, which is a small difference.\n   - The chart does not provide context for the scale of these values. The base year (1900) is set at 100, but the actual values range from 18.81 to 103.7, which might not be immediately apparent to the viewer.\n\n4. A better visualization approach could be:\n   - A stacked bar chart where each bar represents the price index for a specific year (e.g., 1900, 1934, 2015) and the segments within each bar represent the price indices of different commodities.\n   - A line chart with commodities on the y-axis and years on the x-axis, where each line represents the price index of a specific commodity.\n   - A heat map where the x-axis represents the year and the y-axis represents the commodity, with color intensity representing the price index.\n\n\n\nimage decoded (batch 1/1) in 1323 ms",
+        "tokens_per_second": 18.84,
+        "prompt_tokens": 694,
+        "completion_tokens": 349,
+        "total_time_ms": 18529.17,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_multi_chart_synthesis": {
+        "question_id": "t3_q2_multi_chart_synthesis",
+        "prompt": "Perform a comprehensive analysis:\n1. Calculate the difference between Green and Orange bars\n2. What percentage of the total does each color represent?\n3. If this trend continued for 3 more periods, project the values\n4. What external factors might explain the difference?",
+        "response": "### Comprehensive Analysis\n\n#### 1. Calculate the difference between Green and Orange bars\n\nThe Green bar represents Cameroon with a GPI of 0.79, and the Orange bar represents Low Income with a GPI of 0.71.\n\nThe difference is:\n\\[ 0.79 - 0.71 = 0.08 \\]\n\n#### 2. What percentage of the total does each color represent?\n\nThe total GPI values are:\n- Slovenia: 1.00\n- Albania: 0.96\n- Cameroon: 0.79\n- Low Income: 0.71\n\nTo find the percentage, we divide each value by the total and multiply by 100.\n\nFor Slovenia:\n\\[ \\frac{1.00}{4.46} \\times 100 \\approx 22.32\\% \\]\n\nFor Albania:\n\\[ \\frac{0.96}{4.46} \\times 100 \\approx 21.56\\% \\]\n\nFor Cameroon:\n\\[ \\frac{0.79}{4.46} \\times 100 \\approx 17.72\\% \\]\n\nFor Low Income:\n\\[ \\frac{0.71}{4.46} \\times 100 \\approx 15.91\\% \\]\n\n#### 3. If this trend continued for 3 more periods, project the values\n\nAssuming a linear trend, we can project the values by adding the difference observed between the Green and Orange bars (0.08) to the current values.\n\nFor Cameroon (Green bar):\n\\[ 0.79 + 0.08 = 0.87 \\]\n\nFor Low Income (Orange bar):\n\\[ 0.71 + 0.08 = 0.79 \\]\n\n#### 4. What external factors might explain the difference?\n\nThe difference in GPI values between countries can be attributed to several external factors:\n\n1. **Economic Development**: Countries with higher economic development tend to have better access to education and resources, which can lead to higher GPI values.\n2. **Cultural Factors**: Cultural norms and societal expectations about gender roles can influence educational participation and completion rates.\n3. **Political Stability**: Political stability and government policies can impact educational access and quality.\n4. **Health and Healthcare**: Access to healthcare can influence educational outcomes by ensuring children are healthy and can attend school regularly.\n5. **Infrastructure**: Availability of schools and educational facilities can also play a role in educational access.\n6. **Parental Education and Attitudes**: Parents' education and attitudes towards gender equality can influence their children's educational opportunities.\n\n### Conclusion\n\nThe analysis shows that the GPI values for Cameroon and Low Income countries are lower than those for Slovenia and Albania. This difference can be attributed to factors such as economic development, cultural norms, political stability, and access to healthcare and infrastructure. If the trend continues, the GPI values for Cameroon and Low Income countries are projected to increase by 0.08, reflecting the ongoing efforts in these areas.\n\n\n\nimage decoded (batch 1/1) in 1358 ms",
+        "tokens_per_second": 18.61,
+        "prompt_tokens": 694,
+        "completion_tokens": 647,
+        "total_time_ms": 34765.15,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q3_twyne_security": {
+        "question_id": "t3_q3_twyne_security",
+        "prompt": "Analyze this DeFi protocol architecture as a security auditor:\n1. Identify all trust assumptions in the design\n2. What are the potential attack vectors? (oracle manipulation, flash loans, reentrancy, etc.)\n3. Where are the single points of failure?\n4. What invariants must hold for the system to be secure?\n5. Rate the overall security posture (1-10) with justification.",
+        "response": "### 1. Trust Assumptions in the Design\n\n1. **Trust in the Oracle**: The system relies on an oracle to provide accurate and timely data for lending decisions. If the oracle is compromised, it could lead to incorrect lending decisions, potentially resulting in unauthorized lending or borrowing.\n2. **Trust in the Delegation Mechanism**: The system assumes that the Credit LPs (CLPs) will delegate their unused borrowing power correctly and that the borrowers will use the delegated power responsibly.\n3. **Trust in the Smart Contracts**: The smart contracts must be correctly implemented and deployed. Any bugs or vulnerabilities in the smart contracts could allow unauthorized access or manipulation of the system.\n4. **Trust in the Liquidity Providers**: The system assumes that liquidity providers will not manipulate the lending market by providing false or misleading information.\n\n### 2. Potential Attack Vectors\n\n1. **Oracle Manipulation**: An attacker could manipulate the oracle to provide incorrect data, leading to incorrect lending decisions.\n2. **Reentrancy Attacks**: If the smart contracts are not properly protected against reentrancy attacks, an attacker could exploit this vulnerability to drain funds from the system.\n3. **Flash Loan Attacks**: If the system is not properly secured against flash loan attacks, an attacker could exploit the system to borrow large amounts of funds and then repay them in a way that causes the system to fail.\n4. **Delegation Manipulation**: An attacker could manipulate the delegation mechanism to delegate their unused borrowing power to themselves or to other malicious actors.\n5. **Smart Contract Bugs**: Any bugs or vulnerabilities in the smart contracts could be exploited by attackers to gain unauthorized access or manipulate the system.\n\n### 3. Single Points of Failure\n\n1. **Oracle**: The oracle is a single point of failure. If the oracle is compromised, it could lead to incorrect lending decisions.\n2. **Smart Contracts**: The smart contracts are a single point of failure. Any bugs or vulnerabilities in the smart contracts could be exploited by attackers.\n3. **Liquidity Providers**: The system relies on liquidity providers to provide accurate and timely data. If a liquidity provider is compromised, it could lead to incorrect lending decisions.\n4. **Delegation Mechanism**: The delegation mechanism is a single point of failure. If the mechanism is not properly secured, an attacker could manipulate the delegation to delegate their unused borrowing power to themselves or to other malicious actors.\n\n### 4. Invariants for System Security\n\n1. **Oracle Integrity**: The oracle must provide accurate and timely data.\n2. **Smart Contract Integrity**: The smart contracts must be correctly implemented and deployed.\n3. **Liquidity Provider Integrity**: Liquidity providers must provide accurate and timely data.\n4. **Delegation Integrity**: The delegation mechanism must be secure and properly implemented.\n5. **Borrower Responsibility**: Borrowers must use the delegated power responsibly and adhere to the risk constraints of the underlying markets.\n\n### 5. Overall Security Posture Rating (1-10)\n\n**Rating: 6/10**\n\n**Justification:**\n\nThe Twyne protocol addresses several inefficiencies in the DeFi lending market by introducing a novel credit delegation mechanism. However, the security posture is rated as 6/10 due to the following reasons:\n\n- **Trust Assumptions**: The system relies on an oracle and assumes the correctness of the smart contracts and liquidity providers.\n- **Potential Attack Vectors**: There are several attack vectors, including oracle manipulation, reentrancy attacks, and flash loan attacks.\n- **Single Points of Failure**: The oracle, smart contracts, and delegation mechanism are single points of failure.\n- **Invariants**: Ensuring the integrity of the oracle, smart contracts, liquidity providers, and delegation mechanism is crucial for the system's security.\n- **Security Measures**: The protocol does not explicitly mention any security measures beyond the delegation mechanism itself. Additional security measures, such as regular audits and security testing, would be beneficial.\n\nImprovements could include implementing robust security measures, conducting regular security audits, and ensuring the oracle and smart contracts are secure and reliable.\n\n\n\nimage decoded (batch 1/2) in 4250 ms\nimage decoded (batch 2/2) in 5557 ms",
+        "tokens_per_second": 13.73,
+        "prompt_tokens": 4126,
+        "completion_tokens": 826,
+        "total_time_ms": 60178.25,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q4_twyne_economic": {
+        "question_id": "t3_q4_twyne_economic",
+        "prompt": "Analyze the economic model and incentive structure:\n1. What are the participant roles and their incentives?\n2. Is there a Nash equilibrium? Describe it.\n3. How could rational actors game this system?\n4. What happens during extreme market conditions (bank run scenario)?\n5. Compare to existing DeFi protocols (Aave, Compound, MakerDAO).",
+        "response": "### 1. Participant Roles and Incentives\n\nThe Twyne protocol involves several key participants and their respective roles and incentives:\n\n- **Credit LPs (Lenders):**\n  - **Incentives:** Credit LPs provide liquidity by depositing underlying assets into the Credit Vault. They receive receipt tokens in exchange, which can be used to delegate their credit to borrowers. The receipt tokens represent the right to receive interest and yield from the external lending protocol.\n  - **Role:** Credit LPs are incentivized to provide liquidity to the system to earn interest and yield.\n\n- **Borrowers:**\n  - **Incentives:** Borrowers can use the collateralized lending mechanism to borrow assets. They pay interest to the external lending protocol and a siphoning rate to Credit LPs through a reduction in their collateral.\n  - **Role:** Borrowers are incentivized to repay their loans to avoid liquidation and maintain their collateral.\n\n- **External Lending Protocol:**\n  - **Incentives:** The external lending protocol provides liquidity and enforces liquidation thresholds. It ensures that the system remains liquid and stable.\n  - **Role:** The external lending protocol acts as a liquidity provider and enforcer of risk management.\n\n### 2. Nash Equilibrium\n\nA Nash equilibrium in this context would be a situation where no participant can improve their outcome by unilaterally changing their strategy, given the strategies of the other participants. In the Twyne protocol:\n\n- **Credit LPs:** They would be in equilibrium if they are earning the maximum interest and yield possible given the liquidity provided by the system.\n- **Borrowers:** They would be in equilibrium if they are paying the optimal interest rate and collateral reduction to avoid liquidation.\n- **External Lending Protocol:** It would be in equilibrium if it is providing the optimal liquidity and enforcing the right liquidation thresholds.\n\n### 3. Rational Actors Gaining the System\n\nRational actors could potentially game the system in the following ways:\n\n- **Credit LPs:** They might try to manipulate the interest rates or liquidity to maximize their own yield. However, this would be counterproductive as it would reduce the overall liquidity and interest rates for the system.\n- **Borrowers:** Borrowers might try to game the system by underreporting their collateral or using strategies to reduce their collateral without paying the required interest. This could lead to liquidation and a loss of trust in the system.\n- **External Lending Protocol:** The external lending protocol could be vulnerable to strategic behavior from Credit LPs or borrowers if it does not have robust risk management and enforcement mechanisms.\n\n### 4. Extreme Market Conditions (Bank Run Scenario)\n\nDuring extreme market conditions, such as a bank run, the liquidity in the system could be severely impacted. This could lead to:\n\n- **Credit LPs:** They might withdraw their liquidity, leading to a reduction in the overall liquidity of the system.\n- **Borrowers:** They might face difficulties in repaying their loans, leading to a higher risk of liquidation.\n- **External Lending Protocol:** It might struggle to maintain liquidity and enforce liquidation thresholds, leading to instability in the system.\n\n### 5. Comparison to Existing DeFi Protocols\n\n- **Aave:** Aave is a decentralized lending protocol that allows users to borrow and lend assets. It uses a multi-level collateral system and interest rate models to manage risk. Aave's interest rate is determined by market demand and supply, and it has a robust liquidation mechanism to prevent default.\n- **Compound:** Compound is another lending protocol that uses a multi-level collateral system and interest rate models. It has a more complex interest rate model and uses a reserve system to manage liquidity. Compound also has a robust liquidation mechanism to prevent default.\n- **MakerDAO:** MakerDAO is a decentralized stablecoin protocol that uses a multi-level collateral system and interest rate models. It uses a reserve system to manage liquidity and has a robust liquidation mechanism to prevent default. MakerDAO's interest rate is determined by market demand and supply.\n\n### Summary\n\nThe Twyne protocol offers a unique credit delegation model that allows borrowers to access higher loan-to-value ratios while maintaining system safety. The protocol ensures fair compensation for Credit LPs and borrowers through a dual interest structure. However, it is important to consider the potential for rational actors to game the system and the impact of extreme market conditions on the liquidity and stability of the system. Comparing Twyne to existing DeFi protocols like Aave, Compound, and MakerDAO highlights the differences in their approaches to liquidity management, interest rate models, and risk management.\n\n\n\nimage decoded (batch 1/2) in 4312 ms\nimage decoded (batch 2/2) in 5345 ms",
+        "tokens_per_second": 13.66,
+        "prompt_tokens": 4113,
+        "completion_tokens": 936,
+        "total_time_ms": 68536.25,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q5_document_forensics": {
+        "question_id": "t3_q5_document_forensics",
+        "prompt": "Analyze this business document forensically:\n1. Extract all named entities (people, companies, locations, dates)\n2. What is the business relationship implied?\n3. Identify any inconsistencies or red flags\n4. What additional documents would you request to verify claims?\n5. Assess document authenticity indicators (letterhead, signatures, formatting)",
+        "response": "### 1. Extracted Named Entities:\n- **People:**\n  - Milton E. Hatfield, Jr.\n  - Clinton O. Mayer III\n  - George V. Novello\n  - Martin Miller\n  - William P. Scully\n  - William R. Thompson\n  - Ernest S. Watts\n  - Stephen L. Wald\n  - Joe Fuchs\n  - Dick Wyandotte\n\n- **Companies:**\n  - Value Line\n  - Burnham & Co.\n  - Moody's Investors\n  - E. F. Hutton\n  - Francis I. DuPont\n  - Model Roland\n  - Merrill Lynch\n  - Kitter Peabody\n\n- **Locations:**\n  - None\n\n- **Dates:**\n  - None\n\n### 2. Business Relationship Implied:\nThe document lists names associated with various financial institutions and companies, suggesting a professional or business relationship. The names are likely individuals involved in the financial industry, possibly as employees, clients, or partners. The presence of financial institutions like Value Line, Moody's Investors, E. F. Hutton, and Merrill Lynch indicates that these individuals may be involved in financial analysis, investment, or consulting services.\n\n### 3. Inconsistencies or Red Flags:\n- The document is labeled \"Page Two,\" which implies it is part of a larger document. However, the content does not provide context about the preceding page or the following pages, which could be a red flag.\n- The names \"Joe Fuchs\" and \"Dick Wyandotte\" are written in a different handwriting style compared to the rest of the document, which might indicate they were added later or by a different person.\n- The repeated mention of \"Kitter Peabody\" at the end of the document could be a typographical error or a reference to a specific entity.\n\n### 4. Additional Documents Requested to Verify Claims:\n- **Previous and following pages:** To understand the context and flow of the document.\n- **Corresponding financial reports or analyses:** To verify the roles and responsibilities of the individuals listed.\n- **Corporate records or organizational charts:** To confirm the affiliations of the individuals with the companies listed.\n- **Communication records:** To understand the nature of the business relationships and interactions.\n\n### 5. Document Authenticity Indicators:\n- **Formatting:** The document appears to be a typewritten list, which is common for business documents.\n- **Handwriting:** The variation in handwriting style for \"Joe Fuchs\" and \"Dick Wyandotte\" suggests they may have been added later or by a different person.\n- **Source:** The document is sourced from an industry document collection, which adds credibility but does not guarantee its authenticity.\n- **Consistency:** The document lacks a header, footer, or other standard document elements that could provide additional context or verification.\n\n### Conclusion:\nThe document appears to be a list of individuals associated with various financial institutions. The presence of different handwriting styles for some names and the lack of context for the preceding and following pages raise some red flags. To verify the claims, it would be beneficial to have the full document, additional records, and possibly a more detailed context of the business relationships.\n\n\n\nimage decoded (batch 1/2) in 4156 ms\nimage decoded (batch 2/2) in 5152 ms",
+        "tokens_per_second": 13.89,
+        "prompt_tokens": 4110,
+        "completion_tokens": 658,
+        "total_time_ms": 47386.75,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_calculation": {
+        "question_id": "t2_q1_calculation",
+        "prompt": "What is the total intrinsic value of options exercised in 2008? Show your work by listing each value you read.",
+        "response": "To determine the total intrinsic value of options exercised in 2008, we need to sum the intrinsic values for each year mentioned in the document. The intrinsic value for each year is given as follows:\n\n- 2010: $278 million\n- 2009: $184 million\n- 2008: $506 million\n\nNow, let's add these values together:\n\n\\[\n278 \\text{ million} + 184 \\text{ million} + 506 \\text{ million} = 968 \\text{ million}\n\\]\n\nTherefore, the total intrinsic value of options exercised in 2008 is $506 million.\n\n\n\nimage decoded (batch 1/2) in 4377 ms\nimage decoded (batch 2/2) in 5639 ms",
+        "tokens_per_second": 14.07,
+        "prompt_tokens": 4068,
+        "completion_tokens": 154,
+        "total_time_ms": 10942.13,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q2_comparison": {
+        "question_id": "t2_q2_comparison",
+        "prompt": "What is the difference between the highest and lowest green bar? State both values and compute the difference.",
+        "response": "The image shows a bar chart comparing the percentage of Japanese support for Japan to \"Limit its military role\" versus \"Play a more active military role\" in the Asia-Pacific region for the years 2015 and 2016.\n\n- In 2016, the green bar (representing \"Play a more active military role\") is at 29%.\n- In 2015, the green bar is at 23%.\n\nTo find the difference between these two values:\n\n\\[ \\text{Difference} = 29\\% - 23\\% = 6\\% \\]\n\nSo, the difference between the highest and lowest green bar is 6%.\n\n\n\nimage decoded (batch 1/1) in 308 ms",
+        "tokens_per_second": 20.67,
+        "prompt_tokens": 162,
+        "completion_tokens": 145,
+        "total_time_ms": 7013.41,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q3_trend_analysis": {
+        "question_id": "t2_q3_trend_analysis",
+        "prompt": "When does the line have the sharpest increase? Identify the time period and estimate the rate of change.",
+        "response": "The line in the graph shows a steady increase from 2010 to 2014. To estimate the rate of change, we can calculate the slope of the line between two points.\n\nLet's choose the points for 2010 and 2014:\n- In 2010, the number of unsheltered homeless people is approximately 1,800.\n- In 2014, the number of unsheltered homeless people is approximately 2,700.\n\nThe rate of change can be calculated using the formula for slope:\n\\[ \\text{Rate of change} = \\frac{\\text{Change in number}}{\\text{Change in time}} \\]\n\nSubstituting the values:\n\\[ \\text{Rate of change} = \\frac{2,700 - 1,800}{2014 - 2010} = \\frac{900}{4} = 225 \\]\n\nSo, the rate of change is approximately 225 people per year.\n\nTherefore, the line has a sharp increase from 2010 to 2014, with an estimated rate of change of 225 people per year.\n\n\n\nimage decoded (batch 1/1) in 1354 ms",
+        "tokens_per_second": 19.22,
+        "prompt_tokens": 661,
+        "completion_tokens": 262,
+        "total_time_ms": 13632.32,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_ratio_calculation": {
+        "question_id": "t2_q4_ratio_calculation",
+        "prompt": "What's the ratio of the lowest value of green bars to the lowest value of blue bars? Show the values and calculation.",
+        "response": "To find the ratio of the lowest value of the green bars to the lowest value of the blue bars, we need to identify the lowest values from both the green and blue bars in the chart.\n\n1. Identify the lowest value of the green bars:\n   - New Zealand: 76%\n   - Australia: 71%\n   - Canada: 68%\n   - UK: 67%\n   - U.S.: 58%\n\n   The lowest value of the green bars is 58%.\n\n2. Identify the lowest value of the blue bars:\n   - New Zealand: 24%\n   - Australia: 29%\n   - Canada: 32%\n   - UK: 33%\n   - U.S.: 42%\n\n   The lowest value of the blue bars is 24%.\n\n3. Calculate the ratio:\n   \\[\n   \\text{Ratio} = \\frac{\\text{Lowest value of green bars}}{\\text{Lowest value of blue bars}} = \\frac{58}{24}\n   \\]\n\n4. Simplify the ratio:\n   \\[\n   \\frac{58}{24} \\approx 2.4167\n   \\]\n\nSo, the ratio of the lowest value of the green bars to the lowest value of the blue bars is approximately 2.4167.\n\n\n\nimage decoded (batch 1/1) in 1349 ms",
+        "tokens_per_second": 19.46,
+        "prompt_tokens": 673,
+        "completion_tokens": 285,
+        "total_time_ms": 14645.33,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q5_document_synthesis": {
+        "question_id": "t2_q5_document_synthesis",
+        "prompt": "What is the dividend payout in 2012? Also find the 2011 value and calculate the year-over-year change.",
+        "response": "The image shows a bar chart for the \"Dividend Payout\" section, which includes data for the years 1996 to 2012. Here are the steps to find the dividend payout values for 2012 and 2011, and then calculate the year-over-year change:\n\n1. **Dividend Payout in 2012:**\n   - The bar for 2012 shows a value of 1084.\n\n2. **Dividend Payout in 2011:**\n   - The bar for 2011 shows a value of 751.\n\n3. **Year-over-Year Change:**\n   - The year-over-year change is calculated as follows:\n     \\[\n     \\text{Change} = \\text{Dividend Payout in 2012} - \\text{Dividend Payout in 2011}\n     \\]\n     \\[\n     \\text{Change} = 1084 - 751 = 333\n     \\]\n\nSo, the dividend payout in 2012 was 1084, in 2011 it was 751, and the year-over-year change was 333.\n\n\n\nimage decoded (batch 1/2) in 4305 ms\nimage decoded (batch 2/2) in 5350 ms",
+        "tokens_per_second": 13.61,
+        "prompt_tokens": 4067,
+        "completion_tokens": 270,
+        "total_time_ms": 19841.67,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_scene_text": {
+        "question_id": "t1_q1_scene_text",
+        "prompt": "What is written in the image?",
+        "response": "Centre\n\n\n\nimage decoded (batch 1/1) in 63 ms",
+        "tokens_per_second": 20.03,
+        "prompt_tokens": 29,
+        "completion_tokens": 1,
+        "total_time_ms": 49.92,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q2_sign_reading": {
+        "question_id": "t1_q2_sign_reading",
+        "prompt": "What is the Mosman Manly exit going to? Read all text on the sign.",
+        "response": "The sign for the Mosman Manly exit reads:\n\n\"To Mosman Manly Chatswood Epping\"\n\n\n\nimage decoded (batch 1/1) in 467 ms",
+        "tokens_per_second": 20.58,
+        "prompt_tokens": 244,
+        "completion_tokens": 22,
+        "total_time_ms": 1069.03,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 17.1975,
+    "avg_algorithmic_score": null,
+    "questions_tested": 12,
+    "questions_passed": 0
+  }
+}

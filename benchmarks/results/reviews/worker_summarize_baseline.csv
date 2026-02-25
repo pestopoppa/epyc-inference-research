@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,4.52,3,Reasoning structure present
+thinking,t3_q2_causal_inference,3.92,3,Reasoning structure present
+thinking,t3_q3_reasoning_trap,2.92,3,Reasoning structure present
+thinking,t2_q1_paradox,2.87,3,Reasoning structure present
+thinking,t2_q2_counterfactual,2.81,2,Some reasoning present
+thinking,t2_q3_formal,2.9,3,Reasoning structure present
+thinking,t2_q4_metacognition,2.79,2,Some reasoning present
+thinking,t1_q1_multistep,2.83,3,Reasoning structure present
+thinking,t1_q2_hypothesis,2.93,2,Some reasoning present
+thinking,t1_q3_planning,2.78,3,Reasoning structure present
+coder,t3_q1_concurrent_correctness,2.8,3,Code structure present
+coder,t3_q2_distributed_consistency,2.86,2,Code or explanation present
+coder,t3_q3_algorithmic_hardness,2.7,2,Code or explanation present
+coder,t2_q1_design,2.86,3,Code structure present
+coder,t2_q2_debug_complex,3.01,3,Code structure present
+coder,t2_q3_optimize,2.95,3,Code structure present
+coder,t2_q4_system,2.97,3,Code structure present
+coder,t1_q1_algorithm,2.82,3,Code structure present
+coder,t1_q2_refactor,2.96,3,Code structure present
+coder,t1_q3_test,2.91,3,Code structure present
+agentic,t3_q1_competing_constraints,2.82,1,No tool call structure
+agentic,t3_q2_multi_agent_coordination,2.98,1,No tool call structure
+agentic,t3_q3_adversarial_robustness,2.89,1,No tool call structure
+agentic,t2_q1_ambiguous,2.74,1,No tool call structure
+agentic,t2_q2_error_chain,2.97,3,Tool call structure present
+agentic,t2_q3_schema_edge,3.04,3,Tool call structure present
+agentic,t2_q4_orchestration,2.99,1,No tool call structure
+agentic,t1_q1_sequential,3.08,1,No tool call structure
+agentic,t1_q2_error_handling,3.06,3,Tool call structure present
+agentic,t1_q3_nested_params,3.01,3,Tool call structure present
+general,t3_q1_policy_analysis,3.89,2,General response generated
+general,t3_q2_system_failure,3.05,2,General response generated
+general,t3_q3_strategic_communication,2.91,2,General response generated
+general,t2_q1_synthesis,3.02,2,General response generated
+general,t2_q2_transform,2.98,2,General response generated
+general,t2_q3_schedule,2.89,2,General response generated
+general,t2_q4_inconsistency,2.96,2,General response generated
+general,t1_q1_json,3.03,2,General response generated
+general,t1_q2_multistep,3.0,2,General response generated
+general,t1_q3_compare,2.98,2,General response generated
+math,t3_q1_analysis,2.83,3,Mathematical reasoning present
+math,t3_q2_combinatorics,2.83,3,Mathematical reasoning present
+math,t3_q3_probability_theory,2.77,3,Mathematical reasoning present
+math,t2_q1_optimization,2.94,3,Mathematical reasoning present
+math,t2_q2_proof,2.83,3,Mathematical reasoning present
+math,t2_q3_calculus,2.96,3,Mathematical reasoning present
+math,t2_q4_statistics,2.81,3,Mathematical reasoning present
+math,t1_q1_word_problem,2.91,3,Mathematical reasoning present
+math,t1_q2_system_equations,2.97,3,Mathematical reasoning present
+math,t1_q3_probability,2.91,3,Mathematical reasoning present
+instruction_precision,t3_q1_self_referential,2.96,2,General response generated
+instruction_precision,t3_q2_cascading_constraints,3.04,2,General response generated
+instruction_precision,t3_q3_meta_instruction,3.0,2,General response generated
+instruction_precision,t2_q1_resist_elaboration,3.05,2,Brief response generated
+instruction_precision,t2_q2_maintain_format,3.09,2,General response generated
+instruction_precision,t2_q3_empty_handling,3.06,2,General response generated
+instruction_precision,t2_q4_conflicting_constraints,4.14,2,General response generated
+instruction_precision,t1_q1_negative_instruction,4.12,2,General response generated
+instruction_precision,t1_q2_word_limit,4.16,2,General response generated
+instruction_precision,t1_q3_structured_format,4.17,2,General response generated
+instruction_precision,t1_q4_multiple_constraints,4.1,2,General response generated

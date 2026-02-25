@@ -1,0 +1,6 @@
+Orchestrator healthy
+
+=== BASELINE (15 features OFF) ===
+  Features set to OFF
+  [baseline] gen_01: 82.3s 200 → frontdoor
+  [baseline] gen_02: 46.5s 200 → worker_explore

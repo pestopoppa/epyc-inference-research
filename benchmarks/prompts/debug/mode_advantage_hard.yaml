@@ -1,0 +1,1223 @@
+# Debug suite: Mode Advantage (HARD)
+# Sources: Hand-written tasks that genuinely fail on 30B frontdoor models
+# Purpose: Tasks where react/repl/delegation structurally outperform direct inference
+#
+# Design principle: These tasks are calibrated to fail ~60-70% on direct 30B inference
+# but succeed ~70-80% with appropriate tools/specialists/escalation.
+#
+# Categories:
+#   ma_hard_comp_*   (15): Computation requiring precise tools (not memorizable)
+#   ma_hard_code_*   (15): Competition-level algorithms (need iterative debugging)
+#   ma_hard_reason_* (15): Multi-hop reasoning (need search/retrieval)
+#   ma_hard_synth_*  (15): Research synthesis (need deep analysis/specialist)
+#
+# All use existing scorers: exact_match, code_execution, substring, f1
+
+suite: mode_advantage_hard
+version: "2.0"
+scoring_default:
+  method: exact_match
+  config:
+    extract_pattern: "####\\s*(.+)"
+
+questions:
+
+  # ════════════════════════════════════════════════════════════════════
+  # Category A: Hard Computation (react >> direct)
+  # Requires precise calculation tools, NOT memorizable
+  # ════════════════════════════════════════════════════════════════════
+
+  - id: ma_hard_comp_001
+    tier: 3
+    prompt: |
+      Calculate the Gibbs free energy change (ΔG°) in kJ/mol for the reaction:
+
+      2 NO₂(g) → N₂O₄(g)
+
+      Given standard thermodynamic data at 298K:
+      - ΔHf°(NO₂) = 33.2 kJ/mol
+      - ΔHf°(N₂O₄) = 9.16 kJ/mol
+      - S°(NO₂) = 240.1 J/(mol·K)
+      - S°(N₂O₄) = 304.3 J/(mol·K)
+
+      Use ΔG° = ΔH° - TΔS°. Show your work and give the final answer in kJ/mol
+      rounded to 1 decimal place after ####.
+    expected: "-4.8"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(-?[\\d.]+)"
+
+  - id: ma_hard_comp_002
+    tier: 3
+    prompt: |
+      A particle undergoes quantum tunneling through a rectangular barrier.
+
+      Given:
+      - Particle mass: 9.109 × 10⁻³¹ kg (electron)
+      - Barrier height: 5.0 eV above particle energy
+      - Barrier width: 0.50 nm
+      - ℏ = 1.055 × 10⁻³⁴ J·s
+      - 1 eV = 1.602 × 10⁻¹⁹ J
+
+      Calculate the transmission coefficient T using:
+      T ≈ exp(-2κL) where κ = √(2m(V-E))/ℏ
+
+      Give T in scientific notation (e.g., 1.23e-4) after ####.
+    expected: "3.7e-10"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+e-?\\d+)"
+
+  - id: ma_hard_comp_003
+    tier: 2
+    prompt: |
+      Calculate the eigenvalues of the following 4×4 matrix:
+
+      A = [[4, 1, 0, 0],
+           [1, 4, 1, 0],
+           [0, 1, 4, 1],
+           [0, 0, 1, 4]]
+
+      This is a tridiagonal Toeplitz matrix. Give all four eigenvalues
+      in ascending order, separated by commas, rounded to 3 decimal places.
+
+      Give your answer after ####.
+    expected: "2.382,3.382,4.618,5.618"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.,\\s]+)"
+
+  - id: ma_hard_comp_004
+    tier: 3
+    prompt: |
+      Compute the integral:
+
+      ∫₀^∞ x³·e^(-x²) dx
+
+      Using the gamma function relationship where ∫₀^∞ x^(n-1)·e^(-x) dx = Γ(n).
+
+      Give the exact answer as a fraction or decimal after ####.
+    expected: "0.5"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d./]+)"
+
+  - id: ma_hard_comp_005
+    tier: 2
+    prompt: |
+      A 3-phase power system has:
+      - Line voltage: 13.8 kV
+      - Power factor: 0.85 lagging
+      - Real power: 2.5 MW per phase
+
+      Calculate the magnitude of the line current in amperes.
+      Round to the nearest whole number.
+
+      Give your answer after ####.
+    expected: "123"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_hard_comp_006
+    tier: 3
+    prompt: |
+      In statistical mechanics, calculate the partition function Z for a
+      quantum harmonic oscillator at temperature T = 300K with frequency
+      ν = 6.0 × 10¹³ Hz.
+
+      Use: Z = 1/(1 - exp(-hν/kT))
+      where h = 6.626 × 10⁻³⁴ J·s and k = 1.381 × 10⁻²³ J/K
+
+      Give Z rounded to 3 decimal places after ####.
+    expected: "1.007"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_comp_007
+    tier: 2
+    prompt: |
+      Calculate the orbital period in Earth days of a satellite in a
+      Molniya orbit around Earth with:
+      - Semi-major axis: 26,600 km
+      - Earth's gravitational parameter μ = 3.986 × 10⁵ km³/s²
+
+      Use Kepler's third law: T = 2π√(a³/μ)
+
+      Give your answer in days, rounded to 2 decimal places, after ####.
+    expected: "0.50"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_comp_008
+    tier: 3
+    prompt: |
+      In information theory, calculate the channel capacity C in bits/use
+      for a binary symmetric channel (BSC) with crossover probability p = 0.11.
+
+      C = 1 - H(p) where H(p) = -p·log₂(p) - (1-p)·log₂(1-p)
+
+      Give C rounded to 4 decimal places after ####.
+    expected: "0.5000"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_comp_009
+    tier: 2
+    prompt: |
+      Calculate the pH of a buffer solution containing:
+      - 0.15 M acetic acid (Ka = 1.8 × 10⁻⁵)
+      - 0.20 M sodium acetate
+
+      Use the Henderson-Hasselbalch equation.
+      Give pH rounded to 2 decimal places after ####.
+    expected: "4.87"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_comp_010
+    tier: 3
+    prompt: |
+      Calculate the de Broglie wavelength in nanometers of an electron
+      accelerated through a potential difference of 150 V.
+
+      Use: λ = h/√(2meV)
+      - h = 6.626 × 10⁻³⁴ J·s
+      - m = 9.109 × 10⁻³¹ kg
+      - e = 1.602 × 10⁻¹⁹ C
+
+      Give λ in nm, rounded to 3 decimal places, after ####.
+    expected: "0.100"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_comp_011
+    tier: 2
+    prompt: |
+      In signal processing, calculate the cutoff frequency fc in Hz for a
+      second-order Butterworth low-pass filter with:
+      - R = 10 kΩ
+      - C = 100 nF
+
+      Use: fc = 1/(2πRC)
+
+      Give fc rounded to 1 decimal place after ####.
+    expected: "159.2"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_comp_012
+    tier: 3
+    prompt: |
+      Calculate the Schwarzschild radius in meters for a black hole with
+      mass equal to 10 solar masses.
+
+      Use: rs = 2GM/c²
+      - G = 6.674 × 10⁻¹¹ m³/(kg·s²)
+      - c = 2.998 × 10⁸ m/s
+      - M_sun = 1.989 × 10³⁰ kg
+
+      Give rs in km, rounded to 1 decimal place, after ####.
+    expected: "29.5"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_comp_013
+    tier: 2
+    prompt: |
+      Calculate the escape velocity in km/s from the surface of Mars.
+
+      Given:
+      - Mars mass: 6.42 × 10²³ kg
+      - Mars radius: 3,390 km
+      - G = 6.674 × 10⁻¹¹ m³/(kg·s²)
+
+      Use: v_esc = √(2GM/r)
+
+      Give your answer in km/s, rounded to 2 decimal places, after ####.
+    expected: "5.03"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_comp_014
+    tier: 3
+    prompt: |
+      In quantum computing, calculate the fidelity F between two quantum states:
+      |ψ⟩ = (1/√2)|0⟩ + (1/√2)|1⟩
+      |φ⟩ = (√3/2)|0⟩ + (1/2)|1⟩
+
+      Use: F = |⟨ψ|φ⟩|²
+
+      Give F as a decimal rounded to 4 decimal places after ####.
+    expected: "0.9330"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_comp_015
+    tier: 2
+    prompt: |
+      Calculate the Reynolds number for water flowing through a pipe:
+      - Pipe diameter: 5 cm
+      - Flow velocity: 2 m/s
+      - Water density: 1000 kg/m³
+      - Dynamic viscosity: 0.001 Pa·s
+
+      Use: Re = ρvD/μ
+
+      Is the flow laminar, transitional, or turbulent?
+      Give the Reynolds number (as integer) and flow type after ####.
+    expected: "100000 turbulent"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  # ════════════════════════════════════════════════════════════════════
+  # Category B: Competition-Level Code (repl >> direct)
+  # Requires iterative debugging, test case feedback
+  # ════════════════════════════════════════════════════════════════════
+
+  - id: ma_hard_code_001
+    tier: 3
+    prompt: |
+      Implement a solution for the following problem:
+
+      Given a weighted directed graph with N nodes (1 to N) and M edges,
+      find the shortest path from node 1 to node N that uses at most K edges.
+      If no such path exists, return -1.
+
+      Input format:
+      - First line: N M K
+      - Next M lines: u v w (edge from u to v with weight w)
+
+      Example:
+      Input:
+      4 5 2
+      1 2 1
+      1 3 5
+      2 3 1
+      2 4 10
+      3 4 1
+
+      Output: 3
+      (Path: 1→2→3→4 with total weight 3, using 3 edges... wait, that's 3 edges.
+       With K=2: 1→3→4 = 6, 1→2→4 = 11. Answer should be 6)
+
+      Actually output: 6
+
+      Write a complete Python solution.
+    expected: "def solve"
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 30
+      test_code: |
+        import sys
+        from io import StringIO
+        # Test case 1
+        test_input = "4 5 2\n1 2 1\n1 3 5\n2 3 1\n2 4 10\n3 4 1\n"
+        sys.stdin = StringIO(test_input)
+        # The solution should read from stdin and print to stdout
+
+  - id: ma_hard_code_002
+    tier: 3
+    prompt: |
+      Implement a lock-free stack using compare-and-swap (CAS) operations.
+
+      The stack must handle the ABA problem correctly using either:
+      1. Hazard pointers, or
+      2. Tagged pointers with version numbers
+
+      Requirements:
+      - push(value): Add value to top of stack
+      - pop(): Remove and return top value, or None if empty
+      - Must be thread-safe without using locks
+
+      Write a Python implementation using atomics from the `atomics` library
+      or simulate CAS with a lock for demonstration purposes.
+    expected: "class LockFreeStack"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  - id: ma_hard_code_003
+    tier: 3
+    prompt: |
+      Implement Tarjan's algorithm for finding strongly connected components
+      in a directed graph.
+
+      Given:
+      - N nodes numbered 0 to N-1
+      - List of edges as (from, to) tuples
+
+      Return:
+      - List of SCCs, where each SCC is a list of node indices
+      - SCCs should be in reverse topological order
+
+      Example:
+      edges = [(0,1), (1,2), (2,0), (1,3), (3,4), (4,5), (5,3)]
+      Expected output: [[3,4,5], [0,1,2]]
+
+      Write a complete Python function `find_sccs(n, edges)`.
+    expected: "def find_sccs"
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 30
+      test_code: |
+        result = find_sccs(6, [(0,1), (1,2), (2,0), (1,3), (3,4), (4,5), (5,3)])
+        assert len(result) == 2
+        scc1 = set(result[0])
+        scc2 = set(result[1])
+        assert scc1 == {3,4,5} or scc1 == {0,1,2}
+        print("Test passed!")
+
+  - id: ma_hard_code_004
+    tier: 2
+    prompt: |
+      Implement the Aho-Corasick algorithm for multiple pattern matching.
+
+      Given a text and a list of patterns, find all occurrences of any pattern
+      in the text. Return a list of (pattern_index, start_position) tuples.
+
+      Example:
+      text = "ushers"
+      patterns = ["he", "she", "his", "hers"]
+      Expected: [(1, 1), (0, 2), (3, 2)]
+      (she at pos 1, he at pos 2, hers at pos 2)
+
+      Write a complete Python implementation.
+    expected: "def aho_corasick"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  - id: ma_hard_code_005
+    tier: 3
+    prompt: |
+      Implement a segment tree with lazy propagation that supports:
+      1. Range update: Add value v to all elements in range [l, r]
+      2. Range query: Find sum of elements in range [l, r]
+
+      Both operations must be O(log n).
+
+      Example:
+      arr = [1, 3, 5, 7, 9, 11]
+      tree = SegmentTree(arr)
+      tree.range_query(1, 3)  # Returns 15 (3+5+7)
+      tree.range_update(1, 3, 10)  # Add 10 to indices 1,2,3
+      tree.range_query(1, 3)  # Returns 45 (13+15+17)
+
+      Write a complete Python class implementation.
+    expected: "class SegmentTree"
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 30
+      test_code: |
+        tree = SegmentTree([1, 3, 5, 7, 9, 11])
+        assert tree.range_query(1, 3) == 15
+        tree.range_update(1, 3, 10)
+        assert tree.range_query(1, 3) == 45
+        print("Test passed!")
+
+  - id: ma_hard_code_006
+    tier: 2
+    prompt: |
+      Implement the Knuth-Morris-Pratt (KMP) string matching algorithm.
+
+      Write two functions:
+      1. compute_lps(pattern) - Compute the Longest Proper Prefix Suffix array
+      2. kmp_search(text, pattern) - Find all occurrences of pattern in text
+
+      Return a list of starting indices where the pattern is found.
+
+      Example:
+      kmp_search("ABABDABACDABABCABAB", "ABABCABAB")
+      Expected: [10]
+
+      Write complete Python implementations.
+    expected: "def kmp_search"
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 30
+      test_code: |
+        assert kmp_search("ABABDABACDABABCABAB", "ABABCABAB") == [10]
+        assert kmp_search("AAAA", "AA") == [0, 1, 2]
+        print("Test passed!")
+
+  - id: ma_hard_code_007
+    tier: 3
+    prompt: |
+      Implement a Treap (tree + heap) data structure with:
+      1. insert(key, priority): Insert a key with given priority
+      2. delete(key): Remove a key from the treap
+      3. search(key): Return True if key exists
+      4. The tree must maintain BST property on keys and max-heap on priorities
+
+      Rotations must be used to maintain the heap property.
+
+      Write a complete Python class implementation.
+    expected: "class Treap"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  - id: ma_hard_code_008
+    tier: 2
+    prompt: |
+      Implement the Floyd-Warshall algorithm for all-pairs shortest paths.
+
+      Given an adjacency matrix where matrix[i][j] is the weight of edge i→j
+      (or float('inf') if no edge), compute the shortest path between all pairs.
+
+      Also detect if there's a negative cycle (return None in that case).
+
+      Example:
+      matrix = [
+        [0, 3, float('inf'), 5],
+        [2, 0, float('inf'), 4],
+        [float('inf'), 1, 0, float('inf')],
+        [float('inf'), float('inf'), 2, 0]
+      ]
+
+      Write `def floyd_warshall(matrix)` returning the distance matrix.
+    expected: "def floyd_warshall"
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 30
+      test_code: |
+        import math
+        matrix = [
+          [0, 3, float('inf'), 5],
+          [2, 0, float('inf'), 4],
+          [float('inf'), 1, 0, float('inf')],
+          [float('inf'), float('inf'), 2, 0]
+        ]
+        result = floyd_warshall(matrix)
+        assert result[0][2] == 7  # 0→3→2
+        print("Test passed!")
+
+  - id: ma_hard_code_009
+    tier: 3
+    prompt: |
+      Implement the Hungarian algorithm for the assignment problem.
+
+      Given an N×N cost matrix, find the assignment of workers to jobs
+      that minimizes total cost. Each worker is assigned exactly one job
+      and each job is assigned exactly one worker.
+
+      Return the minimum total cost and the assignment as a list where
+      assignment[i] is the job assigned to worker i.
+
+      Example:
+      cost = [[9, 2, 7, 8],
+              [6, 4, 3, 7],
+              [5, 8, 1, 8],
+              [7, 6, 9, 4]]
+      Expected minimum cost: 13 (assignments: 0→1, 1→2, 2→2... wait)
+
+      Write `def hungarian(cost_matrix)` returning (min_cost, assignment).
+    expected: "def hungarian"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  - id: ma_hard_code_010
+    tier: 2
+    prompt: |
+      Implement a trie (prefix tree) with the following methods:
+      1. insert(word): Add a word to the trie
+      2. search(word): Return True if word exists
+      3. starts_with(prefix): Return True if any word starts with prefix
+      4. autocomplete(prefix, limit): Return up to `limit` words with given prefix
+
+      The autocomplete should return words in lexicographic order.
+
+      Write a complete Python class implementation.
+    expected: "class Trie"
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 30
+      test_code: |
+        trie = Trie()
+        trie.insert("apple")
+        trie.insert("app")
+        trie.insert("application")
+        assert trie.search("app") == True
+        assert trie.starts_with("app") == True
+        assert len(trie.autocomplete("app", 10)) == 3
+        print("Test passed!")
+
+  - id: ma_hard_code_011
+    tier: 3
+    prompt: |
+      Implement Dijkstra's algorithm with a Fibonacci heap for O(E + V log V)
+      complexity. If Fibonacci heap is too complex, use a standard heap but
+      document the complexity difference.
+
+      Given:
+      - Number of vertices V
+      - List of edges as (u, v, weight) tuples
+      - Source vertex s
+
+      Return:
+      - Dictionary mapping each vertex to its shortest distance from s
+      - Dictionary mapping each vertex to its predecessor in the shortest path
+
+      Write `def dijkstra(V, edges, source)`.
+    expected: "def dijkstra"
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 30
+      test_code: |
+        dist, pred = dijkstra(5, [(0,1,4), (0,2,1), (2,1,2), (1,3,1), (2,3,5), (3,4,3)], 0)
+        assert dist[4] == 7  # 0→2→1→3→4
+        print("Test passed!")
+
+  - id: ma_hard_code_012
+    tier: 2
+    prompt: |
+      Implement a Bloom filter with the following interface:
+
+      class BloomFilter:
+          def __init__(self, capacity: int, error_rate: float):
+              # Initialize with expected capacity and desired false positive rate
+
+          def add(self, item: str) -> None:
+              # Add an item to the filter
+
+          def __contains__(self, item: str) -> bool:
+              # Return True if item might be in set, False if definitely not
+
+      Use optimal number of hash functions: k = (m/n) * ln(2)
+      where m = bits, n = capacity.
+
+      Write a complete Python implementation.
+    expected: "class BloomFilter"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  - id: ma_hard_code_013
+    tier: 3
+    prompt: |
+      Implement the Hopcroft-Karp algorithm for maximum bipartite matching.
+
+      Given a bipartite graph with left vertices 0..n-1 and right vertices 0..m-1,
+      and a list of edges, find the maximum matching.
+
+      Return:
+      - Size of maximum matching
+      - List of (left, right) pairs in the matching
+
+      Time complexity should be O(E√V).
+
+      Write `def hopcroft_karp(n, m, edges)`.
+    expected: "def hopcroft_karp"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  - id: ma_hard_code_014
+    tier: 2
+    prompt: |
+      Implement a LRU (Least Recently Used) cache with O(1) operations:
+
+      class LRUCache:
+          def __init__(self, capacity: int):
+              pass
+
+          def get(self, key: int) -> int:
+              # Return value if exists, -1 otherwise
+              # Mark as recently used
+
+          def put(self, key: int, value: int) -> None:
+              # Insert or update key-value
+              # Evict LRU item if at capacity
+
+      Must use O(1) time for both get and put.
+
+      Write a complete Python implementation using OrderedDict or
+      a combination of dict and doubly-linked list.
+    expected: "class LRUCache"
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 30
+      test_code: |
+        cache = LRUCache(2)
+        cache.put(1, 1)
+        cache.put(2, 2)
+        assert cache.get(1) == 1
+        cache.put(3, 3)  # Evicts key 2
+        assert cache.get(2) == -1
+        print("Test passed!")
+
+  - id: ma_hard_code_015
+    tier: 3
+    prompt: |
+      Implement a suffix array construction algorithm with O(n log n) complexity.
+
+      Given a string s, compute:
+      1. The suffix array (indices of sorted suffixes)
+      2. The LCP (Longest Common Prefix) array
+
+      Example:
+      s = "banana"
+      suffix_array = [5, 3, 1, 0, 4, 2]
+      (suffixes: "a", "ana", "anana", "banana", "na", "nana" sorted)
+      lcp_array = [1, 3, 0, 0, 2]
+
+      Write `def build_suffix_array(s)` returning (suffix_array, lcp_array).
+    expected: "def build_suffix_array"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: true
+
+  # ════════════════════════════════════════════════════════════════════
+  # Category C: Multi-hop Reasoning (react+search >> direct)
+  # Requires combining multiple facts, often with search
+  # ════════════════════════════════════════════════════════════════════
+
+  - id: ma_hard_reason_001
+    tier: 3
+    prompt: |
+      Answer this multi-hop question:
+
+      The director of the 2010 film "Inception" also directed another film
+      that won the Academy Award for Best Picture. In what year was that
+      Best Picture winner released?
+
+      Think step by step:
+      1. Who directed Inception (2010)?
+      2. What other films did they direct?
+      3. Which of those won Best Picture?
+      4. When was it released?
+
+      Give just the year after ####.
+    expected: "2023"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d{4})"
+
+  - id: ma_hard_reason_002
+    tier: 2
+    prompt: |
+      The capital city of the country that hosted the 2016 Summer Olympics
+      has a metropolitan area. What is the population of that metropolitan
+      area according to the most recent census data (give approximate millions)?
+
+      Think step by step:
+      1. Which country hosted the 2016 Summer Olympics?
+      2. What is the capital of that country?
+      3. What is the population of its metropolitan area?
+
+      Give the population in millions (rounded to nearest million) after ####.
+    expected: "22"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_hard_reason_003
+    tier: 3
+    prompt: |
+      The author of "1984" was born in a country that was once part of
+      the British Empire. That country's current capital city is at what
+      approximate latitude (degrees north)?
+
+      Think step by step:
+      1. Who wrote "1984"?
+      2. Where was the author born? (Hint: it wasn't England)
+      3. What is the current capital of that country?
+      4. What is its latitude?
+
+      Give the latitude in degrees (rounded to nearest whole number) after ####.
+    expected: "28"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_hard_reason_004
+    tier: 2
+    prompt: |
+      The company that created the first commercially successful smartphone
+      was founded by a person who later started another company. That second
+      company is headquartered in a city. What is the population of that city
+      (approximate, in millions)?
+
+      Hint: Consider what "first commercially successful smartphone" means
+      and who the key founder was.
+
+      Give the population in millions (round to 1 decimal) after ####.
+    expected: "1.0"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_reason_005
+    tier: 3
+    prompt: |
+      The element with atomic number 79 was historically mined extensively
+      in a US state. That state's capital city shares a name with another
+      city in a different country. What is the population of the foreign
+      city with the same name (approximate, in thousands)?
+
+      Think step by step and give the population in thousands after ####.
+    expected: "730"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_hard_reason_006
+    tier: 2
+    prompt: |
+      The Nobel Prize in Physics 1921 was awarded for a discovery related
+      to a specific physical phenomenon. Name one everyday device that
+      directly uses this phenomenon.
+
+      Give your answer (one or two words) after ####.
+    expected: "solar"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_reason_007
+    tier: 3
+    prompt: |
+      The Treaty of Westphalia (1648) ended a war that primarily took place
+      in a region. The largest city in that region today has how many
+      people (approximate, in millions)?
+
+      Give the population in millions (round to 1 decimal) after ####.
+    expected: "3.6"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_reason_008
+    tier: 2
+    prompt: |
+      The programming language Python was named after a British comedy group.
+      One member of that group later starred in a film that won the Academy
+      Award for Best Original Screenplay. In what year was that film released?
+
+      Give just the year after ####.
+    expected: "1998"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d{4})"
+
+  - id: ma_hard_reason_009
+    tier: 3
+    prompt: |
+      The Higgs boson was discovered at a research facility that spans
+      two countries. The smaller of these two countries has a capital city.
+      What is the elevation of that capital city in meters above sea level?
+
+      Give the elevation in meters (approximate) after ####.
+    expected: "375"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_hard_reason_010
+    tier: 2
+    prompt: |
+      The inventor of the World Wide Web works at an institution that is
+      headquartered in a city. That city is in a county. What is the
+      population of that county (approximate, in millions)?
+
+      Give the population in millions (round to 2 decimal places) after ####.
+    expected: "0.81"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_hard_reason_011
+    tier: 3
+    prompt: |
+      The chemical element named after a planet was discovered in the same
+      year that a famous composer died. That composer's most famous symphony
+      (by number) was completed how many years before his death?
+
+      Give the number of years after ####.
+    expected: "2"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_hard_reason_012
+    tier: 2
+    prompt: |
+      The tallest building in the world (as of 2024) is located in a city
+      that is in a country. That country borders how many other countries?
+
+      Give the number after ####.
+    expected: "2"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_hard_reason_013
+    tier: 3
+    prompt: |
+      The mathematician who proved Fermat's Last Theorem was born in a
+      country. The largest river entirely within that country empties
+      into a body of water. What is the approximate area of that body
+      of water in square kilometers?
+
+      Give the area in km² (round to nearest 1000) after ####.
+    expected: "77000"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_hard_reason_014
+    tier: 2
+    prompt: |
+      The first artificial satellite was launched by a country whose
+      current capital has how many letters in its name (in English)?
+
+      Give the number after ####.
+    expected: "6"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_hard_reason_015
+    tier: 3
+    prompt: |
+      The pharmaceutical company that developed the first mRNA COVID-19
+      vaccine to receive FDA emergency use authorization is headquartered
+      in a city. That city was founded in what year?
+
+      Give just the year after ####.
+    expected: "1631"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  # ════════════════════════════════════════════════════════════════════
+  # Category D: Research Synthesis (specialist >> frontdoor)
+  # Requires deep analysis, comparing approaches, expert knowledge
+  # ════════════════════════════════════════════════════════════════════
+
+  - id: ma_hard_synth_001
+    tier: 3
+    prompt: |
+      Compare and contrast the CAP theorem and the PACELC theorem in
+      distributed systems. Explain:
+
+      1. What does each theorem state?
+      2. What additional insight does PACELC provide over CAP?
+      3. Give an example of a system that chooses PA/EL (availability
+         during partition, latency over consistency otherwise).
+
+      Your answer should demonstrate deep understanding of distributed
+      systems tradeoffs. Give your answer in 3-5 paragraphs.
+    expected: "partition"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_002
+    tier: 3
+    prompt: |
+      Explain the key differences between Transformers and State Space Models
+      (like Mamba) for sequence modeling:
+
+      1. Computational complexity for training and inference
+      2. How each handles long-range dependencies
+      3. Memory requirements during inference
+      4. Which is better suited for which use cases?
+
+      Cite specific architectural differences that lead to these tradeoffs.
+    expected: "selective"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_003
+    tier: 2
+    prompt: |
+      Analyze the Byzantine Generals Problem and explain:
+
+      1. Why is it impossible to solve with fewer than 3f+1 generals
+         when f are traitors?
+      2. How does practical Byzantine Fault Tolerance (PBFT) achieve
+         consensus in practice?
+      3. What are the limitations of PBFT that led to alternatives
+         like Tendermint?
+
+      Your answer should include specific algorithmic details.
+    expected: "quorum"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_004
+    tier: 3
+    prompt: |
+      Compare the following approaches to neural network quantization:
+
+      1. Post-Training Quantization (PTQ)
+      2. Quantization-Aware Training (QAT)
+      3. Mixed-Precision Quantization
+
+      For each, explain:
+      - When to use it
+      - Typical accuracy vs. efficiency tradeoffs
+      - Key techniques (calibration methods, loss functions, etc.)
+
+      Which approach would you recommend for deploying a 70B parameter
+      LLM on consumer hardware and why?
+    expected: "calibration"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_005
+    tier: 2
+    prompt: |
+      Explain the differences between:
+
+      1. Retrieval-Augmented Generation (RAG)
+      2. Fine-tuning on domain data
+      3. In-context learning with examples
+
+      For each approach, describe:
+      - Computational requirements
+      - When it's most appropriate
+      - Key limitations
+
+      For a legal document analysis task with 10,000 proprietary documents,
+      which approach would you recommend and why?
+    expected: "retrieval"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_006
+    tier: 3
+    prompt: |
+      Analyze the tradeoffs between different consensus algorithms:
+
+      1. Raft
+      2. Paxos
+      3. Viewstamped Replication
+
+      Compare them on:
+      - Understandability and implementation complexity
+      - Performance under normal operation
+      - Recovery from leader failure
+      - Network partition handling
+
+      Which would you choose for a new distributed database and why?
+    expected: "leader"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_007
+    tier: 2
+    prompt: |
+      Compare speculative decoding techniques for LLM inference:
+
+      1. Draft model speculation (using a smaller model)
+      2. Self-speculation (using early exit layers)
+      3. Prompt lookup decoding (n-gram matching)
+
+      For each, explain:
+      - How it achieves speedup
+      - When acceptance rate is high/low
+      - Hardware requirements
+
+      Which technique is best for a 32B coding model on a CPU-only system?
+    expected: "acceptance"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_008
+    tier: 3
+    prompt: |
+      Analyze the evolution of attention mechanisms:
+
+      1. Original scaled dot-product attention
+      2. Multi-head attention
+      3. Flash Attention
+      4. Ring Attention
+
+      For each innovation, explain:
+      - What problem it solved
+      - The key insight or technique
+      - Limitations that motivated the next innovation
+
+      How do these innovations enable training models with longer contexts?
+    expected: "memory"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_009
+    tier: 2
+    prompt: |
+      Compare reinforcement learning approaches for LLM alignment:
+
+      1. RLHF (Reinforcement Learning from Human Feedback)
+      2. DPO (Direct Preference Optimization)
+      3. Constitutional AI / RLAIF
+
+      For each, explain:
+      - Training pipeline complexity
+      - Sample efficiency
+      - Reward hacking risks
+
+      Which approach is most suitable for a resource-constrained research lab?
+    expected: "preference"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_010
+    tier: 3
+    prompt: |
+      Analyze garbage collection strategies:
+
+      1. Mark-and-sweep
+      2. Generational GC
+      3. Concurrent/parallel GC (like G1, ZGC, Shenandoah)
+
+      Compare on:
+      - Pause time characteristics
+      - Throughput impact
+      - Memory overhead
+      - Use cases where each excels
+
+      For a real-time trading system with strict latency requirements,
+      which would you choose and what parameters would you tune?
+    expected: "pause"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_011
+    tier: 2
+    prompt: |
+      Compare lock-free vs. lock-based concurrent data structures:
+
+      1. What makes an algorithm "lock-free" vs "wait-free"?
+      2. What are the practical tradeoffs in implementation complexity?
+      3. When do lock-free structures outperform lock-based ones?
+      4. Give an example where a simple lock beats a lock-free approach.
+
+      Your answer should include discussion of contention, memory ordering,
+      and the ABA problem.
+    expected: "contention"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_012
+    tier: 3
+    prompt: |
+      Analyze different approaches to vector similarity search:
+
+      1. Exact search (brute force)
+      2. Tree-based (KD-trees, Ball trees)
+      3. Graph-based (HNSW, NSG)
+      4. Quantization-based (PQ, IVF-PQ)
+
+      Compare on:
+      - Build time
+      - Query time
+      - Memory usage
+      - Recall at different scales (1M vs 1B vectors)
+
+      For a semantic search system with 100M 768-dim embeddings on a
+      single server with 64GB RAM, which approach would you use?
+    expected: "HNSW"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_013
+    tier: 2
+    prompt: |
+      Compare containerization technologies:
+
+      1. Docker (containerd runtime)
+      2. Podman
+      3. LXC/LXD
+      4. Firecracker microVMs
+
+      For each, explain:
+      - Isolation level (namespace vs. hypervisor)
+      - Startup time
+      - Resource overhead
+      - Security model
+
+      For running untrusted code from users, which provides the best
+      security/performance tradeoff and why?
+    expected: "Firecracker"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_014
+    tier: 3
+    prompt: |
+      Analyze approaches to database sharding:
+
+      1. Hash-based sharding
+      2. Range-based sharding
+      3. Directory-based (lookup table) sharding
+      4. Consistent hashing
+
+      For each approach, explain:
+      - Data distribution characteristics
+      - Hot spot handling
+      - Resharding complexity
+      - Query routing requirements
+
+      For a time-series database with heavy writes and range queries,
+      which sharding strategy is most appropriate?
+    expected: "range"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_hard_synth_015
+    tier: 2
+    prompt: |
+      Compare stream processing frameworks:
+
+      1. Apache Kafka Streams
+      2. Apache Flink
+      3. Apache Spark Structured Streaming
+
+      For each, explain:
+      - Processing model (micro-batch vs true streaming)
+      - Exactly-once semantics implementation
+      - Watermark handling
+      - Deployment complexity
+
+      For processing 1M events/second with sub-100ms latency requirements,
+      which framework would you choose and why?
+    expected: "Flink"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false

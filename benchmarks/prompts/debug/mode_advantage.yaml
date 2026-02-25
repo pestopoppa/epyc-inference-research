@@ -1,0 +1,3697 @@
+# Debug suite: Mode Advantage
+# Sources: Hand-written tasks designed to produce strong mode-differentiation signal
+# Purpose: Tasks where react/repl/delegation structurally outperform direct inference
+#
+# Categories:
+#   ma_comp_*   (15): Computation-gated — react >> direct (tool use structurally necessary)
+#   ma_iter_*   (15): Iterative fix/search — repl >> direct (execution/search needed)
+#   ma_multi_*  (15): Multi-step composition — delegation/react >> direct
+#   ma_esc_*    (15): Escalation-gated — specialist >> frontdoor
+#
+# All use existing scorers: exact_match, code_execution, substring, programmatic
+
+suite: mode_advantage
+version: "1.0"
+scoring_default:
+  method: exact_match
+  config:
+    extract_pattern: "####\\s*(\\S+)"
+
+questions:
+
+  # ════════════════════════════════════════════════════════════════════
+  # Category A: Computation-gated (react >> direct)
+  # Model must compute; in-head calculation is unreliable
+  # ════════════════════════════════════════════════════════════════════
+
+  - id: ma_comp_001
+    tier: 1
+    prompt: |
+      Compute 7^13 mod 97.
+
+      Use a calculator or write code to verify. Give your final numeric answer after ####.
+    expected: "38"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_comp_002
+    tier: 1
+    prompt: |
+      What is 2^67 - 1? Give the exact integer value.
+
+      Give your final answer after ####.
+    expected: "147573952589676412927"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_comp_003
+    tier: 2
+    prompt: |
+      A store has an item priced at $847.53. First apply a 23% discount, then
+      add 8.875% sales tax, then split the bill evenly among 7 people. Round
+      each intermediate step to 2 decimal places. How much does each person pay?
+
+      Give your final answer in dollars and cents (e.g. 102.34) after ####.
+    expected: "101.50"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*\\$?([\\d.]+)"
+
+  - id: ma_comp_004
+    tier: 1
+    prompt: |
+      Compute the SHA-256 hash of the exact string "hello world" (without quotes,
+      no trailing newline). Give the first 16 hex characters of the hash.
+
+      Give your answer after ####.
+    expected: "b94d27b9934d3e08"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([a-f0-9]+)"
+
+  - id: ma_comp_005
+    tier: 2
+    prompt: |
+      Apply ROT13 encoding to the following string:
+      "The Quick Brown Fox Jumps Over The Lazy Dog"
+
+      Give only the encoded result after ####.
+    expected: "Gur Dhvpx Oebja Sbk Whzcf Bire Gur Ynml Qbt"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(.+)"
+      normalize: false
+
+  - id: ma_comp_006
+    tier: 2
+    prompt: |
+      Here are daily temperatures in Celsius for a week:
+      Mon: 23.4, Tue: 19.8, Wed: 21.1, Thu: 25.7, Fri: 18.3, Sat: 22.6, Sun: 24.9
+
+      Calculate the standard deviation (population, not sample). Round to 4 decimal places.
+
+      Give your numeric answer after ####.
+    expected: "2.4870"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_comp_007
+    tier: 1
+    prompt: |
+      What is the 50th prime number?
+
+      Give your numeric answer after ####.
+    expected: "229"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_comp_008
+    tier: 2
+    prompt: |
+      Decode the following base64 string and report the plaintext:
+      VGhlIHNlY3JldCBjb2RlIGlzOiBSVUJZLTQ0MTctRU1FUkFMRA==
+
+      Give just the decoded plaintext after ####.
+    expected: "The secret code is: RUBY-4417-EMERALD"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(.+)"
+
+  - id: ma_comp_009
+    tier: 3
+    prompt: |
+      Compute the determinant of this 4x4 matrix:
+      [[2, 5, -3, 1],
+       [4, -1, 7, 2],
+       [6, 3, -2, 5],
+       [1, 8, 4, -3]]
+
+      Give your numeric answer after ####.
+    expected: "-25"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(-?\\d+\\.?\\d*)"
+
+  - id: ma_comp_010
+    tier: 2
+    prompt: |
+      How many days are there between March 15, 1847 and November 23, 1903?
+      Include both the start and end dates in the count.
+
+      Give your numeric answer after ####.
+    expected: "20707"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_comp_011
+    tier: 3
+    prompt: |
+      Compute the continued fraction representation of sqrt(23).
+      Give the periodic part as a comma-separated list of integers.
+      For example, sqrt(2) = [1; 2, 2, 2, ...] so the periodic part is "2".
+
+      Give your answer after ####.
+    expected: "1,3,1,8"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d,\\s]+)"
+      normalize: true
+
+  - id: ma_comp_012
+    tier: 1
+    prompt: |
+      What is 123456789 * 987654321?
+
+      Give the exact integer result after ####.
+    expected: "121932631112635269"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_comp_013
+    tier: 3
+    prompt: |
+      Compute the first 20 digits of pi after the decimal point.
+
+      Give your answer after #### as just the digits (no "3." prefix).
+    expected: "14159265358979323846"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_comp_014
+    tier: 2
+    prompt: |
+      Given the list of numbers: [47, 12, 83, 56, 29, 91, 15, 68, 34, 77, 42, 8, 63, 25, 50, 71, 3, 88, 37, 59]
+
+      Sort them and report the median (average of 10th and 11th values).
+
+      Give your numeric answer after ####.
+    expected: "48.5"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*([\\d.]+)"
+
+  - id: ma_comp_015
+    tier: 3
+    prompt: |
+      Compute Euler's totient function φ(2520).
+
+      Give your numeric answer after ####.
+    expected: "576"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  # ════════════════════════════════════════════════════════════════════
+  # Category B: Iterative fix / search (repl >> direct)
+  # Requires running code, testing, debugging, or processing data
+  # ════════════════════════════════════════════════════════════════════
+
+  - id: ma_iter_001
+    tier: 1
+    prompt: |
+      The following Python function has a bug. Fix it so all test cases pass.
+
+      ```python
+      def flatten(nested_list):
+          """Flatten a nested list of arbitrary depth."""
+          result = []
+          for item in nested_list:
+              if isinstance(item, list):
+                  result.extend(item)
+              else:
+                  result.append(item)
+          return result
+      ```
+
+      Test cases:
+      ```python
+      assert flatten([1, [2, 3], [4, [5, 6]]]) == [1, 2, 3, 4, 5, 6]
+      assert flatten([1, [2, [3, [4]]]]) == [1, 2, 3, 4]
+      assert flatten([]) == []
+      assert flatten([[[[1]]]]) == [1]
+      ```
+
+      Write the corrected function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert flatten([1, [2, 3], [4, [5, 6]]]) == [1, 2, 3, 4, 5, 6]
+        assert flatten([1, [2, [3, [4]]]]) == [1, 2, 3, 4]
+        assert flatten([]) == []
+        assert flatten([[[[1]]]]) == [1]
+        assert flatten([1, 2, 3]) == [1, 2, 3]
+        print("All tests passed!")
+
+  - id: ma_iter_002
+    tier: 2
+    prompt: |
+      The following function is supposed to implement binary search but has a bug
+      that causes an infinite loop on certain inputs. Fix it.
+
+      ```python
+      def binary_search(arr, target):
+          """Return index of target in sorted array, or -1 if not found."""
+          low, high = 0, len(arr) - 1
+          while low <= high:
+              mid = (low + high) // 2
+              if arr[mid] < target:
+                  low = mid
+              elif arr[mid] > target:
+                  high = mid
+              else:
+                  return mid
+          return -1
+      ```
+
+      Write the corrected function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert binary_search([1, 3, 5, 7, 9], 5) == 2
+        assert binary_search([1, 3, 5, 7, 9], 1) == 0
+        assert binary_search([1, 3, 5, 7, 9], 9) == 4
+        assert binary_search([1, 3, 5, 7, 9], 4) == -1
+        assert binary_search([1, 3, 5, 7, 9], 0) == -1
+        assert binary_search([1, 3, 5, 7, 9], 10) == -1
+        assert binary_search([], 1) == -1
+        assert binary_search([1], 1) == 0
+        assert binary_search([1, 2], 2) == 1
+        print("All tests passed!")
+
+  - id: ma_iter_003
+    tier: 2
+    prompt: |
+      Write a Python function that builds a regex matching valid IPv4 addresses
+      (e.g., "192.168.1.1") but NOT invalid ones (e.g., "999.1.1.1", "1.2.3.4.5").
+      Each octet must be 0-255. No leading zeros except for "0" itself.
+
+      ```python
+      import re
+
+      def is_valid_ipv4(s):
+          """Return True if s is a valid IPv4 address string."""
+          # Your implementation here
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        # Valid addresses
+        assert is_valid_ipv4("192.168.1.1") == True
+        assert is_valid_ipv4("0.0.0.0") == True
+        assert is_valid_ipv4("255.255.255.255") == True
+        assert is_valid_ipv4("10.0.0.1") == True
+        assert is_valid_ipv4("1.2.3.4") == True
+        # Invalid addresses
+        assert is_valid_ipv4("256.1.1.1") == False
+        assert is_valid_ipv4("1.2.3.4.5") == False
+        assert is_valid_ipv4("01.02.03.04") == False
+        assert is_valid_ipv4("1.2.3") == False
+        assert is_valid_ipv4("") == False
+        assert is_valid_ipv4("1.2.3.4a") == False
+        assert is_valid_ipv4("999.999.999.999") == False
+        assert is_valid_ipv4("1.2.3.04") == False
+        print("All tests passed!")
+
+  - id: ma_iter_004
+    tier: 1
+    prompt: |
+      What does the following Python code print?
+
+      ```python
+      def mystery(n):
+          if n <= 0:
+              return 1
+          return mystery(n - 1) + mystery(n - 2)
+
+      result = 0
+      for i in range(8):
+          result += mystery(i) % 3
+      print(result)
+      ```
+
+      Give just the number after ####.
+    expected: "9"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_iter_005
+    tier: 2
+    prompt: |
+      Fix the following function that should implement merge sort. It currently
+      produces wrong output on some inputs.
+
+      ```python
+      def merge_sort(arr):
+          if len(arr) <= 1:
+              return arr
+          mid = len(arr) // 2
+          left = merge_sort(arr[:mid])
+          right = merge_sort(arr[mid:])
+          return merge(left, right)
+
+      def merge(left, right):
+          result = []
+          i = j = 0
+          while i < len(left) and j < len(right):
+              if left[i] < right[j]:
+                  result.append(left[i])
+                  i += 1
+              else:
+                  result.append(right[j])
+                  j += 1
+          # Bug: forgot remaining elements
+          return result
+      ```
+
+      Write the corrected merge function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert merge_sort([3, 1, 4, 1, 5, 9, 2, 6]) == [1, 1, 2, 3, 4, 5, 6, 9]
+        assert merge_sort([5, 4, 3, 2, 1]) == [1, 2, 3, 4, 5]
+        assert merge_sort([]) == []
+        assert merge_sort([1]) == [1]
+        assert merge_sort([2, 1]) == [1, 2]
+        assert merge_sort([1, 1, 1]) == [1, 1, 1]
+        print("All tests passed!")
+
+  - id: ma_iter_006
+    tier: 3
+    prompt: |
+      What does the following Python code output? Trace through it carefully.
+
+      ```python
+      class Node:
+          def __init__(self, val, children=None):
+              self.val = val
+              self.children = children or []
+
+      def transform(node, depth=0):
+          if depth % 2 == 0:
+              new_val = node.val * 2
+          else:
+              new_val = node.val + 10
+          new_children = [transform(c, depth + 1) for c in node.children]
+          return Node(new_val, new_children)
+
+      def collect(node):
+          result = [node.val]
+          for c in node.children:
+              result.extend(collect(c))
+          return result
+
+      tree = Node(1, [
+          Node(2, [Node(3), Node(4)]),
+          Node(5, [Node(6)])
+      ])
+
+      result = collect(transform(tree))
+      print(sum(result))
+      ```
+
+      Give the number after ####.
+    expected: "55"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_iter_007
+    tier: 2
+    prompt: |
+      The following Python function should check if a string has balanced
+      brackets of three types: (), [], {}. It has a subtle bug. Fix it.
+
+      ```python
+      def is_balanced(s):
+          stack = []
+          pairs = {'(': ')', '[': ']', '{': '}'}
+          for char in s:
+              if char in pairs:
+                  stack.append(char)
+              elif char in pairs.values():
+                  if not stack:
+                      return False
+                  if pairs[stack[-1]] == char:
+                      stack.pop()
+          return True
+      ```
+
+      Write the corrected function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert is_balanced("()[]{}") == True
+        assert is_balanced("{[()]}") == True
+        assert is_balanced("") == True
+        assert is_balanced("((()))") == True
+        assert is_balanced("(]") == False
+        assert is_balanced("([)]") == False
+        assert is_balanced("{") == False
+        assert is_balanced("}") == False
+        assert is_balanced("((())") == False
+        assert is_balanced("text (with [brackets]) is {ok}") == True
+        print("All tests passed!")
+
+  - id: ma_iter_008
+    tier: 3
+    prompt: |
+      Write a Python function that given a string, returns the length of the
+      longest substring without repeating characters.
+
+      ```python
+      def longest_unique_substring(s):
+          """Return length of longest substring with all unique characters."""
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert longest_unique_substring("abcabcbb") == 3
+        assert longest_unique_substring("bbbbb") == 1
+        assert longest_unique_substring("pwwkew") == 3
+        assert longest_unique_substring("") == 0
+        assert longest_unique_substring("abcdefg") == 7
+        assert longest_unique_substring("aab") == 2
+        assert longest_unique_substring("dvdf") == 3
+        assert longest_unique_substring("anviaj") == 5
+        print("All tests passed!")
+
+  - id: ma_iter_009
+    tier: 1
+    prompt: |
+      What does this Python code print?
+
+      ```python
+      x = [1, 2, 3, 4, 5]
+      y = x
+      y[2] = 99
+      z = x[:]
+      z[0] = -1
+      x.append(6)
+      print(len(y), y[2], z[0], len(z))
+      ```
+
+      Give the exact output after ####.
+    expected: "6 99 -1 5"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(.+)"
+
+  - id: ma_iter_010
+    tier: 3
+    prompt: |
+      Fix the following LRU Cache implementation. It should evict the least
+      recently used item when capacity is exceeded, and `get` should update
+      recency.
+
+      ```python
+      class LRUCache:
+          def __init__(self, capacity):
+              self.capacity = capacity
+              self.cache = {}
+              self.order = []
+
+          def get(self, key):
+              if key in self.cache:
+                  return self.cache[key]
+              return -1
+
+          def put(self, key, value):
+              if key in self.cache:
+                  self.cache[key] = value
+              else:
+                  if len(self.cache) >= self.capacity:
+                      old = self.order[0]
+                      del self.cache[old]
+                      self.order.pop(0)
+                  self.cache[key] = value
+                  self.order.append(key)
+      ```
+
+      The bug: `get` doesn't update recency, and `put` for existing keys
+      doesn't update order. Fix both issues.
+
+      Write the corrected class.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        cache = LRUCache(2)
+        cache.put(1, 1)
+        cache.put(2, 2)
+        assert cache.get(1) == 1      # returns 1, makes 1 most recent
+        cache.put(3, 3)               # evicts key 2 (least recent)
+        assert cache.get(2) == -1     # not found
+        cache.put(4, 4)               # evicts key 1 (least recent now)
+        assert cache.get(1) == -1
+        assert cache.get(3) == 3
+        assert cache.get(4) == 4
+        # Test update existing key
+        cache2 = LRUCache(2)
+        cache2.put(1, 1)
+        cache2.put(2, 2)
+        cache2.put(1, 10)             # update existing, makes 1 most recent
+        cache2.put(3, 3)              # should evict 2, not 1
+        assert cache2.get(2) == -1
+        assert cache2.get(1) == 10
+        print("All tests passed!")
+
+  - id: ma_iter_011
+    tier: 2
+    prompt: |
+      Parse the following CSV data and answer: what is the total revenue
+      for the "Electronics" category?
+
+      ```
+      product,category,quantity,unit_price
+      Widget A,Electronics,150,29.99
+      Widget B,Clothing,200,19.50
+      Widget C,Electronics,75,149.99
+      Widget D,Food,500,3.99
+      Widget E,Electronics,30,299.99
+      Widget F,Clothing,100,45.00
+      Widget G,Food,250,7.50
+      Widget H,Electronics,200,59.99
+      ```
+
+      Revenue = quantity * unit_price. Sum all Electronics rows.
+
+      Give the total after ####.
+    expected: "36745.45"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*\\$?([\\d.]+)"
+
+  - id: ma_iter_012
+    tier: 3
+    prompt: |
+      Write a Python function that solves the N-Queens problem and returns
+      the number of distinct solutions for a given N.
+
+      ```python
+      def count_n_queens(n):
+          """Return the number of distinct solutions to the N-Queens problem."""
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 15
+      test_code: |
+        assert count_n_queens(1) == 1
+        assert count_n_queens(4) == 2
+        assert count_n_queens(5) == 10
+        assert count_n_queens(6) == 4
+        assert count_n_queens(8) == 92
+        print("All tests passed!")
+
+  - id: ma_iter_013
+    tier: 2
+    prompt: |
+      What does this Python code output?
+
+      ```python
+      from collections import defaultdict
+
+      def process(data):
+          groups = defaultdict(list)
+          for k, v in data:
+              groups[k].append(v)
+          result = {}
+          for k, vs in sorted(groups.items()):
+              result[k] = sum(vs) / len(vs)
+          return result
+
+      data = [
+          ('a', 10), ('b', 20), ('a', 30), ('c', 40),
+          ('b', 50), ('a', 20), ('c', 10), ('b', 30),
+      ]
+      r = process(data)
+      print(f"{r['a']:.1f} {r['b']:.1f} {r['c']:.1f}")
+      ```
+
+      Give the exact output after ####.
+    expected: "20.0 33.3 25.0"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(.+)"
+
+  - id: ma_iter_014
+    tier: 1
+    prompt: |
+      Fix this function that should count the number of vowels in a string,
+      but it has an off-by-one error.
+
+      ```python
+      def count_vowels(s):
+          count = 0
+          vowels = "aeiou"
+          for i in range(1, len(s)):
+              if s[i].lower() in vowels:
+                  count += 1
+          return count
+      ```
+
+      Write the corrected function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert count_vowels("hello") == 2
+        assert count_vowels("aeiou") == 5
+        assert count_vowels("AEIOU") == 5
+        assert count_vowels("xyz") == 0
+        assert count_vowels("a") == 1
+        assert count_vowels("") == 0
+        assert count_vowels("Apple") == 2
+        print("All tests passed!")
+
+  - id: ma_iter_015
+    tier: 3
+    prompt: |
+      Write a Python function that finds all valid ways to add +, -, or nothing
+      between digits of a string of digits to get a target sum. Return the count
+      of valid expressions.
+
+      Example: digits="123", target=6 → "1+2+3" → count=1
+
+      ```python
+      def count_expressions(digits, target):
+          """Count ways to insert +/- between digits to reach target."""
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert count_expressions("123", 6) == 1       # 1+2+3
+        assert count_expressions("123", 0) == 1       # 1+2-3
+        assert count_expressions("123", 123) == 1     # 123
+        assert count_expressions("123", 24) == 1      # 1+23
+        assert count_expressions("1111", 4) == 1      # 1+1+1+1
+        assert count_expressions("1111", 11) == 4     # 1-1+11, 1+11-1, 11+1-1, 11-1+1
+        assert count_expressions("9", 9) == 1
+        print("All tests passed!")
+
+  # ════════════════════════════════════════════════════════════════════
+  # Category C: Multi-step composition (delegation/react >> direct)
+  # Requires chaining multiple operations or structured planning
+  # ════════════════════════════════════════════════════════════════════
+
+  - id: ma_multi_001
+    tier: 2
+    prompt: |
+      You have access to these tools:
+      - calculate(expression) → numeric result
+      - lookup_rate(currency, date) → exchange rate to USD
+
+      Task: A European company invoiced €47,350 on 2024-01-15 when EUR/USD was 1.0892.
+      They received payment on 2024-03-20 when EUR/USD was 1.0834.
+      Calculate the foreign exchange loss in USD (positive number = loss).
+
+      Steps:
+      1. Call lookup_rate to get the invoice-date USD amount
+      2. Call lookup_rate to get the payment-date USD amount
+      3. Call calculate to find the difference
+
+      Show your work. Give the USD loss amount rounded to 2 decimal places after ####.
+    expected: "274.63"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*\\$?([\\d.]+)"
+
+  - id: ma_multi_002
+    tier: 1
+    prompt: |
+      Process the following data through 3 sequential steps:
+
+      Input list: [8, 3, 12, 7, 15, 1, 9, 4, 11, 6]
+
+      Step 1: Sort the list ascending
+      Step 2: Remove all values less than 5
+      Step 3: Compute the sum of remaining values
+
+      Show each intermediate step. Give the final sum after ####.
+    expected: "68"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_multi_003
+    tier: 2
+    prompt: |
+      A delivery service charges:
+      - Base fee: $5.00
+      - Per-mile rate: $0.75 for first 10 miles, $0.50 for miles 11-30, $0.35 for 31+
+      - Weight surcharge: $2.00 per lb over 50 lbs
+      - Rush fee: 40% extra on total if rush delivery
+      - Weekend discount: 10% off final amount if Saturday or Sunday
+
+      Calculate the cost for: 45-mile, 73-lb package, rush delivery on a Saturday.
+
+      Show each component. Give the final cost after ####.
+    expected: "92.93"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*\\$?([\\d.]+)"
+
+  - id: ma_multi_004
+    tier: 3
+    prompt: |
+      Write a Python program that:
+      1. Generates all prime numbers up to 100
+      2. Filters to only twin primes (primes p where p+2 is also prime)
+      3. Computes the sum of all twin prime pairs (include both p and p+2)
+
+      A twin prime pair is (3,5), (5,7), (11,13), etc. If a prime appears
+      in multiple pairs (like 5), count it each time it appears.
+
+      Give the sum after ####.
+    expected: "488"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_multi_005
+    tier: 2
+    prompt: |
+      Convert the Roman numeral MCMXCIV to decimal, then:
+      1. Multiply by 3
+      2. Subtract 1776
+      3. Find the prime factorization of the result
+      4. Report the largest prime factor
+
+      Give the largest prime factor after ####.
+    expected: "701"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_multi_006
+    tier: 3
+    prompt: |
+      Write a Python function that implements a simple stack-based calculator.
+      It should support: numbers, +, -, *, /, and parentheses.
+      Return the result as a float.
+
+      ```python
+      def evaluate(expression):
+          """Evaluate arithmetic expression string. Return float result."""
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert abs(evaluate("3 + 4 * 2") - 11.0) < 1e-9
+        assert abs(evaluate("(3 + 4) * 2") - 14.0) < 1e-9
+        assert abs(evaluate("10 / 3") - 3.3333333333) < 1e-6
+        assert abs(evaluate("2 + 3 * (4 - 1)") - 11.0) < 1e-9
+        assert abs(evaluate("((2 + 3) * (7 - 4)) / 5") - 3.0) < 1e-9
+        assert abs(evaluate("100") - 100.0) < 1e-9
+        print("All tests passed!")
+
+  - id: ma_multi_007
+    tier: 1
+    prompt: |
+      Given the text:
+      "The project started on 2024-01-15 with a budget of $50000. Phase 1
+      cost $12500 and was completed on 2024-03-20. Phase 2 cost $18750 and
+      finished on 2024-06-30. Phase 3 is estimated at $22000."
+
+      Extract and calculate:
+      1. Total actual spend (Phase 1 + Phase 2)
+      2. Remaining budget
+      3. Will Phase 3 fit in the remaining budget? (yes/no)
+
+      Format: "spent: $X, remaining: $Y, fits: Z"
+      Give your answer after ####.
+    expected: "spent: $31250, remaining: $18750, fits: no"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_multi_008
+    tier: 2
+    prompt: |
+      Write a Python function that takes a nested dictionary and "flattens" it,
+      using dot notation for keys.
+
+      Example: {"a": {"b": 1, "c": {"d": 2}}} → {"a.b": 1, "a.c.d": 2}
+
+      ```python
+      def flatten_dict(d, parent_key='', sep='.'):
+          """Flatten nested dict with dot-notation keys."""
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert flatten_dict({"a": 1, "b": 2}) == {"a": 1, "b": 2}
+        assert flatten_dict({"a": {"b": 1}}) == {"a.b": 1}
+        assert flatten_dict({"a": {"b": {"c": 1}}}) == {"a.b.c": 1}
+        assert flatten_dict({"a": {"b": 1, "c": 2}, "d": 3}) == {"a.b": 1, "a.c": 2, "d": 3}
+        assert flatten_dict({}) == {}
+        assert flatten_dict({"a": {"b": {"c": {"d": 4}}}}) == {"a.b.c.d": 4}
+        print("All tests passed!")
+
+  - id: ma_multi_009
+    tier: 3
+    prompt: |
+      Write a Python function that implements Dijkstra's shortest path algorithm.
+      The graph is represented as an adjacency dict: {node: [(neighbor, weight), ...]}.
+      Return the shortest distance from source to target, or -1 if unreachable.
+
+      ```python
+      def dijkstra(graph, source, target):
+          """Find shortest path distance from source to target."""
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        g1 = {
+            'A': [('B', 1), ('C', 4)],
+            'B': [('C', 2), ('D', 5)],
+            'C': [('D', 1)],
+            'D': [],
+        }
+        assert dijkstra(g1, 'A', 'D') == 4  # A->B->C->D
+        assert dijkstra(g1, 'A', 'A') == 0
+        assert dijkstra(g1, 'A', 'B') == 1
+        assert dijkstra(g1, 'A', 'C') == 3  # A->B->C
+
+        g2 = {'A': [('B', 1)], 'B': [], 'C': []}
+        assert dijkstra(g2, 'A', 'C') == -1  # unreachable
+
+        g3 = {
+            1: [(2, 7), (3, 9), (6, 14)],
+            2: [(1, 7), (3, 10), (4, 15)],
+            3: [(1, 9), (2, 10), (4, 11), (6, 2)],
+            4: [(2, 15), (3, 11), (5, 6)],
+            5: [(4, 6), (6, 9)],
+            6: [(1, 14), (3, 2), (5, 9)],
+        }
+        assert dijkstra(g3, 1, 5) == 20  # 1->3->6->5
+        print("All tests passed!")
+
+  - id: ma_multi_010
+    tier: 1
+    prompt: |
+      Follow these exact steps and report the result:
+      1. Start with the number 1000
+      2. Subtract the year Columbus reached the Americas (1492)
+      3. Take the absolute value
+      4. Multiply by the number of sides on a hexagon (6)
+      5. Add the boiling point of water in Fahrenheit (212)
+      6. Integer-divide by 7
+
+      Give the final integer after ####.
+    expected: "452"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_multi_011
+    tier: 2
+    prompt: |
+      Write a Python function that converts an integer to its English words
+      representation. Support 0 to 999,999.
+
+      Examples: 42 → "forty two", 1001 → "one thousand one"
+
+      ```python
+      def int_to_words(n):
+          """Convert integer (0-999999) to English words."""
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert int_to_words(0) == "zero"
+        assert int_to_words(1) == "one"
+        assert int_to_words(13) == "thirteen"
+        assert int_to_words(42) == "forty two"
+        assert int_to_words(100) == "one hundred"
+        assert int_to_words(115) == "one hundred fifteen"
+        assert int_to_words(1000) == "one thousand"
+        assert int_to_words(1001) == "one thousand one"
+        assert int_to_words(12345) == "twelve thousand three hundred forty five"
+        assert int_to_words(999999) == "nine hundred ninety nine thousand nine hundred ninety nine"
+        print("All tests passed!")
+
+  - id: ma_multi_012
+    tier: 3
+    prompt: |
+      Write a Python function that validates and evaluates a mathematical
+      expression given as a list of tokens, supporting variables.
+
+      ```python
+      def eval_expr(tokens, variables):
+          """Evaluate tokenized expression with variable substitution.
+          tokens: list of strings like ['x', '+', '3', '*', '(', 'y', '-', '1', ')']
+          variables: dict like {'x': 5, 'y': 10}
+          Returns: numeric result (float)
+          Supports: +, -, *, /, parentheses, variables, integers
+          Standard operator precedence (* / before + -)
+          """
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert abs(eval_expr(['3', '+', '4'], {}) - 7.0) < 1e-9
+        assert abs(eval_expr(['x', '+', 'y'], {'x': 3, 'y': 4}) - 7.0) < 1e-9
+        assert abs(eval_expr(['2', '*', '3', '+', '4'], {}) - 10.0) < 1e-9
+        assert abs(eval_expr(['2', '*', '(', '3', '+', '4', ')'], {}) - 14.0) < 1e-9
+        assert abs(eval_expr(['x', '*', '(', 'y', '+', '1', ')'], {'x': 5, 'y': 3}) - 20.0) < 1e-9
+        assert abs(eval_expr(['10', '/', '3'], {}) - 3.3333333) < 1e-5
+        print("All tests passed!")
+
+  - id: ma_multi_013
+    tier: 2
+    prompt: |
+      A company has the following employee data:
+
+      ```
+      name,department,salary,years
+      Alice,Engineering,95000,5
+      Bob,Marketing,72000,3
+      Charlie,Engineering,105000,8
+      Diana,Marketing,68000,2
+      Eve,Engineering,88000,4
+      Frank,HR,75000,6
+      Grace,HR,82000,7
+      Henry,Marketing,71000,4
+      ```
+
+      Calculate:
+      1. Average salary per department (rounded to nearest dollar)
+      2. The department with the highest average salary
+      3. The total payroll for employees with 5+ years
+
+      Format: "eng_avg: $X, mkt_avg: $Y, hr_avg: $Z, highest: DEPT, senior_total: $W"
+      Give your answer after ####.
+    expected: "eng_avg: $96000, mkt_avg: $70333, hr_avg: $78500, highest: Engineering, senior_total: $357000"
+    scoring_method: substring
+    scoring_config:
+      case_sensitive: false
+
+  - id: ma_multi_014
+    tier: 1
+    prompt: |
+      Process this list through a pipeline:
+      Input: "apple banana cherry date elderberry fig grape"
+
+      Step 1: Split into words
+      Step 2: Filter to only words with 5+ letters
+      Step 3: Capitalize each word
+      Step 4: Sort alphabetically
+      Step 5: Join with " | "
+
+      Give the result after ####.
+    expected: "APPLE | BANANA | CHERRY | ELDERBERRY | GRAPE"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(.+)"
+      normalize: false
+
+  - id: ma_multi_015
+    tier: 3
+    prompt: |
+      Write a Python function that implements a topological sort of a DAG.
+      The graph is represented as {node: [list of nodes it depends on]}.
+      Return a valid ordering, or raise ValueError if there's a cycle.
+
+      ```python
+      def topological_sort(graph):
+          """Return topological ordering of DAG. Raise ValueError on cycle."""
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        # Basic DAG
+        g1 = {'a': [], 'b': ['a'], 'c': ['a', 'b'], 'd': ['c']}
+        r1 = topological_sort(g1)
+        assert r1.index('a') < r1.index('b')
+        assert r1.index('b') < r1.index('c')
+        assert r1.index('c') < r1.index('d')
+
+        # Independent nodes
+        g2 = {'a': [], 'b': [], 'c': []}
+        r2 = topological_sort(g2)
+        assert set(r2) == {'a', 'b', 'c'}
+
+        # Single node
+        g3 = {'a': []}
+        assert topological_sort(g3) == ['a']
+
+        # Cycle detection
+        g4 = {'a': ['b'], 'b': ['c'], 'c': ['a']}
+        try:
+            topological_sort(g4)
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+
+        print("All tests passed!")
+
+  # ════════════════════════════════════════════════════════════════════
+  # Category D: Escalation-gated (specialist >> frontdoor)
+  # Requires deeper reasoning or advanced algorithm knowledge
+  # ════════════════════════════════════════════════════════════════════
+
+  - id: ma_esc_001
+    tier: 3
+    prompt: |
+      Implement the A* search algorithm on a weighted grid.
+      The grid has cells that are passable (0) or blocked (1).
+      Movement: 4-directional (up/down/left/right), cost 1 per step.
+      Heuristic: Manhattan distance.
+
+      ```python
+      def astar(grid, start, goal):
+          """Find shortest path length from start to goal on grid.
+          grid: list of lists (0=passable, 1=blocked)
+          start: (row, col) tuple
+          goal: (row, col) tuple
+          Returns: shortest path length (int), or -1 if unreachable
+          """
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        grid1 = [
+            [0, 0, 0, 0],
+            [0, 1, 1, 0],
+            [0, 0, 0, 0],
+            [0, 1, 0, 0],
+        ]
+        assert astar(grid1, (0, 0), (3, 3)) == 6
+
+        grid2 = [
+            [0, 1, 0],
+            [0, 1, 0],
+            [0, 0, 0],
+        ]
+        assert astar(grid2, (0, 0), (0, 2)) == 6
+
+        # Blocked path
+        grid3 = [
+            [0, 1],
+            [1, 0],
+        ]
+        assert astar(grid3, (0, 0), (1, 1)) == -1
+
+        # Same start and goal
+        assert astar([[0]], (0, 0), (0, 0)) == 0
+
+        # Open grid
+        grid4 = [[0]*5 for _ in range(5)]
+        assert astar(grid4, (0, 0), (4, 4)) == 8
+
+        print("All tests passed!")
+
+  - id: ma_esc_002
+    tier: 3
+    prompt: |
+      Implement a trie (prefix tree) that supports insert, search (exact), and
+      startsWith (prefix check), plus a count_prefix method that returns how
+      many words have a given prefix.
+
+      ```python
+      class Trie:
+          def __init__(self):
+              pass
+
+          def insert(self, word):
+              pass
+
+          def search(self, word):
+              """Return True if word is in trie."""
+              pass
+
+          def starts_with(self, prefix):
+              """Return True if any word starts with prefix."""
+              pass
+
+          def count_prefix(self, prefix):
+              """Return count of words starting with prefix."""
+              pass
+      ```
+
+      Write the complete class.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        t = Trie()
+        t.insert("apple")
+        t.insert("app")
+        t.insert("application")
+        t.insert("banana")
+        t.insert("band")
+        assert t.search("apple") == True
+        assert t.search("app") == True
+        assert t.search("ap") == False
+        assert t.starts_with("ap") == True
+        assert t.starts_with("ban") == True
+        assert t.starts_with("cat") == False
+        assert t.count_prefix("app") == 3    # apple, app, application
+        assert t.count_prefix("ban") == 2    # banana, band
+        assert t.count_prefix("apple") == 1
+        assert t.count_prefix("xyz") == 0
+        assert t.count_prefix("") == 5       # all words
+        print("All tests passed!")
+
+  - id: ma_esc_003
+    tier: 3
+    prompt: |
+      Find the flaw in this proof:
+
+      Claim: All horses are the same color.
+
+      Proof by induction:
+      Base case: For n=1, a set of 1 horse trivially has all horses the same color.
+
+      Inductive step: Assume any set of n horses has all the same color.
+      Consider a set of n+1 horses: {h1, h2, ..., h(n+1)}.
+      The first n horses {h1, ..., hn} are the same color (by inductive hypothesis).
+      The last n horses {h2, ..., h(n+1)} are the same color (by inductive hypothesis).
+      These two sets overlap, so all n+1 horses must be the same color.
+
+      What is the specific logical error? Name the exact value of n where
+      the inductive step breaks down.
+
+      Give the value of n after ####.
+    expected: "1"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_esc_004
+    tier: 3
+    prompt: |
+      Implement a Union-Find (Disjoint Set Union) data structure with path
+      compression and union by rank. Include a method to count the number
+      of connected components.
+
+      ```python
+      class UnionFind:
+          def __init__(self, n):
+              """Initialize with n elements (0 to n-1)."""
+              pass
+
+          def find(self, x):
+              """Find root of x with path compression."""
+              pass
+
+          def union(self, x, y):
+              """Union sets containing x and y. Return False if already same set."""
+              pass
+
+          def connected(self, x, y):
+              """Return True if x and y are in same set."""
+              pass
+
+          def count_components(self):
+              """Return number of connected components."""
+              pass
+      ```
+
+      Write the complete class.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        uf = UnionFind(6)
+        assert uf.count_components() == 6
+        assert uf.connected(0, 1) == False
+        uf.union(0, 1)
+        assert uf.connected(0, 1) == True
+        assert uf.count_components() == 5
+        uf.union(2, 3)
+        uf.union(0, 3)
+        assert uf.connected(1, 2) == True
+        assert uf.count_components() == 3
+        uf.union(4, 5)
+        assert uf.count_components() == 2
+        uf.union(0, 5)
+        assert uf.count_components() == 1
+        assert uf.connected(1, 4) == True
+        # Idempotent union
+        assert uf.union(0, 1) == False
+        print("All tests passed!")
+
+  - id: ma_esc_005
+    tier: 3
+    prompt: |
+      Implement a min-heap that supports insert, extract_min, peek, and
+      decrease_key (needed for Dijkstra's algorithm).
+
+      ```python
+      class MinHeap:
+          def __init__(self):
+              pass
+
+          def insert(self, key, value):
+              """Insert element with given key (priority) and value."""
+              pass
+
+          def extract_min(self):
+              """Remove and return (key, value) with smallest key."""
+              pass
+
+          def peek(self):
+              """Return (key, value) with smallest key without removing."""
+              pass
+
+          def decrease_key(self, value, new_key):
+              """Decrease the key of element with given value."""
+              pass
+
+          def __len__(self):
+              pass
+      ```
+
+      Write the complete class.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        h = MinHeap()
+        h.insert(5, 'e')
+        h.insert(3, 'c')
+        h.insert(7, 'g')
+        h.insert(1, 'a')
+        assert len(h) == 4
+        assert h.peek() == (1, 'a')
+        assert h.extract_min() == (1, 'a')
+        assert h.extract_min() == (3, 'c')
+        h.insert(2, 'b')
+        h.decrease_key('g', 1)
+        assert h.extract_min() == (1, 'g')
+        assert h.extract_min() == (2, 'b')
+        assert h.extract_min() == (5, 'e')
+        assert len(h) == 0
+        print("All tests passed!")
+
+  - id: ma_esc_006
+    tier: 2
+    prompt: |
+      In the following pseudo-concurrent system, identify the race condition:
+
+      ```python
+      class BankAccount:
+          def __init__(self, balance=0):
+              self.balance = balance
+
+          def transfer(self, other, amount):
+              if self.balance >= amount:
+                  self.balance -= amount
+                  other.balance += amount
+                  return True
+              return False
+      ```
+
+      Thread A: account1.transfer(account2, 500)
+      Thread B: account2.transfer(account1, 300)
+
+      Starting balances: account1=1000, account2=1000
+
+      What is the specific race condition called, and what is the worst-case
+      total balance (sum of both accounts) after both transfers complete?
+
+      The name of this race condition pattern is typically called "TOCTOU" or
+      "check-then-act". The worst case total is when both reads happen before
+      either write completes.
+
+      What is the worst-case total balance after both operations? Give the
+      number after ####.
+    expected: "1200"
+    # Lost-update race: both += writes read stale values, only decrements persist
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(\\d+)"
+
+  - id: ma_esc_007
+    tier: 3
+    prompt: |
+      Implement a Bloom filter with configurable false positive rate.
+      Use k independent hash functions derived from two base hashes (double hashing).
+
+      ```python
+      class BloomFilter:
+          def __init__(self, expected_elements, fp_rate=0.01):
+              """Initialize Bloom filter.
+              expected_elements: expected number of elements
+              fp_rate: desired false positive rate
+              """
+              pass
+
+          def add(self, item):
+              """Add an item to the filter."""
+              pass
+
+          def might_contain(self, item):
+              """Check if item might be in the filter (may have false positives)."""
+              pass
+      ```
+
+      Write the complete class.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        import math
+        bf = BloomFilter(1000, 0.01)
+        # Add 100 items
+        for i in range(100):
+            bf.add(f"item_{i}")
+        # All added items must be found (no false negatives)
+        for i in range(100):
+            assert bf.might_contain(f"item_{i}") == True, f"False negative for item_{i}"
+        # Check false positive rate on unseen items
+        fp_count = 0
+        test_count = 10000
+        for i in range(100, 100 + test_count):
+            if bf.might_contain(f"item_{i}"):
+                fp_count += 1
+        fp_rate = fp_count / test_count
+        # Allow up to 5% FP rate (generous for test stability)
+        assert fp_rate < 0.05, f"FP rate too high: {fp_rate:.4f}"
+        print("All tests passed!")
+
+  - id: ma_esc_008
+    tier: 2
+    prompt: |
+      What is the time complexity of the following function? Express as Big-O
+      in terms of n. Consider ALL operations including the inner function calls.
+
+      ```python
+      def mystery(arr):
+          n = len(arr)
+          result = []
+          for i in range(n):
+              for j in range(i, n):
+                  sub = arr[i:j+1]   # O(j-i+1) to create slice
+                  result.append(sum(sub))  # O(j-i+1) to sum
+          return max(result) if result else 0  # O(len(result)) for max
+      ```
+
+      Give the tight Big-O bound after ####. Format: O(n^k) where k is an integer.
+    expected: "O(n^3)"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(O\\(n\\^\\d+\\))"
+
+  - id: ma_esc_009
+    tier: 3
+    prompt: |
+      Implement the Knuth-Morris-Pratt (KMP) string matching algorithm.
+      Return all starting indices where pattern occurs in text.
+
+      ```python
+      def kmp_search(text, pattern):
+          """Find all occurrences of pattern in text using KMP.
+          Returns list of starting indices.
+          """
+          pass
+      ```
+
+      Write the complete function (including the failure function / prefix table).
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert kmp_search("AABAACAADAABAABA", "AABA") == [0, 9, 12]
+        assert kmp_search("AAAAAA", "AA") == [0, 1, 2, 3, 4]
+        assert kmp_search("ABCDEF", "XYZ") == []
+        assert kmp_search("ABAB", "ABAB") == [0]
+        assert kmp_search("", "ABC") == []
+        assert kmp_search("ABC", "") == []
+        assert kmp_search("ABABABABAB", "ABAB") == [0, 2, 4, 6]
+        print("All tests passed!")
+
+  - id: ma_esc_010
+    tier: 2
+    prompt: |
+      Given the CAP theorem, explain which property each of these distributed
+      systems sacrifices:
+
+      1. A traditional single-node PostgreSQL database
+      2. A 3-node Cassandra cluster with quorum reads/writes
+      3. A Redis cluster with async replication
+
+      For each system, state which ONE of C (Consistency), A (Availability),
+      P (Partition tolerance) is sacrificed. Note: single-node systems sacrifice P.
+
+      Format your answer as: "1:X, 2:Y, 3:Z" where X/Y/Z are C, A, or P.
+
+      Give your answer after ####.
+    expected: "1:P, 2:A, 3:C"
+    scoring_method: exact_match
+    scoring_config:
+      extract_pattern: "####\\s*(.+)"
+      normalize: true
+
+  - id: ma_esc_011
+    tier: 3
+    prompt: |
+      Implement an interval tree that supports inserting intervals and querying
+      all intervals that overlap with a given point.
+
+      ```python
+      class IntervalTree:
+          def __init__(self):
+              pass
+
+          def insert(self, low, high, data=None):
+              """Insert interval [low, high] with optional data."""
+              pass
+
+          def query_point(self, point):
+              """Return list of (low, high, data) for all intervals containing point."""
+              pass
+      ```
+
+      Write the complete class.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        tree = IntervalTree()
+        tree.insert(15, 20, "a")
+        tree.insert(10, 30, "b")
+        tree.insert(17, 19, "c")
+        tree.insert(5, 20, "d")
+        tree.insert(12, 15, "e")
+        tree.insert(30, 40, "f")
+
+        r1 = tree.query_point(18)
+        names1 = sorted([x[2] for x in r1])
+        assert names1 == ["a", "b", "c", "d"], f"Got {names1}"
+
+        r2 = tree.query_point(10)
+        names2 = sorted([x[2] for x in r2])
+        assert names2 == ["b", "d"], f"Got {names2}"
+
+        r3 = tree.query_point(35)
+        names3 = sorted([x[2] for x in r3])
+        assert names3 == ["f"], f"Got {names3}"
+
+        r4 = tree.query_point(50)
+        assert len(r4) == 0
+
+        print("All tests passed!")
+
+  - id: ma_esc_012
+    tier: 2
+    prompt: |
+      Implement a function that finds the longest common subsequence (LCS) of
+      two strings. Return the LCS itself (not just the length).
+
+      ```python
+      def lcs(s1, s2):
+          """Return the longest common subsequence of s1 and s2."""
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert lcs("ABCBDAB", "BDCAB") in ("BCAB", "BDAB")  # length 4
+        assert len(lcs("ABCBDAB", "BDCAB")) == 4
+        assert lcs("ABC", "ABC") == "ABC"
+        assert lcs("ABC", "DEF") == ""
+        assert lcs("", "ABC") == ""
+        assert lcs("AGGTAB", "GXTXAYB") in ("GTAB",)  # length 4
+        assert len(lcs("AGGTAB", "GXTXAYB")) == 4
+        print("All tests passed!")
+
+  - id: ma_esc_013
+    tier: 3
+    prompt: |
+      Implement a function that computes the edit distance (Levenshtein distance)
+      between two strings AND returns the sequence of operations
+      (insert, delete, replace) to transform s1 into s2.
+
+      ```python
+      def edit_distance(s1, s2):
+          """Return (distance, operations) where operations is a list of
+          (operation, position, char) tuples.
+          Operations: 'insert', 'delete', 'replace'
+          """
+          pass
+      ```
+
+      Write the complete function.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        d, ops = edit_distance("kitten", "sitting")
+        assert d == 3
+        assert len(ops) == 3
+
+        d2, ops2 = edit_distance("", "abc")
+        assert d2 == 3
+
+        d3, ops3 = edit_distance("abc", "abc")
+        assert d3 == 0
+        assert ops3 == []
+
+        d4, ops4 = edit_distance("abc", "")
+        assert d4 == 3
+
+        d5, ops5 = edit_distance("saturday", "sunday")
+        assert d5 == 3
+
+        print("All tests passed!")
+
+  - id: ma_esc_014
+    tier: 2
+    prompt: |
+      Implement a rate limiter using the token bucket algorithm.
+      The bucket has a maximum capacity and refills at a constant rate.
+
+      ```python
+      import time
+
+      class TokenBucketRateLimiter:
+          def __init__(self, rate, capacity):
+              """
+              rate: tokens added per second
+              capacity: maximum tokens in bucket
+              """
+              pass
+
+          def allow(self):
+              """Return True if request is allowed, False if rate-limited."""
+              pass
+      ```
+
+      Write the complete class.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        import time
+        limiter = TokenBucketRateLimiter(rate=10, capacity=5)
+        # Should allow first 5 requests (bucket starts full)
+        for i in range(5):
+            assert limiter.allow() == True, f"Request {i} should be allowed"
+        # 6th should be denied (bucket empty)
+        assert limiter.allow() == False
+        # Wait for refill
+        time.sleep(0.3)
+        # Should have ~3 tokens now (0.3s * 10 tokens/s)
+        assert limiter.allow() == True
+        assert limiter.allow() == True
+        # Test capacity limit - wait long enough to overfill
+        time.sleep(1.0)
+        allowed = 0
+        for _ in range(10):
+            if limiter.allow():
+                allowed += 1
+        # Should be capped at capacity (5)
+        assert allowed == 5, f"Expected 5 allowed, got {allowed}"
+        print("All tests passed!")
+
+  - id: ma_esc_015
+    tier: 3
+    prompt: |
+      Implement the Aho-Corasick algorithm for multi-pattern string matching.
+      Given a text and a set of patterns, find all occurrences of any pattern
+      in the text.
+
+      ```python
+      class AhoCorasick:
+          def __init__(self, patterns):
+              """Build automaton from list of pattern strings."""
+              pass
+
+          def search(self, text):
+              """Return list of (position, pattern) for all matches."""
+              pass
+      ```
+
+      Write the complete class.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        ac = AhoCorasick(["he", "she", "his", "hers"])
+        results = ac.search("ahishers")
+        # Expected matches: "his" at 1, "he" at 4, "she" at 3, "hers" at 4
+        result_set = set((pos, pat) for pos, pat in results)
+        assert (1, "his") in result_set, f"Missing (1, 'his') in {result_set}"
+        assert (3, "she") in result_set, f"Missing (3, 'she') in {result_set}"
+        assert (4, "he") in result_set, f"Missing (4, 'he') in {result_set}"
+        assert (4, "hers") in result_set, f"Missing (4, 'hers') in {result_set}"
+
+        ac2 = AhoCorasick(["ab", "bc"])
+        r2 = ac2.search("abc")
+        r2_set = set((pos, pat) for pos, pat in r2)
+        assert (0, "ab") in r2_set
+        assert (1, "bc") in r2_set
+
+        ac3 = AhoCorasick(["xyz"])
+        r3 = ac3.search("abc")
+        assert len(r3) == 0
+
+        print("All tests passed!")
+
+  # ════════════════════════════════════════════════════════════════════
+  # Category E: Mini-SWE (repl+delegation >> direct)
+  # Each task: buggy module + failing tests. Fix the bug, pass all tests.
+  # Direct mode patches blind; REPL can run tests iteratively.
+  # ════════════════════════════════════════════════════════════════════
+
+  - id: ma_swe_001
+    tier: 2
+    prompt: |
+      The following EventEmitter class has a bug: `once` listeners fire
+      every time instead of only once. Find and fix the bug.
+
+      ```python
+      class EventEmitter:
+          def __init__(self):
+              self._listeners = {}
+
+          def on(self, event, callback):
+              self._listeners.setdefault(event, []).append(callback)
+
+          def once(self, event, callback):
+              """Register a listener that fires only once."""
+              def wrapper(*args, **kwargs):
+                  callback(*args, **kwargs)
+                  self.off(event, callback)  # BUG: removes callback, not wrapper
+              self.on(event, wrapper)
+
+          def off(self, event, callback):
+              if event in self._listeners:
+                  self._listeners[event] = [
+                      cb for cb in self._listeners[event] if cb != callback
+                  ]
+
+          def emit(self, event, *args, **kwargs):
+              for cb in list(self._listeners.get(event, [])):
+                  cb(*args, **kwargs)
+      ```
+
+      Write the complete fixed class.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        calls = []
+        ee = EventEmitter()
+        ee.once("ping", lambda: calls.append("once"))
+        ee.on("ping", lambda: calls.append("always"))
+        ee.emit("ping")
+        ee.emit("ping")
+        ee.emit("ping")
+        assert calls == ["once", "always", "always", "always"], f"Got {calls}"
+        # Test once with args
+        results = []
+        ee2 = EventEmitter()
+        ee2.once("data", lambda x: results.append(x))
+        ee2.emit("data", 42)
+        ee2.emit("data", 99)
+        assert results == [42], f"Got {results}"
+        print("All tests passed!")
+
+  - id: ma_swe_002
+    tier: 2
+    prompt: |
+      This pagination helper has a bug: it returns wrong results when
+      `page` exceeds the total number of pages. It should return an
+      empty list for out-of-range pages but currently raises an error.
+
+      ```python
+      class Paginator:
+          def __init__(self, items, page_size=10):
+              self.items = list(items)
+              self.page_size = page_size
+
+          @property
+          def total_pages(self):
+              return len(self.items) // self.page_size + 1
+
+          def get_page(self, page):
+              """Return items for 1-indexed page number."""
+              if page < 1:
+                  return []
+              start = (page - 1) * self.page_size
+              return self.items[start:start + self.page_size]
+      ```
+
+      The bug is in `total_pages` — it's wrong when items divide evenly.
+      Fix the class.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        p = Paginator(range(25), page_size=10)
+        assert p.total_pages == 3
+        assert p.get_page(1) == list(range(10))
+        assert p.get_page(3) == [20, 21, 22, 23, 24]
+        assert p.get_page(4) == []
+        # Exact multiple
+        p2 = Paginator(range(20), page_size=10)
+        assert p2.total_pages == 2
+        assert p2.get_page(2) == list(range(10, 20))
+        assert p2.get_page(3) == []
+        # Empty
+        p3 = Paginator([], page_size=10)
+        assert p3.total_pages == 0
+        assert p3.get_page(1) == []
+        # Single item
+        p4 = Paginator([42], page_size=10)
+        assert p4.total_pages == 1
+        assert p4.get_page(1) == [42]
+        print("All tests passed!")
+
+  - id: ma_swe_003
+    tier: 3
+    prompt: |
+      This CSV parser handles quoted fields but has a bug: it doesn't
+      handle escaped quotes inside quoted fields (doubled-quote convention:
+      `""` inside quotes means a literal `"`).
+
+      ```python
+      def parse_csv_line(line):
+          """Parse a single CSV line into fields. Supports quoted fields."""
+          fields = []
+          current = []
+          in_quotes = False
+
+          for char in line:
+              if char == '"':
+                  in_quotes = not in_quotes
+              elif char == ',' and not in_quotes:
+                  fields.append(''.join(current))
+                  current = []
+              else:
+                  current.append(char)
+
+          fields.append(''.join(current))
+          return fields
+      ```
+
+      Fix the function to handle `""` as an escaped quote inside quoted fields.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert parse_csv_line('a,b,c') == ['a', 'b', 'c']
+        assert parse_csv_line('"hello, world",b') == ['hello, world', 'b']
+        assert parse_csv_line('a,"b""c",d') == ['a', 'b"c', 'd']
+        assert parse_csv_line('""') == ['"']
+        assert parse_csv_line('"she said ""hi""",b') == ['she said "hi"', 'b']
+        assert parse_csv_line('a,b,') == ['a', 'b', '']
+        assert parse_csv_line('') == ['']
+        print("All tests passed!")
+
+  - id: ma_swe_004
+    tier: 2
+    prompt: |
+      This LRU cache decorator has a bug: it doesn't respect `maxsize`
+      correctly. When the cache is full, it should evict the least recently
+      used entry, but instead it never evicts anything.
+
+      ```python
+      from collections import OrderedDict
+      from functools import wraps
+
+      def lru_cache(maxsize=128):
+          def decorator(func):
+              cache = OrderedDict()
+
+              @wraps(func)
+              def wrapper(*args):
+                  if args in cache:
+                      cache.move_to_end(args)
+                      return cache[args]
+                  result = func(*args)
+                  cache[args] = result
+                  if len(cache) >= maxsize:
+                      cache.popitem(last=True)
+                  return result
+
+              wrapper.cache_info = lambda: {"size": len(cache), "maxsize": maxsize}
+              wrapper.cache_clear = lambda: cache.clear()
+              return wrapper
+          return decorator
+      ```
+
+      Find and fix the eviction bug.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        @lru_cache(maxsize=3)
+        def square(x):
+            return x * x
+        square(1); square(2); square(3)
+        assert square.cache_info()["size"] == 3
+        square(4)  # Should evict 1
+        assert square.cache_info()["size"] == 3
+        square(2)  # Hit, moves 2 to recent
+        square(5)  # Should evict 3 (oldest)
+        assert square.cache_info()["size"] == 3
+        # Verify 3 was evicted by checking it needs recomputation
+        calls = []
+        @lru_cache(maxsize=2)
+        def track(x):
+            calls.append(x)
+            return x
+        track(1); track(2)
+        assert len(calls) == 2
+        track(1)  # Cache hit
+        assert len(calls) == 2
+        track(3)  # Evicts 2
+        track(2)  # Cache miss, recomputes
+        assert len(calls) == 4
+        assert calls == [1, 2, 3, 2]
+        print("All tests passed!")
+
+  - id: ma_swe_005
+    tier: 2
+    prompt: |
+      This URL parser has a bug: it fails to parse URLs with ports and
+      ignores query parameters when a fragment is present.
+
+      ```python
+      import re
+
+      def parse_url(url):
+          """Parse URL into components dict."""
+          pattern = r'^(https?)://([^/:]+)(?::(\d+))?(/[^?#]*)?(?:\?([^#]*))?(?:#(.*))?$'
+          m = re.match(pattern, url)
+          if not m:
+              return None
+          return {
+              'scheme': m.group(1),
+              'host': m.group(2),
+              'port': int(m.group(3)) if m.group(3) else None,
+              'path': m.group(4) or '/',
+              'query': m.group(5),
+              'fragment': m.group(6),
+          }
+      ```
+
+      The regex is actually fine, but the function doesn't parse query
+      strings into key-value pairs. Enhance it to return `query` as a dict
+      and `query_string` as the raw string.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        r = parse_url("https://example.com:8080/path?a=1&b=2#frag")
+        assert r['scheme'] == 'https'
+        assert r['host'] == 'example.com'
+        assert r['port'] == 8080
+        assert r['path'] == '/path'
+        assert r['query'] == {'a': '1', 'b': '2'}
+        assert r['query_string'] == 'a=1&b=2'
+        assert r['fragment'] == 'frag'
+        r2 = parse_url("http://test.com/page")
+        assert r2['port'] is None
+        assert r2['query'] == {}
+        assert r2['query_string'] is None
+        r3 = parse_url("https://x.com/?key=val")
+        assert r3['query'] == {'key': 'val'}
+        print("All tests passed!")
+
+  - id: ma_swe_006
+    tier: 3
+    prompt: |
+      This task scheduler has a bug: tasks with dependencies can run before
+      their dependencies complete due to an incorrect readiness check.
+
+      ```python
+      class TaskScheduler:
+          def __init__(self):
+              self.tasks = {}
+              self.completed = set()
+              self.execution_order = []
+
+          def add_task(self, name, deps=None):
+              self.tasks[name] = set(deps) if deps else set()
+
+          def _is_ready(self, name):
+              """Check if all dependencies are completed."""
+              return all(d in self.completed for d in self.tasks.get(name, []))
+
+          def run(self):
+              """Execute all tasks in valid order."""
+              remaining = set(self.tasks.keys())
+              while remaining:
+                  ready = [t for t in remaining if self._is_ready(t)]
+                  if not ready:
+                      raise ValueError(f"Circular dependency: {remaining}")
+                  # Bug: runs ALL ready tasks but only marks first as complete
+                  task = ready[0]
+                  self.execution_order.append(task)
+                  self.completed.add(task)
+                  remaining.remove(task)
+              return self.execution_order
+      ```
+
+      The comment says "runs ALL ready tasks but only marks first" — but
+      actually the real bug is different. The scheduler works but is
+      inefficient: it only executes one task per iteration even when multiple
+      are ready. However, there's a correctness bug when a dependency refers
+      to a task that was never added. Fix BOTH issues:
+      1. Execute all ready tasks per iteration (batch execution)
+      2. Raise ValueError if a dependency references an unknown task
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        s = TaskScheduler()
+        s.add_task("a")
+        s.add_task("b")
+        s.add_task("c", deps=["a", "b"])
+        s.add_task("d", deps=["c"])
+        order = s.run()
+        assert order.index("a") < order.index("c")
+        assert order.index("b") < order.index("c")
+        assert order.index("c") < order.index("d")
+        # a and b should be in the same batch (both ready initially)
+        assert set(order[:2]) == {"a", "b"}
+        # Unknown dependency
+        s2 = TaskScheduler()
+        s2.add_task("x", deps=["nonexistent"])
+        try:
+            s2.run()
+            assert False, "Should raise ValueError for unknown dep"
+        except ValueError as e:
+            assert "nonexistent" in str(e).lower() or "unknown" in str(e).lower()
+        # Circular detection still works
+        s3 = TaskScheduler()
+        s3.add_task("a", deps=["b"])
+        s3.add_task("b", deps=["a"])
+        try:
+            s3.run()
+            assert False, "Should raise ValueError for circular"
+        except ValueError:
+            pass
+        print("All tests passed!")
+
+  - id: ma_swe_007
+    tier: 2
+    prompt: |
+      This retry decorator has a bug: it swallows the final exception
+      instead of re-raising it, so failed calls return None silently.
+
+      ```python
+      import time
+      from functools import wraps
+
+      def retry(max_attempts=3, delay=0.1, backoff=2.0, exceptions=(Exception,)):
+          def decorator(func):
+              @wraps(func)
+              def wrapper(*args, **kwargs):
+                  attempts = 0
+                  current_delay = delay
+                  while attempts < max_attempts:
+                      try:
+                          return func(*args, **kwargs)
+                      except exceptions as e:
+                          attempts += 1
+                          if attempts < max_attempts:
+                              time.sleep(current_delay)
+                              current_delay *= backoff
+              return wrapper
+          return decorator
+      ```
+
+      Fix the decorator so it re-raises the last exception after all retries
+      are exhausted.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        call_count = 0
+        @retry(max_attempts=3, delay=0.01)
+        def flaky():
+            global call_count
+            call_count += 1
+            if call_count < 3:
+                raise ValueError("not yet")
+            return "ok"
+        assert flaky() == "ok"
+        assert call_count == 3
+        # Test that it raises after all retries
+        @retry(max_attempts=2, delay=0.01, exceptions=(RuntimeError,))
+        def always_fail():
+            raise RuntimeError("permanent")
+        try:
+            always_fail()
+            assert False, "Should have raised"
+        except RuntimeError as e:
+            assert "permanent" in str(e)
+        # Test that non-matching exceptions propagate immediately
+        @retry(max_attempts=3, delay=0.01, exceptions=(ValueError,))
+        def wrong_error():
+            raise TypeError("wrong type")
+        try:
+            wrong_error()
+            assert False, "Should have raised TypeError"
+        except TypeError:
+            pass
+        print("All tests passed!")
+
+  - id: ma_swe_008
+    tier: 3
+    prompt: |
+      This configuration manager merges nested dicts but has a bug:
+      it mutates the default config instead of creating a copy, so
+      subsequent loads see stale merged values.
+
+      ```python
+      class ConfigManager:
+          def __init__(self, defaults):
+              self._defaults = defaults
+              self._overrides = {}
+
+          def set(self, key_path, value):
+              """Set a value using dot-separated key path."""
+              keys = key_path.split('.')
+              d = self._overrides
+              for k in keys[:-1]:
+                  d = d.setdefault(k, {})
+              d[keys[-1]] = value
+
+          def get_merged(self):
+              """Return defaults merged with overrides."""
+              return self._deep_merge(self._defaults, self._overrides)
+
+          def _deep_merge(self, base, override):
+              """Recursively merge override into base."""
+              result = base  # BUG: should be a copy
+              for key, value in override.items():
+                  if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                      result[key] = self._deep_merge(result[key], value)
+                  else:
+                      result[key] = value
+              return result
+
+          def reset(self):
+              self._overrides = {}
+      ```
+
+      Fix the mutation bug in `_deep_merge`.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        defaults = {"db": {"host": "localhost", "port": 5432}, "debug": False}
+        cm = ConfigManager(defaults)
+        cm.set("db.host", "prod-server")
+        merged = cm.get_merged()
+        assert merged["db"]["host"] == "prod-server"
+        assert merged["db"]["port"] == 5432
+        # Critical: defaults must NOT be mutated
+        assert defaults["db"]["host"] == "localhost", f"Defaults mutated: {defaults}"
+        # Reset and verify clean state
+        cm.reset()
+        merged2 = cm.get_merged()
+        assert merged2["db"]["host"] == "localhost"
+        # Multiple sets
+        cm.set("db.port", 3306)
+        cm.set("debug", True)
+        merged3 = cm.get_merged()
+        assert merged3["db"]["port"] == 3306
+        assert merged3["debug"] == True
+        assert defaults["debug"] == False
+        print("All tests passed!")
+
+  - id: ma_swe_009
+    tier: 2
+    prompt: |
+      This matrix class has a bug in multiplication: it transposes the
+      dimensions check, rejecting valid multiplications and accepting invalid ones.
+
+      ```python
+      class Matrix:
+          def __init__(self, data):
+              self.data = [list(row) for row in data]
+              self.rows = len(data)
+              self.cols = len(data[0]) if data else 0
+
+          def __mul__(self, other):
+              if self.rows != other.cols:  # BUG: should be self.cols != other.rows
+                  raise ValueError(f"Cannot multiply {self.rows}x{self.cols} by {other.rows}x{other.cols}")
+              result = [[0] * other.cols for _ in range(self.rows)]
+              for i in range(self.rows):
+                  for j in range(other.cols):
+                      for k in range(self.cols):
+                          result[i][j] += self.data[i][k] * other.data[k][j]
+              return Matrix(result)
+
+          def __eq__(self, other):
+              return self.data == other.data
+
+          def __repr__(self):
+              return f"Matrix({self.data})"
+      ```
+
+      Fix the dimension check.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        a = Matrix([[1, 2, 3], [4, 5, 6]])      # 2x3
+        b = Matrix([[7, 8], [9, 10], [11, 12]])  # 3x2
+        c = a * b  # Should work: 2x3 * 3x2 = 2x2
+        assert c.data == [[58, 64], [139, 154]]
+        assert c.rows == 2 and c.cols == 2
+        # Invalid multiplication
+        try:
+            a * Matrix([[1, 2], [3, 4]])  # 2x3 * 2x2 → invalid
+            assert False, "Should raise ValueError"
+        except ValueError:
+            pass
+        # Identity multiplication
+        eye = Matrix([[1, 0], [0, 1]])
+        m = Matrix([[3, 4], [5, 6]])
+        assert (m * eye).data == [[3, 4], [5, 6]]
+        print("All tests passed!")
+
+  - id: ma_swe_010
+    tier: 3
+    prompt: |
+      This JSON path query engine has a bug: array indexing and wildcard
+      matching don't work correctly together. `$.items[*].name` should
+      return all names in the items array, but it only returns the first.
+
+      ```python
+      def jsonpath(data, path):
+          """Simple JSON path query. Supports $.key, $.array[n], $.array[*]."""
+          parts = _parse_path(path)
+          results = [data]
+          for part in parts:
+              new_results = []
+              for item in results:
+                  if part == '*':
+                      if isinstance(item, list):
+                          new_results.extend(item)
+                      elif isinstance(item, dict):
+                          new_results.extend(item.values())
+                  elif part.isdigit():
+                      idx = int(part)
+                      if isinstance(item, list) and idx < len(item):
+                          new_results.append(item[idx])
+                  else:
+                      if isinstance(item, dict) and part in item:
+                          new_results.append(item[part])
+              results = new_results
+          return results
+
+      def _parse_path(path):
+          """Parse '$.items[*].name' into ['items', '*', 'name']."""
+          if path.startswith('$'):
+              path = path[1:]
+          parts = []
+          current = []
+          i = 0
+          while i < len(path):
+              c = path[i]
+              if c == '.':
+                  if current:
+                      parts.append(''.join(current))
+                      current = []
+              elif c == '[':
+                  if current:
+                      parts.append(''.join(current))
+                      current = []
+                  i += 1
+                  bracket = []
+                  while i < len(path) and path[i] != ']':
+                      bracket.append(path[i])
+                      i += 1
+                  parts.append(''.join(bracket))
+              else:
+                  current.append(c)
+              i += 1
+          if current:
+              parts.append(''.join(current))
+          return parts
+      ```
+
+      The parsing and traversal logic above is actually correct for basic
+      cases. The issue is that it doesn't handle nested arrays of objects
+      properly when filtering. Add support for recursive descent (`$..key`)
+      that finds a key at any depth.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        data = {
+            "store": {
+                "books": [
+                    {"title": "A", "price": 10},
+                    {"title": "B", "price": 20},
+                ],
+                "name": "MyStore"
+            }
+        }
+        # Basic path
+        assert jsonpath(data, "$.store.name") == ["MyStore"]
+        # Array wildcard
+        assert jsonpath(data, "$.store.books[*].title") == ["A", "B"]
+        # Array index
+        assert jsonpath(data, "$.store.books[0].price") == [10]
+        # Recursive descent
+        titles = jsonpath(data, "$..title")
+        assert sorted(titles) == ["A", "B"], f"Got {titles}"
+        prices = jsonpath(data, "$..price")
+        assert sorted(prices) == [10, 20]
+        # Deeply nested
+        deep = {"a": {"b": {"c": {"target": 42}}, "target": 7}}
+        assert sorted(jsonpath(deep, "$..target")) == [7, 42]
+        print("All tests passed!")
+
+  - id: ma_swe_011
+    tier: 2
+    prompt: |
+      This state machine implementation has a bug: it doesn't prevent
+      invalid transitions and allows transitions from any state to any
+      other state.
+
+      ```python
+      class StateMachine:
+          def __init__(self, initial_state, transitions):
+              """
+              transitions: dict mapping state -> list of (event, target_state)
+              """
+              self.state = initial_state
+              self.transitions = transitions
+              self.history = [initial_state]
+
+          def trigger(self, event):
+              """Trigger an event. Returns True if transition happened."""
+              for evt, target in self.transitions.get(self.state, []):
+                  if evt == event:
+                      self.state = target
+                      self.history.append(target)
+                      return True
+              # BUG: falls through and doesn't return False
+              self.state = event  # Wrong: treats event as state
+              self.history.append(event)
+              return True
+      ```
+
+      Fix the bug: invalid transitions should return False without changing state.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        transitions = {
+            "idle": [("start", "running"), ("reset", "idle")],
+            "running": [("pause", "paused"), ("stop", "idle")],
+            "paused": [("resume", "running"), ("stop", "idle")],
+        }
+        sm = StateMachine("idle", transitions)
+        assert sm.state == "idle"
+        assert sm.trigger("start") == True
+        assert sm.state == "running"
+        assert sm.trigger("invalid_event") == False
+        assert sm.state == "running"  # Unchanged
+        assert sm.trigger("pause") == True
+        assert sm.state == "paused"
+        assert sm.trigger("start") == False  # Can't start from paused
+        assert sm.state == "paused"
+        assert sm.trigger("resume") == True
+        assert sm.state == "running"
+        assert sm.trigger("stop") == True
+        assert sm.state == "idle"
+        assert sm.history == ["idle", "running", "paused", "running", "idle"]
+        print("All tests passed!")
+
+  - id: ma_swe_012
+    tier: 2
+    prompt: |
+      This ring buffer has a bug: it doesn't handle the wraparound
+      correctly when reading, returning stale data after the buffer wraps.
+
+      ```python
+      class RingBuffer:
+          def __init__(self, capacity):
+              self.capacity = capacity
+              self.buffer = [None] * capacity
+              self.write_pos = 0
+              self.count = 0
+
+          def write(self, value):
+              self.buffer[self.write_pos] = value
+              self.write_pos = (self.write_pos + 1) % self.capacity
+              if self.count < self.capacity:
+                  self.count += 1
+
+          def read_all(self):
+              """Return all values in insertion order (oldest to newest)."""
+              if self.count < self.capacity:
+                  return self.buffer[:self.count]
+              else:
+                  # BUG: wrong start position for wrapped buffer
+                  return self.buffer[self.write_pos:] + self.buffer[:self.write_pos - 1]
+      ```
+
+      Fix the `read_all` method.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        rb = RingBuffer(3)
+        rb.write(1); rb.write(2)
+        assert rb.read_all() == [1, 2]
+        rb.write(3)
+        assert rb.read_all() == [1, 2, 3]
+        rb.write(4)  # Overwrites 1
+        assert rb.read_all() == [2, 3, 4]
+        rb.write(5)  # Overwrites 2
+        assert rb.read_all() == [3, 4, 5]
+        rb.write(6)  # Overwrites 3
+        assert rb.read_all() == [4, 5, 6]
+        # Single element buffer
+        rb2 = RingBuffer(1)
+        rb2.write(10)
+        assert rb2.read_all() == [10]
+        rb2.write(20)
+        assert rb2.read_all() == [20]
+        print("All tests passed!")
+
+  - id: ma_swe_013
+    tier: 3
+    prompt: |
+      This expression tokenizer has a bug: it doesn't handle negative numbers
+      correctly when they appear after an operator or at the start of input.
+
+      ```python
+      def tokenize(expression):
+          """Tokenize math expression into numbers and operators."""
+          tokens = []
+          i = 0
+          while i < len(expression):
+              if expression[i].isspace():
+                  i += 1
+              elif expression[i].isdigit() or expression[i] == '.':
+                  j = i
+                  while j < len(expression) and (expression[j].isdigit() or expression[j] == '.'):
+                      j += 1
+                  tokens.append(('NUMBER', float(expression[i:j])))
+                  i = j
+              elif expression[i] in '+-*/()':
+                  tokens.append(('OP', expression[i]))
+                  i += 1
+              else:
+                  raise ValueError(f"Unexpected character: {expression[i]}")
+          return tokens
+      ```
+
+      Fix the tokenizer to handle negative numbers: a `-` is a unary minus
+      (part of a number) when it appears at the start or after another operator
+      or opening paren. Otherwise it's a binary minus operator.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert tokenize("3 + 4") == [('NUMBER', 3.0), ('OP', '+'), ('NUMBER', 4.0)]
+        assert tokenize("-5") == [('NUMBER', -5.0)]
+        assert tokenize("3 + -5") == [('NUMBER', 3.0), ('OP', '+'), ('NUMBER', -5.0)]
+        assert tokenize("(-3)") == [('OP', '('), ('NUMBER', -3.0), ('OP', ')')]
+        assert tokenize("3 - 4") == [('NUMBER', 3.0), ('OP', '-'), ('NUMBER', 4.0)]
+        assert tokenize("-3 * -2") == [('NUMBER', -3.0), ('OP', '*'), ('NUMBER', -2.0)]
+        assert tokenize("3.14 + -2.5") == [('NUMBER', 3.14), ('OP', '+'), ('NUMBER', -2.5)]
+        print("All tests passed!")
+
+  - id: ma_swe_014
+    tier: 2
+    prompt: |
+      This simple template engine has a bug: it doesn't handle nested
+      variable references or missing variables gracefully.
+
+      ```python
+      import re
+
+      def render_template(template, variables):
+          """Render template string with {{variable}} placeholders."""
+          def replace(match):
+              key = match.group(1).strip()
+              return str(variables.get(key, match.group(0)))
+
+          result = re.sub(r'\{\{(\w+)\}\}', replace, template)
+          return result
+      ```
+
+      The regex `\w+` doesn't match dotted paths like `user.name`. Fix it to:
+      1. Support dotted paths: `{{user.name}}` looks up `variables["user"]["name"]`
+      2. Return the original placeholder (e.g., `{{missing}}`) for missing keys
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        assert render_template("Hello {{name}}", {"name": "World"}) == "Hello World"
+        assert render_template("{{missing}}", {}) == "{{missing}}"
+        assert render_template("Hi {{user.name}}", {"user": {"name": "Alice"}}) == "Hi Alice"
+        assert render_template("{{a.b.c}}", {"a": {"b": {"c": 42}}}) == "42"
+        assert render_template("{{a.b.missing}}", {"a": {"b": {}}}) == "{{a.b.missing}}"
+        assert render_template("No vars here", {}) == "No vars here"
+        assert render_template("{{x}} and {{y}}", {"x": 1, "y": 2}) == "1 and 2"
+        print("All tests passed!")
+
+  - id: ma_swe_015
+    tier: 3
+    prompt: |
+      This priority queue–based job scheduler has two bugs:
+      1. Jobs with the same priority aren't processed in FIFO order
+      2. The `cancel` method doesn't work because it compares tuples wrong
+
+      ```python
+      import heapq
+
+      class JobScheduler:
+          def __init__(self):
+              self._queue = []
+              self._cancelled = set()
+
+          def submit(self, job_id, priority):
+              """Lower priority number = higher priority."""
+              heapq.heappush(self._queue, (priority, job_id))
+
+          def cancel(self, job_id):
+              self._cancelled.add(job_id)
+
+          def next_job(self):
+              """Return next job_id, skipping cancelled jobs. None if empty."""
+              while self._queue:
+                  priority, job_id = heapq.heappop(self._queue)
+                  if job_id not in self._cancelled:
+                      return job_id
+              return None
+      ```
+
+      Bug 1: When two jobs have equal priority, `heapq` compares `job_id`
+      strings, which gives alphabetical order, not insertion order. Fix by
+      adding a sequence counter as tiebreaker.
+
+      Fix both issues.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        s = JobScheduler()
+        s.submit("first", 1)
+        s.submit("second", 1)
+        s.submit("third", 1)
+        # Same priority: should be FIFO
+        assert s.next_job() == "first"
+        assert s.next_job() == "second"
+        assert s.next_job() == "third"
+        assert s.next_job() is None
+        # Priority ordering
+        s2 = JobScheduler()
+        s2.submit("low", 3)
+        s2.submit("high", 1)
+        s2.submit("med", 2)
+        assert s2.next_job() == "high"
+        assert s2.next_job() == "med"
+        assert s2.next_job() == "low"
+        # Cancellation
+        s3 = JobScheduler()
+        s3.submit("a", 1)
+        s3.submit("b", 2)
+        s3.submit("c", 3)
+        s3.cancel("b")
+        assert s3.next_job() == "a"
+        assert s3.next_job() == "c"  # b was cancelled
+        assert s3.next_job() is None
+        print("All tests passed!")
+
+  - id: ma_swe_016
+    tier: 2
+    prompt: |
+      This middleware pipeline has a bug: middleware functions are called
+      in the wrong order. They should execute in the order they were added
+      (first added = outermost), but currently they execute in reverse.
+
+      ```python
+      class Pipeline:
+          def __init__(self):
+              self.middlewares = []
+
+          def use(self, middleware):
+              """Add middleware. Called as middleware(data, next_fn)."""
+              self.middlewares.append(middleware)
+
+          def execute(self, data):
+              """Run data through the middleware pipeline."""
+              def create_chain(index):
+                  if index >= len(self.middlewares):
+                      return data
+                  def next_fn(d):
+                      return create_chain(index + 1)
+                  return self.middlewares[index](data, next_fn)
+              return create_chain(0)
+      ```
+
+      Two bugs:
+      1. `next_fn` ignores its argument `d` and always passes original `data`
+      2. When middleware modifies data and calls next_fn, the modification
+         should propagate through the chain
+
+      Fix both.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        log = []
+        p = Pipeline()
+        p.use(lambda data, next_fn: (log.append(f"A:{data}"), next_fn(data + 1))[1])
+        p.use(lambda data, next_fn: (log.append(f"B:{data}"), next_fn(data + 10))[1])
+        p.use(lambda data, next_fn: (log.append(f"C:{data}"), data * 2)[1])
+        result = p.execute(0)
+        assert log == ["A:0", "B:1", "C:11"], f"Got {log}"
+        assert result == 22, f"Got {result}"
+        # Empty pipeline
+        p2 = Pipeline()
+        assert p2.execute(42) == 42
+        # Single middleware
+        p3 = Pipeline()
+        p3.use(lambda data, next_fn: data + 100)
+        assert p3.execute(5) == 105
+        print("All tests passed!")
+
+  - id: ma_swe_017
+    tier: 3
+    prompt: |
+      This simple database table implementation has a bug: the `where`
+      filter doesn't correctly handle compound conditions (AND/OR).
+
+      ```python
+      class Table:
+          def __init__(self, columns):
+              self.columns = columns
+              self.rows = []
+
+          def insert(self, **kwargs):
+              row = {col: kwargs.get(col) for col in self.columns}
+              self.rows.append(row)
+
+          def select(self, *columns):
+              cols = columns if columns else self.columns
+              return Query(self.rows, cols)
+
+      class Query:
+          def __init__(self, rows, columns):
+              self.rows = rows
+              self.columns = columns
+              self._filters = []
+
+          def where(self, **conditions):
+              """Add AND filter: all conditions must match."""
+              self._filters.append(conditions)
+              return self
+
+          def or_where(self, **conditions):
+              """Add OR filter: any filter group can match."""
+              self._filters.append(conditions)
+              return self
+
+          def execute(self):
+              """Apply filters and return matching rows."""
+              if not self._filters:
+                  filtered = self.rows
+              else:
+                  filtered = []
+                  for row in self.rows:
+                      # BUG: treats all filter groups as AND instead of OR
+                      if all(
+                          all(row.get(k) == v for k, v in f.items())
+                          for f in self._filters
+                      ):
+                          filtered.append(row)
+              return [{col: row[col] for col in self.columns} for row in filtered]
+      ```
+
+      Fix: multiple `where` calls should be OR (any group matches).
+      Within each group, conditions are AND (all must match).
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        t = Table(["name", "age", "city"])
+        t.insert(name="Alice", age=30, city="NYC")
+        t.insert(name="Bob", age=25, city="LA")
+        t.insert(name="Charlie", age=30, city="LA")
+        t.insert(name="Diana", age=25, city="NYC")
+        # Single condition group
+        r1 = t.select("name").where(age=30).execute()
+        assert [x["name"] for x in r1] == ["Alice", "Charlie"]
+        # AND within group
+        r2 = t.select("name").where(age=30, city="LA").execute()
+        assert [x["name"] for x in r2] == ["Charlie"]
+        # OR between groups
+        r3 = t.select("name").where(city="NYC").or_where(age=25).execute()
+        names = [x["name"] for x in r3]
+        assert set(names) == {"Alice", "Bob", "Diana"}, f"Got {names}"
+        # No filters = all rows
+        r4 = t.select("name").execute()
+        assert len(r4) == 4
+        print("All tests passed!")
+
+  - id: ma_swe_018
+    tier: 2
+    prompt: |
+      This caching proxy has a bug: the TTL (time-to-live) check is inverted,
+      returning stale data and evicting fresh data.
+
+      ```python
+      import time
+
+      class CacheProxy:
+          def __init__(self, backend, ttl=60):
+              self.backend = backend
+              self.ttl = ttl
+              self._cache = {}
+
+          def get(self, key):
+              if key in self._cache:
+                  value, timestamp = self._cache[key]
+                  if time.time() - timestamp > self.ttl:  # BUG? or is it fine?
+                      return value  # Returns stale data when expired
+                  else:
+                      del self._cache[key]  # Evicts fresh data
+              # Cache miss
+              value = self.backend(key)
+              self._cache[key] = (value, time.time())
+              return value
+
+          def invalidate(self, key):
+              self._cache.pop(key, None)
+      ```
+
+      The if/else branches are swapped. Fix them.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        call_log = []
+        def backend(key):
+            call_log.append(key)
+            return f"value_{key}_{len(call_log)}"
+        cache = CacheProxy(backend, ttl=0.2)
+        # First call: cache miss
+        v1 = cache.get("a")
+        assert v1 == "value_a_1"
+        assert len(call_log) == 1
+        # Second call: cache hit (within TTL)
+        v2 = cache.get("a")
+        assert v2 == "value_a_1"
+        assert len(call_log) == 1  # No new backend call
+        # Wait for expiry
+        time.sleep(0.3)
+        v3 = cache.get("a")
+        assert v3 == "value_a_2"  # Fresh from backend
+        assert len(call_log) == 2
+        # Invalidate
+        cache.invalidate("a")
+        v4 = cache.get("a")
+        assert v4 == "value_a_3"
+        assert len(call_log) == 3
+        print("All tests passed!")
+
+  - id: ma_swe_019
+    tier: 3
+    prompt: |
+      This observable/reactive value system has a bug: derived values
+      don't update when their dependencies change, because the dependency
+      tracking only records the initial computation.
+
+      ```python
+      class Observable:
+          _current_tracker = None
+
+          def __init__(self, value):
+              self._value = value
+              self._subscribers = []
+
+          @property
+          def value(self):
+              if Observable._current_tracker is not None:
+                  Observable._current_tracker.add(self)
+              return self._value
+
+          @value.setter
+          def value(self, new_value):
+              if self._value != new_value:
+                  self._value = new_value
+                  for cb in self._subscribers:
+                      cb()
+
+          def subscribe(self, callback):
+              self._subscribers.append(callback)
+
+      class Computed:
+          def __init__(self, compute_fn):
+              self._compute_fn = compute_fn
+              self._deps = set()
+              self._value = None
+              self._dirty = True
+              # Initial computation to discover dependencies
+              self._track_and_compute()
+
+          def _track_and_compute(self):
+              self._deps = set()  # Clear old deps
+              Observable._current_tracker = self._deps
+              self._value = self._compute_fn()
+              Observable._current_tracker = None
+              self._dirty = False
+              # BUG: subscribes every time, causing duplicate subscriptions
+              for dep in self._deps:
+                  dep.subscribe(self._mark_dirty)
+
+          def _mark_dirty(self):
+              self._dirty = True
+
+          @property
+          def value(self):
+              if self._dirty:
+                  self._track_and_compute()
+              return self._value
+      ```
+
+      Fix the duplicate subscription bug: when re-tracking, unsubscribe
+      from old deps before subscribing to new ones.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        a = Observable(1)
+        b = Observable(2)
+        compute_count = [0]
+        def compute():
+            compute_count[0] += 1
+            return a.value + b.value
+        c = Computed(compute)
+        assert c.value == 3
+        initial_computes = compute_count[0]
+        a.value = 10
+        assert c.value == 12
+        b.value = 20
+        assert c.value == 30
+        # Verify no exponential recomputation from duplicate subscriptions
+        for i in range(50):
+            a.value = i
+            _ = c.value
+        # Should compute roughly 50 more times, NOT exponentially more
+        assert compute_count[0] < initial_computes + 120, f"Too many computes: {compute_count[0]}"
+        print("All tests passed!")
+
+  - id: ma_swe_020
+    tier: 2
+    prompt: |
+      This diff algorithm finds the longest common subsequence to compute
+      a minimal diff, but it has a bug in the output: it marks lines as
+      "changed" even when they're identical, because the comparison is
+      by index rather than by content.
+
+      ```python
+      def compute_diff(old_lines, new_lines):
+          """Compute line-by-line diff. Returns list of (op, line) tuples.
+          op: ' ' (unchanged), '-' (removed), '+' (added)
+          """
+          m, n = len(old_lines), len(new_lines)
+          # LCS dynamic programming
+          dp = [[0] * (n + 1) for _ in range(m + 1)]
+          for i in range(1, m + 1):
+              for j in range(1, n + 1):
+                  if old_lines[i-1] == new_lines[j-1]:
+                      dp[i][j] = dp[i-1][j-1] + 1
+                  else:
+                      dp[i][j] = max(dp[i-1][j], dp[i][j-1])
+
+          # Backtrack to produce diff
+          diff = []
+          i, j = m, n
+          while i > 0 or j > 0:
+              if i > 0 and j > 0 and old_lines[i-1] == new_lines[j-1]:
+                  diff.append((' ', old_lines[i-1]))
+                  i -= 1
+                  j -= 1
+              elif j > 0 and (i == 0 or dp[i][j-1] >= dp[i-1][j]):
+                  diff.append(('+', new_lines[j-1]))
+                  j -= 1
+              else:
+                  diff.append(('-', old_lines[i-1]))
+                  i -= 1
+
+          diff.reverse()
+          return diff
+      ```
+
+      Actually, this code is correct! But it doesn't handle the common
+      case where users want a unified diff format string. Add a
+      `format_unified` function that wraps this and produces:
+      ```
+      --- old
+      +++ new
+      @@ -1,N +1,M @@
+       unchanged line
+      -removed line
+      +added line
+      ```
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        old = ["line1", "line2", "line3"]
+        new = ["line1", "line2modified", "line3", "line4"]
+        diff = compute_diff(old, new)
+        assert diff[0] == (' ', 'line1')
+        assert diff[1] == ('-', 'line2')
+        assert diff[2] == ('+', 'line2modified')
+        assert diff[3] == (' ', 'line3')
+        assert diff[4] == ('+', 'line4')
+        # Unified format
+        output = format_unified(old, new)
+        lines = output.strip().split('\n')
+        assert lines[0] == '--- old'
+        assert lines[1] == '+++ new'
+        assert '@@ ' in lines[2]
+        body = [l for l in lines[3:] if l]
+        assert ' line1' in body
+        assert '-line2' in body
+        assert '+line2modified' in body
+        print("All tests passed!")
+
+  - id: ma_swe_021
+    tier: 3
+    prompt: |
+      This pub/sub message broker has a bug: pattern subscriptions using
+      wildcards don't match correctly. `user.*` should match `user.login`
+      and `user.logout` but NOT `user.profile.update` (single-level wildcard).
+
+      ```python
+      class MessageBroker:
+          def __init__(self):
+              self._exact = {}     # topic -> [callbacks]
+              self._patterns = {}  # pattern -> [callbacks]
+
+          def subscribe(self, topic, callback):
+              """Subscribe to exact topic or wildcard pattern.
+              * matches one level, # matches zero or more levels.
+              """
+              if '*' in topic or '#' in topic:
+                  self._patterns.setdefault(topic, []).append(callback)
+              else:
+                  self._exact.setdefault(topic, []).append(callback)
+
+          def publish(self, topic, message):
+              received = []
+              # Exact match
+              for cb in self._exact.get(topic, []):
+                  cb(topic, message)
+                  received.append(cb)
+              # Pattern match
+              for pattern, callbacks in self._patterns.items():
+                  if self._match(pattern, topic):
+                      for cb in callbacks:
+                          cb(topic, message)
+                          received.append(cb)
+              return len(received)
+
+          def _match(self, pattern, topic):
+              """Match MQTT-style wildcards."""
+              p_parts = pattern.split('.')
+              t_parts = topic.split('.')
+              # BUG: only checks if lengths are equal, doesn't handle # wildcard
+              if len(p_parts) != len(t_parts):
+                  return False
+              return all(
+                  pp == '*' or pp == tp
+                  for pp, tp in zip(p_parts, t_parts)
+              )
+      ```
+
+      Fix `_match` to correctly handle:
+      - `*` matches exactly one level
+      - `#` matches zero or more levels (must be last segment)
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        log = []
+        mb = MessageBroker()
+        mb.subscribe("user.*", lambda t, m: log.append(f"star:{t}"))
+        mb.subscribe("user.#", lambda t, m: log.append(f"hash:{t}"))
+        mb.subscribe("user.login", lambda t, m: log.append(f"exact:{t}"))
+        # Single level
+        mb.publish("user.login", {})
+        assert "star:user.login" in log
+        assert "hash:user.login" in log
+        assert "exact:user.login" in log
+        log.clear()
+        # Multi level: * should NOT match, # should
+        mb.publish("user.profile.update", {})
+        assert "star:user.profile.update" not in log
+        assert "hash:user.profile.update" in log
+        log.clear()
+        # Just "user" - # matches zero levels
+        mb.publish("user", {})
+        assert "star:user" not in log  # * requires exactly one more level
+        assert "hash:user" in log       # # matches zero levels
+        print("All tests passed!")
+
+  - id: ma_swe_022
+    tier: 2
+    prompt: |
+      This rate-limited queue has a bug: it doesn't wait between
+      dequeues, processing everything instantly regardless of the rate limit.
+
+      ```python
+      import time
+      from collections import deque
+
+      class RateLimitedQueue:
+          def __init__(self, max_per_second):
+              self.max_per_second = max_per_second
+              self.interval = 1.0 / max_per_second
+              self._queue = deque()
+              self._last_process_time = 0  # BUG: should be None or far past
+
+          def enqueue(self, item):
+              self._queue.append(item)
+
+          def process_next(self):
+              """Process next item, respecting rate limit.
+              Returns (item, waited) or (None, 0) if empty.
+              """
+              if not self._queue:
+                  return None, 0
+              now = time.time()
+              elapsed = now - self._last_process_time
+              wait_time = max(0, self.interval - elapsed)
+              if wait_time > 0:
+                  time.sleep(wait_time)
+              self._last_process_time = time.time()
+              return self._queue.popleft(), wait_time
+
+          def __len__(self):
+              return len(self._queue)
+      ```
+
+      The initial `_last_process_time = 0` means the first item always
+      processes without waiting (epoch time is far in the past). But the
+      real bug is that `process_next` should be usable in a loop and
+      `process_all` is missing. Add `process_all` that processes everything
+      at the rate limit and returns list of (item, wait) pairs.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        q = RateLimitedQueue(max_per_second=100)
+        for i in range(5):
+            q.enqueue(i)
+        start = time.time()
+        results = q.process_all()
+        elapsed = time.time() - start
+        assert len(results) == 5
+        assert [item for item, _ in results] == [0, 1, 2, 3, 4]
+        # At 100/sec = 0.01s interval, 5 items should take ~0.04-0.06s
+        assert elapsed >= 0.03, f"Too fast: {elapsed:.3f}s"
+        assert elapsed < 0.5, f"Too slow: {elapsed:.3f}s"
+        # Empty queue
+        assert q.process_all() == []
+        print("All tests passed!")
+
+  - id: ma_swe_023
+    tier: 3
+    prompt: |
+      This simple HTTP router has a bug: parameterized routes like
+      `/users/:id` don't extract the parameter value correctly, and
+      route priority is wrong (static routes should match before parametric).
+
+      ```python
+      class Router:
+          def __init__(self):
+              self.routes = []
+
+          def add_route(self, method, path, handler):
+              parts = path.strip('/').split('/')
+              self.routes.append((method, parts, handler))
+
+          def match(self, method, path):
+              """Return (handler, params) or (None, {})."""
+              parts = path.strip('/').split('/')
+              for route_method, route_parts, handler in self.routes:
+                  if route_method != method:
+                      continue
+                  if len(route_parts) != len(parts):
+                      continue
+                  params = {}
+                  match = True
+                  for rp, pp in zip(route_parts, parts):
+                      if rp.startswith(':'):
+                          params[rp[1:]] = pp
+                      elif rp != pp:
+                          match = False
+                          break
+                  if match:
+                      return handler, params
+              return None, {}
+      ```
+
+      Bug: routes are matched in insertion order, so if a parametric route
+      is added before a static route, the parametric route wins. Fix this
+      by sorting: static routes first, then parametric.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        r = Router()
+        r.add_route("GET", "/users/:id", lambda: "user_by_id")
+        r.add_route("GET", "/users/me", lambda: "current_user")
+        r.add_route("POST", "/users", lambda: "create_user")
+        # Static route should win over parametric
+        handler, params = r.match("GET", "/users/me")
+        assert handler() == "current_user", f"Got {handler()}"
+        assert params == {}
+        # Parametric route extracts param
+        handler, params = r.match("GET", "/users/123")
+        assert handler() == "user_by_id"
+        assert params == {"id": "123"}
+        # Method matching
+        handler, params = r.match("POST", "/users")
+        assert handler() == "create_user"
+        # No match
+        handler, params = r.match("DELETE", "/users")
+        assert handler is None
+        handler, params = r.match("GET", "/other")
+        assert handler is None
+        print("All tests passed!")
+
+  - id: ma_swe_024
+    tier: 2
+    prompt: |
+      This permission checker has a bug: wildcard permissions don't
+      work correctly. A user with permission `admin.*` should have access
+      to `admin.read` and `admin.write`, but not `admin.users.delete`.
+
+      ```python
+      class PermissionChecker:
+          def __init__(self):
+              self._roles = {}  # role -> set of permissions
+
+          def define_role(self, role, permissions):
+              self._roles[role] = set(permissions)
+
+          def check(self, roles, required_permission):
+              """Check if any of the given roles grant the required permission."""
+              for role in roles:
+                  perms = self._roles.get(role, set())
+                  for perm in perms:
+                      if perm == required_permission:
+                          return True
+                      if perm == '*':
+                          return True
+                      # BUG: doesn't handle wildcard matching
+              return False
+      ```
+
+      Add wildcard matching: `admin.*` matches any `admin.X` (one level).
+      `admin.**` matches any depth under admin.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        pc = PermissionChecker()
+        pc.define_role("admin", ["*"])
+        pc.define_role("editor", ["posts.*", "media.*"])
+        pc.define_role("viewer", ["posts.read"])
+        pc.define_role("supermod", ["users.**"])
+        # Admin has everything
+        assert pc.check(["admin"], "anything") == True
+        # Editor has single-level wildcard
+        assert pc.check(["editor"], "posts.read") == True
+        assert pc.check(["editor"], "posts.write") == True
+        assert pc.check(["editor"], "posts.comments.delete") == False
+        assert pc.check(["editor"], "users.read") == False
+        # Viewer has exact match only
+        assert pc.check(["viewer"], "posts.read") == True
+        assert pc.check(["viewer"], "posts.write") == False
+        # Supermod has recursive wildcard
+        assert pc.check(["supermod"], "users.read") == True
+        assert pc.check(["supermod"], "users.profile.update") == True
+        # Multiple roles
+        assert pc.check(["viewer", "editor"], "media.upload") == True
+        print("All tests passed!")
+
+  - id: ma_swe_025
+    tier: 3
+    prompt: |
+      This connection pool has a bug: connections are never returned to the
+      pool after use, causing pool exhaustion.
+
+      ```python
+      import threading
+      from collections import deque
+
+      class ConnectionPool:
+          def __init__(self, factory, max_size=5):
+              self._factory = factory
+              self._max_size = max_size
+              self._pool = deque()
+              self._in_use = 0
+              self._lock = threading.Lock()
+              self._available = threading.Condition(self._lock)
+
+          def acquire(self, timeout=None):
+              """Acquire a connection from the pool."""
+              with self._available:
+                  while True:
+                      if self._pool:
+                          conn = self._pool.popleft()
+                          self._in_use += 1
+                          return conn
+                      if self._in_use < self._max_size:
+                          self._in_use += 1
+                          return self._factory()
+                      # Pool exhausted, wait
+                      if not self._available.wait(timeout):
+                          raise TimeoutError("Connection pool exhausted")
+
+          def release(self, conn):
+              """Return a connection to the pool."""
+              with self._available:
+                  self._pool.append(conn)
+                  # BUG: doesn't decrement _in_use
+                  self._available.notify()
+
+          @property
+          def available(self):
+              with self._lock:
+                  return len(self._pool)
+
+          @property
+          def in_use(self):
+              with self._lock:
+                  return self._in_use
+      ```
+
+      Fix the `release` method to decrement `_in_use`.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        counter = [0]
+        def factory():
+            counter[0] += 1
+            return f"conn_{counter[0]}"
+        pool = ConnectionPool(factory, max_size=2)
+        c1 = pool.acquire()
+        c2 = pool.acquire()
+        assert pool.in_use == 2
+        assert pool.available == 0
+        pool.release(c1)
+        assert pool.in_use == 1
+        assert pool.available == 1
+        c3 = pool.acquire()
+        assert c3 == c1  # Reused from pool
+        pool.release(c2)
+        pool.release(c3)
+        assert pool.in_use == 0
+        assert pool.available == 2
+        # Should be able to acquire again after release
+        conns = [pool.acquire() for _ in range(2)]
+        assert pool.in_use == 2
+        for c in conns:
+            pool.release(c)
+        assert pool.in_use == 0
+        print("All tests passed!")
+
+  - id: ma_swe_026
+    tier: 2
+    prompt: |
+      This search index has a bug: searching for multiple terms with AND
+      semantics returns results matching ANY term instead of ALL terms.
+
+      ```python
+      class SearchIndex:
+          def __init__(self):
+              self._index = {}   # term -> set of doc_ids
+              self._docs = {}    # doc_id -> content
+
+          def add(self, doc_id, content):
+              self._docs[doc_id] = content
+              words = set(content.lower().split())
+              for word in words:
+                  self._index.setdefault(word, set()).add(doc_id)
+
+          def search(self, query):
+              """Search for documents matching ALL query terms."""
+              terms = query.lower().split()
+              if not terms:
+                  return []
+              results = set()
+              for term in terms:
+                  results.update(self._index.get(term, set()))  # BUG: union, not intersection
+              return sorted(results)
+      ```
+
+      Fix to use intersection (AND semantics).
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        idx = SearchIndex()
+        idx.add(1, "the quick brown fox")
+        idx.add(2, "the lazy brown dog")
+        idx.add(3, "quick lazy fox")
+        # Single term
+        assert idx.search("fox") == [1, 3]
+        # AND semantics: both terms required
+        assert idx.search("quick fox") == [1, 3]
+        assert idx.search("brown fox") == [1]
+        assert idx.search("brown dog") == [2]
+        # No match
+        assert idx.search("cat") == []
+        # All three docs have no common word set for this
+        assert idx.search("quick dog") == []
+        # Empty query
+        assert idx.search("") == []
+        print("All tests passed!")
+
+  - id: ma_swe_027
+    tier: 3
+    prompt: |
+      This graph class has a bug in cycle detection: it reports false
+      positives on DAGs with diamond patterns (A→B, A→C, B→D, C→D).
+
+      ```python
+      class Graph:
+          def __init__(self):
+              self.adj = {}
+
+          def add_edge(self, u, v):
+              self.adj.setdefault(u, []).append(v)
+              self.adj.setdefault(v, [])  # Ensure v exists
+
+          def has_cycle(self):
+              """Detect cycle using DFS."""
+              visited = set()
+              for node in self.adj:
+                  if node not in visited:
+                      if self._dfs_cycle(node, visited, set()):
+                          return True
+              return False
+
+          def _dfs_cycle(self, node, visited, path):
+              visited.add(node)
+              path.add(node)
+              for neighbor in self.adj.get(node, []):
+                  if neighbor in path:
+                      return True
+                  if neighbor in visited:  # BUG: skips already-visited nodes
+                      return True          # but visited ≠ in current path!
+                  if self._dfs_cycle(neighbor, visited, path):
+                      return True
+              path.remove(node)
+              return False
+      ```
+
+      Fix: `visited` means "fully explored" — skip it. Only `path`
+      (current recursion stack) indicates a cycle.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        # Diamond DAG: NOT a cycle
+        g1 = Graph()
+        g1.add_edge("A", "B")
+        g1.add_edge("A", "C")
+        g1.add_edge("B", "D")
+        g1.add_edge("C", "D")
+        assert g1.has_cycle() == False
+        # Actual cycle
+        g2 = Graph()
+        g2.add_edge("A", "B")
+        g2.add_edge("B", "C")
+        g2.add_edge("C", "A")
+        assert g2.has_cycle() == True
+        # Self loop
+        g3 = Graph()
+        g3.add_edge("A", "A")
+        assert g3.has_cycle() == True
+        # Linear chain
+        g4 = Graph()
+        g4.add_edge("A", "B")
+        g4.add_edge("B", "C")
+        g4.add_edge("C", "D")
+        assert g4.has_cycle() == False
+        # Disconnected with one cycle
+        g5 = Graph()
+        g5.add_edge("A", "B")
+        g5.add_edge("X", "Y")
+        g5.add_edge("Y", "X")
+        assert g5.has_cycle() == True
+        print("All tests passed!")
+
+  - id: ma_swe_028
+    tier: 2
+    prompt: |
+      This command parser for a CLI app has a bug: it doesn't handle
+      quoted arguments with spaces correctly, splitting them apart.
+
+      ```python
+      def parse_command(cmd_string):
+          """Parse command string into (command, args, flags).
+          Supports: cmd arg1 arg2 --flag=value --bool-flag "quoted arg"
+          """
+          parts = cmd_string.strip().split()  # BUG: splits quoted strings
+          if not parts:
+              return None, [], {}
+
+          command = parts[0]
+          args = []
+          flags = {}
+
+          for part in parts[1:]:
+              if part.startswith('--'):
+                  key_val = part[2:]
+                  if '=' in key_val:
+                      key, val = key_val.split('=', 1)
+                      flags[key] = val
+                  else:
+                      flags[key_val] = True
+              else:
+                  args.append(part)
+
+          return command, args, flags
+      ```
+
+      Fix the parser to handle quoted strings (both single and double quotes).
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        cmd, args, flags = parse_command('echo hello world')
+        assert cmd == 'echo'
+        assert args == ['hello', 'world']
+        cmd, args, flags = parse_command('grep "hello world" file.txt')
+        assert cmd == 'grep'
+        assert args == ['hello world', 'file.txt']
+        cmd, args, flags = parse_command("run --name=test --verbose")
+        assert flags == {'name': 'test', 'verbose': True}
+        cmd, args, flags = parse_command("deploy 'my app' --env=prod")
+        assert args == ['my app']
+        assert flags == {'env': 'prod'}
+        cmd, args, flags = parse_command("")
+        assert cmd is None
+        print("All tests passed!")
+
+  - id: ma_swe_029
+    tier: 3
+    prompt: |
+      This simple event sourcing system has a bug: replaying events
+      doesn't produce the same state as the original sequence because
+      the snapshot mechanism captures a reference rather than a copy.
+
+      ```python
+      class EventStore:
+          def __init__(self):
+              self.events = []
+              self.snapshots = {}
+
+          def append(self, event):
+              self.events.append(event)
+
+          def snapshot(self, name, state):
+              """Save a snapshot of current state."""
+              self.snapshots[name] = state  # BUG: stores reference, not copy
+
+          def replay(self, reducer, initial_state=None, from_snapshot=None):
+              """Replay events through reducer to rebuild state."""
+              if from_snapshot and from_snapshot in self.snapshots:
+                  state = self.snapshots[from_snapshot]
+                  # Find events after snapshot... simplified: replay all
+                  return state
+              state = initial_state
+              for event in self.events:
+                  state = reducer(state, event)
+              return state
+
+      def bank_reducer(state, event):
+          if state is None:
+              state = {"balance": 0, "transactions": []}
+          if event["type"] == "deposit":
+              state["balance"] += event["amount"]
+              state["transactions"].append(event)
+          elif event["type"] == "withdraw":
+              state["balance"] -= event["amount"]
+              state["transactions"].append(event)
+          return state
+      ```
+
+      Fix TWO bugs:
+      1. `snapshot` must deep-copy the state
+      2. `bank_reducer` mutates state instead of returning new state
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        store = EventStore()
+        store.append({"type": "deposit", "amount": 100})
+        store.append({"type": "deposit", "amount": 50})
+        state1 = store.replay(bank_reducer)
+        assert state1["balance"] == 150
+        assert len(state1["transactions"]) == 2
+        # Snapshot
+        store.snapshot("v1", state1)
+        store.append({"type": "withdraw", "amount": 30})
+        state2 = store.replay(bank_reducer)
+        assert state2["balance"] == 120
+        # Snapshot should be unchanged
+        snap = store.replay(bank_reducer, from_snapshot="v1")
+        assert snap["balance"] == 150, f"Snapshot mutated: {snap['balance']}"
+        assert len(snap["transactions"]) == 2
+        # Full replay should still work
+        state3 = store.replay(bank_reducer)
+        assert state3["balance"] == 120
+        assert len(state3["transactions"]) == 3
+        print("All tests passed!")
+
+  - id: ma_swe_030
+    tier: 2
+    prompt: |
+      This string similarity function computes Jaccard similarity on
+      character n-grams, but it has a bug: it uses a list instead of a
+      set for one side, causing duplicates to inflate the similarity score.
+
+      ```python
+      def ngrams(text, n=2):
+          """Generate character n-grams from text."""
+          text = text.lower()
+          return [text[i:i+n] for i in range(len(text) - n + 1)]
+
+      def jaccard_similarity(text1, text2, n=2):
+          """Compute Jaccard similarity on character n-grams."""
+          grams1 = ngrams(text1, n)  # BUG: list, not set
+          grams2 = ngrams(text2, n)  # BUG: list, not set
+          if not grams1 and not grams2:
+              return 1.0
+          if not grams1 or not grams2:
+              return 0.0
+          intersection = len([g for g in grams1 if g in grams2])
+          union = len(grams1) + len(grams2) - intersection
+          return intersection / union if union > 0 else 0.0
+      ```
+
+      Fix to use proper set operations for Jaccard similarity.
+    expected: ""
+    scoring_method: code_execution
+    scoring_config:
+      language: python
+      timeout: 10
+      test_code: |
+        # Identical strings
+        assert jaccard_similarity("hello", "hello") == 1.0
+        # Completely different
+        assert jaccard_similarity("abc", "xyz") == 0.0
+        # Partial overlap
+        sim = jaccard_similarity("abcdef", "abcxyz")
+        assert 0.0 < sim < 1.0
+        # Symmetric
+        assert jaccard_similarity("abc", "bcd") == jaccard_similarity("bcd", "abc")
+        # Repeated characters shouldn't inflate score
+        s1 = jaccard_similarity("aaa", "aab")
+        s2 = jaccard_similarity("abc", "abd")
+        # Both have 2 bigrams each, with 1 overlap each
+        assert abs(s1 - s2) < 0.01, f"s1={s1}, s2={s2}"
+        # Empty strings
+        assert jaccard_similarity("", "") == 1.0
+        assert jaccard_similarity("abc", "") == 0.0
+        print("All tests passed!")

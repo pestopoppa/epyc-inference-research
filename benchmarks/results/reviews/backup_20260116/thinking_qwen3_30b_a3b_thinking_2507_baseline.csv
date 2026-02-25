@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,15.69,2,Good reasoning about research flaws but truncated mid-answer
+thinking,t3_q2_causal_inference,15.76,2,Detailed DAG analysis but truncated before completing all parts
+thinking,t3_q3_reasoning_trap,16.37,2,Good dataset bias reasoning but truncated mid-scenario
+thinking,t2_q1_paradox,19.24,3,Complete philosophical analysis with multiple positions
+thinking,t2_q2_counterfactual,16.35,2,Detailed academic research analysis but heavily truncated
+thinking,t2_q3_formal,16.38,3,Complete formal proof with concrete example
+thinking,t2_q4_metacognition,16.54,2,Good Fermi estimation process but truncated before bounds
+thinking,t1_q1_multistep,15.86,3,Complete mathematical solution with verification
+thinking,t1_q2_hypothesis,17.95,3,Three alternative explanations with clear scenarios
+thinking,t1_q3_planning,16.29,2,Good constraint analysis but truncated before listing all orderings
+coder,t3_q1_concurrent_correctness,16.11,2,Good ABA problem discussion but truncated before fix
+coder,t3_q2_distributed_consistency,16.45,2,Lists conflict resolution strategies but truncated mid-answer
+coder,t3_q3_algorithmic_hardness,16.29,2,Good adversary argument reasoning but truncated before complete proof
+coder,t2_q1_design,17.10,3,Complete LRU cache implementation with explanation
+coder,t2_q2_debug_complex,16.65,2,Identifies race condition correctly but truncated explanation
+coder,t2_q3_optimize,16.46,2,Good hash map optimization approach but truncated
+coder,t2_q4_system,16.20,2,System design discussion but truncated
+coder,t1_q1_algorithm,16.37,2,Algorithm explanation but truncated
+coder,t1_q2_refactor,16.88,2,Refactoring discussion but truncated
+coder,t1_q3_test,16.44,2,Test strategy but truncated
+agentic,t3_q1_competing_constraints,16.39,2,Multi-constraint reasoning but truncated
+agentic,t3_q2_multi_agent_coordination,15.91,2,Agent coordination discussion but truncated
+agentic,t3_q3_adversarial_robustness,15.72,2,Security reasoning but truncated
+agentic,t2_q1_ambiguous,19.43,2,Ambiguity handling but truncated
+agentic,t2_q2_error_chain,15.50,2,Error chain analysis but truncated
+agentic,t2_q3_schema_edge,20.11,2,Schema edge case handling but truncated
+agentic,t2_q4_orchestration,16.05,2,Orchestration logic but truncated
+agentic,t1_q1_sequential,15.89,2,Sequential processing but truncated
+agentic,t1_q2_error_handling,16.47,2,Error handling strategy but truncated
+agentic,t1_q3_nested_params,20.09,2,Nested parameter handling but truncated
+general,t3_q1_policy_analysis,16.42,2,Policy analysis reasoning but truncated
+general,t3_q2_system_failure,16.45,2,System failure analysis but truncated
+general,t3_q3_strategic_communication,15.91,2,Communication strategy but truncated
+general,t2_q1_synthesis,18.39,2,Synthesis attempt but truncated
+general,t2_q2_transform,16.38,2,Transformation logic but truncated
+general,t2_q3_schedule,16.13,2,Scheduling approach but truncated
+general,t2_q4_inconsistency,18.99,3,Complete inconsistency detection with clear list
+general,t1_q1_json,16.28,3,Correct JSON output generated
+general,t1_q2_multistep,16.41,2,Multi-step processing but truncated mid-execution
+general,t1_q3_compare,16.55,2,Comparison analysis but excessive elaboration and truncation
+math,t3_q1_analysis,16.53,2,Complex analysis setup but truncated before solution
+math,t3_q2_combinatorics,16.14,2,Combinatorics reasoning but truncated
+math,t3_q3_probability_theory,16.25,2,Probability setup but truncated before final answer
+math,t2_q1_optimization,19.26,2,Optimization approach but truncated
+math,t2_q2_proof,15.75,2,Proof structure but truncated
+math,t2_q3_calculus,17.96,2,Calculus work but truncated
+math,t2_q4_statistics,16.70,2,Statistical reasoning but truncated
+math,t1_q1_word_problem,16.18,2,Word problem solution approach but truncated
+math,t1_q2_system_equations,18.50,2,Equation system setup but truncated
+math,t1_q3_probability,19.17,2,Probability calculation but truncated
+instruction_precision,t3_q1_self_referential,19.67,1,Shows thinking but fails self-referential constraint - no valid sentence produced
+instruction_precision,t3_q2_cascading_constraints,19.64,1,Shows planning but fails to produce the 5-word list - truncated mid-planning
+instruction_precision,t3_q3_meta_instruction,19.71,1,Analyzes instructions but fails to execute them - truncated before output
+instruction_precision,t2_q1_resist_elaboration,20.03,1,Fails completely - elaborate thinking instead of just '4'
+instruction_precision,t2_q2_maintain_format,19.60,1,Extensive thinking violates 'EXACTLY this format' constraint
+instruction_precision,t2_q3_empty_handling,19.83,1,Shows reasoning but fails constraint compliance
+instruction_precision,t2_q4_conflicting_constraints,19.80,1,Analyzes conflict but fails to follow format
+instruction_precision,t1_q1_negative_instruction,20.00,1,Violates 'do not' instruction with extra text
+instruction_precision,t1_q2_word_limit,19.68,1,Excessive thinking violates word limit
+instruction_precision,t1_q3_structured_format,19.60,1,Fails structured format requirement
+instruction_precision,t1_q4_multiple_constraints,20.11,1,Multiple constraint violations

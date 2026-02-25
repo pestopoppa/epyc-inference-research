@@ -1,0 +1,68 @@
+[
+  {
+    "id": "bind_01",
+    "prompt": "What is dependency injection and why is it useful?",
+    "role": "frontdoor",
+    "mode": "direct",
+    "routing_override": null,
+    "source": "general.yaml",
+    "rubric": {
+      "must_mention": ["inversion of control", "constructor/setter/interface injection", "testability (mock dependencies)", "loose coupling"],
+      "pass_if": "explains IoC principle and >=2 benefits (testability, modularity, etc.)"
+    }
+  },
+  {
+    "id": "bind_02",
+    "prompt": "Write a thread-safe singleton pattern in Java.",
+    "role": "coder_escalation",
+    "mode": "repl",
+    "routing_override": "coder_escalation",
+    "source": "coder.yaml",
+    "rubric": {
+      "valid_approaches": ["double-checked locking with volatile", "Bill Pugh (static inner class)", "enum singleton"],
+      "must_handle": "thread safety without excessive synchronization",
+      "reference": "public class Singleton {\n    private static volatile Singleton instance;\n    private Singleton() {}\n    public static Singleton getInstance() {\n        if (instance == null) {\n            synchronized (Singleton.class) {\n                if (instance == null) instance = new Singleton();\n            }\n        }\n        return instance;\n    }\n}",
+      "pass_if": "thread-safe implementation using any valid approach"
+    }
+  },
+  {
+    "id": "bind_03",
+    "prompt": "Explain the observer pattern with a practical example.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "routing_override": "worker_explore",
+    "source": "general.yaml",
+    "rubric": {
+      "must_mention": ["subject/observable maintains list of observers", "notify on state change", "loose coupling between subject and observers"],
+      "good_examples": ["event system (UI button clicks)", "pub/sub messaging", "MVC (model notifies views)", "stock price tracker"],
+      "pass_if": "correct pattern description with a concrete, practical example"
+    }
+  },
+  {
+    "id": "bind_04",
+    "prompt": "Design a plugin architecture for a text editor.",
+    "role": "architect_coding",
+    "mode": "direct",
+    "routing_override": "architect_coding",
+    "source": "coder.yaml",
+    "rubric": {
+      "must_include": ["plugin interface/abstract class", "plugin discovery (directory scan or manifest)", "lifecycle hooks (init, activate, deactivate)", "event system for editor events"],
+      "should_mention": ["sandboxing/security", "dependency resolution between plugins", "hot-reload capability"],
+      "pass_if": "defines plugin interface + discovery mechanism + lifecycle management"
+    }
+  },
+  {
+    "id": "bind_05",
+    "prompt": "Compare the strategy pattern vs the template method pattern.",
+    "role": "frontdoor",
+    "mode": "direct",
+    "routing_override": null,
+    "source": "general.yaml",
+    "rubric": {
+      "strategy": ["composition-based", "algorithm selected at runtime", "inject via constructor/setter"],
+      "template_method": ["inheritance-based", "algorithm skeleton in base class", "subclasses override specific steps"],
+      "key_difference": "composition (strategy) vs inheritance (template method)",
+      "pass_if": "correctly distinguishes composition vs inheritance approach"
+    }
+  }
+]

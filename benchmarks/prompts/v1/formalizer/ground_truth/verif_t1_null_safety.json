@@ -1,0 +1,108 @@
+{
+  "problem_id": "verif-t1-null-safety",
+  "original_task": "This getUserProfile function should never return null for valid user IDs. If the user doesn't exist, throw an exception.",
+  "formal_specification": {
+    "problem_type": "proof",
+    "variables": [
+      {
+        "name": "user_id",
+        "type": "string",
+        "domain": "non-empty string matching user ID pattern",
+        "description": "Unique identifier for the user"
+      },
+      {
+        "name": "result",
+        "type": "UserProfile | Exception",
+        "description": "The function's return value or thrown exception"
+      }
+    ],
+    "preconditions": [
+      "user_id != null",
+      "user_id != ''",
+      "matches(user_id, /^[a-zA-Z0-9_-]+$/)"
+    ],
+    "postconditions": [
+      "result != null",
+      "typeof(result) == UserProfile || threw(UserNotFoundException)"
+    ],
+    "invariants": [
+      "forall valid user_id: getUserProfile(user_id) != null",
+      "exists(user_id) implies result.id == user_id"
+    ],
+    "constraints": [
+      {
+        "expression": "result != null || exception_thrown",
+        "description": "Function must either return a valid profile or throw",
+        "hard": true
+      }
+    ]
+  },
+  "edge_cases": [
+    {
+      "description": "User ID is null",
+      "input": "null",
+      "expected_behavior": "Throw IllegalArgumentException",
+      "severity": "critical"
+    },
+    {
+      "description": "User ID is empty string",
+      "input": "''",
+      "expected_behavior": "Throw IllegalArgumentException",
+      "severity": "critical"
+    },
+    {
+      "description": "User exists but profile is incomplete",
+      "expected_behavior": "Return partial profile, never null",
+      "severity": "important"
+    },
+    {
+      "description": "Database connection fails",
+      "expected_behavior": "Throw appropriate exception, not null",
+      "severity": "critical"
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "criterion": "Never returns null for valid user IDs",
+      "testable": true,
+      "test_method": "Property-based testing with valid ID generator",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Throws UserNotFoundException for non-existent users",
+      "testable": true,
+      "test_method": "Unit test with non-existent ID",
+      "priority": "must_have"
+    },
+    {
+      "criterion": "Validates user_id format before database lookup",
+      "testable": true,
+      "test_method": "Unit test with invalid format IDs",
+      "priority": "should_have"
+    }
+  ],
+  "suggested_approach": {
+    "algorithm_family": "defensive programming",
+    "recommended_tools": ["Objects.requireNonNull", "Optional.orElseThrow", "@NonNull annotation"],
+    "decomposition": [
+      "Validate input (null check, format check)",
+      "Query database",
+      "Handle not-found case with exception",
+      "Return non-null result"
+    ]
+  },
+  "confidence": 0.95,
+  "ambiguities": [
+    {
+      "question": "What exception type should be thrown for invalid format?",
+      "assumption": "IllegalArgumentException",
+      "impact": "Affects exception hierarchy"
+    }
+  ],
+  "related_concepts": [
+    "Null Object Pattern",
+    "Option/Maybe types",
+    "Design by Contract",
+    "Defensive programming"
+  ]
+}

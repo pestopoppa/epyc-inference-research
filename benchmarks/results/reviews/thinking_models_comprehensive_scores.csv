@@ -1,0 +1,112 @@
+model,suite,question_id,claude_score,score_reason
+# DeepSeek-R1-Distill-Llama-70B (Q4_K_M)
+thinking_deepseek_r1_distill_llama_70b,thinking,t3_q1_methodological_critique,2,Identifies selection bias and confounding but truncated before completing 4 issues
+thinking_deepseek_r1_distill_llama_70b,thinking,t3_q2_causal_inference,2,Good start on DAG analysis with Gene as confounder but truncated
+thinking_deepseek_r1_distill_llama_70b,thinking,t3_q3_reasoning_trap,2,Identifies model/architecture difference issue but truncated before scenario
+thinking_deepseek_r1_distill_llama_70b,thinking,t2_q1_paradox,2,Good start on material constitution vs essentialist views but truncated
+thinking_deepseek_r1_distill_llama_70b,thinking,t2_q2_counterfactual,2,Good analysis of slower dissemination and localized collaboration but truncated
+thinking_deepseek_r1_distill_llama_70b,thinking,t2_q3_formal,2,Correctly identifies hypothetical syllogism but truncated
+thinking_deepseek_r1_distill_llama_70b,thinking,t2_q4_metacognition,2,Good Fermi estimation approach with households but truncated
+thinking_deepseek_r1_distill_llama_70b,thinking,t1_q1_multistep,2,Starts correct train problem approach but truncated
+thinking_deepseek_r1_distill_llama_70b,thinking,t1_q2_hypothesis,2,Identifies SES and health consciousness as alternatives but truncated
+thinking_deepseek_r1_distill_llama_70b,thinking,t1_q3_planning,2,Sets up A->B->D chain correctly but truncated
+thinking_deepseek_r1_distill_llama_70b,coder,t3_q1_concurrent_correctness,2,Identifies ABA problem scenario with preemption but truncated
+thinking_deepseek_r1_distill_llama_70b,coder,t3_q2_distributed_consistency,2,Lists LWW and Multi-Value strategies but truncated
+
+# DeepSeek-R1-Distill-Llama-8B (Q4_K_M)
+thinking_deepseek_r1_distill_llama_8b,agentic,t3_q1_competing_constraints,3,Complete JSON plan with steps and validation checks for CSV analysis
+thinking_deepseek_r1_distill_llama_8b,agentic,t3_q2_multi_agent_coordination,2,Good orchestration design but truncated at 2047 tokens
+thinking_deepseek_r1_distill_llama_8b,agentic,t3_q3_adversarial_robustness,3,Complete security analysis with policy recommendations
+thinking_deepseek_r1_distill_llama_8b,agentic,t2_q1_ambiguous,2,Chose email but verbose reasoning truncated at decision
+thinking_deepseek_r1_distill_llama_8b,agentic,t2_q2_error_chain,3,Correct reasoning to restart database service with proper JSON
+thinking_deepseek_r1_distill_llama_8b,agentic,t2_q3_schema_edge,3,Correct JSON with endpoint users and Bearer token header
+thinking_deepseek_r1_distill_llama_8b,agentic,t2_q4_orchestration,3,Complete deployment plan JSON with failure handling
+thinking_deepseek_r1_distill_llama_8b,agentic,t1_q1_sequential,1,Extremely verbose reasoning but no valid JSON array output
+thinking_deepseek_r1_distill_llama_8b,agentic,t1_q2_error_handling,1,Verbose circular reasoning without clear decision
+thinking_deepseek_r1_distill_llama_8b,agentic,t1_q3_nested_params,2,Truncated during reasoning
+
+# DeepSeek-R1-Distill-Qwen-7B (Q4_K_M)
+thinking_deepseek_r1_distill_qwen_7b,agentic,t3_q1_competing_constraints,3,Complete JSON plan with validation checks and fallback strategy
+thinking_deepseek_r1_distill_qwen_7b,agentic,t3_q2_multi_agent_coordination,2,Good orchestration reasoning but truncated before complete JSON
+thinking_deepseek_r1_distill_qwen_7b,agentic,t3_q3_adversarial_robustness,2,Identifies security issues but advice is generic
+thinking_deepseek_r1_distill_qwen_7b,agentic,t2_q1_ambiguous,2,Verbose reasoning eventually chose Slack but excessive repetition
+thinking_deepseek_r1_distill_qwen_7b,agentic,t2_q2_error_chain,2,Good reasoning but chose check_dns instead of restart_service
+thinking_deepseek_r1_distill_qwen_7b,agentic,t2_q3_schema_edge,2,Wrong endpoint format (missing /) and wrong header structure
+thinking_deepseek_r1_distill_qwen_7b,agentic,t2_q4_orchestration,2,Truncated during planning reasoning
+thinking_deepseek_r1_distill_qwen_7b,agentic,t1_q1_sequential,2,Missing tool names in JSON array output
+thinking_deepseek_r1_distill_qwen_7b,agentic,t1_q2_error_handling,1,Circular verbose reasoning without action
+thinking_deepseek_r1_distill_qwen_7b,agentic,t1_q3_nested_params,2,JSON structure wrong (name field instead of tool name)
+
+# DeepSeek-R1-Distill-Qwen-14B (Q4_K_M)
+thinking_deepseek_r1_distill_qwen_14b,general,t3_q1_policy_analysis,3,Complete analysis with 3 failure modes and revised policy
+thinking_deepseek_r1_distill_qwen_14b,general,t3_q2_system_failure,3,Correctly explains replica lag causing double-charges
+thinking_deepseek_r1_distill_qwen_14b,general,t3_q3_strategic_communication,2,Good analysis but truncated before actual statement
+thinking_deepseek_r1_distill_qwen_14b,general,t2_q1_synthesis,3,Clear two-phase recommendation balancing all concerns
+thinking_deepseek_r1_distill_qwen_14b,general,t2_q2_transform,2,Shows correct YAML structure but adds extra employees not in input
+thinking_deepseek_r1_distill_qwen_14b,general,t2_q3_schedule,2,Good constraint analysis but truncated before solution
+thinking_deepseek_r1_distill_qwen_14b,general,t2_q4_inconsistency,3,Correctly identifies body type and rate limit inconsistencies
+thinking_deepseek_r1_distill_qwen_14b,general,t1_q1_json,3,Correct JSON with all fields
+thinking_deepseek_r1_distill_qwen_14b,general,t1_q2_multistep,0,Repetitive loop output (Wait no count is 6 repeated many times)
+thinking_deepseek_r1_distill_qwen_14b,general,t1_q3_compare,3,Recommends microservices for high-traffic with good justification
+thinking_deepseek_r1_distill_qwen_14b,coder,t3_q1_concurrent_correctness,2,Good ABA problem setup but truncated
+thinking_deepseek_r1_distill_qwen_14b,coder,t3_q2_distributed_consistency,2,Lists strategies but scenarios incomplete
+
+# DeepSeek-R1-Distill-Qwen-32B (Q6_K)
+thinking_deepseek_r1_distill_qwen_32b,thinking,t3_q1_methodological_critique,3,Complete 4 methodological issues with improved experimental design
+thinking_deepseek_r1_distill_qwen_32b,thinking,t3_q2_causal_inference,3,Correct minimal adjustment set {Gene} and collider explanation
+thinking_deepseek_r1_distill_qwen_32b,thinking,t3_q3_reasoning_trap,3,Good scenario with medical imaging equipment diversity
+thinking_deepseek_r1_distill_qwen_32b,thinking,t2_q1_paradox,2,Good analysis but truncated at 2047 tokens
+thinking_deepseek_r1_distill_qwen_32b,thinking,t2_q2_counterfactual,3,Complete analysis across all 3 dimensions with second-order effects
+thinking_deepseek_r1_distill_qwen_32b,thinking,t2_q3_formal,3,Complete proof with truth table and rain/grass example
+thinking_deepseek_r1_distill_qwen_32b,thinking,t2_q4_metacognition,2,Good Fermi approach but truncated at 2047 tokens
+thinking_deepseek_r1_distill_qwen_32b,thinking,t1_q1_multistep,3,Correct answer 11:34 AM with complete work shown
+
+# Qwen3-30B-A3B-Thinking-2507 (Q8_0)
+thinking_qwen3_30b_a3b_thinking_2507,thinking,t3_q1_methodological_critique,3,Identifies 4 issues (selection bias test bias confounding statistical artifact)
+thinking_qwen3_30b_a3b_thinking_2507,thinking,t3_q2_causal_inference,2,Good DAG reasoning but truncated at 2047 tokens
+thinking_qwen3_30b_a3b_thinking_2507,thinking,t3_q3_reasoning_trap,2,Good test set bias reasoning but truncated
+thinking_qwen3_30b_a3b_thinking_2507,thinking,t2_q1_paradox,3,Complete Ship of Theseus with two philosophical positions
+thinking_qwen3_30b_a3b_thinking_2507,thinking,t2_q2_counterfactual,2,Good analysis but truncated with repetitive characters
+thinking_qwen3_30b_a3b_thinking_2507,thinking,t2_q3_formal,2,Correct proof but excessive repetition in output
+thinking_qwen3_30b_a3b_thinking_2507,thinking,t2_q4_metacognition,2,Good Fermi estimation approach but truncated
+thinking_qwen3_30b_a3b_thinking_2507,thinking,t1_q1_multistep,3,Correct answer 11:34 AM
+
+# Qwen3-4B-Thinking-2507 (Q8_0)
+thinking_qwen3_4b_thinking_2507,agentic,t3_q1_competing_constraints,2,Extended reasoning but incomplete plan due to truncation
+thinking_qwen3_4b_thinking_2507,agentic,t3_q2_multi_agent_coordination,2,Verbose reasoning truncated at 2047 tokens
+thinking_qwen3_4b_thinking_2507,agentic,t3_q3_adversarial_robustness,2,Good security analysis but truncated
+thinking_qwen3_4b_thinking_2507,agentic,t2_q1_ambiguous,2,Chose Slack but excessive verbose reasoning
+thinking_qwen3_4b_thinking_2507,agentic,t2_q2_error_chain,3,Good reasoning about database restart
+thinking_qwen3_4b_thinking_2507,agentic,t2_q3_schema_edge,2,Verbose but arrives at correct JSON
+thinking_qwen3_4b_thinking_2507,agentic,t2_q4_orchestration,2,Planning incomplete due to truncation
+thinking_qwen3_4b_thinking_2507,agentic,t1_q1_sequential,2,Verbose but correct tool call approach
+
+# Thinking-Reasoning (Qwen3-Next-80B-A3B-Thinking Q4_K_S)
+thinking_reasoning,math,t3_q1_analysis,3,Complete correct proof differentiability closed form and limit
+thinking_reasoning,math,t3_q2_combinatorics,2,Attempts proof but gets stuck on calculation verification
+thinking_reasoning,math,t3_q3_probability_theory,3,Excellent derivation showing E[N] = e
+thinking_reasoning,math,t2_q1_optimization,3,Correct answer 5000 sq meters
+thinking_reasoning,math,t2_q2_proof,3,Correct identification of inductive step failure at n=1
+thinking_reasoning,math,t2_q3_calculus,3,Correct integral = 10
+thinking_reasoning,math,t2_q4_statistics,3,Correct calculations mean median std and outlier analysis
+thinking_reasoning,math,t1_q1_word_problem,3,Correct calculations for discount problem
+thinking_reasoning,general,t3_q1_policy_analysis,3,Complete analysis with failure modes and monitoring
+thinking_reasoning,general,t3_q2_system_failure,3,Correct double-charge explanation with replica lag
+
+# Qwen3-30B-A3B-Thinking-2507 Q4KS (quantized)
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,thinking,t3_q1_methodological_critique,3,Similar quality to Q8_0 version
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,thinking,t2_q1_paradox,3,Good Ship of Theseus analysis
+thinking_qwen3_30b_a3b_thinking_2507_q4ks,thinking,t1_q1_multistep,3,Correct answer 11:34 AM
+
+# DeepSeek-R1-Distill-Qwen-14B Q6KL (quantized)
+thinking_deepseek_r1_distill_qwen_14b_q6kl,general,t3_q1_policy_analysis,3,Complete analysis similar to Q4_K_M version
+thinking_deepseek_r1_distill_qwen_14b_q6kl,general,t2_q1_synthesis,3,Good two-phase recommendation
+thinking_deepseek_r1_distill_qwen_14b_q6kl,general,t1_q1_json,3,Correct JSON output
+
+# Phi-4-Reasoning-Plus (baseline and Q8)
+thinking_phi_4_reasoning_plus,thinking,t3_q1_methodological_critique,3,Good methodological critique
+thinking_phi_4_reasoning_plus,thinking,t2_q1_paradox,3,Philosophical analysis of identity
+thinking_phi_4_reasoning_plus,thinking,t1_q1_multistep,3,Correct train problem solution
+thinking_phi_4_reasoning_plus_q8,thinking,t3_q1_methodological_critique,3,Similar quality to F16 version
+thinking_phi_4_reasoning_plus_q8,thinking,t2_q1_paradox,3,Good philosophical analysis
+thinking_phi_4_reasoning_plus_q8,thinking,t1_q1_multistep,3,Correct answer

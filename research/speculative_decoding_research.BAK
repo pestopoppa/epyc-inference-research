@@ -1,0 +1,838 @@
+# Speculative Decoding Research: Multi-Track Optimization Plan
+
+## Executive Summary
+
+This document tracks research into maximizing LLM inference throughput on AMD EPYC 9655 "Turin" (96-core Zen 5) with 1.13TB RAM. The primary focus is speculative decoding techniques, comparing external draft models, internal prediction heads (Medusa/EAGLE), and MoE self-drafting.
+
+**Key Insight:** On CPU (memory-bandwidth bound), the optimal approach minimizes memory traffic. Methods that avoid loading a second model (EAGLE, Medusa, MoE self-drafting) have theoretical advantages over dual-model speculation.
+
+| Track | Approach | Status | Expected Speedup |
+|-------|----------|--------|------------------|
+| **Track 1** | External Draft Model | 🔄 Cross-testing pairs | 2-10x (model dependent) |
+| **Track 2** | MoE Self-Drafting | 🔴 Needs C++ | Optimal bandwidth |
+| **Track 3** | EAGLE-style Internal Heads | 🔬 Research | 2-3x (requires training) |
+| **Track 4** | Medusa Multi-Head | 🔬 Research | 2-3x (requires training) |
+
+---
+
+## Background: Speculative Decoding Landscape
+
+### The Core Problem
+LLM inference is memory-bandwidth bound. Each token requires loading the entire model from RAM. On EPYC 9655 with ~460 GB/s bandwidth, a 32B Q4 model (~18GB) theoretically allows ~25 tokens/sec single-stream.
+
+### Solution Approaches
+
+#### 1. External Draft Model (Traditional)
+- Small model (0.5-3B) generates K draft tokens
+- Large model verifies in single forward pass
+- **Pro:** Simple, works with any model pair
+- **Con:** Two models in memory = 2x bandwidth pressure
+
+#### 2. EAGLE (Extrapolation Algorithm for Greater Language-model Efficiency)
+- Trains lightweight "draft head" on target model's hidden states
+- Uses low/mid/high-level features for next-token prediction
+- **Pro:** Single model, minimal overhead
+- **Con:** Requires training EAGLE checkpoint per model
+
+#### 3. Medusa (Multiple Decoding Heads)
+- Adds K parallel prediction heads to final layer
+- Each head predicts token at position +1, +2, ... +K
+- Tree attention verifies candidates simultaneously
+- **Pro:** No separate model, parameter-efficient training
+- **Con:** Requires fine-tuning heads per model
+
+#### 4. MoE Self-Drafting (Our Focus for Track 2)
+- MoE models (DeepSeek, Qwen-MoE) activate K experts per token
+- Draft pass: Force Top-1 expert (fast, ~1/8 compute)
+- Verify pass: Full Top-8 experts (accurate)
+- **Pro:** Zero additional parameters, guaranteed vocab match
+- **Con:** Only works for MoE architectures
+
+---
+
+## Track 1: External Draft Model (Cross-Testing)
+
+### Status
+🔄 **Initial results promising** (10x on Qwen2.5-Coder-32B) — cross-testing additional model pairs in progress
+
+### Validated Configurations
+
+| Target Model | Draft Model | K | Acceptance | Speedup |
+|--------------|-------------|---|------------|---------|
+| Qwen2.5-Coder-32B | Qwen2.5-Coder-0.5B | 8 | ~83% (code) | 10x |
+| Qwen2.5-Coder-32B | Qwen2.5-Coder-0.5B | 8 | ~32% (prose) | 3x |
+
+### Content-Aware Adaptive K
+
+Based on research findings, optimal K varies by content type:
+
+| Content Type | Optimal K | Acceptance Rate | Detection Pattern |
+|--------------|-----------|-----------------|-------------------|
+| Code/Structured | 16-24 | 70-85% | `{ } ( ) ; \`\`\`` |
+| Prose/General | 6-10 | 25-40% | Normal text |
+| Math/Proofs | 4-8 | 20-35% | ∑ ∀ ∫ proof theorem |
+| JSON/Schema | 4-6 | Variable | `"type":` structured |
+
+### NUMA-Optimized Multi-Process Architecture
+
+For maximum throughput, separate draft and target onto different NUMA nodes:
+
+```
+┌─────────────────────────┐     ┌─────────────────────────┐
+│     Draft Server        │     │     Target Server       │
+│  NUMA Node 0 (32 cores) │────▶│  NUMA Nodes 1-3 (64c)   │
+│  Port 8080              │     │  Port 8081              │
+│  ~4GB model             │     │  ~18GB model            │
+└─────────────────────────┘     └─────────────────────────┘
+```
+
+**Launch commands:**
+```bash
+# Draft (fast, low latency)
+numactl --physcpubind=0-31 --membind=0 \
+  ./llama-server -m draft.gguf --port 8080 -t 32 --mlock
+
+# Target (high throughput)  
+numactl --physcpubind=32-95 --membind=1,2,3 \
+  ./llama-server -m target.gguf --port 8081 -t 64 --mlock
+```
+
+### Critical Implementation Notes
+
+1. **Overshoot Bug:** If draft generates 10 tokens but target rejects #2, discard #3-#10
+2. **Tokenizer Match:** Draft and target MUST share vocabulary
+3. **KV Cache:** Target verifies all K tokens in single forward pass
+
+---
+
+## Track 2: MoE Self-Drafting (God Mode)
+
+### Status
+🟡 **Phase 1: Quality Validation In Progress** — Implementing soft mask to test Top-1 acceptance rate
+
+### Background: Initial Attempt Failed
+
+**Approach 1: Override n_expert_used** (Dec 2024)
+- Added `moe_n_expert_override` parameter to context params
+- Modified `build_moe_ffn()` to use override value
+- **FAILED:** `n_expert_used` is coupled to tensor dimensions, not just expert selection
+- Crash: `GGML_ASSERT(view_src == NULL || data_size == 0 || data_size + view_offs <= ggml_nbytes(view_src))`
+- Root cause: Tensors like `up_exps` are shaped `[n_ff, n_expert_used, n_tokens]`
+
+### Two-Phase Implementation Strategy
+
+**Phase 1: Soft Mask Quality Validation** (Current)
+- Keep full tensor shapes (8 experts allocated)
+- After router computes weights, zero out experts 1-7 (keep only top-1)
+- Test if Top-1 produces coherent text
+- Target acceptance rate: >40-50% for viability
+
+**Phase 2: Hard Mask Performance** (Pending Phase 1)
+- Refactor `build_moe_ffn` to decouple allocation from execution
+- Add `n_expert_exec` parameter to `ggml_mul_mat_id`
+- Skip memory loads for masked experts (actual speedup)
+
+### The Core Insight
+
+MoE models activate K experts per token (typically K=8). By forcing Top-1:
+```
+Standard MoE Forward Pass:
+  Input → Router → Select Top-8 Experts → Weighted Sum → Output
+  (Full compute, full accuracy)
+
+Self-Draft Forward Pass:
+  Input → Router → Select Top-1 Expert (softmask others) → Output
+  (Simulated 1/8 compute, lower accuracy but fast)
+```
+
+**Advantages:**
+- Vocabulary guaranteed 100% compatible (same model)
+- Single model in memory (no bandwidth double-dip)
+- No additional training required
+
+### Soft Mask Implementation (Phase 1)
+
+**File:** `src/llama-graph.cpp`, function `build_moe_ffn()`
+
+**Target Location:** After line 995 where weights are computed:
+```cpp
+ggml_tensor * weights = ggml_get_rows(ctx0, probs, selected_experts); // [1, n_expert_used, n_tokens]
+```
+
+**Modification:** Add soft mask controlled by `cparams.moe_n_expert_override`:
+```cpp
+// SOFT MASK: If moe_n_expert_override is set, zero weights for experts beyond override
+if (cparams.moe_n_expert_override > 0 && cparams.moe_n_expert_override < n_expert_used) {
+    // Create mask [1, n_expert_used, 1] with 1s for first N experts, 0s for rest
+    ggml_tensor * mask = ggml_new_tensor_3d(ctx0, weights->type, 1, n_expert_used, 1);
+    // Set values: mask[0,0..N-1,0] = 1.0, mask[0,N..7,0] = 0.0
+    // Apply: weights = weights * mask
+}
+```
+
+### Parameters Already Added
+
+These parameters were added in the initial attempt and remain in place:
+
+**include/llama.h** (llama_context_params):
+```cpp
+int32_t  moe_n_expert_override;  // 0 = model default, 1+ = force N experts
+```
+
+**common/arg.cpp** (CLI flag):
+```cpp
+--moe-n-expert N   // MoE: override number of active experts
+```
+
+**common/common.cpp** (propagation to llama context params)
+
+### Test Plan
+
+1. Build llama.cpp with soft mask modification
+2. Run baseline on DeepSeek-R1-32B (full Top-8)
+3. Run with `--moe-n-expert 1` (soft-masked Top-1)
+4. Compare:
+   - Output coherence (qualitative)
+   - Perplexity on reference text
+   - Token-level acceptance rate simulation
+
+### Files Modified (Track 2)
+
+| File | Change | Status |
+|------|--------|--------|
+| include/llama.h | Added moe_n_expert_override | ✅ Complete |
+| src/llama-cparams.h | Added moe_n_expert_override | ✅ Complete |
+| src/llama-context.cpp | Default value + propagation | ✅ Complete |
+| common/arg.cpp | CLI flag --moe-n-expert | ✅ Complete |
+| common/common.h | Field in common_params | ✅ Complete |
+| common/common.cpp | Propagation to llama params | ✅ Complete |
+| src/llama-graph.cpp | Soft mask in build_moe_ffn | 🔄 In Progress |
+
+---
+
+## Track 3: EAGLE-Style Speculation
+
+### Overview
+
+EAGLE (Extrapolation Algorithm for Greater Language-model Efficiency) trains a lightweight draft head that predicts next tokens using the target model's hidden states.
+
+**Key Papers:**
+- EAGLE-1 (ICML'24): Basic feature extrapolation
+- EAGLE-2 (EMNLP'24): Dynamic draft tree based on confidence
+- EAGLE-3 (NeurIPS'25): Multi-level feature fusion (low/mid/high)
+
+### EAGLE-3 Architecture
+
+```
+Target Model Forward Pass:
+  └── Layer 1-10:  Low-level features  ──┐
+  └── Layer 11-20: Mid-level features  ──┼──▶ EAGLE Head ──▶ Draft Tokens
+  └── Layer 21-32: High-level features ──┘
+```
+
+### Status in llama.cpp
+
+- **Not yet supported** (as of late 2024)
+- Active discussion: [github.com/ggml-org/llama.cpp/discussions/15902](https://github.com/ggml-org/llama.cpp/discussions/15902)
+- Feature request: [github.com/ggml-org/llama.cpp/issues/15305](https://github.com/ggml-org/llama.cpp/issues/15305)
+
+### Available EAGLE Checkpoints
+
+From HuggingFace:
+- `yuhuili/EAGLE3-LLaMA3.1-Instruct-8B`
+- `yuhuili/EAGLE3-Qwen2.5-7B-Instruct`
+- Various community EAGLE models
+
+### vLLM Support
+
+vLLM supports EAGLE-3:
+```python
+llm = LLM(
+    model="meta-llama/Llama-3.1-8B-Instruct",
+    speculative_config={
+        "method": "eagle3",
+        "model": "yuhuili/EAGLE3-LLaMA3.1-Instruct-8B",
+        "num_speculative_tokens": 5
+    }
+)
+```
+
+### CPU Considerations
+
+EAGLE may be less optimal on CPU than GPU because:
+- Extracting multi-level features adds overhead
+- CPU has lower parallelism for tree attention
+- Bandwidth savings less dramatic than avoiding second model entirely
+
+**Recommendation:** Prioritize Track 2 (MoE self-drafting) for DeepSeek, use Track 1 (external draft) for other models, explore EAGLE only if pre-trained checkpoints available.
+
+---
+
+## Track 4: Medusa Multi-Head Prediction
+
+### Overview
+
+Medusa adds K parallel prediction heads to the model's final layer. Each head predicts the token at a different future position.
+
+**Key Paper:** "MEDUSA: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads" (ICML'24)
+
+### Architecture
+
+```
+                    ┌─▶ Head 1 ──▶ Token +1 prediction
+Final Hidden ──────▶├─▶ Head 2 ──▶ Token +2 prediction  
+State               ├─▶ Head 3 ──▶ Token +3 prediction
+                    └─▶ Head 4 ──▶ Token +4 prediction
+                           │
+                           ▼
+                    Tree Attention (verify all candidates)
+```
+
+### Speedup Results (from paper)
+
+| Model | Medusa-1 | Medusa-2 |
+|-------|----------|----------|
+| Vicuna-7B | 2.2x | 2.8x |
+| Vicuna-13B | 2.1x | 2.5x |
+| Vicuna-33B | 2.0x | 2.3x |
+
+### Training Requirements
+
+**Medusa-1:** Freeze base model, train only heads (parameter-efficient)
+**Medusa-2:** Fine-tune base model + heads (better but more expensive)
+
+### CPU Considerations
+
+- Tree attention requires processing multiple candidates simultaneously
+- On CPU, this may not parallelize as efficiently as GPU
+- Memory overhead from multiple head weights
+
+**Recommendation:** Medusa requires training infrastructure. Lower priority than Tracks 1-2 unless pre-trained Medusa heads become available.
+
+---
+
+## Track 5: SSM Architecture (Blocked)
+
+### Status
+⛔ **Fundamentally Incompatible**
+
+### The Problem
+
+Qwen3-Next and similar SSM (State Space Model/Mamba) architectures use recurrent state instead of KV cache:
+
+- Standard speculative decoding: Generate K drafts → Verify → **Rollback KV cache** on rejection
+- SSM models: State is recurrent, cannot "rollback" — must recompute from scratch
+
+### Research Directions (Future)
+
+- **STree:** Tree-based speculation adapted for SSMs
+- **SpeculativeMamba:** Mamba-specific algorithms
+
+### Baseline Performance
+
+```bash
+# SSM models run at their natural speed (no speculation)
+OMP_NUM_THREADS=1 numactl --interleave=all \
+  ./llama-cli -m Qwen3-Next-80B-A3B-Q4_K_M.gguf -t 96 -n 256
+# Expected: ~11-12 t/s baseline
+```
+
+---
+
+## Track 1: Further Investigation Topics
+
+### Questions for Marginal Gains
+
+These investigations may yield incremental improvements to external draft speculative decoding:
+
+#### 1. Multi-turn Conversations: Context Length Effects
+**Question:** Does acceptance rate degrade as context grows?
+
+**Hypothesis:** Draft model's limited context window may cause divergence from target as conversation history exceeds draft's training distribution.
+
+**Test Protocol:**
+```bash
+# Test acceptance at different context lengths
+for ctx in 1024 4096 8192 16384 32768; do
+  ./llama-speculative -m target.gguf --draft draft.gguf \
+    --ctx-size $ctx --draft-max 8 -n 256 \
+    -p "<long_context_prompt_of_length_$ctx>"
+done
+```
+
+**Expected Findings:**
+- Code acceptance likely stable (structural patterns persist)
+- Prose acceptance may degrade 5-15% at 16K+ context
+- Mitigation: Reduce K dynamically when context > 8K
+
+#### 2. Batch Inference Parallelization
+**Question:** Can multiple requests share speculation overhead?
+
+**Architecture Options:**
+```
+Option A: Shared Draft, Parallel Targets
+┌────────────────┐     ┌─────────────────┐
+│  Draft Server  │────▶│  Target Pool    │
+│  (1 process)   │     │  (N processes)  │
+└────────────────┘     └─────────────────┘
+- Draft generates for all requests
+- Targets verify in parallel
+
+Option B: Independent Speculation Per Request
+┌─────────────────────┐
+│ Request 1: D→T      │
+├─────────────────────┤
+│ Request 2: D→T      │  (Standard, no sharing)
+├─────────────────────┤
+│ Request N: D→T      │
+└─────────────────────┘
+```
+
+**CPU Consideration:** With 96 cores, Option B may be optimal—dedicate cores per request rather than sharing draft overhead.
+
+#### 3. Quantization Effects on Draft Quality
+**Question:** Q4_K_M vs Q5_K_M vs Q8_0 for draft model?
+
+| Draft Quant | Size | Speed | Acceptance Impact |
+|-------------|------|-------|-------------------|
+| Q4_K_M | 0.3GB | Fastest | Baseline |
+| Q5_K_M | 0.4GB | -10% | +2-3% acceptance? |
+| Q8_0 | 0.5GB | -20% | +5% acceptance? |
+
+**Recommendation:** Test empirically, but Q4_K_M likely optimal—draft speed matters more than draft quality for CPU-bound inference.
+
+#### 4. NUMA Pinning Strategy
+**Question:** Draft on node 0, target on nodes 1-3?
+
+**Current (Interleaved):**
+```bash
+numactl --interleave=all ./llama-speculative ...
+```
+
+**Alternative (Pinned):**
+```bash
+# Draft server - low latency, high frequency
+numactl --cpubind=0 --membind=0 \
+  ./llama-server -m draft.gguf --port 8080 -t 32
+
+# Target server - high throughput
+numactl --cpubind=1 --membind=1 \
+  ./llama-server -m target.gguf --port 8081 -t 64
+```
+
+**Expected:** Minimal benefit for integrated speculation (same process). Pinning helps for server-based architecture with separate draft/target processes.
+
+---
+
+## Track 2: MoE Self-Draft Implementation Plan
+
+### Status: 🔴 Blocked — Tensor Dimension Coupling
+
+### Implementation Attempt (2025-12-14)
+
+**Problem Discovered:** The `n_expert_used` parameter in llama.cpp is used for BOTH:
+1. Expert selection in argsort (`ggml_argsort_top_k(ctx0, selection_probs, n_expert_used)`)
+2. Tensor shape definitions (`[n_ff, n_expert_used, n_tokens]`)
+
+When overriding `n_expert_used` from 8→1, the tensor dimensions become invalid:
+```
+GGML_ASSERT(view_src == NULL || data_size == 0 ||
+            data_size + view_offs <= ggml_nbytes(view_src)) failed
+```
+
+**Required Fix:** Separate the parameters:
+1. `n_expert_used` - for tensor shapes (must match model config)
+2. `n_expert_select` - NEW, for expert selection (can be overridden)
+
+This requires refactoring `build_moe_ffn()` to use `n_expert_select` for the argsort while keeping `n_expert_used` for tensor operations.
+
+**Code changes made (kept for future work):**
+- Added `moe_n_expert_override` to `llama_context_params` (include/llama.h)
+- Added to `llama_cparams` (src/llama-cparams.h)
+- Added CLI flag `--moe-n-expert` (common/arg.cpp)
+- Added propagation (common/common.cpp, src/llama-context.cpp)
+
+### Original Design
+
+### Code Analysis Summary
+
+**Expert Selection Location:** `src/llama-graph.cpp:982`
+```cpp
+ggml_tensor * selected_experts = ggml_argsort_top_k(ctx0, selection_probs, n_expert_used);
+```
+
+**Key Parameter:** `n_expert_used` from `hparams` (fixed at model load)
+
+**MoE Model Parameters (DeepSeek-R1-32B):**
+- Total experts: 64
+- Active per token: 8 (n_expert_used)
+- FFN hidden dim: 1536 per expert
+
+### Implementation Strategy
+
+#### Option A: Context-Level Override (Recommended)
+
+**Step 1: Add parameter to `llama_context_params` (include/llama.h:320)**
+```cpp
+struct llama_context_params {
+    // ... existing params ...
+
+    // MoE self-drafting: override n_expert_used for this context
+    // 0 = use model default, 1+ = force exactly N experts
+    int32_t moe_n_expert_override;  // NEW
+};
+```
+
+**Step 2: Propagate to graph builder (src/llama-graph.cpp)**
+```cpp
+// In build_moe_ffn(), around line 980:
+int n_active = (cparams.moe_n_expert_override > 0)
+    ? cparams.moe_n_expert_override
+    : n_expert_used;
+
+ggml_tensor * selected_experts = ggml_argsort_top_k(ctx0, selection_probs, n_active);
+```
+
+**Step 3: Create dual-context speculative loop**
+```cpp
+// Draft context: Top-1 expert (fast)
+llama_context_params draft_params = llama_context_default_params();
+draft_params.moe_n_expert_override = 1;
+llama_context * ctx_draft = llama_init_from_model(model, draft_params);
+
+// Verify context: Full experts (accurate)
+llama_context_params verify_params = llama_context_default_params();
+verify_params.moe_n_expert_override = 0; // Use model default (8)
+llama_context * ctx_verify = llama_init_from_model(model, verify_params);
+
+// Speculative loop uses SAME model, different contexts
+```
+
+**Step 4: CLI flag (examples/speculative/speculative.cpp)**
+```cpp
+// Add argument
+params.moe_draft_k = 1;  // --moe-draft-k 1
+
+// Use for self-drafting
+if (params.moe_draft_k > 0) {
+    // Self-draft mode: single model, dual context
+} else {
+    // External draft mode: two models
+}
+```
+
+### Expected Performance
+
+| Mode | Memory | Bandwidth | Speedup Estimate |
+|------|--------|-----------|------------------|
+| External Draft (0.5B + 32B) | 19GB | 2x model loads | 2-3x |
+| Self-Draft (32B Top-1/Top-8) | 18GB | 1x model loads | 3-5x |
+
+**Why Self-Draft is Better for CPU:**
+1. Single model in RAM = better cache utilization
+2. No vocabulary mismatch possible
+3. Router already computed—just pick fewer experts
+4. Memory bandwidth is the bottleneck, not compute
+
+### KV Cache Considerations
+
+**Critical:** Both draft and verify contexts must share the KV cache for prefix tokens.
+
+```cpp
+// After draft generates K tokens:
+llama_kv_cache_seq_cp(ctx_verify, 0, 0, 0, n_past);
+
+// If verification rejects token i, rollback:
+llama_kv_cache_seq_rm(ctx_draft, 0, n_past + i, -1);
+llama_kv_cache_seq_rm(ctx_verify, 0, n_past + i, -1);
+```
+
+### Files to Modify
+
+| File | Change |
+|------|--------|
+| `include/llama.h` | Add `moe_n_expert_override` to context params |
+| `src/llama.cpp` | Initialize new param in `llama_context_params_init()` |
+| `src/llama-graph.cpp` | Use override in `build_moe_ffn()` |
+| `examples/speculative/speculative.cpp` | Add `--moe-draft-k` CLI flag |
+| `common/arg.cpp` | Parse new argument |
+
+---
+
+## Track 3: CPU EAGLE from First Principles
+
+### Status: 🔬 Design Complete — Feasibility Assessment
+
+### Why Build CPU EAGLE?
+
+1. **No existing CPU implementation** — All EAGLE work targets GPU
+2. **MoE models need it** — External drafts fail due to vocab mismatch
+3. **Optimal for bandwidth-bound** — Internal heads add minimal memory
+4. **Pre-trained checkpoints available** — AngelSlim/Qwen3-a3B_eagle3
+
+### EAGLE Architecture (Simplified for CPU)
+
+```
+                         Target Model
+                              │
+    ┌─────────────────────────┼─────────────────────────┐
+    │                         │                         │
+    ▼                         ▼                         ▼
+Layer 8 output          Layer 16 output         Layer 28 output
+(Low-level features)    (Mid-level features)    (High-level features)
+    │                         │                         │
+    └──────────────┬──────────┴──────────┬──────────────┘
+                   │                     │
+                   ▼                     ▼
+              [Projection]         [Projection]
+                   │                     │
+                   └──────────┬──────────┘
+                              │
+                              ▼
+                      [Fused Features]
+                              │
+                              ▼
+                    [Draft Decoder Layer]
+                              │
+                              ▼
+                       [LM Head Copy]
+                              │
+                              ▼
+                      Draft Token Logits
+```
+
+### Implementation Plan
+
+#### Step 1: Expose Intermediate Layer Outputs
+
+**Current state:** Layer outputs tagged with `cb(cur, "l_out", il)` but not stored.
+
+**Modification (src/llama-graph.h):**
+```cpp
+struct llm_graph_result {
+    ggml_tensor * t_embd   = nullptr;  // existing
+    ggml_tensor * t_logits = nullptr;  // existing
+
+    // NEW: Intermediate layer outputs for EAGLE
+    std::vector<ggml_tensor *> t_layer_out;  // [n_layer] layer outputs
+};
+```
+
+**Modification (model files, e.g., src/models/qwen3moe.cpp):**
+```cpp
+// After each layer's l_out:
+cb(cur, "l_out", il);
+res->t_layer_out.push_back(cur);  // NEW: Store for EAGLE
+```
+
+#### Step 2: Build Lightweight Draft Head
+
+**EAGLE Head Architecture (~100M params for 32B model):**
+```cpp
+struct eagle_head {
+    // Feature projections (one per extracted layer)
+    ggml_tensor * proj_low;   // [n_embd, n_eagle_hidden]
+    ggml_tensor * proj_mid;   // [n_embd, n_eagle_hidden]
+    ggml_tensor * proj_high;  // [n_embd, n_eagle_hidden]
+
+    // Single decoder layer
+    ggml_tensor * attn_q, * attn_k, * attn_v, * attn_o;
+    ggml_tensor * ffn_up, * ffn_gate, * ffn_down;
+    ggml_tensor * norm1, * norm2;
+
+    // Reuse target model's LM head (no copy needed)
+};
+```
+
+**Forward Pass:**
+```cpp
+ggml_tensor * eagle_forward(
+    eagle_head * head,
+    ggml_tensor * feat_low,   // Layer 8 output
+    ggml_tensor * feat_mid,   // Layer 16 output
+    ggml_tensor * feat_high,  // Layer 28 output
+    ggml_tensor * lm_head     // Shared with target
+) {
+    // Project features to common dimension
+    auto h_low  = ggml_mul_mat(ctx, head->proj_low, feat_low);
+    auto h_mid  = ggml_mul_mat(ctx, head->proj_mid, feat_mid);
+    auto h_high = ggml_mul_mat(ctx, head->proj_high, feat_high);
+
+    // Fuse features (sum or concat + linear)
+    auto h_fused = ggml_add(ctx, ggml_add(ctx, h_low, h_mid), h_high);
+
+    // Single transformer layer
+    h_fused = eagle_attn(ctx, head, h_fused);
+    h_fused = eagle_ffn(ctx, head, h_fused);
+
+    // Generate logits using target's LM head
+    return ggml_mul_mat(ctx, lm_head, h_fused);
+}
+```
+
+#### Step 3: Integrate with Speculative Loop
+
+```cpp
+// Modified speculative decoding for EAGLE
+while (n_decoded < n_predict) {
+    // 1. Run target model to get layer outputs + logits
+    llama_decode(ctx_tgt, batch);
+
+    // 2. Extract intermediate features
+    auto feat_low  = res->t_layer_out[8];
+    auto feat_mid  = res->t_layer_out[16];
+    auto feat_high = res->t_layer_out[28];
+
+    // 3. Run EAGLE head to generate K draft tokens
+    for (int i = 0; i < K; i++) {
+        auto draft_logits = eagle_forward(head, feat_low, feat_mid, feat_high, lm_head);
+        draft_tokens[i] = sample(draft_logits);
+
+        // Update features with autoregressive embedding
+        // (EAGLE uses feature extrapolation here)
+    }
+
+    // 4. Verify draft tokens with full target model
+    // (Standard speculative verification)
+}
+```
+
+### CPU-Specific Optimizations
+
+1. **Reuse target's memory layout** — EAGLE head shares LM head weights
+2. **Avoid extra KV cache** — EAGLE head is shallow (1 layer)
+3. **Quantize EAGLE weights** — Q4_K_M for projections, Q8_0 for decoder
+4. **Batch feature extraction** — Compute all layer outputs in single pass
+
+### Checkpoint Loading
+
+**Available:** `AngelSlim/Qwen3-a3B_eagle3` on HuggingFace
+
+**Format:** Separate `.safetensors` with EAGLE-specific keys:
+```
+eagle.proj_low.weight
+eagle.proj_mid.weight
+eagle.proj_high.weight
+eagle.layers.0.self_attn.q_proj.weight
+eagle.layers.0.mlp.gate_proj.weight
+...
+```
+
+**llama.cpp Integration:**
+```cpp
+// Load EAGLE checkpoint alongside main model
+llama_model_params mparams = llama_model_default_params();
+mparams.eagle_path = "eagle3-checkpoint.gguf";  // NEW
+
+llama_model * model = llama_model_load(main_model_path, mparams);
+```
+
+### Feasibility Assessment
+
+| Aspect | Difficulty | Notes |
+|--------|------------|-------|
+| Expose layer outputs | Easy | Add vector to result struct |
+| Build EAGLE head | Medium | ~500 lines C++ |
+| Load EAGLE checkpoint | Medium | Extend model loader |
+| Speculative integration | Hard | Modify decode loop significantly |
+| Training EAGLE heads | Hard | Requires PyTorch + GPU |
+
+**Recommendation:** Start with pre-trained EAGLE checkpoints (Qwen3, LLaMA3) to validate approach before considering training infrastructure.
+
+### Estimated Performance
+
+| Method | Draft Overhead | Memory | Speedup |
+|--------|---------------|--------|---------|
+| External Draft (0.5B) | 4GB RAM, 2x bandwidth | High | 2-3x |
+| MoE Self-Draft | 0 extra RAM | Optimal | 3-5x |
+| EAGLE Head (~100M) | 0.2GB RAM | Optimal | 2-4x |
+
+**EAGLE vs MoE Self-Draft:** EAGLE works for ALL architectures (dense + MoE), but MoE self-draft is simpler for MoE models specifically.
+
+---
+
+## Execution Priority
+
+### Immediate (This Session)
+1. ✅ Complete Track 1 baseline benchmarks
+2. ✅ Complete Track 2 design (MoE self-draft)
+3. ✅ Complete Track 3 design (CPU EAGLE)
+4. ✅ Tested Qwen3-32B: 1.90 t/s baseline → 5.87 t/s with spec decode (3.1x)
+
+### Short-Term (Next Steps)
+5. [ ] Track 2: Refactor `build_moe_ffn()` to separate `n_expert_select` from `n_expert_used`
+6. [ ] Track 2: Test self-draft with DeepSeek-R1-32B after refactor
+7. [ ] Track 1: Investigate context length effects
+
+### Medium-Term
+8. [ ] Implement Track 3: EAGLE head loader
+9. [ ] Load pre-trained EAGLE checkpoint for Qwen3
+10. [ ] Benchmark EAGLE vs self-draft vs external draft
+
+### Blocking Issues
+- **Track 2**: `n_expert_used` coupling with tensor shapes requires significant refactoring
+
+---
+
+## Literature References
+
+### Foundational Speculative Decoding
+- Leviathan et al. (2023) "Fast Inference from Transformers via Speculative Decoding" — Original speculative decoding paper
+- Chen et al. (2023) "Accelerating Large Language Model Decoding with Speculative Sampling"
+
+### EAGLE Series
+- Li et al. (2024) "EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty" (ICML'24)
+- Li et al. (2024) "EAGLE-2: Faster Inference with Dynamic Draft Trees" (EMNLP'24)  
+- Li et al. (2025) "EAGLE-3: Multi-Level Feature Fusion" (NeurIPS'25)
+- GitHub: [github.com/SafeAILab/EAGLE](https://github.com/SafeAILab/EAGLE)
+
+### Medusa
+- Cai et al. (2024) "MEDUSA: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads" (ICML'24)
+- GitHub: [github.com/FasterDecoding/Medusa](https://github.com/FasterDecoding/Medusa)
+- Blog: [together.ai/blog/medusa](https://together.ai/blog/medusa)
+
+### Tree Attention & Advanced Methods
+- Miao et al. (2024) "SpecInfer: Accelerating Generative LLM Serving with Tree-based Speculative Inference"
+- Spector & Re (2023) "Accelerating LLM Inference with Staged Speculative Decoding"
+
+### MoE & Mixture of Experts
+- Fedus et al. (2021) "Switch Transformers: Scaling to Trillion Parameter Models"
+- Jiang et al. (2024) "Mixtral of Experts"
+
+### AMD/CPU Specific
+- Numberworld (2024) "Zen 5 AVX-512 Teardown"
+- OpenBLAS 0.3.29+ Zen 5 optimizations
+
+### Implementation Resources
+- llama.cpp speculative: [github.com/ggerganov/llama.cpp/examples/speculative](https://github.com/ggerganov/llama.cpp/tree/master/examples/speculative)
+- vLLM spec decode docs: [docs.vllm.ai/en/latest/features/spec_decode](https://docs.vllm.ai/en/latest/features/spec_decode/)
+- LM Studio 0.3.10 speculative: [lmstudio.ai/blog/lmstudio-v0.3.10](https://lmstudio.ai/blog/lmstudio-v0.3.10)
+
+---
+
+## Appendix: Quick Reference Commands
+
+### Standard Speculative Decoding
+```bash
+OMP_NUM_THREADS=1 numactl --interleave=all \
+  ./llama-speculative \
+  -m TARGET.gguf --draft DRAFT.gguf \
+  --draft-max 8 -t 96 -p "prompt"
+```
+
+### Benchmark
+```bash
+OMP_NUM_THREADS=1 numactl --interleave=all \
+  ./llama-bench -m MODEL.gguf -t 96 -p 512 -n 128
+```
+
+### Model Conversion
+```bash
+python convert_hf_to_gguf.py /path/to/hf/model \
+  --outfile /mnt/raid0/llm/models/model-Q4_K_M.gguf \
+  --outtype q4_k_m
+```
+
+---
+
+*Research document for blog: "Maximizing LLM Inference on AMD EPYC Turin: A Deep Dive into Speculative Decoding"*

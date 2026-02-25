@@ -1,0 +1,23 @@
+{
+  "environment": "codex",
+  "A": {
+    "total_tasks": 50,
+    "quality_pass_rate": 0.94,
+    "cost_per_task": 2.29933014,
+    "p95_task_latency": 8.283958,
+    "manual_intervention_rate": 0.02
+  },
+  "B": {
+    "total_tasks": 50,
+    "quality_pass_rate": 0.92,
+    "cost_per_task": 2.1789692,
+    "p95_task_latency": 7.607916,
+    "manual_intervention_rate": 0.02
+  },
+  "deltas": {
+    "delta_quality": -0.019999999999999907,
+    "delta_cost": -0.052346088935275675,
+    "delta_latency": -0.0816085740656821,
+    "delta_manual_intervention": 0.0
+  }
+}

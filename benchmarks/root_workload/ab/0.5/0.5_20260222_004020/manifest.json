@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-02-21T23:40:21.700915+00:00",
+  "optimization_id": "0.5",
+  "seed": 7,
+  "tasks_per_arm": 6,
+  "workload_pack_path": "benchmarks/root_workload/workload_pack_v1.json",
+  "workload_pack_version": "v1-starter",
+  "selected_tasks": [
+    {
+      "task_id": "li_004",
+      "task_class": "long_input",
+      "input_payload": "Convert a large benchmark result set into normalized cost anomaly candidates by task class.",
+      "quality_rubric_id": "rubric.long_input.v1",
+      "expected_artifact_type": "table"
+    },
+    {
+      "task_id": "ps_005",
+      "task_class": "planning_synthesis",
+      "input_payload": "Create a weekly anomaly triage plan based on normalized cost ratio per task class.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "re_001",
+      "task_class": "resume",
+      "input_payload": "Resume a paused run from delta summary and continue with pending optimization IDs only.",
+      "quality_rubric_id": "rubric.resume.v1",
+      "expected_artifact_type": "plan"
+    },
+    {
+      "task_id": "if_002",
+      "task_class": "implementation_fix",
+      "input_payload": "Patch a hook to block writes to protected governance files while preserving fail-open for non-critical checks.",
+      "quality_rubric_id": "rubric.implementation.v1",
+      "expected_artifact_type": "patch"
+    },
+    {
+      "task_id": "rs_005",
+      "task_class": "read_search",
+      "input_payload": "List files that define nightshift budgets, reserve policy, and run wrappers.",
+      "quality_rubric_id": "rubric.read_search.v1",
+      "expected_artifact_type": "summary"
+    },
+    {
+      "task_id": "ps_001",
+      "task_class": "planning_synthesis",
+      "input_payload": "Draft a rollout plan to enable correctness-gated escalation with telemetry for both codex and claude-code.",
+      "quality_rubric_id": "rubric.planning.v1",
+      "expected_artifact_type": "plan"
+    }
+  ],
+  "selected_task_ids": [
+    "li_004",
+    "ps_005",
+    "re_001",
+    "if_002",
+    "rs_005",
+    "ps_001"
+  ],
+  "required_environments": [
+    "codex",
+    "claude-code"
+  ],
+  "required_arms": [
+    "A",
+    "B"
+  ]
+}

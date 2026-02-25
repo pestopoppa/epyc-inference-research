@@ -1,0 +1,549 @@
+version: 1
+domain: thinking
+description: "Reasoning and chain-of-thought benchmark - hardened for post-doctoral level differentiation"
+created: "2025-12-16"
+updated: "2025-12-18"
+
+prompts:
+  # ============== TIER 1: Medium (was T2) ==============
+  t1_q1_multistep:
+    tier: 1
+    name: "Multi-Step Reasoning"
+    prompt: |
+      A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.
+      Another train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.
+      The stations are 280 miles apart.
+
+      At what time do the trains meet? Show all your work.
+    expected: "11:34 AM"
+    reference_answer: |
+      **Step 1: Position at 10:00 AM**
+      Train A has traveled for 1 hour at 60 mph = 60 miles from Station A.
+      Remaining distance between trains: 280 - 60 = 220 miles.
+
+      **Step 2: Combined approach rate**
+      After 10:00 AM, both trains are moving toward each other.
+      Combined speed: 60 + 80 = 140 mph.
+
+      **Step 3: Time to meet**
+      Time = Distance / Speed = 220 miles / 140 mph = 11/7 hours ≈ 1.571 hours
+      1.571 hours = 1 hour 34 minutes 17 seconds
+
+      **Step 4: Meeting time**
+      10:00 AM + 1 hour 34 minutes = 11:34 AM
+
+      The trains meet at approximately **11:34 AM**.
+
+      Verification: Train A travels 60 + (60 × 11/7) = 60 + 94.3 = 154.3 miles from A.
+      Train B travels 80 × 11/7 = 125.7 miles from B.
+      Total: 154.3 + 125.7 = 280 miles ✓
+    scoring:
+      - criterion: "Correct answer"
+        weight: 40
+      - criterion: "Correct equation setup"
+        weight: 30
+      - criterion: "Accounts for time delay"
+        weight: 20
+      - criterion: "Clear presentation"
+        weight: 10
+
+  t1_q2_hypothesis:
+    tier: 1
+    name: "Hypothesis Testing"
+    prompt: |
+      A researcher claims: "Students who eat breakfast score higher on tests."
+      She collected data showing breakfast-eaters averaged 85% while non-breakfast-eaters averaged 75%.
+
+      What are three alternative explanations for this correlation that don't involve breakfast directly causing better scores? Be specific.
+    expected: "Confounding variables: SES, sleep, general health habits"
+    reference_answer: |
+      **Alternative Explanation 1: Socioeconomic Status (SES) Confound**
+      Wealthier families can afford regular breakfast AND provide better educational resources (tutoring, books, stable housing, quieter study environments). The correlation may reflect that higher SES causes both breakfast-eating AND better test scores independently.
+
+      **Alternative Explanation 2: General Health and Organization Habits**
+      Students who eat breakfast may also maintain better sleep schedules, exercise regularly, and have organized study routines. It's not breakfast specifically but the overall constellation of healthy habits that improves cognitive performance. Breakfast-eating is merely a marker of these habits, not the cause.
+
+      **Alternative Explanation 3: Reverse Causation**
+      Students who are already high-performing and motivated may be more disciplined about their morning routines, including eating breakfast. Their academic capability leads to better organization, which leads to breakfast-eating—not the other way around. The causal arrow may point from "good student" to "eats breakfast" rather than vice versa.
+
+      Additional possibilities include: parental involvement (engaged parents ensure both breakfast and homework), school programs (schools serving breakfast may also have better resources), and selection bias (students who skip breakfast may have chaotic home environments affecting both diet and study).
+    scoring:
+      - criterion: "Three valid alternatives"
+        weight: 50
+      - criterion: "Identifies confounding variables"
+        weight: 30
+      - criterion: "Specific and plausible"
+        weight: 20
+
+  t1_q3_planning:
+    tier: 1
+    name: "Planning Under Constraints"
+    prompt: |
+      You need to water 5 plants (A, B, C, D, E) with these constraints:
+      - A must be watered before B
+      - C must be watered immediately after D
+      - E cannot be first or last
+      - B must be watered before D
+
+      List all valid orderings. Show your reasoning process.
+    expected: "Systematic enumeration with constraint checking"
+    reference_answer: |
+      **Step 1: Identify fixed ordering constraints**
+      - A < B (A before B)
+      - B < D (B before D)
+      - D immediately followed by C (treat "DC" as a unit)
+
+      Combined chain: A → B → DC
+
+      **Step 2: Constraint on E**
+      - E cannot be first or last
+      - E must be in positions 2, 3, or 4
+
+      **Step 3: Enumerate placements of E**
+      The skeleton A...B...DC has 4 elements. E must be inserted in the middle.
+
+      Possible positions for E:
+      1. Between A and B: A E B D C ✓
+      2. Between B and D: A B E D C ✓
+      3. E first: E A B D C ✗ (violates "E not first")
+      4. E last: A B D C E ✗ (violates "E not last")
+      5. Between D and C: A B D E C ✗ (violates "C immediately after D")
+
+      **Valid Orderings:**
+      1. **A E B D C**
+      2. **A B E D C**
+
+      **Verification:**
+      - A E B D C: A<B ✓, B<D ✓, DC adjacent ✓, E not first/last ✓
+      - A B E D C: A<B ✓, B<D ✓, DC adjacent ✓, E not first/last ✓
+    scoring:
+      - criterion: "All valid orderings found"
+        weight: 40
+      - criterion: "No invalid orderings"
+        weight: 30
+      - criterion: "Systematic approach"
+        weight: 20
+      - criterion: "Constraint verification"
+        weight: 10
+
+  # ============== TIER 2: Hard Undergrad (was T3) ==============
+  t2_q1_paradox:
+    tier: 2
+    name: "Paradox Resolution"
+    prompt: |
+      Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the "real" Ship of Theseus?
+
+      Present arguments for at least two different philosophical positions, then state which you find most convincing and why.
+    expected: "Multiple positions (identity through continuity, material identity, etc.)"
+    reference_answer: |
+      **Position 1: Spatiotemporal Continuity (The Repaired Ship is "Real")**
+      Identity persists through continuous existence in space and time. Just as a person remains "themselves" despite replacing every cell over 7-10 years, the ship's identity is preserved through the gradual replacement process. Each intermediate state is connected to the previous one. The ship in the harbor with all new planks has an unbroken chain of existence back to the original.
+
+      **Position 2: Material Constitution (The Reconstructed Ship is "Real")**
+      Identity is determined by material composition. The ship built from original planks contains the actual physical matter of the original Ship of Theseus. If you recovered Theseus's original vessel from the seabed and reassembled it, we'd clearly call that "the Ship of Theseus"—so why should gradual disassembly change this?
+
+      **Position 3: Functional/Nominal Identity (Both or Neither)**
+      "Ship of Theseus" is a label we assign based on social convention and function. The repaired ship serves the function and maintains the name. The reconstructed ship has the material. Neither has privileged claim—"identity" is a human construct imposed on physical objects.
+
+      **Most Convincing: Spatiotemporal Continuity**
+      I find this position most convincing because:
+      1. It matches our intuitions about personal identity (we don't become "someone else" when cells regenerate)
+      2. It preserves practical identity (legal ownership, historical records)
+      3. The reconstructed ship has a discontinuous existence—it didn't exist as a ship during the intermediate period
+      4. If material identity were paramount, we'd face absurdities (a person whose arm was amputated and reattached isn't "less themselves")
+
+      The repaired ship maintains continuous existence and function; the reconstructed ship is best described as "a ship made from original Theseus planks."
+    scoring:
+      - criterion: "Two+ coherent positions"
+        weight: 35
+      - criterion: "Addresses both ships"
+        weight: 25
+      - criterion: "Reasoned personal stance"
+        weight: 25
+      - criterion: "Philosophical depth"
+        weight: 15
+
+  t2_q2_counterfactual:
+    tier: 2
+    name: "Counterfactual Reasoning"
+    prompt: |
+      Consider this scenario: "If the internet had never been invented, how would academic research be different today?"
+
+      Analyze this counterfactual across three dimensions:
+      1. Speed of knowledge dissemination
+      2. Collaboration patterns
+      3. Reproducibility and peer review
+
+      Be specific about mechanisms and second-order effects.
+    expected: "Detailed analysis with specific mechanisms and effects"
+    reference_answer: |
+      **1. Speed of Knowledge Dissemination**
+
+      *Primary effect:* Research would spread via physical journals, postal mail, and conferences. A finding published today would reach most researchers in 3-6 months rather than hours.
+
+      *Mechanisms:*
+      - Journal publication cycles: 6-18 months from submission to print
+      - Physical distribution: Mailing to university libraries worldwide
+      - Indexing: Manual catalog updates, citation indices published annually
+
+      *Second-order effects:*
+      - **More "rediscovery"**: Researchers would unknowingly duplicate work, wasting resources
+      - **Geographic knowledge clusters**: Institutions near major libraries would have systematic advantages
+      - **Slower paradigm shifts**: Revolutionary findings would take years to gain traction (like plate tectonics in the 1960s)
+      - **Conference primacy**: Conferences would be THE venue for cutting-edge findings, dramatically increasing their importance
+
+      **2. Collaboration Patterns**
+
+      *Primary effect:* Collaboration would be predominantly local/institutional or require physical co-location.
+
+      *Mechanisms:*
+      - Communication: Phone calls, faxes, postal mail (expensive, slow)
+      - File sharing: Physical shipping of drafts, data tapes, printouts
+      - Meetings: Expensive travel required for any substantive coordination
+
+      *Second-order effects:*
+      - **Smaller author lists**: Papers would have 2-4 authors instead of 20-200
+      - **Stronger institutional silos**: Harvard-Harvard collaborations would dominate over Harvard-Tokyo
+      - **Sabbatical culture**: Extended visits to other institutions would be essential (and more common)
+      - **More single-author papers**: Solo work would remain viable longer
+      - **Brain drain intensification**: Top researchers would concentrate at elite institutions more than today
+
+      **3. Reproducibility and Peer Review**
+
+      *Primary effect:* Less access to raw data, code, and supplementary materials, but potentially more thorough review.
+
+      *Mechanisms:*
+      - Data sharing: Request by mail, wait weeks for tapes/printouts
+      - Code: Rarely shared, must be reimplemented
+      - Review: Fewer submissions = more time per paper
+
+      *Second-order effects:*
+      - **Method descriptions**: Papers would include much more methodological detail (can't link to GitHub)
+      - **Replication crisis delayed**: Without easy meta-analysis and large-scale replication, problems would surface slower
+      - **But also**: Individual replication attempts would be more careful (higher cost = more diligence)
+      - **Review quality**: Fewer papers + captive reviewer pool = potentially deeper reviews
+      - **Less preprint chaos**: No arXiv-style priority races, but also no rapid error correction
+    scoring:
+      - criterion: "Covers all three dimensions"
+        weight: 30
+      - criterion: "Specific mechanisms identified"
+        weight: 30
+      - criterion: "Second-order effects"
+        weight: 25
+      - criterion: "Plausible reasoning"
+        weight: 15
+
+  t2_q3_formal:
+    tier: 2
+    name: "Formal Logic"
+    prompt: |
+      Prove or disprove: "If P -> Q and Q -> R, then P -> R"
+
+      Provide a formal proof using logical rules, then give a concrete example demonstrating the principle.
+    expected: "Valid proof (hypothetical syllogism) with example"
+    reference_answer: |
+      **Claim:** (P → Q) ∧ (Q → R) ⊢ (P → R)
+
+      **Proof (Hypothetical Syllogism / Chain Rule):**
+
+      1. P → Q          [Premise 1]
+      2. Q → R          [Premise 2]
+      3. | P            [Assumption for conditional proof]
+      4. | Q            [Modus Ponens: 1, 3]
+      5. | R            [Modus Ponens: 2, 4]
+      6. P → R          [Conditional Introduction: 3-5]
+
+      **QED.** The statement is PROVED (true).
+
+      **Alternative proof using truth tables:**
+      For all truth value assignments where both (P→Q) and (Q→R) are true, (P→R) is also true. The only way P→R is false is if P is true and R is false. But if P is true and R is false, then either Q is true (making Q→R false) or Q is false (making P→Q false). Either way, the premises can't both be true when the conclusion is false.
+
+      **Concrete Example:**
+      - P: "It is raining"
+      - Q: "The ground is wet"
+      - R: "The roads are slippery"
+
+      - Premise 1: If it is raining, then the ground is wet. (P → Q)
+      - Premise 2: If the ground is wet, then the roads are slippery. (Q → R)
+      - Conclusion: If it is raining, then the roads are slippery. (P → R)
+
+      This is known as **hypothetical syllogism** or **transitivity of implication** in classical logic.
+    scoring:
+      - criterion: "Valid formal proof"
+        weight: 40
+      - criterion: "Correct logical rules cited"
+        weight: 25
+      - criterion: "Concrete example"
+        weight: 25
+      - criterion: "Clear presentation"
+        weight: 10
+
+  t2_q4_metacognition:
+    tier: 2
+    name: "Metacognitive Analysis"
+    prompt: |
+      You're asked to estimate how many piano tuners are in Chicago.
+
+      1. Describe your estimation approach step by step
+      2. Identify the key assumptions you're making
+      3. Estimate upper and lower bounds
+      4. What information would most reduce your uncertainty?
+
+      This is about your reasoning process, not the exact number.
+    expected: "Fermi estimation with explicit assumptions and uncertainty"
+    reference_answer: |
+      **Step-by-Step Estimation Approach:**
+
+      1. **Estimate Chicago population:** ~2.7 million (city proper), ~9.5 million (metro area). Use city proper for conservative estimate.
+
+      2. **Estimate households:** 2.7M people ÷ 2.5 people/household ≈ 1.1 million households
+
+      3. **Estimate piano ownership rate:** Roughly 5-10% of households own a piano. Use 7% → 77,000 pianos. Add institutions (schools, churches, concert halls): +10,000 → **~87,000 pianos**
+
+      4. **Estimate tuning frequency:** Average piano is tuned 1-2 times per year. Use 1.5 → **130,500 tunings/year**
+
+      5. **Estimate tuner capacity:** A tuner does 3-5 tunings/day, works 5 days/week, 50 weeks/year. Use 4 tunings × 250 days = **1,000 tunings/year per tuner**
+
+      6. **Calculate tuners needed:** 130,500 ÷ 1,000 = **~130 piano tuners**
+
+      **Key Assumptions:**
+      - Piano ownership rate (5-10%) - major uncertainty
+      - Tuning frequency - varies by owner (casual vs. professional)
+      - Tuner efficiency - assumes full-time professionals; part-timers exist
+      - Chicago-specific factors - wealth distribution, cultural emphasis on music
+      - Market equilibrium - assumes supply roughly matches demand
+
+      **Bounds:**
+      - **Lower bound:** 50 tuners (3% ownership, 1 tuning/year, efficient tuners)
+      - **Upper bound:** 250 tuners (10% ownership, 2 tunings/year, includes part-timers)
+      - **Point estimate:** 100-150 tuners
+
+      **Information to Reduce Uncertainty:**
+      1. **Piano sales/registration data** - Direct count of pianos would eliminate the largest uncertainty
+      2. **Yellow Pages/Yelp listings** - Actual count of piano tuning businesses (though misses employee count)
+      3. **Piano Technicians Guild membership** - Professional association has Chicago chapter data
+      4. **Music teacher density** - Correlates with piano ownership and professional tuning needs
+    scoring:
+      - criterion: "Clear estimation approach"
+        weight: 30
+      - criterion: "Explicit assumptions"
+        weight: 25
+      - criterion: "Reasonable bounds"
+        weight: 25
+      - criterion: "Identifies key uncertainties"
+        weight: 20
+
+  # ============== TIER 3: Post-Doctoral Level (NEW) ==============
+  t3_q1_methodological_critique:
+    tier: 3
+    name: "Methodological Critique"
+    prompt: |
+      A psychology paper claims: "We found that bilingual children score 15 points higher on
+      executive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control."
+
+      Identify at least 4 methodological issues that could explain these results without
+      bilingualism actually causing cognitive enhancement. For each issue, explain how it
+      could produce the observed effect.
+    expected: "Selection bias, SES confounds, reverse causation, measurement validity, publication bias, etc."
+    reference_answer: |
+      **Issue 1: Selection Bias / Self-Selection**
+      Bilingual families are not random. Parents who raise bilingual children may systematically differ from monolingual families in ways that also affect cognitive development:
+      - Higher education levels (values multilingualism AND cognitive enrichment)
+      - Immigration backgrounds (associated with resilience, adaptability)
+      - Greater investment in children's education generally
+
+      *Mechanism:* These families would produce children with higher executive function regardless of bilingualism. The study compares systematically different populations.
+
+      **Issue 2: Socioeconomic Status (SES) Confound**
+      Bilingualism in Western contexts often correlates with either (a) affluent families who invest in language education, or (b) immigrant families with strong cultural values around education.
+
+      *Mechanism:* Higher SES → better nutrition, less stress, more cognitive stimulation, better schools → higher executive function. The bilingualism is epiphenomenal.
+
+      **Issue 3: Reverse Causation**
+      Children with better executive function may find it easier to maintain two languages. Rather than bilingualism causing cognitive enhancement, pre-existing cognitive advantages enable successful bilingualism.
+
+      *Mechanism:* Executive function helps manage language switching. Children who struggle cognitively may abandon second language → survivors are those with high EF already.
+
+      **Issue 4: Measurement/Construct Validity**
+      Executive function tests may inadvertently favor bilingual cognitive styles:
+      - Task-switching paradigms resemble language-switching
+      - Inhibition tests may tap skills practiced in language selection
+      - Tests may be culturally biased toward experiences common in bilingual households
+
+      *Mechanism:* The test doesn't measure "pure" executive function but rather specific skills that bilingual practice reinforces. It's teaching to the test, not generalizable enhancement.
+
+      **Issue 5: Publication Bias (File Drawer Problem)**
+      Studies finding no effect of bilingualism on cognition are less likely to be published. The literature systematically over-represents positive findings.
+
+      *Mechanism:* Perhaps 20 studies were conducted; 4 found p<0.05 by chance, those got published. We're seeing noise, not signal.
+
+      **Issue 6: Researcher Degrees of Freedom**
+      With n=200 and multiple executive function measures, researchers may have:
+      - Chosen the most favorable outcome measure
+      - Excluded outliers selectively
+      - Defined "bilingual" in ways that maximized effect size
+
+      *Mechanism:* P-hacking / garden of forking paths produces spuriously significant results.
+
+      **The word "proves" is particularly egregious** - observational studies cannot prove causation regardless of p-values or effect sizes. At best they demonstrate association warranting experimental investigation.
+    scoring:
+      - criterion: "Four valid methodological issues"
+        weight: 40
+      - criterion: "Clear causal mechanisms for each"
+        weight: 30
+      - criterion: "Distinguishes correlation from causation"
+        weight: 20
+      - criterion: "Research design sophistication"
+        weight: 10
+
+  t3_q2_causal_inference:
+    tier: 3
+    name: "Causal Inference DAG"
+    prompt: |
+      Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,
+      Gene -> Smoking, Gene -> Cancer.
+
+      You want to estimate the causal effect of Smoking on Cancer from observational data.
+      1. What is the minimal sufficient adjustment set?
+      2. Would conditioning on Yellow Fingers introduce bias? Explain.
+      3. If Gene is unmeasured, can you still get an unbiased estimate? How?
+    expected: "Condition on Gene only. Yellow Fingers is a collider - conditioning opens a path. Instrumental variables if Gene unmeasured."
+    reference_answer: |
+      **DAG Structure:**
+      ```
+      Gene → Smoking → Cancer
+        ↓         ↓
+        └────────→ Cancer
+                  ↓
+      Smoking → Yellow Fingers
+      ```
+
+      **1. Minimal Sufficient Adjustment Set: {Gene}**
+
+      Paths from Smoking to Cancer:
+      - Direct: Smoking → Cancer (causal, keep open)
+      - Backdoor: Smoking ← Gene → Cancer (confounding, must block)
+
+      To estimate the causal effect of Smoking on Cancer, we must block the backdoor path Smoking ← Gene → Cancer. Conditioning on Gene blocks this path.
+
+      The minimal sufficient adjustment set is **{Gene}** (just Gene alone).
+
+      **2. Yellow Fingers: Does NOT Introduce Bias (But Doesn't Help)**
+
+      Yellow Fingers is a **descendant** of Smoking (Smoking → Yellow Fingers). It is NOT a collider in this DAG—it has only one parent (Smoking).
+
+      Conditioning on Yellow Fingers:
+      - Does not open any backdoor paths (no collider structure involving Cancer)
+      - Does not help block the Gene confound
+      - Reduces statistical power (unnecessary conditioning)
+
+      **Important clarification:** Yellow Fingers would be a collider if it had multiple parents, e.g., if Cancer → Yellow Fingers also existed. In that case, conditioning would open the path Smoking → Yellow Fingers ← Cancer and induce spurious association. But in the stated DAG, Yellow Fingers has only Smoking as a parent.
+
+      So: Conditioning on Yellow Fingers is **not biasing but is useless**—it neither helps nor hurts identification of the Smoking → Cancer effect.
+
+      **3. If Gene is Unmeasured: Instrumental Variables Approach**
+
+      If Gene is unmeasured, we cannot directly adjust for confounding. However, if we can find a valid **instrument**, we can still estimate the causal effect.
+
+      The instrument must satisfy:
+      - **Relevance:** Correlated with Smoking
+      - **Exclusion:** Affects Cancer ONLY through Smoking
+      - **Independence:** Not correlated with unmeasured confounders
+
+      **Potential instruments:**
+      - Cigarette taxes/prices (affect smoking behavior, no direct cancer pathway)
+      - Geographic distance to tobacco retailers
+      - Random assignment in a smoking cessation trial
+
+      Using two-stage least squares (2SLS) or other IV methods, we can estimate the causal effect even without observing Gene.
+
+      **Alternative: Bounds and Sensitivity Analysis**
+      If no instrument is available, we can compute bounds on the causal effect given assumptions about the strength of unmeasured confounding (e.g., Manski bounds, E-values, or Rosenbaum sensitivity analysis).
+    scoring:
+      - criterion: "Correct adjustment set (Gene)"
+        weight: 30
+      - criterion: "Identifies collider bias"
+        weight: 30
+      - criterion: "Instrumental variable approach"
+        weight: 25
+      - criterion: "Clear d-separation reasoning"
+        weight: 15
+
+  t3_q3_reasoning_trap:
+    tier: 3
+    name: "Reasoning Under Misdirection"
+    prompt: |
+      A researcher presents this argument:
+
+      "We trained Model A on dataset D1 (1M examples) and Model B on dataset D2 (1M examples).
+      Model A achieved 92% accuracy on test set T. Model B achieved 78% accuracy on test set T.
+      Therefore, dataset D1 produces better models than dataset D2."
+
+      This conclusion seems reasonable but is WRONG. Identify the flaw, then construct
+      a concrete scenario where D2 is actually the superior dataset despite the accuracy gap.
+
+      Your scenario must be specific (not just "maybe the test set is biased") and must
+      explain the mechanism by which the inferior-seeming dataset is actually better.
+    expected: "Test set T may be drawn from D1's distribution. Scenario: D1 is narrow domain, D2 is diverse. T matches D1's domain, but D2 generalizes better to real-world distribution."
+    reference_answer: |
+      **The Flaw: Distribution Mismatch Between Test Set and Deployment**
+
+      The argument assumes that performance on test set T is a valid proxy for "better model." This is only true if T is representative of the actual deployment distribution. If T is drawn from the same distribution as D1 but not D2, then Model A's superior performance is an artifact of distribution matching, not true model quality.
+
+      **Concrete Scenario: Medical Imaging Diagnosis**
+
+      **Setup:**
+      - **D1:** 1M chest X-rays all from Hospital X, using Siemens CT scanners, mostly urban patients aged 40-70
+      - **D2:** 1M chest X-rays from 50 different hospitals worldwide, various scanner manufacturers, diverse demographics
+      - **Test set T:** 10,000 images from Hospital X (same scanner, same demographics as D1)
+
+      **Results:**
+      - Model A (trained on D1): 92% accuracy on T
+      - Model B (trained on D2): 78% accuracy on T
+
+      **Why D2 is Actually Superior:**
+
+      Model A has learned **spurious correlations** specific to Hospital X:
+      - Scanner-specific artifacts (Siemens produces slightly different image characteristics)
+      - Hospital X's patient positioning protocols
+      - Demographic-specific disease presentations
+      - Even scanner calibration patterns that correlate with diagnosis codes
+
+      Model B learned **generalizable features**:
+      - True pathological indicators that transfer across equipment
+      - Diverse disease presentations across demographics
+      - Robustness to acquisition differences
+
+      **Deployment Reality:**
+      When deployed at Hospital Y (different scanner, different demographics):
+      - Model A: Crashes to 58% accuracy (learned wrong features)
+      - Model B: Maintains 76% accuracy (learned transferable features)
+
+      **The Mechanism:**
+      Model A achieves high test accuracy by exploiting distribution-specific shortcuts that don't generalize. Model B has lower test accuracy because it hasn't learned these shortcuts, but it captures actual diagnostic information.
+
+      **Real-World Evidence:**
+      This exact phenomenon has been documented in medical AI:
+      - Models trained on single-hospital data often fail at other sites
+      - "Shortcut learning" where models use hospital ID, scanner type, or even image borders for classification
+      - The ImageNet-trained models that classified "husky vs wolf" based on snow in the background
+
+      **Corrected Conclusion:**
+      Test accuracy on T tells us which model better fits T's distribution, not which dataset produces better models for deployment. Proper evaluation requires:
+      1. Test set from deployment distribution (or multiple diverse test sets)
+      2. Out-of-distribution evaluation
+      3. Feature analysis to detect shortcut learning
+    scoring:
+      - criterion: "Identifies distribution mismatch flaw"
+        weight: 30
+      - criterion: "Concrete scenario constructed"
+        weight: 30
+      - criterion: "Mechanism clearly explained"
+        weight: 25
+      - criterion: "Scenario is non-obvious"
+        weight: 15
+
+inference_params:
+  temperature: 0.3
+  max_tokens: 2048
+  timeout: 300

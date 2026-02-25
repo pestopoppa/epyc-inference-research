@@ -1,0 +1,232 @@
+[
+  {
+    "query": "calculate loss predictions",
+    "category": "ML code",
+    "tokens": [
+      "calculate",
+      "loss",
+      "predictions"
+    ],
+    "oov_tokens": [],
+    "thresholds": {
+      "1.0": {
+        "n_matches": 0,
+        "latency_ms": 6.35,
+        "sample_matches": []
+      },
+      "0.8": {
+        "n_matches": 0,
+        "latency_ms": 10.55,
+        "sample_matches": []
+      },
+      "0.7": {
+        "n_matches": 0,
+        "latency_ms": 3.67,
+        "sample_matches": []
+      },
+      "0.6": {
+        "n_matches": 0,
+        "latency_ms": 3.3,
+        "sample_matches": []
+      },
+      "0.5": {
+        "n_matches": 0,
+        "latency_ms": 4.65,
+        "sample_matches": []
+      }
+    }
+  },
+  {
+    "query": "async retry exponential backoff",
+    "category": "async patterns",
+    "tokens": [
+      "async",
+      "retry",
+      "exponential",
+      "backoff"
+    ],
+    "oov_tokens": [
+      "async",
+      "backoff"
+    ],
+    "thresholds": {
+      "1.0": {
+        "n_matches": 0,
+        "latency_ms": 5.19,
+        "sample_matches": []
+      },
+      "0.8": {
+        "n_matches": 0,
+        "latency_ms": 4.1,
+        "sample_matches": []
+      },
+      "0.7": {
+        "n_matches": 0,
+        "latency_ms": 3.88,
+        "sample_matches": []
+      },
+      "0.6": {
+        "n_matches": 0,
+        "latency_ms": 3.8,
+        "sample_matches": []
+      },
+      "0.5": {
+        "n_matches": 0,
+        "latency_ms": 3.81,
+        "sample_matches": []
+      }
+    }
+  },
+  {
+    "query": "binary search tree insert delete",
+    "category": "data structures",
+    "tokens": [
+      "binary",
+      "search",
+      "tree",
+      "insert",
+      "delete"
+    ],
+    "oov_tokens": [],
+    "thresholds": {
+      "1.0": {
+        "n_matches": 0,
+        "latency_ms": 4.78,
+        "sample_matches": []
+      },
+      "0.8": {
+        "n_matches": 0,
+        "latency_ms": 6.44,
+        "sample_matches": []
+      },
+      "0.7": {
+        "n_matches": 0,
+        "latency_ms": 6.19,
+        "sample_matches": []
+      },
+      "0.6": {
+        "n_matches": 0,
+        "latency_ms": 4.49,
+        "sample_matches": []
+      },
+      "0.5": {
+        "n_matches": 0,
+        "latency_ms": 5.84,
+        "sample_matches": []
+      }
+    }
+  },
+  {
+    "query": "thread safe lru cache",
+    "category": "concurrency",
+    "tokens": [
+      "thread",
+      "safe",
+      "lru",
+      "cache"
+    ],
+    "oov_tokens": [],
+    "thresholds": {
+      "1.0": {
+        "n_matches": 0,
+        "latency_ms": 3.63,
+        "sample_matches": []
+      },
+      "0.8": {
+        "n_matches": 0,
+        "latency_ms": 5.36,
+        "sample_matches": []
+      },
+      "0.7": {
+        "n_matches": 0,
+        "latency_ms": 4.04,
+        "sample_matches": []
+      },
+      "0.6": {
+        "n_matches": 0,
+        "latency_ms": 4.63,
+        "sample_matches": []
+      },
+      "0.5": {
+        "n_matches": 0,
+        "latency_ms": 4.34,
+        "sample_matches": []
+      }
+    }
+  },
+  {
+    "query": "recursive descent parser",
+    "category": "parsing",
+    "tokens": [
+      "recursive",
+      "descent",
+      "parser"
+    ],
+    "oov_tokens": [],
+    "thresholds": {
+      "1.0": {
+        "n_matches": 0,
+        "latency_ms": 3.46,
+        "sample_matches": []
+      },
+      "0.8": {
+        "n_matches": 0,
+        "latency_ms": 3.09,
+        "sample_matches": []
+      },
+      "0.7": {
+        "n_matches": 0,
+        "latency_ms": 3.38,
+        "sample_matches": []
+      },
+      "0.6": {
+        "n_matches": 0,
+        "latency_ms": 3.34,
+        "sample_matches": []
+      },
+      "0.5": {
+        "n_matches": 0,
+        "latency_ms": 3.51,
+        "sample_matches": []
+      }
+    }
+  },
+  {
+    "query": "shortest path graph dijkstra",
+    "category": "graph algorithms",
+    "tokens": [
+      "shortest",
+      "path",
+      "graph",
+      "dijkstra"
+    ],
+    "oov_tokens": [],
+    "thresholds": {
+      "1.0": {
+        "n_matches": 0,
+        "latency_ms": 4.37,
+        "sample_matches": []
+      },
+      "0.8": {
+        "n_matches": 0,
+        "latency_ms": 4.21,
+        "sample_matches": []
+      },
+      "0.7": {
+        "n_matches": 0,
+        "latency_ms": 4.57,
+        "sample_matches": []
+      },
+      "0.6": {
+        "n_matches": 0,
+        "latency_ms": 4.11,
+        "sample_matches": []
+      },
+      "0.5": {
+        "n_matches": 0,
+        "latency_ms": 4.58,
+        "sample_matches": []
+      }
+    }
+  }
+]

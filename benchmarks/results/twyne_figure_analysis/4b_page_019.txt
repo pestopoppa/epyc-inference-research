@@ -1,0 +1,34 @@
+encoding image slice...
+image slice encoded in 25467 ms
+decoding image batch 1/2, n_tokens_batch = 2048
+image decoded (batch 1/2) in 4057 ms
+decoding image batch 2/2, n_tokens_batch = 1609
+image decoded (batch 2/2) in 4505 ms
+
+Here is an analysis of Figure 6 from the DeFi whitepaper:
+
+---
+
+**1. What type of visualization is this?**
+
+This is a **contour plot** (or 2D surface plot) with a color gradient, often called a **heat map** or **contour chart**. It visualizes a 3-dimensional relationship (two independent variables and one dependent variable) in a 2D plane, using color intensity to represent the magnitude of the third variable.
+
+- The x-axis represents the *Liquidity Incentive (i)*.
+- The y-axis represents the *Closing Factor (c)*.
+- The color gradient (from blue to red) represents the *Expected CLP Losses* (as a decimal value).
+
+The black dashed line is a **theoretical frontier** — a boundary that represents the “optimal” or “minimum loss” curve derived from a mathematical model (Equation 38).
+
+---
+
+**2. What are the key components or data series shown?**
+
+- **X-axis: Liquidity Incentive (i)** — The incentive offered to liquidators (CLPs) to trigger a liquidation. Higher values mean higher incentives.
+- **Y-axis: Closing Factor (c)** — The fraction of collateral value that is “locked” or “used” in the loan. Lower values mean more collateral is available to the borrower.
+- **Color Bar (Right): CLP Loss** — The expected loss for the Collateral Lending Pool (CLP) as a decimal. Negative values indicate a loss (e.g., -0.936 = 93.6% loss). The color scale ranges from 0.000 (no loss) to -0.936 (maximum loss shown).
+- **Black Dashed Line: Theoretical CLP-loss Frontier** — The boundary curve derived from Equation 38. It represents the “loss frontier” — the minimum possible loss for a given set of parameters.
+- **Regions:**
+  - **“No Losses”** — The region where CLPs do not incur any loss (blue area, left of the frontier).
+  - **“CLP Losses”** — The region where CLPs incur losses (red to orange area, right of the frontier).
+
+---

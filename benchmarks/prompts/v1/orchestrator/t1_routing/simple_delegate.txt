@@ -1,0 +1,15 @@
+Summarize the following text in one sentence.
+
+---
+test_id: t1_simple_delegate
+context: |
+  The quick brown fox jumps over the lazy dog. This sentence contains every
+  letter of the English alphabet and has been used for typing practice since
+  the late 1800s. It was popularized by typewriter companies and later by
+  computer keyboard manufacturers.
+expected_behavior: Calls llm_call() once to summarize the text
+pass_criteria:
+  max_turns: 5
+  uses_function: ["llm_call"]
+  llm_call_count: 1
+  must_call_final: true

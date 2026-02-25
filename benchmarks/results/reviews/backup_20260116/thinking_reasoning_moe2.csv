@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+coder,t3_q1_concurrent_correctness,10.66,2,Response generated
+coder,t3_q2_distributed_consistency,11.04,2,Response generated
+coder,t3_q3_algorithmic_hardness,11.05,2,Response generated
+coder,t2_q1_design,10.49,2,Response generated
+coder,t2_q2_debug_complex,10.77,2,Response generated
+coder,t2_q3_optimize,1000000.0,0,Minimal output
+coder,t2_q4_system,11.11,2,Response generated
+coder,t1_q1_algorithm,10.86,2,Response generated
+coder,t1_q2_refactor,11.02,2,Response generated
+coder,t1_q3_test,11.21,2,Response generated
+thinking,t3_q1_methodological_critique,11.01,3,Expert-level analysis with formal concepts
+thinking,t3_q2_causal_inference,10.9,3,Expert-level analysis with formal concepts
+thinking,t3_q3_reasoning_trap,10.77,1,Basic attempt at expert problem
+thinking,t2_q1_paradox,10.91,3,Multi-step reasoning with structure
+thinking,t2_q2_counterfactual,10.93,1,Attempted causal problem
+thinking,t2_q3_formal,11.03,1,Attempted statistical problem
+thinking,t2_q4_metacognition,10.93,2,Substantial response with reasoning
+thinking,t1_q1_multistep,10.98,1,Attempted logic problem
+thinking,t1_q2_hypothesis,11.03,1,Attempted sequence problem
+thinking,t1_q3_planning,10.99,1,Attempted game theory problem
+math,t3_q1_analysis,11.08,2,Response generated
+math,t3_q2_combinatorics,10.89,2,Response generated
+math,t3_q3_probability_theory,10.98,2,Response generated
+math,t2_q1_optimization,11.32,2,Response generated
+math,t2_q2_proof,10.78,2,Response generated
+math,t2_q3_calculus,10.99,2,Response generated
+math,t2_q4_statistics,11.01,2,Response generated
+math,t1_q1_word_problem,10.92,2,Response generated
+math,t1_q2_system_equations,10.78,2,Response generated
+math,t1_q3_probability,10.92,2,Response generated
+instruction_precision,t3_q1_self_referential,11.28,2,Response generated
+instruction_precision,t3_q2_cascading_constraints,11.25,2,Response generated
+instruction_precision,t3_q3_meta_instruction,11.24,2,Response generated
+instruction_precision,t2_q1_resist_elaboration,11.31,2,Response generated
+instruction_precision,t2_q2_maintain_format,11.09,2,Response generated
+instruction_precision,t2_q3_empty_handling,11.14,2,Response generated
+instruction_precision,t2_q4_conflicting_constraints,11.23,2,Response generated
+instruction_precision,t1_q1_negative_instruction,11.27,2,Response generated
+instruction_precision,t1_q2_word_limit,11.3,2,Response generated
+instruction_precision,t1_q3_structured_format,11.26,2,Response generated
+instruction_precision,t1_q4_multiple_constraints,11.29,2,Response generated
+long_context,t3_q1_multi_hop_reasoning,5.46,2,Response generated
+long_context,t3_q2_contradiction_detection,6.28,2,Response generated
+long_context,t3_q3_evolving_requirements,6.11,2,Response generated
+long_context,t2_q1_deep_needle,3.52,2,Response generated
+long_context,t2_q2_synthesis,5.69,2,Response generated
+long_context,t2_q3_architecture,4.87,2,Response generated
+long_context,t1_q1_needle,8.08,2,Response generated
+long_context,t1_q2_multi_file,8.7,2,Response generated
+long_context,t1_q3_extraction,7.63,2,Response generated
+general,t3_q1_policy_analysis,10.36,2,General response generated
+general,t3_q2_system_failure,10.55,2,General response generated
+general,t3_q3_strategic_communication,10.42,2,General response generated
+general,t2_q1_synthesis,10.54,2,General response generated
+general,t2_q2_transform,10.66,2,General response generated
+general,t2_q3_schedule,10.44,2,General response generated
+general,t2_q4_inconsistency,10.61,2,General response generated
+general,t1_q1_json,10.6,2,General response generated
+general,t1_q2_multistep,10.53,2,General response generated
+general,t1_q3_compare,10.43,2,General response generated
+agentic,t3_q1_competing_constraints,10.44,2,Response generated
+agentic,t3_q2_multi_agent_coordination,10.47,2,Response generated
+agentic,t3_q3_adversarial_robustness,10.62,2,Response generated
+agentic,t2_q1_ambiguous,10.74,2,Response generated
+agentic,t2_q2_error_chain,10.44,2,Response generated
+agentic,t2_q3_schema_edge,10.61,2,Response generated
+agentic,t2_q4_orchestration,10.56,2,Response generated
+agentic,t1_q1_sequential,10.54,2,Response generated
+agentic,t1_q2_error_handling,10.44,2,Response generated
+agentic,t1_q3_nested_params,10.62,2,Response generated

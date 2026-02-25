@@ -1,0 +1,531 @@
+version: 1
+domain: instruction_precision
+description: "Tests exact instruction following - hardened for complex constraint satisfaction"
+created: "2025-12-16"
+updated: "2025-12-18"
+note: "Most tests can be auto-scored for pass/fail"
+
+prompts:
+  # ============== TIER 1: Medium (was T2) ==============
+  t1_q1_negative_instruction:
+    tier: 1
+    name: "Negative Instruction (Forbidden Words)"
+    prompt: |
+      Explain photosynthesis in 2 sentences. Do NOT mention sunlight, sun, or solar.
+    expected: "Explanation without forbidden words"
+    auto_score: "forbidden_words:sunlight,sun,solar"
+    reference_answer: |
+      Photosynthesis is the process by which plants convert light energy, water, and carbon dioxide into glucose and oxygen. This chemical reaction occurs in the chloroplasts of plant cells, enabling them to produce their own food.
+
+      **Alternative valid answer:**
+      Plants use light energy to transform water and carbon dioxide into sugar and oxygen through photosynthesis. This process takes place in the chloroplasts and is essential for plant growth and survival.
+
+      **Key constraints satisfied:**
+      - Two sentences ✓
+      - No "sunlight" ✓
+      - No "sun" ✓
+      - No "solar" ✓
+      - Valid scientific explanation ✓
+
+      **Common failures:**
+      - Using "sunlight" (most common violation)
+      - Using compound words like "sunshine"
+      - More or fewer than 2 sentences
+    scoring:
+      - criterion: "No forbidden words"
+        weight: 60
+      - criterion: "Valid explanation"
+        weight: 40
+
+  t1_q2_word_limit:
+    tier: 1
+    name: "Exact Word Count Range"
+    prompt: |
+      Describe machine learning in exactly 20-25 words. Count carefully.
+    expected: "20-25 words"
+    auto_score: "word_count:20:25"
+    reference_answer: |
+      Machine learning is a branch of artificial intelligence where computers learn patterns from data to make predictions or decisions without being explicitly programmed for each task. (25 words)
+
+      **Alternative valid answers (with word counts):**
+
+      (20 words): Machine learning enables computers to learn from data and improve their performance on tasks without explicit programming for every situation.
+
+      (22 words): Machine learning is a type of artificial intelligence that allows systems to automatically learn and improve from experience without being explicitly programmed.
+
+      (24 words): Machine learning uses algorithms and statistical models to enable computer systems to progressively improve their performance on a specific task through experience and data.
+
+      **Counting tips:**
+      - Hyphenated words typically count as one word
+      - Numbers count as words
+      - Contractions count as one word
+
+      **Common failures:**
+      - Not counting words at all
+      - Off by more than 5 words
+      - Counting punctuation as words
+    scoring:
+      - criterion: "Word count in range"
+        weight: 100
+
+  t1_q3_structured_format:
+    tier: 1
+    name: "Exact Structured Format"
+    prompt: |
+      List 3 programming languages with their release year.
+      Format EXACTLY as: LANGUAGE (YEAR)
+      One per line, no bullets, no numbers, no extra text.
+    expected: "Python (1991)\nJava (1995)\nJavaScript (1995)"
+    auto_score: "format_pattern:^[A-Za-z]+ \\(\\d{4}\\)$"
+    reference_answer: |
+      Python (1991)
+      Java (1995)
+      JavaScript (1995)
+
+      **Alternative valid answers (accurate years):**
+
+      C (1972)
+      Fortran (1957)
+      COBOL (1959)
+      Ruby (1995)
+      Go (2009)
+      Rust (2010)
+      Swift (2014)
+      Kotlin (2011)
+
+      **Format requirements:**
+      - Language name (can be multi-word like "Visual Basic")
+      - Space after name
+      - Year in parentheses
+      - No bullets (-, *, •)
+      - No numbers (1., 2., 3.)
+      - No extra text or explanations
+      - One entry per line
+
+      **Common failures:**
+      - Adding "1." or "-" before entries
+      - Adding explanatory text like "Here are three languages:"
+      - Wrong year format: "1991" instead of "(1991)"
+      - Extra punctuation: "Python (1991)."
+    scoring:
+      - criterion: "Correct format per line"
+        weight: 70
+      - criterion: "No bullets/numbers"
+        weight: 30
+
+  t1_q4_multiple_constraints:
+    tier: 1
+    name: "Multiple Simultaneous Constraints"
+    prompt: |
+      Name 5 countries in Europe.
+      - Exactly 5 countries
+      - Alphabetical order
+      - One per line
+      - No additional text or punctuation
+    expected: "5 European countries, alphabetical, one per line"
+    auto_score: "multi:count_items:5,alphabetical,no_punctuation"
+    reference_answer: |
+      Austria
+      Belgium
+      Denmark
+      France
+      Germany
+
+      **Alternative valid answers:**
+
+      Albania
+      Croatia
+      Estonia
+      Finland
+      Greece
+
+      Ireland
+      Italy
+      Latvia
+      Malta
+      Norway
+
+      **Constraints checklist:**
+      - ✓ Exactly 5 countries (not 4, not 6)
+      - ✓ Alphabetical order (A before B before C...)
+      - ✓ One per line (newline between each)
+      - ✓ No additional text (no "Here are 5 countries:")
+      - ✓ No punctuation (no periods, commas, or bullets)
+
+      **Common failures:**
+      - Adding an introduction like "Here are five European countries:"
+      - Adding periods after country names
+      - Non-alphabetical order
+      - Including non-European countries (Turkey is disputed)
+      - Listing 4 or 6 instead of exactly 5
+    scoring:
+      - criterion: "Exactly 5"
+        weight: 30
+      - criterion: "Alphabetical"
+        weight: 30
+      - criterion: "One per line"
+        weight: 20
+      - criterion: "No extra text"
+        weight: 20
+
+  # ============== TIER 2: Hard (was T3) ==============
+  t2_q1_resist_elaboration:
+    tier: 2
+    name: "Resist Urge to Elaborate"
+    prompt: |
+      What is 2+2? Reply with only the number, nothing else.
+    expected: "4"
+    auto_score: "exact_match:4"
+    reference_answer: |
+      4
+
+      **Exactly that. Nothing more.**
+
+      **Common failures:**
+      - "The answer is 4"
+      - "4."
+      - "2+2=4"
+      - "Four"
+      - "4\n" (trailing newline may be acceptable)
+      - Any explanation or elaboration
+
+      **Why this is hard for LLMs:**
+      LLMs are trained to be helpful and often elaborate by default.
+      Resisting this urge requires recognizing the explicit constraint
+      "nothing else" and suppressing the natural tendency to explain.
+
+      **Scoring:**
+      - Exact "4" with no additional characters: Full credit
+      - "4" with minor whitespace: Usually acceptable
+      - Any other text: Zero credit
+    scoring:
+      - criterion: "Only the number"
+        weight: 100
+
+  t2_q2_maintain_format:
+    tier: 2
+    name: "Maintain Format Under Complexity"
+    prompt: |
+      Analyze this error and respond in EXACTLY this format:
+      ERROR_TYPE: <type>
+      ROOT_CAUSE: <one sentence>
+      FIX: <one sentence>
+
+      No other text. Error: TypeError: Cannot read property 'map' of undefined
+    expected: "Three labeled lines in exact format"
+    auto_score: "format_lines:ERROR_TYPE:,ROOT_CAUSE:,FIX:"
+    reference_answer: |
+      ERROR_TYPE: TypeError
+      ROOT_CAUSE: Attempting to call .map() on a variable that is undefined instead of an array.
+      FIX: Add a null check or default to an empty array before calling .map().
+
+      **Alternative valid answer:**
+
+      ERROR_TYPE: TypeError
+      ROOT_CAUSE: The variable expected to be an array was undefined when .map() was called.
+      FIX: Initialize the variable to an empty array or use optional chaining (?.map).
+
+      **Format requirements:**
+      - Exactly 3 lines
+      - Each line starts with the label followed by colon and space
+      - ERROR_TYPE: (concise type name)
+      - ROOT_CAUSE: (one complete sentence)
+      - FIX: (one complete sentence)
+      - No introduction, no conclusion, no explanations
+
+      **Common failures:**
+      - Adding "Here's my analysis:" before the format
+      - Adding explanatory text after the three lines
+      - Multi-sentence ROOT_CAUSE or FIX
+      - Missing colon after labels
+      - Extra blank lines between entries
+    scoring:
+      - criterion: "Exact format"
+        weight: 70
+      - criterion: "No extra text"
+        weight: 30
+
+  t2_q3_empty_handling:
+    tier: 2
+    name: "Handle Empty/None Case"
+    prompt: |
+      Extract all email addresses from this text: 'Hello world, nice day!'
+      If none found, output exactly: NONE
+      Do not explain or apologize.
+    expected: "NONE"
+    auto_score: "exact_match:NONE"
+    reference_answer: |
+      NONE
+
+      **Exactly that. Nothing more.**
+
+      **Common failures:**
+      - "No email addresses found."
+      - "I couldn't find any email addresses in the text."
+      - "None"  (lowercase - must be uppercase NONE)
+      - "NONE."  (period added)
+      - "Sorry, there are no email addresses in this text."
+      - Explaining why there are no emails
+      - Apologizing for not finding any
+
+      **Why this is hard:**
+      - LLMs naturally want to explain empty results
+      - The explicit "Do not explain or apologize" fights against training
+      - Case sensitivity matters (NONE vs None vs none)
+
+      **Correct behavior:**
+      1. Scan text for email pattern (xxx@yyy.zzz)
+      2. Find none
+      3. Output exactly "NONE" as instructed
+    scoring:
+      - criterion: "Exactly NONE"
+        weight: 100
+
+  t2_q4_conflicting_constraints:
+    tier: 2
+    name: "Multiple Conflicting Constraints"
+    prompt: |
+      Write one sentence about databases that:
+      - Is under 12 words
+      - Starts with 'A'
+      - Ends with 'data'
+      - Does not use 'store' or 'storage'
+    expected: "Sentence meeting all 4 criteria"
+    auto_score: "multi:word_count:1:12,starts_with:A,ends_with:data,forbidden_words:store,storage"
+    reference_answer: |
+      A database organizes and manages large collections of structured data.
+
+      **Word count:** 9 words ✓
+      **Starts with 'A':** Yes ✓
+      **Ends with 'data':** Yes ✓
+      **No 'store'/'storage':** Correct ✓
+
+      **Alternative valid answers:**
+
+      "A relational database efficiently indexes and retrieves structured data." (8 words)
+
+      "A well-designed database ensures quick access to critical data." (9 words)
+
+      "All modern applications rely on databases to manage data." (9 words)
+
+      **Constraint analysis:**
+      - "Under 12 words" - must be 11 or fewer
+      - "Starts with A" - first word must be "A" or start with "A"
+      - "Ends with data" - last word must be "data"
+      - "No store/storage" - cannot use these words in any form
+
+      **Common failures:**
+      - Using "stores" or "storing" (related to forbidden "store")
+      - Ending with "data." (period may cause "ends with" check to fail)
+      - Exceeding 12 words when trying to be comprehensive
+      - Starting with "Databases" instead of "A"
+    scoring:
+      - criterion: "Under 12 words"
+        weight: 25
+      - criterion: "Starts with A"
+        weight: 25
+      - criterion: "Ends with data"
+        weight: 25
+      - criterion: "No forbidden words"
+        weight: 25
+
+  # ============== TIER 3: Expert Constraint Satisfaction (NEW) ==============
+  t3_q1_self_referential:
+    tier: 3
+    name: "Self-Referential Constraints"
+    prompt: |
+      Write a sentence that:
+      1. Contains exactly the number of words that it claims to contain
+      2. States how many letters are in the sentence (must be accurate)
+      3. Uses exactly 3 commas
+      4. Does not use the words 'this', 'sentence', or 'contains'
+
+      Example format: "A total of X words appear here, along with Y letters, making it, Z something."
+    expected: "Self-consistent sentence with accurate self-references and all format constraints"
+    auto_score: "manual"  # Requires checking internal consistency
+    reference_answer: |
+      Here are fourteen words, and exactly sixty letters appear, making a valid, complete statement.
+
+      **Verification:**
+      - Word count claim: "fourteen words"
+      - Actual word count: 14 ✓ (Here/are/fourteen/words/and/exactly/sixty/letters/appear/making/a/valid/complete/statement)
+      - Letter count claim: "sixty letters"
+      - Actual letter count: 60 ✓ (count all alphabetic characters)
+      - Comma count: 3 ✓ (after "words", "appear", "valid")
+      - Forbidden words: No "this", "sentence", "contains" ✓
+
+      **Alternative valid answer:**
+
+      "Twelve words exist here, with fifty-two letters total, all carefully, precisely counted."
+
+      Verification:
+      - Words: 12 ✓
+      - Letters: 52 ✓
+      - Commas: 3 ✓
+      - No forbidden words ✓
+
+      **Why this is extremely hard:**
+      1. Changing the word count changes the letter count
+      2. Changing letter count words changes both counts
+      3. Must satisfy all constraints simultaneously
+      4. Requires iterative trial-and-error or careful planning
+
+      **Construction approach:**
+      1. Start with a template with placeholders for numbers
+      2. Count words in template (excluding number words)
+      3. Choose number word that makes word count correct
+      4. Count letters and adjust number word for letter count
+      5. Verify all constraints, iterate if needed
+    scoring:
+      - criterion: "Word count claim matches actual"
+        weight: 30
+      - criterion: "Letter count claim matches actual"
+        weight: 30
+      - criterion: "Exactly 3 commas"
+        weight: 20
+      - criterion: "No forbidden words"
+        weight: 20
+
+  t3_q2_cascading_constraints:
+    tier: 3
+    name: "Cascading Constraint Dependencies"
+    prompt: |
+      Create a list of 5 items where:
+      1. Each item is a single word
+      2. Each word must start with the LAST letter of the previous word
+      3. No word can be longer than the previous word
+      4. The first word must be exactly 8 letters
+      5. The last word must be exactly 4 letters
+      6. No proper nouns
+      7. All words must be common English words
+
+      Output only the 5 words, one per line.
+    expected: "Chain of 5 words meeting all cascading constraints (e.g., absolute -> elephant -> talent -> tulip -> palm)"
+    auto_score: "manual"  # Complex constraint checking
+    reference_answer: |
+      absolute
+      economy
+      yellow
+      watch
+      help
+
+      **Verification:**
+      1. absolute (8 letters) - starts chain ✓
+      2. economy (7 letters) - starts with 'e' (last letter of absolute) ✓, 7 ≤ 8 ✓
+      3. yellow (6 letters) - starts with 'y' (last letter of economy) ✓, 6 ≤ 7 ✓
+      4. watch (5 letters) - starts with 'w' (last letter of yellow) ✓, 5 ≤ 6 ✓
+      5. help (4 letters) - starts with 'h' (last letter of watch) ✓, 4 ≤ 5 ✓, exactly 4 ✓
+
+      All common English words ✓
+      No proper nouns ✓
+
+      **Alternative valid chain:**
+
+      complete
+      elephant
+      teacher
+      river
+      rock
+
+      Verification:
+      - complete (8) → elephant (8) starts with 'e' ✓, 8 ≤ 8 ✓
+      - elephant (8) → teacher (7) starts with 't' ✓, 7 ≤ 8 ✓
+      - teacher (7) → river (5) starts with 'r' ✓, 5 ≤ 7 ✓
+      - river (5) → rock (4) starts with 'r' ✓, 4 ≤ 5 ✓, exactly 4 ✓
+
+      **Why this is hard:**
+      - Must plan the entire chain considering all constraints
+      - Length must decrease from 8 to 4 (lose 4 letters over 4 transitions)
+      - Last letter of each word constrains next word options
+      - Easy to get stuck with no valid next word
+
+      **Common failures:**
+      - Length increases somewhere in the chain
+      - First word not exactly 8 letters
+      - Last word not exactly 4 letters
+      - Chain breaks (word doesn't start with previous last letter)
+      - Using proper nouns or uncommon words
+    scoring:
+      - criterion: "Chain rule satisfied"
+        weight: 30
+      - criterion: "Length decreasing"
+        weight: 20
+      - criterion: "First word 8 letters"
+        weight: 15
+      - criterion: "Last word 4 letters"
+        weight: 15
+      - criterion: "All common English words"
+        weight: 20
+
+  t3_q3_meta_instruction:
+    tier: 3
+    name: "Meta-Instruction Interpretation"
+    prompt: |
+      I will give you instructions in a special format. Follow ONLY the instructions that are:
+      - In square brackets
+      - AND contain a number
+
+      Here are the instructions:
+      [Print hello]
+      [Print 42]
+      Print goodbye
+      {Print 99}
+      [Do nothing]
+      [Say 7 times: hi]
+
+      Output exactly what the valid instructions tell you to do, nothing else.
+    expected: "42\nhi hi hi hi hi hi hi"
+    auto_score: "manual"  # Meta-instruction parsing
+    reference_answer: |
+      42
+      hi hi hi hi hi hi hi
+
+      **Analysis of each instruction:**
+
+      1. `[Print hello]` - In square brackets ✓, contains number? NO ✗
+         → INVALID (no number)
+
+      2. `[Print 42]` - In square brackets ✓, contains number "42" ✓
+         → VALID → Output: 42
+
+      3. `Print goodbye` - In square brackets? NO ✗
+         → INVALID (not in brackets)
+
+      4. `{Print 99}` - In square brackets? NO (curly braces) ✗
+         → INVALID (wrong bracket type)
+
+      5. `[Do nothing]` - In square brackets ✓, contains number? NO ✗
+         → INVALID (no number)
+
+      6. `[Say 7 times: hi]` - In square brackets ✓, contains number "7" ✓
+         → VALID → Output: hi hi hi hi hi hi hi (7 times)
+
+      **Final output:**
+      42
+      hi hi hi hi hi hi hi
+
+      **Why this is hard:**
+      - Must parse meta-rules about which instructions to follow
+      - Must distinguish square brackets [] from curly braces {}
+      - Must check for numeric content, not just bracket format
+      - Must correctly interpret the valid instructions
+      - Must resist following plausible-looking invalid instructions
+
+      **Common failures:**
+      - Following `[Print hello]` (no number)
+      - Following `{Print 99}` (wrong brackets)
+      - Adding explanations about which instructions were followed
+      - Getting the "7 times" count wrong
+      - Including the instruction text instead of its result
+    scoring:
+      - criterion: "Correctly identifies valid instructions"
+        weight: 40
+      - criterion: "Ignores invalid instructions"
+        weight: 30
+      - criterion: "Correct interpretation of valid ones"
+        weight: 30
+
+inference_params:
+  temperature: 0.1  # Low temp for precise following
+  max_tokens: 512
+  timeout: 90

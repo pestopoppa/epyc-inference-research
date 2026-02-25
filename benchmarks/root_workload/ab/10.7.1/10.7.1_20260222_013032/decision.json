@@ -1,0 +1,12 @@
+{
+  "decision": "KEEP",
+  "reasons": [
+    "quality non-inferior in both environments with cost improvement/neutrality"
+  ],
+  "combined_deltas": {
+    "delta_quality": 0.050000000000000044,
+    "delta_cost": -0.09799610355926373,
+    "delta_latency": 0.043569594779182604,
+    "delta_manual_intervention": -0.045
+  }
+}

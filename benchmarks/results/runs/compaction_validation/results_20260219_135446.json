@@ -1,0 +1,29 @@
+{
+  "timestamp": "2026-02-19T13:54:46",
+  "tests": [
+    {
+      "name": "baseline_small",
+      "context_chars": 5132,
+      "answer_chars": 286,
+      "elapsed_s": 54.3,
+      "tool_results_cleared": 0,
+      "compaction_triggered": false,
+      "compaction_tokens_saved": 0,
+      "mode": "repl",
+      "turns": 2,
+      "role": "frontdoor",
+      "has_answer": true,
+      "pass": true
+    },
+    {
+      "name": "c1_medium_context",
+      "error": "http_504: {\"answer\":\"[ERROR: Inference failed: Request timed out after 18s]\",\"turns\":5,\"tokens_used\":918,\"elapsed_seconds\":89.18094407999888,\"mock_mode\":false,\"real_mode\":true,\"cache_stats\":{\"frontdoor\":{\"router_total_routes\":0,\"router_hit_rate\":0.0,\"backend_hit_rate\":1.0,\"backend_token_savings\":1.1525441437676314,\"total_prompt_tokens\":9571,\"cached_prompt_tokens\":11031,\"slot_stats\":[{\"slot_id\":0,\"prefix_hash\":\"\",\"hit_count\":0,\"miss_count\":0,\"hit_rate\":0.0,\"last_access\":1771505452.208196},{\"slot_id\":1,\"pre",
+      "pass": false
+    },
+    {
+      "name": "c1_large_context",
+      "error": "http_504: {\"answer\":\"[ERROR: Inference lock timeout (request deadline exceeded) (role=frontdoor, mode=exclusive, lock=/mnt/raid0/llm/tmp/heavy_model.lock, request=chat-cbe78305)]\",\"turns\":2,\"tokens_used\":500,\"elapsed_seconds\":90.37992701001349,\"mock_mode\":false,\"real_mode\":true,\"cache_stats\":{\"frontdoor\":{\"router_total_routes\":0,\"router_hit_rate\":0.0,\"backend_hit_rate\":1.0,\"backend_token_savings\":1.1525441437676314,\"total_prompt_tokens\":9571,\"cached_prompt_tokens\":11031,\"slot_stats\":[{\"slot_id\":0,\"prefix_",
+      "pass": false
+    }
+  ]
+}
