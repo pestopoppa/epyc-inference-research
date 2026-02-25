@@ -50,3 +50,7 @@ All results are for AMD EPYC 9655 "Turin" (96C/192T Zen 5, 1.13TB DDR5-5600 ECC,
 - [epyc-llama](https://github.com/pestopoppa/llama.cpp) — Custom llama.cpp fork for AMD EPYC
 
 Agent files, hooks, and handoffs live in `epyc-root` — not here. Orchestrator runtime code (`src/`) lives in `epyc-orchestrator` — not here.
+
+> **Path history note**: Documentation and handoffs dated before 2026-02-25 reference
+> `/mnt/raid0/llm/claude` (the pre-split monorepo). Those paths are no longer valid.
+> This repo's content was extracted from that monorepo.
