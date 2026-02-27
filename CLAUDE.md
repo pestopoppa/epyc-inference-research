@@ -28,7 +28,7 @@ Always update RESULTS.md after completing benchmark runs.
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/benchmark/seed_specialist_routing.py` | Main benchmarking harness |
+| ~~`scripts/benchmark/seed_specialist_routing.py`~~ | **Moved to epyc-orchestrator** (`epyc-orchestrator/scripts/benchmark/`) |
 | `scripts/score_benchmarks.py` | Score completed benchmark runs |
 | `scripts/lib/executor.py` | Shared inference executor |
 | `scripts/lib/registry_loader.py` | Model registry YAML loader |

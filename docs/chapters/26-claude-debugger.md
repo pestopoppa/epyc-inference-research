@@ -193,7 +193,7 @@ All debugger activity is logged to two JSONL files: one for fix decisions and re
 <details>
 <summary>Log format and locations</summary>
 
-Fix log at `/mnt/raid0/llm/claude/logs/debug_changes.jsonl`:
+Fix log at `/mnt/raid0/llm/epyc-orchestrator/logs/debug_changes.jsonl`:
 
 <details>
 <summary>Data: change log JSONL schema</summary>
@@ -214,7 +214,7 @@ Fix log at `/mnt/raid0/llm/claude/logs/debug_changes.jsonl`:
 
 </details>
 
-Diagnostics per-answer are logged separately to `/mnt/raid0/llm/claude/logs/seeding_diagnostics.jsonl`.
+Diagnostics per-answer are logged separately to `/mnt/raid0/llm/epyc-orchestrator/logs/seeding_diagnostics.jsonl`.
 
 Reload watchdog events are emitted to normal logs by `ClaudeDebugger`:
 

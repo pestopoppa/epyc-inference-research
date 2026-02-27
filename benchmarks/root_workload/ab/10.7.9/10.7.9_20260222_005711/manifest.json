@@ -4,7 +4,7 @@
   "optimization_id": "10.7.9",
   "seed": 42,
   "tasks_per_arm": 50,
-  "workload_pack_path": "/mnt/raid0/llm/claude/benchmarks/root_workload/workload_pack_curated_debug_hard50_v1.json",
+  "workload_pack_path": "/mnt/raid0/llm/epyc-inference-research/benchmarks/root_workload/workload_pack_curated_debug_hard50_v1.json",
   "workload_pack_version": "curated-debug-hard50-v1",
   "selected_tasks": [
     {

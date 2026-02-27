@@ -53,7 +53,7 @@ except ImportError:
 # Constants
 # ---------------------------------------------------------------------------
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent  # /mnt/raid0/llm/claude
+PROJECT_ROOT = Path(__file__).parent.parent.parent  # /mnt/raid0/llm/epyc-inference-research
 
 
 def _read_registry_timeout(category: str, key: str, fallback: int) -> int:

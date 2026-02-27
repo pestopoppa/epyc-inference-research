@@ -23,7 +23,7 @@ os.environ["GENSIM_DATA_DIR"] = "/mnt/raid0/llm/cache/gensim-data"
 SNIPPETS_DB = "/mnt/raid0/llm/cache/corpus/v3_sharded/snippets.db"
 CORPUS_TXT = "/mnt/raid0/llm/tmp/softmatcha_test_corpus.txt"
 INDEX_PATH = "/mnt/raid0/llm/tmp/softmatcha_test.h5"
-OUTPUT_DIR = "/mnt/raid0/llm/claude/benchmarks/results/runs/q5_softmatcha"
+OUTPUT_DIR = "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/runs/q5_softmatcha"
 
 # Test queries — same as quality gate prompts
 TEST_QUERIES = [

@@ -182,9 +182,9 @@ export PIP_CACHE_DIR=/mnt/raid0/llm/cache/pip
 export TMPDIR=/mnt/raid0/llm/tmp
 
 # XDG Base Directory Specification
-export XDG_CACHE_HOME=/mnt/raid0/llm/claude/cache
-export XDG_DATA_HOME=/mnt/raid0/llm/claude/share
-export XDG_STATE_HOME=/mnt/raid0/llm/claude/state
+export XDG_CACHE_HOME=/mnt/raid0/llm/epyc-orchestrator/cache
+export XDG_DATA_HOME=/mnt/raid0/llm/epyc-orchestrator/share
+export XDG_STATE_HOME=/mnt/raid0/llm/epyc-orchestrator/state
 ```
 
 </details>
@@ -264,7 +264,7 @@ source /mnt/raid0/llm/pace-env/bin/activate
 uv venv /mnt/raid0/llm/pace-env
 
 # Install dependencies
-uv pip install -r /mnt/raid0/llm/claude/requirements.txt
+uv pip install -r /mnt/raid0/llm/epyc-orchestrator/requirements.txt
 ```
 
 </details>
@@ -282,11 +282,11 @@ Every session starts with an initialization script that verifies the environment
 
 ```bash
 # Set environment variables
-source /mnt/raid0/llm/claude/scripts/utils/agent_log.sh
+source /mnt/raid0/llm/epyc-orchestrator/scripts/utils/agent_log.sh
 agent_session_start "Session purpose"
 
 # Discover models and verify llama.cpp branch
-bash /mnt/raid0/llm/claude/scripts/session/session_init.sh
+bash /mnt/raid0/llm/epyc-orchestrator/scripts/session/session_init.sh
 ```
 
 </details>

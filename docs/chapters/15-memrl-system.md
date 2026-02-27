@@ -16,7 +16,7 @@ The episodic store is the heart of MemRL — it persists every routing decision 
 <summary>Storage layout and design rationale</summary>
 
 ```
-/mnt/raid0/llm/claude/orchestration/repl_memory/sessions/
+/mnt/raid0/llm/epyc-orchestrator/orchestration/repl_memory/sessions/
 ├── episodic.db           # SQLite metadata (action, context, q_value, timestamps)
 ├── embeddings.faiss      # FAISS index (L2-normalized inner product)
 └── id_map.npy           # memory_id → faiss_idx mapping

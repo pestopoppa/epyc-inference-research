@@ -1,6 +1,6 @@
 {
   "timestamp": "20260222_060934",
-  "workload_pack": "/mnt/raid0/llm/claude/benchmarks/root_workload/workload_pack_curated_debug_hard100_v1.json",
+  "workload_pack": "/mnt/raid0/llm/epyc-inference-research/benchmarks/root_workload/workload_pack_curated_debug_hard100_v1.json",
   "sample_size": 20,
   "seed": 42,
   "timeout_s": 120,
@@ -252,8 +252,8 @@
     }
   ],
   "profile_refs": {
-    "codex": "/mnt/raid0/llm/claude/benchmarks/root_workload/ab_tuning/optuna_20260222_014840/codex/study_summary.json",
-    "claude-code": "/mnt/raid0/llm/claude/benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/study_summary.json"
+    "codex": "/mnt/raid0/llm/epyc-inference-research/benchmarks/root_workload/ab_tuning/optuna_20260222_014840/codex/study_summary.json",
+    "claude-code": "/mnt/raid0/llm/epyc-inference-research/benchmarks/root_workload/ab_tuning/optuna_20260222_014840/claude-code/study_summary.json"
   },
   "notes": [
     "Arm A: baseline prompt.",

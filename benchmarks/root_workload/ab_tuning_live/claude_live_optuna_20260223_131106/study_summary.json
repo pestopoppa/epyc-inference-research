@@ -3,7 +3,7 @@
   "environment": "claude-code-live",
   "seed": 42,
   "tasks_per_arm": 12,
-  "workload_pack": "/mnt/raid0/llm/claude/benchmarks/root_workload/workload_pack_curated_debug_hard100_v1.json",
+  "workload_pack": "/mnt/raid0/llm/epyc-inference-research/benchmarks/root_workload/workload_pack_curated_debug_hard100_v1.json",
   "optimization_ids": [
     "0.1",
     "0.2",
@@ -104,7 +104,7 @@
       "delta_latency": -0.1219716418774517,
       "delta_manual_intervention": 0.0,
       "feasible": true,
-      "trial_dir": "/mnt/raid0/llm/claude/benchmarks/root_workload/ab_tuning_live/claude_live_optuna_20260223_131106/trial_0002"
+      "trial_dir": "/mnt/raid0/llm/epyc-inference-research/benchmarks/root_workload/ab_tuning_live/claude_live_optuna_20260223_131106/trial_0002"
     }
   },
   "top_trials": [
@@ -182,7 +182,7 @@
         "delta_latency": -0.1219716418774517,
         "delta_manual_intervention": 0.0,
         "feasible": true,
-        "trial_dir": "/mnt/raid0/llm/claude/benchmarks/root_workload/ab_tuning_live/claude_live_optuna_20260223_131106/trial_0002"
+        "trial_dir": "/mnt/raid0/llm/epyc-inference-research/benchmarks/root_workload/ab_tuning_live/claude_live_optuna_20260223_131106/trial_0002"
       }
     },
     {
@@ -249,7 +249,7 @@
         "delta_latency": 0.07167296270046697,
         "delta_manual_intervention": 0.0,
         "feasible": true,
-        "trial_dir": "/mnt/raid0/llm/claude/benchmarks/root_workload/ab_tuning_live/claude_live_optuna_20260223_131106/trial_0000"
+        "trial_dir": "/mnt/raid0/llm/epyc-inference-research/benchmarks/root_workload/ab_tuning_live/claude_live_optuna_20260223_131106/trial_0000"
       }
     },
     {
@@ -318,7 +318,7 @@
         "delta_latency": 0.10358665453882786,
         "delta_manual_intervention": 0.0,
         "feasible": true,
-        "trial_dir": "/mnt/raid0/llm/claude/benchmarks/root_workload/ab_tuning_live/claude_live_optuna_20260223_131106/trial_0001"
+        "trial_dir": "/mnt/raid0/llm/epyc-inference-research/benchmarks/root_workload/ab_tuning_live/claude_live_optuna_20260223_131106/trial_0001"
       }
     }
   ]

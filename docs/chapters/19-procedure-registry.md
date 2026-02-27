@@ -312,7 +312,7 @@ The scheduler persists state to survive restarts:
 
 ```python
 # State is automatically saved to:
-# /mnt/raid0/llm/claude/orchestration/procedures/state/scheduler.json
+# /mnt/raid0/llm/epyc-orchestrator/orchestration/procedures/state/scheduler.json
 
 # After restart, reload state
 scheduler = ProcedureScheduler(registry, persist_state=True)

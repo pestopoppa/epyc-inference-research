@@ -29,7 +29,7 @@ os.environ["GENSIM_DATA_DIR"] = "/mnt/raid0/llm/cache/gensim-data"
 os.environ["FASTTEXT_HOME"] = "/mnt/raid0/llm/cache/fasttext"
 
 SNIPPETS_DB = "/mnt/raid0/llm/cache/corpus/v3_sharded/snippets.db"
-OUTPUT_DIR = "/mnt/raid0/llm/claude/benchmarks/results/runs"
+OUTPUT_DIR = "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/runs"
 
 # Token categories for analysis
 PYTHON_KEYWORDS = {

@@ -10,7 +10,7 @@ Manages benchmark results:
 - Skip logic for existing results
 
 Directory structure:
-  /mnt/raid0/llm/claude/benchmarks/results/
+  /mnt/raid0/llm/epyc-inference-research/benchmarks/results/
   ├── runs/
   │   └── YYYYMMDD_HHMMSS/           # Run directory
   │       ├── manifest.json           # What was tested
@@ -30,7 +30,7 @@ import yaml
 
 
 # Default paths
-RESULTS_DIR = "/mnt/raid0/llm/claude/benchmarks/results"
+RESULTS_DIR = "/mnt/raid0/llm/epyc-inference-research/benchmarks/results"
 INDEX_FILE = "index.jsonl"
 
 
@@ -395,7 +395,7 @@ def result_exists(
 
 
 # Model registry path for model-path deduplication
-MODEL_REGISTRY_PATH = "/mnt/raid0/llm/claude/orchestration/model_registry.yaml"
+MODEL_REGISTRY_PATH = "/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml"
 
 
 def get_roles_by_model_path(model_path: str) -> list[str]:

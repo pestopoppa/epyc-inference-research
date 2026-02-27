@@ -193,7 +193,7 @@ runtime_defaults:
     database:
       # FAISS backend (default): stores episodic.db + embeddings.faiss + id_map.npy
       # NumPy backend (fallback): stores episodic.db + embeddings.npy
-      path: /mnt/raid0/llm/claude/orchestration/repl_memory/sessions
+      path: /mnt/raid0/llm/epyc-orchestrator/orchestration/repl_memory/sessions
       use_faiss: true  # O(log n) search; set to false for O(n) NumPy fallback
     embedding:
       # BGE-large-en-v1.5: Purpose-built for embeddings, 1024 dims, better MTEB scores
@@ -233,7 +233,7 @@ runtime_defaults:
       flush_interval: 10.0  # Seconds between FAISS index flushes
       sync_on_shutdown: true  # Always flush on SIGTERM/close()
     logging:
-      progress_dir: /mnt/raid0/llm/claude/logs/progress
+      progress_dir: /mnt/raid0/llm/epyc-orchestrator/logs/progress
       buffer_size: 10
     cold_start:
       min_samples: 3
@@ -247,13 +247,13 @@ runtime_defaults:
     failure_graph:
       enabled: true
       description: "Kuzu graph for failure pattern tracking (anti-memory)"
-      db_path: /mnt/raid0/llm/claude/orchestration/repl_memory/kuzu_db
+      db_path: /mnt/raid0/llm/epyc-orchestrator/orchestration/repl_memory/kuzu_db
       # Scoring: actions linked to unmitigated failures get penalty
       penalty_weight: 0.3  # score *= (1 - penalty_weight * failure_risk)
     hypothesis_graph:
       enabled: true
       description: "Kuzu graph for hypothesis confidence tracking"
-      db_path: /mnt/raid0/llm/claude/orchestration/repl_memory/kuzu_db
+      db_path: /mnt/raid0/llm/epyc-orchestrator/orchestration/repl_memory/kuzu_db
       # Confidence update: asymptotic toward 1.0 on success, 0.0 on failure
       confidence_delta: 0.1
       low_confidence_threshold: 0.2  # Warn when confidence < this
@@ -503,7 +503,7 @@ server_mode:
     launch_command: >
       docker run -d --name nextplaid-code
       -p 8088:8080
-      -v /mnt/raid0/llm/claude/cache/next-plaid/code-indices:/data/indices
+      -v /mnt/raid0/llm/epyc-orchestrator/cache/next-plaid/code-indices:/data/indices
       -v /mnt/raid0/llm/cache/huggingface:/root/.cache/huggingface
       ghcr.io/lightonai/next-plaid:cpu-1.0.4
       --host 0.0.0.0 --port 8080 --index-dir /data/indices
@@ -526,7 +526,7 @@ server_mode:
     launch_command: >
       docker run -d --name nextplaid-docs
       -p 8089:8080
-      -v /mnt/raid0/llm/claude/cache/next-plaid/docs-indices:/data/indices
+      -v /mnt/raid0/llm/epyc-orchestrator/cache/next-plaid/docs-indices:/data/indices
       -v /mnt/raid0/llm/cache/huggingface:/root/.cache/huggingface
       ghcr.io/lightonai/next-plaid:cpu-1.0.4
       --host 0.0.0.0 --port 8080 --index-dir /data/indices

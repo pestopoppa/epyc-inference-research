@@ -35,7 +35,7 @@ from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
 
-BASE_DIR = "/mnt/raid0/llm/claude/benchmarks/results"
+BASE_DIR = "/mnt/raid0/llm/epyc-inference-research/benchmarks/results"
 RUNS_DIR = os.path.join(BASE_DIR, "runs")
 REVIEWS_DIR = os.path.join(BASE_DIR, "reviews")
 OUTPUT_FILE = os.path.join(REVIEWS_DIR, "summary.csv")

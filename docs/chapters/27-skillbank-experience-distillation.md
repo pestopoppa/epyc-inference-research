@@ -139,7 +139,7 @@ CREATE INDEX idx_confidence ON skills(confidence DESC);
 ### Storage Layout
 
 ```
-/mnt/raid0/llm/claude/orchestration/repl_memory/sessions/
+/mnt/raid0/llm/epyc-orchestrator/orchestration/repl_memory/sessions/
 ├── episodic.db             # SQLite metadata (existing)
 ├── embeddings.faiss        # Episodic FAISS index (existing)
 ├── id_map.npy              # Episodic ID map (existing)

@@ -73,7 +73,7 @@ sudo bash /mnt/raid0/llm/UTILS/emergency_cleanup.sh
 | ✅ ALLOWED (RAID Array) | ❌ FORBIDDEN (Root FS) |
 |-------------------------|------------------------|
 | `/mnt/raid0/llm/` | `/home/` (except symlinks) |
-| `/mnt/raid0/llm/claude/` | `/tmp/` (except via bind mount) |
+| `/mnt/raid0/llm/epyc-orchestrator/` | `/tmp/` (except via bind mount) |
 | `/mnt/raid0/llm/cache/` | `/var/` |
 | `/mnt/raid0/llm/models/` | `~/.cache/` |
 | `/mnt/raid0/llm/tmp/` | `~/.local/` |
@@ -100,7 +100,7 @@ The RAID0 array holds everything: 2.1TB of GGUF models, 850GB of HuggingFace sou
 | `/mnt/raid0/llm/hf/` | HuggingFace format models | 850GB (source models) |
 | `/mnt/raid0/llm/cache/` | HF/pip caches | 120GB |
 | `/mnt/raid0/llm/tmp/` | Temporary files (TMPDIR) | 50GB (cleaned daily) |
-| `/mnt/raid0/llm/claude/` | Project docs & scripts | 8GB |
+| `/mnt/raid0/llm/epyc-orchestrator/` | Project docs & scripts | 8GB |
 | `/mnt/raid0/llm/llama.cpp/` | Production toolchain | 2GB |
 | `/mnt/raid0/llm/llama.cpp-experimental/` | Experimental worktree | 2GB |
 
@@ -286,7 +286,7 @@ python3 -c "from src.services.archive_extractor import ArchiveExtractor; \
     ArchiveExtractor.cleanup_expired(max_age_hours=24)"
 
 # Clean pytest cache
-find /mnt/raid0/llm/claude -name ".pytest_cache" -type d -exec rm -rf {} +
+find /mnt/raid0/llm/epyc-orchestrator -name ".pytest_cache" -type d -exec rm -rf {} +
 ```
 
 </details>

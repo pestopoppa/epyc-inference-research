@@ -277,7 +277,7 @@ def main():
     parser = argparse.ArgumentParser(description="Score benchmark outputs")
     parser.add_argument("--input-dir", default="/mnt/raid0/llm/tmp/thinking_rubric_results",
                        help="Directory containing output files")
-    parser.add_argument("--output", default="/mnt/raid0/llm/claude/benchmarks/results/scores.jsonl",
+    parser.add_argument("--output", default="/mnt/raid0/llm/epyc-inference-research/benchmarks/results/scores.jsonl",
                        help="Output JSONL file")
     parser.add_argument("--summary", action="store_true",
                        help="Print summary statistics")

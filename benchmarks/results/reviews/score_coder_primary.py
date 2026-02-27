@@ -232,8 +232,8 @@ def score_response(suite, question_id, prompt, response, tps):
 
 def main():
     # Read benchmark file
-    input_file = '/mnt/raid0/llm/claude/benchmarks/results/runs/20251220_214317/coder_primary_baseline.json'
-    output_file = '/mnt/raid0/llm/claude/benchmarks/results/reviews/coder_primary_baseline.csv'
+    input_file = '/mnt/raid0/llm/epyc-inference-research/benchmarks/results/runs/20251220_214317/coder_primary_baseline.json'
+    output_file = '/mnt/raid0/llm/epyc-inference-research/benchmarks/results/reviews/coder_primary_baseline.csv'
 
     with open(input_file, 'r') as f:
         data = json.load(f)

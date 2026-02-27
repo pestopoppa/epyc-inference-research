@@ -305,7 +305,7 @@ Both graph databases are compact and fast. The Failure Graph holds around 74 nod
 |--------|---------------|------------------|
 | Database size | ~14MB | ~4.6MB |
 | Node count | 13 failures + 45 symptoms + 16 mitigations | 15 hypotheses + evidence |
-| Storage location | `/mnt/raid0/llm/claude/orchestration/repl_memory/kuzu_db/failure_graph/` | `.../hypothesis_graph/` |
+| Storage location | `/mnt/raid0/llm/epyc-orchestrator/orchestration/repl_memory/kuzu_db/failure_graph/` | `.../hypothesis_graph/` |
 | Backend | Kuzu 0.11+ | Kuzu 0.11+ |
 
 </details>

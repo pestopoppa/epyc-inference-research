@@ -91,7 +91,7 @@ store = SQLiteSessionStore()
 session = Session.create(
     name="Benchmark Analysis",
     project="Model Evaluation",
-    working_directory="/mnt/raid0/llm/claude"
+    working_directory="/mnt/raid0/llm/epyc-orchestrator"
 )
 
 # Store in database
@@ -301,7 +301,7 @@ finding = Finding(
     confidence=1.0,
     confirmed=True,
     tags=["benchmark", "moe", "optimization"],
-    source_file="/mnt/raid0/llm/claude/benchmarks/results/runs/2026-01-15/..."
+    source_file="/mnt/raid0/llm/epyc-orchestrator/benchmarks/results/runs/2026-01-15/..."
 )
 
 store.add_finding(finding)

@@ -90,7 +90,7 @@ def main():
     parser.add_argument("--output", type=str, default=None, help="Output JSON path")
     args = parser.parse_args()
 
-    results_dir = Path("/mnt/raid0/llm/claude/benchmarks/results/runs")
+    results_dir = Path("/mnt/raid0/llm/epyc-inference-research/benchmarks/results/runs")
     ts = time.strftime("%Y%m%d_%H%M%S")
     out_dir = results_dir / f"sidecar_{args.model}_{ts}"
     out_dir.mkdir(parents=True, exist_ok=True)

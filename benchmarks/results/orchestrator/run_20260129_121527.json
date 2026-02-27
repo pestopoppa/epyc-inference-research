@@ -25,7 +25,7 @@
         "suites": {
           "thinking": {
             "exit_code": 0,
-            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_thinking_20260129_121527.json",
+            "output_file": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/orchestrator/comparison_thinking_20260129_121527.json",
             "quality_pass_rate": 100.0,
             "avg_speedup": 0,
             "avg_tps": 37.35230235130989,
@@ -34,7 +34,7 @@
           },
           "coder": {
             "exit_code": 0,
-            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_coder_20260129_121527.json",
+            "output_file": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/orchestrator/comparison_coder_20260129_121527.json",
             "quality_pass_rate": 90.0,
             "avg_speedup": 0,
             "avg_tps": 30.912615063528925,
@@ -43,7 +43,7 @@
           },
           "general": {
             "exit_code": 0,
-            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_general_20260129_121527.json",
+            "output_file": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/orchestrator/comparison_general_20260129_121527.json",
             "quality_pass_rate": 80.0,
             "avg_speedup": 0,
             "avg_tps": 29.929225327041262,
@@ -52,7 +52,7 @@
           },
           "math": {
             "exit_code": 0,
-            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_math_20260129_121527.json",
+            "output_file": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/orchestrator/comparison_math_20260129_121527.json",
             "quality_pass_rate": 80.0,
             "avg_speedup": 0,
             "avg_tps": 29.589261104768514,
@@ -61,7 +61,7 @@
           },
           "agentic": {
             "exit_code": 0,
-            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_agentic_20260129_121527.json",
+            "output_file": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/orchestrator/comparison_agentic_20260129_121527.json",
             "quality_pass_rate": 80.0,
             "avg_speedup": 0,
             "avg_tps": 27.48724454845497,
@@ -70,7 +70,7 @@
           },
           "instruction_precision": {
             "exit_code": 0,
-            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_instruction_precision_20260129_121527.json",
+            "output_file": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/orchestrator/comparison_instruction_precision_20260129_121527.json",
             "quality_pass_rate": 72.72727272727273,
             "avg_speedup": 0,
             "avg_tps": 27.8543873308,
@@ -79,7 +79,7 @@
           },
           "long_context": {
             "exit_code": 0,
-            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_long_context_20260129_121527.json",
+            "output_file": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/orchestrator/comparison_long_context_20260129_121527.json",
             "quality_pass_rate": 33.33333333333333,
             "avg_speedup": 0,
             "avg_tps": 14.326170224017751,
@@ -88,7 +88,7 @@
           },
           "vl": {
             "exit_code": 0,
-            "output_file": "/mnt/raid0/llm/claude/benchmarks/results/orchestrator/comparison_vl_20260129_121527.json",
+            "output_file": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/orchestrator/comparison_vl_20260129_121527.json",
             "quality_pass_rate": 75.0,
             "avg_speedup": 0,
             "avg_tps": 10.830077682830641,

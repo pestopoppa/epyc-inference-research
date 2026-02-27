@@ -8,7 +8,7 @@
 # Usage: source lib/registry_reader.sh
 # =============================================================================
 
-REGISTRY_FILE="${REGISTRY_FILE:-/mnt/raid0/llm/claude/orchestration/model_registry.yaml}"
+REGISTRY_FILE="${REGISTRY_FILE:-/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml}"
 MODEL_BASE="/mnt/raid0/llm/lmstudio/models"
 
 # =============================================================================

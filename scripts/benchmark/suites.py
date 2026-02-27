@@ -5,7 +5,7 @@ from __future__ import annotations
 Benchmark Suite Loader
 
 Loads benchmark prompt definitions from YAML files in:
-  /mnt/raid0/llm/claude/benchmarks/prompts/v1/
+  /mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/v1/
 
 Provides functions to:
 - Load all suites
@@ -27,7 +27,7 @@ except ImportError:
 
 
 # Default paths
-PROMPTS_DIR = "/mnt/raid0/llm/claude/benchmarks/prompts/v1"
+PROMPTS_DIR = "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/v1"
 
 
 @dataclass

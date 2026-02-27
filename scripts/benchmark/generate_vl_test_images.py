@@ -7,7 +7,7 @@ import os
 
 from PIL import Image, ImageDraw, ImageFont
 
-OUTPUT_DIR = "/mnt/raid0/llm/claude/test_images/vl_rubric"
+OUTPUT_DIR = "/mnt/raid0/llm/epyc-inference-research/test_images/vl_rubric"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def get_font(size=40):

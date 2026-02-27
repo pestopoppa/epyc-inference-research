@@ -188,7 +188,7 @@ python3 scripts/server/orchestrator_stack.py reload orchestrator
 <summary>Config: orchestrator_state.json schema</summary>
 
 ```json
-// /mnt/raid0/llm/claude/logs/orchestrator_state.json
+// /mnt/raid0/llm/epyc-orchestrator/logs/orchestrator_state.json
 {
   "server_8080": {
     "role": "frontdoor",
@@ -196,7 +196,7 @@ python3 scripts/server/orchestrator_stack.py reload orchestrator
     "port": 8080,
     "started_at": "2026-01-28T10:30:00",
     "model_path": "/mnt/raid0/llm/models/Qwen3-Coder-30B-A3B-Q4_K_M.gguf",
-    "log_file": "/mnt/raid0/llm/claude/logs/llama-server-8080.log"
+    "log_file": "/mnt/raid0/llm/epyc-orchestrator/logs/llama-server-8080.log"
   }
 }
 ```
@@ -308,7 +308,7 @@ checkpoint_restore("before_model_update_20260128_103000")
 
 </details>
 
-Stored in `/mnt/raid0/llm/claude/orchestration/checkpoints/`.
+Stored in `/mnt/raid0/llm/epyc-orchestrator/orchestration/checkpoints/`.
 
 ## References
 

@@ -17,7 +17,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-DIAGNOSTICS_PATH = Path("/mnt/raid0/llm/claude/logs/seeding_diagnostics.jsonl")
+DIAGNOSTICS_PATH = Path("/mnt/raid0/llm/epyc-inference-research/logs/seeding_diagnostics.jsonl")
 
 
 def load_records(path: Path) -> list[dict]:

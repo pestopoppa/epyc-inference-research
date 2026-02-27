@@ -380,7 +380,7 @@ Beyond the static YAML registry, tools can be loaded dynamically through a plugi
   "enabled": true,
   "dependencies": ["kuzu"],
   "settings_schema": {
-    "canvas_directory": {"type": "string", "default": "/mnt/raid0/llm/claude/logs/canvases"}
+    "canvas_directory": {"type": "string", "default": "/mnt/raid0/llm/epyc-orchestrator/logs/canvases"}
   },
   "tools": [
     {

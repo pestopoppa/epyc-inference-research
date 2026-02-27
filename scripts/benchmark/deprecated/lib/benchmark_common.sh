@@ -7,7 +7,7 @@
 # =============================================================================
 
 # Paths
-BENCHMARK_BASE="/mnt/raid0/llm/claude/benchmarks"
+BENCHMARK_BASE="/mnt/raid0/llm/epyc-inference-research/benchmarks"
 PROMPTS_DIR="$BENCHMARK_BASE/prompts"
 RESULTS_DIR="$BENCHMARK_BASE/results"
 BASELINES_DIR="$BENCHMARK_BASE/baselines"

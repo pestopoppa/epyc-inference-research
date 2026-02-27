@@ -146,7 +146,7 @@ def _candidate_context_dirs() -> list[Path]:
         dirs.append(Path(env_tmp))
     dirs.extend(
         [
-            Path("/mnt/raid0/llm/claude/tmp"),
+            Path("/mnt/raid0/llm/epyc-inference-research/tmp"),
             Path("/mnt/raid0/llm/tmp"),
             Path("/tmp"),
         ]
@@ -228,7 +228,7 @@ def main():
             print(f"    Head: {head[:300]}...")
 
     # Save
-    out_dir = "/mnt/raid0/llm/claude/benchmarks/results/runs/compaction_validation"
+    out_dir = "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/runs/compaction_validation"
     os.makedirs(out_dir, exist_ok=True)
     ts = time.strftime("%Y%m%d_%H%M%S")
     out_path = f"{out_dir}/results_{ts}.json"

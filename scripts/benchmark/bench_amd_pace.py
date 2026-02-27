@@ -24,7 +24,7 @@ Usage:
     python bench_amd_pace.py --dry-run
 
 Results are saved to:
-    /mnt/raid0/llm/claude/benchmarks/results/runs/{run_id}/amd_pace_{model}_{config}.json
+    /mnt/raid0/llm/epyc-inference-research/benchmarks/results/runs/{run_id}/amd_pace_{model}_{config}.json
 """
 
 import argparse
@@ -59,7 +59,7 @@ from suites import load_suite, get_all_suite_names
 
 # Model configurations
 HF_BASE = Path("/mnt/raid0/llm/hf")
-RESULTS_DIR = Path("/mnt/raid0/llm/claude/benchmarks/results")
+RESULTS_DIR = Path("/mnt/raid0/llm/epyc-inference-research/benchmarks/results")
 
 # Set torch threads for AMD EPYC
 torch.set_num_threads(96)

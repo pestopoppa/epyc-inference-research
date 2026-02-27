@@ -513,7 +513,7 @@ Two-stage context pressure management in `src/graph/helpers.py`:
 1. **C3: Tool Result Clearing** (40% of max_context) — regex-based clearing of stale `<<<TOOL_OUTPUT>>>...<<<END_TOOL_OUTPUT>>>` blocks from `state.last_output`. Keeps last N blocks (default 2), replaces older with `[Tool result cleared]`. Feature flag: `tool_result_clearing`.
 
 2. **C1: Context Externalization** (60% of max_context) — "virtual memory" pattern instead of lossy summarization:
-   - Dumps full verbatim `state.context` to a writable tmp path (`ORCHESTRATOR_PATHS_TMP_DIR` / configured tmp / `/mnt/raid0/llm/claude/tmp` / system tmp fallback) (zero information loss)
+   - Dumps full verbatim `state.context` to a writable tmp path (`ORCHESTRATOR_PATHS_TMP_DIR` / configured tmp / `/mnt/raid0/llm/epyc-orchestrator/tmp` / system tmp fallback) (zero information loss)
    - Generates a structured index via `worker_explore` (7B, not SERIAL_ROLES gated) using hot-swappable prompt (`orchestration/prompts/compaction_index.md`) with line coordinates for one-shot `read_file(path, offset=N, limit=M)` retrieval
    - If index generation fails (timeout/contention), compaction still proceeds using a deterministic fallback index
    - Index prompt now generates a **"Current Execution State"** block as the first section (what the system is working on, key values, next action) — inspired by the Markovian property from Delethink (arXiv:2510.06557)

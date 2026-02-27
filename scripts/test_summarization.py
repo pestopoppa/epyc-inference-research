@@ -9,7 +9,7 @@ import httpx
 from pathlib import Path
 
 # Load figure descriptions from previous analysis
-ANALYSIS_FILE = Path("/mnt/raid0/llm/claude/Twyne_V1_Whitepaper_analysis.json")
+ANALYSIS_FILE = Path("/mnt/raid0/llm/epyc-inference-research/Twyne_V1_Whitepaper_analysis.json")
 
 def load_context():
     """Load figure descriptions and construct context."""
@@ -112,7 +112,7 @@ if __name__ == "__main__":
 
     if result:
         # Save result
-        output_file = Path(f"/mnt/raid0/llm/claude/Twyne_summarization_{model_name.replace('/', '_')}.json")
+        output_file = Path(f"/mnt/raid0/llm/epyc-inference-research/Twyne_summarization_{model_name.replace('/', '_')}.json")
         with open(output_file, "w") as f:
             json.dump(result, f, indent=2)
         print(f"\nResult saved to: {output_file}")

@@ -1,10 +1,10 @@
 #!/bin/bash
-# organize_claude_dir.sh - Reorganize /mnt/raid0/llm/claude into clean structure
+# organize_claude_dir.sh - Reorganize /mnt/raid0/llm/epyc-inference-research into clean structure
 # Usage: bash organize_claude_dir.sh [--dry-run]
 
 set -euo pipefail
 
-CLAUDE_DIR="/mnt/raid0/llm/claude"
+CLAUDE_DIR="/mnt/raid0/llm/epyc-inference-research"
 DRY_RUN=0
 
 if [[ "${1:-}" == "--dry-run" ]]; then
