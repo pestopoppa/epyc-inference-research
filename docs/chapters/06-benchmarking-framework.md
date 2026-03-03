@@ -23,6 +23,8 @@ Every model entering the orchestration system is measured against eight purpose-
 | **VL** | Vision-language | OCR, image understanding | worker_vision |
 | **Long Context** | Information retrieval | Needle-in-haystack (4K-50K tokens) | ingest_long_context |
 | **Instruction Precision** | Format compliance | Exact output structure | **Critical for orchestration** |
+| **Web Research** | Multi-source web search | Query decomposition, source synthesis | frontdoor, any tool-using role |
+| **Skill Transfer** | Cross-domain skill transfer | Same skill across code/math/web domains | SkillBank validation |
 
 </details>
 
@@ -189,7 +191,14 @@ Nine suites now sample fresh questions from real HuggingFace datasets on each ru
 | cruxeval | CRUXEval (cruxeval-org/cruxeval) | 1,600 |
 | bigcodebench | BigCodeBench (bigcode/bigcodebench) | 1,140 |
 
-Adapters in `scripts/benchmark/dataset_adapters.py`. Falls back to static YAML for `agentic`, `long_context`, and `mode_advantage`.
+Adapters in `scripts/benchmark/dataset_adapters.py`. Falls back to static YAML for `agentic`, `long_context`, `mode_advantage`, `web_research`, and `skill_transfer`.
+
+Two additional YAML-only suites were added on 2026-03-03:
+
+| Suite | Questions | Scoring | Purpose |
+|-------|-----------|---------|---------|
+| web_research | 50 | F1 (0.5) | 5 categories: post-cutoff, multi-source, verification, current-data, multi-hop |
+| skill_transfer | 36 | F1 (0.5) | 4 skills × 3 domains — validates SkillBank cross-domain transfer |
 
 ### Mode-Advantage Suite (February 2026)
 

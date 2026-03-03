@@ -397,6 +397,44 @@ These dimensions mirror the complexity of Claude's own pricing structure, where 
 
 </details>
 
+## Web Research Reward Dimensions (March 2026, Search-R1)
+
+Beyond routing cost, the seeding pipeline now computes multi-dimensional rewards when `web_research` tool usage is detected. These capture research quality orthogonal to the correctness/cost trade-off.
+
+### Tool Effectiveness Rewards
+
+| Dimension | Computation | Range |
+|-----------|-------------|-------|
+| `wr_accuracy` | Binary correctness of final answer | 0.0–1.0 |
+| `wr_source_diversity` | Unique domains / total fetched pages | 0.0–1.0 |
+| `wr_efficiency` | Inverse of total fetch time (normalized) | 0.0–1.0 |
+| `wr_completeness` | Pages synthesized / pages fetched | 0.0–1.0 |
+
+Aggregate: weighted average (accuracy=0.5, completeness=0.3, diversity=0.1, efficiency=0.1).
+
+### Scratchpad Rewards
+
+When session scratchpad is active, three additional dimensions measure model self-awareness during research:
+
+| Dimension | Signal |
+|-----------|--------|
+| `sp_insight_count` | Number of structured insights extracted by worker_fast |
+| `sp_web_insight_ratio` | Fraction of insights referencing web content (keyword match) |
+| `sp_answer_containment` | Fraction of insight keywords (len>=4) appearing in final answer |
+
+### Query Strategy Scoring
+
+`score_query_strategy()` evaluates root LM multi-call decomposition:
+- `query_count` — 1=direct, 2+=decomposed
+- `query_diversity` — Jaccard distance between consecutive queries
+- `source_yield` — unique domains / total calls
+
+### MemRL Integration
+
+`wr_*` and `sp_*` dimensions are injected into the reward context via `seeding_injection.py`. In `q_scorer.py`, a +0.05 additive bonus for `wr_source_diversity` is applied when `wr_accuracy > 0` (correctness-gated to avoid rewarding diverse but wrong searches).
+
+**Key files**: `seeding_rewards.py` (compute functions), `seeding_injection.py` (MemRL injection), `q_scorer.py` (bonus application).
+
 ## Skill Effectiveness Scoring (February 2026)
 
 SkillBank's recursive evolution system (see SkillBank & Experience Distillation (documented in epyc-orchestrator)) creates a feedback loop with cost-aware rewards. When a skill-augmented routing decision succeeds cheaply, both the QScorer (routing memory) and OutcomeTracker (skill confidence) reinforce the decision, driving a virtuous cycle where architect knowledge propagates to cheaper workers over time.

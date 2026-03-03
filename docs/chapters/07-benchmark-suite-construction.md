@@ -383,7 +383,7 @@ Each of the nine suites draws from different public benchmarks and uses differen
 
 ## Current Pool Statistics
 
-Across all nine suites we have 431 questions total, skewing toward T2 and T3 difficulty since that is where models actually diverge in capability.
+Across all eleven suites we have 517 questions total, skewing toward T2 and T3 difficulty since that is where models actually diverge in capability.
 
 <details>
 <summary>Pool statistics by suite</summary>
@@ -399,9 +399,40 @@ Across all nine suites we have 431 questions total, skewing toward T2 and T3 dif
 | instruction_precision | 43 | 13 | 17 | 13 | programmatic |
 | long_context | 44 | 8 | 14 | 22 | substring / exact_match |
 | mode_advantage | 90 | 0 | 45 | 45 | code_execution / exact_match |
-| **TOTAL** | **431** | 91 | 168 | 172 | -- |
+| web_research | 50 | — | — | — | f1 (0.5 threshold) |
+| skill_transfer | 36 | — | — | — | f1 (0.5 threshold) |
+| **TOTAL** | **517** | 91+ | 168+ | 172+ | — |
 
 </details>
+
+### Web Research Suite (March 2026)
+
+50 questions across 5 categories, each requiring `web_research` tool invocation:
+
+| Category | Count | Signal |
+|----------|-------|--------|
+| post_cutoff | 10 | Facts after model training cutoff |
+| multi_source | 10 | Requires cross-referencing multiple sources |
+| verification | 10 | Claim verification against live data |
+| current_data | 10 | Current statistics/prices/standings |
+| multi_hop | 10 | Multi-step reasoning over web results |
+
+All prompts include "Use web search to find" to ensure tool triggering. F1 scoring with threshold 0.5 (matching SimpleQA config). Feeds into Search-R1 reward dimensions (see epyc-orchestrator Ch07: MemRL System).
+
+### Skill Transfer Suite (March 2026)
+
+36 questions testing 4 skills × 3 domains × 3 questions each, designed to validate SkillBank cross-domain transfer:
+
+| Skill | Code | Math | Web Research |
+|-------|------|------|-------------|
+| structured_extraction | 3 | 3 | 3 |
+| error_diagnosis | 3 | 3 | 3 |
+| multi_step_planning | 3 | 3 | 3 |
+| format_transformation | 3 | 3 | 3 |
+
+Analysis scripts: `analyze_skill_transfer.py` (skill × domain pass-rate matrix), `skill_transfer_regression.py` (before/after regression detection).
+
+**Scoring propagation fix**: Prior to 2026-03-03, `question_pool.py` defaulted per-question `scoring_method` to `exact_match` ignoring YAML top-level defaults. Fixed to propagate top-level `scoring_method`/`scoring_config` as fallbacks. This also corrected `web_research.yaml` — its 50 questions were silently scored with `exact_match` instead of `f1`.
 
 ## Reconstruction Procedure
 
