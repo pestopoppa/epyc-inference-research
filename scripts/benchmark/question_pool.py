@@ -87,6 +87,8 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
                 with open(yaml_path) as f:
                     data = _yaml.safe_load(f)
                 questions = data.get("questions", [])
+                default_scoring_method = data.get("scoring_method", "exact_match")
+                default_scoring_config = data.get("scoring_config", {})
                 converted = []
                 for q in questions:
                     converted.append({
@@ -97,8 +99,8 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
                         "expected": q.get("expected", ""),
                         "image_path": q.get("image_path", ""),
                         "tier": q.get("tier", 1),
-                        "scoring_method": q.get("scoring_method", "exact_match"),
-                        "scoring_config": q.get("scoring_config", {}),
+                        "scoring_method": q.get("scoring_method", default_scoring_method),
+                        "scoring_config": q.get("scoring_config", default_scoring_config),
                         "dataset_source": "yaml",
                     })
                 stats[suite_name] = len(converted)

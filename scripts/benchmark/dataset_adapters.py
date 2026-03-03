@@ -47,7 +47,7 @@ ADAPTER_SUITES = {
 }
 
 # Suites that stay YAML-based (no public dataset or intentionally synthetic)
-YAML_ONLY_SUITES = {"agentic", "long_context", "mode_advantage", "mode_advantage_hard", "web_research"}
+YAML_ONLY_SUITES = {"agentic", "long_context", "mode_advantage", "mode_advantage_hard", "skill_transfer", "web_research"}
 
 
 def get_adapter(suite: str) -> Optional["BaseAdapter"]:

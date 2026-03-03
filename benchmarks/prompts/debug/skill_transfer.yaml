@@ -1,0 +1,680 @@
+# SkillsBench-Inspired Skill Transfer Evaluation Suite
+#
+# Measures per-skill cross-domain transfer: does a model that masters
+# structured_extraction on code also handle it on math and web/research?
+#
+# 4 skills x 3 domains x 3 questions = 36 questions.
+# Extra fields (skill, domain) are dropped by pool builder — analysis
+# scripts join against this YAML by question_id to recover them.
+#
+# Skills:
+#   - structured_extraction: Pull structured data from unstructured text
+#   - error_diagnosis: Identify root causes of failures
+#   - multi_step_planning: Decompose complex tasks into ordered steps
+#   - format_transformation: Convert between data representations
+#
+# Domains:
+#   - code: Programming and software engineering
+#   - math: Mathematics and formal reasoning
+#   - web_research: Web content and information synthesis
+
+scoring_method: f1
+scoring_config:
+  threshold: 0.5
+
+questions:
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # STRUCTURED EXTRACTION — Code Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_ext_code_001
+    prompt: |
+      Extract the following from this Python traceback: (1) the exception type,
+      (2) the file where it originated, (3) the line number.
+
+      Traceback (most recent call last):
+        File "/app/services/auth.py", line 42, in validate_token
+          payload = jwt.decode(token, secret, algorithms=["HS256"])
+        File "/usr/lib/python3.11/site-packages/jwt/api_jwt.py", line 168, in decode
+          self._validate_claims(payload, merged_options)
+        jwt.exceptions.ExpiredSignatureError: Signature has expired
+
+      Return your answer as: exception_type, file, line_number
+    expected: "ExpiredSignatureError, /app/services/auth.py, 42"
+    skill: structured_extraction
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_ext_code_002
+    prompt: |
+      Extract all environment variable names referenced in this shell script snippet:
+
+      #!/bin/bash
+      DB_HOST="${DB_HOST:-localhost}"
+      DB_PORT="${DB_PORT:-5432}"
+      echo "Connecting to $DB_HOST:$DB_PORT as $DB_USER"
+      export PGPASSWORD="$DB_PASS"
+      psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME"
+
+      List them comma-separated in the order they first appear.
+    expected: "DB_HOST, DB_PORT, DB_USER, DB_PASS, DB_NAME, PGPASSWORD"
+    skill: structured_extraction
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_ext_code_003
+    prompt: |
+      From the following git log, extract: (1) number of commits, (2) unique
+      authors, (3) files changed.
+
+      commit a1b2c3d Author: Alice <alice@co.com> Date: Mon Mar 3 10:00
+        Fix null pointer in UserService.java
+
+      commit d4e5f6g Author: Bob <bob@co.com> Date: Mon Mar 3 09:30
+        Update README.md with API docs
+
+      commit h7i8j9k Author: Alice <alice@co.com> Date: Sun Mar 2 22:15
+        Refactor PaymentController.java
+
+      Return: commit_count, authors (comma-sep), files (comma-sep)
+    expected: "3, Alice, Bob, UserService.java, README.md, PaymentController.java"
+    skill: structured_extraction
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # STRUCTURED EXTRACTION — Math Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_ext_math_001
+    prompt: |
+      Extract all variables and their given values from this word problem:
+
+      "A train leaves Station A traveling east at 80 km/h. Two hours later,
+      another train leaves Station A traveling east at 120 km/h. Station B
+      is 480 km east of Station A."
+
+      List as: variable = value, one per item, comma-separated.
+    expected: "speed_train1 = 80 km/h, head_start = 2 hours, speed_train2 = 120 km/h, distance_AB = 480 km"
+    skill: structured_extraction
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_ext_math_002
+    prompt: |
+      From this system of equations, extract: (1) number of equations,
+      (2) number of unique variables, (3) list the variables.
+
+      3x + 2y - z = 10
+      x - y + 4z = -2
+      2x + 3y + z = 14
+
+      Return: equation_count, variable_count, variables (comma-sep)
+    expected: "3, 3, x, y, z"
+    skill: structured_extraction
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_ext_math_003
+    prompt: |
+      Extract the coefficients of the polynomial:
+      f(x) = 5x^4 - 3x^3 + 0x^2 + 7x - 2
+
+      List them in order from highest degree to lowest, comma-separated.
+    expected: "5, -3, 0, 7, -2"
+    skill: structured_extraction
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # STRUCTURED EXTRACTION — Web/Research Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_ext_web_001
+    prompt: |
+      Extract the key claims from this passage:
+
+      "According to a 2024 WHO report, global life expectancy reached 73.3
+      years, up from 66.8 years in 2000. The largest gains were in Africa,
+      where life expectancy increased by 12 years. Heart disease remains
+      the leading cause of death worldwide."
+
+      List each distinct factual claim, comma-separated.
+    expected: "global life expectancy 73.3 years, up from 66.8 in 2000, largest gains in Africa, Africa increased 12 years, heart disease leading cause of death"
+    skill: structured_extraction
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_ext_web_002
+    prompt: |
+      Extract all named entities (people, organizations, locations) from:
+
+      "OpenAI CEO Sam Altman met with EU Commissioner Thierry Breton in
+      Brussels to discuss the AI Act. Microsoft, a major OpenAI investor,
+      sent representatives from their Redmond headquarters."
+
+      Group by type: people, organizations, locations.
+    expected: "people: Sam Altman, Thierry Breton; organizations: OpenAI, EU, Microsoft; locations: Brussels, Redmond"
+    skill: structured_extraction
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_ext_web_003
+    prompt: |
+      From the following product review excerpt, extract: (1) product name,
+      (2) rating, (3) pros mentioned, (4) cons mentioned.
+
+      "The Sony WH-1000XM5 headphones deserve their 4.5/5 rating. The noise
+      cancellation is best-in-class and battery life lasts 30 hours. However,
+      they don't fold flat like the XM4 and the price tag of $400 is steep."
+
+      Return structured: product, rating, pros (comma-sep), cons (comma-sep)
+    expected: "Sony WH-1000XM5, 4.5/5, noise cancellation best-in-class, 30 hour battery life, don't fold flat, price $400"
+    skill: structured_extraction
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # ERROR DIAGNOSIS — Code Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_diag_code_001
+    prompt: |
+      Diagnose the bug in this Python function:
+
+      def calculate_average(numbers):
+          total = 0
+          for i in range(len(numbers)):
+              total += numbers[i]
+          return total / len(numbers)
+
+      result = calculate_average([])
+
+      What is the error and its root cause?
+    expected: "ZeroDivisionError, division by zero when list is empty, len(numbers) returns 0"
+    skill: error_diagnosis
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_diag_code_002
+    prompt: |
+      This JavaScript code has a subtle bug. Identify it and explain why:
+
+      async function fetchUsers() {
+        const users = [];
+        const ids = [1, 2, 3, 4, 5];
+        for (const id of ids) {
+          const resp = await fetch(`/api/users/${id}`);
+          users.push(resp.json());
+        }
+        return users;
+      }
+
+      What is wrong and what will the caller receive?
+    expected: "missing await on resp.json(), push stores unresolved Promises, caller receives array of Promises instead of user objects"
+    skill: error_diagnosis
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_diag_code_003
+    prompt: |
+      Diagnose why this SQL query returns unexpected results:
+
+      SELECT orders.id, customers.name, orders.total
+      FROM orders, customers
+      WHERE orders.status = 'pending'
+
+      The developer expected ~50 rows (pending orders) but gets ~5000.
+    expected: "missing JOIN condition, creates Cartesian product cross join, every pending order paired with every customer, need WHERE orders.customer_id = customers.id"
+    skill: error_diagnosis
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # ERROR DIAGNOSIS — Math Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_diag_math_001
+    prompt: |
+      Find the error in this derivation:
+
+      Prove: 1 = 2
+      Let a = b
+      a² = ab           (multiply both sides by a)
+      a² - b² = ab - b²  (subtract b² from both sides)
+      (a+b)(a-b) = b(a-b) (factor)
+      a+b = b            (divide both sides by (a-b))
+      b+b = b            (substitute a=b)
+      2b = b
+      2 = 1
+
+      Which step contains the error and why?
+    expected: "division by (a-b) is division by zero since a equals b, a minus b equals zero, invalid step"
+    skill: error_diagnosis
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_diag_math_002
+    prompt: |
+      A student solved: "Find x where log(x) + log(x-3) = 1"
+
+      Their work:
+      log(x(x-3)) = 1
+      x(x-3) = 10
+      x² - 3x - 10 = 0
+      (x-5)(x+2) = 0
+      x = 5 or x = -2
+
+      Student claims both solutions are valid. What is wrong?
+    expected: "x = -2 is invalid, logarithm domain requires positive arguments, log(-2) is undefined, x must be greater than 3, only x = 5 is valid"
+    skill: error_diagnosis
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_diag_math_003
+    prompt: |
+      Identify the error in this probability calculation:
+
+      "A bag has 5 red and 3 blue balls. Draw 2 without replacement.
+      P(both red) = P(first red) × P(second red) = 5/8 × 5/8 = 25/64"
+
+      What is wrong and what is the correct answer?
+    expected: "treats draws as independent but they are without replacement, second draw probability should be 4/7 not 5/8, correct answer is 5/8 times 4/7 equals 20/56 equals 5/14"
+    skill: error_diagnosis
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # ERROR DIAGNOSIS — Web/Research Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_diag_web_001
+    prompt: |
+      Find the contradictory claims in these two passage excerpts:
+
+      Source A: "The city of Springfield reported a population decline of 12%
+      between 2020 and 2024, dropping from 180,000 to approximately 158,400."
+
+      Source B: "Springfield's mayor announced record growth in 2024,
+      citing a population increase to 195,000 from the 2020 base of 180,000."
+
+      Identify the contradiction and which specific claims conflict.
+    expected: "Source A claims population declined to 158400, Source B claims population increased to 195000, contradictory directions from same 2020 base of 180000"
+    skill: error_diagnosis
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_diag_web_002
+    prompt: |
+      Identify the logical fallacy in this argument:
+
+      "Professor Smith, a renowned physicist, says that organic food is
+      healthier than conventional food. Since he's a brilliant scientist,
+      his opinion on nutrition must be correct."
+
+      Name the fallacy and explain why the reasoning is flawed.
+    expected: "appeal to authority, argument from authority, expertise in physics does not transfer to nutrition, domain mismatch, being expert in one field does not make one expert in another"
+    skill: error_diagnosis
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_diag_web_003
+    prompt: |
+      A research summary claims: "Study X (n=15) proves that meditation
+      cures depression. All participants showed improvement after 8 weeks."
+
+      Identify all methodological red flags in this claim.
+    expected: "very small sample size n=15, no control group mentioned, no placebo comparison, uses word proves rather than suggests, no blinding, no mention of statistical significance, correlation not causation"
+    skill: error_diagnosis
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # MULTI-STEP PLANNING — Code Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_plan_code_001
+    prompt: |
+      Decompose this refactoring task into ordered steps:
+
+      "We have a 2000-line monolithic Flask app (app.py) that needs to be
+      split into a proper package structure with blueprints. The app has
+      routes for users, products, and orders, plus shared middleware for
+      auth and logging."
+
+      List 5-7 concrete steps in execution order.
+    expected: "create package directory structure, extract shared middleware into separate modules, create blueprint for users routes, create blueprint for products routes, create blueprint for orders routes, create application factory, update imports and register blueprints"
+    skill: multi_step_planning
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_plan_code_002
+    prompt: |
+      Plan the steps to add authentication to an existing REST API that
+      currently has no auth. The API is built with FastAPI and uses
+      PostgreSQL. Requirements: JWT tokens, refresh tokens, password
+      hashing, protected routes.
+
+      List the implementation steps in dependency order.
+    expected: "add password hashing utility with bcrypt, create users table migration, implement user registration endpoint, implement login endpoint with JWT generation, create refresh token mechanism, add JWT verification middleware, protect existing routes with dependency injection, add token revocation"
+    skill: multi_step_planning
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_plan_code_003
+    prompt: |
+      Plan a database migration strategy for:
+
+      "Rename the 'users.username' column to 'users.display_name' in a
+      production PostgreSQL database serving 10K req/s. The column is
+      referenced by 3 other tables via foreign keys and used in 12
+      application queries."
+
+      List the steps for a zero-downtime migration.
+    expected: "add new display_name column, backfill data from username to display_name, update application to write to both columns, update application reads to use display_name, verify all queries use new column, drop foreign key constraints on old column, add foreign keys to new column, remove old username column, deploy final application removing dual-write"
+    skill: multi_step_planning
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # MULTI-STEP PLANNING — Math Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_plan_math_001
+    prompt: |
+      Outline the proof approach for:
+
+      "Prove that the square root of 2 is irrational."
+
+      List the logical steps in order (do not execute the full proof,
+      just outline the strategy).
+    expected: "assume sqrt(2) is rational, express as p/q in lowest terms where gcd is 1, square both sides to get 2q^2 = p^2, conclude p^2 is even so p is even, substitute p=2k, get 2q^2 = 4k^2 so q^2 = 2k^2, conclude q is also even, contradiction with gcd assumption"
+    skill: multi_step_planning
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_plan_math_002
+    prompt: |
+      Plan the solution approach for this optimization problem:
+
+      "A farmer has 400 meters of fencing and wants to create a rectangular
+      enclosure next to a river (no fencing needed on the river side).
+      What dimensions maximize the area?"
+
+      List the mathematical steps (don't solve, just plan).
+    expected: "define variables width x and length y, write constraint 2x + y = 400, express y in terms of x, write area function A = x times y, substitute to get A as function of x only, take derivative, set derivative to zero, solve for x, verify maximum with second derivative, compute y from constraint"
+    skill: multi_step_planning
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_plan_math_003
+    prompt: |
+      Plan how to solve this system using matrix methods:
+
+      2x + 3y - z = 1
+      4x + y + 2z = 11
+      -2x + 5y + 3z = 7
+
+      List the steps of the solution method.
+    expected: "write augmented matrix, apply row reduction Gaussian elimination, create zeros below pivot in first column, create zeros below pivot in second column, back-substitute to find z, substitute z to find y, substitute y and z to find x, verify solution in all three equations"
+    skill: multi_step_planning
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # MULTI-STEP PLANNING — Web/Research Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_plan_web_001
+    prompt: |
+      Plan a research synthesis strategy for:
+
+      "Write a comprehensive comparison of renewable energy adoption rates
+      across G7 countries from 2020-2025."
+
+      List the research and synthesis steps in order.
+    expected: "identify authoritative data sources IEA IRENA government reports, collect per-country renewable energy share data, normalize metrics across sources, create comparison framework by energy type, analyze trends and growth rates, identify leaders and laggards, synthesize findings with supporting data, note limitations and data gaps"
+    skill: multi_step_planning
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_plan_web_002
+    prompt: |
+      Plan a fact-checking workflow for the claim:
+
+      "Country X has the highest GDP per capita in the world as of 2025."
+
+      What steps would you take to verify or refute this?
+    expected: "identify claim components country and metric and time period, find authoritative GDP data sources IMF World Bank, check multiple rankings for current year, compare nominal vs PPP GDP per capita, verify if microstates are included or excluded, cross-reference at least three sources, assess recency of data, form conclusion with confidence level"
+    skill: multi_step_planning
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_plan_web_003
+    prompt: |
+      Plan how to evaluate the credibility of a health claim found on a
+      blog post: "Supplement Y reverses aging at the cellular level."
+
+      What steps would you take?
+    expected: "check if peer-reviewed studies exist, search PubMed for clinical trials, evaluate sample sizes and methodology, check for replication by independent labs, identify funding sources and conflicts of interest, consult expert consensus and systematic reviews, check regulatory agency positions FDA EMA, assess strength of evidence"
+    skill: multi_step_planning
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # FORMAT TRANSFORMATION — Code Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_fmt_code_001
+    prompt: |
+      Convert this CSV data to JSON array format:
+
+      name,age,city
+      Alice,30,Portland
+      Bob,25,Seattle
+      Carol,35,Denver
+
+      Return valid JSON.
+    expected: '[{"name": "Alice", "age": 30, "city": "Portland"}, {"name": "Bob", "age": 25, "city": "Seattle"}, {"name": "Carol", "age": 35, "city": "Denver"}]'
+    skill: format_transformation
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_fmt_code_002
+    prompt: |
+      Convert this Python dictionary to a YAML configuration:
+
+      config = {
+          "server": {"host": "0.0.0.0", "port": 8080},
+          "database": {"url": "postgresql://localhost/mydb", "pool_size": 5},
+          "logging": {"level": "INFO", "file": "/var/log/app.log"}
+      }
+
+      Return valid YAML.
+    expected: "server:\n  host: 0.0.0.0\n  port: 8080\ndatabase:\n  url: postgresql://localhost/mydb\n  pool_size: 5\nlogging:\n  level: INFO\n  file: /var/log/app.log"
+    skill: format_transformation
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_fmt_code_003
+    prompt: |
+      Convert this SQL CREATE TABLE statement to a Python SQLAlchemy model class name and column definitions:
+
+      CREATE TABLE employees (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(100) NOT NULL,
+          email VARCHAR(255) UNIQUE,
+          salary DECIMAL(10,2),
+          hired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
+      List the class name and each column with its SQLAlchemy type.
+    expected: "Employee, id Integer primary_key, name String(100) nullable=False, email String(255) unique=True, salary Numeric(10,2), hired_at DateTime default"
+    skill: format_transformation
+    domain: code
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # FORMAT TRANSFORMATION — Math Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_fmt_math_001
+    prompt: |
+      Convert this LaTeX expression to plain text:
+
+      \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+
+      Write it using standard ASCII characters only.
+    expected: "(-b +/- sqrt(b^2 - 4ac)) / (2a)"
+    skill: format_transformation
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_fmt_math_002
+    prompt: |
+      Convert this matrix from LaTeX to a plain-text representation:
+
+      \begin{bmatrix} 1 & 2 & 3 \\ 4 & 5 & 6 \\ 7 & 8 & 9 \end{bmatrix}
+
+      Use a row-per-line format with brackets.
+    expected: "[1  2  3]\n[4  5  6]\n[7  8  9]"
+    skill: format_transformation
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_fmt_math_003
+    prompt: |
+      Convert these interval notations to inequality form:
+
+      1. (-∞, 5]
+      2. [2, 8)
+      3. (-3, 3)
+
+      Write each as an inequality using x.
+    expected: "x <= 5, 2 <= x < 8, -3 < x < 3"
+    skill: format_transformation
+    domain: math
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # FORMAT TRANSFORMATION — Web/Research Domain
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: st_fmt_web_001
+    prompt: |
+      Convert these URLs into APA-style bibliography entries. Assume
+      access date is March 3, 2026.
+
+      1. https://www.who.int/news/climate-health-report-2025 (WHO, "Climate and Health Report 2025", published January 15, 2025)
+      2. https://arxiv.org/abs/2401.12345 (Zhang et al., "Advances in Neural Scaling", 2024)
+
+      Return formatted bibliography entries.
+    expected: "World Health Organization. (2025, January 15). Climate and Health Report 2025. https://www.who.int/news/climate-health-report-2025; Zhang et al. (2024). Advances in Neural Scaling. arXiv. https://arxiv.org/abs/2401.12345"
+    skill: format_transformation
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_fmt_web_002
+    prompt: |
+      Convert this unstructured meeting notes text into a structured
+      action-item list:
+
+      "In today's meeting, John agreed to finish the API docs by Friday.
+      Sarah will review the security audit results and report back next
+      Tuesday. The team decided to postpone the database migration until
+      Q2. Mike needs to set up the staging environment before the sprint
+      demo on Thursday."
+
+      Format as: assignee | action | deadline
+    expected: "John | finish API docs | Friday; Sarah | review security audit results | next Tuesday; team | postpone database migration | Q2; Mike | set up staging environment | before Thursday sprint demo"
+    skill: format_transformation
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
+
+  - id: st_fmt_web_003
+    prompt: |
+      Convert this table of data from text format to a markdown table:
+
+      Country: USA, GDP: 25.5T, Population: 331M, GDP per capita: 77K
+      Country: China, GDP: 18.3T, Population: 1412M, GDP per capita: 13K
+      Country: Japan, GDP: 4.2T, Population: 125M, GDP per capita: 34K
+      Country: Germany, GDP: 4.1T, Population: 84M, GDP per capita: 49K
+
+      Return a proper markdown table.
+    expected: "| Country | GDP | Population | GDP per capita |\n|---------|-----|------------|----------------|\n| USA | 25.5T | 331M | 77K |\n| China | 18.3T | 1412M | 13K |\n| Japan | 4.2T | 125M | 34K |\n| Germany | 4.1T | 84M | 49K |"
+    skill: format_transformation
+    domain: web_research
+    scoring_method: f1
+    scoring_config:
+      threshold: 0.5
