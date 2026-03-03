@@ -7,7 +7,7 @@ Companion to [epyc-orchestrator](https://github.com/pestopoppa/epyc-orchestrator
 ## What's here
 
 - **Benchmark infrastructure** — automated benchmarking of speculative decoding, MoE reduction, prompt lookup, and SSM inference on AMD EPYC hardware
-- **29 research chapters** — from hardware characterization through multi-model orchestration
+- **[9 research chapters](docs/chapters/INDEX.md)** — inference optimization and evaluation methodology
 - **Optimization experiments** — Optuna-based hyperparameter tuning, memory viability studies, graph router training
 - **Model evaluation** — scoring rubrics, Claude-as-Judge reviews, comparative analysis
 - **Model registry** — full catalog of tested models with quantization levels, compatible drafts, and known quirks
@@ -25,7 +25,7 @@ benchmarks/          Prompts, results, baselines, evidence
   results/reviews/   Claude-as-Judge evaluation scores
 configs/             Memory viability experiment configs
 docs/
-  chapters/          29 research chapters (hardware → orchestration)
+  chapters/          9 research chapters (inference optimization → evaluation)
   experiments/       Experiment writeups
   guides/            Model sizing, benchmarking guide
   reference/
