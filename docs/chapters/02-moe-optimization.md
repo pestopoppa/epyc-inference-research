@@ -1,4 +1,4 @@
-# Chapter 06: MoE Optimization (Track 2)
+# Chapter 02: MoE Optimization (Track 2)
 
 ## Introduction
 
@@ -194,4 +194,4 @@ Always verify quality after applying expert reduction. The general rule: if Clau
 
 ---
 
-*Previous: [Chapter 05: Speculative Decoding](05-speculative-decoding.md)* | *Next: [Chapter 07: Prompt Lookup](07-prompt-lookup.md)*
+*Previous: [Chapter 01: Speculative Decoding](01-speculative-decoding.md)* | *Next: [Chapter 03: Prompt Lookup Decoding](03-prompt-lookup.md)*

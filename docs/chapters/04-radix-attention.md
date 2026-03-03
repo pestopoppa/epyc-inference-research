@@ -1,4 +1,4 @@
-# Chapter 08: RadixAttention Prefix Caching
+# Chapter 04: RadixAttention Prefix Caching
 
 ## Introduction
 
@@ -242,4 +242,4 @@ The PrefixRouter→id_slot pipeline was validated end-to-end. Prior to this, the
 
 ---
 
-*Previous: [Chapter 07: Prompt Lookup](07-prompt-lookup.md)* | *Next: [Chapter 09: Deprecated Approaches](09-deprecated-approaches.md)*
+*Previous: [Chapter 03: Prompt Lookup Decoding](03-prompt-lookup.md)* | *Next: [Chapter 05: Deprecated Approaches & Lessons](05-deprecated-approaches.md)*

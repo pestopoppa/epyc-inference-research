@@ -1,4 +1,4 @@
-# Chapter 09: Deprecated Approaches
+# Chapter 05: Deprecated Approaches
 
 ## Introduction
 
@@ -191,4 +191,4 @@ The pattern is clear: methods that work use separate, complete models or exploit
 
 ---
 
-*Previous: [Chapter 08: RadixAttention](08-radix-attention.md)* | *Next: [Chapter 10: Orchestration Architecture](10-orchestration-architecture.md)*
+*Previous: [Chapter 04: RadixAttention & Prefix Caching](04-radix-attention.md)* | *Next: [Chapter 06: Benchmarking Framework](06-benchmarking-framework.md)*

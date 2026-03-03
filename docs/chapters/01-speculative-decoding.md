@@ -1,4 +1,4 @@
-# Chapter 05: Speculative Decoding (Track 1)
+# Chapter 01: Speculative Decoding (Track 1)
 
 ## Introduction
 
@@ -194,4 +194,4 @@ Large architect models use full experts + spec decode (quality over speed). Key 
 
 ---
 
-*Previous: [Chapter 04: Storage & Safety](04-storage-and-safety.md)* | *Next: [Chapter 06: MoE Optimization](06-moe-optimization.md)*
+*Next: [Chapter 02: MoE Expert Reduction](02-moe-optimization.md)*

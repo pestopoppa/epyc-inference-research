@@ -1,4 +1,4 @@
-# Chapter 24: Benchmark Suite Construction
+# Chapter 07: Benchmark Suite Construction
 
 ## Introduction
 
@@ -536,4 +536,4 @@ The debug suite is the foundation for Phase 3 MemRL validation: seeding speciali
 
 ---
 
-*Previous: [Chapter 23: Security & Monitoring](23-security-and-monitoring.md)* | *Next: TBD*
+*Previous: [Chapter 06: Benchmarking Framework](06-benchmarking-framework.md)* | *Next: [Chapter 08: Cost-Aware Reward Design](08-cost-aware-rewards.md)*

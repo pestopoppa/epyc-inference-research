@@ -1,4 +1,4 @@
-# Chapter 21: Benchmarking Framework
+# Chapter 06: Benchmarking Framework
 
 ## Introduction
 
@@ -119,7 +119,7 @@ benchmarks/
 │   └── index.jsonl      # Benchmark index for comparison
 ```
 
-**Note:** Benchmark prompts are gitignored — they are reconstructible from public sources. See [Chapter 24: Benchmark Suite Construction](24-benchmark-suite-construction.md) for the construction methodology and reconstruction instructions.
+**Note:** Benchmark prompts are gitignored — they are reconstructible from public sources. See [Chapter 07: Benchmark Suite Construction](07-benchmark-suite-construction.md) for the construction methodology and reconstruction instructions.
 
 </details>
 
@@ -393,4 +393,4 @@ This is important because:
 
 ---
 
-*Previous: [Chapter 20: Session Persistence](20-session-persistence.md)* | *Next: [Chapter 22: Tool Registry & Agent Roles](22-tool-registry.md)*
+*Previous: [Chapter 05: Deprecated Approaches & Lessons](05-deprecated-approaches.md)* | *Next: [Chapter 07: Benchmark Suite Construction](07-benchmark-suite-construction.md)*

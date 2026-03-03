@@ -1,4 +1,4 @@
-# Chapter 07: Prompt Lookup (Track 8)
+# Chapter 03: Prompt Lookup (Track 8)
 
 ## Introduction
 
@@ -118,7 +118,7 @@ def get_draft_tokens(context, prompt):
 
 ## SSM Warning
 
-**CRITICAL**: Do not use prompt lookup with Qwen3-Next (SSM) models. The SSM architecture requires consecutive token positions — draft token rejection corrupts the recurrent state. See [Chapter 06: MoE Optimization](06-moe-optimization.md) for SSM-safe alternatives.
+**CRITICAL**: Do not use prompt lookup with Qwen3-Next (SSM) models. The SSM architecture requires consecutive token positions — draft token rejection corrupts the recurrent state. See [Chapter 02: MoE Optimization](02-moe-optimization.md) for SSM-safe alternatives.
 
 ## Implementation Notes
 
@@ -315,4 +315,4 @@ Attempted to improve code quality (not just speed) by instructing the model to "
 
 ---
 
-*Previous: [Chapter 06: MoE Optimization](06-moe-optimization.md)* | *Next: [Chapter 08: RadixAttention](08-radix-attention.md)*
+*Previous: [Chapter 02: MoE Expert Reduction](02-moe-optimization.md)* | *Next: [Chapter 04: RadixAttention & Prefix Caching](04-radix-attention.md)*

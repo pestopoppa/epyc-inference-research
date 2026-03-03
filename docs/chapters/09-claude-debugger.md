@@ -1,4 +1,4 @@
-# Chapter 26: Claude-in-the-Loop Debugger
+# Chapter 09: Claude-in-the-Loop Debugger
 
 ## Introduction
 
@@ -299,7 +299,7 @@ Claude can recommend skill-related actions based on diagnostic patterns:
 - **High retrieval + low effectiveness**: Skill principle may be misleading -- flag for review
 - **No skills for task type**: Gap in SkillBank coverage -- recommend distillation run
 
-See [Chapter 27](27-skillbank-experience-distillation.md) for full SkillBank documentation.
+See SkillBank & Experience Distillation (documented in epyc-orchestrator) for full SkillBank documentation.
 
 </details>
 
@@ -326,4 +326,8 @@ See [Chapter 27](27-skillbank-experience-distillation.md) for full SkillBank doc
 
 ---
 
-| [Chapter 25: Cost-Aware Rewards](25-cost-aware-rewards.md) | [Index](INDEX.md) | [Chapter 27: SkillBank Experience Distillation](27-skillbank-experience-distillation.md) |
+| [Chapter 08: Cost-Aware Rewards](08-cost-aware-rewards.md) | [Index](INDEX.md) | SkillBank & Experience Distillation (documented in epyc-orchestrator) |
+
+---
+
+*Previous: [Chapter 08: Cost-Aware Reward Design](08-cost-aware-rewards.md)*

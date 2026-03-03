@@ -1,4 +1,4 @@
-# Chapter 25: Cost-Aware Reward Design for Model Routing
+# Chapter 08: Cost-Aware Reward Design for Model Routing
 
 ## Introduction
 
@@ -266,7 +266,7 @@ With cost-aware rewards, MemRL will learn to prefer frontdoor for simple tasks (
 
 ## Mode-Advantage Task Enrichment (February 2026)
 
-The cost-aware reward system works best when paired with tasks that produce strong comparative signal. The mode-advantage suite (90 tasks, see [Chapter 24](24-benchmark-suite-construction.md)) provides exactly this: computation-gated tasks where react mode wins on correctness, iterative-fix tasks where cost differentiates equal failures, and escalation-gated tasks where specialist correctness dominates cost entirely.
+The cost-aware reward system works best when paired with tasks that produce strong comparative signal. The mode-advantage suite (90 tasks, see [Chapter 07](07-benchmark-suite-construction.md)) provides exactly this: computation-gated tasks where react mode wins on correctness, iterative-fix tasks where cost differentiates equal failures, and escalation-gated tasks where specialist correctness dominates cost entirely.
 
 <details>
 <summary>Task categories and dataset adapters</summary>
@@ -399,7 +399,7 @@ These dimensions mirror the complexity of Claude's own pricing structure, where 
 
 ## Skill Effectiveness Scoring (February 2026)
 
-SkillBank's recursive evolution system (see [Ch27](27-skillbank-experience-distillation.md)) creates a feedback loop with cost-aware rewards. When a skill-augmented routing decision succeeds cheaply, both the QScorer (routing memory) and OutcomeTracker (skill confidence) reinforce the decision, driving a virtuous cycle where architect knowledge propagates to cheaper workers over time.
+SkillBank's recursive evolution system (see SkillBank & Experience Distillation (documented in epyc-orchestrator)) creates a feedback loop with cost-aware rewards. When a skill-augmented routing decision succeeds cheaply, both the QScorer (routing memory) and OutcomeTracker (skill confidence) reinforce the decision, driving a virtuous cycle where architect knowledge propagates to cheaper workers over time.
 
 <details>
 <summary>QScorer and OutcomeTracker interaction</summary>
@@ -485,3 +485,7 @@ Replay-based candidate promotion now uses a regret-optimized objective alongside
 7. "Learning to Route LLMs with Confidence Tokens," arXiv:2410.13284 (2024). https://arxiv.org/html/2410.13284v2
 
 </details>
+
+---
+
+*Previous: [Chapter 07: Benchmark Suite Construction](07-benchmark-suite-construction.md)* | *Next: [Chapter 09: Claude-in-the-Loop Debugger](09-claude-debugger.md)*
