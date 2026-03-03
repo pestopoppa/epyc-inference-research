@@ -1,0 +1,276 @@
+# Web Research Quality Evaluation Suite (Search-R1)
+#
+# Questions designed to reliably trigger web_research tool usage.
+# Each question requires external information that cannot be answered
+# from parametric knowledge alone. Scoring uses F1 with threshold 0.5.
+#
+# Categories:
+#   - post_cutoff: Facts from after model training cutoff
+#   - multi_source: Requires corroborating multiple sources
+#   - verification: Fact-checking claims requiring external lookup
+#   - current_data: Current statistics/numbers that change over time
+
+scoring_method: f1
+scoring_config:
+  threshold: 0.5
+
+questions:
+  # ── Post-cutoff factual questions ──────────────────────────────────
+
+  - id: wr_post_001
+    prompt: "Use web search to find: Who won the 2025 Nobel Prize in Physics and what was their contribution?"
+    expected: "John Hopfield and Geoffrey Hinton for foundational discoveries in machine learning with artificial neural networks"
+    category: post_cutoff
+
+  - id: wr_post_002
+    prompt: "Use web search to find: What was the global average temperature anomaly for 2025 according to NASA or NOAA?"
+    expected: "record warm year temperature anomaly above 1.5 degrees Celsius"
+    category: post_cutoff
+
+  - id: wr_post_003
+    prompt: "Use web search to find the latest stable release version of Python as of 2026."
+    expected: "Python 3.13"
+    category: post_cutoff
+
+  - id: wr_post_004
+    prompt: "Use web search to find: Which company launched the most orbital rockets in 2025?"
+    expected: "SpaceX"
+    category: post_cutoff
+
+  - id: wr_post_005
+    prompt: "Use web search to find: What major AI safety legislation was passed in the EU in 2025?"
+    expected: "EU AI Act"
+    category: post_cutoff
+
+  - id: wr_post_006
+    prompt: "Use web search to find: Who won the 2025 Academy Award for Best Picture?"
+    expected: "Anora"
+    category: post_cutoff
+
+  - id: wr_post_007
+    prompt: "Use web search to find: What was the closing price of Bitcoin on January 1, 2026?"
+    expected: "approximately 93000 to 95000 dollars"
+    category: post_cutoff
+
+  - id: wr_post_008
+    prompt: "Use web search to find: Which country hosted the 2025 UN Climate Change Conference (COP30)?"
+    expected: "Brazil Belem"
+    category: post_cutoff
+
+  - id: wr_post_009
+    prompt: "Use web search to find: What was the world population estimate as of January 2026?"
+    expected: "approximately 8.1 billion"
+    category: post_cutoff
+
+  - id: wr_post_010
+    prompt: "Use web search to find: What new element or isotope was synthesized in 2025, if any?"
+    expected: "no confirmed new element synthesis in 2025"
+    category: post_cutoff
+
+  # ── Multi-source corroboration ─────────────────────────────────────
+
+  - id: wr_multi_001
+    prompt: "Use web search to compare the GDP growth rates of the US, China, and India for 2025. Which country had the highest growth rate?"
+    expected: "India had the highest GDP growth rate around 6-7 percent"
+    category: multi_source
+
+  - id: wr_multi_002
+    prompt: "Use web search to find at least three different sources reporting on the largest data breach of 2025. What company was affected and how many records were exposed?"
+    expected: "data breach records exposed"
+    category: multi_source
+
+  - id: wr_multi_003
+    prompt: "Use web search to compare electricity generation from solar vs wind power globally in 2025. Which produced more energy?"
+    expected: "solar exceeded wind in global electricity generation"
+    category: multi_source
+
+  - id: wr_multi_004
+    prompt: "Use web search to find the top 3 most downloaded mobile apps globally in 2025 according to multiple app analytics sources."
+    expected: "TikTok Instagram"
+    category: multi_source
+
+  - id: wr_multi_005
+    prompt: "Use web search to compare reviews of the top 3 electric vehicles released in 2025. Which received the best safety rating?"
+    expected: "electric vehicle safety rating 5 star"
+    category: multi_source
+
+  - id: wr_multi_006
+    prompt: "Use web search to find the current world records for 100m sprint, marathon, and high jump. List the record holders and times/distances."
+    expected: "Usain Bolt 9.58 seconds Eliud Kipchoge marathon"
+    category: multi_source
+
+  - id: wr_multi_007
+    prompt: "Use web search to compare the inflation rates in the US, UK, and Japan for late 2025. Which country had the lowest inflation?"
+    expected: "Japan lowest inflation rate"
+    category: multi_source
+
+  - id: wr_multi_008
+    prompt: "Use web search to find the top 3 programming languages by popularity in 2025 according to TIOBE and Stack Overflow surveys."
+    expected: "Python JavaScript"
+    category: multi_source
+
+  - id: wr_multi_009
+    prompt: "Use web search to find the current population rankings of the 5 largest cities in the world by metropolitan area."
+    expected: "Tokyo Delhi Shanghai"
+    category: multi_source
+
+  - id: wr_multi_010
+    prompt: "Use web search to compare the market capitalization of Apple, Microsoft, and Nvidia as of early 2026."
+    expected: "Apple Microsoft Nvidia trillion"
+    category: multi_source
+
+  # ── Fact verification ──────────────────────────────────────────────
+
+  - id: wr_verify_001
+    prompt: "Use web search to verify: Is it true that the James Webb Space Telescope discovered signs of life on an exoplanet in 2025?"
+    expected: "no confirmed discovery of life JWST detected atmospheric signatures but no definitive biosignatures"
+    category: verification
+
+  - id: wr_verify_002
+    prompt: "Use web search to verify: Did any country achieve net-zero carbon emissions by 2025?"
+    expected: "no major country achieved net-zero emissions by 2025 though some small nations and territories claim carbon neutrality"
+    category: verification
+
+  - id: wr_verify_003
+    prompt: "Use web search to verify: Is it true that global deforestation rates decreased in 2025 compared to 2024?"
+    expected: "deforestation rates data 2025"
+    category: verification
+
+  - id: wr_verify_004
+    prompt: "Use web search to verify: Did the WHO declare any new pandemic in 2025?"
+    expected: "no new pandemic declared by WHO in 2025"
+    category: verification
+
+  - id: wr_verify_005
+    prompt: "Use web search to verify: Is it true that quantum computers solved a practical optimization problem faster than classical computers in 2025?"
+    expected: "quantum advantage demonstration"
+    category: verification
+
+  - id: wr_verify_006
+    prompt: "Use web search to verify: Did commercial nuclear fusion power generation begin anywhere in the world by 2025?"
+    expected: "no commercial nuclear fusion power generation in 2025 though progress was made"
+    category: verification
+
+  - id: wr_verify_007
+    prompt: "Use web search to verify: Is it true that self-driving taxis without safety drivers are operating in more than 5 US cities as of 2025?"
+    expected: "Waymo robotaxi operating in several cities"
+    category: verification
+
+  - id: wr_verify_008
+    prompt: "Use web search to verify: Did any major social media platform ban users under 16 in 2025?"
+    expected: "Australia passed legislation social media age ban"
+    category: verification
+
+  - id: wr_verify_009
+    prompt: "Use web search to verify: Is it true that the Arctic experienced an ice-free summer in 2025?"
+    expected: "Arctic was not ice-free in summer 2025 though sea ice extent continued declining"
+    category: verification
+
+  - id: wr_verify_010
+    prompt: "Use web search to verify: Did OpenAI release GPT-5 in 2025?"
+    expected: "OpenAI released models in 2025"
+    category: verification
+
+  # ── Current data lookups ───────────────────────────────────────────
+
+  - id: wr_data_001
+    prompt: "Use web search to find the current US federal funds rate as set by the Federal Reserve."
+    expected: "federal funds rate percent"
+    category: current_data
+
+  - id: wr_data_002
+    prompt: "Use web search to find the current exchange rate between US Dollar and Euro."
+    expected: "USD EUR exchange rate approximately"
+    category: current_data
+
+  - id: wr_data_003
+    prompt: "Use web search to find how many active satellites are currently in Earth orbit as of 2025-2026."
+    expected: "approximately 10000 to 15000 active satellites"
+    category: current_data
+
+  - id: wr_data_004
+    prompt: "Use web search to find the current global installed capacity of solar power in gigawatts."
+    expected: "solar power capacity over 1500 GW"
+    category: current_data
+
+  - id: wr_data_005
+    prompt: "Use web search to find the latest global CO2 concentration in parts per million (ppm) from the Mauna Loa observatory."
+    expected: "CO2 concentration approximately 425 to 430 ppm"
+    category: current_data
+
+  - id: wr_data_006
+    prompt: "Use web search to find the current number of UNESCO World Heritage Sites worldwide."
+    expected: "over 1100 UNESCO World Heritage Sites"
+    category: current_data
+
+  - id: wr_data_007
+    prompt: "Use web search to find how many countries are currently members of the United Nations."
+    expected: "193 member states"
+    category: current_data
+
+  - id: wr_data_008
+    prompt: "Use web search to find the total number of COVID-19 deaths worldwide as reported by WHO."
+    expected: "over 7 million COVID-19 deaths"
+    category: current_data
+
+  - id: wr_data_009
+    prompt: "Use web search to find the current price of gold per troy ounce in US dollars."
+    expected: "gold price per ounce dollars"
+    category: current_data
+
+  - id: wr_data_010
+    prompt: "Use web search to find the current global average internet speed according to Ookla Speedtest."
+    expected: "global average download speed Mbps"
+    category: current_data
+
+  # ── Multi-hop research questions ───────────────────────────────────
+
+  - id: wr_hop_001
+    prompt: "Use web search to answer: What is the capital of the country that won the most gold medals at the 2024 Paris Olympics, and what is that city's current population?"
+    expected: "Washington DC United States population"
+    category: multi_hop
+
+  - id: wr_hop_002
+    prompt: "Use web search to find: Who is the current CEO of the company that manufactures the most-sold smartphone model in 2025, and when did they become CEO?"
+    expected: "CEO smartphone"
+    category: multi_hop
+
+  - id: wr_hop_003
+    prompt: "Use web search to answer: What programming language is the Linux kernel primarily written in, and who is the current maintainer of that language's ISO standard?"
+    expected: "C programming language Linux kernel"
+    category: multi_hop
+
+  - id: wr_hop_004
+    prompt: "Use web search to find: What river runs through the city hosting the 2028 Summer Olympics, and what is its total length?"
+    expected: "Los Angeles River miles"
+    category: multi_hop
+
+  - id: wr_hop_005
+    prompt: "Use web search to answer: What is the GDP per capita of the country where the world's tallest building is located?"
+    expected: "UAE Dubai Burj Khalifa GDP per capita"
+    category: multi_hop
+
+  - id: wr_hop_006
+    prompt: "Use web search to find: What university did the 2025 Turing Award winner attend for their PhD?"
+    expected: "Turing Award university PhD"
+    category: multi_hop
+
+  - id: wr_hop_007
+    prompt: "Use web search to answer: What is the population of the country where the Amazon river has its source?"
+    expected: "Peru population approximately"
+    category: multi_hop
+
+  - id: wr_hop_008
+    prompt: "Use web search to find: What language is primarily spoken in the country that exports the most lithium, and how many native speakers does it have?"
+    expected: "Spanish Chile lithium"
+    category: multi_hop
+
+  - id: wr_hop_009
+    prompt: "Use web search to answer: What is the elevation of the highest point in the country that currently holds the presidency of the G20?"
+    expected: "highest point elevation meters"
+    category: multi_hop
+
+  - id: wr_hop_010
+    prompt: "Use web search to find: Who founded the company with the highest revenue in the Fortune Global 500 list for 2025, and what year was it founded?"
+    expected: "Walmart Sam Walton 1962"
+    category: multi_hop
