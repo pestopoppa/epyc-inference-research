@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,8.12,2,"Produces valid JSON plan with steps, validation, fallback. Echoes prompt but core answer correct. Minor: code in step 4 hardcodes column names despite claiming schema-agnostic."
+agentic,t3_q2_multi_agent_coordination,8.05,1,First JSON has syntax errors (unquoted keys in step 3). Self-corrects with second JSON but output messy. No parallelization despite 60s budget. Time budget analysis missing.
+agentic,t3_q3_adversarial_robustness,7.32,2,"Correctly identifies security concerns, refuses to run command, handles admin escalation. Truncated at 2047 tokens cutting off points 3-5, but covered 1-2 with technical depth."
+agentic,t2_q1_ambiguous,8.61,2,"Chooses Slack reasonably, explains why, provides valid JSON. Includes think tokens which is messy but answer correct."
+agentic,t2_q2_error_chain,8.54,3,Clean reasoning: connection_refused -> check DNS. Correct tool call with proper parameters. Concise and well-structured.
+agentic,t2_q3_schema_edge,8.86,3,"Correct JSON: /users endpoint, GET method, body null, Authorization Bearer header. All schema constraints respected."
+agentic,t2_q4_orchestration,8.26,2,"Correct deployment plan with checkout, test, build, deploy, notify. Includes failure handlers with rollback. Had typo notify_slout but self-corrected."
+agentic,t1_q1_sequential,8.77,1,Correct tool calls (grep then read) but repeats answer 3 times with meta-commentary. Instruction said output only JSON array - violated.
+agentic,t1_q2_error_handling,8.58,2,"Reasonable error handling: offers search, confirm ID, or create new. Repeats options twice but core answer appropriate."
+agentic,t1_q3_nested_params,8.84,3,"Perfect JSON tool call with correct title, assignees array, nested metadata. Clean output."
+general,t3_q1_policy_analysis,7.48,2,"Identifies metric gaming/Goodharts Law, proposes amendments. Truncated at 2047 but covered multiple failure modes. Starts repeating at end."
+general,t3_q2_system_failure,7.87,2,Correctly identifies replica lag causing idempotency check failure. Explains mechanism well. Truncated but core analysis accurate.
+general,t3_q3_strategic_communication,8.46,3,"Excellent board statement: acknowledges failures, reframes LOIs, proposes 90-day milestones, addresses leadership indirectly. Insightful meta-analysis."
+general,t2_q1_synthesis,7.85,2,Correct phased approach: 2-week hotfix under 20K then Q1 refactor. Trade-offs listed. Chinese chars leak. Truncated.
+general,t2_q2_transform,7.74,1,Correct YAML structure but degenerately repeats same YAML block until 2047 cutoff. Repetition loop.
+general,t2_q3_schedule,7.85,1,Attempts constraint solving but never produces clean final schedule. Truncated mid-analysis. No clear answer.
+general,t2_q4_inconsistency,9.1,3,"Correctly identifies all 3 inconsistencies: body format, rate limit values, time units. Clean summary table."
+general,t1_q1_json,9.32,3,"Perfect JSON with correct name, role, department, start_date. Clean and concise."
+general,t1_q2_multistep,7.9,1,Correct processing but degenerately repeats final output block many times until 2047 cutoff. Repetition loop.
+general,t1_q3_compare,7.85,1,Correct comparison but degenerately repeats same paragraph until 2047 cutoff. Repetition loop.
+math,t3_q1_analysis,7.63,2,"Correctly derives closed form e^(x cos 1) sin(x sin 1), computes derivative, gets limit -> 0. Truncated but core math correct."
+math,t3_q2_combinatorics,7.57,1,Attempts proof but discovers identity fails for n=2. Gets stuck. No proof completed.
+math,t3_q3_probability_theory,7.66,0,Degenerate repetition loop: Hint the answer is e repeated dozens of times. No actual proof provided.
+math,t2_q1_optimization,8.59,3,"Perfect: x+2y=200, A=200y-2y^2, y=50, x=100, A=5000. Second derivative check. All correct."
+math,t2_q2_proof,7.55,2,Correctly identifies error at n=1 transition: two groups of 1 horse are disjoint. Core identification precise.
+math,t2_q3_calculus,7.94,3,"Perfect: antiderivative x^3+x^2-x, F(2)=10, F(0)=0, answer=10. All steps clear."
+math,t2_q4_statistics,8.34,3,Mean=23.125 (sum 185 correct). Median=23.5. Std dev ~7.355. IQR no outliers. All verified.
+math,t1_q1_word_problem,8.67,3,"Perfect: discount 30, price 120, tax 9.60, final 129.60, 86.4%. All correct."
+math,t1_q2_system_equations,7.98,3,All 4 solutions found. Two methods shown. Clean.
+math,t1_q3_probability,8.71,3,"Both red 2/9, one red one blue 1/3. Both correct with verification."
+thinking,t3_q1_methodological_critique,7.69,2,"Identifies selection bias, test bias, publication bias, sampling issues. Starts repeating. Truncated."
+thinking,t3_q2_causal_inference,7.59,2,Correctly identifies Gene as confounder. Discusses Yellow Fingers. Slightly muddled on Y conditioning. Truncated.
+thinking,t3_q3_reasoning_trap,7.84,2,Identifies flaw: test set not representative. Constructs imbalanced test set scenario. Truncated but mechanism explained.
+thinking,t2_q1_paradox,7.75,2,Presents continuity vs material essentialism. Argues for continuity. Truncated but both positions covered.
+thinking,t2_q2_counterfactual,7.86,3,Thorough analysis across all 3 dimensions with specific mechanisms and second-order effects. Complete response.
+thinking,t2_q3_formal,7.75,2,Correct proof of hypothetical syllogism using natural deduction. Truncated before full example but proof correct.
+thinking,t2_q4_metacognition,7.74,2,Good Fermi estimation: population -> pianos -> tuning -> tuners. Identifies key uncertainty. Truncated but methodology sound.
+thinking,t1_q1_multistep,7.8,2,"Correct math: t=18/7 hours, ~11:34 AM. Repeats solution but core answer correct."
+thinking,t1_q2_hypothesis,8.39,3,"Three clear alternatives: SES, study habits, overall health. Each with specific mechanisms. Complete."
+thinking,t1_q3_planning,7.75,1,Attempts enumeration but gets lost. Truncated without listing all valid orderings. Incomplete.
+coder,t3_q1_concurrent_correctness,7.6,2,Identifies ABA problem with concrete scenario. Proposes tagged pointers fix. Truncated before complete code.
+coder,t3_q2_distributed_consistency,7.81,2,"Lists strategies (LWW, vector clocks, CRDTs). Wrong-behavior scenarios. Recommends CRDTs for cart. Truncated before banking."
+coder,t3_q3_algorithmic_hardness,7.63,1,Starts adversary argument. Gets lost in Akra-Bazzi computation. Never completes randomized select analysis.
+coder,t2_q1_design,8.09,3,Complete LRU cache with doubly-linked list + hash map. O(1) ops. Edge cases handled. Clean.
+coder,t2_q2_debug_complex,8.6,3,Correctly identifies race condition. Fix with asyncio.Lock correct. Alternative solutions provided.
+coder,t2_q3_optimize,7.69,2,Frequency map O(n) and two-pointer approaches. Hash map solution complete and correct.
+coder,t2_q4_system,7.76,2,Sliding window rate limiter. Correct algorithm. Edge cases discussed. Truncated but core sound.
+coder,t1_q1_algorithm,7.58,2,Identifies left=mid infinite loop bug. Fix to left=mid+1 correct. Truncated. Second bug identification unclear.
+coder,t1_q2_refactor,7.71,2,Hash map O(n) optimization correct. Memory optimization discussed but truncated.
+coder,t1_q3_test,7.77,3,"Comprehensive pytest tests: normal, edge, error cases. Good coverage with multiple numeric types."
+instruction_precision,t3_q1_self_referential,8.8,0,"Never produces valid self-referential sentence. All 511 tokens spent reasoning, no final answer."
+instruction_precision,t3_q2_cascading_constraints,8.8,0,"Never produces valid 5-word chain. All tokens spent reasoning, no final answer."
+instruction_precision,t3_q3_meta_instruction,8.76,0,Degenerate repetition: repeats meta-instruction text dozens of times. Never executes valid instructions.
+instruction_precision,t2_q1_resist_elaboration,8.92,0,Degenerate repetition: outputs 4 hundreds of times. Should output just 4 once.
+instruction_precision,t2_q2_maintain_format,8.88,1,Correct format produced once but then repeats block many times. Violates no other text constraint.
+instruction_precision,t2_q3_empty_handling,8.89,1,Outputs NONE correctly but then explains and repeats. Instruction said do not explain.
+instruction_precision,t2_q4_conflicting_constraints,9.0,2,Final answer A database organizes data meets all constraints. Excessive reasoning but correct output.
+instruction_precision,t1_q1_negative_instruction,8.95,0,Degenerate repetition of self-imposed constraints. Never produces 2 sentences about photosynthesis.
+instruction_precision,t1_q2_word_limit,9.08,2,Produces 21-word description within 20-25 range. Correct.
+instruction_precision,t1_q3_structured_format,9.03,0,Degenerate repetition of instruction text. Never outputs language list.
+instruction_precision,t1_q4_multiple_constraints,8.96,1,Correct list in alpha order but repeats entire list dozens of times. Repetition loop.

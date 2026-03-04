@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+long_context,t3_q1_multi_hop_reasoning,0.84,2,Correctly identified that documents lack relevant content; honest refusal rather than hallucination
+long_context,t3_q2_contradiction_detection,1.13,2,Correctly identified documents are technical descriptions not witness statements; refused to fabricate
+long_context,t3_q3_evolving_requirements,0.89,2,Correctly refused to fabricate information from placeholder text; honest assessment
+long_context,t2_q1_deep_needle,0,0,"Empty response / echo-only, no actual content generated"
+long_context,t2_q2_synthesis,0.87,1,Partial synthesis from Q1 data only; noted missing Q2 report but provided analysis of available data
+long_context,t2_q3_architecture,0,1,Began architecture analysis but truncated almost immediately; insufficient content
+long_context,t1_q1_needle,3.15,3,Correctly identified no hardcoded secrets in the codebase; concise correct answer
+long_context,t1_q2_multi_file,2.83,0,Degenerate repetition loop - repeated prompt instructions instead of analyzing code
+long_context,t1_q3_extraction,2.44,2,Extracted dates amounts and party names from legal document
+agentic,t3_q1_competing_constraints,10.16,2,Produced valid JSON plan with steps validation checks and fallback strategy as requested
+agentic,t3_q2_multi_agent_coordination,10.03,2,Produced valid orchestration JSON with phases context passing and failure handling
+agentic,t3_q3_adversarial_robustness,9.74,3,Correctly identified security concerns refused malicious commands provided comprehensive security policy
+agentic,t2_q1_ambiguous,10.51,2,Addressed ambiguity by noting need for clarification and provided both email and Slack tool calls
+agentic,t2_q2_error_chain,10.32,3,Correctly diagnosed database connection issue and chose get_logs as next diagnostic step with proper reasoning
+agentic,t2_q3_schema_edge,10.66,3,Generated correct tool call JSON with proper endpoint method null body for GET and auth header
+agentic,t2_q4_orchestration,8.05,2,Produced deployment plan with test/deploy failure handling and rollback
+agentic,t1_q1_sequential,10.79,2,Correct sequential tool calls: grep_search then read_file
+agentic,t1_q2_error_handling,10.69,2,Correctly handled 404 error by informing user and suggesting alternatives
+agentic,t1_q3_nested_params,10.59,3,Generated correct nested parameter JSON with all required fields
+instruction_precision,t3_q1_self_referential,10.31,1,Attempted self-referential sentence but did not verify all constraints; showed reasoning work only and never produced valid answer
+instruction_precision,t3_q2_cascading_constraints,10.34,1,Attempted cascading constraints but did not complete valid 5-word chain meeting all rules
+instruction_precision,t3_q3_meta_instruction,10.46,0,Garbled output with 42 and hello embedded in repetitive prompt-echo text; never cleanly executed valid instructions
+instruction_precision,t2_q1_resist_elaboration,10.98,1,Correct answer but failed to resist elaboration; included extra text
+instruction_precision,t2_q2_maintain_format,10.41,0,Degenerate repetition: correct format repeated dozens of times instead of once
+instruction_precision,t2_q3_empty_handling,10.44,0,Degenerate repetition of NONE hundreds of times
+instruction_precision,t2_q4_conflicting_constraints,10.42,0,Degenerate repetition of same sentence; failed to produce single valid output
+instruction_precision,t1_q1_negative_instruction,10.41,0,Model echoed and expanded forbidden word list instead of answering; never explained photosynthesis
+instruction_precision,t1_q2_word_limit,10.45,0,Degenerate repetition of same definition; failed to output single response
+instruction_precision,t1_q3_structured_format,10.39,0,Failed structured format
+instruction_precision,t1_q4_multiple_constraints,10.46,0,Degenerate repetition; countries NOT in alphabetical order (France Germany Italy Spain UK would be correct)
+general,t3_q1_policy_analysis,8.01,3,Comprehensive policy analysis identifying Goodharts Law and other failure modes with amendments and trade-offs
+general,t3_q2_system_failure,0,3,Excellent post-mortem explaining idempotency/replica lag mechanism with monitoring dashboard and corrective actions
+general,t3_q3_strategic_communication,9.55,3,Strong board opening statement addressing problems LOIs as pivot 90-day milestones and leadership position
+general,t2_q1_synthesis,0,2,Good synthesis with concrete phased recommendation balancing all perspectives
+general,t2_q2_transform,9.21,3,Correct YAML transformation grouping employees by department with proper nesting
+general,t2_q3_schedule,7.49,3,Valid schedule: Team sync 9am Alice-Dave 2pm Bob-Dave 3pm; correctly verified all constraints
+general,t2_q4_inconsistency,8.35,1,Correctly identified body format and rate limit inconsistencies but fell into degenerate repetition listing 124+ redundant items
+general,t1_q1_json,10.9,3,Perfect JSON output with all four fields correctly extracted
+general,t1_q2_multistep,7.9,1,Added items not in original list (fig Grape); correct processing logic but modified input data
+general,t1_q3_compare,10.54,2,Correct comparison but exceeded 2-3 sentence format with additional table and details
+coder,t3_q1_concurrent_correctness,9.86,2,Explained ABA problem with concrete operation sequence and provided hazard pointer fix with code
+coder,t3_q2_distributed_consistency,8.22,2,Listed multiple conflict resolution strategies with scenarios; addressed shopping cart use case; response truncated before banking ledger
+coder,t3_q3_algorithmic_hardness,7.58,1,Partial algorithmic hardness proof
+coder,t2_q1_design,8.58,2,LRU cache with correct O(1) data structure (doubly linked list + hash map)
+coder,t2_q2_debug_complex,10.45,3,Correctly identified race condition and fixed with asyncio.Lock; clear explanation
+coder,t2_q3_optimize,8.131716334128571,0,Degenerate repetition of prompt instructions; never provided optimized solution
+coder,t2_q4_system,10.23,3,Clean rate limiter with sliding window using deque; handles edge cases; correct O(1) amortized
+coder,t1_q1_algorithm,32.73671940986948,1,Partial bug identification
+coder,t1_q2_refactor,8.24,2,Provided speed-optimized version and discussed memory optimization approaches; response truncated
+coder,t1_q3_test,8.78,3,Comprehensive pytest test suite covering normal edge and error cases with proper pytest features
+math,t3_q1_analysis,8.08,2,Correct closed form via Im(e^{xe^i}) proved differentiability via Weierstrass M-test correctly found limit is 0
+math,t3_q2_combinatorics,8.2,2,Correctly identified that the stated identity fails for n=2 (LHS=1 RHS=2); thorough verification
+math,t3_q3_probability_theory,8.05,0,Degenerate repetition of hints (unique line ratio 0.18); never produced actual proofs for E[N]=e
+math,t2_q1_optimization,10.09,3,Correct optimization: x=100m y=50m area=5000 sq meters; shown with both algebraic and calculus methods
+math,t2_q2_proof,7.88,3,Correctly identified error at n=1 where subsets are disjoint with no overlap; clear explanation
+math,t2_q3_calculus,8.46,2,Correct answer (10) but degenerately repeated the same solution 20+ times; answer is right but output quality degraded
+math,t2_q4_statistics,10.12,3,All calculations correct: sum=185 mean=23.125 median=23.5 std~7.356 no outliers
+math,t1_q1_word_problem,10.94,3,All three parts correct: discount=$120 final=$129.60 percentage=86.4%
+math,t1_q2_system_equations,8.51,2,"Found all four solutions (3,4) (4,3) (-3,-4) (-4,-3) but repeated solution multiple times"
+math,t1_q3_probability,7.78,2,Correct probabilities P(both red)=2/9 P(red+blue)=1/3 with work shown but verification repeated multiple times
+thinking,t3_q1_methodological_critique,7.75,3,Identified 4+ methodological issues including selection bias reverse causality measurement issues and more
+thinking,t3_q2_causal_inference,8.83,2,Discussed adjustment sets and collider bias for Yellow Fingers; response expanded beyond original questions and truncated
+thinking,t3_q3_reasoning_trap,8.37,2,Identified dataset distribution mismatch; constructed concrete daylight/non-daylight scenario; truncated before completion
+thinking,t2_q1_paradox,8.25,2,Presented continuity and material composition positions with personal assessment
+thinking,t2_q2_counterfactual,8.6,3,Thorough counterfactual analysis across all three dimensions with specific mechanisms and second-order effects
+thinking,t2_q3_formal,8.14,2,Correct proof via hypothetical syllogism and Modus Ponens with example but repeated 4 times instead of once
+thinking,t2_q4_metacognition,9.72,3,Excellent Fermi estimation with clear methodology assumptions bounds and uncertainty reduction
+thinking,t1_q1_multistep,8.44,2,Correct approach: relative speed 140 mph time 11/7 hours after 10am ~11:34 AM; response truncated
+thinking,t1_q2_hypothesis,7.85,3,Provided 3+ specific alternative explanations with clear mechanisms
+thinking,t1_q3_planning,8.07,2,Found valid orderings with correct constraint analysis; DC block approach correct; response truncated

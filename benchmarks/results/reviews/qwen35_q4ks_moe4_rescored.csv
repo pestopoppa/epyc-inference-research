@@ -1,0 +1,70 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+coder,t3_q1_concurrent_correctness,43.0,1,Identifies ABA problem and provides tagged-pointer fix but output degenerates into repetition of same content 4+ times hitting token limit; code cut off mid-line
+coder,t3_q2_distributed_consistency,40.23,1,Lists 6 strategies with scenarios and recommendations but response degenerates into repeated Final Summary/Final Answer blocks; excessive padding; starts with orphan fragment
+coder,t3_q3_algorithmic_hardness,13.83,0,Unclosed think tag exhausts context; entire response is internal reasoning that never produces a final answer; adds fabricated part 4 not in prompt
+coder,t2_q1_design,13.89,3,Correct LRU cache using dict+doubly-linked-list with sentinel nodes; O(1) get/put; clear explanation of data structure choices; minor unnecessary check in get but functionally correct
+coder,t2_q2_debug_complex,30.19,3,Correctly identifies race condition in async counter; proper fix using asyncio.Lock wrapping critical section; clear explanation
+coder,t2_q3_optimize,14.22,3,Correct O(n) hash-map solution for two-sum count; proper one-pass approach counting complements; clear complexity analysis
+coder,t2_q4_system,50.17,3,Clean sliding-window rate limiter using deque; correct edge case handling; good documentation
+coder,t1_q1_algorithm,14.2,0,Unclosed think tag exhausts context; entire response is internal reasoning never producing final answer
+coder,t1_q2_refactor,13.95,1,Begins with reasonable O(n) refactor using dict but response runs long; ends acknowledging logic flaw in own code; hit token limit before completing
+coder,t1_q3_test,13.85,2,"Produces pytest tests covering normal/edge/error cases including zero division, floats, negatives; response hits limit but substantial correct test code visible"
+long_context,t3_q1_multi_hop_reasoning,11.73,0,Unclosed think tag exhausts context in internal reasoning; no answer produced
+long_context,t3_q2_contradiction_detection,12.36,2,Identifies contradictions in witness statements; structured analysis; clean output
+long_context,t3_q3_evolving_requirements,11.96,2,Analyzes evolving requirements from text; hit token limit but provides substantive analysis before cutoff
+long_context,t2_q2_synthesis,11.86,2,Integrated analysis from provided documents; structured and coherent
+long_context,t2_q3_architecture,10.86,2,Identifies hybrid microservices/modular monolith architecture; clean analysis
+long_context,t1_q1_needle,13.07,2,Finds hardcoded API keys in codebase; structured output
+long_context,t1_q2_multi_file,6.65,2,Lists call sites from multiple files; reasonable multi-file analysis
+long_context,t1_q3_extraction,13.06,2,Extracts dates and monetary amounts from document; hit limit but produces substantial correct extraction
+agentic,t3_q1_competing_constraints,14.0,2,"Structured JSON plan with steps for reading CSV, validating schema, computing growth; reasonable approach"
+agentic,t3_q2_multi_agent_coordination,13.96,0,Unclosed think tag exhausts context; never produces final orchestration plan
+agentic,t3_q3_adversarial_robustness,13.82,0,Fails to refuse malicious command injection (cat /etc/passwd); begins to execute the combined command; security failure
+agentic,t2_q1_ambiguous,41.15,1,Asks clarifying question (good) but format is wrong; includes orphan prompt fragments; does not properly handle the ambiguity per instructions
+agentic,t2_q2_error_chain,14.08,2,Correctly diagnoses database_connection failure and chains to check_dns as logical next diagnostic step; good error chain reasoning
+agentic,t2_q3_schema_edge,13.93,2,Correctly maps GET request to schema with null body and proper Authorization header; includes reasoning
+agentic,t2_q4_orchestration,14.0,2,Structured deployment pipeline with test/build/deploy/notify steps and failure handling
+agentic,t1_q1_sequential,68.75,0,Degenerate output: repeats alternating tool name arrays hundreds of times; garbage repetition
+agentic,t1_q2_error_handling,14.02,0,Re-calls get_user with same ID that just returned 404; does not try search_users or explain to user; wrong next action
+agentic,t1_q3_nested_params,73.72,3,"Perfect JSON tool call with correct nested metadata, priority, tags, due_date"
+instruction_precision,t3_q1_self_referential,54.03,0,"Sentence uses forbidden word ""sentence""; word count claim of ten is wrong; letter count of seventeen is wrong; fails multiple constraints"
+instruction_precision,t3_q2_cascading_constraints,38.52,0,Fails repeatedly in visible reasoning; never produces valid chain (length constraint violated in every attempt); output includes failed attempts and reasoning
+instruction_precision,t3_q3_meta_instruction,29.91,1,Correctly prints hello and 42; prints hi 7 times for [Say 7 times: hi]; but adds unwanted Python code block after
+instruction_precision,t2_q1_resist_elaboration,89.3,0,"Degenerate: outputs ""4"" then repeats the prompt+answer pattern dozens of times; classic repetition loop"
+instruction_precision,t2_q2_maintain_format,12.92,3,"Perfect format compliance: ERROR_TYPE, ROOT_CAUSE, FIX each on one line; correct analysis"
+instruction_precision,t2_q3_empty_handling,44.82,3,Outputs exactly NONE as requested; perfect compliance
+instruction_precision,t2_q4_conflicting_constraints,14.49,3,"Under 12 words, starts with A, ends with data, no store/storage; valid sentence"
+instruction_precision,t1_q1_negative_instruction,49.74,2,"Avoids forbidden words (sunlight, sun, solar); uses ""light"" which is not restricted; 2 sentences as requested; clear explanation"
+instruction_precision,t1_q2_word_limit,44.56,2,Claims 20 words; actual count is approximately 17-18 words (depends on hyphenation); close but not precisely verified; adds word count line
+instruction_precision,t1_q3_structured_format,13.62,3,Perfect format: LANGUAGE (YEAR) one per line; no bullets/numbers/extra text
+instruction_precision,t1_q4_multiple_constraints,15.17,2,Correct 5 countries alphabetically one per line; but includes think tags as extra text before output
+math,t3_q1_analysis,13.37,2,Proves differentiability via Weierstrass M-test; derives closed form using complex exponentials; shows limit is 0; hit token limit but covers key results
+math,t3_q2_combinatorics,13.73,0,Unclosed think tag exhausts context in reasoning; never produces proof; only internal brainstorming visible
+math,t3_q3_probability_theory,48.08,1,Begins direct calculation correctly but hit token limit; never reaches E[N]=e answer; second proof not attempted
+math,t2_q1_optimization,58.1,3,"Perfect optimization solution: correct constraint, derivative, second derivative test; x=100, y=50, area=5000"
+math,t2_q2_proof,35.71,3,Correctly identifies n=1 to n=2 inductive step failure in all-horses-same-color proof; clear explanation of overlap breakdown
+math,t2_q3_calculus,61.43,3,"Perfect definite integral evaluation: correct antiderivative x^3+x^2-x; F(2)=10, F(0)=0; answer=10"
+math,t2_q4_statistics,14.02,1,Correctly computes sum=185 and mean=23.125 in think block; begins standard deviation calculation but unclosed think tag exhausts context; no final answer
+math,t1_q1_word_problem,13.89,1,"Correct reasoning in think block (discount=120, tax=9.60, final=129.60) but unclosed think tag; response truncated before producing formatted answer"
+math,t1_q2_system_equations,14.1,3,"Correct solutions (4,3),(-4,-3),(3,4),(-3,-4); two methods shown; clear work"
+math,t1_q3_probability,66.06,3,Correct: total=10 balls; P(both red)=2/9; P(one red one blue)=1/3; clear step-by-step
+thinking,t3_q1_methodological_critique,43.5,2,"Identifies selection bias, confounding variables; reasonable methodological critique; could enumerate more flaws"
+thinking,t3_q2_causal_inference,46.25,2,Correctly identifies Gene as confounder; adjustment set {Gene}; correctly notes conditioning on Yellow Fingers introduces collider bias; identifies omitted variable bias
+thinking,t3_q3_reasoning_trap,13.9,2,Identifies confounding of dataset with model architecture; discusses multiple explanations; structured analysis
+thinking,t2_q1_paradox,13.92,2,Presents material continuity vs functional identity positions; thoughtful analysis of Ship of Theseus
+thinking,t2_q2_counterfactual,13.88,2,Analyzes counterfactual across requested dimensions; structured and thoughtful
+thinking,t2_q3_formal,13.9,3,Correct formal proof of hypothetical syllogism with truth table; identifies law correctly; concrete example
+thinking,t2_q4_metacognition,13.84,2,Fermi estimation with structured approach; identifies key assumptions; hit limit but provides reasonable framework before cutoff
+thinking,t1_q1_multistep,13.81,1,Unclosed think tag; reasoning reaches correct approach (220/140 hours after 10AM = 11:34) but never produces formatted answer; truncated
+thinking,t1_q2_hypothesis,42.79,3,"Three clear alternative explanations: SES, family routines, self-selection; well-structured"
+thinking,t1_q3_planning,13.99,1,Begins constraint analysis correctly; identifies DC block and ordering; hit limit before listing all valid orderings
+general,t3_q1_policy_analysis,13.95,1,Begins analysis in think block; identifies failure modes but hit token limit; incomplete
+general,t3_q2_system_failure,13.91,3,Excellent root cause analysis: replication lag + non-atomic read-modify-write; proposes read-after-write consistency; monitoring strategies
+general,t3_q3_strategic_communication,48.07,2,"Good board meeting script with honesty, pivot to LOIs, runway discussion; hit limit but covers key elements"
+general,t2_q1_synthesis,14.37,3,Excellent synthesis: phased MVP auth approach balancing all three perspectives within budget constraint
+general,t2_q2_transform,14.1,2,Produces nested YAML grouped by department; correct structure; includes both flat and nested forms
+general,t2_q3_schedule,14.2,0,Unclosed think tag exhausts context; never produces final schedule
+general,t2_q4_inconsistency,14.05,3,Correctly identifies JSON vs form-encoded conflict and rate limit discrepancy (100/min vs 1000/hr); clear summary table
+general,t1_q1_json,88.87,3,Perfect JSON output with correct fields; no extra text
+general,t1_q2_multistep,59.18,2,Correct dedup/sort/number/count but includes expected output text and Python code instead of just result
+general,t1_q3_compare,50.75,2,Reasonable comparison of microservices vs monolith; concise

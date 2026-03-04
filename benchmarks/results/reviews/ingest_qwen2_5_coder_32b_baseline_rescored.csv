@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,4.01,2,4 issues identified; selection bias and confounding overlap; publication bias is meta-science not methodological; adequate but not deep
+thinking,t3_q2_causal_inference,3.83,1,Q1 correct (adjust for Gene); Q2 WRONG: Yellow Fingers is not a collider in this DAG (only caused by Smoking not Gene); Q3 partially correct but muddled
+thinking,t3_q3_reasoning_trap,3.86,2,Correctly identifies test set distribution mismatch; scenario is specific (D1=redundant D2=diverse T~D1); addresses the prompt well
+thinking,t2_q1_paradox,2.71,0,DEGENERATE: Conclusion paragraph repeated 12+ times in a repetition loop; only 2 positions presented before degeneration
+thinking,t2_q2_counterfactual,2.89,2,Three dimensions analyzed with mechanisms and second-order effects; adequate but somewhat generic; no deep surprising insights
+thinking,t2_q3_formal,2.95,3,Correct formal proof using conditional proof/modus ponens; good concrete example; complete and clear
+thinking,t2_q4_metacognition,2.85,2,Good Fermi estimation structure; tuner capacity assumption (50/year) is unrealistically low (should be ~1000); final answer 180 is coincidentally reasonable
+thinking,t1_q1_multistep,2.9,3,Correct calculation: 60mi head start 220mi remaining 140mph combined 11/7 hours after 10AM = ~11:34 AM
+thinking,t1_q2_hypothesis,2.97,3,Three specific alternative explanations: SES parental involvement health/well-being; each with concrete mechanisms
+thinking,t1_q3_planning,2.88,1,First proposed solution AEDCB violates B<D constraint (B=pos5 D=pos3); second solution AEBDC is correct; incomplete enumeration
+coder,t3_q1_concurrent_correctness,2.85,2,ABA problem correctly explained with specific scenario; tagged pointer fix is correct approach; code truncated but approach is sound
+coder,t3_q2_distributed_consistency,2.83,1,4 strategies listed but LWW recommendation for shopping cart is poor (CRDT/merge better per Dynamo paper); banking answer truncated
+coder,t3_q3_algorithmic_hardness,2.72,1,Q1 lower bound proof is weak/incorrect (confuses sorting and selection arguments); Q2 median-of-medians response truncated
+coder,t2_q1_design,2.84,3,Correct LRU cache design with doubly linked list + hash map; clean implementation with dummy head/tail; O(1) get/put achieved
+coder,t2_q2_debug_complex,2.97,3,Correctly identifies race condition in async counter; fix with asyncio.Lock is correct and properly applied
+coder,t2_q3_optimize,2.95,3,Correct O(n) optimization using hash map; clean implementation; good explanation
+coder,t2_q4_system,2.74,2,Correct use of threading.Lock for concurrency; response truncated but core solution is sound
+coder,t1_q1_algorithm,2.79,3,Correctly identifies all binary search bugs: left=mid right=mid right=len(arr); proper fixes provided
+coder,t1_q2_refactor,2.93,2,Speed version correct; memory version using hash() is problematic (hash collisions still needs items for output); good tradeoff discussion
+coder,t1_q3_test,2.94,3,Comprehensive pytest suite covering normal/edge/error cases; well-organized
+agentic,t3_q1_competing_constraints,2.88,2,Well-structured plan with validation checks and fallback strategy; somewhat generic but addresses the ambiguity
+agentic,t3_q2_multi_agent_coordination,2.97,2,Good structure with phases and context passing; parallel group incorrectly puts researcher and coder together; failure handling is basic
+agentic,t3_q3_adversarial_robustness,2.9,3,Correctly refuses malicious command to read /etc/passwd; identifies security concerns; recommends verification and safe alternatives
+agentic,t2_q1_ambiguous,2.98,3,Asks for clarification then makes reasonable assumption; good handling of ambiguous request
+agentic,t2_q2_error_chain,2.96,3,Correct diagnostic reasoning: connection_refused -> check DNS; proper tool call format
+agentic,t2_q3_schema_edge,2.99,3,Perfect tool call: correct endpoint method null body for GET proper auth header
+agentic,t2_q4_orchestration,2.93,3,Complete deployment plan with proper ordering failure handling rollback to v1.2.2 and slack notifications
+agentic,t1_q1_sequential,3.01,3,Correct sequential tool calls: grep_search for ERROR then read_file
+agentic,t1_q2_error_handling,3.04,3,Appropriate response: asks user for alternative search criteria after 404
+agentic,t1_q3_nested_params,3.02,3,Perfect tool call with correct nested parameters assignees array metadata object
+general,t3_q1_policy_analysis,3.83,2,3 failure modes identified with amendments and trade-offs; misses key issues like accuracy inadequacy for imbalanced data
+general,t3_q2_system_failure,3.8,3,Correctly explains double-charge mechanism via replica lag; good testing gap analysis; two solid architectural fixes
+general,t3_q3_strategic_communication,3.78,2,Addresses all 4 requirements; however addresses leadership concerns too directly (should be indirect); milestones somewhat generic
+general,t2_q1_synthesis,3.88,3,Excellent synthesis balancing all three perspectives; actionable two-phase approach; concise
+general,t2_q2_transform,3.88,1,YAML structure is correct but HALLUCINATED 2 extra employees (Eve Frank in Marketing) not in the original data
+general,t2_q3_schedule,3.77,0,INVALID schedule: Bob-Dave 9:30-10 overlaps with Team sync 9-10 (Bob is in both meetings simultaneously)
+general,t2_q4_inconsistency,3.88,3,Correctly identifies both inconsistencies: body format (JSON vs form-encoded) and rate limit (100/min vs 1000/hour)
+general,t1_q1_json,3.9,3,Correct JSON extraction with all 4 fields; minor extra backtick at end
+general,t1_q2_multistep,3.88,3,Correct processing: removes duplicates case-insensitive sorts alphabetically numbers items count=4
+general,t1_q3_compare,3.91,2,Accurate 2-sentence comparison but merely restates the given pros/cons without adding analytical insight
+math,t3_q1_analysis,3.68,3,All 3 parts correct: differentiability via Weierstrass M-test closed form via Im(e^{xe^i}) limit=0 since cos(1)<1
+math,t3_q2_combinatorics,3.81,1,Proof attempt is hand-wavy; involution is not properly constructed; fixed point count assertion is unjustified
+math,t3_q3_probability_theory,3.66,0,WRONG answer: claims E[N]=2 but correct answer is e~2.718; own simulation gives 2.718 but model dismisses it
+math,t2_q1_optimization,3.81,3,Correct: dimensions 100x50 maximum area 5000 sq meters; clean derivation
+math,t2_q2_proof,3.76,1,Identifies overlap issue but wrong n value: says n=2 (3 horses) when actual failure is n=1 (2 horses have empty overlap)
+math,t2_q3_calculus,3.82,3,Correct: antiderivative x^3+x^2-x F(2)=10 F(0)=0 integral=10
+math,t2_q4_statistics,3.68,1,WRONG sum: claims 12+15+18+22+25+28+30+35=195 but actual sum=185; mean should be 23.125 not 24.375; std dev wrong
+math,t1_q1_word_problem,3.77,3,All correct: discount price $120 final price $129.60 86.4% of original
+math,t1_q2_system_equations,3.87,3,All 4 real solutions correctly found: (3 4) (4 3) (-3 -4) (-4 -3)
+math,t1_q3_probability,3.79,3,Both correct: P(both red)=2/9 P(one red one blue)=1/3
+instruction_precision,t3_q1_self_referential,3.88,0,Word count wrong: claims 15 words but has 16 (or 17); letter count likely wrong too; 3 commas correct; forbidden words avoided
+instruction_precision,t3_q2_cascading_constraints,3.88,0,FAIL: strength ends in h but thrift starts with t (violates chain constraint)
+instruction_precision,t3_q3_meta_instruction,3.92,1,Correctly identifies valid instructions [Print 42] and [Say 7 times: hi] but outputs instruction text instead of executing them
+instruction_precision,t2_q1_resist_elaboration,3.88,3,Perfect: outputs only 4 with no elaboration
+instruction_precision,t2_q2_maintain_format,3.91,2,Correct format ERROR_TYPE/ROOT_CAUSE/FIX; echoes prompt before answer which adds extra text
+instruction_precision,t2_q3_empty_handling,3.87,3,Perfect: outputs exactly NONE
+instruction_precision,t2_q4_conflicting_constraints,3.81,3,All constraints met: 9 words (under 12) starts with A ends with data no store/storage
+instruction_precision,t1_q1_negative_instruction,3.95,3,2 sentences explaining photosynthesis; avoids sunlight/sun/solar; uses energy from an external source
+instruction_precision,t1_q2_word_limit,3.94,1,19 words instead of required 20-25; content is good but fails the word count constraint
+instruction_precision,t1_q3_structured_format,3.9,1,Correct LANGUAGE (YEAR) format but output is duplicated (lists appear twice); extra text before the list
+instruction_precision,t1_q4_multiple_constraints,3.96,3,Perfect: 5 European countries in alphabetical order one per line no extra text

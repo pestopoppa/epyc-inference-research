@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,122.74,2,Echoes prompt then provides 4 methodological issues; selection bias and confounders are strong but statistical significance critique is weak; substantially correct
+thinking,t3_q2_causal_inference,107.21,0,Echoes prompt and invents extra questions; Q1 wrong (does not identify Gene as minimal adjustment set); Q2 wrong (Yellow Fingers is not a confounder); Q3 wrong (claims regression can include unmeasured variable)
+thinking,t3_q3_reasoning_trap,108.07,1,Echoes prompt; identifies flaw vaguely; scenario mechanism incoherent - claims D1 overfits yet scores higher on test set
+thinking,t2_q1_paradox,119.34,2,Echoes prompt; presents 3 philosophical positions with reasoning; adequate but does not deeply engage with reconstructed ship
+thinking,t2_q2_counterfactual,118.32,2,Echoes prompt; covers all 3 dimensions with mechanisms and second-order effects; reasonable though generic
+thinking,t2_q3_formal,112.85,1,Echoes prompt; claims P->R equivalent to Q->R (wrong); proof is informal rather than formal; concrete example is fine
+thinking,t2_q4_metacognition,117.66,1,Echoes prompt; fails Fermi estimation methodology - starts with arbitrary range instead of deriving from population; suggests research which defeats purpose
+thinking,t1_q1_multistep,112.38,3,Math fully correct - solves 60t+80(t-1)=280 to get 11:34 AM; verifies with alternative approach
+thinking,t1_q2_hypothesis,122.17,2,Echoes prompt; provides 3 reasonable alternative explanations (intelligence SES study habits)
+thinking,t1_q3_planning,109.39,0,Lists 10 orderings but most violate constraints; final answer A B C D E is invalid (C not immediately after D); constraint verification incorrect
+general,t3_q1_policy_analysis,118.0,2,Echoes prompt; identifies 3 failure modes with mechanisms amendments and trade-offs; data drift and model decay overlap but reasonable
+general,t3_q2_system_failure,108.18,2,Core Q1 explanation substantially correct (stale replica read during lag spike); Q3 fixes are vague; hits token limit but core answers adequate
+general,t3_q3_strategic_communication,108.49,2,Covers all 4 requirements with appropriate tone; milestones use placeholder brackets; overall structure solid
+general,t2_q1_synthesis,109.46,1,Recommends 3-month refactor but does not reconcile 2-week urgency or 20K budget constraint; fails true synthesis
+general,t2_q2_transform,114.11,0,Hallucinates 4 extra employees; produces invalid YAML with duplicate department keys; misplaces employees under wrong departments
+general,t2_q3_schedule,118.71,0,Output nonsensical - lists people in slots without scheduling actual meetings; ignores Alice unavailability; completely fails
+general,t2_q4_inconsistency,120.91,2,Correctly identifies body format inconsistency and rate limit difference; lists format and payload as separate items but same issue
+general,t1_q1_json,109.64,0,DEGENERATE: correct JSON repeated ~35 times until token limit; repetition loop failure
+general,t1_q2_multistep,109.22,0,DEGENERATE: input items repeated in endless loop until token limit; never produces output
+general,t1_q3_compare,114.32,0,Single vacuous sentence with no comparison; 23 tokens; completely fails task

@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,19.39,0,"Degenerate: 440 repeated closing tags, never produces final answer"
+general,t3_q2_system_failure,16.89,2,Correct replica lag analysis with metrics and alert workflow; thinking mixed with output
+general,t3_q3_strategic_communication,17.76,3,Complete 5-min board statement addressing all 4 requirements with concrete metrics
+general,t2_q1_synthesis,21.33,3,Concrete recommendation: 2-week hotfix under 20K then Q1 refactor; addresses all perspectives
+general,t2_q2_transform,18.34,2,Correct YAML transformation with department grouping; thinking mixed into output
+general,t2_q3_schedule,16.97,0,Never produces final JSON schedule; response cuts off mid-reasoning
+general,t2_q4_inconsistency,18.32,1,Identifies correct inconsistencies but never outputs required JSON format; cuts off
+general,t1_q1_json,25.59,2,Correct JSON with all 4 fields; echoes prompt before JSON
+general,t1_q2_multistep,17.34,0,Never produces final numbered list; reasoning cuts off mid-analysis
+general,t1_q3_compare,22.55,3,Clear monolith recommendation with specific reasoning; meets sentence requirement
+long_context,t3_q1_multi_hop_reasoning,1.87,2,Correctly identifies no financial data in API docs; states Information not found
+long_context,t3_q2_contradiction_detection,2.49,0,Never produces structured answer; cuts off mid-reasoning
+long_context,t3_q3_evolving_requirements,,0,Never produces answer; response is context echo then question text
+long_context,t2_q1_deep_needle,,0,Never produces answer; echoes log data without analysis
+long_context,t2_q2_synthesis,,0,Never produces analysis; reasoning cuts off while parsing data
+long_context,t2_q3_architecture,,0,Never produces answer; echoes config files and code
+long_context,t1_q1_needle,3.38,3,Correctly found hardcoded API key sk-proj-7x9mK2nP4qR8sT1uV3wY5zA
+long_context,t1_q2_multi_file,2.56,1,Partial code analysis; identifies patterns but cuts off at Issue 12
+long_context,t1_q3_extraction,1.93,1,Partial extraction: monetary amounts listed but cuts off; dates and names incomplete
+agentic,t3_q1_competing_constraints,15.94,0,Never produces tool calls or plan; cuts off mid-reasoning about CSV schema
+agentic,t3_q2_multi_agent_coordination,15.01,0,Never produces coordination plan; cuts off mid-reasoning
+agentic,t3_q3_adversarial_robustness,14.36,1,Identifies command injection concern but degenerates into base64 repetition
+agentic,t2_q1_ambiguous,20.31,3,Correctly identifies ambiguity and asks appropriate clarifying question
+agentic,t2_q2_error_chain,15.17,1,Identifies database root cause but never produces requested tool call JSON
+agentic,t2_q3_schema_edge,20.43,3,Correct tool call JSON with proper endpoint method null body auth header
+agentic,t2_q4_orchestration,16.25,1,Partial deployment plan; reasoning cuts off before completion
+agentic,t1_q1_sequential,15.71,2,Correct tool call sequence grep_search then read_file; thinking mixed with output
+agentic,t1_q2_error_handling,15.78,2,Appropriate clarification request after 404; thinking mixed with output
+agentic,t1_q3_nested_params,21.41,3,Correct nested JSON tool call with all parameters
+instruction_precision,t3_q1_self_referential,15.26,0,Never produces valid self-referential sentence; cuts off mid-reasoning
+instruction_precision,t3_q2_cascading_constraints,19.94,0,Never produces the 5-word list; cuts off mid-constraint analysis
+instruction_precision,t3_q3_meta_instruction,20.29,1,Identifies correct instructions but output mixed with reasoning; cuts off
+instruction_precision,t2_q1_resist_elaboration,21.91,1,Correct answer 4 but massive thinking leaked; violates only-number instruction
+instruction_precision,t2_q2_maintain_format,20.44,1,Correct content but format violated by inline thinking
+instruction_precision,t2_q3_empty_handling,20.76,1,Correct NONE but reasoning mixed in; violates do-not-explain instruction
+instruction_precision,t2_q4_conflicting_constraints,20.93,2,Valid sentence meeting all constraints; thinking leaked but answer correct
+instruction_precision,t1_q1_negative_instruction,21.51,2,Correct 2-sentence explanation without forbidden words; clean final answer after thinking
+instruction_precision,t1_q2_word_limit,20.6,1,Approximately correct word count but thinking leaked; response cuts off
+instruction_precision,t1_q3_structured_format,20.6,1,Correct format and data but thinking leaked; violates no-extra-text instruction
+instruction_precision,t1_q4_multiple_constraints,21.23,1,Correct 5 countries alphabetically but thinking leaked into output
+coder,t3_q1_concurrent_correctness,15.26,1,Identifies ABA problem with partial sequence but cuts off; fix incomplete
+coder,t3_q2_distributed_consistency,15.35,2,Good conflict resolution analysis with 4+ strategies and banking comparison
+coder,t3_q3_algorithmic_hardness,15.09,1,Correct recurrence for median-of-medians but proof and analysis cut off
+coder,t2_q1_design,15.53,1,Correct LRU design approach but code implementation cuts off
+coder,t2_q2_debug_complex,15.69,2,Correctly identifies race condition and proposes asyncio.Lock fix
+coder,t2_q3_optimize,15.32,3,Correct O(n) hash map solution with complete working code
+coder,t2_q4_system,16.09,1,Correct rate limiter approach but code and tests cut off
+coder,t1_q1_algorithm,13.7,2,Identifies left=mid bug correctly; second bug analysis cut off
+coder,t1_q2_refactor,13.8,2,First version set-based O(n) correct and complete; second cuts off
+coder,t1_q3_test,14.39,1,Identifies correct test categories but actual pytest code cuts off
+thinking,t3_q1_methodological_critique,15.4,3,Identifies 4+ methodological issues with mechanisms; proposes experiment
+thinking,t3_q2_causal_inference,15.31,1,Partial DAG analysis; Yellow Fingers and front-door discussion cuts off
+thinking,t3_q3_reasoning_trap,14.89,1,Identifies test set bias correctly but concrete scenario cuts off
+thinking,t2_q1_paradox,15.67,1,Discusses identity positions but degenerates into repeated boxed repetition loop
+thinking,t2_q2_counterfactual,15.57,3,Thorough counterfactual analysis across all 3 dimensions with specific mechanisms
+thinking,t2_q3_formal,16.08,2,Correct formal proof of hypothetical syllogism with concrete example
+thinking,t2_q4_metacognition,15.07,2,Good Fermi estimation with steps assumptions bounds uncertainty reduction
+thinking,t1_q1_multistep,18.51,3,Correct: 11:34 AM with clear work and Python verification
+thinking,t1_q2_hypothesis,15.91,2,Three valid alternative explanations for breakfast-test correlation
+thinking,t1_q3_planning,15.97,1,Correct constraint analysis but cuts off before listing all valid orderings
+math,t3_q1_analysis,15.2,3,Correct: differentiability closed form Im(e^{xe^i}-1) limit=0
+math,t3_q2_combinatorics,14.59,0,Never completes proof; cuts off mid-analysis
+math,t3_q3_probability_theory,17.07,3,Correct: E[N]=e with two proof approaches and verification
+math,t2_q1_optimization,19.61,3,Correct: 100m x 50m max area 5000 sq meters
+math,t2_q2_proof,15.13,3,Correctly identifies inductive step fails at n=1 to n=2
+math,t2_q3_calculus,17.86,3,Correct: antiderivative x^3+x^2-x integral=10
+math,t2_q4_statistics,15.32,2,Correct approach for all calculations; cuts off but methodology sound
+math,t1_q1_word_problem,14.48,3,Correct: 120 after discount 129.60 after tax 86.4 pct
+math,t1_q2_system_equations,15.7,2,Correct method with (x+y)^2=49 (x-y)^2=1; partial solution listing
+math,t1_q3_probability,20.18,3,Correct: P(both red)=2/9 P(one red one blue)=1/3

@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+instruction_precision,t2_q2_maintain_format,1.24,1,Echoes full prompt before answering; format correct but No other text constraint violated
+instruction_precision,t2_q4_conflicting_constraints,1.25,2,Sentence meets all 4 constraints (7 words starts A ends data no store); adds unnecessary explanation
+instruction_precision,t1_q4_multiple_constraints,1.24,1,Countries correct and alphabetical but adds code block marker and full paragraph violating no-additional-text
+instruction_precision,t3_q1_self_referential,3.15,0,Never produces valid sentence; entire response is thinking-aloud without final answer
+instruction_precision,t3_q2_cascading_constraints,3.13,0,Never produces valid 5-word list; stuck reasoning about constraints truncated mid-thought
+instruction_precision,t3_q3_meta_instruction,3.14,0,Fails to follow meta-instructions; generates new prompts instead of outputting results; degenerate
+instruction_precision,t2_q1_resist_elaboration,3.16,0,Fails completely; generates fake multi-turn conversation instead of answering 4
+instruction_precision,t2_q3_empty_handling,3.19,1,First answer NONE correct but generates 12+ additional self-prompted email extraction examples
+instruction_precision,t1_q1_negative_instruction,3.19,0,Degenerate repetition: repeats Do NOT mention 64 times never produces photosynthesis explanation
+instruction_precision,t1_q2_word_limit,3.17,0,Fails word limit; continues with full ML textbook QA 511 tokens degenerate continuation
+instruction_precision,t1_q3_structured_format,3.19,1,First 3 entries correct format but continues listing 60+ more languages; ignores exactly 3 constraint
+agentic,t2_q2_error_chain,25.12,0,Empty response (1 completion token); echoes prompt only no reasoning or tool call
+agentic,t1_q3_nested_params,1.22,2,Correct parameter extraction; JSON uses tool instead of name key but all values correct
+agentic,t3_q1_competing_constraints,1.63,2,Good multi-step plan with read-first strategy schema validation and fallback
+agentic,t3_q2_multi_agent_coordination,1.65,2,Reasonable orchestration plan with correct agent assignments phased execution dependency awareness
+agentic,t3_q3_adversarial_robustness,1.65,3,Correctly identifies command injection risk refuses unsafe request proposes security policy
+agentic,t2_q1_ambiguous,1.75,2,Correctly identifies ambiguity and asks clarification; simulates conversation but approach sound
+agentic,t2_q3_schema_edge,1.71,1,First tool call correct but repeats schema+response 13 times; degenerate continuation
+agentic,t2_q4_orchestration,2.14,3,Complete deployment plan with staging-first rollback on failure and notifications
+agentic,t1_q1_sequential,3.21,3,Correct sequential tool calls: grep_search then read_file; clean JSON output
+agentic,t1_q2_error_handling,2.73,1,Initial recovery strategy reasonable but generates 17 fake conversation rounds; degenerate
+general,t1_q1_json,1.23,3,Perfect JSON extraction: name role department start_date all correct
+general,t3_q1_policy_analysis,2.94,3,Thorough policy analysis: proxy metrics static thresholds audit gaps; amendments with trade-offs
+general,t3_q2_system_failure,3.1,3,Precise explanation of replica lag idempotency bypass; two fixes with trade-offs
+general,t3_q3_strategic_communication,3.09,3,Effective board statement acknowledges problems frames LOIs as pivot proposes milestones
+general,t2_q1_synthesis,2.94,2,Solid phased recommendation balancing urgency and sustainability; exceeds 3-4 sentence constraint
+general,t2_q2_transform,3.2,2,Shows correct nested YAML but then shifts to Python code implementation
+general,t2_q3_schedule,2.94,1,Incorrectly concludes scheduling impossible; valid schedules exist
+general,t2_q4_inconsistency,3.19,3,Identifies all three inconsistencies with clear doc attribution
+general,t1_q2_multistep,2.94,0,Answers modified prompt adding items not in original; repeats 24 times degenerate
+general,t1_q3_compare,3.2,3,Clear concise comparison within 2-3 sentences; correct trade-offs
+math,t2_q3_calculus,1.21,3,Correct antiderivative evaluation and final answer of 10
+math,t1_q1_word_problem,1.22,3,All three parts correct: 120 after discount 129.60 after tax 86.4 percent
+math,t3_q1_analysis,2.97,3,All three parts correct: differentiability closed form e^(xcos1)sin(xsin1) limit 0
+math,t3_q2_combinatorics,2.94,0,Never completes proof; lost in reasoning truncated without conclusion
+math,t3_q3_probability_theory,2.92,3,Correct E[N]=e with both direct and elegant simplex proofs
+math,t2_q1_optimization,2.9,2,Correct W=50 L=100 A=5000; verbose reasoning truncated before final verification
+math,t2_q2_proof,3.09,3,Correctly identifies empty overlap failure at n=1 and why overlap breaks
+math,t2_q4_statistics,3.08,3,All correct: sum=185 mean=23.125 median=23.5 SD=7.357 no outliers
+math,t1_q2_system_equations,2.96,3,All four solutions found: (4 3) (-4 -3) (3 4) (-3 -4)
+math,t1_q3_probability,3.19,3,Both correct: P(both red)=2/9 P(one red one blue)=1/3
+thinking,t2_q1_paradox,1.22,2,Two positions materialist and functionalist presented; adequate but shallow
+thinking,t1_q2_hypothesis,1.21,3,Three specific alternative explanations: SES reverse causation selection bias
+thinking,t3_q1_methodological_critique,2.15,3,4+ methodological issues identified with mechanisms explained
+thinking,t3_q2_causal_inference,2.12,1,Correct adjustment set but WRONG on Yellow Fingers; claims collider caused by Smoking AND Cancer
+thinking,t3_q3_reasoning_trap,1.99,3,Strong flaw identification with concrete medical imaging scenario
+thinking,t2_q2_counterfactual,2.12,3,Thorough counterfactual across all three dimensions with mechanisms
+thinking,t2_q3_formal,2.16,3,Correct formal proof with modus ponens conditional proof and Lean 4 code
+thinking,t2_q4_metacognition,1.99,3,Complete Fermi estimation with assumptions bounds and uncertainty analysis
+thinking,t1_q1_multistep,2.03,3,Correct: t=18/7 hours trains meet at 11:34 AM
+thinking,t1_q3_planning,2.04,3,All 3 valid orderings found with constraint verification
+coder,t3_q1_concurrent_correctness,1.94,3,Correct ABA scenario with tagged pointer fix
+coder,t3_q2_distributed_consistency,2.16,3,4 strategies with failure scenarios; correct domain recommendations
+coder,t3_q3_algorithmic_hardness,2.04,2,Correct adversary argument and group size discussion; truncated part 3
+coder,t2_q1_design,2.0,0,Degenerate repetition: repeats prompt 29 times never produces LRU cache
+coder,t2_q2_debug_complex,2.15,3,Correctly identifies race condition; asyncio.Lock fix correct
+coder,t2_q3_optimize,2.01,1,Identifies hash map approach but gets confused; no correct final code
+coder,t2_q4_system,2.0,1,Discusses rate limiter but no clean implementation; truncated
+coder,t1_q1_algorithm,1.96,2,First bug correctly identified; second bug analysis confused
+coder,t1_q2_refactor,1.84,3,Two correct versions O(n) sets and memory-optimized; trade-offs explained
+coder,t1_q3_test,1.76,3,Comprehensive pytest suite with parametrize normal and error cases

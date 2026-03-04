@@ -1,0 +1,57 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,12.22,0,Degenerate: prompt echo followed by repetition loop
+thinking,t3_q2_causal_inference,11.93,0,Degenerate: prompt echo followed by repetition loop
+thinking,t3_q3_reasoning_trap,11.61,0,Degenerate: prompt echo followed by repetition loop
+thinking,t2_q1_paradox,12.73,0,Degenerate: tail is repetitive (< 8 unique chars)
+thinking,t2_q3_formal,12.24,0,Degenerate: prompt echo + incoherent generation hitting max tokens
+thinking,t2_q4_metacognition,12.77,0,Degenerate: tail is repetitive (< 8 unique chars)
+thinking,t1_q1_multistep,12.43,0,Degenerate: prompt echo followed by repetition loop
+thinking,t1_q2_hypothesis,11.94,0,Degenerate: prompt echo followed by repetition loop
+thinking,t1_q3_planning,11.23,0,Degenerate: prompt echo followed by repetition loop
+coder,t3_q1_concurrent_correctness,12.84,0,Degenerate: prompt echo followed by repetition loop
+coder,t3_q2_distributed_consistency,11.53,0,Degenerate: prompt echo followed by repetition loop
+coder,t2_q1_design,12.34,0,Degenerate: prompt echo followed by repetition loop
+coder,t2_q2_debug_complex,11.43,0,Degenerate: prompt echo followed by repetition loop
+coder,t2_q3_optimize,12.56,0,Degenerate: prompt echo followed by repetition loop
+coder,t2_q4_system,11.84,0,Degenerate: prompt echo followed by repetition loop
+coder,t1_q1_algorithm,11.11,0,Degenerate: prompt echo followed by repetition loop
+coder,t1_q2_refactor,11.70,0,Degenerate: prompt echo followed by repetition loop
+coder,t1_q3_test,12.48,0,Degenerate: prompt echo followed by repetition loop
+agentic,t3_q1_competing_constraints,12.02,0,Degenerate: prompt echo + incoherent generation hitting max tokens
+agentic,t3_q2_multi_agent_coordination,11.39,0,Degenerate: tail is repetitive (< 8 unique chars)
+agentic,t3_q3_adversarial_robustness,11.56,0,Degenerate: prompt echo + incoherent generation hitting max tokens
+agentic,t2_q1_ambiguous,12.14,0,Degenerate: prompt echo + incoherent generation hitting max tokens
+agentic,t2_q2_error_chain,10.60,0,Degenerate: prompt echo + incoherent generation hitting max tokens
+agentic,t2_q3_schema_edge,12.42,0,Degenerate: prompt echo followed by repetition loop
+agentic,t2_q4_orchestration,11.45,0,Degenerate: prompt echo + incoherent generation hitting max tokens
+agentic,t1_q1_sequential,12.63,0,Degenerate: prompt echo followed by repetition loop
+agentic,t1_q2_error_handling,11.88,0,Degenerate: prompt echo followed by repetition loop
+agentic,t1_q3_nested_params,24.41,0,Degenerate: incoherent output with no correct content
+general,t3_q1_policy_analysis,11.97,0,Degenerate: tail is repetitive (< 8 unique chars)
+general,t3_q2_system_failure,0,0,No completion tokens generated (null/0 tokens)
+general,t3_q3_strategic_communication,11.89,0,Degenerate: prompt echo followed by repetition loop
+general,t2_q1_synthesis,12.21,0,Degenerate: tail is repetitive (< 8 unique chars)
+general,t2_q2_transform,13.12,0,Degenerate: prompt echo followed by repetition loop
+general,t2_q3_schedule,12.80,0,Degenerate: prompt echo followed by repetition loop
+general,t2_q4_inconsistency,12.71,0,Degenerate: tail is repetitive (< 8 unique chars)
+general,t1_q1_json,12.79,0,Degenerate: tail is repetitive (< 8 unique chars)
+general,t1_q2_multistep,12.73,0,Degenerate: prompt echo followed by repetition loop
+general,t1_q3_compare,11.96,0,Degenerate: prompt echo followed by repetition loop
+math,t3_q2_combinatorics,11.84,0,Degenerate: prompt echo followed by repetition loop
+math,t3_q3_probability_theory,12.90,0,Degenerate: prompt echo followed by repetition loop
+math,t2_q1_optimization,13.12,0,Degenerate: tail is repetitive (< 8 unique chars)
+math,t2_q2_proof,10.83,0,Degenerate: prompt echo followed by repetition loop
+math,t2_q4_statistics,13.35,0,Degenerate: tail is repetitive (< 8 unique chars)
+math,t1_q1_word_problem,22.93,0,Degenerate: incoherent output with no correct content
+math,t1_q3_probability,12.52,0,Degenerate: prompt echo followed by repetition loop
+instruction_precision,t3_q1_self_referential,22.35,0,Degenerate: prompt echo followed by repetition loop
+instruction_precision,t3_q2_cascading_constraints,21.05,0,Degenerate: tail is repetitive (< 8 unique chars)
+instruction_precision,t3_q3_meta_instruction,21.54,0,Degenerate: prompt echo followed by repetition loop
+instruction_precision,t2_q1_resist_elaboration,23.64,0,Degenerate: prompt echo followed by repetition loop
+instruction_precision,t2_q2_maintain_format,22.25,0,Degenerate: prompt echo + incoherent generation hitting max tokens
+instruction_precision,t2_q3_empty_handling,32.88,0,Degenerate: tail is repetitive (< 8 unique chars)
+instruction_precision,t2_q4_conflicting_constraints,33.01,0,Degenerate: prompt echo followed by repetition loop
+instruction_precision,t1_q1_negative_instruction,33.34,0,Degenerate: prompt echo + incoherent generation hitting max tokens
+instruction_precision,t1_q2_word_limit,34.88,0,Degenerate: prompt echo + incoherent generation hitting max tokens
+instruction_precision,t1_q3_structured_format,34.08,0,Degenerate: tail is repetitive (< 8 unique chars)
+instruction_precision,t1_q4_multiple_constraints,34.02,0,Degenerate: prompt echo + incoherent generation hitting max tokens

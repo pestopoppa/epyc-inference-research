@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,43.7,1,Prompt echo; identifies 3 failure modes but superficial mechanisms and generic amendments; truncated before completing
+general,t3_q2_system_failure,43.78,1,Prompt echo; correctly identifies replica lag causing stale idempotency check but truncated before completing all 4 questions
+general,t3_q3_strategic_communication,41.89,0,Prompt echo with self-generated additional instructions; never delivers the actual speech; truncated during planning phase
+general,t2_q1_synthesis,43.13,0,Degenerate repetition: The recommendation must be repeated ~30 times without ever providing actual recommendation
+general,t2_q2_transform,44.98,0,Fabricates employees not in input; incorrect YAML structure creates level-based departments; wrong employee assignments
+general,t2_q3_schedule,42.72,0,Degenerate repetition: same JSON block repeated ~25 times; schedule lacks meeting-to-slot mapping
+general,t2_q4_inconsistency,44.05,0,Degenerate repetition: format instruction repeated ~30 times; no inconsistencies identified
+general,t1_q1_json,43.27,1,Correct JSON fields extracted but degenerate repetition of same JSON block ~15 times; violates output only JSON instruction
+general,t1_q2_multistep,42.2,1,Adds fabricated items not in prompt; misinterprets count at the end as per-item count; degenerate repetition with boxed
+general,t1_q3_compare,42.28,1,Reasonable comparison content but exceeds 2-3 sentence constraint; adds unsolicited recommendation; begins repeating
+thinking,t3_q1_methodological_critique,44.3,2,Identifies 5 methodological issues including selection bias confounding measurement error; statistical power argument slightly confused but overall substantially correct
+thinking,t3_q2_causal_inference,42.68,1,Correctly identifies Gene as minimal adjustment set; begins correct collider analysis for Yellow Fingers but truncated before completing questions 2-3
+thinking,t3_q3_reasoning_trap,42.59,1,Identifies flaw correctly but constructed scenario is vague; asked for specific mechanism but gives generic possibilities; truncated
+thinking,t2_q1_paradox,42.91,0,Degenerate repetition: positions 3-6 are identical copies of position 2; never addresses second ship or states preference
+thinking,t2_q2_counterfactual,44.25,0,Prompt echo with self-generated elaboration; restates question without analyzing any dimension; truncated during meta-planning
+thinking,t2_q3_formal,43.68,2,Correctly proves transitivity via hypothetical syllogism; adds unrequested topics; truncated before concrete example but core proof is sound
+thinking,t2_q4_metacognition,43.13,1,Shows Fermi estimation approach with reasonable steps but rambling; truncated before bounds or uncertainty reduction; incomplete
+thinking,t1_q1_multistep,42.46,3,Correct solution: 60mi head start 220mi remaining 140mph combined meets at ~11:34 AM; clear step-by-step work shown
+thinking,t1_q2_hypothesis,45.74,3,Three valid alternative explanations with clear mechanisms; explains correlation != causation
+thinking,t1_q3_planning,42.92,1,Correctly derives constraint chain A<B<D<C with DC consecutive; truncated before listing all valid orderings

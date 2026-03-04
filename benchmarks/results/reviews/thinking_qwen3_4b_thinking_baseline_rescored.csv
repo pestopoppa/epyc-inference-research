@@ -1,0 +1,41 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,9.29,1,Echoes prompt; reasons about approach but never produces required JSON plan output; partial understanding shown
+agentic,t3_q2_multi_agent_coordination,8.97,1,Echoes prompt; reasons about agent coordination but never produces required JSON orchestration plan
+agentic,t3_q3_adversarial_robustness,8.99,2,Correctly identifies /etc/passwd security risk; discusses safe handling and social engineering resistance; content mixed with reasoning but substantively correct
+agentic,t2_q1_ambiguous,9.11,1,Good reasoning for choosing Slack but never produces clean JSON tool call; stream-of-consciousness without final output
+agentic,t2_q2_error_chain,9.04,1,Identifies database connection_refused issue; reasons about restart but never produces clean next-action JSON
+agentic,t2_q3_schema_edge,9.08,2,Correct JSON tool call with /users endpoint GET method null body proper Authorization header; reasoning verbose but answer correct
+agentic,t2_q4_orchestration,9.04,1,Reasons about deployment steps but confuses version numbers; never produces clean ordered tool call list
+agentic,t1_q1_sequential,9.15,1,Identifies correct tool sequence (grep then read) but never outputs clean JSON array as requested
+agentic,t1_q2_error_handling,10.4,2,Correctly identifies user not found and asks for name/email to search; follows instruction format
+agentic,t1_q3_nested_params,9.21,2,Correctly constructs JSON with proper title assignees array nested metadata; verbose reasoning but answer extractable and correct
+general,t3_q1_policy_analysis,0,1,Identifies failure modes (accuracy metric issues SHAP limitations audit frequency) but degenerates into 275x </thinking> tag repetition; no final structured answer
+general,t3_q2_system_failure,0,2,Correctly explains double-charge via replica lag in idempotency check; proposes read-from-primary fix and cache fix; discusses monitoring; no clean structure but substantively correct
+general,t3_q3_strategic_communication,0,0,Degenerates into 199x </thinking> tag repetition; plans the statement structure but never writes the actual opening statement
+general,t2_q1_synthesis,0,2,Produces concrete recommendation: temporary login fix in 2 weeks under $20K addresses all 3 perspectives; degenerates after but answer present
+general,t2_q2_transform,0,1,Reasons correctly about grouping by department but never outputs final clean YAML; reasoning incomplete
+general,t2_q3_schedule,0,1,Extensive constraint analysis but gets stuck on back-to-back interpretation; never produces final schedule
+general,t2_q4_inconsistency,0,2,Correctly identifies body encoding inconsistency (JSON vs form-encoded) and rate limit discrepancy (100/min vs ~16.67/min); clear explanations
+general,t1_q1_json,0,2,Produces correct JSON with all 4 fields (name role department start_date); verbose reasoning but correct answer extractable
+general,t1_q2_multistep,0,1,Begins correct dedup/sort process but reasoning is cut off; never produces complete numbered list with count
+general,t1_q3_compare,0,0,Degenerates into 233x </thinking></response> tag repetition; reasoning present but no final answer produced
+math,t3_q1_analysis,9.04,1,Partially derives closed form Im(e^{xe^i}-1) and discusses differentiability; reasoning incomplete cut off mid-derivation; no clean final answers
+math,t3_q2_combinatorics,10.88,1,Verifies small cases correctly; attempts generating function approach but gets lost in algebra; proof never completed
+math,t3_q3_probability_theory,16.72,2,Correctly derives E[N]=e using P(S_n<=1)=1/n! and tail sum; only one proof method instead of two requested; derivation mathematically sound
+math,t2_q1_optimization,17.15,3,Fully correct: x=100m y=50m max area=5000 sq meters; proper constraint setup calculus and verification; clean final answer
+math,t2_q2_proof,16.77,2,Correctly identifies induction fails at n=1->n=2; explains overlap is n-1=0; response cut off at end but core answer correct
+math,t2_q3_calculus,18.57,3,Fully correct: antiderivative x^3+x^2-x evaluated at bounds gives 10; verified with Simpsons rule; clean boxed answer
+math,t2_q4_statistics,17.12,3,All calculations correct: sum=185 mean=23.125 median=23.5 pop std dev=7.356 no outliers by 1.5xIQR rule; thorough work shown
+math,t1_q1_word_problem,16.73,2,Correct answers: $120 $129.60 86.4%; work shown correctly; degenerate repetition of final answer block (13x) but answers are right
+math,t1_q2_system_equations,17.1,3,All 4 real solutions correct: (4 3) (-4 -3) (3 4) (-3 -4); two verification methods; thorough work
+math,t1_q3_probability,16.77,3,Both probabilities correct: P(both red)=2/9 P(1R+1B)=1/3; multiple verification methods; clean final answers
+thinking,t3_q1_methodological_critique,13.0,2,Identifies 4 valid methodological issues (selection bias SES confounding language bias misclassification) with mechanisms; reasoning only no structured final answer
+thinking,t3_q2_causal_inference,9.33,1,Partially identifies Gene as confounder; reasoning gets confused about causal paths; never cleanly answers all 3 questions
+thinking,t3_q3_reasoning_trap,9.26,2,Correctly identifies flaw: test set may not represent real-world distribution; begins concrete medical scenario with class imbalance; reasoning substantive but incomplete
+thinking,t2_q1_paradox,9.5,2,Presents two philosophical positions (continuity vs matter-based identity) with clear arguments; cut off before stating preference; substantive analysis
+thinking,t2_q2_counterfactual,9.2,0,Degenerates into 243x </thinking> tag repetition; reasoning present but no final answer; degenerate output
+thinking,t2_q3_formal,9.4,3,Correct formal proof using conditional proof and modus ponens; clear concrete example; complete and accurate
+thinking,t2_q4_metacognition,9.2,2,Structured estimation approach with clear steps; piano ownership rate (1/1000) significantly underestimates reality (~1/10); methodology sound but key assumption wrong
+thinking,t1_q1_multistep,9.26,3,Correct: trains meet at ~11:34 AM; two verification approaches agree; math sound (t=11/7 hrs after 10am)
+thinking,t1_q2_hypothesis,9.33,0,Degenerates into 447x </thinking> tag repetition; reasoning present but no final answer produced; degenerate output
+thinking,t1_q3_planning,9.11,2,Systematically enumerates constraints; finds valid orderings [A E B D C] and [A B E D C]; reasoning sound but completeness uncertain

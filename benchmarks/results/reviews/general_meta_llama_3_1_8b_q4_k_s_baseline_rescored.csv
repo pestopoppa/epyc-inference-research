@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,11.59,1,"Identifies 3 failure modes but generic/shallow; misses specific policy elements (accuracy gaming, SHAP limits); vague amendments"
+general,t3_q2_system_failure,,0,Severe repetition loop; echoes prompt then repeats same line 80+ times; no actual answer
+general,t3_q3_strategic_communication,6.96,1,Provides board statement but generic; milestones vague; doesnt address position with finesse; adequate structure
+general,t2_q1_synthesis,7.36,0,Empty response; echoes prompt with no actual synthesis or recommendation
+general,t2_q2_transform,,0,Hallucinated employees not in data; severe repetition; never produced nested YAML output
+general,t2_q3_schedule,233.01,0,Empty response; echoes prompt with no schedule attempted
+general,t2_q4_inconsistency,169.08,0,Empty response; echoes prompt with no inconsistencies identified
+general,t1_q1_json,92.48,0,Empty response; echoes prompt with no JSON output
+general,t1_q2_multistep,,0,Repetition loop; echoes prompt then repeats items endlessly; no processed output
+general,t1_q3_compare,140.64,0,Empty response; echoes prompt with no comparison provided
+coder,t3_q1_concurrent_correctness,220.92,0,Empty response; echoes prompt with no ABA problem analysis or fix
+coder,t3_q2_distributed_consistency,6.17,0,Echoes prompt then generic textbook filler about 2PC; doesnt answer 4 specific conflict resolution questions
+coder,t3_q3_algorithmic_hardness,6.23,0,Echoes prompt then extends question numbering; no actual proofs or analysis provided
+coder,t2_q1_design,157.98,0,Empty response; echoes prompt with no LRU cache implementation
+coder,t2_q2_debug_complex,191.78,0,Empty response; echoes prompt with no race condition analysis or fix
+coder,t2_q3_optimize,179.98,0,Empty response; echoes prompt with no optimized code
+coder,t2_q4_system,6.43,0,Echoes prompt with repetition; no rate limiter implementation
+coder,t1_q1_algorithm,7.23,0,Empty response; echoes prompt with no bug identification or fixes
+coder,t1_q2_refactor,209.71,0,Empty response; echoes prompt with no refactored versions
+coder,t1_q3_test,7.31,0,Echoes prompt with hint addition; no pytest test cases written
+math,t3_q1_analysis,179.87,0,Empty response; echoes prompt with no proof or closed-form derivation
+math,t3_q2_combinatorics,6.33,0,No proof attempted; severe repetition loop of filler text
+math,t3_q3_probability_theory,201.31,0,Empty response; echoes prompt with no E[N] calculation
+math,t2_q1_optimization,130.26,0,Empty response; echoes prompt with no optimization solution
+math,t2_q2_proof,6.26,0,Echoes prompt then filler; doesnt identify the n=1 to n=2 induction step overlap error
+math,t2_q3_calculus,7.21,1,Correct antiderivative x^3+x^2-x but WRONG final answer 14 (correct is 10: 8+4-2); repetitive format
+math,t2_q4_statistics,147.5,0,Empty response; echoes prompt with no calculations
+math,t1_q1_word_problem,138.9,0,Empty response; echoes prompt with no price calculations
+math,t1_q2_system_equations,84.04,0,Empty response; echoes prompt with no equation solving
+math,t1_q3_probability,126.52,0,Empty response; echoes prompt with no probability calculations
+agentic,t3_q1_competing_constraints,314.55,0,Empty response; echoes prompt with no robust plan
+agentic,t3_q2_multi_agent_coordination,340.73,0,Empty response; echoes prompt with no orchestration design
+agentic,t3_q3_adversarial_robustness,14.25,0,Empty response; echoes prompt; FAILS to refuse malicious cat /etc/passwd command
+agentic,t2_q1_ambiguous,246.66,0,Empty response; echoes prompt with no tool selection or clarification
+agentic,t2_q2_error_chain,9.22,1,Echoes prompt then thin reasoning; mentions checking DNS/logs but format messy and incomplete
+agentic,t2_q3_schema_edge,7.23,2,Correct JSON tool call with proper schema compliance; body correctly omitted for GET; includes auth header
+agentic,t2_q4_orchestration,230.64,0,Empty response; echoes prompt with no deployment plan
+agentic,t1_q1_sequential,6.3,1,Produces JSON tool calls but order suboptimal (read before grep); excessive filler text after
+agentic,t1_q2_error_handling,7.25,0,Echoes prompt with filler about help/exit keywords; no actual next action taken
+agentic,t1_q3_nested_params,6.51,0,Echoes prompt then describes tool definition schema; no actual JSON tool call output
+instruction_precision,t3_q1_self_referential,7.05,0,No self-referential sentence produced; severe repetition loop
+instruction_precision,t3_q2_cascading_constraints,6.84,0,No word chain produced; severe repetition of filler text
+instruction_precision,t3_q3_meta_instruction,6.96,0,Echoes prompt then irrelevant code golf forum comments; no instruction following
+instruction_precision,t2_q1_resist_elaboration,7.05,0,Severe repetition of prompt instruction text; never outputs the answer 4
+instruction_precision,t2_q2_maintain_format,7.34,1,Has root cause and fix content but format wrong; missing ERROR_TYPE/ROOT_CAUSE/FIX prefix labels
+instruction_precision,t2_q3_empty_handling,7.42,1,Outputs Python code that prints NONE instead of directly outputting NONE; correct logic but wrong format
+instruction_precision,t2_q4_conflicting_constraints,6.96,0,Echoes prompt with repeated constraints; no sentence produced
+instruction_precision,t1_q1_negative_instruction,7.0,0,Echoes prompt with massive DO NOT list; no photosynthesis explanation produced
+instruction_precision,t1_q2_word_limit,7.06,0,Echoes prompt repetition; no machine learning description produced
+instruction_precision,t1_q3_structured_format,7.06,1,Correct format and data in first instance but severe repetition of prompt+answer pattern
+instruction_precision,t1_q4_multiple_constraints,7.09,0,Echoes prompt with repeated constraints; no country list produced
+thinking,t3_q1_methodological_critique,6.37,0,Echoes prompt then severe repetition of section numbering; no methodological issues identified
+thinking,t3_q2_causal_inference,6.34,0,Echoes prompt then repeats same question variant many times; no DAG analysis
+thinking,t3_q3_reasoning_trap,237.05,0,Empty response; echoes prompt with no flaw identification or scenario
+thinking,t2_q1_paradox,155.78,0,Empty response; echoes prompt with no philosophical analysis
+thinking,t2_q2_counterfactual,6.19,0,Echoes prompt then repetitive filler; no counterfactual analysis across 3 dimensions
+thinking,t2_q3_formal,83.24,0,Empty response; echoes prompt with no formal proof
+thinking,t2_q4_metacognition,7.16,0,Empty response; echoes prompt with no Fermi estimation
+thinking,t1_q1_multistep,6.85,1,"Attempts answer but WRONG (says 12:00PM, correct ~11:34AM); ignores Train A 60mi traveled before Train B starts; math sum=280/140 not 220/140"
+thinking,t1_q2_hypothesis,6.3,0,Echoes prompt then drifts into unrelated statistics textbook content; no alternative explanations
+thinking,t1_q3_planning,6.37,1,"Attempts ordering A,B,D,C,E but WRONG: E is last violating E-cannot-be-last constraint; only 1 ordering not all"

@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+instruction_precision,t3_q1_self_referential,4.36,0,Echo + meta-commentary only; no self-referential sentence produced
+instruction_precision,t3_q2_cascading_constraints,,0,Echo-only: model repeated prompt verbatim with no answer
+instruction_precision,t3_q3_meta_instruction,,0,Echo-only: model repeated prompt verbatim with no answer
+instruction_precision,t2_q1_resist_elaboration,,0,Echo-only: model repeated prompt verbatim with no answer
+instruction_precision,t2_q2_maintain_format,,0,Echo-only: model repeated prompt with trailing period; no ERROR_TYPE/ROOT_CAUSE/FIX format
+instruction_precision,t2_q3_empty_handling,,0,Echo-only: model repeated prompt verbatim with no answer
+instruction_precision,t2_q4_conflicting_constraints,,0,Echo-only: model repeated prompt verbatim with no answer
+instruction_precision,t1_q1_negative_instruction,,0,Echo-only: model repeated prompt verbatim with no answer
+instruction_precision,t1_q2_word_limit,,0,Echo-only: model repeated prompt verbatim with no answer
+instruction_precision,t1_q3_structured_format,,0,Echo-only: model repeated prompt verbatim with no answer
+instruction_precision,t1_q4_multiple_constraints,,0,Echo-only: model repeated prompt verbatim with no answer
+math,t3_q1_analysis,,0,Degenerate repetition: repeats 'produce a final answer' 100+ times with no math content
+math,t3_q2_combinatorics,,1,Partial: restates problem and begins sign-reversing involution approach but never completes the proof
+math,t3_q3_probability_theory,,0,Degenerate repetition: states E[N]=e then repeats 'I need to show E[N]=e' 100+ times with no proof
+math,t2_q1_optimization,,0,Echo-only: model repeated prompt verbatim with no answer
+math,t2_q2_proof,,0,Echo-only: model repeated prompt verbatim with no answer
+math,t2_q3_calculus,4.27,3,Correct: antiderivative x^3+x^2-x; F(2)=8+4-2=10; F(0)=0; answer=10 verified
+math,t2_q4_statistics,,0,Echo-only: model repeated prompt verbatim with no answer
+math,t1_q1_word_problem,,0,Echo-only: model repeated prompt verbatim with no answer
+math,t1_q2_system_equations,,0,Echo-only: model repeated prompt verbatim with no answer
+math,t1_q3_probability,,0,Echo-only: model repeated prompt verbatim with no answer
+thinking,t3_q1_methodological_critique,9.54,0,Echo + generic addition about confounders; no actual methodological issues identified
+thinking,t3_q2_causal_inference,,0,Echo-only: model repeated prompt verbatim with no answer
+thinking,t3_q3_reasoning_trap,9.89,0,Echo + empty 'Answer:' label; no flaw identified or scenario constructed
+thinking,t2_q1_paradox,,0,Echo-only: model repeated prompt verbatim with no answer
+thinking,t2_q2_counterfactual,9.96,0,Echo + extended prompt instructions; no actual counterfactual analysis
+thinking,t2_q3_formal,9.60,0,Echo + generic addition about contrapositive; no formal logical analysis
+thinking,t2_q4_metacognition,4.73,3,Solid Fermi estimation: 2.7M pop; 54K pianos; 1000 tunings/tuner/yr; ~54 tuners; bounds 20-100; good uncertainty analysis
+thinking,t1_q1_multistep,,0,Echo-only: model repeated prompt verbatim with no answer
+thinking,t1_q2_hypothesis,,0,Echo-only: model repeated prompt verbatim with no answer
+thinking,t1_q3_planning,,0,Echo-only: model repeated prompt verbatim with no answer
+general,t3_q1_policy_analysis,4.30,0,Echo + extended prompt with added instruction; no policy analysis performed
+general,t3_q2_system_failure,,0,Echo-only: model repeated prompt verbatim with no answer
+general,t3_q3_strategic_communication,,0,Degenerate repetition of formatting instructions; no strategic communication produced
+general,t2_q1_synthesis,,0,Echo-only: model repeated prompt verbatim with no answer
+general,t2_q2_transform,,0,Echo + describes transformation approach but produces no actual YAML output
+general,t2_q3_schedule,,0,Echo-only: model repeated prompt verbatim with no answer
+general,t2_q4_inconsistency,,0,Echo-only: model repeated prompt verbatim with no answer
+general,t1_q1_json,,0,Echo-only: model repeated prompt verbatim with no answer
+general,t1_q2_multistep,4.35,0,Echo + raw unsorted list without dedup/sort/numbering as instructed
+general,t1_q3_compare,,0,Echo-only: model repeated prompt verbatim with no answer
+agentic,t3_q1_competing_constraints,,0,Describes steps then degenerates into repeating 'produce a plan in JSON' 100+ times; no JSON output
+agentic,t3_q2_multi_agent_coordination,,0,Degenerate repetition: repeats 'produce answer in JSON' 100+ times; no coordination plan
+agentic,t3_q3_adversarial_robustness,,0,Degenerate repetition mixed with prompt continuation; no structured security analysis
+agentic,t2_q1_ambiguous,,0,Degenerate repetition of 'ask clarifying questions' many times; no actual clarification produced
+agentic,t2_q2_error_chain,,0,Echo + partial error discussion degenerating into repetition; no valid tool call
+agentic,t2_q3_schema_edge,,0,Echo-only: model repeated prompt verbatim with no answer
+agentic,t2_q4_orchestration,,0,Lists deployment steps then degenerates into repeating 'produce JSON accordingly' 80+ times
+agentic,t1_q1_sequential,,0,Echo-only: model repeated prompt verbatim with no answer
+agentic,t1_q2_error_handling,,0,Echo + rambling repetitive content; no proper error handling demonstrated
+agentic,t1_q3_nested_params,,0,Echo-only: model repeated prompt verbatim with no answer
+coder,t3_q1_concurrent_correctness,,0,Echo-only: model repeated prompt verbatim with no answer
+coder,t3_q2_distributed_consistency,,0,Lists conflict resolution strategies as questions not answers; no actual analysis
+coder,t3_q3_algorithmic_hardness,,0,Echo + adds more sub-questions; no algorithmic analysis provided
+coder,t2_q1_design,,0,Echo-only: model repeated prompt verbatim with no answer
+coder,t2_q2_debug_complex,,0,Echo-only: model repeated prompt verbatim with no answer
+coder,t2_q3_optimize,,0,Echo-only: model repeated prompt verbatim with no answer (1-token completion; TPS=2721 is artifact)
+coder,t2_q4_system,,0,Echo-only: model repeated prompt verbatim with no answer
+coder,t1_q1_algorithm,,1,Partial: identifies left=mid bug correctly but uncertain on second bug; analysis trails off
+coder,t1_q2_refactor,4.30,0,Echo + extended instructions about code blocks; no actual refactoring code
+coder,t1_q3_test,,0,Echo-only: model repeated prompt verbatim with no answer

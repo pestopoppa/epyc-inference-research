@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,71.97,1,Echoes prompt; identifies ~2 vague failure modes but lacks specific mechanisms amendments and tradeoffs; repetitive; hit token limit
+general,t3_q2_system_failure,77.89,0,Misidentifies root cause; degenerate repetition of 'more efficient database query' as fix; no meaningful architectural solutions
+general,t3_q3_strategic_communication,74.94,1,Generic board statement; acknowledges problems but fails to frame LOIs as strategic pivot; no specific metrics or milestones; repetitive
+general,t2_q1_synthesis,78.83,1,Recommendation ignores Product 2-week urgency; fails to synthesize all three perspectives; repetitive filler; no concrete phased plan
+general,t2_q2_transform,77.19,0,Degenerate output: hallucinated employee names in flat list; never produces nested YAML; repetition of Zayda entries
+general,t2_q3_schedule,75.61,0,Schedule violates constraints: Alice scheduled during unavailable 10-11am; missing Alice-Dave 1:1; degenerate repetition of same wrong schedule
+general,t2_q4_inconsistency,78.92,0,Falsely flags identical values as inconsistent; misses JSON vs form-encoded body difference initially; degenerate repetition of 72+ numbered items
+general,t1_q1_json,76.0,1,"First JSON block close but name='Sarah' missing 'Chen'; then degenerate repetition of same block; violates 'output only the JSON' instruction"
+general,t1_q2_multistep,76.08,0,Degenerate output: repeats cherry thousands of times; never performs deduplication sorting numbering or counting
+general,t1_q3_compare,75.4,1,Initial comparison is superficially correct but degenerates into repeating Q&A loop; not a concise 2-3 sentence comparison as requested
+thinking,t3_q1_methodological_critique,77.43,1,Lists ~3 methodological issues but explanations are shallow and confused; reverse causality explanation garbled; repetitive; does not reach 4 clear issues
+thinking,t3_q2_causal_inference,77.28,0,Degenerate output: repeats minimal sufficient adjustment set question 111+ times; never provides any answers to the actual DAG questions
+thinking,t3_q3_reasoning_trap,74.64,0,Identifies vague flaw but never constructs required concrete scenario; degenerate repetition of same paragraph; misses specific mechanisms
+thinking,t2_q1_paradox,73.85,0,Degenerate: 22+ near-identical numbered arguments; no distinct philosophical positions; pure repetitive filler with trivial word variations
+thinking,t2_q2_counterfactual,75.82,0,"Contradicts own premise: says 'internet would have enabled' in a no-internet counterfactual; fundamentally confused; degenerates into repetition"
+thinking,t2_q3_formal,70.93,1,Correct conclusion but no formal proof; misdefines transitivity; no concrete example; degenerates into repeating 'the statement is true'
+thinking,t2_q4_metacognition,77.84,0,Degenerate output: repeats '1.' thousands of times; no estimation approach assumptions bounds or reasoning whatsoever
+thinking,t1_q1_multistep,73.86,0,Never computes answer; degenerate repetition of self-referential questions; no math work shown
+thinking,t1_q2_hypothesis,76.55,0,Degenerate output: repeats the question 'What are the three alternative explanations' hundreds of times; zero explanations provided
+thinking,t1_q3_planning,77.47,0,Never lists valid orderings; degenerate repetition of constraints and task description; no actual reasoning or solutions

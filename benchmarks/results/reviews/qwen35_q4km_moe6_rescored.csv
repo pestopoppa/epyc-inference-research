@@ -1,0 +1,67 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+long_context,t2_q1_deep_needle,8.82,3,Correctly identified CRITICAL error: node-7 at 2024-03-15 03:47:22 with exact log entry
+long_context,t2_q2_synthesis,10.64,2,Addressed all 3 questions with integrated analysis; correctly noted data structure issues in input
+long_context,t1_q1_needle,11.43,2,Found the hardcoded API key sk-proj-7x9mK2nP4qR8sT1uV3wY5zA; excessive think-aloud but correct result
+long_context,t1_q2_multi_file,11.62,1,Failed to trace data flow from config.py to main.py as asked; identified generic bugs but missed the actual code structure
+long_context,t1_q3_extraction,11.51,0,Unclosed think block consumed entire context; never produced the three requested lists of dates/amounts/names
+thinking,t3_q1_methodological_critique,12.18,3,Four strong methodological issues (SES confound; reverse causality; test familiarity; third variable) with clear mechanisms
+thinking,t3_q2_causal_inference,12.23,3,Correct minimal adjustment set {Gene}; correct analysis of Yellow Fingers conditioning; correct discussion of unmeasured Gene
+thinking,t3_q3_reasoning_trap,36.57,1,Identified flaw generically but scenario was not specific enough; repetitive structure; no concrete mechanism showing D2 superiority
+thinking,t2_q1_paradox,12.31,3,Two well-articulated philosophical positions (hylomorphic vs mereological) with clear reasoning and final judgment
+thinking,t2_q2_counterfactual,44.33,1,Superficial treatment of all 3 dimensions; lacks specific mechanisms and second-order effects as requested; ends with irrelevant boxed summary
+thinking,t2_q3_formal,12.38,3,Clean formal proof via conditional proof method; correct truth table; clear concrete example with rain/wet/slippery
+thinking,t2_q4_metacognition,12.27,2,Covered all 4 parts of Fermi estimation; reasonable methodology; think block leaked into output but content solid
+thinking,t1_q1_multistep,64.59,3,Correct algebraic setup and solution; trains meet at 11:34 AM; verification included
+thinking,t1_q2_hypothesis,12.36,3,Three specific alternative explanations (SES; sleep quality; underlying health) with clear mechanisms
+thinking,t1_q3_planning,12.34,3,Correctly derived 2 valid orderings (A E B D C and A B E D C) with systematic constraint analysis
+coder,t3_q1_concurrent_correctness,12.28,2,Correct ABA scenario trace; identified use-after-free and logical corruption; tagged pointer fix incomplete but approach correct
+coder,t3_q2_distributed_consistency,12.18,3,Four strategies (LWW; vector clocks; manual; FWW) with specific failure scenarios; correct shopping cart vs banking recommendations
+coder,t3_q3_algorithmic_hardness,12.31,1,Hallucinated additional questions; think block consumed response; incomplete proof and derivations
+coder,t2_q1_design,51.43,1,Used list.remove() which is O(n); acknowledged the O(n) issue but failed to implement required O(1) using doubly-linked list
+coder,t2_q2_debug_complex,50.3,3,Correctly identified race condition in async code; proper fix with asyncio.Lock; clear explanation
+coder,t2_q3_optimize,12.32,3,Correct O(n) solution using frequency hash map; clear step-by-step trace; handles duplicates correctly
+coder,t2_q4_system,12.32,3,Robust sliding window log implementation; uses time.monotonic(); deque for efficient cleanup; handles edge cases
+coder,t1_q1_algorithm,12.27,1,Think block consumed response; identified infinite loop bug but never produced a final answer with both bugs and fixes
+coder,t1_q2_refactor,12.18,3,Two distinct optimizations (hash set O(n) and sort-based O(n log n)) with clear tradeoff analysis
+coder,t1_q3_test,47.73,3,Comprehensive pytest coverage: normal; negative; float; zero division; precision; large/small numbers
+instruction_precision,t3_q1_self_referential,12.36,0,Used forbidden words this and sentence; word count claim (12) incorrect (19 words); never produced valid sentence
+instruction_precision,t3_q2_cascading_constraints,48.91,0,Degenerate repetitive output; repeated same incorrect sequence many times; never met any constraints
+instruction_precision,t3_q3_meta_instruction,12.63,3,Correctly identified two valid instructions ([Print 42] and [Say 7 times: hi]); output 42 and seven his
+instruction_precision,t2_q1_resist_elaboration,14.62,3,Correct output of just 4 with no elaboration
+instruction_precision,t2_q2_maintain_format,43.55,0,Echoed a fabricated stack trace instead of following ERROR_TYPE/ROOT_CAUSE/FIX format
+instruction_precision,t2_q3_empty_handling,14.95,3,Correct output of exactly NONE with no explanation
+instruction_precision,t2_q4_conflicting_constraints,12.61,0,Think block consumed entire response; drafted ideas but never output a final sentence
+instruction_precision,t1_q1_negative_instruction,49.57,2,Two sentences about photosynthesis without sunlight/sun/solar; used light which is technically allowed
+instruction_precision,t1_q2_word_limit,13.0,3,22 words describing machine learning; within 20-25 word range; clear and accurate
+instruction_precision,t1_q3_structured_format,21.91,3,Correct format LANGUAGE (YEAR); three valid entries; no bullets or extra text
+instruction_precision,t1_q4_multiple_constraints,13.42,3,Five European countries in alphabetical order; one per line; no extra text
+general,t3_q1_policy_analysis,12.34,3,Three well-articulated failure modes (accuracy trap; explainability paradox; static audits) with specific amendments and tradeoffs
+general,t3_q2_system_failure,41.54,2,Correct explanation of eventual consistency causing double-charges; good fixes; unnecessarily repeated answer twice
+general,t3_q3_strategic_communication,45.81,2,Addresses all 4 requirements (acknowledges problems; frames LOIs as pivot; 90-day milestones; indirect position defense); duplicated speech
+general,t2_q1_synthesis,12.81,3,Concrete recommendation balancing engineering (phased approach); product (2-week patch); and finance (under $20K); 4 sentences
+general,t2_q2_transform,12.76,3,Correct nested YAML with Engineering and Sales departments; proper indentation and structure
+general,t2_q3_schedule,12.4,2,Systematic constraint analysis; identified valid schedule (Team Sync 9-10; Alice 1:1 10:30; Bob 1:1 14:00); truncated but correct reasoning
+general,t2_q4_inconsistency,12.53,3,Correctly identified both inconsistencies: body format (JSON vs form-encoded) and rate limit (100/min vs 1000/hr with 6x math)
+general,t1_q1_json,12.87,3,Correct JSON parsing with all fields: name; role; department; start_date
+general,t1_q2_multistep,12.54,0,Hallucinated additional items not in input (Elderberry; fig; Grape; etc.); processed wrong data set entirely
+general,t1_q3_compare,12.31,3,Clear 3-sentence comparison covering scalability vs simplicity tradeoffs
+math,t3_q1_analysis,12.27,3,All 3 parts correct: infinite radius of convergence proof; closed form e^(x*cos1)*sin(x*sin1); limit 0 via squeeze theorem
+math,t3_q2_combinatorics,47.21,0,Incomplete proof; attempted sign-reversing involution but got stuck; multiple restarts without reaching conclusion
+math,t3_q3_probability_theory,33.24,2,Correct answer E[N]=e; direct calculation correct; elegant proof essentially repeats direct calculation rather than using distinct method
+math,t2_q1_optimization,12.27,0,Algebraic error: expanded (200-2y)*y as 200y-4y^2 instead of 200y-2y^2; got y=25 instead of correct y=50; area 3750 vs correct 5000
+math,t2_q2_proof,12.23,3,Correctly identified error at n=1; explained empty intersection between {H1} and {H2}; clear reasoning
+math,t2_q3_calculus,69.08,3,Correct antiderivative; correct evaluation at bounds; final answer 10
+math,t2_q4_statistics,12.16,1,Mean (23.125) and median (23.5) correct; sum correctly 185; standard deviation calculation consumed by self-correcting think block; no final answer
+math,t1_q1_word_problem,12.2,3,All 3 parts correct: $120 after discount; $129.60 after tax; 86.4% of original
+math,t1_q2_system_equations,32.74,3,All 4 real solutions found and verified; two methods (substitution and sum/difference)
+math,t1_q3_probability,67.82,3,Correct total balls=10; P(both red)=2/9; P(one red one blue)=1/3; clear step-by-step
+agentic,t3_q1_competing_constraints,12.52,3,Well-structured JSON plan with 5 steps; 5 validation checks; and comprehensive fallback strategy
+agentic,t3_q2_multi_agent_coordination,12.27,3,Complete orchestration plan with 2 phases; context passing; parallelization; and per-agent failure handling
+agentic,t3_q3_adversarial_robustness,12.17,3,Thorough security analysis: SSRF identification; safe handling strategy; social engineering defense; encoded command detection
+agentic,t2_q1_ambiguous,12.39,3,Correctly identified ambiguity and asked clarifying questions instead of blindly executing
+agentic,t2_q2_error_chain,12.73,3,Correct diagnostic reasoning: check DNS before restart or escalation; proper JSON tool call
+agentic,t2_q3_schema_edge,12.31,0,Think block consumed response deliberating on JSON format; never produced the actual tool call JSON
+agentic,t2_q4_orchestration,12.62,3,Complete deployment plan with 5 ordered steps; proper test fail (halt+notify) and deploy fail (rollback+notify) handling
+agentic,t1_q1_sequential,12.93,1,Only included grep_search; missing read_file call that user explicitly requested (show me that file)
+agentic,t1_q2_error_handling,12.65,2,Correctly decided to ask user for name/email after 404; reasoning was messy with abandoned search_users call
+agentic,t1_q3_nested_params,12.66,3,Correct JSON tool call with nested metadata; all fields properly populated

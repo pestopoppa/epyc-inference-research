@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,17.81,2,Identifies 4+ methodological issues with examples; truncated but substantive content correct
+thinking,t3_q2_causal_inference,17.75,1,Discusses parts 1-2 in thinking but never produces structured answer; truncated before part 3 (front-door criterion)
+thinking,t3_q3_reasoning_trap,17.64,1,Reasoning identifies dataset composition flaw but truncated mid-analysis; no structured final answer
+thinking,t2_q1_paradox,21.31,3,Complete response with two well-argued positions and own view; well-structured
+thinking,t2_q2_counterfactual,18.37,2,Complete with specific analysis across dimensions; some fabricated historical details but reasoning sound
+thinking,t2_q3_formal,18.25,2,Correct formal proof using MP and CP; concrete example provided; truncated but proof complete
+thinking,t2_q4_metacognition,17.97,2,Good Fermi estimation with bounds and uncertainty analysis; truncated but substantively complete
+thinking,t1_q1_multistep,21.08,3,Correct solution: 11:34 AM; clear step-by-step work
+thinking,t1_q2_hypothesis,17.62,0,Degenerate repetition loop: boxed pattern repeated 33 times
+thinking,t1_q3_planning,17.97,2,Correctly finds valid orderings through systematic case analysis; truncated during verification
+coder,t3_q1_concurrent_correctness,17.05,1,Identifies ABA problem and proposes tagged pointers but implementation truncated
+coder,t3_q2_distributed_consistency,17.58,3,Complete analysis of consistency strategies with domain-appropriate tradeoffs
+coder,t3_q3_algorithmic_hardness,18.11,1,Attempts adversary argument for lower bound but reasoning incomplete and truncated
+coder,t2_q1_design,17.64,2,Correct LRU cache with DLL+hashmap; truncated in helper method but core logic complete
+coder,t2_q2_debug_complex,17.3,2,Correctly identifies race condition and provides proper asyncio.Lock fix
+coder,t2_q3_optimize,18.01,2,Correct O(n) optimization using frequency map; code shown though truncated
+coder,t2_q4_system,17.92,1,Rate limiter concept correct but truncated in edge case analysis; implementation incomplete
+coder,t1_q1_algorithm,18.07,1,Finds one bug (left=mid) but truncated before finding second bug
+coder,t1_q2_refactor,18.15,2,Correct O(n) set-based optimization with tradeoff discussion; truncated but solution clear
+coder,t1_q3_test,17.8,1,Comprehensive test plan but truncated before producing actual pytest code
+agentic,t3_q1_competing_constraints,16.97,1,Planning stage thinking about tool usage; truncated without producing tool calls
+agentic,t3_q2_multi_agent_coordination,17.77,1,Discusses agent capabilities and planning but truncated without concrete dispatch plan
+agentic,t3_q3_adversarial_robustness,17.74,1,Partial analysis of adversarial scenarios; truncated
+agentic,t2_q1_ambiguous,17.81,0,Degenerate repetition loop: repeats ambiguity identification without resolution
+agentic,t2_q2_error_chain,17.08,0,Degenerate repetition loop: restart_service call repeated 42 times
+agentic,t2_q3_schema_edge,17.76,1,Partial discussion of schema edge cases; truncated
+agentic,t2_q4_orchestration,17.12,1,Discusses orchestration approach; truncated
+agentic,t1_q1_sequential,18.1,1,Describes sequential approach but truncated without complete solution
+agentic,t1_q2_error_handling,17.21,1,Discusses error handling strategy; truncated
+agentic,t1_q3_nested_params,21.74,1,JSON tool call started but incomplete; includes reasoning text instead of clean output
+general,t3_q1_policy_analysis,17.24,0,Opens <think> tag that never closes; no final answer produced
+general,t3_q2_system_failure,16.63,1,Partial system failure analysis; truncated
+general,t3_q3_strategic_communication,17.1,1,Partial communication strategy; truncated
+general,t2_q1_synthesis,20.27,3,Complete stakeholder synthesis with concrete actionable proposal
+general,t2_q2_transform,17.27,1,Partial data transformation discussion; truncated
+general,t2_q3_schedule,16.31,1,Schedule optimization reasoning; truncated without solution
+general,t2_q4_inconsistency,17.06,0,"Degenerate: model states ""I give up"" and enters repetition loop"
+general,t1_q1_json,22.23,3,Perfect JSON extraction with correct fields
+general,t1_q2_multistep,18.08,1,Partial multi-step reasoning; truncated
+general,t1_q3_compare,21.33,3,"Complete comparison with clear, well-reasoned recommendation"
+math,t3_q1_analysis,17.99,3,"All 3 parts correct: differentiability, closed form, and limit"
+math,t3_q2_combinatorics,17.81,1,Attempts proof via substitution and generating functions but truncated
+math,t3_q3_probability_theory,17.28,1,Identifies 1/n! simplex volume but truncated before completing proof; E[N]=e not stated
+math,t2_q1_optimization,21.35,3,"Correct: 100m x 50m, area = 5000 sq m"
+math,t2_q2_proof,17.2,2,Correctly identifies error: inductive step fails at n=1 due to empty overlap
+math,t2_q3_calculus,19.14,3,"Correct: antiderivative x^3+x^2-x, answer = 10"
+math,t2_q4_statistics,17.35,1,Discusses statistics concepts but truncated before presenting complete calculations
+math,t1_q1_word_problem,17.36,2,"Parts 1-3 correct (20, 29.60, 86.4%); degenerates into unrelated problem after"
+math,t1_q2_system_equations,21.17,3,"All 4 solutions correct: (4,3), (3,4), (-3,-4), (-4,-3)"
+math,t1_q3_probability,21.1,3,Both answers correct: 2/9 and 1/3
+instruction_precision,t3_q1_self_referential,21.94,0,Never produces valid self-referential sentence; only thinking about constraints
+instruction_precision,t3_q2_cascading_constraints,21.75,0,Never produces word chain; only thinking about constraints
+instruction_precision,t3_q3_meta_instruction,21.91,0,Analyzes instructions but truncated before producing answer
+instruction_precision,t2_q1_resist_elaboration,23.09,1,Eventually outputs 4 but includes extensive meta-commentary; fails only-number constraint
+instruction_precision,t2_q2_maintain_format,22.17,0,Never outputs in required ERROR_TYPE/ROOT_CAUSE/FIX format; only discusses it
+instruction_precision,t2_q3_empty_handling,23.63,2,Correct output NONE; includes some thinking preamble but answer correct
+instruction_precision,t2_q4_conflicting_constraints,22.22,2,Valid sentence meeting all constraints; repeated multiple times but answer correct
+instruction_precision,t1_q1_negative_instruction,22.35,1,Attempts explanation but truncated; never produces clean 2-sentence answer
+instruction_precision,t1_q2_word_limit,22.28,1,Attempts word-limited description but truncated during word counting
+instruction_precision,t1_q3_structured_format,22.19,3,"Correct format and years: Python (1991), Java (1995), C (1972)"
+instruction_precision,t1_q4_multiple_constraints,22.32,1,Lists valid countries but includes extensive thinking; no clean final output

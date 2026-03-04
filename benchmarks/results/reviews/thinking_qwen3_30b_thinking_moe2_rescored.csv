@@ -1,0 +1,55 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,23.45,1,Rambling CoT without clear structure; touches on correlation vs causation but never delivers 4 distinct methodological issues as required
+thinking,t3_q2_causal_inference,23.11,0,Degenerate repetition loop (I will not do that repeated); no substantive answer on DAG adjustment sets
+thinking,t3_q3_reasoning_trap,22.32,1,Identifies that evaluation on same test set is problematic but never constructs a concrete scenario where D2 is superior
+thinking,t2_q1_paradox,23.43,0,Degenerate repetition of ship of Theseus is a thought experiment; no philosophical positions presented
+thinking,t2_q2_counterfactual,22.95,0,Degenerate repetition loop (I dont know repeated dozens of times); no analysis provided
+thinking,t2_q3_formal,22.75,0,Degenerate repetition loop (Im going to the park repeated); no formal proof of transitivity provided
+thinking,t2_q4_metacognition,23.37,1,Attempts Fermi estimation arriving at 110 piano tuners but reasoning is muddled and degenerates into repetition
+thinking,t1_q1_multistep,22.65,0,Degenerate repetition of 09:00 (wrong answer); correct answer is 11:34 AM; no work shown
+thinking,t1_q2_hypothesis,23.38,0,Degenerate repetition loop; no alternative explanations for breakfast-test correlation provided
+thinking,t1_q3_planning,23.17,0,Completely off-topic; outputs 2021 repeatedly instead of plant watering orderings
+coder,t3_q2_distributed_consistency,22.5,1,Mentions a few conflict resolution strategies but never completes list of 4 with scenarios
+coder,t2_q1_design,23.4,0,Degenerate repetition loop (the time for the following repeated); no LRU cache implementation
+coder,t2_q2_debug_complex,21.73,1,Identifies race condition exists and mentions asyncio lock concept but never provides working fix code
+coder,t2_q3_optimize,22.31,1,Discusses hash map approach conceptually but never provides complete optimized code
+coder,t2_q4_system,23.2,1,Discusses queue-based rate limiter concept but never provides complete working implementation
+coder,t1_q1_algorithm,22.97,1,Partially identifies left=mid should be left=mid+1 but explanation is confused; does not clearly identify both bugs
+coder,t1_q2_refactor,22.26,1,Mentions set-based approach for speed optimization but provides incomplete code fragment
+coder,t1_q3_test,23.1,0,Never provides actual pytest test code; rambling about what tests should be without implementation
+agentic,t3_q1_competing_constraints,21.34,1,Attempts to address file reading but never handles the competing constraints
+agentic,t3_q2_multi_agent_coordination,21.55,1,Discusses agent capabilities but never provides clear orchestration plan with proper task dispatch
+agentic,t3_q3_adversarial_robustness,22.61,1,Identifies command chaining as security concern but explanation is muddled; never addresses all 5 questions
+agentic,t2_q1_ambiguous,23.75,0,Degenerates into unrelated code/string discussion; never addresses ambiguity
+agentic,t2_q2_error_chain,21.84,0,Degenerate repetition of check the logs; never provides concrete next tool call
+agentic,t2_q3_schema_edge,22.46,0,Degenerate repetition of I fixed it; never produces correct JSON tool call
+agentic,t2_q4_orchestration,21.98,1,Outlines basic deployment steps but plan is incomplete and incorrect
+agentic,t1_q1_sequential,23.01,0,Rambles about JSON syntax but never produces correct JSON array with grep_search then read_file
+agentic,t1_q2_error_handling,23.29,1,Arrives at reasonable user not found response but reasoning is confused
+agentic,t1_q3_nested_params,22.21,1,Partially constructs JSON with correct fields but output is incomplete
+general,t3_q1_policy_analysis,21.58,1,Touches on accuracy threshold issues but never provides structured analysis of 3+ failure modes
+general,t3_q3_strategic_communication,22.02,0,Degenerate repetition loop; never produces a board meeting opening statement
+general,t2_q1_synthesis,22.76,0,Goes off-topic into unrelated multiple choice; never synthesizes perspectives
+general,t2_q2_transform,22.15,0,Corrupts input data and never produces valid nested YAML
+general,t2_q3_schedule,21.86,0,Degenerate output of repeated zeros; never produces valid meeting schedule
+general,t2_q4_inconsistency,23.63,1,Identifies JSON vs form-encoded body inconsistency and rate limit discrepancy but analysis is incomplete
+general,t1_q1_json,21.78,1,Identifies correct field values but never outputs clean JSON; violates output-only-JSON instruction
+general,t1_q2_multistep,22.61,0,Degenerate repetition of lime; never processes the list correctly
+general,t1_q3_compare,22.11,0,Degenerate repetition; never provides 2-3 sentence comparison
+math,t3_q1_analysis,23.39,0,Never proves differentiability or derives closed form or evaluates limit
+math,t3_q2_combinatorics,22.17,0,Never provides proof of the identity; rambles inconclusively
+math,t2_q1_optimization,23.36,1,Correctly identifies 3-sided fencing constraint but never completes optimization
+math,t2_q2_proof,20.94,1,Recognizes flawed induction but never pinpoints n=2 failure clearly
+math,t2_q3_calculus,22.36,0,Never computes the integral; repeats pedagogical advice in a loop; correct answer is 10
+math,t1_q1_word_problem,21.81,2,"Correctly computes discount price (120), tax (9.60), final price (129.60); rambling but math is correct"
+instruction_precision,t3_q1_self_referential,29.95,0,Never produces a sentence meeting any of the 4 constraints
+instruction_precision,t3_q2_cascading_constraints,29.56,0,Never outputs 5 words; discusses problem but produces no valid word chain
+instruction_precision,t3_q3_meta_instruction,29.65,0,Never correctly outputs the valid instruction results; rambles inconclusively
+instruction_precision,t2_q1_resist_elaboration,31.81,0,Degenerate repetition of 2+2= variants; never outputs just 4; includes contradictory answers
+instruction_precision,t2_q2_maintain_format,30.77,0,Never outputs the required 3-line format; rambles about the error
+instruction_precision,t2_q3_empty_handling,31.15,0,Hallucinates email addresses from text containing none; should have output NONE
+instruction_precision,t2_q4_conflicting_constraints,31.19,0,Never produces a valid sentence meeting the 4 constraints
+instruction_precision,t1_q1_negative_instruction,31.47,0,Degenerate repetition; never explains photosynthesis
+instruction_precision,t1_q2_word_limit,31.36,0,Degenerate repetition; never provides a 20-25 word description of ML
+instruction_precision,t1_q3_structured_format,30.26,0,Degenerate output about year of the goose; never produces LANGUAGE (YEAR) format
+instruction_precision,t1_q4_multiple_constraints,30.45,0,Degenerate repetition of Im a human; never lists 5 European countries

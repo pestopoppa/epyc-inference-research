@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,35.57,1,Echoes prompt; 3 failure modes are superficial restatements of policy elements not genuine failure analysis; repetitive trade-off text
+general,t3_q2_system_failure,33.25,0,Echoes prompt; fails to identify replica-lag race condition causing double-charges; generic duplicate payment explanation misses the actual mechanism
+general,t3_q3_strategic_communication,27.67,1,Echoes prompt; board statement has incoherent 90-day plan listing 6 quarters; lacks strategic nuance required for T3
+general,t2_q1_synthesis,30.69,1,Echoes prompt; recommendation repeats points 1-3 as 4-6 (degenerate repetition); fails to truly synthesize perspectives into unified plan
+general,t2_q2_transform,34.5,0,Echoes prompt; uses json.dumps producing flat JSON list not nested YAML grouped by department; completely wrong output format
+general,t2_q3_schedule,34.69,0,Echoes prompt; reasoning ignores Dave 2-4pm availability; fails to produce any valid schedule
+general,t2_q4_inconsistency,30.2,0,Degenerate repetition: alternating rate limit values endlessly; fails to identify JSON vs form-encoded inconsistency; starts with No Inconsistencies then contradicts
+general,t1_q1_json,31.79,3,Correct JSON with all 4 fields accurately extracted: name role department start_date
+general,t1_q2_multistep,30.24,0,Degenerate repetition: repeating 1-2-3 pattern hundreds of times; never produces correct deduplicated sorted list
+general,t1_q3_compare,29.53,1,Echoes prompt; initial comparison is reasonable but vastly exceeds 2-3 sentence requirement; rambles with repetitive elaboration
+thinking,t3_q1_methodological_critique,30.65,0,Degenerate repetition: issues 1 and 3 are identical; entire 4-issue block repeats verbatim; unique_ratio=0.41
+thinking,t3_q2_causal_inference,34.13,0,Wrong minimal adjustment set (includes Yellow Fingers instead of Gene); misidentifies collider bias; wrong on unmeasured confounders
+thinking,t3_q3_reasoning_trap,33.39,1,Identifies flaw vaguely but concrete scenario is incoherent - trains both models on D2 contradicting the original setup
+thinking,t2_q1_paradox,32.86,1,Echoes prompt; presents non-standard philosophical positions (Constructivism/Realism); shallow analysis missing two-ship variant
+thinking,t2_q2_counterfactual,30.05,2,Covers all three dimensions with relevant mechanisms; analysis is somewhat superficial but structurally complete and addresses second-order effects
+thinking,t2_q3_formal,33.67,1,Echoes prompt; proof attempt via contrapositive is circular (derives P->Q from its own contrapositive); no concrete example provided as requested
+thinking,t2_q4_metacognition,30.42,1,Echoes prompt; suggests surveying people (misses Fermi estimation point); weak reasoning despite correct population baseline of 2.4M
+thinking,t1_q1_multistep,32.82,0,Wrong answer: 10:30 AM instead of correct ~11:34 AM; calculates first train distance as 30mi in 30min (should be 60mi in 1hr); math errors throughout
+thinking,t1_q2_hypothesis,67.16,1,Echoes prompt; 2 of 3 alternatives (nutrition and sleep) are mechanisms of breakfast helping not confounding variables; only stress is partially relevant
+thinking,t1_q3_planning,59.13,0,Wrong answer: ordering E-B-C-D-A violates A-before-B constraint; contradicts own constraint restatement; claims single valid ordering when multiple exist

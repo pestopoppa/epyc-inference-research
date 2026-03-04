@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,7.97,1,Identifies some failure modes but echoes prompt adds hallucinated context severe repetition at end never completes analysis
+general,t3_q2_system_failure,8.21,2,Correctly identifies replica lag causing stale idempotency reads leading to double-charges; proposes fixes but response trails off incomplete
+general,t3_q3_strategic_communication,8.05,1,Mixes reasoning with output; begins addressing constraints but never delivers a complete polished 5-minute statement
+general,t2_q1_synthesis,8.05,1,Identifies correct phased approach but severe repetition (18x same block) and never delivers clean 3-4 sentence recommendation
+general,t2_q2_transform,8.19,2,Shows correct nested YAML output grouped by department; unnecessary rambling about Python implementation follows
+general,t2_q3_schedule,8.03,1,Attempts constraints but gets confused about time slot boundaries; never produces final valid schedule; cuts off mid-analysis
+general,t2_q4_inconsistency,8.07,3,Correctly identifies both: body format conflict (Doc B form-encoded vs A/C JSON) and rate limit conflict (100/min vs 1000/hr)
+general,t1_q1_json,8.12,1,Correct JSON fields but violates output-only-JSON instruction; adds extensive explanation and repetitive reasoning
+general,t1_q2_multistep,8.07,0,Gets confused by hallucinated incorrect example; never produces clean final output; self-contradictory reasoning
+general,t1_q3_compare,8.15,1,Contains relevant comparison points but fails 2-3 sentence constraint; extreme repetition (11x same block)
+coder,t3_q1_concurrent_correctness,8.04,2,Correctly identifies ABA problem and explains scenario; fix mentions tagged pointers but implementation incomplete
+coder,t3_q2_distributed_consistency,8.0,1,Lists multiple conflict resolution strategies but cuts off before completing analysis; shopping cart recommendation incomplete
+coder,t3_q3_algorithmic_hardness,8.0,1,Begins adversary argument and median-of-medians discussion but both proofs incomplete; never derives precise comparisons
+coder,t2_q1_design,8.08,2,Correctly identifies doubly linked list + hashmap for O(1) LRU; discusses implementation but code not fully complete
+coder,t2_q2_debug_complex,8.07,3,Correctly identifies async race condition; proposes correct asyncio.Lock fix; shows working corrected code
+coder,t2_q3_optimize,7.98,2,Correctly proposes hash-based O(n) approach using complement lookup; discusses edge cases but trails off
+coder,t2_q4_system,8.02,1,Token bucket approach correct but never delivers complete clean implementation; reasoning loops about semantics
+coder,t1_q1_algorithm,8.26,2,Correctly identifies left=mid bug (should be mid+1) and infinite loop; second bug identification less clear
+coder,t1_q2_refactor,8.32,2,Proposes correct set-based O(n) solution; discusses memory trade-offs; provides two approaches as requested
+coder,t1_q3_test,8.05,2,Lists reasonable test cases covering normal edge and error conditions; pytest.raises for ValueError; covers basics well
+math,t3_q1_analysis,8.01,1,Correct direction on all 3 parts but never states clean final answers; cuts off during closed form derivation
+math,t3_q2_combinatorics,8.07,0,Never produces a proof; wanders through multiple approaches without reaching any conclusion
+math,t3_q3_probability_theory,8.33,1,Begins correct P(N=k) approach but never reaches E[N]=e; P(N=2)=1/2 correct; cuts off during P(N=3)
+math,t2_q1_optimization,8.1,3,Fully correct: 2W+L=200 W=50 L=100 area=5000; verifies with second derivative test
+math,t2_q2_proof,8.13,3,Correctly identifies error at n=1->n=2; groups disjoint with no overlap; clear and accurate
+math,t2_q3_calculus,8.06,3,Fully correct: antiderivative x^3+x^2-x F(2)=10 F(0)=0 integral=10; correctly finds root at x=1/3
+math,t2_q4_statistics,8.06,2,Sum=185 correct; mean=23.125 median=23.5 correct; std dev correct approach but final value cut off
+math,t1_q1_word_problem,8.0,3,Fully correct: 120 after discount 129.60 after tax 86.4 percent
+math,t1_q2_system_equations,8.08,3,"All 4 solutions found (3,4) (4,3) (-3,-4) (-4,-3); verified via both methods"
+math,t1_q3_probability,8.2,3,Fully correct: P(both red)=2/9 P(one red one blue)=1/3; clear work shown
+agentic,t3_q1_competing_constraints,7.89,1,Good reasoning about unknown schema but never produces requested JSON plan output
+agentic,t3_q2_multi_agent_coordination,7.84,1,Discusses agent assignments but never produces requested JSON output
+agentic,t3_q3_adversarial_robustness,7.92,2,Correctly identifies security concerns and refuses malicious command; good policy discussion
+agentic,t2_q1_ambiguous,8.09,1,Correctly identifies ambiguity but severe repetition (47x same line); never delivers clean output
+agentic,t2_q2_error_chain,8.01,1,Considers multiple reasonable next steps but never commits to single JSON tool call
+agentic,t2_q3_schema_edge,8.05,2,Correct JSON with proper endpoint method null body and auth header; adds explanation when told output-only
+agentic,t2_q4_orchestration,7.88,1,Discusses deployment flow correctly but never produces requested JSON structure
+agentic,t1_q1_sequential,8.18,1,Understands correct sequence but violates output-only-JSON instruction
+agentic,t1_q2_error_handling,8.22,2,Correct JSON response asking for clarification; suggests search_users
+agentic,t1_q3_nested_params,8.05,2,Correct nested JSON with all fields; adds explanation when told output-only
+instruction_precision,t3_q1_self_referential,8.68,0,Never produces valid self-referential sentence; only discusses approach
+instruction_precision,t3_q2_cascading_constraints,8.77,0,Hallucinated APPLE starting word; confused; never produces valid chain
+instruction_precision,t3_q3_meta_instruction,8.8,0,Hallucinates new instructions instead of following original ones
+instruction_precision,t2_q1_resist_elaboration,8.83,0,Massively violates reply-with-only-the-number; extensive reasoning instead of just 4
+instruction_precision,t2_q2_maintain_format,8.82,2,Eventually produces correct 3-line format; reasoning before it; format lines accurate
+instruction_precision,t2_q3_empty_handling,8.73,1,Correctly outputs NONE but violates do-not-explain with extensive reasoning
+instruction_precision,t2_q4_conflicting_constraints,8.81,0,Hallucinates dozens of extra constraints; never produces valid sentence
+instruction_precision,t1_q1_negative_instruction,8.85,0,Hallucinates extra constraints then loops on cell wall/plasma membrane 12x; never explains photosynthesis
+instruction_precision,t1_q2_word_limit,8.89,1,Valid 24-word description but repeats 4+ times with extensive padding
+instruction_precision,t1_q3_structured_format,8.83,1,Correct format lines but adds prefix explanation and repeats list multiple times
+instruction_precision,t1_q4_multiple_constraints,8.88,0,Lists 35+ countries instead of exactly 5; completely fails constraint
+thinking,t3_q1_methodological_critique,7.99,2,Identifies 4+ issues (correlation/causation selection bias SES sample size) with explanations
+thinking,t3_q2_causal_inference,8.1,2,Correct adjustment set {Gene}; Yellow Fingers as collider correct; unmeasured Gene blocks adjustment
+thinking,t3_q3_reasoning_trap,7.93,1,Identifies general flaw but fails to construct required specific concrete scenario
+thinking,t2_q1_paradox,8.01,2,Multiple positions (material functional identity) with formal notation; states preference
+thinking,t2_q2_counterfactual,8.0,2,Analyzes all 3 dimensions with tables; good breadth; addresses alternative scenario
+thinking,t2_q3_formal,8.04,3,Correct formal proof using resolution; concrete example; clear and complete
+thinking,t2_q4_metacognition,7.95,2,Good Fermi structure; population to pianos to frequency to capacity; bounds 100-320
+thinking,t1_q1_multistep,8.17,3,Fully correct: 60mi head start 220mi remaining 140mph meets at ~11:34 AM
+thinking,t1_q2_hypothesis,7.96,0,Severe repetition (23x same line); explanations buried in noise; unusable
+thinking,t1_q3_planning,8.0,1,Correctly sets up constraints but cuts off before completing all valid orderings

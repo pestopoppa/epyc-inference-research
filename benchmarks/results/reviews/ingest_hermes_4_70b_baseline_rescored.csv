@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+instruction_precision,t2_q2_maintain_format,1.23,2,Correct format and content after prompt echo; ERROR_TYPE/ROOT_CAUSE/FIX all present and accurate; minor: includes prompt echo
+instruction_precision,t2_q4_conflicting_constraints,1.22,2,Sentence meets all 4 constraints (7 words starts A ends data no store/storage); minor: includes extra explanation
+instruction_precision,t3_q1_self_referential,2.38,0,No valid sentence produced; degenerate output listing bullet points of constraints without attempting answer
+instruction_precision,t3_q2_cascading_constraints,2.12,0,Degenerate repetition loop on Nylon; never produces valid 5-word list
+instruction_precision,t3_q3_meta_instruction,2.16,1,Incorrectly includes hello from [Print hello] which has no number; correctly handles [Print 42] and [Say 7 times: hi]
+instruction_precision,t2_q1_resist_elaboration,2.16,0,Degenerate repetition loop; never outputs just 4; hallucinated threatening dialogue
+instruction_precision,t2_q3_empty_handling,2.17,0,Degenerate: generates dozens of hallucinated email extraction examples instead of just outputting NONE
+instruction_precision,t1_q1_negative_instruction,2.16,0,Degenerate repetition loop of Do NOT mention organisms; no photosynthesis explanation produced
+instruction_precision,t1_q2_word_limit,2.16,1,First attempt is valid 25-word description but degenerate repetition of same sentence fills rest of output
+instruction_precision,t1_q3_structured_format,2.16,1,First 3 entries correct format but lists 40+ languages instead of exactly 3; violates count constraint
+instruction_precision,t1_q4_multiple_constraints,2.2,2,Correct 5 European countries in alphabetical order; minor: includes extra commentary text after the list
+agentic,t2_q1_ambiguous,1.21,2,Asks clarifying question and provides reasonable Slack tool call with justification
+agentic,t2_q2_error_chain,27.79,0,Only 1 completion token; no reasoning or tool call generated; effectively empty response
+agentic,t1_q2_error_handling,1.21,1,Correctly suggests search_users but then hallucinates a successful result instead of just outputting the tool call
+agentic,t3_q1_competing_constraints,3.03,2,Produces structured plan with read-first approach validation checks and fallback strategy
+agentic,t3_q2_multi_agent_coordination,2.9,2,Comprehensive orchestration plan with correct agent assignment context passing parallelization and failure handling
+agentic,t3_q3_adversarial_robustness,3.02,3,Thorough security analysis: identifies command injection resists social engineering detects encoded attacks proposes policy
+agentic,t2_q3_schema_edge,3.21,3,Correct JSON tool call: endpoint /users method GET body null Authorization header with Bearer token
+agentic,t2_q4_orchestration,2.51,2,Valid deployment plan with checkout test build deploy steps; includes rollback on failure and Slack notifications
+agentic,t1_q1_sequential,2.6,1,First JSON array correct (grep then read_file) but degenerate repetition of entire prompt+answer pattern fills output
+agentic,t1_q3_nested_params,2.51,1,First JSON tool call correct with nested params; degenerate repetition fills remaining output
+general,t1_q1_json,1.23,3,Correct JSON: name=Sarah Chen role=Senior Engineer department=Platform team start_date=2024-03-15
+general,t1_q3_compare,1.21,2,Adequate comparison covering key tradeoffs; somewhat verbose but captures scaling vs simplicity tradeoff
+general,t3_q1_policy_analysis,3.12,3,Identifies 3+ failure modes with mechanisms proposes specific amendments with tradeoffs
+general,t3_q2_system_failure,2.19,3,Precise explanation of idempotency-on-replica failure; two architectural fixes with tradeoffs; monitoring
+general,t3_q3_strategic_communication,3.09,3,Well-structured board statement: acknowledges problems frames LOIs as pivot 90-day milestones addresses leadership
+general,t2_q1_synthesis,2.36,1,Good initial recommendation but degenerate repetition fills rest of output
+general,t2_q2_transform,2.7,2,Correct nested YAML transformation; minor: includes implementation discussion after
+general,t2_q3_schedule,2.57,1,Begins valid constraint analysis but runs out of tokens before producing final schedule
+general,t2_q4_inconsistency,2.82,3,Correctly identifies both inconsistencies: JSON vs form-encoded body and rate limit discrepancy
+general,t1_q2_multistep,2.39,1,First attempt correct (Apple banana cherry Date Total: 4) but degenerate repetition fills output
+math,t2_q3_calculus,1.21,3,Correct antiderivative evaluation at bounds final answer 10
+math,t1_q1_word_problem,1.21,3,All three parts correct: discount $120 final $129.60 86.4%
+math,t3_q1_analysis,2.18,1,Correct approach via Im(e^{xe^i}) but runs out of tokens before completing all parts
+math,t3_q2_combinatorics,2.07,1,Attempts proof but finds numerical counterexample for n=2; runs out of tokens
+math,t3_q3_probability_theory,2.12,1,Begins correct calculation but runs out of tokens before reaching E[N]=e
+math,t2_q1_optimization,2.27,3,Correct: W=50m L=100m max area=5000 sq meters; proper derivative analysis
+math,t2_q2_proof,2.09,3,Correctly identifies error at n=1 to n=2 step; explains overlap breaks down
+math,t2_q4_statistics,2.08,3,All correct: sum=185 mean=23.125 median=23.5 std dev~7.358 no outliers
+math,t1_q2_system_equations,1.98,2,Correct method via substitution; reaches z=16 and z=9 before truncation
+math,t1_q3_probability,3.21,3,Both probabilities correct: P(both red)=2/9 P(one red one blue)=1/3
+thinking,t3_q1_methodological_critique,3.17,3,Identifies 4+ issues with specific mechanisms
+thinking,t3_q2_causal_inference,3.1,3,All 3 parts correct: adjust for Gene Yellow Fingers is collider unmeasured confounder
+thinking,t3_q3_reasoning_trap,3.03,3,Identifies distribution mismatch flaw; constructs specific medical imaging scenario
+thinking,t2_q1_paradox,2.93,1,Good initial analysis but degenerate repetition fills majority of output
+thinking,t2_q2_counterfactual,3.14,3,Thorough counterfactual analysis across all 3 dimensions with mechanisms
+thinking,t2_q3_formal,3.13,3,Correct formal proof via hypothetical syllogism; clear concrete example
+thinking,t2_q4_metacognition,3.12,3,Clear Fermi estimation approach; key assumptions; bounds 150-200
+thinking,t1_q1_multistep,2.9,2,Correct answer 11:34 AM with valid work; includes unnecessary Python code
+thinking,t1_q2_hypothesis,3.18,3,Three specific alternative explanations with mechanisms
+thinking,t1_q3_planning,2.98,3,Correctly finds both valid orderings with systematic reasoning
+coder,t3_q1_concurrent_correctness,2.9,2,Correctly identifies ABA problem with concrete sequence; tagged pointer fix truncated
+coder,t3_q2_distributed_consistency,3.15,3,4+ conflict resolution strategies with failure scenarios and domain-specific recommendations
+coder,t3_q3_algorithmic_hardness,2.9,2,Good adversary argument and recurrence derivation; part 3 truncated
+coder,t2_q1_design,2.93,2,Correct LRU implementation using DLL + hashmap for O(1); code truncated
+coder,t2_q2_debug_complex,3.06,3,Correctly identifies race condition; fixes with asyncio.Lock
+coder,t2_q3_optimize,3.17,3,Correct O(n) optimization using frequency dictionary
+coder,t2_q4_system,2.98,2,Correct rate limiter with sliding window; truncated at end
+coder,t1_q1_algorithm,2.91,2,Correctly identifies left=mid infinite loop bug and right=len(arr) issue
+coder,t1_q2_refactor,3.01,3,Two valid refactored versions with tradeoffs explained
+coder,t1_q3_test,2.97,2,Good parametrized test cases covering normal edge and error cases; truncated

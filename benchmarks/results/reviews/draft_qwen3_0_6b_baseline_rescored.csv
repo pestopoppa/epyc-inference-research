@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,90.11,0,prompt echo without substantive answer; degenerate repetition (uniqueness=0.85 but content is just numbered repeats of 'Discuss the implications of your amendments')
+general,t3_q2_system_failure,95.0,0,prompt echo without substantive answer; degenerate repetition (recursive self-reference loop 'What is the correct answer to the question...')
+general,t3_q3_strategic_communication,92.12,0,prompt echo without substantive answer; degenerate repetition ('mix of C-level and non-CEs' repeated)
+general,t2_q1_synthesis,98.75,0,prompt echo without substantive answer; degenerate repetition (uniqueness=0.02; 'The user is a small business owner' repeated ~114 times)
+general,t2_q2_transform,98.11,0,prompt echo without substantive answer; degenerate repetition (uniqueness=0.03; fabricated duplicate data entries instead of YAML transformation)
+general,t2_q3_schedule,88.14,0,prompt echo without substantive answer; no valid schedule produced; degenerate filler text
+general,t2_q4_inconsistency,90.67,0,prompt echo without substantive answer; degenerate repetition ('The answer is: 2' repeated ~50 times; does not list actual inconsistencies)
+general,t1_q1_json,90.01,0,prompt echo without substantive answer; no valid JSON output produced; degenerate repetition (uniqueness=0.01; 'So the JSON object should have the same structure' loop)
+general,t1_q2_multistep,93.94,0,prompt echo without substantive answer; degenerate repetition (uniqueness=0.04); incorrect item list ('bana' instead of 'banana'); no numbered sorted output
+general,t1_q3_compare,95.97,0,prompt echo without substantive answer; degenerate repetition (uniqueness=0.06; re-echoes approach descriptions instead of comparing)
+thinking,t3_q1_methodological_critique,97.84,0,prompt echo without substantive answer; degenerate repetition (uniqueness=0.02; 'The issues must be in the same paragraph' repeated ~171 times)
+thinking,t3_q2_causal_inference,93.75,0,prompt echo without substantive answer; degenerate repetition (recursive 'What is the name of the system' loop); no adjustment set identified
+thinking,t3_q3_reasoning_trap,97.84,0,prompt echo without substantive answer; degenerate repetition; boxed answer attempts but no coherent scenario constructed
+thinking,t2_q1_paradox,91.71,0,prompt echo without substantive answer; degenerate repetition (uniqueness=0.01; 'The question is in English and the answer should be in English' loop)
+thinking,t2_q2_counterfactual,91.41,0,prompt echo without substantive answer; degenerate repetition (uniqueness=0.04; 'Let us say' filler loop); no substantive analysis across the three dimensions
+thinking,t2_q3_formal,103.42,0,prompt echo without substantive answer; degenerate repetition (uniqueness=0.01; 'Also give a concrete example for the other side' repeated ~186 times)
+thinking,t2_q4_metacognition,98.87,0,prompt echo without substantive answer; degenerate repetition (uniqueness=0.01; 'So you can write in the blank' repeated ~228 times)
+thinking,t1_q1_multistep,104.29,0,prompt echo without substantive answer; degenerate repetition (A/B/C/D cycle repeated ~100 times); math: no correct answer (should be ~11:34 AM)
+thinking,t1_q2_hypothesis,98.81,0,prompt echo without substantive answer; degenerate repetition (uniqueness=0.00; 'Be specific' repeated ~683 times); no alternative explanations provided
+thinking,t1_q3_planning,96.14,0,prompt echo without substantive answer; degenerate repetition (dash characters repeated); no valid orderings listed

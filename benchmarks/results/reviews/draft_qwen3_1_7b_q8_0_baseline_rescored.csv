@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,43.79,2,structured analysis with failure modes; echoes prompt
+general,t3_q2_system_failure,43.7,2,system failure analysis present; echoes prompt
+general,t3_q3_strategic_communication,39.93,2,strategic communication analysis present; echoes prompt
+general,t2_q1_synthesis,36.23,0,"degenerate repetition: same sentence repeated 113x, no synthesis produced"
+general,t2_q2_transform,36.16,1,nested YAML produced but hallucinated 127 employees (only ~6 in prompt)
+general,t2_q3_schedule,34.91,2,schedule attempt present; echoes prompt
+general,t2_q4_inconsistency,34.58,0,"degenerate repetition (9x, unique_ratio=0.15)"
+general,t1_q1_json,34.85,0,degenerate repetition: JSON block repeated 49x
+general,t1_q2_multistep,35.66,0,"degenerate repetition: 'grape' repeated 1023x, no valid list output"
+general,t1_q3_compare,35.9,0,degenerate repetition (meta-commentary repeated 15x)
+thinking,t3_q1_methodological_critique,35.06,2,methodological critique present; echoes prompt
+thinking,t3_q2_causal_inference,34.79,2,causal inference analysis present; echoes prompt
+thinking,t3_q3_reasoning_trap,33.79,0,"degenerate repetition (6x, ratio=0.19)"
+thinking,t2_q1_paradox,35.04,0,"degenerate repetition (5x, ratio=0.35)"
+thinking,t2_q2_counterfactual,34.59,2,counterfactual analysis across dimensions; echoes prompt
+thinking,t2_q3_formal,35.39,2,formal proof present; echoes prompt
+thinking,t2_q4_metacognition,35.13,2,Fermi estimation with steps; echoes prompt
+thinking,t1_q1_multistep,34.2,2,correct meeting time (11:34 AM); echoes prompt
+thinking,t1_q2_hypothesis,36.62,0,degenerate repetition (boxed pattern repeated 50x)
+thinking,t1_q3_planning,35.36,2,constraint-based planning with orderings; echoes prompt

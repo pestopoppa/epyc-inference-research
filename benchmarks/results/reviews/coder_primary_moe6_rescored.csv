@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,22.9,2,Identifies 4 valid methodological issues (selection bias publication bias test design developmental confounding) with mechanisms. Echoes prompt but substantive content.
+thinking,t3_q2_causal_inference,13.27,1,Confused rambling with multiple self-corrections. Initially wrong (adjustment={Yellow Fingers}) eventually reaches correct answer ({Gene}) but response is incoherent and hits token limit mid-sentence.
+thinking,t3_q3_reasoning_trap,13.14,2,Identifies core flaw and constructs specific medical diagnosis scenario. Scenario reasonable but partly relies on model architecture differences alongside dataset quality.
+thinking,t2_q1_paradox,9.62,1,Starts with two valid positions but devolves into degenerate self-dialogue pattern simulating a multi-turn conversation with itself. Hits 2047 token limit in self-roleplay.
+thinking,t2_q2_counterfactual,14.53,3,Thorough analysis across all three dimensions with specific mechanisms and second-order effects. Well-structured and complete.
+thinking,t2_q3_formal,14.47,2,Correct natural deduction proof and good concrete example. Truth table has error in row 6 (Q->R marked T when Q=T R=F should be F) but formal proof is valid.
+thinking,t2_q4_metacognition,15.17,3,Clear Fermi estimation with systematic approach key assumptions identified bounds estimated and uncertainty reduction factors discussed.
+thinking,t1_q1_multistep,15.64,3,Correct mathematical setup and solution. Arrives at 11:34 AM with all work shown clearly.
+thinking,t1_q2_hypothesis,24.8,3,Three specific and well-explained alternative explanations for the breakfast-test correlation. Each includes concrete mechanisms.
+thinking,t1_q3_planning,12.16,1,Correctly identifies constraints and begins systematic enumeration but hits 2047 token limit mid-reasoning without providing complete list of valid orderings.
+coder,t3_q1_concurrent_correctness,11.32,2,Initially gives wrong ABA scenario but self-corrects. Provides tagged pointer fix with code. Covers all required parts despite initial confusion.
+coder,t3_q2_distributed_consistency,9.16,2,Lists 4 conflict resolution strategies with failure scenarios for each. Provides shopping cart and banking recommendations with justification.
+coder,t3_q3_algorithmic_hardness,10.05,2,Covers adversary argument recurrence relation derivation and group size significance. Hits token limit but addresses all three parts.
+coder,t2_q1_design,11.23,1,LRU cache uses list+dict with timestamps instead of OrderedDict or doubly-linked list. List-based approach is O(n) for eviction failing the O(1) time complexity requirement.
+coder,t2_q2_debug_complex,15.36,3,Correctly identifies the race condition (read-modify-write across await) and provides clean fix using asyncio.Lock.
+coder,t2_q3_optimize,14.91,3,Correct O(n) optimization using hash map/frequency counter. Clean implementation with proper explanation.
+coder,t2_q4_system,13.47,3,Correct sliding window rate limiter using deque. Handles edge cases with input validation.
+coder,t1_q1_algorithm,14.65,2,Correctly identifies bug 1 (left=mid causes infinite loop fix: left=mid+1). Bug 2 identification debatable depending on exclusive vs inclusive bounds interpretation.
+coder,t1_q2_refactor,21.45,3,Two valid refactored versions with correct time complexities. Speed optimization with sets (O(n)) and memory optimization approach with tradeoff explanation.
+coder,t1_q3_test,22.25,3,Comprehensive pytest test suite covering normal cases division by zero floating point and edge cases.
+agentic,t3_q1_competing_constraints,22.7,2,Produces JSON plan with steps validation checks and fallback strategy addressing unknown schema and graceful failure handling.
+agentic,t3_q2_multi_agent_coordination,21.53,3,Well-structured orchestration plan with correct agent assignment context passing parallelization and failure handling within time budget.
+agentic,t3_q3_adversarial_robustness,20.09,3,Correctly identifies command injection risk proposes safe handling addresses social engineering escalation encoded command detection and general security policy.
+agentic,t2_q1_ambiguous,25.19,2,Asks clarifying questions which is appropriate then provides a template email as fallback. Reasonable handling of ambiguity.
+agentic,t2_q2_error_chain,24.49,3,Correct reasoning: checks DNS for db-staging.internal before restarting showing proper diagnostic methodology.
+agentic,t2_q3_schema_edge,25.49,3,Correct tool call with proper endpoint (/users) method (GET) null body and Authorization header with Bearer token.
+agentic,t2_q4_orchestration,23.59,3,Correct deployment plan with ordered steps test failure handling (notify+abort) and deploy failure handling (rollback+notify).
+agentic,t1_q1_sequential,25.37,2,Correct tool call order (grep first then read) but format is string-concatenated rather than proper JSON objects within the array.
+agentic,t1_q2_error_handling,12.49,1,Correct initial approach (ask for clarification after 404) but response becomes repetitive restating same options multiple times until hitting token limit.
+agentic,t1_q3_nested_params,16.45,3,Perfect JSON tool call with correct title assignees array metadata with priority tags and due_date.
+general,t3_q1_policy_analysis,,2,Identifies multiple failure modes with mechanisms and proposes amendments. Content is substantive despite TPS=None.
+general,t3_q2_system_failure,,3,Precisely explains double-charge mechanism through read replica lag identifies testing blind spot proposes architectural fixes with tradeoffs and suggests monitoring.
+general,t3_q3_strategic_communication,14.68,3,Effective board statement that acknowledges problems non-defensively frames LOIs as strategic pivot proposes 90-day milestones and subtly addresses leadership question.
+general,t2_q1_synthesis,,2,Provides concrete recommendation balancing all three perspectives with phased approach. Response extends beyond requested 3-4 sentences into unnecessary elaboration.
+general,t2_q2_transform,16.94,3,Correct YAML transformation with proper nesting by department. All employees correctly grouped.
+general,t2_q3_schedule,,1,Attempts systematic scheduling but hits token limit without providing a definitive final answer. Partial reasoning shown but no complete validated schedule.
+general,t2_q4_inconsistency,,2,Correctly identifies key inconsistencies: body format (JSON vs form-encoded) and rate limiting (100/min vs 1000/hour). Notes some minor non-inconsistencies.
+general,t1_q1_json,17.61,3,Perfect JSON extraction with correct name role department and start_date values.
+general,t1_q2_multistep,17.98,3,Correct processing: removes duplicates case-insensitively sorts alphabetically numbers items adds count. All 4 steps correct.
+general,t1_q3_compare,17.3,3,Concise and accurate comparison within requested 2-3 sentence format. Captures key tradeoffs correctly.
+math,t3_q1_analysis,10.42,2,Correct differentiability proof via uniform convergence. Begins closed form derivation using Im(e^{xe^i}). Hits token limit but covers key parts.
+math,t3_q2_combinatorics,10.53,1,Begins combinatorial proof framework with sign-reversing involution but hits token limit without completing the proof or establishing the bijection.
+math,t3_q3_probability_theory,10.05,2,Direct calculation approach correct: P(S_n <= 1) = 1/n! leading to E[N] = e. Self-corrects initial density error.
+math,t2_q1_optimization,14.18,3,Correct optimization setup and solution: dimensions 100m x 50m maximum area 5000 sq meters.
+math,t2_q2_proof,9.22,2,Correctly identifies the error: inductive step fails at n=1 to n=2 because the two subsets do not overlap. Response verbose but core identification correct.
+math,t2_q3_calculus,16.5,3,Perfect integral calculation with correct antiderivative and evaluation. Answer: 10.
+math,t2_q4_statistics,12.78,0,WRONG: Sum computed as 205 instead of correct 185. Mean=25.625 is wrong (should be 23.125). All downstream calculations based on incorrect sum.
+math,t1_q1_word_problem,15.3,3,All calculations correct: $120 after discount $129.60 after tax 86.4% of original price.
+math,t1_q2_system_equations,14.06,3,All four real solutions correctly found and verified: (4 3) (-4 -3) (3 4) (-3 -4).
+math,t1_q3_probability,15.19,3,Correct probability calculations with clear work shown. P(both red) = 2/9 is correct.
+instruction_precision,t3_q1_self_referential,14.82,0,Multiple failed attempts to construct self-referential sentence. Never produces a valid answer meeting all 4 constraints simultaneously.
+instruction_precision,t3_q2_cascading_constraints,14.52,0,Repeated failed attempts to construct valid word chain. None of the attempts satisfy all constraints (letter chaining decreasing length 8->4 letters).
+instruction_precision,t3_q3_meta_instruction,17.84,1,Incorrectly includes hello output from [Print hello] which has no number. Correctly handles [Print 42] and [Say 7 times: hi] but fails filtering criterion.
+instruction_precision,t2_q1_resist_elaboration,24.29,3,Perfect: responds with only 4 as instructed.
+instruction_precision,t2_q2_maintain_format,25.93,3,Correct format with all three fields properly filled. No extraneous text.
+instruction_precision,t2_q3_empty_handling,26.79,3,Correctly outputs NONE with no explanation or apology.
+instruction_precision,t2_q4_conflicting_constraints,23.39,0,Degenerate repetition: same sentence repeated 46+ times until token limit. Repetition loop failure.
+instruction_precision,t1_q1_negative_instruction,27.1,3,Explains photosynthesis in 2 sentences without using forbidden words (sunlight sun solar). Uses energy from the environment effectively.
+instruction_precision,t1_q2_word_limit,27.14,3,Exactly 20 words within the 20-25 word requirement. Content accurately describes machine learning.
+instruction_precision,t1_q3_structured_format,24.88,3,Perfect format: LANGUAGE (YEAR) on separate lines with no extra text bullets or numbers.
+instruction_precision,t1_q4_multiple_constraints,26.8,0,Algeria is in Africa not Europe. Fails the basic factual requirement of listing European countries.
+long_context,t3_q1_multi_hop_reasoning,,0,Response echoes filler context text about API handlers. Does not extract any actual information or answer the multi-hop reasoning questions.
+long_context,t3_q2_contradiction_detection,1.25,0,Echoes filler documentation text and fabricates contradictions from generic API handler descriptions. Does not identify actual witness contradictions.
+long_context,t3_q3_evolving_requirements,,0,Generic table output about system components. Does not track chronological requirement changes identify scope creep email or answer specific questions.
+long_context,t2_q1_deep_needle,,0,Response echoes the log data and question without providing any answer. No CRITICAL error identified or analyzed.
+long_context,t2_q2_synthesis,,0,Lists financial data points without integrated analysis. Confused by repeated financial sections. Does not connect changes with market factors or competitor activity.
+long_context,t2_q3_architecture,,0,Response echoes the codebase and ends with the question text. No architectural analysis pattern identification or class hierarchy provided.
+long_context,t1_q1_needle,2.56,2,Correctly identifies hardcoded API key sk-proj-7x9mK2nP4qR8sT1uV3wY5zA in auth_utils files. Response becomes repetitive but core finding correct.
+long_context,t1_q2_multi_file,3.17,0,Response echoes codebase code listings without providing data flow analysis or bug identification as requested.
+long_context,t1_q3_extraction,2.11,0,Degenerate repetition: date extraction devolves into repeating same dates until token limit.

@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,62.36,0,"prompt echo + repetitive filler ('a large number of models' loop); no 3 failure modes, no mechanisms, no amendments identified"
+general,t3_q2_system_failure,61.0,1,prompt echo; identifies replica lag vaguely but explanation is imprecise ('secondary transaction' is wrong framing); no 2 architectural fixes; no monitoring proposal
+general,t3_q3_strategic_communication,59.4,0,prompt echo + severe repetition (29x repeated format instructions); no board statement written
+general,t2_q1_synthesis,59.81,1,prompt echo; mentions all 3 perspectives but fabricates '20% sales drop' not in prompt; recommendation is 3 paragraphs not 3-4 sentences; contradicts itself (3 months AND 2 weeks)
+general,t2_q2_transform,56.91,0,"prompt echo + hallucinated employees (Emily, Frank, George etc.); repeated flat list 3x instead of nested YAML; no valid department grouping produced"
+general,t2_q3_schedule,58.38,0,prompt echo + circular reasoning; adds fabricated constraints; assumes Team sync must be 9AM with no basis; never produces a valid schedule
+general,t2_q4_inconsistency,64.55,1,prompt echo; identifies rate limit discrepancy (100/min vs 1000/hr) but gets math wrong (says 100*60=6000=1000); explicitly says JSON vs form-encoded is 'no inconsistency' -- misses key body format conflict
+general,t1_q1_json,60.86,0,prompt echo + severe repetition ('Output only the JSON' repeated 10+ times as self-prompting); no valid JSON output produced
+general,t1_q2_multistep,68.49,0,prompt echo + massive repetition ('banana' repeated hundreds of times); no list processing performed
+general,t1_q3_compare,65.3,0,prompt echo + severe repetition (31x repeated answer block); not a concise 2-3 sentence comparison
+thinking,t3_q1_methodological_critique,65.16,0,prompt echo + self-prompting with blank fill-ins (___); repeats 'write a short paragraph' 3x; no concrete methodological issues identified
+thinking,t3_q2_causal_inference,65.15,0,"prompt echo; circular definition of MSAS ('all variables necessary for causal comparison' repeated); wrong on Yellow Fingers (calls it a confounder, actually a collider); never identifies {Gene} as minimal adjustment set"
+thinking,t3_q3_reasoning_trap,64.1,0,"prompt echo + severe repetition (154x 'Answer in 3-4 sentences'); no flaw identified, no concrete scenario constructed"
+thinking,t2_q1_paradox,67.01,0,"prompt echo + repetitive filler ('main body and main hull' looped); invents wrong ship anatomy; no philosophical positions (identity theory, mereological essentialism, etc.) argued"
+thinking,t2_q2_counterfactual,56.55,0,prompt echo + severe repetition (133x 'analyze the consequences'); no actual counterfactual analysis across the 3 requested dimensions
+thinking,t2_q3_formal,66.4,1,prompt echo; correctly identifies hypothetical syllogism but then confuses itself testing P=false cases; gets confused by vacuous truth; no clean formal proof; no concrete real-world example
+thinking,t2_q4_metacognition,65.99,0,"prompt echo + circular reasoning loop ('how do I find X' repeated 5+ times); confuses piano tuners with piano players; never reaches estimation, bounds, or uncertainty analysis"
+thinking,t1_q1_multistep,63.28,1,"prompt echo; attempts calculation, correctly computes 280/60=4.67h for full trip, but gets confused in meeting-time setup; never arrives at correct answer of 11:34 AM; reasoning goes in circles"
+thinking,t1_q2_hypothesis,66.4,1,"prompt echo; mentions confounders (type of breakfast, class, time of day) but these are vague/weak; does not give 3 specific named alternative explanations (e.g. SES, sleep, motivation); adds self-prompting"
+thinking,t1_q3_planning,65.39,1,"prompt echo; correct constraint decomposition (A<B<D, DC pair, E not endpoints); starts systematic approach but never completes enumeration of valid orderings"

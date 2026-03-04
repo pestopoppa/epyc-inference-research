@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,6.17,2,Valid JSON plan with steps/validation/fallback; covers schema discovery and graceful degradation but steps are generic and lack concrete tool call sequences
+agentic,t3_q2_multi_agent_coordination,5.88,2,Correct phasing with parallelization of research tasks; context passing defined; but dispatches 2 tasks to researcher_agent in parallel (same agent may not parallelize) and timing analysis is shallow
+agentic,t3_q3_adversarial_robustness,5.57,3,Correctly identifies command injection and /etc/passwd risk; refuses to comply even with admin claim; provides base64 encoded example; comprehensive policy design
+agentic,t2_q1_ambiguous,6.52,2,Reasonable choice of Slack for urgency with brief justification; could have asked clarifying question but chose to act with explanation as permitted
+agentic,t2_q2_error_chain,6.27,3,Correct diagnostic reasoning: connection_refused -> check DNS as next step; proper JSON tool call format
+agentic,t2_q3_schema_edge,6.45,2,Correct JSON with /users endpoint, GET method, null body, auth header; minor issue: includes extraneous text "No other text." before the JSON output
+agentic,t2_q4_orchestration,6.09,2,Reasonable deployment plan with test gates and rollback; covers unit/integration/e2e stages but truncated response
+agentic,t1_q1_sequential,6.54,2,Correct tool sequence (grep then read_file); minor: includes extraneous preamble text "If no tools are needed output an empty array"
+agentic,t1_q2_error_handling,6.33,3,Good error recovery: identifies 404, suggests search_users or ask_user for clarification; provides concrete tool call
+agentic,t1_q3_nested_params,6.44,2,Correct nested JSON with proper types; minor: includes "No other text." preamble which violates implicit output-only instruction
+general,t3_q1_policy_analysis,5.18,3,Thorough analysis identifying overfitting to accuracy metrics, SHAP limitations, and bias audit gaps; provides actionable amendments
+general,t3_q2_system_failure,5.01,3,Correctly identifies race condition from eventual consistency lag defeating idempotency keys; accurate technical analysis of read-replica timing
+general,t3_q3_strategic_communication,4.83,3,Authentic board presentation: acknowledges misses, takes responsibility, pivots to LOIs and enterprise traction; avoids buzzwords as instructed
+general,t2_q1_synthesis,5.31,3,Clean synthesis balancing all 3 perspectives with phased approach (hotfix then refactor) under budget constraint
+general,t2_q2_transform,5.3,1,YAML structure correct for the 4 original employees BUT hallucinated a 5th employee (Eve from HR) not in the input data; also leaked prompt continuation text before the answer
+general,t2_q3_schedule,4.49,2,Systematic constraint analysis with correct identification of availability windows; response truncated at 2048 tokens before final schedule but reasoning is sound
+general,t2_q4_inconsistency,5.18,3,Correctly identifies JSON vs form-encoded conflict and rate limit discrepancy (100/min vs 1000/hr = 6x difference); clear presentation
+general,t1_q1_json,5.44,3,Perfect JSON extraction with all 4 fields correct; no extraneous text
+general,t1_q2_multistep,5.37,1,Hallucinated "Elderberry" which is NOT in the input list; also the sort order is wrong (case-insensitive sort should yield Apple/banana/cherry/Date but capitalization handling is inconsistent)
+general,t1_q3_compare,5.38,3,Concise 3-sentence comparison covering scaling, fault isolation, and tradeoff; meets length constraint
+long_context,t3_q1_multi_hop_reasoning,0.72,0,Failed to extract any information from the context; states documents contain no relevant data about companies/persons/transactions; complete task failure
+long_context,t3_q2_contradiction_detection,0.86,0,Fabricated witness names and testimony not present in the actual context; hallucinated entire contradiction analysis from non-existent data
+long_context,t3_q3_evolving_requirements,1.13,2,Correctly identifies that the provided text contains no email thread; accurately lists what the documentation actually covers rather than hallucinating
+long_context,t2_q1_deep_needle,0,0,Empty response (timed out with 0 chars); complete failure
+long_context,t2_q2_synthesis,0.92,1,Attempts structured analysis but contains contradictions (Q1 gross profit $14M then Q2 gross profit $10M described as decrease which is internally inconsistent with revenue growth narrative); some data appears fabricated
+long_context,t2_q3_architecture,0.62,2,Identifies microservices pattern and dual-language implementation; mentions EventEmitter and config-driven design; response truncated but substantive analysis present
+long_context,t1_q1_needle,2.26,3,Successfully found the hardcoded API key: sk-proj-7x9mK2nP4qR8sT1uV3wY5zA; exact value extracted correctly
+long_context,t1_q2_multi_file,2.43,2,Identifies class name/docstring mismatches across files; follows instruction to not mention .json configs; but analysis is somewhat generic
+long_context,t1_q3_extraction,1.84,1,Lists dates in correct format but response truncated at 2048 tokens; no monetary amounts or company names visible in truncated output; incomplete extraction
+thinking,t3_q1_methodological_critique,6.2,3,Identifies 4 valid methodological issues: SES confounding, selection bias, measurement confounds, and cultural/environmental factors; well-structured
+thinking,t3_q2_causal_inference,6.09,3,Correct minimal adjustment set {Gene}; correctly explains why conditioning on Yellow Fingers introduces bias (descendant of treatment); accurate DAG reasoning
+thinking,t3_q3_reasoning_trap,5.89,3,Correctly identifies the flaw: test accuracy does not directly reflect dataset quality; lists task alignment, overfitting, and dataset complexity as confounds
+thinking,t2_q1_paradox,6.1,3,Presents both continuity and material identity perspectives with clear arguments; discusses the philosophical implications thoughtfully
+thinking,t2_q2_counterfactual,5.86,3,Thorough counterfactual analysis covering knowledge dissemination speed, geographic access barriers, and conference-dependent knowledge sharing
+thinking,t2_q3_formal,6.13,3,Correct formal proof using conditional proof/modus ponens; concrete rain example; explains importance of hypothetical syllogism
+thinking,t2_q4_metacognition,6.04,3,Solid Fermi estimation with clear breakdown: population, piano ownership rate, tuning frequency, tuner capacity; shows working
+thinking,t1_q1_multistep,6.09,3,Correct setup: Train A travels 60mi in first hour, remaining 220mi closed at 140mph combined; meets at 10:00 + 220/140 hours; correct methodology
+thinking,t1_q2_hypothesis,6.2,3,Three valid alternative explanations for breakfast-test score correlation: SES, time management/discipline, and (likely) sleep quality; avoids causal claim
+thinking,t1_q3_planning,5.61,3,Systematic constraint analysis with correct partial ordering A<B<D-C; identifies E position constraints; methodical enumeration approach
+coder,t3_q1_concurrent_correctness,5.62,3,Correctly identifies ABA problem in pop() with concrete thread interleaving scenario; shows memory reuse leading to corrupted stack state
+coder,t3_q2_distributed_consistency,5.81,2,Covers LWW, CRDTs, and application-level resolution with wrong-behavior scenarios; but response starts with orphaned text "Would your choice change?" (prompt leakage)
+coder,t3_q3_algorithmic_hardness,5.35,2,Begins proof with adversary argument for Omega(n) lower bound; but claims height >= log2(n!) which is wrong for selection (that is sorting lower bound); partial credit for attempt
+coder,t2_q1_design,5.78,3,Correct LRU cache with doubly-linked list + hash map; O(1) get/put; dummy head/tail nodes; clean implementation
+coder,t2_q2_debug_complex,6.17,3,Correctly identifies async race condition: non-atomic read-modify-write with await yielding control; prescribes asyncio.Lock solution
+coder,t2_q3_optimize,5.92,3,Correct O(n) hash map solution for two-sum pair counting; handles duplicate elements and avoids double counting
+coder,t2_q4_system,6.27,3,Clean sliding window rate limiter with deque; correct window expiration logic; O(1) amortized
+coder,t1_q1_algorithm,6.01,3,Correctly identifies both bugs: off-by-one on right bound and < vs <= comparison; provides fix and unit tests
+coder,t1_q2_refactor,5.99,3,Good refactoring from O(n^2) to O(n) using sets; explains tradeoff clearly; provides two alternative implementations
+coder,t1_q3_test,5.59,3,Comprehensive pytest suite with parametrized tests, edge cases (div by 1, same numbers), and error cases (zero division); clean structure
+math,t3_q1_analysis,5.33,3,Correct proof of differentiability via Weierstrass M-test and term-by-term differentiation of uniformly convergent series; rigorous
+math,t3_q2_combinatorics,5.2,2,Attempts combinatorial proof with inclusion-exclusion approach; identifies correct RHS interpretation; but proof truncated at 2048 tokens before completion
+math,t3_q3_probability_theory,5.32,3,Correct setup: E[N] = sum P(N>=n) = sum P(S_{n-1}<=1); correctly identifies P(S_k<=1) = 1/k! for uniform [0,1]; leads to E[N]=e
+math,t2_q1_optimization,6.28,3,Correct optimization: l=200-2w, A=200w-2w^2, dA/dw=0 gives w=50, l=100, A=5000; complete solution
+math,t2_q2_proof,6.02,3,Correctly identifies the horse problem flaw: inductive step fails at n=1->2 because single-horse subsets have no overlap; precise
+math,t2_q3_calculus,6.23,3,Correct antiderivative x^3+x^2-x; F(2)=10, F(0)=0; integral=10; clean step-by-step
+math,t2_q4_statistics,5.61,3,Sum=185 (correct, NOT 205); mean=23.125; median=23.5; SD~7.36; IQR method correct with Q1=16.5 Q3=29.0; no outliers; all verified
+math,t1_q1_word_problem,6.02,3,Correct: discount $30, price after discount $120, tax $9.60, final $129.60; clear steps
+math,t1_q2_system_equations,6.03,3,Correct algebraic solution using (x+y)^2 and (x-y)^2 identities; finds all 4 solutions (4,3), (3,4), (-4,-3), (-3,-4)
+math,t1_q3_probability,6.08,3,Correct: P(both red)=2/9; P(one red one blue) uses both orderings; proper without-replacement calculation
+instruction_precision,t3_q1_self_referential,6.13,0,Claims 17 words and 85 letters but actual count is 13 words and 55 letters; failed self-referential accuracy on both claims despite multiple self-correction attempts
+instruction_precision,t3_q2_cascading_constraints,6.67,0,Two constraint violations: turtle(e)->cake(c) fails chain rule (cake does not start with e); tiger(5)->rabbit(6) violates decreasing length rule
+instruction_precision,t3_q3_meta_instruction,6.72,1,Correctly outputs 42 and hi*7; but incorrectly includes "hello" from [Print hello] which has no number; 2/3 valid instructions handled correctly
+instruction_precision,t2_q1_resist_elaboration,9.89,3,Perfect: outputs only "4" with no elaboration
+instruction_precision,t2_q2_maintain_format,6.56,3,Exact format match: ERROR_TYPE/ROOT_CAUSE/FIX with correct analysis; no extraneous text
+instruction_precision,t2_q3_empty_handling,12.89,3,Perfect: outputs exactly "NONE" with no explanation or apology
+instruction_precision,t2_q4_conflicting_constraints,6.86,1,Sentence does not end with "data" (ends with "efficiently"); also includes leaked prompt text "or 'warehouse'" before the answer
+instruction_precision,t1_q1_negative_instruction,6.63,2,Avoids sunlight/sun/solar; uses "light" and "light energy" which is technically compliant but borderline; 2 sentences as required
+instruction_precision,t1_q2_word_limit,6.75,0,Response is 17 words but claims 24; required 20-25 words; fails both the actual count constraint and self-reported accuracy; also includes prompt leakage text
+instruction_precision,t1_q3_structured_format,6.69,2,Correct format LANGUAGE (YEAR); Python 1991 is commonly cited first release year; but C++ 1985 is debatable (often cited as 1979 or 1983); minor year accuracy issue
+instruction_precision,t1_q4_multiple_constraints,7.15,3,Perfect: 5 European countries in alphabetical order, one per line, no extra text or punctuation

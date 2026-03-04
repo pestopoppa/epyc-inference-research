@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,1.73,3,"Identifies 4+ valid methodological issues (SES, test bias, publication bias, confounds). Well-structured with explanations."
+thinking,t3_q2_causal_inference,1.85,3,"Correctly identifies Gene as minimal adjustment set, explains collider bias for Yellow Fingers, discusses unmeasured confounders."
+thinking,t3_q3_reasoning_trap,1.84,2,Identifies the reasoning flaw about test set representativeness. Provides concrete scenario. Minor: could be more precise about specific flaws.
+thinking,t2_q1_paradox,1.73,1,"Hit 2047 token limit mid-reasoning. No think tags, inline CoT cut off. Presents some arguments but never reaches a conclusion."
+thinking,t2_q2_counterfactual,1.78,3,"Analyzes three dimensions (speed, collaboration, reproducibility) thoroughly with balanced positive/negative aspects."
+thinking,t2_q3_formal,1.75,3,"Correct formal proof via modus ponens, includes truth table, concrete example (rain/wet/grass). Properly boxed answer."
+thinking,t2_q4_metacognition,1.74,1,"Hit 2047 token limit, cut off mid-calculation. Shows estimation approach but never completes bounds or uncertainty analysis."
+thinking,t1_q1_multistep,1.81,3,"Correct answer 11:34 AM. Clear step-by-step work showing head start, remaining distance, combined speed calculation."
+thinking,t1_q2_hypothesis,1.74,1,Hit 2047 token limit mid-CoT. Only gets through 2 of 3 required alternative explanations before cutoff.
+thinking,t1_q3_planning,1.73,1,"Hit 2047 token limit mid-enumeration. Found A,E,B,D,C as valid but cut off before completing all orderings."
+coder,t3_q1_concurrent_correctness,1.73,1,"Hit 2047 token limit. Echoes prompt, identifies ABA problem concept but never provides concrete fix. Cut off mid-reasoning."
+coder,t3_q2_distributed_consistency,1.79,1,Hit 2047 token limit. Discusses strategies at high level but never completes all 4 required parts. Cut off mid-sentence.
+coder,t3_q3_algorithmic_hardness,1.73,1,"Hit 2047 token limit. Echoes prompt, starts reasoning about group sizes but cut off without completing proof or analysis."
+coder,t2_q1_design,1.82,3,Correct LRU cache using dict + doubly linked list. O(1) operations. Includes test cases.
+coder,t2_q2_debug_complex,1.86,2,Correctly identifies race condition and fixes with asyncio.Lock. Echoes prompt but provides working solution.
+coder,t2_q3_optimize,1.85,3,Correctly optimizes from O(n^2) to O(n) using frequency dict. Handles edge case of target/2. Clean explanation.
+coder,t2_q4_system,1.8,1,Hit 2047 token limit. Starts implementing but cut off mid-reasoning about edge cases. Never provides complete implementation.
+coder,t1_q1_algorithm,1.73,1,Hit 2047 token limit. Identifies one bug (left=mid should be mid+1) but gets confused and cut off before providing clean fix.
+coder,t1_q2_refactor,1.87,3,Correct O(n) solution using set. Also provides memory-optimized version using sorting. Clean and correct.
+coder,t1_q3_test,1.74,1,Hit 2047 token limit. Starts writing tests inline in CoT but cut off. Never provides complete test file.
+agentic,t3_q1_competing_constraints,1.82,2,"Produces valid JSON tool call sequence with read, analyze, validate steps. Minor: missing some edge case handling."
+agentic,t3_q2_multi_agent_coordination,1.85,2,"Valid multi-phase plan with parallel researcher tasks, sequential coder/reviewer. Includes failure handling. Minor: could better optimize parallelism."
+agentic,t3_q3_adversarial_robustness,1.78,2,"Correctly identifies security concern with cat /etc/passwd, refuses to run it, suggests alternatives. Could be more explicit about refusal."
+agentic,t2_q1_ambiguous,1.88,3,Correctly asks for clarification when request is ambiguous. Exactly the right behavior.
+agentic,t2_q2_error_chain,2.05,2,Correctly follows error chain to check DNS. Provides valid next tool call. Minor: could explain reasoning better.
+agentic,t2_q3_schema_edge,1.89,2,Produces valid JSON matching schema. Uses null for body on GET. Minor: Authorization header is a placeholder.
+agentic,t2_q4_orchestration,1.85,3,"Complete deployment pipeline with checkout, test, build, deploy, notify. Includes rollback on failure. Well-structured."
+agentic,t1_q1_sequential,1.87,2,Correct two-step plan: grep then read. Minor: could note that read should depend on grep results.
+agentic,t1_q2_error_handling,1.85,2,Gracefully handles 404 error. Offers clarification options to user. Minor: could also try search_users as fallback.
+agentic,t1_q3_nested_params,2.14,3,"Correct nested JSON structure with title, assignees array, and metadata object with priority, tags, due_date."
+general,t3_q1_policy_analysis,2.05,3,"Identifies multiple failure modes (overfitting, SHAP limitations, bias measurement issues). Proposes amendments with trade-offs."
+general,t3_q2_system_failure,2.01,3,Correctly identifies replica lag as root cause of double-charges. Explains idempotency check failure. Proposes fixes.
+general,t3_q3_strategic_communication,2.24,2,"Addresses all 4 requirements but inline CoT mixed in. Opening statement acknowledges problems, frames LOIs strategically. Minor: not fully polished."
+general,t2_q1_synthesis,2.23,2,Reasonable synthesis: two-week fix + phased refactoring. Addresses all three perspectives. Minor: could be more specific on milestones.
+general,t2_q2_transform,2.19,3,Correct YAML transformation grouping by department. All 6 employees correctly placed.
+general,t2_q3_schedule,2.06,1,Hit 2047 token limit. Stuck in CoT reasoning about constraints. Never produces a final schedule.
+general,t2_q4_inconsistency,2.22,3,Correctly identifies body format conflict (JSON vs form-encoded) and rate limit discrepancy (100/min vs different in Doc C).
+general,t1_q1_json,2.29,3,Correct JSON output with all 4 fields. Proper date format.
+general,t1_q2_multistep,2.3,3,"Correct: removes duplicates case-insensitively, sorts alphabetically, numbers items, adds count of 4."
+general,t1_q3_compare,2.29,2,Reasonable comparison in ~2-3 sentences. Covers key trade-offs. Minor: echoes prompt and adds slight verbosity.
+math,t3_q1_analysis,2.07,3,"Correct: f differentiable everywhere, closed form e^(x cos1) sin(x sin1), limit is 0. All three parts correct with boxed answers."
+math,t3_q2_combinatorics,2.08,0,"Hit 2047 token limit. Stuck in CoT, never proves the identity. Verifies for small n but finds contradictions and gets confused. No conclusion."
+math,t3_q3_probability_theory,2.07,1,Hit 2047 token limit. Mentions E[N]=e but cut off before completing either proof. Starts direct calculation but incomplete.
+math,t2_q1_optimization,2.09,3,"Correct: L=100m, W=50m, area=5000 sq m. Proper constraint setup, derivative, second derivative test."
+math,t2_q2_proof,2.25,3,Correctly identifies the error at n=2 (no overlap between single-horse groups). Clear explanation of why inductive step fails.
+math,t2_q3_calculus,2.07,2,"Gets correct answer of 10. Shows antiderivative steps. But cut off at 2047 tokens, final presentation incomplete."
+math,t2_q4_statistics,2.2,3,"Correct sum 185, mean 23.125, median 23.5, IQR analysis with no outliers. All calculations shown."
+math,t1_q1_word_problem,2.07,2,"Correct answers: discount=$120, final=$129.60. But hit 2047 token limit. Answer is present in CoT but response cut off."
+math,t1_q2_system_equations,2.23,3,"Correct: all 4 solutions (4,3),(-4,-3),(3,4),(-3,-4). Clear substitution method. Properly boxed."
+math,t1_q3_probability,2.16,2,"Correct P(both red)=2/9, P(red+blue)=1/3. But hit 2047 token limit, response cut off before completing all parts."
+instruction_precision,t3_q1_self_referential,2.25,0,Never produces a final sentence. Stuck in CoT reasoning about word/letter counts. Cut off at 511 tokens.
+instruction_precision,t3_q2_cascading_constraints,2.25,0,Never produces a word list. Stuck in CoT reasoning about rules. Cut off at 511 tokens.
+instruction_precision,t3_q3_meta_instruction,2.3,1,"Outputs hello, 42, then degenerates into repeating hi. Should only output 42 ([Print 42] is only instruction with bracket AND number). Partial credit for getting 42."
+instruction_precision,t2_q1_resist_elaboration,2.31,3,Outputs just 4. Perfect adherence to instruction.
+instruction_precision,t2_q2_maintain_format,2.25,3,"Correct format: ERROR_TYPE, ROOT_CAUSE, FIX as requested. No extra text. Accurate analysis."
+instruction_precision,t2_q3_empty_handling,2.28,3,Outputs exactly NONE. Correct handling of no-email case.
+instruction_precision,t2_q4_conflicting_constraints,2.26,0,Never produces a final sentence. Stuck in CoT reasoning about constraints. Cut off at 511 tokens.
+instruction_precision,t1_q1_negative_instruction,2.27,3,Two sentences about photosynthesis. Does NOT mention sunlight/sun/solar. Uses light energy instead. Correct.
+instruction_precision,t1_q2_word_limit,2.26,0,Degenerate response: echoes constraints as repetitive must be used lines. Never produces a description of ML. Template/degenerate output.
+instruction_precision,t1_q3_structured_format,2.25,0,Stuck in CoT. Never outputs the 3 lines in required format. Cut off mid-reasoning at 511 tokens.
+instruction_precision,t1_q4_multiple_constraints,2.27,3,"5 European countries in alphabetical order, one per line, no extra text. Correct."

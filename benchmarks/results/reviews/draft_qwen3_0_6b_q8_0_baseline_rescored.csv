@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,73.48,1,Prompt echo; adds fabricated question 5 not in original prompt; identifies 3 failure modes but analysis is shallow and repetitive (9x repeated line); response truncates mid-sentence
+general,t3_q2_system_failure,63.2,1,Prompt echo; partially correct double-charge explanation via replica lag; 7x line repetition; response truncates mid-sentence; missing concrete architecture proposals
+general,t3_q3_strategic_communication,67.25,1,Prompt echo; produces partial board statement but repetitive (6x); ends with duplicate Final Answer blocks; lacks strategic depth and specific financial proposals
+general,t2_q1_synthesis,67.92,0,Catastrophic repetition loop (101x identical line); prompt echo; never produces a concrete recommendation; degenerate output
+general,t2_q2_transform,65.33,1,Prompt echo; 23x line repetition; produces grouped YAML but retains redundant dept field in nested items; format not clean
+general,t2_q3_schedule,67.0,0,Incorrect answer: claims impossible but valid schedules exist (e.g. team sync 9-10 then Alice-Dave 2pm then Bob-Dave 3pm); severe repetition of Impossible in code blocks
+general,t2_q4_inconsistency,65.76,2,Prompt echo but substantive content; correctly identifies JSON vs form-encoded body inconsistency and rate limit discrepancy (100/min vs 1000/hr); response trails off but core analysis is sound
+general,t1_q1_json,66.73,0,Correct JSON output but catastrophic repetition (51x identical JSON block); prompt echo; degenerate looping output
+general,t1_q2_multistep,70.03,0,Prompt echo; fabricates extra banana item not in original list; 13x repetition; never produces clean numbered deduplicated sorted output
+general,t1_q3_compare,64.36,0,Catastrophic repetition (23x identical comparison paragraph); prompt echo; comparison content exists but is endlessly looped; degenerate output
+thinking,t3_q1_methodological_critique,66.04,1,Prompt echo; identifies 4 methodological issues but explanations are shallow; 7x line repetition; cuts off
+thinking,t3_q2_causal_inference,67.88,0,Wrong minimal adjustment set (claims Cancer Yellow Fingers Gene - correct is Gene only); fabricates causal effect value 0.01; 25x line repetition; prompt echo
+thinking,t3_q3_reasoning_trap,65.18,1,Prompt echo; correctly identifies accuracy-comparison flaw; but concrete scenario is vague and merely restates the premise; 12x repetition
+thinking,t2_q1_paradox,68.37,1,Prompt echo; mentions two philosophical positions but analysis is surface-level; 11x repetition; no clear argued conclusion
+thinking,t2_q2_counterfactual,66.77,0,Catastrophic repetition loop (84x identical question line); prompt echo; never substantively addresses the three dimensions; degenerate output
+thinking,t2_q3_formal,68.75,0,Initially identifies hypothetical syllogism correctly but constructs invalid counterexample where premises are not met; concludes valid logical principle is false; self-contradictory reasoning
+thinking,t2_q4_metacognition,70.91,0,Catastrophic repetition loop (31x think about the problem again); prompt echo; never produces estimates bounds or key assumptions; degenerate output
+thinking,t1_q1_multistep,74.02,0,Correct answer (11:34 AM) with valid working but catastrophic repetition (40x identical answer line); prompt echo; degenerate looping
+thinking,t1_q2_hypothesis,72.98,0,Catastrophic repetition loop (87x identical line); prompt echo; never provides the requested 3 alternative explanations; degenerate output
+thinking,t1_q3_planning,64.81,0,Catastrophic repetition loop (30x apply the same format); prompt echo; never enumerates valid plant orderings; degenerate output

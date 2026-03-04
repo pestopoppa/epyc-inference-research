@@ -1,0 +1,48 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,18.96,0,Echoes prompt; rambling; incomplete plan; typo /data/sale.csv; no validation_checks or fallback_strategy
+agentic,t3_q2_multi_agent_coordination,16.9,0,Rambling; confuses stock symbol; no coherent orchestration plan produced
+agentic,t3_q3_adversarial_robustness,17.74,1,Identifies security concern and /etc/passwd risk but rambles; incomplete coverage of 5 parts; no structured policy
+agentic,t2_q1_ambiguous,21.1,0,Degenerate repetition loop; never produces tool call or coherent clarification
+agentic,t2_q2_error_chain,18.96,0,Uses non-existent tool check_health; rambles; never identifies correct next action
+agentic,t2_q3_schema_edge,17.24,0,Incorrect JSON output; endpoint missing /; hallucinates extra content; rambles about token format
+agentic,t2_q4_orchestration,17.3,0,Completely wrong plan with nonsense steps; confused about branch naming; no valid deployment plan
+agentic,t1_q1_sequential,17.09,0,Hallucinates unrelated token replacement task; no valid JSON tool call array produced
+agentic,t1_q2_error_handling,21.6,0,Repeats same failing get_user call; rambles; no useful error recovery
+agentic,t1_q3_nested_params,19.49,0,Hallucinates additional prompt; rambles; no valid JSON tool call produced
+long_context,t3_q1_multi_hop_reasoning,,0,Echoes entire prompt (241KB); no reasoning or answer produced; likely degenerate
+long_context,t3_q2_contradiction_detection,1.31,0,Echoes prompt; ends in degenerate repetition loop; no contradictions identified
+long_context,t3_q3_evolving_requirements,,0,Echoes prompt; rambles about unrelated email threads; no requirements analysis
+long_context,t2_q1_deep_needle,,0,Echoes log lines without analysis; no needle found or reported
+long_context,t2_q2_synthesis,,0,Echoes financial data; never produces synthesis; truncated before any summary
+long_context,t1_q2_multi_file,5.57,0,Echoes code files; ends with nonsensical fix; no proper multi-file analysis
+general,t3_q1_policy_analysis,19.7,0,Rambles without structure; no clear failure modes identified; no amendments proposed
+general,t3_q2_system_failure,19.85,0,Misidentifies root cause as non-unique key; real issue is replica lag during idempotency check; confused
+general,t3_q3_strategic_communication,20.01,0,Degenerate repetition loop (I am a number); no board statement produced
+general,t2_q1_synthesis,20.83,0,Degenerate dash repetition loop; no synthesis recommendation produced
+general,t2_q2_transform,19.45,0,No valid YAML produced; rambles about group method; outputs boxed group nonsensically
+general,t2_q3_schedule,20.89,0,No valid schedule produced; confuses meeting types; rambles without resolution
+general,t2_q4_inconsistency,20.42,1,Identifies body format and rate limit inconsistencies but buried in rambling; incomplete analysis
+general,t1_q1_json,22.62,0,Wrong role (Senior not Senior Engineer); wrong date (2.03.01); hallucinates other names; not clean JSON
+general,t1_q2_multistep,20.72,0,Hallucinates items not in original list; never produces correct output; rambles about counting
+general,t1_q3_compare,19.44,0,No concise comparison produced; extensive rambling; never delivers 2-3 sentence answer
+instruction_precision,t3_q1_self_referential,29.88,0,No valid self-referential sentence produced; rambles about letter counting
+instruction_precision,t3_q2_cascading_constraints,29.78,0,No valid word list produced; rambles about problem structure
+instruction_precision,t3_q3_meta_instruction,29.32,0,Never produces correct output for meta-instructions; confused about filtering rules
+instruction_precision,t2_q1_resist_elaboration,31.75,0,Wrong answer (never outputs 4); degenerate repetition of 2; violates only-the-number instruction
+instruction_precision,t2_q2_maintain_format,27.22,0,Degenerate numeric repetition loop; no ERROR_TYPE/ROOT_CAUSE/FIX format produced
+instruction_precision,t2_q3_empty_handling,31.0,0,Completely off-topic (discusses sum of even numbers); never outputs NONE
+instruction_precision,t2_q4_conflicting_constraints,30.44,0,Degenerate 0.0.0.0 repetition loop; no valid sentence produced
+instruction_precision,t1_q1_negative_instruction,30.03,0,Violates constraint by mentioning sun/sunlight multiple times; degenerate [1] repetition loop
+instruction_precision,t1_q2_word_limit,30.84,0,No 20-25 word description produced; extensive rambling
+instruction_precision,t1_q3_structured_format,30.53,0,No clean LANGUAGE (YEAR) output produced; rambles about formatting rules
+instruction_precision,t1_q4_multiple_constraints,30.85,0,Never lists countries; interprets question as word puzzle; completely wrong
+thinking,t3_q1_methodological_critique,20.14,1,Mentions selection bias and SES confound but rambling; never delivers 4 clear structured issues
+thinking,t3_q2_causal_inference,19.82,1,Discusses Gene and adjustment but confused and incomplete; never clearly answers all 3 parts
+thinking,t3_q3_reasoning_trap,18.91,0,Mentions overfitting but never constructs required concrete scenario; rambles
+thinking,t2_q1_paradox,20.06,0,Confused about thought experiment name; never presents 2 clear philosophical positions; rambles
+thinking,t2_q2_counterfactual,19.46,0,Degenerates into repetitive nonsense about speed of light; no coherent counterfactual analysis
+thinking,t2_q3_formal,18.74,0,Mentions valid/tautology but never produces formal proof; confused; ends with getting a headache
+thinking,t1_q3_planning,21.14,1,Identifies constraints correctly but never completes enumeration of valid orderings; truncated
+coder,t1_q1_algorithm,21.57,1,Identifies both bugs conceptually but presentation is confused; shows both correct and incorrect fixes
+coder,t1_q2_refactor,14.01,0,Degenerate number repetition loop; no refactored versions produced
+math,t2_q1_optimization,23.29,0,Wrong answer (mentions 1600 sq ft); degenerates into repetition; never reaches correct 5000 sq m

@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,15.7,2,"Valid JSON plan with steps, validation, fallback. Echoes prompt. Schema detection reasonable but code has bugs (pct_change on wrong axis). Minor issues."
+agentic,t3_q2_multi_agent_coordination,18.76,2,"Correct agent assignment, parallel groups, context passing. Phase 1+2 total 60s budget issue (sequential=60s, over budget). Failure handling is generic retry. Reasonable overall."
+agentic,t3_q3_adversarial_robustness,18.02,2,"Identifies command injection, refuses to run, handles social engineering. Encoded example is weak (backslash-semicolon not really encoded). Policy is generic but covers basics."
+agentic,t2_q1_ambiguous,20.86,2,Both asks clarifying question and provides tool call with explanation. Reasonable choice of Slack for urgency. Good approach.
+agentic,t2_q2_error_chain,20.35,3,"Correct reasoning: connection refused -> check DNS first. Good diagnostic chain, proper JSON tool call format."
+agentic,t2_q3_schema_edge,21.43,3,"Perfect JSON: /users endpoint, GET method, body=null, Authorization Bearer header. All schema constraints satisfied."
+agentic,t2_q4_orchestration,20.61,2,"Reasonable deployment pipeline with test/deploy/rollback steps. Missing some detail (no staging check, no approval gate). Has on_test_fail and on_deploy_fail handlers."
+agentic,t1_q1_sequential,22.1,1,Response is terse array of tool calls but format is non-standard (concatenated name+params). Missing explanation of sequencing logic. Barely functional.
+agentic,t1_q2_error_handling,21.86,2,Correct tool call for get_user with ID 123. Shows understanding of the task. Missing explicit error handling logic but adequate.
+agentic,t1_q3_nested_params,21.63,3,"Perfect nested JSON with title, assignees array, metadata object with priority, tags array, and due_date."
+general,t3_q1_policy_analysis,13.65,2,"Thorough policy analysis with failure modes, amendments, and trade-offs. Verbose but substantive. Covers robustness, explainability, bias."
+general,t3_q2_system_failure,10.86,2,Correctly identifies replica lag + idempotency check race condition. Two fix options with trade-offs. Good monitoring suggestions.
+general,t3_q3_strategic_communication,,1,Excessive repetition: repeats the entire statement multiple times with minor variations. Contains useful content but degenerate output pattern with 'Let me know' padding.
+general,t2_q1_synthesis,14.06,3,"Excellent synthesis: phased approach with specific dollar amounts, timeline, and balance across all three perspectives."
+general,t2_q2_transform,13.99,3,Correct YAML transformation grouped by department with proper nesting. All 4 employees correctly placed.
+general,t2_q3_schedule,,2,"Extended thinking/reasoning shown. Final schedule (Team sync 9-10am, Alice-Dave 2-2:30pm, Bob-Dave 3-3:30pm) is valid: respects all constraints including Dave availability and no back-to-back. Messy reasoning path but correct conclusion."
+general,t2_q4_inconsistency,12.63,3,Correctly identifies body format inconsistency (JSON vs form-encoded) and rate limit discrepancy (100/min vs 1000/hr). Clear analysis.
+general,t1_q1_json,19.59,3,"Perfect JSON extraction: name, role, department, start_date all correct."
+general,t1_q2_multistep,21.4,0,"WRONG: Hallucinated items not in input (Elderberry, Fig, Grape, Grapefruit). Input has 4 unique items (apple, banana, cherry, date), model claims 8. Fundamental error."
+general,t1_q3_compare,17.92,1,"Asked for 2-3 sentences, produced 6000+ chars of detailed comparison. Ignores format constraint entirely. Content is good but instruction violation is severe."
+long_context,t3_q1_multi_hop_reasoning,,0,"Claims documents don't contain relevant info about Company A, B, etc. Repeats this claim multiple times. Failed to extract information from context. Repetitive output."
+long_context,t3_q2_contradiction_detection,1.54,1,Attempts contradiction detection but produces confused analysis. Self-corrects partway through but output is disorganized. Identifies some contradictions but unreliable.
+long_context,t3_q3_evolving_requirements,2.19,0,Claims no notification system exists in documentation. Repeats this conclusion multiple times. Failed to engage with the actual content.
+long_context,t2_q1_deep_needle,,0,Empty response. No content produced.
+long_context,t2_q2_synthesis,1.41,1,"Generic synthesis about performance, market factors, competitors. Vague and repetitive. Lacks specific data points or concrete findings from the documents."
+long_context,t2_q3_architecture,,0,Empty response. No content produced.
+long_context,t1_q1_needle,4.99,3,Successfully extracted the API key: sk-proj-7x9mK2nP4qR8sT1uV3wY5zA. Correct and concise.
+long_context,t1_q2_multi_file,5.37,2,Reproduces file contents with class structures. Shows understanding of multi-file codebase. Some useful analysis but mostly code echo.
+long_context,t1_q3_extraction,3.89,0,"Severe repetition: 'March 1, 2024' appears 19 times, 'March 18, 2024' 19 times, 'March 27, 2024' 23 times. Degenerate looping output."
+coder,t3_q1_concurrent_correctness,19.33,3,"Correctly identifies ABA problem, explains scenario, provides tagged pointer fix with code, explains why fix works. Thorough and accurate."
+coder,t3_q2_distributed_consistency,17.81,2,"Covers LWW, CRDTs, client-side, quorum resolution. Shopping cart->CRDT, banking->quorum recommendations correct. Verbose with repeated sections and fake references."
+coder,t3_q3_algorithmic_hardness,19.42,2,Correct adversary argument for Omega(n) lower bound. Correct recurrence for median-of-medians. Expected comparisons for randomized select stated as 2n+O(log n) which is approximately correct. Some repeated content.
+coder,t2_q1_design,16.14,2,"Two implementations: first with list (O(n) get), second with doubly-linked list + hashmap (O(1)). Second is correct LRU. First has O(n) remove which isn't optimal. Shows progression but initial impl is weak."
+coder,t2_q2_debug_complex,13.32,3,"Correctly identifies async race condition, explains step-by-step, provides correct fix with asyncio.Lock. Clean and accurate."
+coder,t2_q3_optimize,13.25,3,Correct O(n) hash map solution for pair counting. Clear explanation with worked example. Handles frequency tracking properly.
+coder,t2_q4_system,12.73,2,Working sliding window rate limiter using deque. Validates inputs. Not fully thread-safe (acknowledged). Clean implementation.
+coder,t1_q1_algorithm,11.2,2,"Identifies both bugs in binary search (left=mid->mid+1, right=mid->mid-1). Provides corrected code. Self-corrects reasoning. Also fixes while condition to <=."
+coder,t1_q2_refactor,11.06,2,Two versions: speed (set-based O(n)) and memory (O(n^2) scanning). Correct trade-off explanation. Then generates self-congratulatory review text which is unnecessary noise.
+coder,t1_q3_test,13.06,3,"Comprehensive pytest test cases: normal, negative, float, zero division, edge cases. Uses pytest.approx for floats. Good coverage."
+math,t3_q1_analysis,9.96,3,"Correct: proves differentiability via uniform convergence, finds closed form Im(e^{xe^i}), computes limit=0 using cos(1)<1. Rigorous and correct."
+math,t3_q2_combinatorics,8.36,1,"Attempts combinatorial proof with sign-reversing involution but fails to complete it. Gets lost in multiple approaches, never reaches valid proof. Honest about difficulty but incomplete."
+math,t3_q3_probability_theory,9.81,3,Correct: E[N]=e. Both direct calculation (simplex volumes 1/(n-1)!) and geometric argument presented. Clean derivation.
+math,t2_q1_optimization,8.57,2,"Correct setup and solution: x=100, y=50, A=5000. Second derivative test included. Extremely repetitive conclusion section but math is right."
+math,t2_q2_proof,7.59,3,Correctly identifies the error: inductive step fails at n=1 because groups don't overlap. Clear explanation of why the overlap argument breaks.
+math,t2_q3_calculus,12.45,3,"Perfect: antiderivative x^3+x^2-x, F(2)=10, F(0)=0, integral=10. Clear steps."
+math,t2_q4_statistics,16.17,0,"CRITICAL MATH ERROR: Claims sum=205, actual sum=185. Mean=25.625 (wrong, should be 23.125). All downstream calculations (stdev, outlier bounds) are wrong due to incorrect sum. 12+15+18+22+25+28+30+35=185 not 205."
+math,t1_q1_word_problem,18.66,3,"Correct: discount $30, price $120, tax $9.60, final $129.60, percentage 86.4%. All steps shown clearly."
+math,t1_q2_system_equations,19.66,3,"All four solutions found and verified: (4,3), (-4,-3), (3,4), (-3,-4). Clean substitution approach."
+math,t1_q3_probability,19.39,3,"Correct: P(both red)=2/9, P(one red one blue)=1/3. Both calculated properly with verification."
+instruction_precision,t3_q1_self_referential,19.67,0,"Failed completely. Multiple attempts, never produces a valid self-referential sentence. Claims 13 words but doesn't verify, claims 30 letters incorrectly. Degenerate retry loop."
+instruction_precision,t3_q2_cascading_constraints,19.7,0,"Degenerate: repeats same 5 words (elephant, tiger, rabbit, tortoise, eagle) dozens of times. Recognizes constraint violations but never fixes them. Severe repetition loop."
+instruction_precision,t3_q3_meta_instruction,20.98,1,"Partially correct: outputs hello, 42, and 7x hi. But valid instructions with numbers are [Print 42] and [Say 7 times: hi]. [Print hello] has no number so should be excluded. Also adds extra explanation text."
+instruction_precision,t2_q1_resist_elaboration,21.95,3,Perfect: responds with just '4'. No elaboration.
+instruction_precision,t2_q2_maintain_format,21.2,3,"Correct structured format: ERROR_TYPE, ROOT_CAUSE, FIX. Appropriate content for each field."
+instruction_precision,t2_q3_empty_handling,21.58,3,Perfect: outputs 'NONE' as instructed when no emails found. No explanation or apology.
+instruction_precision,t2_q4_conflicting_constraints,18.17,2,"Sentence: 'A database efficiently organizes and retrieves data.' 7 words (<12), starts with A, ends with 'data', no store/storage. Ends with 'data.' (period) not 'data' - minor punctuation issue."
+instruction_precision,t1_q1_negative_instruction,22.27,3,"Two sentences explaining photosynthesis without mentioning sunlight, sun, or solar. Uses 'energy from light' instead. Perfect constraint adherence."
+instruction_precision,t1_q2_word_limit,22.64,2,20 words - at the low end of 20-25 range but technically valid. Adds 'Count: 19 words' which is wrong (actual is 20) and violates the implicit constraint of just providing the description.
+instruction_precision,t1_q3_structured_format,20.27,3,"Perfect: Python (1991), Java (1995), C++ (1985). Exact format, one per line, no extras."
+instruction_precision,t1_q4_multiple_constraints,22.58,3,"Five European countries in alphabetical order, one per line, no extra text: Albania, Belgium, France, Germany, Ireland. All constraints met."
+thinking,t3_q1_methodological_critique,25.91,3,"Three distinct methodological flaws: selection bias/confounding, measurement bias, regression to mean. Each with clear mechanism explanation. Excellent critique."
+thinking,t3_q2_causal_inference,20.34,1,WRONG: Claims minimal adjustment set is {Yellow Fingers} but correct answer is {Gene}. Yellow Fingers is a descendant of Smoking (collider path issue). Conditioning on Yellow Fingers does NOT block the backdoor Gene->Smoking<-...->Cancer. Fundamental causal inference error.
+thinking,t3_q3_reasoning_trap,17.16,2,"Correctly identifies the flaw: test set bias, overfitting to distribution, diversity vs specialization. Face recognition example is good. Somewhat verbose and repetitive."
+thinking,t2_q1_paradox,11.38,2,Covers traditional continuity view and materialist view. Takes a position (continuity). Reasonable philosophical analysis but somewhat verbose and doesn't explore more modern frameworks.
+thinking,t2_q2_counterfactual,10.58,2,"Good counterfactual analysis: slower dissemination, proximity-based collaboration. Second-order effects identified. Verbose but substantive."
+thinking,t2_q3_formal,13.15,3,Correct formal proof using conditional proof/modus ponens. Also provides truth table verification and concrete example. Thorough and accurate.
+thinking,t2_q4_metacognition,13.69,2,"Standard Fermi estimation approach. Reasonable assumptions (2.7M population, 1/100 piano ownership). Identifies key uncertainties. Gives range 200-800. Adequate."
+thinking,t1_q1_multistep,21.65,3,"Correct: t=18/7 hours after 9AM = 11:34 AM (approximately). Setup, algebra, and verification all correct. 60t+80(t-1)=280."
+thinking,t1_q2_hypothesis,21.9,3,"Three distinct alternative explanations: SES differences, study habits, pre-existing motivation. Each well-explained with clear reasoning."
+thinking,t1_q3_planning,19.4,0,"WRONG: Claims only valid ordering is A B D E C, but D is at position 3 and C at position 5 - C is NOT immediately after D. Violates the DC adjacency constraint. Correct answers are A B E D C and A E B D C. Model found neither."

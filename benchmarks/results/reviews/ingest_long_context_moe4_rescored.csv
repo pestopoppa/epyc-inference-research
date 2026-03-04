@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+math,t3_q1_analysis,8.09,3,All 3 parts correct: differentiability via Weierstrass M-test; closed form f(x)=e^(x cos1) sin(x sin1); limit=0 via squeeze theorem
+math,t3_q2_combinatorics,6.79,1,Generating function approach correct but arrives at [x^n] x^n(1+x)^n = 1 contradicting RHS. Model recognizes error but runs out of tokens without resolution
+math,t3_q3_probability_theory,6.23,2,Correct answer E[N]=e via direct calculation using Irwin-Hall CDF P(S_n<=1)=1/n!. Part (b) not completed due to token limit
+math,t2_q1_optimization,6.3,3,Perfect: correct setup x+2y=200 A=200y-2y^2 vertex at y=50 x=100 max area=5000 sq meters
+math,t2_q2_proof,8.16,3,Correct identification: inductive step fails at n=1->n=2 because two singleton subsets are disjoint
+math,t2_q3_calculus,8.01,3,Perfect: antiderivative x^3+x^2-x F(2)-F(0)=10-0=10
+math,t2_q4_statistics,7.45,3,Sum=185 correct mean=23.125 median=23.5 std~7.355 IQR=12.5 no outliers. All verified
+math,t1_q1_word_problem,8.23,3,All 3 parts correct: $120 after discount $129.60 after tax 86.4% of original
+math,t1_q2_system_equations,7.74,3,"All 4 real solutions found correctly: (4,3) (3,4) (-3,-4) (-4,-3)"
+math,t1_q3_probability,8.0,3,Both answers correct: P(both red)=2/9 P(one red one blue)=1/3
+coder,t3_q1_concurrent_correctness,7.83,2,Correctly identifies ABA problem concept with valid scenario. Truncated before providing fix code
+coder,t3_q2_distributed_consistency,7.87,1,Extremely repetitive self-correcting deliberation. Never settles on final strategies or reaches parts 2-4
+coder,t3_q3_algorithmic_hardness,7.68,1,Part 1 adversary argument rambling. Hallucinates extra questions not in prompt. Never reaches parts 2-3
+coder,t2_q1_design,0,0,Empty response (1 token). No LRU cache implementation
+coder,t2_q2_debug_complex,8.12,3,Correctly identifies race condition and provides correct fix using asyncio.Lock
+coder,t2_q3_optimize,16.06935811153029,3,Correct O(n) hash map solution with proper duplicate handling
+coder,t2_q4_system,8.18,3,Working sliding window rate limiter with deque. Clean code with edge case handling
+coder,t1_q1_algorithm,7.9099978201158345,2,Correctly identifies left=mid bug causing infinite loop. Truncated before identifying second bug
+coder,t1_q2_refactor,8.12,1,Correct analysis but hallucinates constraint (no set/dict). Truncated without final code
+coder,t1_q3_test,0,0,Empty response (1 token). No pytest test cases
+instruction_precision,t3_q1_self_referential,8.13,0,Never produces valid self-referential sentence. All tokens spent deliberating
+instruction_precision,t3_q2_cascading_constraints,7.93,0,Multiple failed attempts. Never produces valid 5-word chain meeting all constraints
+instruction_precision,t3_q3_meta_instruction,8.11,2,Correctly handles [Print 42] and [Say 7 times: hi]. Incorrectly includes [Print hello] which has no number. Degenerates into unrelated content
+instruction_precision,t2_q1_resist_elaboration,7.94,3,Perfect: responds with just 4
+instruction_precision,t2_q2_maintain_format,8.02,2,Correct format ERROR_TYPE/ROOT_CAUSE/FIX. Includes prompt echo before answer
+instruction_precision,t2_q3_empty_handling,7.99,3,Perfect: outputs exactly NONE
+instruction_precision,t2_q4_conflicting_constraints,7.86,2,Final sentence meets all constraints but includes extensive deliberation before it
+instruction_precision,t1_q1_negative_instruction,8.07,1,Uses ambient light (arguably violates spirit). Response is 3 sentences not 2
+instruction_precision,t1_q2_word_limit,8.09,1,First attempt 25 words but then extensive second-guessing. Multiple contradictory versions
+instruction_precision,t1_q3_structured_format,8.05,3,Perfect format: Python (1991) Java (1995) JavaScript (1995)
+instruction_precision,t1_q4_multiple_constraints,8.16,3,Perfect: Austria Belgium Denmark Finland France. Alphabetical one per line
+thinking,t3_q1_methodological_critique,7.9,2,Identifies 4 valid issues but publication bias is meta-level not study-level
+thinking,t3_q2_causal_inference,8.09,2,Part 1 correct ({Gene}). Part 2 wrong: Yellow Fingers is a collider descendant not mediator to Cancer. Part 3 reasonable
+thinking,t3_q3_reasoning_trap,8.09,3,Excellent: identifies distribution shift flaw. Concrete medical imaging scenario with clear mechanism
+thinking,t2_q1_paradox,7.27,3,Thorough two-position treatment with nuanced preference for continuity view
+thinking,t2_q2_counterfactual,6.16,3,Excellent analysis across all 3 dimensions with specific mechanisms and examples
+thinking,t2_q4_metacognition,6.27,3,Thorough Fermi estimation with clear assumptions bounds and uncertainty analysis
+thinking,t1_q1_multistep,6.24,3,Correct: trains meet at 11:34 AM. Clear step-by-step with verification
+thinking,t1_q2_hypothesis,6.48,3,Three strong alternative explanations with specific mechanisms
+thinking,t1_q3_planning,8.03,2,Correct systematic approach using DC block. Cases 1-2 eliminated. Truncated before completing
+thinking,t2_q3_formal,7.09,3,Correct proof of hypothetical syllogism. Good example. Correctly proves converse false
+agentic,t3_q1_competing_constraints,7.98,2,Reasonable plan with validation checks and fallback. JSON has syntax error (unclosed quote)
+agentic,t3_q2_multi_agent_coordination,7.96,1,Extensive deliberation but never produces requested JSON output. Truncated mid-analysis
+agentic,t3_q3_adversarial_robustness,7.08,2,Parts 1-3 well answered. Part 4 has degenerate base64 repetition. Part 5 never reached
+agentic,t2_q1_ambiguous,6.42,2,Chooses send_slack (reasonable). Valid JSON. Missing explanation sentence
+agentic,t2_q2_error_chain,8.09,3,Correct reasoning: connection_refused -> check DNS first. Clean JSON output
+agentic,t2_q3_schema_edge,8.13,3,Perfect JSON with correct endpoint method body and header
+agentic,t2_q4_orchestration,7.78,1,Incomplete deployment plan. Only git_checkout in steps. Invalid JSON syntax
+agentic,t1_q1_sequential,8.21,3,Correct tool call sequence: grep_search then read_file
+agentic,t1_q2_error_handling,7.76,2,Appropriately asks for clarification. Verbose with emoji but correct instinct
+agentic,t1_q3_nested_params,7.96,3,Perfect JSON tool call with correct nested metadata and array assignees
+general,t3_q1_policy_analysis,7.9,2,Good analysis of failure modes. Truncated before completing amendments section
+general,t3_q2_system_failure,7.98,3,Excellent: precise explanation of stale read from replica causing double-charge
+general,t3_q3_strategic_communication,6.78,2,Good strategic thinking but truncated before delivering actual opening statement
+general,t2_q1_synthesis,6.07,0,Degenerate output: model gets stuck repeating banned words in infinite loop. No recommendation produced
+general,t2_q2_transform,6.24,1,Identifies correct structure but never produces final YAML output. Truncated mid-implementation
+general,t2_q3_schedule,6.01,1,Begins systematic constraint analysis but truncated before producing valid schedule
+general,t2_q4_inconsistency,6.7,3,Correctly identifies both inconsistencies: body format and rate limit mismatch
+general,t1_q1_json,6.37,3,Perfect JSON output with correct field extraction
+general,t1_q2_multistep,7.92,1,Hallucinates extra items (fig grape) not in original prompt. Truncated without final list
+general,t1_q3_compare,8.15,3,Good 3-sentence comparison. Complete and concise

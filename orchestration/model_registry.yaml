@@ -666,7 +666,7 @@ roles:
       moe6_spec_lookup_tps: 47.11
       full_spec_tps: 41.75
       optimized_tps: 47.11
-      quality_pct: 90
+      quality_pct: 79  # rescored 2026-03-04 (was 90 from lazy scorer)
       speedup: 1.61x
       spec_acceptance_moe6: 70.1%
       spec_acceptance_full: 78.1%
@@ -917,6 +917,171 @@ roles:
       For complex problems, break down into sub-problems.
       Verify your answer before concluding.
       Reason carefully but stop once the conclusion is reached — no restating.
+
+  # =============================================================================
+  # Qwen3.5-35B-A3B Models (SSM+MoE Hybrid — Frontdoor Candidate)
+  # =============================================================================
+  qwen35_q4km:
+    tier: B
+    description: Qwen3.5-35B-A3B Q4_K_M — frontdoor candidate (SSM+MoE hybrid)
+    model:
+      name: Qwen3.5-35B-A3B-UD-Q4_K_M
+      path: unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 19
+      architecture: qwen35moe
+      baseline_experts: 8
+    candidate_roles:
+    - frontdoor
+    - coder
+    - general
+    - ingest
+    acceleration:
+      type: moe_expert_reduction
+      experts: 8
+      override_key: qwen35moe.expert_used_count
+    constraints:
+      forbid:
+      - eagle
+      reason: SSM checkpoint/restore enabled (WS1 Conditional Go, WS2 rebased). Eagle unsupported for hybrid.
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+    notes: >
+      75% Mamba layers + 25% attention. 40 total layers (30 recurrent, 10 attention).
+      Frontdoor target: beat 47.11 t/s (Qwen3-Coder-30B-A3B MoE6+spec+lookup).
+  qwen35_q4ks:
+    tier: B
+    description: Qwen3.5-35B-A3B abliterated Q4_K_S — frontdoor candidate
+    model:
+      name: Huihui-Qwen3.5-35B-A3B-abliterated-i1-Q4_K_S
+      path: mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf
+      quant: Q4_K_S
+      size_gb: 20
+      architecture: qwen35moe
+      baseline_experts: 8
+    candidate_roles:
+    - frontdoor
+    - coder
+    - general
+    - ingest
+    acceleration:
+      type: moe_expert_reduction
+      experts: 8
+      override_key: qwen35moe.expert_used_count
+    constraints:
+      forbid:
+      - eagle
+      reason: SSM checkpoint/restore enabled (WS1 Conditional Go, WS2 rebased). Eagle unsupported for hybrid.
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+    notes: Abliterated variant (mradermacher imatrix quant). Compare quality vs unsloth Q4_K_M.
+  qwen35_q5ks:
+    tier: B
+    description: Qwen3.5-35B-A3B abliterated Q5_K_S — quality/speed tradeoff
+    model:
+      name: Huihui-Qwen3.5-35B-A3B-abliterated-i1-Q5_K_S
+      path: mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf
+      quant: Q5_K_S
+      size_gb: 24
+      architecture: qwen35moe
+      baseline_experts: 8
+    candidate_roles:
+    - frontdoor
+    - coder
+    - general
+    - ingest
+    acceleration:
+      type: moe_expert_reduction
+      experts: 8
+      override_key: qwen35moe.expert_used_count
+    constraints:
+      forbid:
+      - eagle
+      reason: SSM checkpoint/restore enabled (WS1 Conditional Go, WS2 rebased). Eagle unsupported for hybrid.
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_q6k:
+    tier: B
+    description: Qwen3.5-35B-A3B abliterated Q6_K — higher quality
+    model:
+      name: Huihui-Qwen3.5-35B-A3B-abliterated-i1-Q6_K
+      path: mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q6_K.gguf
+      quant: Q6_K
+      size_gb: 29
+      architecture: qwen35moe
+      baseline_experts: 8
+    candidate_roles:
+    - frontdoor
+    - coder
+    - general
+    - ingest
+    acceleration:
+      type: moe_expert_reduction
+      experts: 8
+      override_key: qwen35moe.expert_used_count
+    constraints:
+      forbid:
+      - eagle
+      reason: SSM checkpoint/restore enabled (WS1 Conditional Go, WS2 rebased). Eagle unsupported for hybrid.
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_q8_0:
+    tier: B
+    description: Qwen3.5-35B-A3B abliterated Q8_0 — quality ceiling
+    model:
+      name: Qwen3.5-35B-A3B-abliterated-Q8_0
+      path: jiaojjjjje/Qwen3.5-35B-A3B-abliterated-GGUF/Qwen3.5-35B-A3B-abliterated-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 35
+      architecture: qwen35moe
+      baseline_experts: 8
+    candidate_roles:
+    - frontdoor
+    - coder
+    - general
+    - ingest
+    acceleration:
+      type: moe_expert_reduction
+      experts: 8
+      override_key: qwen35moe.expert_used_count
+    constraints:
+      forbid:
+      - eagle
+      reason: SSM checkpoint/restore enabled (WS1 Conditional Go, WS2 rebased). Eagle unsupported for hybrid.
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+    notes: Quality ceiling reference. Large (35GB) — may be slower than Q4/Q5 variants.
+
   minimax_m21_q4:
     tier: B
     description: MiniMax M2.1 Q4_K_M - 230B MoE (256 experts, 8 active) with thinking
@@ -1195,8 +1360,8 @@ roles:
       baseline_tps: 15.28
       optimized_tps: 20.0
       speedup: 1.3x
-      vl_score: "29/36 (81%)"
-      benchmark_date: 2026-01-27
+      vl_score: "11/12 (92%)"  # rescored 2026-03-04 (was 29/36=81%)
+      benchmark_date: 2026-03-04
     memory:
       residency: hot
       pinned: false
@@ -1205,7 +1370,7 @@ roles:
       api_format: openai_multimodal  # /v1/chat/completions with image_url content
     notes: |
       Only VL model that supports tool calls (agentic tasks).
-      For document figure analysis, use vision_qwen3_vl_4b (94% vs 81%).
+      For document figure analysis, use vision_qwen3_vl_4b (93% vs 92%).
       Keep for: screenshot analysis, UI automation, tool-using vision tasks.
       Server uses /v1/chat/completions with image_url content type.
   vision_escalation:
@@ -1229,8 +1394,8 @@ roles:
       baseline_tps: 19.0
       optimized_tps: 27.6
       speedup: 1.45x
-      vl_score: "27/36 (75%)"
-      benchmark_date: 2026-01-27
+      vl_score: "11/12 (92%)"  # rescored 2026-03-04 (was 27/36=75%)
+      benchmark_date: 2026-03-04
     memory:
       residency: hot
       pinned: false
@@ -2135,13 +2300,13 @@ roles:
       reason: VL model - no compatible text-only drafts
     performance:
       baseline_tps: 18.0
-      vl_score: "34/36 (94%)"
-      benchmark_date: 2026-01-27
+      vl_score: "14/14 (100%)"  # rescored 2026-03-04 (was 34/36=94%); 14/14 VL + 0/1 general harness bug
+      benchmark_date: 2026-03-04
     memory:
       residency: warm  # Small enough for WARM tier (2.3GB)
       pinned: false
     notes: |
-      Best VL model for document figure analysis (94% accuracy).
+      Best VL model for document figure analysis (100% VL accuracy, 93% overall).
       Outperforms larger 30B/235B models on OCR and chart reading.
       Use with document summary context (~8K chars) for optimal results.
       WARNING: 0% agentic - cannot do tool calls. Use Qwen2.5-VL-7B for agentic vision.
@@ -2165,13 +2330,13 @@ roles:
       reason: VL model - no compatible text-only drafts
     performance:
       baseline_tps: 15.4
-      vl_score: "31/36 (86%)"
-      benchmark_date: 2026-01-27
+      vl_score: "11/12 (92%)"  # rescored 2026-03-04 (was 31/36=86%)
+      benchmark_date: 2026-03-04
     memory:
       residency: cold
       pinned: false
     notes: |
-      Good balance of quality (86%) and speed.
+      Good balance of quality (92%) and speed.
       Better than 30B-A3B on chart interpretation despite smaller size.
       WARNING: 0% agentic - cannot do tool calls.
   draft_co_rewarding_ii_qwen3_1_7b_base_math_q8_0:
@@ -2592,6 +2757,45 @@ roles:
     - qwen2.5
     - qwen2-
     notes: "FP16 quantization - slower than Q4/Q8 variants. Added for benchmarking purposes only."
+
+  # Qwen3.5 draft models — only usable if WS1 SSM checkpointing passes Go/No-Go
+  draft_qwen35_0_8b_q4_0:
+    tier: D
+    description: Draft model - Qwen3.5-0.8B Q4_0 (for Qwen3.5 spec decode)
+    model:
+      name: Qwen3.5-0.8B-Q4_0
+      path: unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q4_0.gguf
+      quant: Q4_0
+      size_gb: 0.5
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen3.5-35b-a3b
+    notes: >
+      SSM checkpoint/restore enabled via WS1+WS2. Compatible with all qwen35 targets.
+  draft_qwen35_0_8b_q8_0:
+    tier: D
+    description: Draft model - Qwen3.5-0.8B Q8_0 (for Qwen3.5 spec decode)
+    model:
+      name: Qwen3.5-0.8B-Q8_0
+      path: unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 0.8
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - qwen3.5-35b-a3b
+    notes: >
+      BLOCKED on WS1 SSM state checkpointing. Higher quality draft (Q8_0 vs Q4_0).
+      If WS1 passes, compare acceptance rates vs Q4_0 variant.
 
   # =============================================================================
   # Embedder Models (Tier D - Supporting)

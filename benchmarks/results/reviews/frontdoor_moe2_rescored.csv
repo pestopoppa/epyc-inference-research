@@ -1,0 +1,53 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,16.24,0,Echoes prompt then degenerates into nonsense about 'sourcemods' and repeated zeros
+thinking,t3_q2_causal_inference,10.58,0,"Echoes prompt then repetition loop: 'or the case, or the case, or the case'"
+thinking,t3_q3_reasoning_trap,11.44,0,Echoes prompt then nonsense and repeated zeros
+thinking,t2_q1_paradox,11.21,0,Echoes prompt then repetition loop: 'or the ship of the ship of the ship'
+thinking,t2_q2_counterfactual,13.51,0,Echoes prompt then repetition loop: 'academic approach to academic knowledge'
+thinking,t2_q4_metacognition,11.69,0,Echoes prompt then incoherent rambling about 'human body' repetition
+thinking,t1_q1_multistep,11.03,0,Echoes prompt then repetition of '1000' thousands of times; no calculation
+thinking,t1_q3_planning,11.04,0,Echoes prompt then numbered list with no content; no valid orderings found
+coder,t3_q1_concurrent_correctness,11.28,0,Echoes prompt then incoherent rambling; no ABA problem analysis or code fix
+coder,t3_q2_distributed_consistency,13.25,0,Only echoes part of prompt; no response content at all
+coder,t3_q3_algorithmic_hardness,20.34,0,Echoes prompt then degenerates into nonsense and repeated '1's
+coder,t2_q2_debug_complex,21.93,0,"Echoes prompt, outputs '100' then end-of-text; no fix provided"
+coder,t2_q4_system,20.99,0,"Echoes prompt then broken code with repeated '#if (int, int) -> int' pattern"
+coder,t1_q1_algorithm,19.63,0,Echoes prompt then circular nonsense about 'the bug is that'; no actual fix
+coder,t1_q2_refactor,22.06,0,Echoes prompt then rambling about interviews; no refactored code
+coder,t1_q3_test,21.91,0,Echoes prompt then broken pseudo-test code with repetition; not valid pytest
+agentic,t3_q1_competing_constraints,20.61,0,Echoes prompt then rambling; no JSON plan produced
+agentic,t3_q2_multi_agent_coordination,20.63,0,Echoes prompt then repeated zeros
+agentic,t3_q3_adversarial_robustness,18.02,0,Echoes prompt then degenerate repetition of '1.'
+agentic,t2_q1_ambiguous,19.53,0,Echoes prompt then degenerate repetition of 'I've been a believer'
+agentic,t2_q2_error_chain,18.27,0,Echoes prompt then repetition: 'the most accurate to the situation'
+agentic,t2_q3_schema_edge,18.84,0,Echoes prompt then repeated zeros
+agentic,t2_q4_orchestration,23.61,0,Echoes prompt then repeated zeros
+agentic,t1_q1_sequential,23.05,0,Echoes prompt then repeated '2's
+agentic,t1_q2_error_handling,20.94,0,Echoes prompt then repeated zeros
+agentic,t1_q3_nested_params,27.03,0,Echoes prompt then degenerate religious text repetition
+general,t3_q1_policy_analysis,21.54,0,Echoes prompt then degenerate repetition of 'AI'
+general,t3_q2_system_failure,20.86,0,Echoes prompt then degenerate repetition of '1.'
+general,t3_q3_strategic_communication,20.53,0,Echoes prompt then degenerate 'Board of the Board' repetition
+general,t2_q1_synthesis,20.39,0,Echoes prompt then repeated zeros
+general,t2_q2_transform,20.89,0,Echoes prompt then degenerate data repetition; wrong output
+general,t2_q3_schedule,20.58,0,Echoes prompt then degenerate '1:00' repetition
+general,t2_q4_inconsistency,21.16,0,Echoes prompt then degenerate repetition of '1'
+general,t1_q2_multistep,21.58,0,Echoes prompt then repeated zeros
+general,t1_q3_compare,22.58,0,Echoes prompt then degenerate 'as the the' repetition
+math,t3_q2_combinatorics,20.57,0,"Echoes prompt then degenerate 'a least, a most' repetition"
+math,t2_q1_optimization,21.16,0,Echoes prompt then degenerate '1000000' repetition
+math,t2_q2_proof,20.18,0,Echoes prompt then degenerate 'The same argument.' repetition
+math,t2_q4_statistics,20.03,0,"Echoes prompt then degenerate '35,' repetition"
+math,t1_q1_word_problem,19.85,0,Echoes prompt then degenerate '1000000' repetition
+math,t1_q2_system_equations,21.83,0,Echoes prompt then degenerate '165/' repetition
+math,t1_q3_probability,20.3,0,Echoes prompt then degenerate '16.' repetition
+instruction_precision,t3_q1_self_referential,32.7,0,"Echoes prompt then degenerate 'very, very' repetition"
+instruction_precision,t3_q2_cascading_constraints,32.24,0,Echoes prompt then degenerate 'I have a feeling' repetition
+instruction_precision,t3_q3_meta_instruction,33.13,0,Echoes prompt then repeated zeros
+instruction_precision,t2_q2_maintain_format,32.32,0,Echoes prompt then 'error message is a result of' repetition
+instruction_precision,t2_q3_empty_handling,32.95,0,Echoes prompt then degenerate '10.0000' repetition
+instruction_precision,t2_q4_conflicting_constraints,33.05,0,Echoes prompt then degenerate religious nonsense repetition
+instruction_precision,t1_q1_negative_instruction,35.08,0,"Echoes prompt then degenerate '2002,' repetition"
+instruction_precision,t1_q2_word_limit,34.39,0,Echoes prompt then degenerate 'machine learning' repetition
+instruction_precision,t1_q3_structured_format,34.26,0,Echoes prompt then degenerate '1' repetition
+instruction_precision,t1_q4_multiple_constraints,34.06,0,Echoes prompt then repeated zeros

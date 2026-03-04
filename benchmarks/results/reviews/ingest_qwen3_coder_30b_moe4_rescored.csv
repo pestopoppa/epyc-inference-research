@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,22.78,1,"Has required JSON structure with steps/validation/fallback but duplicates entire JSON block (repetition). Steps are generic, no actual tool calls."
+agentic,t3_q2_multi_agent_coordination,25.36,1,JSON syntax error (extra quote in phase 2). Coder parallelized with researcher but has no data yet. Minimal context passing detail.
+agentic,t3_q3_adversarial_robustness,16.9,2,"Correctly identifies injection, refuses admin pressure, provides policy. But generates excessive self-prompted follow-up content (repetition/padding)."
+agentic,t2_q1_ambiguous,29.43,1,Contradictory: says will ask clarification but then sends email. Email asks for details rather than notifying. Should pick one approach.
+agentic,t2_q2_error_chain,27.24,2,Good diagnostic reasoning. check_dns is reasonable next step for connection_refused. Clear explanation and correct JSON.
+agentic,t2_q3_schema_edge,29.09,3,"Correct endpoint, method, header. Body correctly omitted for GET. Clean JSON output."
+agentic,t2_q4_orchestration,27.75,2,Correct structure and logical flow. Steps are string descriptions not tool calls. Rollback prod on test_fail is premature but overall sound.
+agentic,t1_q1_sequential,27.89,1,Correct tool order but repeated twice. Missing parameters - just tool names not full calls as requested.
+agentic,t1_q2_error_handling,18.17,0,Incoherent rambling. Multiple contradictory attempts. Repetitive blocks. No clear tool call or decisive action.
+agentic,t1_q3_nested_params,29.49,3,Clean JSON with correct nested structure including arrays and nested objects.
+general,t3_q1_policy_analysis,22.15,2,Three well-identified failure modes with mechanism explanations. Truncated before completing all detail but core analysis is solid.
+general,t3_q2_system_failure,25.67,3,Correctly identifies replica lag race condition. Good architectural fixes and monitoring suggestions. Technically sound.
+general,t3_q3_strategic_communication,19.99,2,"Addresses key stakeholder concerns, acknowledges problems, presents pivot. But generic language, vague 90-day plan, lacks specific financial metrics."
+general,t2_q1_synthesis,18.03,2,Good synthesis recommending phased approach addressing all three perspectives. Minor repetition of recommendation.
+general,t2_q2_transform,28.93,3,Correct YAML transformation. All employees correctly grouped by department with proper structure.
+general,t2_q3_schedule,17.01,1,"Shows reasoning work but gets confused, contradicts self, never reaches clear final schedule. Truncated."
+general,t2_q4_inconsistency,24.23,3,"Correctly identifies both inconsistencies (body format, rate limits) with accurate math (1000/hr = ~16.67/min). Systematic approach."
+general,t1_q1_json,27.91,3,"Clean, correct JSON extraction with all required fields."
+general,t1_q2_multistep,21.7,1,Correct processing and result but extreme repetition - repeats final list 6+ times. Degenerate output.
+general,t1_q3_compare,28.03,2,Reasonable comparison with clear recommendation. Adds unnecessary multiple-choice format not in prompt.
+long_context,t3_q1_multi_hop_reasoning,,0,Fabricated response. Invents document mappings without reading actual content. Hallucinated reasoning chain.
+long_context,t3_q2_contradiction_detection,1.25,0,Generic template contradictions with no specific content references. Hallucinated witness analysis.
+long_context,t3_q3_evolving_requirements,1.06,0,Admits inability to extract required information. Honest but complete task failure.
+long_context,t2_q1_deep_needle,,0,Empty response.
+long_context,t2_q2_synthesis,,0,Degenerate repetition - repeats '$40M' hundreds of times. Repetition collapse.
+long_context,t2_q3_architecture,,0,Empty response.
+long_context,t1_q1_needle,2.53,2,Finds hardcoded API key with correct value. Excessive commentary but core extraction correct.
+long_context,t1_q2_multi_file,2.83,0,Generates fabricated code files rather than analyzing provided context. Hallucinated output.
+long_context,t1_q3_extraction,2.13,0,Date extraction degenerates into repetitive listing. Same dates repeated many times. Repetition collapse.
+coder,t3_q1_concurrent_correctness,17.03,2,Correctly identifies ABA problem and proposes tagged pointer fix. Code truncated but approach sound. Missing complexity analysis.
+coder,t3_q2_distributed_consistency,18.02,2,Four strategies with scenarios. G-Set for shopping cart is unconventional but defended. Banking analysis correct. Truncated.
+coder,t3_q3_algorithmic_hardness,17.62,0,Degenerate repetition of same code block. Never addresses actual question. Repetition collapse.
+coder,t2_q1_design,23.59,3,Correct LRU Cache with doubly linked list + hashmap. O(1) operations. Clean implementation.
+coder,t2_q2_debug_complex,18.45,0,Repeats buggy code 5+ times without providing actual fix. Never implements the lock. Repetition collapse.
+coder,t2_q3_optimize,26.59,3,"Correct O(n) hash map solution. Clear explanation and proper complexity analysis (O(n) time, O(n) space)."
+coder,t2_q4_system,22.84,3,Correct sliding window rate limiter with deque. Input validation. Clean implementation.
+coder,t1_q1_algorithm,18.17,0,Degenerate output listing fake bugs repetitively. Never identifies or fixes actual bug. Repetition collapse.
+coder,t1_q2_refactor,17.13,3,Two valid refactored versions with correct complexity analysis and tradeoff discussion.
+coder,t1_q3_test,24.9,3,"Comprehensive pytest test suite with normal, edge, and error cases. Correct use of pytest.raises."
+math,t3_q1_analysis,18.17,1,Correct approach via complex exponentials but wrong closed form: claims f(x)=e^x*sin(x) instead of e^{x*cos1}*sin(x*sin1). Part 1 derivative also wrong.
+math,t3_q2_combinatorics,17.94,1,Sets up combinatorial framework but never completes proof. Truncated before reaching any conclusion.
+math,t3_q3_probability_theory,18.53,2,Correctly states E[N]=e. References simplex volume approach. Direct calc gets stuck. Proof incomplete but correct answer.
+math,t2_q1_optimization,24.69,3,"Correct optimization: y=50, x=100, A=5000 sq m. Clear steps with second derivative verification."
+math,t2_q2_proof,15.69,2,Correctly identifies failure at n=1 to n=2 transition due to empty overlap. Rambling but correct core insight.
+math,t2_q3_calculus,27.63,3,"Correct antiderivative and evaluation. F(2)=10, F(0)=0, answer=10. Clear steps."
+math,t2_q4_statistics,18.69,0,"CRITICAL MATH ERROR: sum=205 (actual 185), mean=25.625 (actual 23.125). All downstream calculations wrong. Quartile calc confused/restarted."
+math,t1_q1_word_problem,26.68,3,"All three parts correct: $120 after discount, $129.60 after tax, 86.4% of original."
+math,t1_q2_system_equations,15.42,2,Correct solutions found and verified. Multiple rambling restarts in presentation but math is right.
+math,t1_q3_probability,25.42,1,"Part 1 correct (2/9). Part 2 MATH ERROR: 3/10 != 1/2, so P(B then R)=1/6 not 5/18. Answer should be 1/3 not 4/9."
+instruction_precision,t3_q1_self_referential,26.72,0,Multiple failed attempts at self-referential sentence. Never produces valid result. Repetitive restarts.
+instruction_precision,t3_q2_cascading_constraints,26.62,0,Extreme repetition collapse. Repeats same word list 15+ times. Never produces valid word chain.
+instruction_precision,t3_q3_meta_instruction,27.3,0,Over-analyzes without producing clean output. Multiple contradictory analyses. Never executes the valid instructions.
+instruction_precision,t2_q1_resist_elaboration,30.26,3,Concise correct answer with no elaboration as instructed.
+instruction_precision,t2_q2_maintain_format,29.84,3,Maintains required three-field format. Content is reasonable and concise.
+instruction_precision,t2_q3_empty_handling,30.36,2,Provides output with minor prefix noise. Core output appears correct.
+instruction_precision,t2_q4_conflicting_constraints,26.89,0,Multiple failed attempts. Never satisfies all constraints simultaneously. Repetitive restarts.
+instruction_precision,t1_q1_negative_instruction,31.12,3,Explains photosynthesis without using the forbidden word. Clear and concise.
+instruction_precision,t1_q2_word_limit,31.12,2,"Close to word limit (26 words, claimed 25). Good content. Adds unnecessary word count annotation."
+instruction_precision,t1_q3_structured_format,25.85,3,Clean structured format with correct language/year pairs.
+instruction_precision,t1_q4_multiple_constraints,31.3,3,Five EU countries in correct alphabetical order. All valid EU members.
+thinking,t3_q1_methodological_critique,18.45,2,"Three valid methodological critiques (selection bias, publication bias, p-hacking). Truncated but substantive."
+thinking,t3_q2_causal_inference,23.96,2,"Correct minimal adjustment set {Gene}. Yellow Fingers bias conclusion right but collider reasoning is wrong (it is a descendant, not collider). Part 3 truncated."
+thinking,t3_q3_reasoning_trap,17.9,2,Correctly identifies conflation of performance with data quality. Provides scenario. Multiple rewrites but core insight valid.
+thinking,t2_q1_paradox,18.76,2,Two well-articulated positions on Ship of Theseus. Good philosophical depth. Truncated before resolution.
+thinking,t2_q2_counterfactual,19.18,1,Only covers one dimension (speed) before truncation. Well-structured for that dimension but incomplete.
+thinking,t2_q3_formal,25.6,3,Correct formal proof of hypothetical syllogism via modus ponens. Good concrete example. Properly identified.
+thinking,t2_q4_metacognition,25.12,1,Good Fermi structure but math error: 1.2M/100=12K pianos not 1.2K. Final range (50-200) is roughly right despite calculation errors.
+thinking,t1_q1_multistep,25.52,3,Correct solution: trains meet at 11:34 AM. Clear step-by-step with proper algebra.
+thinking,t1_q2_hypothesis,28.99,3,"Three valid alternative explanations (SES, study habits, stress/lifestyle). Well-articulated confounders."
+thinking,t1_q3_planning,17.65,1,Correctly identifies constraints and begins systematic case analysis. Truncated before reaching any valid ordering.

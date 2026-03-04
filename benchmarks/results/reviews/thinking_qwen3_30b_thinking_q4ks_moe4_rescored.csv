@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,19.9,2,Identifies 3+ failure modes with mechanisms and amendments; response ends mid-table truncated
+general,t2_q3_schedule,20.19,0,Never produces a final schedule; reasoning loops without conclusion
+general,t1_q3_compare,23.53,2,Correct 2-sentence comparison; excessive CoT but final answer meets constraint
+general,t2_q1_synthesis,22.45,3,Strong synthesis with concrete 2-phase recommendation addressing all 3 stakeholders
+general,t2_q2_transform,21.34,0,Never produces final YAML output; endless reasoning about format
+general,t1_q1_json,35.05,3,Correct JSON with all 4 fields accurately extracted
+general,t3_q2_system_failure,18.92,3,Correctly identifies replica lag causing stale idempotency check; concrete fixes
+general,t3_q3_strategic_communication,20.79,2,Board statement addresses metrics LOIs and 90-day plan; slightly informal tone
+general,t2_q4_inconsistency,19.27,1,Identifies correct inconsistencies but never delivers clean final answer
+general,t1_q2_multistep,19.61,1,Correct dedup/sort reasoning but output truncated; never delivers final list
+agentic,t3_q1_competing_constraints,14.82,2,Good CSV analysis plan with appropriate tool selection
+agentic,t2_q2_error_chain,25.74,3,Correctly traces error chain and proposes restart db service
+agentic,t3_q2_multi_agent_coordination,19.35,2,Reasonable orchestration plan respecting 60s time budget
+agentic,t3_q3_adversarial_robustness,20.91,3,Correctly identifies command injection; proposes safe alternative
+agentic,t2_q1_ambiguous,19.18,2,Identifies ambiguity and asks for clarification appropriately
+agentic,t2_q3_schema_edge,20.07,2,Correct tool call JSON with /users GET null body auth header
+agentic,t2_q4_orchestration,20.17,2,Correct deployment sequence with test build deploy notify steps
+agentic,t1_q1_sequential,18.98,1,Correct tool calls identified but not output as clean JSON array
+agentic,t1_q2_error_handling,19.53,2,Correctly asks for clarification after 404 with helpful message
+agentic,t1_q3_nested_params,19.27,2,Correct JSON with nested metadata priority tags due_date
+instruction_precision,t3_q2_cascading_constraints,30.94,0,Never outputs final 5-word list; reasoning only
+instruction_precision,t3_q3_meta_instruction,31.63,1,Correctly identifies valid instructions but no clean output
+instruction_precision,t1_q1_negative_instruction,32.22,1,Avoids forbidden words but only 1 sentence; no clean 2-sentence final
+instruction_precision,t1_q2_word_limit,32.13,0,Cannot count words accurately; never produces 20-25 word answer
+instruction_precision,t2_q4_conflicting_constraints,32.45,2,Meets all constraints: under 12 words starts with A ends with data
+instruction_precision,t3_q1_self_referential,28.79,0,Never produces valid self-referential sentence meeting constraints
+instruction_precision,t2_q1_resist_elaboration,31.81,1,Outputs 4 but adds extensive elaboration violating instruction
+instruction_precision,t2_q2_maintain_format,29.63,0,Does not output required 3-line format; generates fake stack trace
+instruction_precision,t2_q3_empty_handling,32.53,1,Correctly outputs NONE but adds explanation violating constraint
+instruction_precision,t1_q3_structured_format,29.82,1,Correct data but buried in CoT; no clean 3-line output
+instruction_precision,t1_q4_multiple_constraints,30.4,1,Correct countries identified but never delivers clean output
+thinking,t3_q3_reasoning_trap,18.84,2,Correctly identifies test set contamination flaw with counter-scenario
+thinking,t1_q2_hypothesis,21.46,3,Three specific alternative explanations with clear mechanisms
+thinking,t3_q1_methodological_critique,19.89,3,4+ methodological issues with clear mechanisms identified
+thinking,t3_q2_causal_inference,22.93,2,Correct adjustment set and collider bias analysis
+thinking,t2_q1_paradox,21.86,2,Two philosophical positions with justified preference
+thinking,t2_q2_counterfactual,20.31,2,Analyzes all 3 dimensions with specific mechanisms
+thinking,t2_q3_formal,21.2,3,Correct formal proof via conditional proof and modus ponens
+thinking,t2_q4_metacognition,20.3,3,Clear Fermi estimation with assumptions bounds and uncertainty
+thinking,t1_q1_multistep,20.48,3,Correct math: t=18/7 hours meet at ~11:34 AM verified
+thinking,t1_q3_planning,22.06,2,Systematic constraint analysis; identifies valid orderings
+math,t2_q1_optimization,27.8,3,Correct: x=100m y=50m area=5000 sq m with verification
+math,t3_q1_analysis,19.77,3,Correct differentiability proof closed form and limit
+math,t3_q2_combinatorics,20.25,2,Correctly identifies identity is false via n=2 counterexample
+math,t3_q3_probability_theory,19.46,3,Correct E[N]=e with two proof approaches
+math,t2_q2_proof,19.25,3,Correctly identifies overlap failure at n=1; clear explanation
+math,t2_q3_calculus,20.25,2,Correct answer 10; minor repetition at end
+math,t2_q4_statistics,20.32,3,All calculations correct: mean=23.125 median=23.5 SD=7.36 no outliers
+math,t1_q1_word_problem,28.53,3,All 3 parts correct: 120 129.60 86.4%
+math,t1_q2_system_equations,21.16,3,All 4 solutions found and verified
+math,t1_q3_probability,29.14,3,Both probabilities correct: 2/9 and 1/3
+coder,t3_q1_concurrent_correctness,20.62,2,Correct ABA problem identification with tagged pointer fix
+coder,t3_q2_distributed_consistency,19.47,3,4 strategies with failure scenarios; appropriate recommendations
+coder,t3_q3_algorithmic_hardness,18.68,0,Degenerate repetition loop; questions repeat verbatim
+coder,t2_q1_design,20.48,3,Correct LRU with hash map + doubly linked list O(1)
+coder,t2_q2_debug_complex,21.06,2,Correctly identifies race condition; asyncio.Lock solution
+coder,t2_q3_optimize,19.3,3,Correct O(n) hash map solution verified with example
+coder,t2_q4_system,20.51,2,Correct sliding window rate limiter with tests
+coder,t1_q1_algorithm,19.89,3,Both bugs correctly identified with failing inputs
+coder,t1_q2_refactor,20.07,2,Two refactored versions; speed O(n) with set correct
+coder,t1_q3_test,21.46,3,Comprehensive pytest tests covering normal edge and error cases
+long_context,t3_q1_multi_hop_reasoning,,0,Repetition loop: repeats answer 12 times
+long_context,t3_q2_contradiction_detection,1.59,0,Never delivers final answer; CoT reasoning only
+long_context,t3_q3_evolving_requirements,1.44,0,Fails to extract requirements; never answers questions
+long_context,t2_q1_deep_needle,,0,Empty response after prompt echo
+long_context,t2_q2_synthesis,1.58,2,Good Q1-Q2 comparison with specific metrics within word limit
+long_context,t2_q3_architecture,,0,Empty response after prompt echo
+long_context,t1_q1_needle,5.27,2,Correctly identifies hardcoded API key; verbose
+long_context,t1_q2_multi_file,6.55,1,Partial analysis; identifies cache key bug but incomplete trace
+long_context,t1_q3_extraction,5.21,1,Extracts dates and amounts but degenerates with repeated values

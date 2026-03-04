@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t1_q1_json,43.62,2,Correct JSON with all 4 fields; prompt echo present but answer is valid; output-only constraint met after echo
+general,t1_q2_multistep,58.12,1,Duplicates not actually removed (lists all 7 items then renumbers 5); numbering adds parenthetical counts instead of total count at end; partial credit only
+general,t1_q3_compare,54.14,1,Prompt echo; comparison is relevant but uses bullet lists not the requested 2-3 sentences; shallow analysis without clear recommendation
+general,t2_q1_synthesis,51.33,0,Severe repetition: generates 120+ numbered questions in a loop instead of a 3-4 sentence recommendation; no actionable synthesis
+general,t2_q2_transform,58.38,1,Provides Python code to do the transform rather than actual YAML output; code logic is reasonable but does not produce the requested nested YAML directly
+general,t2_q3_schedule,57.01,1,Schedule has contradictions: puts team sync at 9:30 overlapping Alice unavailable 10-11; claims 1:1 Alice-Dave at 11am but Dave unavailable 11am-2pm; partial structure
+general,t2_q4_inconsistency,46.04,0,Severe repetition: finds 2-3 real inconsistencies then repeats the same JSON-vs-form-encoded finding 30+ times in a loop; repetition penalty
+general,t3_q1_policy_analysis,58.10,1,Addresses all 4 parts superficially; failure modes are generic (overfitting/data leakage) not specific to the policy; amendments are vague; truncated
+general,t3_q2_system_failure,55.92,2,Correctly explains double-charge mechanism via replica lag; testing gap explanation reasonable; two architectural fixes proposed with trade-offs; slightly shallow but covers all parts
+general,t3_q3_strategic_communication,46.96,0,Severe repetition: repeats the same paragraph about milestones and confidence 5+ times; does not produce a coherent 5-minute statement; no 90-day milestones
+thinking,t1_q1_multistep,56.21,0,Math error: correctly computes 220 miles remaining and 11/7 hours but then converts 4/7 hours to 4 minutes 24 seconds (should be ~34 min); final answer 10:00:25 AM is wrong (correct: ~11:34 AM)
+thinking,t1_q2_hypothesis,56.63,2,Three distinct alternative explanations (family environment, nutrition confound, peer influence) with specific mechanisms; meets the prompt requirements adequately
+thinking,t1_q3_planning,50.73,0,Code checks C-after-D but not C-immediately-after-D; output includes invalid orderings (e.g. A,B,C,D,E where C is before D not after); wrong constraint encoding; wrong results
+thinking,t2_q1_paradox,214.30,0,Empty response (prompt echo only with [end of text]); no answer generated
+thinking,t2_q2_counterfactual,57.00,1,Covers all 3 dimensions but analysis is surface-level; no second-order effects discussed; prompt echo present; mostly restates the obvious
+thinking,t2_q3_formal,57.33,2,Correct proof of transitivity using hypothetical syllogism; concrete example is trivial (all true) but valid; meets requirements
+thinking,t2_q4_metacognition,200.93,0,Empty response (prompt echo only with [end of text]); no answer generated
+thinking,t3_q1_methodological_critique,217.49,0,Empty response (prompt echo only with [end of text]); no answer generated
+thinking,t3_q2_causal_inference,248.15,0,Empty response (prompt echo only with [end of text]); no answer generated
+thinking,t3_q3_reasoning_trap,305.52,0,Empty response (prompt echo only with [end of text]); no answer generated

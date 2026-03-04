@@ -1,0 +1,70 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,38.8,3,Four clear methodological issues with mechanisms; also correctly flags p-value misinterpretation
+thinking,t3_q2_causal_inference,11.52,2,Q1 correct (Gene); Q2 WRONG - conditioning on YF does NOT introduce bias is debatable but acceptable as YF is not a collider; Q3 flawed - cannot use Gene as IV if Gene is unmeasured (circular reasoning); partial credit for strong Q1-Q2
+thinking,t3_q3_reasoning_trap,40.51,2,Identifies test-set bias flaw correctly; scenario is concrete (controlled vs diverse images) but essentially IS test-set bias restated; mechanism is clear enough for substantial credit
+thinking,t2_q1_paradox,42.45,1,Starts with prompt echo (Be sure to address...); presents two positions but muddles Parfit attribution; arguments are shallow; personal position is brief and underargued
+thinking,t2_q2_counterfactual,11.63,3,Thorough analysis across all three dimensions with specific mechanisms and second-order effects; well-structured and insightful
+thinking,t2_q3_formal,11.51,0,Unclosed think tag consumed entire context with planning/drafting meta-commentary; never produced actual proof or example; context exhaustion failure
+thinking,t2_q4_metacognition,41.32,2,Good Fermi estimation with clear steps; identifies assumptions; provides bounds (40-390); notes key uncertainty reducers; somewhat repetitive/circular but substantive
+thinking,t1_q1_multistep,58.18,3,Correct answer 11:34:17 AM with clear step-by-step work and verification
+thinking,t1_q2_hypothesis,11.73,3,Three specific alternative explanations (SES confounder; self-discipline; reverse causality) with detailed mechanisms
+thinking,t1_q3_planning,56.85,3,Systematic enumeration finds exactly 2 valid orderings (A-E-B-D-C and A-B-E-D-C); correct and well-reasoned
+general,t3_q1_policy_analysis,41.38,1,Identifies 3 failure modes with mechanisms and amendments; but output is heavily repetitive - entire analysis is duplicated verbatim in the response; hit 2048 token limit with repetition
+general,t3_q2_system_failure,30.61,3,Precise explanation of race condition with replica lag; good testing gap analysis; two solid architectural fixes with tradeoffs; comprehensive monitoring list
+general,t3_q3_strategic_communication,39.03,0,Degenerate repetition: writes the same board statement 5+ times with minor variations; meta-commentary (Final Note/Final Tip/Final Version) loops; hit 2048 token limit with repetitive output
+general,t2_q1_synthesis,42.03,3,Concise phased approach addressing all three perspectives in 3-4 sentences; actionable and specific
+general,t2_q2_transform,58.46,3,Correct YAML transformation with proper nesting by department; clean output
+general,t2_q3_schedule,11.86,0,Unclosed think tag; scheduling logic is confused - places Team Sync 09:00-10:00 AND Alice-Dave at 09:00-09:30 (double-booking Alice); never reaches a valid schedule; hit 2048 token limit mid-analysis
+general,t2_q4_inconsistency,11.74,3,Identifies both inconsistencies (JSON vs form-encoded body; 100 req/min vs 1000 req/hour) with clear analysis and summary table
+general,t1_q1_json,11.96,3,Correct JSON with all four fields accurately extracted; minor: includes think tags but output is clean
+general,t1_q2_multistep,46.32,2,Correct output (4 unique items alphabetically numbered with count); but includes explanation text violating implied format-only instruction; also starts with garbage fragment
+general,t1_q3_compare,11.75,3,Clear 3-sentence comparison covering strengths and tradeoffs of both approaches
+math,t3_q1_analysis,11.55,3,All three parts correct: proves differentiability via infinite radius of convergence; derives closed form f(x)=e^(x*cos1)*sin(x*sin1); correctly computes limit=0 via squeeze theorem
+math,t3_q2_combinatorics,11.46,0,Unclosed think tag with extended meta-planning; algebraic approach reaches LHS=[x^n] x^n(1+x)^n=1 which contradicts RHS=C(n,floor(n/2)); identity appears to be incorrectly stated or model gets lost; never completes proof
+math,t3_q3_probability_theory,11.39,0,Unclosed think tag consumed context with planning; direct calculation approach is correct (E[N]=e via 1/n! simplex volumes) but never reaches part (b); hit 2048 token limit in think block
+math,t2_q1_optimization,11.47,3,Perfect setup and solution: x+2y=200; A(y)=200y-2y^2; y=50 x=100; A=5000 sq meters; includes second derivative verification
+math,t2_q2_proof,47.38,3,Correctly identifies error at n=1 to n=2 transition; explains overlap breakdown clearly; all three questions answered accurately
+math,t2_q3_calculus,11.57,3,Correct antiderivative x^3+x^2-x; correct evaluation F(2)-F(0)=10-0=10; clean presentation
+math,t2_q4_statistics,11.53,0,Unclosed think tag consumed entire context; sum 185 is correct (not 205); calculations in think block are correct but response never produces final output; context exhaustion
+math,t1_q1_word_problem,64.37,3,All three parts correct: $120 after discount; $129.60 after tax; 86.4% of original
+math,t1_q2_system_equations,11.5,0,Unclosed think tag consumed entire context with extended self-correction meta-commentary; correct method identified (sum/difference) and correct solutions found in think block but never output as actual response
+math,t1_q3_probability,11.42,3,Correct: P(both red)=2/9; P(one red one blue)=1/3; uses correct total balls=10 (5+3+2); clear step-by-step calculations
+agentic,t3_q1_competing_constraints,11.57,2,Reasonable 4-step JSON plan with validation checks and fallback strategy; but steps are generic and lack specific code for schema discovery; validation checks are vague
+agentic,t3_q2_multi_agent_coordination,59.98,2,Correct sequential phasing; but parallel_groups shows [2,3] as parallel which contradicts dependencies (reviewer depends on coder); failure handling is thin
+agentic,t3_q3_adversarial_robustness,41.55,2,Identifies command injection correctly; safe handling suggestions are reasonable; response to admin claim is good; encoded command example is weak; general policy is adequate but not deeply technical
+agentic,t2_q1_ambiguous,11.0,2,Chooses Slack appropriately with reasoning; JSON is well-formed; but should have asked clarifying question given ambiguity; chose to act instead
+agentic,t2_q2_error_chain,10.94,3,Good diagnostic reasoning - checks DNS before restarting; correct tool call with proper parameters
+agentic,t2_q3_schema_edge,66.67,2,Correct endpoint/method/headers but missing body:null field which schema requires for GET; output-only instruction followed
+agentic,t2_q4_orchestration,59.28,2,Correct sequence with rollback plans; but tool calls are string descriptions not JSON; on_test_fail includes rollback which is wrong (nothing deployed yet if tests fail)
+agentic,t1_q1_sequential,12.23,0,Only outputs read_file; misses grep_search which should come first per the user request (find ERROR first then show file); wrong order and missing tool
+agentic,t1_q2_error_handling,11.8,2,Appropriate clarification message to user; identifies 404 correctly; offers relevant next steps; but verbose with redundant options lists
+agentic,t1_q3_nested_params,11.86,3,Correct JSON with all nested parameters; title assignees metadata all properly structured
+coder,t3_q1_concurrent_correctness,11.56,0,Unclosed think tag consumed entire context with extended meta-analysis that never converges; repetitive reasoning loops about ABA scenario without reaching concrete answer or fix code
+coder,t3_q2_distributed_consistency,11.54,3,Four strategies with clear descriptions; concrete failure scenarios for each; good shopping cart (CRDT) and banking (OCC) recommendations with justification
+coder,t3_q3_algorithmic_hardness,11.54,0,Degenerate output: starts with unrelated token ring text (repetitive garbage); then provides partial answers for parts 1-2 but part 3 is cut off at 2048 tokens; group size 3 analysis wrong (claims O(n log n) but actually O(n))
+coder,t2_q1_design,49.97,1,Provides O(n) list-based implementation that is NOT O(1) as required; acknowledges this in comments; suggests OrderedDict but doesn't implement it; fails the core requirement
+coder,t2_q2_debug_complex,50.38,3,Correctly identifies race condition from read-sleep-write pattern; proper fix using asyncio.Lock; clear explanation of mechanism
+coder,t2_q3_optimize,11.79,3,Correct O(n) hash map solution; clear explanation of complement lookup pattern; includes examples and performance comparison
+coder,t2_q4_system,11.72,1,Rate limiter has logical bug: is_allowed() always returns True (both branches in the else clause return True); edge case test creates RateLimiter(max_requests=0) which would raise ValueError
+coder,t1_q1_algorithm,43.57,0,Degenerate self-correction loop: repeatedly traces examples that work correctly; never converges on actual failing inputs; identifies correct fixes (left=mid+1) but cannot produce triggering examples; hit 2048 tokens in confused meta-commentary
+coder,t1_q2_refactor,11.58,1,Speed version uses set but keeps item-not-in-duplicates O(n) check making it not truly O(n); memory version using id() is fundamentally flawed (id reuse in CPython); entire response duplicated verbatim (repetition)
+coder,t1_q3_test,54.77,3,Good pytest coverage: normal cases; edge cases (zero numerator negatives decimals); error cases with match; division by one; fractions
+long_context,t3_q2_contradiction_detection,10.36,1,Prompt is AI-generated filler text; model attempts to find contradictions but the context is incoherent by design; response tries to engage but largely produces generic analysis of garbled text; partial credit for attempting structure
+long_context,t3_q3_evolving_requirements,10.13,1,Long filler prompt; model attempts to trace evolving requirements but response is largely boilerplate analysis of generated text; some structure but limited actual insight extraction
+long_context,t2_q1_deep_needle,8.72,1,Model attempts needle-in-haystack but response is brief (122 tokens) and generic; likely failed to locate specific embedded information
+long_context,t2_q2_synthesis,10.11,1,Attempts synthesis across long document but response quality limited by incoherent source material; provides structured output but substance is thin
+long_context,t2_q3_architecture,9.42,1,Architecture analysis of long context; model produces structured response but largely paraphrases filler text without deep extraction
+long_context,t1_q1_needle,2.62,1,Very brief response (47 tokens); extremely low TPS (2.62) suggests context processing issues; likely failed needle task
+long_context,t1_q2_multi_file,10.99,1,Hit 2048 token limit; attempts multi-file analysis but response quality limited by generated filler source material
+long_context,t1_q3_extraction,12.66,1,Hit 2048 token limit; attempts data extraction but working with incoherent generated text limits quality
+instruction_precision,t3_q1_self_referential,53.11,0,Fails all self-referential constraints: claims 10 words but has 16; claims 17 letters but count is wrong; uses forbidden word 'sentence'; self-corrects partway but runs out of tokens before producing valid answer
+instruction_precision,t3_q2_cascading_constraints,12.03,0,Multiple failures: Balloon has 7 letters not 8; N does not start with last letter of Balloon (n); words get longer not shorter (4->4->4->6->4); Nest repeated; constraint cascade completely broken
+instruction_precision,t3_q3_meta_instruction,47.06,1,Initially includes [Print hello] which has no number (wrong); self-corrects to identify valid instructions [Print 42] and [Say 7 times: hi]; but output is messy with multiple restarts and meta-commentary; final corrected output would be right but presentation fails format
+instruction_precision,t2_q1_resist_elaboration,94.44,0,Degenerate prompt-echo repetition: outputs 4 then repeats the entire prompt+answer pattern 25+ times until token limit; classic repetition failure
+instruction_precision,t2_q2_maintain_format,47.16,1,Includes fabricated stack trace before the required format; the ERROR_TYPE/ROOT_CAUSE/FIX section is actually correct but preceded by hallucinated context that violates the format instruction
+instruction_precision,t2_q3_empty_handling,11.84,2,Correct output NONE; but includes think block with reasoning process visible; the actual answer after think is clean
+instruction_precision,t2_q4_conflicting_constraints,50.02,0,Sentence has 12 words (over limit); does not end with 'data' (ends with 'information'); includes extraneous Python code block; fails 3 of 4 constraints
+instruction_precision,t1_q1_negative_instruction,11.17,1,Uses 'light energy' which implicitly references sunlight; instruction said do NOT mention sunlight/sun/solar; borderline violation - light energy is close but not the forbidden words; 2 sentences met
+instruction_precision,t1_q2_word_limit,11.39,1,Word count is 19 (Machine learning enables computers to learn from data without explicit programming identifying patterns to improve performance over time through various algorithms) - one word short of the 20-25 range
+instruction_precision,t1_q3_structured_format,11.43,3,Exactly matches required format: LANGUAGE (YEAR) one per line; no bullets no numbers; years are accurate
+instruction_precision,t1_q4_multiple_constraints,58.1,0,Degenerate repetition: lists 11 countries initially including Algeria (Africa); then repeats the same 5-country correction block 10+ times with apologies until token limit; never produces clean output

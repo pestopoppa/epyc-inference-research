@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,1.78,2,Identifies 4 issues but #3 generic and #4 overlaps with prompt flaw
+thinking,t3_q2_causal_inference,1.46,1,Correct adjustment set {Gene} but wrong on YF (not collider bias) and wrong front-door suggestion
+thinking,t3_q3_reasoning_trap,1.44,2,Correctly identifies test set representativeness flaw with concrete distribution shift scenario
+thinking,t2_q1_paradox,1.43,2,3 valid philosophical positions with reasoning; picks Essentialism with justification
+thinking,t2_q2_counterfactual,1.45,2,Addresses all 3 dimensions with reasonable points; limited second-order effects
+thinking,t2_q3_formal,1.45,3,Correct formal proof using hypothetical syllogism with concrete example
+thinking,t2_q4_metacognition,1.43,2,Solid Fermi estimation with clear steps and stated assumptions and bounds
+thinking,t1_q1_multistep,1.46,3,Correct: 60mi head start 220mi remaining 140mph combined gives 11:34 AM
+thinking,t1_q2_hypothesis,1.46,3,Three valid specific alternative explanations with clear mechanisms
+thinking,t1_q3_planning,1.46,3,Correctly identifies all 3 valid orderings satisfying all constraints
+coder,t3_q1_concurrent_correctness,1.43,2,Correctly identifies ABA problem with concrete scenario and tagged pointer fix
+coder,t3_q2_distributed_consistency,1.42,2,Lists 4+ strategies with tradeoffs; shopping cart vs banking analysis present
+coder,t3_q3_algorithmic_hardness,1.42,1,Incomplete proof of lower bound; median-of-medians not derived; analysis truncated
+coder,t2_q1_design,1.42,3,Correct LRU implementation using OrderedDict with O(1) operations
+coder,t2_q2_debug_complex,15.22,0,Empty response (1 token)
+coder,t2_q3_optimize,1.44,1,O(n) concept correct but set-based solution fails for duplicate values
+coder,t2_q4_system,1.45,3,Correct sliding window rate limiter using deque
+coder,t1_q1_algorithm,1.43,2,Identifies both bugs correctly with proper fix
+coder,t1_q2_refactor,1.45,3,Correct O(n) refactoring with set-based approach and tradeoff explanation
+coder,t1_q3_test,1.47,2,Good test coverage with parametrize; covers normal and edge cases
+agentic,t3_q1_competing_constraints,1.43,1,Plan has unfilled placeholders; does not properly handle competing constraints
+agentic,t3_q2_multi_agent_coordination,1.42,1,Identifies subtasks but admits format not followed; missing parallelization details
+agentic,t3_q3_adversarial_robustness,1.4,2,Correctly identifies security risks and refuses malicious command
+agentic,t2_q1_ambiguous,1.47,2,Chooses appropriate tool (Slack) with clear justification
+agentic,t2_q2_error_chain,1.44,2,Logical DNS check as next diagnostic step for database connection failure
+agentic,t2_q3_schema_edge,1.46,3,Correctly handles GET with null body per schema requirements
+agentic,t2_q4_orchestration,1.43,2,Deployment plan with proper steps rollback and notification
+agentic,t1_q1_sequential,1.47,3,Correct sequential tool calls in JSON array format
+agentic,t1_q2_error_handling,1.47,2,Reasonable fallback to search_users after 404
+agentic,t1_q3_nested_params,1.47,2,Correct nested structure with all fields; minor key naming deviation
+general,t3_q1_policy_analysis,1.5,2,Identifies meaningful failure modes with mechanisms and amendments
+general,t3_q2_system_failure,1.41,2,Correctly identifies replica lag + idempotency read as root cause
+general,t3_q3_strategic_communication,1.42,2,Addresses revenue miss and LOIs as pivot with appropriate tone
+general,t2_q1_synthesis,1.46,3,Excellent synthesis with phased approach addressing all 3 perspectives
+general,t2_q2_transform,1.44,1,Hallucinates extra employee Emily not in input; provides code instead of output
+general,t2_q3_schedule,1.44,2,Valid schedule meeting all constraints with proper gaps
+general,t2_q4_inconsistency,1.47,3,Correctly identifies both body format and rate limit inconsistencies
+general,t1_q1_json,1.47,3,Perfect JSON extraction with all 4 fields correct
+general,t1_q2_multistep,1.46,1,Hallucinates extra item Orange not in input
+general,t1_q3_compare,1.47,3,Concise accurate comparison hitting key tradeoffs
+math,t3_q1_analysis,1.42,2,Correct differentiability proof and limit=0; closed form derivation skipped
+math,t3_q2_combinatorics,1.43,0,No actual proof; vague inclusion-exclusion mention with no derivation
+math,t3_q3_probability_theory,1.41,2,Correct E[N]=e with simplex volume argument outlined
+math,t2_q1_optimization,1.45,3,Correct optimization W=50 L=100 max area=5000
+math,t2_q2_proof,24.22,0,Empty response (1 token)
+math,t2_q3_calculus,1.46,3,Correct antiderivative and evaluation; answer=10
+math,t2_q4_statistics,1.41,2,Mean and median correct; SD has minor arithmetic error; IQR correct
+math,t1_q1_word_problem,1.46,3,All three calculations correct
+math,t1_q2_system_equations,1.45,3,All 4 real solutions found correctly
+math,t1_q3_probability,1.45,3,Both probability calculations correct
+instruction_precision,t3_q1_self_referential,1.44,0,Fails all self-referential constraints; word and letter counts wrong
+instruction_precision,t3_q2_cascading_constraints,1.44,0,Last word Dud is 3 letters not 4; repetitive output pattern
+instruction_precision,t3_q3_meta_instruction,1.47,2,Correctly identifies valid instructions and executes them
+instruction_precision,t2_q1_resist_elaboration,1.44,0,Degenerate continuation: correct 4 then endless self-prompted Q&A
+instruction_precision,t2_q2_maintain_format,1.47,3,Perfect format adherence
+instruction_precision,t2_q3_empty_handling,1.48,3,Exactly outputs NONE as instructed
+instruction_precision,t2_q4_conflicting_constraints,1.48,2,Sentence meets all 4 constraints; minor preamble noise
+instruction_precision,t1_q1_negative_instruction,1.47,2,2 sentences without forbidden words in main text; unnecessary meta-note
+instruction_precision,t1_q2_word_limit,1.48,1,19 words but required 20-25
+instruction_precision,t1_q3_structured_format,1.48,3,Perfect format with correct years
+instruction_precision,t1_q4_multiple_constraints,1.46,0,Degenerate repetition loop; answer repeated 43+ times

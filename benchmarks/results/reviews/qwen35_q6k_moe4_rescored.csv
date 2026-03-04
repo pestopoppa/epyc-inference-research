@@ -1,0 +1,67 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+math,t3_q1_analysis,44.36,3,"All 3 parts correct: differentiability via Weierstrass M-test, closed form e^{xcos1}sin(xsin1), limit 0 with proper justification"
+math,t3_q2_combinatorics,45.89,0,Hit 2048 token limit; involution argument is circular and never completed; repeats same flawed construction multiple times; no valid proof produced
+math,t3_q3_probability_theory,31.56,3,E[N]=e derived correctly via both direct calculation (P(N=n)=1/n!) and simplex volume argument; minor notational issues but mathematically sound
+math,t2_q1_optimization,60.1,3,"Correct setup x+2y=200, correct solution x=100 y=50, max area 5000 sq meters; clear work shown"
+math,t2_q2_proof,39.08,1,"Correctly identifies error at n=1->n=2 transition and overlap failure, but response degenerates into massive repetition of the same paragraph; degenerate output pattern"
+math,t2_q3_calculus,11.09,3,"Correct antiderivative x^3+x^2-x, correct evaluation F(2)=10, F(0)=0, final answer 10; all work shown clearly"
+math,t2_q4_statistics,10.95,0,"Arithmetic error: sum calculated as 175 instead of 185 (45+22=57 should be 67); all downstream values (mean, std dev) wrong; hit token limit in think block"
+math,t1_q1_word_problem,59.89,3,"Correct: discount $30, price after discount $120, tax $9.60, final $129.60; clear step-by-step"
+math,t1_q2_system_equations,61.66,3,"Correct method using (x+y)^2 and (x-y)^2; finds all 4 real solutions (3,4),(4,3),(-3,-4),(-4,-3)"
+math,t1_q3_probability,66.77,3,Total balls=10 correct; P(both red)=2/9 correct; P(one red one blue)=1/3 correct; clear combinatorial approach
+long_context,t3_q3_evolving_requirements,9.73,1,Recognizes the prompt is generated/repetitive technical documentation lacking email metadata; attempts analysis but cannot answer specific questions about dates/requesters that dont exist in text
+long_context,t2_q1_deep_needle,0.0,0,"Empty response (0 chars, 1 token); complete failure to produce output"
+long_context,t1_q1_needle,10.31,2,Found the hardcoded API key sk-proj-7x9mK2nP4qR8sT1uV3wY5zA in CRITICAL_CONFIG; correctly identified location and pattern
+long_context,t1_q2_multi_file,0.0,0,"Empty response (0 chars, 1 token); complete failure to produce output"
+long_context,t1_q3_extraction,10.97,1,Extracts many dates but degenerates into massive repetition of April 21 2024; appears to hit token limit while repeating; unreliable extraction
+thinking,t3_q1_methodological_critique,43.28,3,"Identifies confounding variables (SES), selection bias, measurement validity, and other methodological flaws; rigorous analysis of the bilingualism claim"
+thinking,t3_q2_causal_inference,48.48,2,Correctly identifies Gene as confounder; discusses conditioning on Gene for unbiased estimate; addresses backdoor criterion; some prompt leakage at start but substantive content correct
+thinking,t3_q3_reasoning_trap,40.42,2,"Identifies false cause fallacy and multiple confounds (model capacity, test set bias, hyperparameters); adequate critique though could be more specific"
+thinking,t2_q1_paradox,10.57,2,Presents mereological essentialism and spatio-temporal continuity views; reasonable philosophical analysis of Ship of Theseus
+thinking,t2_q2_counterfactual,34.35,3,"Thorough analysis across knowledge dissemination, collaboration, and methodology; considers second-order effects; well-structured"
+thinking,t2_q3_formal,10.71,2,"Correct proof of hypothetical syllogism P->Q, Q->R therefore P->R; concrete example provided; think block visible but content valid"
+thinking,t2_q4_metacognition,35.63,3,"Clear Fermi estimation with population, piano ownership, tuning frequency, capacity; identifies key assumptions and bounds"
+thinking,t1_q1_multistep,10.81,3,"Correct: 60 miles in first hour, remaining 220 miles, combined 140mph, meets at 11:34 AM; exact calculation shown"
+thinking,t1_q2_hypothesis,10.7,2,"Identifies SES, sleep/health habits, and motivation as alternative explanations; think block leaked but content addresses the question"
+thinking,t1_q3_planning,48.0,2,"Correctly identifies chain A->B->D->C; final answer lists 3 valid orderings (ABEDC, AEBDC, ABDEC) which are correct; messy intermediate work but correct conclusion"
+general,t3_q1_policy_analysis,10.88,2,"Identifies failure modes in AI governance policy; think block leaked but substantive analysis of accuracy threshold, SHAP limitations, audit frequency"
+general,t3_q2_system_failure,10.88,2,Correctly identifies read-replica lag causing idempotency check failure; nested think tags but root cause analysis is sound
+general,t3_q3_strategic_communication,10.93,3,"Well-structured 5-minute board presentation; owns the bad news, pivots to LOIs, addresses team morale; professional tone"
+general,t2_q1_synthesis,59.95,3,"Good phased approach: 2-week quick fix then 3-month refactor; balances all three perspectives (engineering, product, finance)"
+general,t2_q2_transform,11.15,1,"Leaks prompt continuation (Eve, Frank) at start of response; YAML output is correct but includes hallucinated employees not in original prompt"
+general,t2_q3_schedule,10.93,2,Attempts systematic constraint analysis; reaches a valid schedule though reasoning is verbose; handles multi-constraint scheduling
+general,t2_q4_inconsistency,10.82,3,Correctly identifies JSON vs form-encoded body format mismatch between Doc A/C and Doc B; clear analysis
+general,t1_q1_json,10.96,3,Correct JSON with all 4 fields properly extracted; clean output
+general,t1_q2_multistep,47.64,2,"Correct final result (Apple, Banana, Cherry, Date = 4 items); but leaks partial prompt at start ("", Date"")"
+general,t1_q3_compare,54.48,2,Reasonable comparison of microservices vs monolith; captures key tradeoffs; slightly verbose for 2-3 sentence request
+agentic,t3_q1_competing_constraints,10.73,2,"Structured multi-step plan for CSV analysis; reads file, inspects structure, executes code; reasonable tool orchestration"
+agentic,t3_q2_multi_agent_coordination,58.44,2,Valid phased dispatch plan with dependency tracking; sequential when needed; time budget reasonable
+agentic,t3_q3_adversarial_robustness,10.72,2,Identifies command injection risk in curl+cat combo; discusses security concerns; proposes safe alternative
+agentic,t2_q1_ambiguous,48.02,1,Asks clarification but ALSO outputs JSON tool call; contradicts itself (asks for details then sends generic email); inconsistent behavior
+agentic,t2_q2_error_chain,11.09,2,Follows error chain from deploy->health->database; identifies connection_refused; logical next step reasoning
+agentic,t2_q3_schema_edge,67.43,2,Correct GET /users with no body field; includes auth header; properly omits body for GET per schema
+agentic,t2_q4_orchestration,63.9,2,"Reasonable deployment pipeline: checkout, test, build, deploy staging, notify, regression, deploy prod; includes on_test_fail handler"
+agentic,t1_q1_sequential,38.02,0,Outputs multiple contradictory arrays instead of single ordered JSON array; does not follow instruction to output only JSON array
+agentic,t1_q2_error_handling,53.73,1,"Vacillates between create_user, search_users, and asking clarification; contradicts itself multiple times; incoherent tool selection"
+agentic,t1_q3_nested_params,10.76,3,"Correct JSON with title, assignees array, nested metadata with priority/tags/due_date; proper structure"
+instruction_precision,t3_q1_self_referential,10.79,0,"Fails all self-referential constraints; uses forbidden words (this, sentence); word count claims dont match; letter count wrong; multiple failed revision attempts"
+instruction_precision,t3_q2_cascading_constraints,53.37,0,Degenerate: repeats same wrong example (elephant/tiger/giraffe) in infinite loop; never produces valid chain; repetition degeneracy
+instruction_precision,t3_q3_meta_instruction,10.86,1,Think block analyzes correctly (42 and 7 times hi are valid) but response truncated before producing clean output
+instruction_precision,t2_q1_resist_elaboration,90.52,0,"Degenerate repetition: echoes ""What is 2+2? Reply with only the number"" 26 times; classic repetition loop failure"
+instruction_precision,t2_q2_maintain_format,51.83,0,Completely ignores required ERROR_TYPE/ROOT_CAUSE/FIX format; outputs fabricated stack trace instead; prompt echoing/hallucination
+instruction_precision,t2_q3_empty_handling,12.73,3,"Correctly outputs exactly ""NONE"" with no explanation or apology"
+instruction_precision,t2_q4_conflicting_constraints,11.96,3,"A database manages data. - under 12 words, starts with A, ends with data(.), no store/storage; meets all constraints"
+instruction_precision,t1_q1_negative_instruction,11.04,2,"Explains photosynthesis in 2 sentences without sunlight/sun/solar; uses ""light"" which is borderline but not forbidden"
+instruction_precision,t1_q2_word_limit,11.26,2,Word count is 21 which falls within 20-25 range; content is accurate description of ML
+instruction_precision,t1_q3_structured_format,11.11,3,"Exact format LANGUAGE (YEAR) one per line; Python (1991) JavaScript (1995) Java (1996); correct years, no extra text"
+instruction_precision,t1_q4_multiple_constraints,11.7,3,"Exactly 5 European countries, alphabetical, one per line, no extra text; Austria France Germany Italy Spain"
+coder,t3_q1_concurrent_correctness,54.92,2,Identifies ABA problem in lock-free stack; explains scenario with thread interleaving; proposes tagged pointer solution
+coder,t3_q2_distributed_consistency,11.01,2,"Lists conflict resolution strategies (LWW, vector clocks, CRDTs, manual); think block leaked but content addresses all parts"
+coder,t3_q3_algorithmic_hardness,37.74,2,Adversary argument for Omega(n) lower bound; discusses median-of-medians recurrence; hit token limit but core content present
+coder,t2_q1_design,50.86,1,"LRU cache uses list.remove() which is O(n), not O(1) as required; should use OrderedDict or doubly-linked list + hashmap"
+coder,t2_q2_debug_complex,11.09,1,Starts with unrelated aiofiles code (hallucinated); eventually discusses race condition but initial output is wrong code
+coder,t2_q3_optimize,54.5,3,Correct O(n) solution using frequency hashmap; complement lookup pattern; clean implementation
+coder,t2_q4_system,49.23,3,Clean rate limiter with deque for sliding window; handles edge cases; O(1) amortized; standard library only
+coder,t1_q1_algorithm,10.88,2,Identifies bugs in binary search (off-by-one in left=mid should be left=mid+1); analysis in think block; reasonable debugging
+coder,t1_q2_refactor,10.86,3,Two versions: speed-optimized with set O(n) and original analysis; clear tradeoff discussion; clean code
+coder,t1_q3_test,45.94,3,"Comprehensive pytest cases: normal, negative, float, division by one, edge cases; well-structured test suite"

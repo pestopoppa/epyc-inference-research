@@ -1,0 +1,49 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,22.03,0,No final answer; raw rambling about p-values/standard errors; never presents 4 methodological issues; degenerates into repetition
+thinking,t3_q2_causal_inference,22.45,0,No final answer; incorrectly states minimal sufficient set is Y and G (should be just Gene); rambles without clear causal DAG analysis
+thinking,t3_q3_reasoning_trap,22.56,0,No final answer; confused reasoning about in-sample vs out-of-sample; repeats phrases; never identifies key flaws
+thinking,t2_q1_paradox,22.5,0,No final answer; degenerates into I have got to stop repeated 50+ times; severe repetition loop
+thinking,t2_q2_counterfactual,22.6,0,No final answer; degenerates into knowledge speed is the user nonsensical repetition
+thinking,t2_q3_formal,23.71,0,No final answer; rambles about P->Q and Q->R implies P->R without completing proof; confused about notation
+thinking,t2_q4_metacognition,22.82,0,No final answer; degenerates into I dont know what to do with the numbers repeated 12+ times
+thinking,t1_q2_hypothesis,22.34,0,No final answer; degenerates into Im not going to be the one and I know repeated 20+ times
+coder,t3_q1_concurrent_correctness,20.89,0,No final answer; discusses ABA problem vaguely but never provides a fix; rambles about stack operations
+coder,t2_q1_design,21.52,0,No final answer; severe repetition This is a repeated 40+ times; no working LRU implementation
+coder,t2_q2_debug_complex,22.73,0,No final answer; identifies race condition concept but never produces complete fix code; trails off
+coder,t2_q3_optimize,21.51,0,No final answer; mentions hash map approach but never provides complete O(n) implementation
+coder,t2_q4_system,22.29,0,No final answer; discusses rate limiter concepts but never produces working implementation
+coder,t1_q1_algorithm,21.97,0,No final answer; severe repetition index of the target is the value; never identifies both bugs
+coder,t1_q3_test,22.65,0,No final answer; confused about function identity (mentions is_zero instead of divide); no valid pytest code
+agentic,t3_q1_competing_constraints,21.52,0,No final answer; rambles about CSV parsing; never addresses competing constraints or tool selection
+agentic,t3_q2_multi_agent_coordination,21.94,0,No final answer; incomplete JSON structure; never provides complete orchestration plan
+agentic,t3_q3_adversarial_robustness,21.69,0,No final answer; degenerates into I work on security repeated 25+ times
+agentic,t2_q2_error_chain,21.16,0,No final answer; outputs wrong tool call format; confused about what to do; repetitive
+agentic,t2_q3_schema_edge,22.82,0,No final answer; rambles about user endpoints; never produces correct tool call JSON
+agentic,t2_q4_orchestration,21.97,0,No final answer; degenerates into I dont know repeated 40+ times
+agentic,t1_q1_sequential,22.75,0,No final answer; outputs wrong JSON format; ends with nonsensical error/success schema
+agentic,t1_q2_error_handling,21.91,0,No final answer; confused about tool response format; never provides clear next step
+agentic,t1_q3_nested_params,23.02,0,No final answer; rambles about priority but never produces valid create_task JSON
+general,t3_q1_policy_analysis,23.07,0,No final answer; repeats 95% accuracy on heldout set in a loop; never identifies 3 policy failures
+general,t3_q2_system_failure,23.37,0,No final answer; circular reasoning about the key; never properly explains idempotency race condition
+general,t3_q3_strategic_communication,21.39,0,No final answer; degenerates into check the 72nd repeated; no board meeting strategy
+general,t2_q1_synthesis,22.99,0,No final answer; rambles about auth system; never synthesizes three perspectives into recommendation
+general,t2_q2_transform,23.26,0,No final answer; confused about data format; never produces nested YAML output
+general,t2_q3_schedule,22.19,0,No final answer; degenerates into nonsensical time ranges 12:30-12:30pm repeated; no valid schedule
+general,t1_q1_json,22.11,0,No final answer; rambles about date format; never outputs the JSON object
+general,t1_q2_multistep,22.81,0,No final answer; confused about list contents; never produces numbered sorted deduplicated list
+general,t1_q3_compare,23.23,0,No final answer; degenerates into Im repeated 100+ times; severe repetition
+math,t3_q1_analysis,22.84,0,No final answer; confused about the series; never proves differentiability or finds closed form
+math,t3_q3_probability_theory,23.64,0,No final answer; mentions e but never completes either proof; confused about problem setup
+math,t2_q2_proof,22.52,0,No final answer; mentions n=2 and overlap but analysis is muddled; never clearly states the error
+math,t1_q1_word_problem,23.02,0,No final answer; claims answer is $100 (wrong - should be $129.60); never computes 150*0.8=120 or 120*1.08=129.60; degenerates
+instruction_precision,t3_q1_self_referential,29.76,0,No final answer; rambles about word counting; never produces a self-referential sentence
+instruction_precision,t3_q2_cascading_constraints,30.31,0,No final answer; degenerates into Im not done with you repeated 20+ times
+instruction_precision,t3_q3_meta_instruction,30.12,0,No final answer; degenerates into Im going to stop repeated 25+ times; never outputs 42 or hi 7 times
+instruction_precision,t2_q1_resist_elaboration,31.58,0,No final answer; says 2+2=4 so the answer is 5 then loops 2+2=4 60+ times; contradictory and degenerate
+instruction_precision,t2_q2_maintain_format,30.65,0,No final answer; never outputs ERROR_TYPE/ROOT_CAUSE/FIX format; rambles about error messages
+instruction_precision,t2_q3_empty_handling,31.43,0,No final answer; never outputs NONE; mentions @example.com (hallucinated email)
+instruction_precision,t2_q4_conflicting_constraints,30.77,0,No final answer; outputs True/False quiz format; never produces single sentence meeting constraints
+instruction_precision,t1_q1_negative_instruction,31.24,0,No final answer; degenerates into Im not sure I should be saying this loop; no photosynthesis explanation
+instruction_precision,t1_q2_word_limit,30.92,0,No final answer; degenerates into Im going to stop right now loop; no ML description
+instruction_precision,t1_q3_structured_format,30.75,0,No final answer; outputs number sequence 1-81; never lists programming languages with years
+instruction_precision,t1_q4_multiple_constraints,31.22,0,No final answer; rambles about Schengen/Europe; never lists 5 countries

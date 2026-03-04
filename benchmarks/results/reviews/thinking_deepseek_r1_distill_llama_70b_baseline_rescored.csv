@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,0,1,Identifies 3 methodological issues in reasoning but cuts off before completing 4th; never produces final answer
+thinking,t3_q2_causal_inference,0,1,"Correctly identifies Gene as minimal adjustment set, starts Yellow Fingers discussion but cuts off before completing parts 2-3"
+thinking,t3_q3_reasoning_trap,0,1,Identifies architectural difference flaw but cuts off before constructing required concrete scenario
+thinking,t2_q1_paradox,0,0,Unclosed <think> tag - model ran out of context during chain-of-thought; no final answer produced
+thinking,t2_q2_counterfactual,0,1,Partially addresses speed dimension with reasonable analysis but cuts off during collaboration discussion; incomplete
+thinking,t2_q3_formal,0,1,Correctly identifies hypothetical syllogism and starts proof but cuts off before completing formal proof or example
+thinking,t2_q4_metacognition,0,1,Good estimation approach started but cuts off mid-calculation; never provides bounds or uncertainty analysis
+thinking,t1_q1_multistep,0,0,Sets up problem correctly but cuts off before computing the answer; no time of meeting given
+thinking,t1_q2_hypothesis,0,1,"Identifies 2 good alternative explanations (SES, health consciousness) but cuts off before providing required 3rd"
+thinking,t1_q3_planning,0,1,Correctly derives ordering chain A->B->D->C but cuts off before enumerating valid orderings
+coder,t3_q1_concurrent_correctness,0,1,Correctly starts describing ABA scenario with two threads but cuts off before completing the scenario or providing fix code
+coder,t3_q2_distributed_consistency,0,1,"Lists 2 conflict resolution strategies (LWW, multi-value) but cuts off before reaching 4 required strategies or analysis"
+coder,t3_q3_algorithmic_hardness,0,0,Attempts adversary argument but uses incorrect log(n) reasoning instead of proper Omega(n) argument; cuts off in part 1
+coder,t2_q1_design,0,1,"Identifies OrderedDict approach for LRU cache but never produces actual code implementation; double-think tag, no final answer"
+coder,t2_q2_debug_complex,0,1,Correctly identifies race condition mechanism in async code but cuts off before providing the fix
+coder,t2_q3_optimize,0,1,Correctly identifies hash map O(n) approach but cuts off before providing actual optimized code
+coder,t2_q4_system,0,1,Describes valid rate limiter approach with timestamps but cuts off before providing implementation code
+coder,t1_q1_algorithm,0,1,Identifies one bug (left=mid causing infinite loop) but cuts off before finding second bug or providing fixes
+coder,t1_q2_refactor,0,2,"Provides both refactored versions with correct approaches (dict counting and set tracking), explains tradeoffs; cuts off at end but substantive content complete"
+coder,t1_q3_test,0,1,Describes test categories and cases but cuts off before writing actual pytest code
+agentic,t3_q1_competing_constraints,0,1,Describes reasonable planning approach but cuts off before producing required JSON plan output
+agentic,t3_q2_multi_agent_coordination,0,1,Starts reasonable orchestration design but cuts off before producing required JSON output
+agentic,t3_q3_adversarial_robustness,0,1,Addresses security concern (part 1) and safe handling approach (part 2) but cuts off before parts 3-5
+agentic,t2_q1_ambiguous,0,1,Correctly chooses Slack tool with reasoning but cuts off before producing required JSON tool call
+agentic,t2_q2_error_chain,0,1,Reasonable choice to restart database service but JSON is cut off; also arguably should check logs/DNS before blind restart
+agentic,t2_q3_schema_edge,0,2,"Correct JSON tool call with proper endpoint, method, null body for GET, and Authorization header; answer embedded before think tags"
+agentic,t2_q4_orchestration,0,1,Describes reasonable deployment steps but cuts off before producing required JSON plan output
+agentic,t1_q1_sequential,0,1,Correct first tool call (grep_search) but JSON array is cut off before second tool call (read_file)
+agentic,t1_q2_error_handling,0,1,"Correctly identifies need to ask user for name/email to search, but cuts off before producing the actual message"
+agentic,t1_q3_nested_params,0,1,Starts correct JSON with right title and assignees array but JSON is cut off; incomplete output
+general,t3_q1_policy_analysis,0,1,Identifies one failure mode (overfitting to test set) but cuts off before reaching required 3 failure modes or amendments
+general,t3_q2_system_failure,0,1,Begins correct explanation of replica lag causing idempotency check failure but cuts off before completing analysis
+general,t3_q3_strategic_communication,0,0,Only meta-discusses approach to writing the statement; never produces the actual opening statement
+general,t2_q1_synthesis,0,0,Begins analysis of three perspectives but cuts off before providing the required 3-4 sentence recommendation
+general,t2_q2_transform,0,0,"Hallucinated additional employees (Eve, Frank) not in original data; cuts off before producing YAML output"
+general,t2_q3_schedule,0,0,Begins listing constraints but cuts off before producing any schedule
+general,t2_q4_inconsistency,0,1,Identifies body format inconsistency (JSON vs form-encoded) but cuts off before identifying rate limit inconsistency
+general,t1_q1_json,1.02,3,"Complete, correct JSON with all 4 fields accurately extracted: name, role, department, start_date"
+general,t1_q2_multistep,0,0,Begins case-insensitive deduplication reasoning but cuts off before producing any output list
+general,t1_q3_compare,0,0,Restates given information but cuts off without providing the requested 2-3 sentence comparison
+math,t3_q1_analysis,0,1,"Begins correct convergence analysis using ratio test but cuts off before proving differentiability, closed form, or limit"
+math,t3_q2_combinatorics,0,0,Only restates the identity and begins thinking about it; no progress toward proof
+math,t3_q3_probability_theory,0,0,Recognizes the problem structure but cuts off before any substantive calculation; no answer E[N]=e
+math,t2_q1_optimization,0,1,Correctly sets up constraint equation L + 2W = 200 but cuts off before solving the optimization problem
+math,t2_q2_proof,0,1,Begins correct reasoning about the induction error but cuts off before explicitly identifying n=1 to n=2 transition failure
+math,t2_q3_calculus,0,1,Correctly computes antiderivative terms (x^3 + x^2 - x) but cuts off before evaluating at bounds; no final answer
+math,t2_q4_statistics,0,1,Correctly sums data to 185 and begins mean calculation but cuts off; no completed statistics
+math,t1_q1_word_problem,0,1,Correctly calculates discount price ($120) but cuts off before computing tax and final price
+math,t1_q2_system_equations,0,1,Correctly sets up quartic equation x^4 - 25x^2 + 144 = 0 but cuts off before finding solutions
+math,t1_q3_probability,0,1,Correctly identifies P(1st red)=5/10 and P(2nd red|1st red)=4/9 but cuts off before completing calculation
+instruction_precision,t3_q1_self_referential,0,0,Only begins meta-reasoning about constraints; never produces the required self-referential sentence
+instruction_precision,t3_q2_cascading_constraints,0,0,Only begins reasoning about constraints; never produces the required 5-word list
+instruction_precision,t3_q3_meta_instruction,0,1,Identifies valid instructions but incorrectly includes [Print hello] output (no number); correct on [Print 42] and [Say 7 times: hi]
+instruction_precision,t2_q1_resist_elaboration,0,2,Outputs correct answer '4' immediately; then adds unnecessary think-tag elaboration but answer itself is correct
+instruction_precision,t2_q2_maintain_format,0,0,Never produces required ERROR_TYPE/ROOT_CAUSE/FIX format; double-think tag with no final answer
+instruction_precision,t2_q3_empty_handling,0,0,Begins reasoning about email extraction but never outputs required 'NONE' response
+instruction_precision,t2_q4_conflicting_constraints,0,0,Begins reasoning about constraints but cuts off; never produces the required sentence
+instruction_precision,t1_q1_negative_instruction,0,0,Begins reasoning but about to violate constraint (mention sunlight); never produces final 2-sentence answer
+instruction_precision,t1_q2_word_limit,0.9,1,Good description of ML but 27 words exceeds the 20-25 word limit requirement
+instruction_precision,t1_q3_structured_format,0,0,Begins reasoning about language choices but never produces required LANGUAGE (YEAR) formatted output
+instruction_precision,t1_q4_multiple_constraints,0,0,Begins reasoning about European countries but never produces the required alphabetical list

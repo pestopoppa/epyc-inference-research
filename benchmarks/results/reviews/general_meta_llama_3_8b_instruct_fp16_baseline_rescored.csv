@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,2.08,2,Addresses all 4 parts with 3 failure modes amendments and trade-offs; analysis adequate but shallow and generic
+general,t3_q2_system_failure,2.08,1,Partially explains double-charge mechanism but imprecise; fixes vague; monitoring generic
+general,t3_q3_strategic_communication,2.08,2,Reasonable board statement addressing all 4 requirements; milestones vague; addresses position too directly
+general,t2_q1_synthesis,2.1,2,Good phased recommendation synthesizing all 3 perspectives; slightly verbose but addresses constraints
+general,t2_q2_transform,2.08,1,Correct YAML grouping structure but HALLUCINATED extra employees Eve and Frank; massive irrelevant tangent
+general,t2_q3_schedule,2.08,0,Schedule WRONG: Alice-Dave 9:30am conflicts with Team Sync 9-10am; code has syntax errors
+general,t2_q4_inconsistency,2.04,1,Finds 2 inconsistencies but incorrectly says Doc C doesnt specify format; extreme padding
+general,t1_q1_json,2.05,1,Correct JSON but VIOLATED output-only-JSON instruction; massive repetitive padding
+general,t1_q2_multistep,2.1,2,Correct deduplication logic and result; output format as Python tuples not numbered list
+general,t1_q3_compare,2.1,2,Reasonable comparison covering trade-offs; adds odd self-scoring; content accurate
+coder,t3_q1_concurrent_correctness,2.07,0,ABA scenario incorrect; fix completely wrong (is_reclaimed flag doesnt solve ABA)
+coder,t3_q2_distributed_consistency,2.08,1,Lists 4 strategies but FWW non-standard; scenarios superficial; banking recommendation questionable
+coder,t3_q3_algorithmic_hardness,2.06,0,Recurrence WRONG T(n)=T(n/5)+O(1); group size analysis wrong; expected comparisons wrong
+coder,t2_q1_design,2.09,3,Correct LRU cache using OrderedDict with O(1) get/put; clean implementation and explanation
+coder,t2_q2_debug_complex,2.1,2,Correctly identifies race condition; working asyncio.Lock fix; second fix has import error
+coder,t2_q3_optimize,2.04,2,Correct O(n) hash table optimization; massive repetitive padding but core correct
+coder,t2_q4_system,2.05,0,No actual rate limiter implementation; response is repeated is_allowed output examples
+coder,t1_q1_algorithm,2.08,2,Correctly identifies infinite loop bug; second bug muddled; fix appears correct
+coder,t1_q2_refactor,2.09,2,Speed version correct set-based O(n); memory version doesnt actually optimize memory
+coder,t1_q3_test,2.05,2,Good test structure with parametrize; function signature mismatch; repetitive
+math,t3_q1_analysis,2.05,0,No proof of differentiability; no closed form; degenerates into listing derivatives endlessly
+math,t3_q2_combinatorics,2.04,0,Attempts bijective involution but incoherent; no actual bijection; proof incomplete
+math,t3_q3_probability_theory,2.05,0,Answer e/2 WRONG (correct is e); no proof; just repeated Final Answer
+math,t2_q1_optimization,2.05,1,Correct dimensions 50x100 but area 50000 WRONG (should be 5000); constraint equation wrong
+math,t2_q2_proof,2.04,0,Degenerates into pipe chars; does not identify induction error at n=2 step
+math,t2_q3_calculus,2.06,2,Correct antiderivative and evaluation =10; initially states wrong answer then corrects
+math,t2_q4_statistics,2.1,0,Mean WRONG 23.33 vs 23.125; Median WRONG 25 vs 23.5; IQR wrong; outlier detection wrong
+math,t1_q1_word_problem,2.06,2,Calculations correct 120 129.6 86.4pct; initial answer 146.4 wrong then self-corrects
+math,t1_q2_system_equations,2.06,1,"Finds (3,4) (-3,-4) valid but misses (4,3) (-4,-3); no method; extremely repetitive"
+math,t1_q3_probability,2.05,0,P(both red) WRONG 1/9 vs 2/9; P(red+blue) WRONG 3/10 vs 1/3
+agentic,t3_q1_competing_constraints,2.08,2,Reasonable approach for unknown CSV with read-then-analyze; mentions error handling
+agentic,t3_q2_multi_agent_coordination,2.08,2,Reasonable orchestration plan with agent dispatch; considers time budget; handles failures
+agentic,t3_q3_adversarial_robustness,2.05,2,Identifies command injection risk; discusses safe handling; addresses social engineering
+agentic,t2_q1_ambiguous,2.1,2,Identifies ambiguity; chooses Slack for urgent notification; provides JSON tool call
+agentic,t2_q2_error_chain,2.07,1,Follows error chain correctly but devolves into casual conversation
+agentic,t2_q3_schema_edge,2.08,3,Correct JSON tool call with null body for GET and auth header; clean schema compliance
+agentic,t2_q4_orchestration,2.11,2,Ordered deployment plan with failure handling rollback plans
+agentic,t1_q1_sequential,2.08,1,Tool calls generated but order suboptimal; massive tangent listing unrelated tools
+agentic,t1_q2_error_handling,2.08,0,Response degenerates into repeated backtick characters; no meaningful action
+agentic,t1_q3_nested_params,2.13,3,Correct nested JSON with all fields; clean output
+instruction_precision,t3_q1_self_referential,2.12,0,WRONG: includes hello (no number) and goodbye (not in brackets); fails meta-instruction filtering
+instruction_precision,t3_q2_cascading_constraints,2.13,1,Partially addresses cascading constraints but fails precision on layered rules
+instruction_precision,t3_q3_meta_instruction,2.12,1,Partially follows meta-instructions but fails precision on constraint layers
+instruction_precision,t2_q1_resist_elaboration,2.13,0,VIOLATED: should output only 4 but generated dozens of additional QA pairs
+instruction_precision,t2_q2_maintain_format,2.14,2,Correct ERROR_TYPE/ROOT_CAUSE/FIX format; includes prompt echo but format correct
+instruction_precision,t2_q3_empty_handling,2.13,1,Outputs NONE but in code block; then generates additional unrequested examples
+instruction_precision,t2_q4_conflicting_constraints,2.14,3,All 4 constraints met: 8 words starts-with-A ends-with-data no store/storage
+instruction_precision,t1_q1_negative_instruction,2.13,1,Avoids sun/sunlight/solar but generates far more than 2 sentences; adds unrequested content
+instruction_precision,t1_q2_word_limit,2.13,1,Word count claim 24 WRONG actual ~19; generates many additional unrequested QA pairs
+instruction_precision,t1_q3_structured_format,2.13,2,Correct 3 languages in LANGUAGE (YEAR) format; adds massive pipe char padding
+instruction_precision,t1_q4_multiple_constraints,2.13,1,Core output correct 5 countries alphabetical; adds massive irrelevant Python code
+thinking,t3_q1_methodological_critique,2.08,1,Identifies selection bias but pads/repeats rather than identifying 4+ distinct issues
+thinking,t3_q2_causal_inference,2.08,1,Correct minimal adjustment set Gene; YF conditioning partially correct but mechanism wrong
+thinking,t3_q3_reasoning_trap,2.13,2,Identifies confounding factors; constructs reasonable generalization scenario
+thinking,t2_q1_paradox,2.09,2,Presents functional and material identity positions; reasonable analysis; degenerates at end
+thinking,t2_q2_counterfactual,2.08,1,Mentions 3 dimensions but shallow; degenerates into repeated profile links
+thinking,t2_q3_formal,2.13,2,Proof invokes transitivity as axiom (circular) but concrete example clear and correct
+thinking,t2_q4_metacognition,2.08,1,Overly simplistic approach; degenerates into pipe characters; bounds not developed
+thinking,t1_q1_multistep,2.08,0,WRONG: ignores 1-hour head start; correct answer ~11:34 AM not 11:00 AM
+thinking,t1_q2_hypothesis,2.13,2,Three alternative explanations (SES motivation routine); reasonable but 2 and 3 overlap
+thinking,t1_q3_planning,2.13,1,Finds A-B-E-D-C valid but claims only ordering; misses A-E-B-D-C and others

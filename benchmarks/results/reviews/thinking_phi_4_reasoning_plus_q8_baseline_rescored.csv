@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+instruction_precision,t3_q1_self_referential,2.62,0,No sentence produced; only meta-commentary about the task
+instruction_precision,t3_q2_cascading_constraints,,0,Empty response - model echoed prompt only
+instruction_precision,t3_q3_meta_instruction,,0,Empty response - model echoed prompt only
+instruction_precision,t2_q1_resist_elaboration,,0,Empty response - model echoed prompt only
+instruction_precision,t2_q2_maintain_format,6.04,0,Did not produce required ERROR_TYPE/ROOT_CAUSE/FIX format; appended fragment to prompt echo
+instruction_precision,t2_q3_empty_handling,,0,Empty response - model echoed prompt only
+instruction_precision,t2_q4_conflicting_constraints,,0,Empty response - model echoed prompt only
+instruction_precision,t1_q1_negative_instruction,,0,Empty response - model echoed prompt only
+instruction_precision,t1_q2_word_limit,,0,Empty response - model echoed prompt only
+instruction_precision,t1_q3_structured_format,,0,Empty response - model echoed prompt only
+instruction_precision,t1_q4_multiple_constraints,,0,Empty response - model echoed prompt only
+math,t3_q1_analysis,,1,"Parts 1-2 correct (differentiability, closed form Im(e^{xe^i}-1)) but truncated before part 3 (limit)"
+math,t3_q2_combinatorics,,0,"Incomplete proof attempt; wandered into wrong combinatorial interpretation, never reached conclusion"
+math,t3_q3_probability_theory,,0,Degenerate repetition loop
+math,t2_q1_optimization,,0,Empty response - model echoed prompt only
+math,t2_q2_proof,,0,Empty response - model echoed prompt only
+math,t2_q3_calculus,2.61,3,"Correct antiderivative x^3+x^2-x, correct evaluation F(2)=10, F(0)=0, correct final answer 10"
+math,t2_q4_statistics,,0,Empty response - model echoed prompt only
+math,t1_q1_word_problem,,0,Empty response - model echoed prompt only
+math,t1_q2_system_equations,2.64,0,Empty response - model echoed prompt only
+math,t1_q3_probability,,0,Empty response - model echoed prompt only
+thinking,t3_q1_methodological_critique,,0,Empty response - model echoed prompt only
+thinking,t3_q2_causal_inference,,0,Empty response - model echoed prompt only
+thinking,t3_q3_reasoning_trap,2.83,2,Identified key flaw (single test set bias) and gave concrete scenario (studio vs real-world images); adequate depth
+thinking,t2_q1_paradox,,0,Empty response - model echoed prompt only
+thinking,t2_q2_counterfactual,2.63,0,No actual answer; just appended 'Provide a detailed answer' to prompt
+thinking,t2_q3_formal,,2,Correct proof of transitivity via hypothetical syllogism with started example
+thinking,t2_q4_metacognition,,0,Degenerate repetition loop
+thinking,t1_q1_multistep,,0,Empty response - model echoed prompt only
+thinking,t1_q2_hypothesis,2.62,0,Empty response - model echoed prompt only
+thinking,t1_q3_planning,,0,Empty response - model echoed prompt only
+general,t3_q1_policy_analysis,,1,Started identifying policy failure modes (accuracy threshold) but truncated before completing analysis
+general,t3_q2_system_failure,,0,Empty response - model echoed prompt only
+general,t3_q3_strategic_communication,2.62,0,No actual response; just appended formatting instruction
+general,t2_q1_synthesis,2.62,0,Empty response - model echoed prompt only
+general,t2_q2_transform,,1,Partial YAML structure outlined but added own requirements and truncated before complete output
+general,t2_q3_schedule,,0,Empty response - model echoed prompt only
+general,t2_q4_inconsistency,,0,Empty response - model echoed prompt only
+general,t1_q1_json,,0,Empty response - model echoed prompt only
+general,t1_q2_multistep,,0,Degenerate repetition of fruit names in a loop
+general,t1_q3_compare,,0,Empty response - model echoed prompt only
+agentic,t3_q1_competing_constraints,,0,Degenerate repetition loop
+agentic,t3_q2_multi_agent_coordination,,1,Started task decomposition and agent analysis but truncated before producing JSON orchestration plan
+agentic,t3_q3_adversarial_robustness,,0,Degenerate repetition loop
+agentic,t2_q1_ambiguous,,0,Degenerate repetition loop
+agentic,t2_q2_error_chain,,0,Degenerate repetition loop
+agentic,t2_q3_schema_edge,,0,Empty response - model echoed prompt only
+agentic,t2_q4_orchestration,,1,Partial JSON deployment pipeline with git_checkout/run_tests/build_image/deploy/notify steps and failure handlers; truncated
+agentic,t1_q1_sequential,,0,Degenerate repetition loop
+agentic,t1_q2_error_handling,,0,Degenerate repetition loop
+agentic,t1_q3_nested_params,,0,Degenerate repetition loop ('Use the tool call JSON format' repeated)
+coder,t3_q1_concurrent_correctness,,0,Empty response - model echoed prompt only
+coder,t3_q2_distributed_consistency,,0,Degenerate repetition loop
+coder,t3_q3_algorithmic_hardness,,0,Added new questions to prompt instead of answering; no analysis provided
+coder,t2_q1_design,,0,Empty response - model echoed prompt only
+coder,t2_q2_debug_complex,,0,Empty response - model echoed prompt only
+coder,t2_q3_optimize,2669.482136107092,0,Empty response - model echoed prompt only
+coder,t2_q4_system,,0,Empty response - model echoed prompt only
+coder,t1_q1_algorithm,,1,Correctly identified Bug 1 (left=mid should be left=mid+1) with simulation; truncated before Bug 2
+coder,t1_q2_refactor,,0,Degenerate repetition loop
+coder,t1_q3_test,,0,Empty response - model echoed prompt only

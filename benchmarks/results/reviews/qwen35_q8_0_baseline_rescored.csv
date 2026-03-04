@@ -1,0 +1,68 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+instruction_precision,t3_q1_self_referential,42.89,0,Never produces valid sentence; uses forbidden word 'sentence'; word count wrong (16 not 10); letter count wrong; hit max tokens rambling
+instruction_precision,t3_q2_cascading_constraints,48.99,0,Never produces valid 5-word list; loops through failed attempts; hit max tokens without converging
+instruction_precision,t3_q3_meta_instruction,8.16,0,Unclosed think tag exhausted context; never produced output; correct reasoning visible in think block but no final answer
+instruction_precision,t2_q1_resist_elaboration,92.26,0,Degenerate repetition: echoes prompt+answer 27+ times; prompt echoing pattern
+instruction_precision,t2_q2_maintain_format,48.76,0,Does not follow format at all; generates fake stack trace instead of ERROR_TYPE/ROOT_CAUSE/FIX format
+instruction_precision,t2_q3_empty_handling,8.31,3,Correct output 'NONE'; think block present but closes properly; final answer exactly matches requirement
+instruction_precision,t2_q4_conflicting_constraints,9.0,3,"'A database manages sensitive data.' - under 12 words (5), starts with A, ends with data, no store/storage. All constraints met."
+instruction_precision,t1_q1_negative_instruction,8.3,0,Unclosed think tag exhausted context; never produced final answer outside think block
+instruction_precision,t1_q2_word_limit,40.14,2,Sentence is actually 20 words (within 20-25 range) despite model claiming 19; good content but includes meta-commentary 'Count: 19 words'
+instruction_precision,t1_q3_structured_format,22.05,3,Exact format LANGUAGE (YEAR); 3 entries; no extra text; correct years for Python/Java/C++
+instruction_precision,t1_q4_multiple_constraints,50.56,1,"Algeria is in Africa, not Europe; 4 of 5 correct; alphabetical order correct; format correct"
+long_context,t3_q2_contradiction_detection,7.61,1,Recognizes text is boilerplate not witness statements; attempts analysis but lacks precision; runs into max tokens; partially addresses the prompt
+long_context,t2_q1_deep_needle,6.56,3,Correctly identifies node-7 at 2024-03-15 03:47:22 with fatal memory corruption; exact match
+long_context,t2_q3_architecture,6.96,2,"Identifies polyglot inconsistency, redundancy patterns; hit max tokens but substantial analysis provided before cutoff"
+long_context,t1_q1_needle,7.79,0,Unclosed think tag; entire response stuck in think block; never produces final answer listing the API key
+long_context,t1_q2_multi_file,13.68,1,Attempts data flow analysis but output is generic/repetitive; doesn't clearly identify specific bugs; heavy repetition flag
+long_context,t1_q3_extraction,11.61,1,Lists dates but devolves into fabricated sequential dates (August 1-10 etc.); starts ok but degrades into hallucination; hit max tokens
+math,t3_q1_analysis,8.09,3,"Correct: proves differentiability via ratio test (infinite radius), derives closed form e^(x cos1)sin(x sin1) using Im(e^(xe^i)), limit is 0. All three parts correct."
+math,t3_q2_combinatorics,45.66,2,Attempts sign-reversing involution proof; framework correct but gets repetitive; identity statement correct; proof structure reasonable but not fully rigorous before repetition
+math,t3_q3_probability_theory,52.27,2,Correctly identifies P(S_n<=1)=1/n! and sets up E[N]=sum n*P(N=n); correct approach via Irwin-Hall/simplex volume; hit max tokens before completing both proofs but E[N]=e derivation partially visible
+math,t2_q1_optimization,32.3,3,"Correct: x=100m parallel, y=50m perpendicular, max area=5000 sq meters; clear step-by-step with derivative"
+math,t2_q2_proof,34.08,3,Correctly identifies the error at n=1 to n=2 transition; explains overlap is empty; clear and accurate
+math,t2_q3_calculus,74.49,3,"Correct antiderivative x^3+x^2-x; F(2)=10, F(0)=0; final answer 10; all steps shown"
+math,t2_q4_statistics,57.8,0,"CRITICAL: Sum=205 is WRONG (correct=185); mean=25.625 wrong (correct=23.125); all downstream calculations (std dev, IQR) propagate the error"
+math,t1_q1_word_problem,67.6,3,"Correct: discount $30, price after=$120, tax=$9.60, final=$129.60; clear calculations shown"
+math,t1_q2_system_equations,8.14,3,"All 4 real solutions correct: (4,3),(3,4),(-3,-4),(-4,-3); method via (x+y)^2 and (x-y)^2 is standard and correct"
+math,t1_q3_probability,8.13,2,Total balls=10 (5+3+2) correct; P(both red)=2/9 correct; approach for P(red+blue) correct but hit max tokens before final answer; correct methodology throughout
+thinking,t3_q1_methodological_critique,42.57,3,"Identifies selection bias/confounding, lack of causal design, and statistical limitations; well-structured critique with specific examples"
+thinking,t3_q2_causal_inference,43.42,0,"Initially claims {Yellow Fingers} is sufficient adjustment set (WRONG - YF is a collider, conditioning on it opens a path); self-corrects partway through but then contradicts itself again; never reaches coherent final answer; hit max tokens"
+thinking,t3_q3_reasoning_trap,8.16,3,Correctly identifies the flaw: accuracy on single test set T conflated with intrinsic data quality; explains overfitting to T; good analysis of why 78% model may generalize better
+thinking,t2_q1_paradox,40.62,2,Covers identity persistence and formulation view; addresses both ships; somewhat verbose but substantially correct philosophical analysis
+thinking,t2_q2_counterfactual,8.08,3,"Thorough analysis across knowledge dissemination, collaboration, and methodology dimensions; specific examples of physical media constraints; well-structured"
+thinking,t2_q3_formal,8.01,0,Unclosed think tag; entire response trapped in think block; never produces the formal proof or concrete example
+thinking,t2_q4_metacognition,8.01,3,Classic Fermi estimation: population->pianos->tuning frequency->tuner capacity; identifies key assumptions; bounds 1-5; well-structured
+thinking,t1_q1_multistep,7.92,3,"Correct: first train goes 60mi in 1hr, 220mi remaining, closing at 140mph, ~1.57hrs after 10AM = ~11:34AM; answer matches"
+thinking,t1_q2_hypothesis,8.06,3,"Three strong alternative explanations: SES confounding, self-discipline/conscientiousness, health/stress; specific and well-reasoned"
+thinking,t1_q3_planning,31.65,2,Correct approach; finds AEBDC as valid; systematic case analysis; hit max tokens before completing all valid orderings but methodology sound
+coder,t3_q1_concurrent_correctness,47.28,2,Correctly identifies ABA problem in lock-free stack; explains tagged pointer solution; hit max tokens before completing code but core explanation correct
+coder,t3_q2_distributed_consistency,46.0,1,Lists conflict resolution strategies but superficial; doesn't deeply analyze the specific scenario; lacks concrete pseudocode or detailed protocol comparison
+coder,t3_q3_algorithmic_hardness,41.5,2,Adversary argument framework correct for Omega(n) lower bound; randomized select expected comparisons discussed; hit max tokens but core proofs outlined
+coder,t2_q1_design,48.87,2,Working LRU cache with correct logic; acknowledges O(n) remove; uses list not OrderedDict; functional but not O(1) as best practice
+coder,t2_q2_debug_complex,8.13,3,Correctly identifies race condition: read-await-write non-atomic; proposes asyncio.Lock solution; explains why sleep inside lock is needed
+coder,t2_q3_optimize,8.1,3,Correct O(n) solution using Counter; handles duplicate counting and self-pairs; clear complexity analysis
+coder,t2_q4_system,47.93,3,Correct sliding window rate limiter using deque; time.time() for timestamps; clean implementation with proper window cleanup
+coder,t1_q1_algorithm,48.14,1,Identifies left=mid as bug but gets confused during analysis; second bug identification unclear; hit max tokens while still reasoning; doesn't provide clean fix
+coder,t1_q2_refactor,8.21,3,"Two versions: O(n) with set, and streaming approach; both correct; good complexity analysis and tradeoff discussion"
+coder,t1_q3_test,52.9,3,"Comprehensive pytest tests: normal division, edge cases (0/n, negatives, floats), error case with pytest.raises for ZeroDivisionError"
+general,t3_q1_policy_analysis,8.08,1,Unclosed think tag (malformed <think>:); identifies failure modes in think block but hit max tokens before producing clean output
+general,t3_q2_system_failure,41.31,3,Correctly identifies race condition from eventual consistency + idempotency check on replica; explains sequence clearly; good fix suggestions
+general,t3_q3_strategic_communication,8.16,0,Unclosed think tag; entire response stuck debating whether CPO is a typo for CEO; never produces the board meeting statement
+general,t2_q1_synthesis,35.32,3,Phased approach: quick hotfix for churn + 3-month refactor plan; balances all three perspectives; actionable recommendation
+general,t2_q2_transform,8.36,3,Correct nested YAML: departments -> Engineering/Sales -> employees with name+level; valid YAML syntax
+general,t2_q3_schedule,8.21,0,Unclosed think tag; entire response in think block; never produces actual schedule
+general,t2_q4_inconsistency,47.05,3,"Identifies all 3 inconsistencies: JSON vs form-encoded body, rate limit 100/min vs 1000/hr, time unit mismatch"
+general,t1_q1_json,93.48,3,"Perfect JSON with correct fields: name, role, department, start_date; no extra text; valid syntax"
+general,t1_q2_multistep,8.25,0,Unclosed think tag; prompt was contaminated with extra items; reasoning in think block gets correct answer but never outputs it
+general,t1_q3_compare,8.21,2,Think block reasoning is thorough; final output is 2-3 sentence comparison; slightly verbose path to get there but answer correct
+agentic,t3_q1_competing_constraints,48.24,2,Reasonable step plan for CSV analysis; includes error handling for missing columns; addresses edge cases; JSON format correct
+agentic,t3_q2_multi_agent_coordination,8.12,3,"Well-structured multi-phase plan: parallel research+code, then verification; proper dependency chains; context passing defined; error handling included"
+agentic,t3_q3_adversarial_robustness,41.96,2,"Identifies security concerns: command injection, path traversal; refuses unsafe execution; suggests sandboxing; addresses prompt but doesn't fully demonstrate safe alternatives"
+agentic,t2_q1_ambiguous,8.09,0,Unclosed think tag; entire response stuck in analysis paralysis about which tool to use; never produces tool call or clarifying question
+agentic,t2_q2_error_chain,46.73,3,Correct next diagnostic step: check_dns for db-staging.internal; logical chain from deployment failure -> health check -> DB connection refused -> DNS check
+agentic,t2_q3_schema_edge,7.86,3,"Correct tool call: GET /users with null body (schema says must be null for GET), auth header; clean JSON output"
+agentic,t2_q4_orchestration,8.18,3,Correct deployment sequence: checkout -> test -> build -> deploy staging -> deploy prod; includes rollback plan with notify_slack
+agentic,t1_q1_sequential,8.2,2,Correct tool sequence: grep_search then read_file; proper JSON array format; includes unnecessary think block but output correct
+agentic,t1_q2_error_handling,46.37,2,Acknowledges 404 error; offers search_users as alternative; asks for clarification; reasonable recovery strategy though slightly verbose
+agentic,t1_q3_nested_params,34.99,3,"Correct JSON with nested metadata: priority, tags array, due_date; assignees as array; all required fields present"

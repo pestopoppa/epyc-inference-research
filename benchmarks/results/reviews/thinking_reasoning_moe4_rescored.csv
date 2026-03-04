@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+coder,t3_q1_concurrent_correctness,10.14,2,Correct ABA identification and scenario; fix concept present but implementation verbose/confused about CAS semantics
+coder,t3_q2_distributed_consistency,9.79,3,Lists 5 strategies with failure scenarios; recommends CRDTs for shopping cart; thorough
+coder,t3_q3_algorithmic_hardness,9.88,0,Degenerate repetition (7x repeated paragraph); fails to provide proof or analysis
+coder,t2_q1_design,10.19,3,Correct LRU design with DLL+hashmap; O(1) operations; clear explanation
+coder,t2_q2_debug_complex,11.07,3,Correctly identifies race condition; proper fix with asyncio.Lock
+coder,t2_q3_optimize,10.49,3,Correct O(n)/O(nlogn) optimization; two-pointer and hashmap approaches
+coder,t2_q4_system,10.43,3,Correct sliding window rate limiter; handles edge cases; includes tests
+coder,t1_q1_algorithm,10.33,2,Identifies left=mid infinite loop bug; verbose analysis; second bug less clear
+coder,t1_q2_refactor,10.47,3,Two correct refactored versions with proper complexity analysis
+coder,t1_q3_test,10.58,3,"Comprehensive pytest tests covering normal, edge, error cases"
+thinking,t3_q1_methodological_critique,10.49,3,"4+ methodological issues (SES confound, measurement validity, sample bias) with mechanisms"
+thinking,t3_q2_causal_inference,10.84,2,Correct adjustment set {Gene} and collider bias; Q3 lacks discussion of alternative methods
+thinking,t3_q3_reasoning_trap,10.06,3,Correctly identifies test set bias flaw; concrete adversarial robustness scenario
+thinking,t2_q1_paradox,10.31,1,Has </think> but no <think>; final answer truncated mid-sentence; only begins Position 1
+thinking,t2_q2_counterfactual,10.14,3,Thorough analysis across all 3 dimensions with specific examples and second-order effects
+thinking,t2_q3_formal,10.42,3,Correct formal proof of hypothetical syllogism; good examples
+thinking,t2_q4_metacognition,10.92,3,Clear Fermi estimation with explicit assumptions and bounds
+thinking,t1_q1_multistep,10.8,3,Correct answer 11:34 AM with complete work; verified two approaches
+thinking,t1_q2_hypothesis,10.66,3,Three specific alternative explanations with clear third-variable mechanisms
+thinking,t1_q3_planning,10.84,1,Reasoning process correct but does not reach final answer
+math,t3_q1_analysis,10.87,2,Correct differentiability proof and closed form; part 3 limit incomplete
+math,t3_q2_combinatorics,10.78,1,Correctly identifies identity issue (LHS=1 for n=1..4); fails to provide proof
+math,t3_q3_probability_theory,10.76,2,Correct answer E[N]=e; direct proof complete; elegant argument truncated
+math,t2_q1_optimization,10.94,3,"Correct: x=100, y=50, A=5000; clean derivation"
+math,t2_q2_proof,10.55,3,Correctly identifies failure at n=1->n=2; explains overlap breakdown
+math,t2_q3_calculus,10.51,3,Correct: antiderivative x^3+x^2-x; F(2)-F(0)=10
+math,t2_q4_statistics,10.51,0,CRITICAL: Sum=160 (should be 185); mean=20 (should be 23.125); cascading errors
+math,t1_q1_word_problem,10.58,1,MATH ERROR: $120+$9.60 != $128.40; should be $129.60
+math,t1_q2_system_equations,10.31,3,All 4 solutions found using algebraic identities
+math,t1_q3_probability,10.45,1,Part 1 correct (2/9); Part 2: 15/90 simplified to 1/10 (should be 1/6); wrong final
+instruction_precision,t3_q1_self_referential,10.47,0,Never produces required sentence; stuck in reasoning
+instruction_precision,t3_q2_cascading_constraints,10.49,0,Never produces 5 words; stuck reasoning about constraints
+instruction_precision,t3_q3_meta_instruction,10.54,0,Correct analysis but never outputs result; stuck in reasoning
+instruction_precision,t2_q1_resist_elaboration,10.59,0,Outputs 42 then reasoning; should output only 4
+instruction_precision,t2_q2_maintain_format,10.58,0,Does not follow required ERROR_TYPE/ROOT_CAUSE/FIX format
+instruction_precision,t2_q3_empty_handling,10.59,1,Correct conclusion NONE but violates do-not-explain instruction
+instruction_precision,t2_q4_conflicting_constraints,10.6,0,Hallucinates extra constraint; never produces sentence
+instruction_precision,t1_q1_negative_instruction,10.59,1,Reasoning about approach but no clear final 2-sentence answer
+instruction_precision,t1_q2_word_limit,10.55,1,Candidate description within range but buried in verbose reasoning
+instruction_precision,t1_q3_structured_format,10.54,0,Does not follow format; outputs reasoning instead of clean lines
+instruction_precision,t1_q4_multiple_constraints,11.22,3,"Perfect: 5 countries alphabetical, one per line, no extra text"
+long_context,t3_q1_multi_hop_reasoning,5.08,2,Correctly identifies documents lack financial data; honest impossibility
+long_context,t3_q2_contradiction_detection,6.25,2,Correctly identifies task-content mismatch
+long_context,t3_q3_evolving_requirements,5.35,2,Correctly identifies no email thread in provided text
+long_context,t2_q1_deep_needle,3.59,3,Correctly finds CRITICAL: node-7 at 2024-03-15 03:08:02
+long_context,t2_q2_synthesis,5.53,2,Attempts multi-doc synthesis; identifies key metrics; struggles with boundaries
+long_context,t2_q3_architecture,4.8,2,Reasonable architectural analysis of config/code patterns
+long_context,t1_q1_needle,7.3,2,Systematically scans files for secrets; thorough analysis
+long_context,t1_q2_multi_file,7.81,2,Identifies missing files; attempts analysis of available code
+long_context,t1_q3_extraction,7.27,2,Systematic extraction from legal document; reasonable completeness
+general,t3_q1_policy_analysis,9.25,3,3+ failure modes with mechanisms; specific amendments with trade-offs
+general,t3_q2_system_failure,9.3,3,Precise replica-lag double-charge explanation; testing gap; two architectural fixes
+general,t3_q3_strategic_communication,9.32,3,Effective board statement; all 4 requirements addressed; professional tone
+general,t2_q1_synthesis,9.44,3,Excellent synthesis: targeted fix under budget; deferred refactor; 3 sentences
+general,t2_q2_transform,9.29,2,Correct nested YAML but buried in verbose reasoning
+general,t2_q3_schedule,10.43,2,Correct constraint analysis; attempts valid schedule
+general,t2_q4_inconsistency,10.4,3,Correctly identifies body format and rate limit inconsistencies
+general,t1_q1_json,10.76,2,Correct JSON fields but includes preamble text
+general,t1_q2_multistep,10.34,1,Hallucinates extra items from prompt echo; corrupted input
+general,t1_q3_compare,10.58,2,Correct comparison and recommendation; exceeds sentence limit
+agentic,t3_q1_competing_constraints,10.1,2,Reasonable multi-step plan with error handling for unknown schema
+agentic,t3_q2_multi_agent_coordination,10.17,3,Well-designed orchestration; correct agent routing; considers time budget
+agentic,t3_q3_adversarial_robustness,10.46,3,Identifies command injection and sensitive file access; safe handling
+agentic,t2_q1_ambiguous,10.52,2,Uses send_slack as instructed; could have asked clarification
+agentic,t2_q2_error_chain,10.39,2,Correct error chain analysis; reasonable next step
+agentic,t2_q3_schema_edge,10.4,2,Correct JSON with null body and auth header; unwanted reasoning text
+agentic,t2_q4_orchestration,10.52,3,Complete deployment plan with failure rollback paths
+agentic,t1_q1_sequential,10.67,1,Correct tool calls but fails output-only-JSON instruction
+agentic,t1_q2_error_handling,10.54,2,Asks clarification and suggests search_users; reasonable
+agentic,t1_q3_nested_params,10.9,2,Correct nested JSON; minor preamble from prompt echo

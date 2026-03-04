@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,22.68,1,Identifies 2 methodological issues (attrition bias social desirability) before degenerating into repetition loop
+thinking,t3_q2_causal_inference,21.17,0,Degenerate output: echoes prompt then produces LaTeX garbage and repetition loops
+thinking,t3_q3_reasoning_trap,18.84,0,Degenerate output: brief start then 'We need to#the' repetition loop
+thinking,t2_q1_paradox,14.88,0,Degenerate output: no substantive content immediate LaTeX/backslash repetition
+thinking,t2_q2_counterfactual,14.64,0,Degenerate output: '*Do*Do' repetition loop no analysis produced
+thinking,t2_q3_formal,15.48,0,Degenerate output: LaTeX garbage and repetition no proof produced
+thinking,t2_q4_metacognition,14.13,0,Begins estimation but degenerates into 'Chicago has a population of about' repetition loop
+thinking,t1_q1_multistep,15.41,0,Starts setup but degenerates into 'Train 1 travels at 60 mph' repetition never reaches answer
+thinking,t1_q2_hypothesis,13.85,0,Degenerate output: mentions selection bias then degenerates into '* * *' repetition loop
+thinking,t1_q3_planning,14.77,1,Good systematic approach to constraint enumeration but incomplete - reaches token limit before listing all valid orderings
+general,t3_q1_policy_analysis,15.54,1,Identifies accuracy-fairness tradeoff failure mode with mechanism before degenerating into * repetition
+general,t3_q2_system_failure,14.58,1,Correctly identifies replica lag + idempotency check race condition but degenerates into 0-repetition tail
+general,t3_q3_strategic_communication,14.05,0,Degenerate output: echoes prompt setup then degenerates into repetition
+general,t2_q1_synthesis,15.43,0,Degenerate repetition: same 3-line recommendation block repeated dozens of times no actual synthesis
+general,t2_q2_transform,15.64,2,Produces correct nested YAML grouping by department with proper structure though followed by unnecessary repetition
+general,t2_q3_schedule,13.5,1,Begins constraint analysis correctly but runs out of tokens without producing a final schedule
+general,t2_q4_inconsistency,14.73,1,Identifies body format inconsistency (JSON vs form-encoded) but degenerates before completing rate limit analysis
+general,t1_q1_json,27.79,3,Correct JSON with all 4 fields accurately extracted: name role department start_date
+general,t1_q2_multistep,17.24,0,Degenerate: adds extra items to input then repeats instructions endlessly never produces processed output
+general,t1_q3_compare,14.54,1,Provides analysis but fails format constraint (asked for 2-3 sentences gave extended multi-section analysis)
+math,t3_q1_analysis,14.93,0,Degenerate output: immediate LaTeX garbage and repetition no mathematical content
+math,t3_q2_combinatorics,15.76,0,Degenerate output: '### Part' repeated endlessly no proof attempted
+math,t3_q3_probability_theory,15.5,0,Degenerate output: LaTeX repetition E[N]=e never derived
+math,t2_q1_optimization,14.65,1,Correct area formula setup but wrong constraint equation (2x+y instead of x+2y) then degenerates into repetition
+math,t2_q2_proof,13.94,2,Correctly identifies the horse induction fails at n=1 (step from 1 to 2) where subsets dont overlap
+math,t2_q3_calculus,26.53,3,Fully correct: antiderivative x^3+x^2-x F(2)=8+4-2=10 F(0)=0 integral=10
+math,t2_q4_statistics,15.58,0,Begins calculation but degenerates into repetition before computing any results
+math,t1_q1_word_problem,15.18,0,Begins problem setup correctly but degenerates into '0.S0' repetition no final answers
+math,t1_q2_system_equations,23.74,3,Fully correct: all 4 real solutions (4 3) (3 4) (-3 -4) (-4 -3) with clear method
+math,t1_q3_probability,14.12,0,Wrong: uses 8 total balls instead of 10 (5+3+2=10) giving incorrect probabilities
+coder,t3_q1_concurrent_correctness,15.04,1,Partially identifies ABA problem scenario but incomplete explanation and no fix provided
+coder,t3_q2_distributed_consistency,16.05,1,Begins listing conflict resolution strategies (LWW) but degenerates into repetition
+coder,t3_q3_algorithmic_hardness,14.52,1,Begins adversary argument for lower bound but incomplete never addresses median-of-medians
+coder,t2_q1_design,15.33,0,Degenerate output: no LRU implementation immediate garbage/repetition
+coder,t2_q2_debug_complex,14.99,0,Brief mention of race condition but no fix degenerates into 'The user wantsS' repetition
+coder,t2_q3_optimize,15.5631,0,Degenerate output: mentions optimization needed then 'We' repeated endlessly
+coder,t2_q4_system,14.65,1,Good design discussion of sliding window approach and edge cases but no actual code implementation
+coder,t1_q1_algorithm,15.664,0,Degenerate output: mentions invariant then 'The' repeated endlessly no bugs identified
+coder,t1_q2_refactor,15.85,0,Echoes original code with minor garbling no refactored versions provided
+coder,t1_q3_test,16.65,0,Degenerate output: discusses test structure then 'test' word repeated no actual test code
+instruction_precision,t3_q1_self_referential,26.89,0,Attempts construction but never produces a verified self-referential sentence meeting all 4 constraints
+instruction_precision,t3_q2_cascading_constraints,25.61,0,Degenerate output: empty code blocks repeated no words produced
+instruction_precision,t3_q3_meta_instruction,25.58,0,Does not execute instructions; repeats the entire instruction block multiple times
+instruction_precision,t2_q1_resist_elaboration,26.3,0,Knows answer is 4 but degenerates into 'WaitS/4' repetition loop violating constraint
+instruction_precision,t2_q2_maintain_format,26.81,1,Eventually produces correct ERROR_TYPE/ROOT_CAUSE/FIX format but violates 'no other text' constraint
+instruction_precision,t2_q3_empty_handling,26.99,3,Correct: outputs exactly 'NONE' as instructed when no emails found
+instruction_precision,t2_q4_conflicting_constraints,26.43,0,Degenerate output: expands forbidden word list into 'containment' repetition never writes the sentence
+instruction_precision,t1_q1_negative_instruction,26.72,0,Degenerate output: '*only*' repeated endlessly no explanation of photosynthesis
+instruction_precision,t1_q2_word_limit,26.68,1,Reasonable 22-word ML description but claims 24 words (wrong count) then degenerates
+instruction_precision,t1_q3_structured_format,26.68,0,Lists far more than 3 languages degenerates into 'Logo (1967)' repetition
+instruction_precision,t1_q4_multiple_constraints,26.68,0,Lists all European countries instead of exactly 5 violating the primary constraint
+agentic,t3_q1_competing_constraints,21.43,0,Degenerate output: initial approach then code fence/I repetition loop
+agentic,t3_q2_multi_agent_coordination,14.52,1,Outlines multi-phase orchestration plan with agent roles but degenerates before completing
+agentic,t3_q3_adversarial_robustness,15.53,1,Begins security analysis of command injection but degenerates into * repetition
+agentic,t2_q1_ambiguous,27.64,2,Chooses send_slack appropriately with reasonable channel/message produces clean JSON tool call
+agentic,t2_q2_error_chain,26.15,2,Correctly follows diagnostic chain and proposes get_logs for database on staging as next step
+agentic,t2_q3_schema_edge,26.94,3,Correct JSON: endpoint=/users method=GET body omitted Authorization header with Bearer token
+agentic,t2_q4_orchestration,19.93,0,Degenerate output: begins deployment plan but degenerates into 'Wait I need to' repetition
+agentic,t1_q1_sequential,26.1,1,Outputs read_file only missing grep_search step; user asked to find ERROR first then show file
+agentic,t1_q2_error_handling,18.56,1,Correctly identifies need to search_users but degenerates before producing clean tool call JSON
+agentic,t1_q3_nested_params,26.5,0,Outputs placeholder JSON with arguments: '...' instead of actual nested parameters

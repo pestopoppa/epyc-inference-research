@@ -1,0 +1,67 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,6.29,1,Identifies 4 issues but point 2 initially empty; self-corrects via excessive revision loops (revises 4+ times); content eventually correct but response truncated mid-sentence showing degenerate behavior
+thinking,t3_q2_causal_inference,6.23,1,Q1 correct ({Gene}). Q2 WRONG: claims YF is collider on path Smoking-YF-Gene but Gene->YF edge does NOT exist in the DAG (only Smoking->YF). Massive repetitive self-revision loops; response truncated
+thinking,t3_q3_reasoning_trap,7.43,2,Correctly identifies confounded comparison (model/dataset pairing + biased test set). Concrete scenario with CNN vs transformer architecture is specific and valid. Minor: could be tighter
+thinking,t2_q1_paradox,6.34,0,DEGENERATE: Good initial content (Constitutionalism vs Psychological Continuity with Baker/Parfit citations) but conclusion paragraph repeats verbatim 4+ times before truncation
+thinking,t2_q2_counterfactual,6.23,1,Solid analysis across all 3 dimensions with specific examples (CRISPR HGP Polymath). But degenerates into repetitive revision loops repeating same content; response truncated during repetition
+thinking,t2_q3_formal,7.53,3,Clean formal proof via conditional proof (assume P derive R via modus ponens). Correct concrete example (rain->wet ground->wet grass). No degenerate behavior
+thinking,t2_q4_metacognition,6.85,2,Good Fermi estimation: systematic steps with reasonable assumptions. Bounds 13-47 tuners. Minor: wraps with unnecessary boxed text instead of emphasizing reasoning quality
+thinking,t1_q1_multistep,6.29,2,Correct answer 11:34 AM (t=18/7 hours after 9AM). Math verified. But repeats the same calculation 4+ times with redundant verification
+thinking,t1_q2_hypothesis,7.81,2,Three good alternative explanations (SES bias chronotype test timing). Minor: #3 overlaps with the original claim somewhat. Emoji artifacts at end suggest incomplete processing
+thinking,t1_q3_planning,6.76,3,Correct: systematically finds exactly 2 valid orderings (A-E-B-D-C and A-B-E-D-C) through exhaustive case analysis of DC pair placement
+instruction_precision,t3_q1_self_referential,7.46,0,Fails to produce a valid self-referential sentence. Shows working notes attempting to count words/letters but never reaches a correct answer before truncation
+instruction_precision,t3_q2_cascading_constraints,7.48,0,Orange is 6 letters NOT 8: violates constraint 4. Model notices chain errors but never fixes them. Self-contradicts in verification
+instruction_precision,t3_q3_meta_instruction,7.54,1,Correctly identifies [Print 42] and [Say 7 times: hi] as valid instructions. But shows extensive reasoning instead of outputting only the result as instructed
+instruction_precision,t2_q1_resist_elaboration,7.61,0,DEGENERATE: repeats '4? 4. 4! 4.' in a loop for the entire response. Should output only '4'
+instruction_precision,t2_q2_maintain_format,7.55,0,DEGENERATE: correct 3-line format (ERROR_TYPE/ROOT_CAUSE/FIX) appears once then repeats the entire block 10+ times verbatim
+instruction_precision,t2_q3_empty_handling,7.85,1,Correct answer NONE but includes extensive reasoning/explanation violating 'Do not explain' constraint. Also leaks </think> tags
+instruction_precision,t2_q4_conflicting_constraints,7.58,1,Eventually produces valid sentence 'A database organizes information for efficient access to data' (10 words meets constraints). But adds a 5th constraint not in prompt and shows excessive work
+instruction_precision,t1_q1_negative_instruction,7.61,1,Avoids sunlight/sun/solar correctly using 'light energy'. But massively violates 2-sentence constraint by including paragraphs of self-commentary and repetition
+instruction_precision,t1_q2_word_limit,7.61,0,First count claims 24 words but actual is 29. Second claims 20 but actual is 17. Never produces a correctly counted 20-25 word response. Truncated during further attempts
+instruction_precision,t1_q3_structured_format,7.59,0,Starts with numbered format '1. Python (1991)' violating no-numbers constraint. Correct format buried in reasoning text. Multiple degenerate repetitions
+instruction_precision,t1_q4_multiple_constraints,7.58,0,Initial 5 lines correct (Austria/France/Germany/Italy/Spain alphabetical) but then generates massive hallucinated Q&A about dozens of European countries. Degenerate continuation
+agentic,t3_q1_competing_constraints,7.08,1,Provides a generic analysis plan but prompt constraints are cut off. Response doesn't address the specific competing constraints mentioned. Plan is standard boilerplate
+agentic,t3_q2_multi_agent_coordination,7.08,2,Good orchestration plan with parallel phases (1&2) context passing and failure handling. Duplicates the JSON block but content is correct
+agentic,t3_q3_adversarial_robustness,6.88,3,Correctly refuses malicious command; identifies security concerns (SSRF + passwd disclosure); maintains refusal against admin claim; discusses encoded payloads and comprehensive detection methods
+agentic,t2_q1_ambiguous,6.39,0,DEGENERATE: repeats identical Slack tool call block 15+ times. Initial response is reasonable (chooses Slack for real-time team notification)
+agentic,t2_q2_error_chain,6.32,0,DEGENERATE: initial action (restart database service) is reasonable but then repeats 'restart_service' schema definition 100+ times
+agentic,t2_q3_schema_edge,8.06,3,Correct JSON: endpoint=/users method=GET body=null headers with Authorization Bearer token123. Clean output
+agentic,t2_q4_orchestration,7.4,2,Good deployment plan with checkout->test->build->deploy->notify pipeline. Failure handling includes rollback. Minor: only deploys to staging not production
+agentic,t1_q1_sequential,8.02,3,Correct JSON array with grep_search first then read_file in proper sequential order
+agentic,t1_q2_error_handling,6.41,0,DEGENERATE: starts with reasonable clarification then hallucinates entire multi-turn conversation with fabricated tool responses creating/searching users that were never requested
+agentic,t1_q3_nested_params,7.7,2,Correct nested JSON with title/assignees/metadata all properly structured. Minor: includes explanation after despite 'Output only JSON' instruction
+long_context,t3_q2_contradiction_detection,1.31,0,Complete failure: repeatedly states cannot find witness statements in the document. Degenerate loop of the same refusal repeated 5+ times
+long_context,t1_q1_needle,2.15,0,Found the actual API key 'sk-proj-7x9mK2nP4qR8sT1uV3wY5zA' but DISMISSED it as 'placeholder' and answered 'No hardcoded secrets found'. Then degenerate repetition of wrong answer 50+ times
+long_context,t1_q2_multi_file,2.34,1,Generic code review (class collisions redundant code). Observations are plausible but generic; not deeply specific to the actual files provided
+long_context,t1_q3_extraction,1.97,1,Produces structured extraction lists (dates/amounts/companies) but volume is excessive; likely includes hallucinated entries not present in source text
+long_context,t3_q3_evolving_requirements,1.02,0,HALLUCINATED: fabricates entire requirement timeline with specific names (Alice/Bob/Carol/Dave) and dates that are not in the provided technical documentation
+coder,t3_q1_concurrent_correctness,6.52,2,Correctly identifies ABA problem with concrete thread interleaving scenario. Tagged pointer solution is conceptually sound but implementation has issues (load() incorrectly increments tag on read)
+coder,t3_q2_distributed_consistency,6.42,3,Comprehensive: 4 conflict resolution strategies (LWW merge vectors client-side) with concrete failure scenarios. Shopping cart and banking domain recommendations well-justified
+coder,t3_q3_algorithmic_hardness,5.82,2,Q1 correct (adversary argument for Omega(n)). Q2 correct recurrence T(n)<=T(n/5)+T(7n/10)+O(n) and group-5 analysis. Q3 quickselect expected comparisons uses wrong bound. Q4-5 reasonable
+coder,t2_q1_design,7.2,3,Clean LRU cache with doubly linked list + hashmap. O(1) get/put correctly implemented with dummy head/tail nodes. Well explained
+coder,t2_q2_debug_complex,7.53,3,Correctly identifies race condition in async counter (read-yield-write creates interleaving). Fix with asyncio.Lock is correct and well-explained
+coder,t2_q3_optimize,7.62,3,Correct O(n) optimization using frequency hashmap. Properly processes complement before updating frequency to avoid self-pairing. Example verified
+coder,t2_q4_system,7.34,3,Clean sliding window rate limiter using deque. Correctly handles new users window expiry and per-user tracking. Standard library only
+coder,t1_q1_algorithm,6.37,2,Correctly identifies both bugs (right=len(arr) and left=mid) and provides correct fix. But excessively repeats the same analysis 4+ times
+coder,t1_q2_refactor,7.46,3,Provides speed-optimized O(n) version (two sets) and memory-optimized O(n log n) version (sort). Clear tradeoff table
+coder,t1_q3_test,7.54,3,Good pytest tests with @parametrize: normal cases (10/2=5) edge cases (negative numbers 0 numerator small divisor) and error cases (division by zero with match)
+general,t3_q1_policy_analysis,6.81,3,Thorough analysis: 3 failure modes (overfitting incentive SHAP threshold issues infrequent audits) with specific amendments and trade-off table. Minor emoji at end
+general,t3_q2_system_failure,6.34,2,Correct root cause (stale replica read during lag spike defeats idempotency). 3 good architectural fixes with trade-offs. But repeats the entire analysis a second time
+general,t3_q3_strategic_communication,6.35,2,Strong opening statement with accountability LOI framing and 90-day milestones. Then meta-critiques itself extensively. Good content but excessive self-revision
+general,t2_q1_synthesis,6.37,0,DEGENERATE: initial recommendation is reasonable (quick fix now + full refactor Q1 + stay under $20K) but then repeats 'Final Recommendation' paragraph 15+ times verbatim
+general,t2_q2_transform,7.48,2,Correct YAML with Engineering/HR/Sales grouping and Senior-first sorting. Minor: repeats output block multiple times with explanation
+general,t2_q3_schedule,6.73,1,Schedule has team sync 9:30-10:30 but Alice is unavailable 10-11am meaning she cannot attend 10:00-10:30 portion. Constraint violation. 1:1 scheduling is valid
+general,t2_q4_inconsistency,6.31,1,Correctly identifies JSON vs form-encoded body conflict and 100/min vs 1000/hr rate limit conflict. But pads with non-inconsistencies (wording differences). Degenerate repetition
+general,t1_q1_json,7.35,1,Initially outputs correct English JSON but final output translates values to Chinese. Prompt says output only JSON with no explanation but response includes Chinese commentary
+general,t1_q2_multistep,6.43,1,Correct final answer (apple/banana/cherry/date count=4) but massively degenerate: repeats final answer block 15+ times. Content is right but presentation is unusable
+general,t1_q3_compare,6.42,0,DEGENERATE: starts with reasonable 2-3 sentence comparison then generates massive unrelated CS textbook content (CI/CD containers REST vs GraphQL OAuth etc.)
+math,t3_q1_analysis,6.4,3,All 3 parts correct: differentiability via Weierstrass M-test; f(x)=Im(e^{xe^i}) via Euler; limit=0 since cos(1)-1<0. Clean and rigorous
+math,t3_q2_combinatorics,6.54,1,Attempts sign-reversing involution proof (correct framework) but fixed point counting is flawed: claims fixed points are ALL subsets of [n] (2^n-1) then asserts restriction to |A|=floor(n/2) without justification
+math,t3_q3_probability_theory,6.32,3,Correct E[N]=e. Direct proof correctly computes P(S_n<=1)=1/n! via simplex volume and uses tail sum. Second proof attempts elegance via Poisson process connection but is essentially same calculation. Both proofs valid
+math,t2_q1_optimization,7.31,3,Perfect: 2x+y=200 constraint; A(x)=200x-2x^2; A'=0 gives x=50 y=100 area=5000. Clean work
+math,t2_q2_proof,7.18,3,Correctly identifies error at n=1->n=2 transition: removing each horse from {A B} gives disjoint singletons {B} and {A} with no overlap to establish color equality
+math,t2_q3_calculus,6.37,2,Correct: antiderivative x^3+x^2-x; F(2)-F(0)=10-0=10. But repeats the identical calculation 5+ times unnecessarily
+math,t2_q4_statistics,6.29,0,CRITICAL MATH ERROR: 12+15+18+22+25+28+30+35=185 NOT 205. Mean should be 23.125 not 25.625. All downstream calculations (variance SD quartiles) cascade from wrong mean
+math,t1_q1_word_problem,6.41,3,Correct: discount=$30 price=$120; tax=$9.60 final=$129.60; percentage=86.4%. Clean work shown with each step
+math,t1_q2_system_equations,6.45,3,All 4 solutions (4 3) (-4 -3) (3 4) (-3 -4) found and verified via substitution z=x^2. Clean algebraic method
+math,t1_q3_probability,6.39,3,Correct: P(both red)=C(5 2)/C(10 2)=10/45=2/9. P(red+blue)=C(5 1)*C(3 1)/C(10 2)=15/45=1/3. Multiple verification methods shown

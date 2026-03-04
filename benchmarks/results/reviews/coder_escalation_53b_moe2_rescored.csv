@@ -1,0 +1,61 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,13.95,0,Echoes prompt then produces garbled nonsense about 'BTAT' and 'accenture'; identifies zero valid methodological issues
+thinking,t3_q2_causal_inference,12.28,0,Echoes prompt then incoherent text about 'antibodies to protein products'; no adjustment set identified; no valid causal reasoning
+thinking,t3_q3_reasoning_trap,11.45,0,Echoes prompt then degenerates into 'anorez.com' spam and unrelated text; does not identify the flaw or construct a scenario
+thinking,t2_q1_paradox,13.47,0,Echoes prompt then garbled philosophy references; no coherent argument for any position on Ship of Theseus
+thinking,t2_q2_counterfactual,16.41,0,Echoes prompt then incoherent fragments; no analysis of any of the three dimensions requested
+thinking,t2_q3_formal,12.4,0,Echoes prompt then degenerates into LaTeX gibberish and 'Project Gutenberg' spam; no proof attempted
+thinking,t2_q4_metacognition,12.3,0,Echoes prompt then degenerates into LaTeX and 'codeforces' references; no estimation approach described
+thinking,t1_q1_multistep,13.22,0,Echoes prompt then 'Scrollorks' spam and worksheet fragments; never computes when trains meet
+thinking,t1_q2_hypothesis,14.16,0,Echoes prompt then random questions about Moon and tennis balls; zero alternative explanations given
+thinking,t1_q3_planning,12.4,0,Echoes prompt then degenerates into LaTeX notation about sets and automorphisms; zero valid orderings produced
+coder,t3_q1_concurrent_correctness,13.77,0,"Echoes prompt then trails off; does not demonstrate ABA scenario, does not provide fix code"
+coder,t3_q2_distributed_consistency,12.36,0,Echoes prompt then degenerates into HTML-like ad spam; no conflict resolution strategies listed
+coder,t3_q3_algorithmic_hardness,14.87,0,"Echoes prompt then degenerates into HTML/forum spam; no proof, no recurrence derivation"
+coder,t2_q1_design,21.58,0,Echoes prompt then broken Python with syntax errors ('def __init__(defeat)'); LRU cache not implemented
+coder,t2_q2_debug_complex,13.4,0,Echoes prompt then produces endless empty triple-quote strings; race condition not identified or fixed
+coder,t2_q3_optimize,20.07,0,Echoes prompt then vague prose about 'brute force approach'; no O(n) solution provided
+coder,t2_q4_system,14.35,0,Echoes prompt then broken incomplete code with TODO placeholders; rate limiter not implemented
+coder,t1_q1_algorithm,12.77,0,Echoes prompt then broken code with undefined variables and incoherent logic; neither bug identified
+coder,t1_q2_refactor,11.5,0,Echoes prompt then meta-commentary about 'asking you guys questions'; no refactored versions provided
+coder,t1_q3_test,20.32,0,Echoes prompt then garbled text; no valid pytest test cases written
+agentic,t3_q1_competing_constraints,12.78,0,Echoes prompt but response is cut off mid-sentence; no robust plan generated
+agentic,t3_q2_multi_agent_coordination,19.2,0,"Echoes prompt only; no orchestration design, no subtask assignment, no parallelization plan"
+agentic,t3_q3_adversarial_robustness,18.26,0,Echoes prompt then garbled bash/JSON spam with repeated dots; does not refuse malicious command; no security policy designed
+agentic,t2_q1_ambiguous,14.47,0,Echoes prompt then pivots to jq tutorial; does not ask clarifying question or choose appropriate tool
+agentic,t2_q2_error_chain,12.64,0,"Echoes prompt only; no next action chosen, no reasoning provided"
+agentic,t2_q3_schema_edge,17.64,0,Echoes prompt then produces malformed JSON with wrong field names; no correct tool call generated
+agentic,t2_q4_orchestration,14.58,0,Echoes prompt then degenerates into 'gitops tooling' prose; no JSON deployment plan produced
+agentic,t1_q1_sequential,12.61,0,Echoes prompt then produces garbled JSON with repeated dots and wrong structure; no valid tool calls
+agentic,t1_q2_error_handling,19.46,0,Echoes prompt then incoherent text; no valid tool call or clarifying message produced
+agentic,t1_q3_nested_params,20.38,0,Echoes prompt then produces malformed JSON with wrong field names; does not match schema
+general,t3_q1_policy_analysis,14.38,0,"Echoes prompt then incoherent prose; no failure modes identified, no amendments proposed"
+general,t3_q2_system_failure,13.89,0,Echoes prompt then trails off; does not explain double-charge mechanism or propose fixes
+general,t3_q3_strategic_communication,16.62,0,Echoes prompt then incoherent; no board meeting statement written
+general,t2_q1_synthesis,14.35,0,Echoes prompt then degenerates into nonsense about 'I win I complain'; no unified recommendation
+general,t2_q2_transform,20.95,0,Echoes prompt then LaTeX/Python gibberish; no valid nested YAML produced
+general,t2_q3_schedule,11.52,0,Echoes prompt then repeats 'afternoon' endlessly; no valid schedule produced
+general,t2_q4_inconsistency,11.97,0,Echoes prompt then repetitive 'Doc B constraint' loops; inconsistencies not properly identified
+general,t1_q1_json,22.15,0,Echoes prompt then broken JSON with syntax errors and garbage characters; not valid JSON output
+general,t1_q2_multistep,13.69,0,"Echoes prompt then wrong dedup, wrong sort, degenerates into C# code about polygons; completely wrong"
+general,t1_q3_compare,13.25,0,Echoes prompt then incoherent text about 'approach A better fits'; no valid 2-3 sentence comparison
+math,t3_q2_combinatorics,12.69,0,Echoes prompt then incoherent text; no bijective proof or any valid mathematical argument
+math,t3_q3_probability_theory,13.21,0,Echoes prompt then garbled; E[N]=e not derived; no valid proof of either type
+math,t2_q1_optimization,12.05,0,Echoes prompt then degenerates into worksheet/geometry spam; never sets up or solves the optimization
+math,t2_q2_proof,13.22,0,Echoes prompt then vague; does not identify that inductive step fails at n=1 to n=2 (no overlap)
+math,t2_q3_calculus,14.4,0,Echoes prompt then LaTeX gibberish and repeated filler; integral never evaluated; answer 10 not given
+math,t2_q4_statistics,13.52,0,Echoes prompt then random algebra fragments; mean/median/SD not calculated; sum=185 not computed at all
+math,t1_q1_word_problem,20.32,0,Echoes prompt then repetitive 'Step' loops with wrong values ($15000 instead of $150); no correct answers
+math,t1_q2_system_equations,14.04,0,"Echoes prompt then homework-site spam; system never solved; solutions (3,4)(4,3)(-3,-4)(-4,-3) not found"
+math,t1_q3_probability,12.01,0,Echoes prompt then random unrelated probability text; P(both red)=2/9 and P(one red one blue)=1/3 not computed
+instruction_precision,t3_q1_self_referential,19.26,0,Echoes prompt then incoherent; no self-referential sentence produced; zero constraints met
+instruction_precision,t3_q2_cascading_constraints,18.71,0,Echoes prompt then prose about 'ducking pen'; no 5-word chain meeting any constraints
+instruction_precision,t3_q3_meta_instruction,22.27,0,Echoes prompt then prints 'Hello World' via Python; does not correctly filter [Print 42] and [Say 7 times: hi]
+instruction_precision,t2_q1_resist_elaboration,20.67,0,Echoes prompt then long rambling about calculus and integrals; answer '4' never given; elaboration not resisted
+instruction_precision,t2_q2_maintain_format,19.5,0,Echoes prompt then garbled HTML; ERROR_TYPE/ROOT_CAUSE/FIX format not followed
+instruction_precision,t2_q3_empty_handling,18.98,0,Echoes prompt then garbled HTML/spam; does not output 'NONE'; format completely ignored
+instruction_precision,t2_q4_conflicting_constraints,18.85,0,Echoes prompt then random questions about databases; no sentence meeting any of the 4 constraints
+instruction_precision,t1_q1_negative_instruction,20.34,0,Echoes prompt then mentions 'sun' and 'sunlight' multiple times; violates the core negative constraint
+instruction_precision,t1_q2_word_limit,19.43,0,Echoes prompt then verbose rambling; no 20-25 word description produced
+instruction_precision,t1_q3_structured_format,19.63,0,Echoes prompt then garbled text about 'Language Arts'; no LANGUAGE (YEAR) format output
+instruction_precision,t1_q4_multiple_constraints,21.25,0,Echoes prompt then incoherent text about France and war albums; no 5 European countries in alphabetical order

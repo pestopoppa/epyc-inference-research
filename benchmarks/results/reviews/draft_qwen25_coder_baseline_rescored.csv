@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,179.65,1,Prompt echo; 3 failure modes listed but vague/near-identical; mechanisms copy-paste failure modes; amendments and trade-offs repeat same phrases verbatim; heavy repetition
+general,t3_q2_system_failure,183.04,0,Prompt echo; fundamentally misunderstands scenario (says system was NOT idempotent when it was); two proposed fixes are identical copy-paste; circular reasoning throughout
+general,t3_q3_strategic_communication,166.27,0,Prompt echo; wrong role (says COO not CPO); no specific 90-day milestones; heavy repetition of 'We are committed to...'; does not address hostile board member; generic filler
+general,t2_q1_synthesis,166.79,0,Prompt echo; no synthesis - restates each perspective separately; asked for 3-4 sentence recommendation but gives 3 long bullets; fails core task
+general,t2_q2_transform,158.3,0,Prompt echo; never produces nested YAML; response is massive repetition of the flat employee list; repetition loop; total failure
+general,t2_q3_schedule,164.32,0,Prompt echo; misunderstands task - assigns people to slots instead of scheduling 3 meetings; repeats same feasibility check 3x verbatim; no actual schedule produced
+general,t2_q4_inconsistency,175.99,0,Prompt echo; says No Inconsistencies Found for all docs; misses JSON vs form-encoded body and 100 req/min vs 1000 req/hour discrepancies; total failure
+general,t1_q1_json,181.15,2,Correct JSON with all 4 fields and correct values; adds explanation despite no-explanation instruction; minor format violation
+general,t1_q2_multistep,161.44,0,Prompt echo; massive repetition of Date entries; never performs any of the 4 steps (dedup/sort/number/count); repetition loop
+general,t1_q3_compare,90.53,0,Prompt echo with no answer; response is just the prompt text followed by end-of-text; zero content generated
+thinking,t3_q1_methodological_critique,60.45,0,Prompt echo; adds one filler sentence then stops; zero methodological issues identified; prompt echo without answer
+thinking,t3_q2_causal_inference,120.58,0,Prompt echo; Q1 wrong (correct minimal adjustment set is {Gene}); Q2 self-contradictory; Q3 wrong about unconfoundedness; all 3 answers incorrect
+thinking,t3_q3_reasoning_trap,128.71,0,Prompt echo; flaw identification vague and wrong; scenario doesnt demonstrate D2 superiority; adds confusing D3 that changes nothing; fails to construct valid counterexample
+thinking,t2_q1_paradox,149.48,0,Prompt echo; Constructivism framing irrelevant to Ship of Theseus; points 2-4 identical copy-paste; severe repetition; conclusion just echoes prompt hint
+thinking,t2_q2_counterfactual,137.67,1,Prompt echo; covers 3 dimensions but shallow; second-order effects just restate first-order; summary self-contradictory; some valid but superficial observations
+thinking,t2_q3_formal,146.2,0,Prompt echo; proof logic completely wrong - derives contradiction from valid premises then says premises are false; self-contradictory throughout; correct answer by accident
+thinking,t2_q4_metacognition,139.21,0,Prompt echo; no actual Fermi estimation performed; steps are meta-descriptions without content; no upper/lower bounds given; fails core task
+thinking,t1_q1_multistep,146.25,0,Prompt echo; math wrong - uses 1hr for both trains but Train B starts 1hr later; gets 140 miles remaining (should be 220); answer 1:00 PM wrong (correct ~11:34 AM)
+thinking,t1_q2_hypothesis,136.76,1,Prompt echo; 3 alternatives listed but weak (time eating/food quality/health fitness); first two still food-related not true confounders; misses SES/sleep/parental involvement
+thinking,t1_q3_planning,144.7,0,Prompt echo; Python code is wrong (checks adjacency instead of ordering constraints); repeats same broken code 3x; never produces valid orderings; repetitive loop

@@ -1,0 +1,67 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+math,t3_q1_analysis,49.45,3,"All three parts correct: differentiability via Weierstrass M-test, closed form Im(e^{xe^i}), limit=0 with correct justification"
+math,t3_q2_combinatorics,9.87,0,Unclosed think tag exhausting context window; no proof delivered; model discovered identity is likely false (LHS=1 for all n) but never completed response
+math,t3_q3_probability_theory,46.24,3,Correct answer E[N]=e with two proofs; direct calculation via simplex volumes and geometric argument; both valid
+math,t2_q1_optimization,60.57,3,"Fully correct: x=100, y=50, max area=5000 sq meters; clear setup, derivative, second derivative test"
+math,t2_q2_proof,10.08,3,Correct identification of error at n=1->n=2 transition; empty intersection argument; thorough explanation
+math,t2_q3_calculus,10.08,3,"Correct antiderivative x^3+x^2-x, correct evaluation F(2)=10, F(0)=0, answer=10; think tag closed properly"
+math,t2_q4_statistics,57.17,1,"Sum stated as 205 (correct is 185), mean 25.625 (should be 23.125); median and IQR approach reasonable but values wrong due to sum error; population SD wrong"
+math,t1_q1_word_problem,67.99,3,"All three parts correct: 20, 29.60, 86.4%"
+math,t1_q2_system_equations,10.09,3,"All four solutions found correctly: (4,3), (3,4), (-3,-4), (-4,-3); elegant method using symmetric polynomials"
+math,t1_q3_probability,66.36,3,"Correct: total balls=10, P(both red)=2/9, P(one red one blue)=1/3; clear combinatorial approach"
+long_context,t2_q1_deep_needle,7.69,3,Correctly identified CRITICAL error on node-7 at 2024-03-15 03:47:22 with fatal memory corruption
+long_context,t2_q3_architecture,8.4,2,"Reasonable architecture analysis; covers modular structure, polyglot setup; some generic observations but addresses the question"
+long_context,t1_q1_needle,14.49,2,Found the API key sk-proj-7x9mK2nP4qR8sT1uV3wY5zA but then proceeded to echo config files instead of just the key; partial compliance
+long_context,t1_q2_multi_file,10.44,2,Identifies data flow patterns and missing config loading; analysis is somewhat generic but addresses the question adequately
+long_context,t1_q3_extraction,9.55,0,Unclosed think tag; response is entirely within think block showing planning but no actual extracted output delivered
+thinking,t3_q1_methodological_critique,31.98,3,"Identifies confounding variables (SES), measurement issues, statistical concerns; thorough critique with 5+ valid flaws"
+thinking,t3_q2_causal_inference,10.01,2,"Correct DAG analysis, identifies Gene as confounder, backdoor criterion; some verbosity and trailing incomplete sentence but substantively correct"
+thinking,t3_q3_reasoning_trap,10.09,0,"Unclosed think tag exhausting context; response is entirely within think block, no actual answer delivered"
+thinking,t2_q1_paradox,10.0,2,Discusses Ship of Theseus from multiple philosophical perspectives; response appears cut off but covers material vs form identity debate adequately
+thinking,t2_q2_counterfactual,37.66,3,"Thorough analysis across all three dimensions: dissemination speed, collaboration methods, access inequality; well-structured"
+thinking,t2_q3_formal,55.34,3,Correct proof via hypothetical syllogism with concrete example; clear and complete
+thinking,t2_q4_metacognition,46.45,3,Good Fermi estimation: ~100-300 piano tuners in Chicago; identifies key assumptions and bounds; metacognitive reflection included
+thinking,t1_q1_multistep,10.16,3,"Correct answer 11:34 AM; proper calculation of head start distance, combined speed, meeting time"
+thinking,t1_q2_hypothesis,42.89,3,"Three valid alternative explanations: SES, overall health behaviors, study habits/motivation; well-explained"
+thinking,t1_q3_planning,54.11,1,"Lists A E B D C, A B E D C, A B D E C; third ordering A B D E C violates DC-adjacent constraint; only 2 of 3 valid (and those are the only 2 valid ones)"
+general,t3_q1_policy_analysis,10.17,2,"Identifies policy weaknesses: fixed 95% threshold inappropriate for all models, SHAP limitations, quarterly review cadence; suggests amendments; slightly verbose but substantive"
+general,t3_q2_system_failure,36.06,3,Excellent root cause analysis: read-from-replica during lag spike allows duplicate idempotency key creation; correct fix with primary-only reads for idempotency checks
+general,t3_q3_strategic_communication,10.23,3,"Well-structured board presentation: acknowledges misses, pivots to enterprise LOIs, clear ask for 90-day plan; professional tone"
+general,t2_q1_synthesis,10.15,3,"Good synthesis: phased approach with 4-week auth sprint, then full refactor; balances all three perspectives"
+general,t2_q2_transform,58.85,2,"Correct YAML transformation; includes extra explanation text when not asked for, but structure is correct"
+general,t2_q3_schedule,10.24,0,"Unclosed think tag; response is entirely planning within think block, no schedule delivered"
+general,t2_q4_inconsistency,49.69,3,"Correctly identifies all inconsistencies: body format (JSON vs form-encoded), rate limit values (100/min vs 1000/hr), time periods"
+general,t1_q1_json,90.85,3,"Perfect JSON output with correct fields: name, role, department, start_date; no extra text"
+general,t1_q2_multistep,10.36,3,"Correct: 8 unique items, properly deduplicated case-insensitive, sorted alphabetically, numbered, count included"
+general,t1_q3_compare,69.05,1,Asked for 2-3 sentences but produced 12131 chars (~65 sentences); massively exceeds format constraint despite good content
+agentic,t3_q1_competing_constraints,45.79,2,"Reasonable plan with steps for CSV analysis, error handling, fallback strategies; structured JSON output"
+agentic,t3_q2_multi_agent_coordination,57.47,3,"Good multi-phase orchestration: researcher->coder->reviewer pipeline; time budgets, dependencies, error handling all specified"
+agentic,t3_q3_adversarial_robustness,46.18,3,"Identifies command injection risk, provides safe alternative code with subprocess and input validation; thorough security analysis"
+agentic,t2_q1_ambiguous,48.6,3,"Correctly asks for clarification before acting; identifies missing info (who, what, severity); provides reasonable default action"
+agentic,t2_q2_error_chain,10.2,3,Correct diagnostic chain: deploy blocked -> health check -> db connection refused -> restart database service; logical reasoning
+agentic,t2_q3_schema_edge,66.57,2,Valid GET request with endpoint starting with /; missing body:null which schema requires for GET/DELETE; headers correctly optional
+agentic,t2_q4_orchestration,59.18,3,"Correct deployment pipeline: checkout, test, build, deploy; failure handling with notification and rollback"
+agentic,t1_q1_sequential,10.41,1,Only one tool call (grep_search); missing second call (read_file); also includes extra text before the JSON array
+agentic,t1_q2_error_handling,46.09,2,Asks for more info before creating user; suggests search; reasonable recovery strategy though could be more decisive
+agentic,t1_q3_nested_params,72.19,3,"Correct JSON with nested metadata including priority, tags, due_date; all required fields present"
+instruction_precision,t3_q1_self_referential,54.25,0,"Failed all self-referential constraints; word count wrong, letter count wrong, uses forbidden word ""sentence""; multiple failed attempts visible"
+instruction_precision,t3_q2_cascading_constraints,10.75,0,"Chain rule violated: Spirited->Tender (d!=T), Tender->Noble (r!=N), Noble->Light (e!=L); only Light->Time works; first word 8 letters correct, last word 4 letters correct"
+instruction_precision,t3_q3_meta_instruction,50.52,1,Identifies [Print 42] and [Say 7 times: hi] as valid; but initially includes [Print hello] which has no number; self-corrects but output is messy with explanation text; final corrected output would be right but format violated
+instruction_precision,t2_q1_resist_elaboration,11.45,3,"Outputs just ""4"" (with think tags that are empty); meets the constraint"
+instruction_precision,t2_q2_maintain_format,44.51,0,Echoes stack trace instead of following ERROR_TYPE/ROOT_CAUSE/FIX format; completely misses the instruction
+instruction_precision,t2_q3_empty_handling,12.18,3,"Outputs exactly ""NONE"" as required; clean compliance"
+instruction_precision,t2_q4_conflicting_constraints,11.27,3,"Under 12 words (6), starts with A, ends with data, no store/storage; all constraints met"
+instruction_precision,t1_q1_negative_instruction,49.79,3,"Two sentences about photosynthesis; uses ""light"" but avoids sunlight/sun/solar as instructed; valid"
+instruction_precision,t1_q2_word_limit,44.84,2,Actual word count is 20 (in 20-25 range); model claims 19 which is wrong self-assessment; but the actual output meets the constraint
+instruction_precision,t1_q3_structured_format,48.85,3,"Exact format LANGUAGE (YEAR) with correct years; no bullets, no numbers, no extra text"
+instruction_precision,t1_q4_multiple_constraints,49.58,0,"Algeria is in Africa, not Europe; fails the basic factual requirement; other constraints (5 items, alphabetical, one per line) partially met"
+coder,t3_q1_concurrent_correctness,54.61,2,Correctly identifies ABA problem scenario; explains incorrect behavior; proposes tagged pointers fix but response truncated before full implementation
+coder,t3_q2_distributed_consistency,10.08,3,"Lists 4+ strategies: LWW with logical clocks, CRDTs, application-level merge, manual resolution; discusses CAP theorem tradeoffs"
+coder,t3_q3_algorithmic_hardness,41.0,2,Adversary argument for Omega(n) lower bound started correctly; mentions decision tree and comparison model; response truncated but core argument present
+coder,t2_q1_design,48.36,2,Correct LRU cache implementation but acknowledges O(n) for list.remove() instead of O(1); notes need for OrderedDict or doubly-linked list; honest self-assessment but fails the O(1) requirement
+coder,t2_q2_debug_complex,30.42,3,Correctly identifies race condition; fix with asyncio.Lock is correct; clear explanation of the problem and solution
+coder,t2_q3_optimize,53.81,3,Correct O(n) solution using hash map for complement counting; clear explanation of time/space complexity
+coder,t2_q4_system,10.09,2,Good sliding window rate limiter with deque; validates inputs; response truncated but core implementation visible and correct
+coder,t1_q1_algorithm,10.06,0,Unclosed think tag; entire response is within think block analyzing bugs but never delivers the fix
+coder,t1_q2_refactor,31.38,3,Correct O(n) solution using two sets (seen + duplicates); explains why original is O(n^3); provides alternative approach
+coder,t1_q3_test,50.84,3,"Comprehensive pytest tests: normal, zero division, negatives, floats, zero numerator, large/small numbers, division by one"

@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,7.17,2,Valid JSON plan addressing all 4 requirements; steps are somewhat vague rather than concrete tool calls
+agentic,t3_q2_multi_agent_coordination,6.89,3,Complete JSON with correct agent assignments parallelization of researcher tasks context passing and failure handling
+agentic,t3_q3_adversarial_robustness,6.76,3,Correctly identifies injection risk refuses admin pressure provides encoded command example designs comprehensive policy
+agentic,t2_q1_ambiguous,7.58,3,Asks clarification first then provides reasonable default (Slack) with justification and valid JSON
+agentic,t2_q2_error_chain,7.24,2,Reasonable diagnostic approach (get_logs before restart) valid JSON; could also check DNS which is equally valid
+agentic,t2_q3_schema_edge,7.54,1,Missing body:null required for GET requests per schema; includes extraneous text despite output-only instruction
+agentic,t2_q4_orchestration,7.10,2,Good deployment plan with rollback and notifications; minor: leading period in output no staging/merge step
+agentic,t1_q1_sequential,7.66,2,Correct sequential tool calls; includes extraneous text despite output-only instruction
+agentic,t1_q2_error_handling,6.15,0,Degenerate repetition loop: repeats same 4-option block ~10 times verbatim
+agentic,t1_q3_nested_params,7.46,3,Perfectly structured nested JSON with correct title assignees array priority tags and date
+general,t3_q1_policy_analysis,6.72,3,Identifies 3+ failure modes with mechanisms proposes specific amendments with trade-offs; thorough and well-structured
+general,t3_q2_system_failure,6.72,3,Precise race condition analysis two architectural fixes with trade-offs monitoring recommendations
+general,t3_q3_strategic_communication,6.81,2,Good board statement addressing all 4 requirements; some garbled unicode characters in output
+general,t2_q1_synthesis,7.60,3,Excellent synthesis balancing all three stakeholder constraints with phased approach
+general,t2_q2_transform,7.58,2,Correct nested YAML grouping by department; includes original flat data before transformation (extra output)
+general,t2_q3_schedule,6.45,2,Arrives at valid schedule after methodical analysis; unnecessarily includes Dave in Team Sync; verbose working
+general,t2_q4_inconsistency,6.14,0,Degenerate repetition: correctly identifies inconsistencies but repeats same list ~8 times verbatim
+general,t1_q1_json,7.73,3,Perfect JSON extraction with all fields correctly parsed
+general,t1_q2_multistep,7.46,1,Hallucinates extra items not in input (elderberry fig grape honeydew); self-correction still includes wrong items
+general,t1_q3_compare,7.62,3,Accurate concise comparison covering key trade-offs
+long_context,t3_q1_multi_hop_reasoning,0.87,0,Empty/refusal response: says no documents provided despite prompt including context
+long_context,t3_q2_contradiction_detection,1.20,0,Fabricates witnesses and contradictions from scratch rather than analyzing provided context; hallucinated data
+long_context,t3_q3_evolving_requirements,0.99,1,Correctly identifies boilerplate content but fails to extract any useful analysis from the provided context
+long_context,t2_q1_deep_needle,0,0,Timed out with 0 tokens output; complete failure
+long_context,t2_q2_synthesis,0.82,1,Provides structured analysis with specific metrics but likely hallucinated numbers; cannot verify against actual context
+long_context,t2_q3_architecture,0.60,1,Generic architecture description; pattern identification appears template-based rather than extracted from specific codebase
+long_context,t1_q1_needle,1.72,0,Fails to find any actual API keys/secrets; dumps generic config files instead
+long_context,t1_q2_multi_file,2.10,0,Fails to trace data flow or identify specific bugs; gives generic observations about naming conventions
+long_context,t1_q3_extraction,1.45,1,Lists dates that appear systematically generated rather than extracted from document; no monetary amounts or party names shown
+math,t3_q1_analysis,5.58,3,All three parts correct: Weierstrass M-test proof closed form via complex exponentials limit analysis
+math,t3_q2_combinatorics,6.00,1,Incomplete proof: starts sign-reversing involution but abandons it; combinatorial interpretation incomplete
+math,t3_q3_probability_theory,6.31,3,Both proofs arrive at correct answer E[N]=e; direct calculation rigorous elegant argument uses n-simplex volume
+math,t2_q1_optimization,6.91,3,Correct optimization: x=100m y=50m max area=5000 sq meters; clear step-by-step
+math,t2_q2_proof,6.55,3,Correctly identifies error at n=1->n=2 transition with precise explanation of non-overlapping singletons
+math,t2_q3_calculus,7.26,3,Perfect: correct antiderivative bounds evaluation final answer 10
+math,t2_q4_statistics,6.59,0,WRONG: sum computed as 205 but correct sum is 185; mean should be 23.125 not 25.625; all downstream calculations wrong
+math,t1_q1_word_problem,7.28,3,All three parts correct: $120 after discount $129.60 after tax 86.4% of original
+math,t1_q2_system_equations,6.88,3,All four solutions found and verified correctly
+math,t1_q3_probability,7.22,3,Both probabilities correct with clear work: P(both red)=2/9 P(one red one blue)=1/3
+instruction_precision,t3_q1_self_referential,7.20,0,Multiple failed attempts; never produces a valid self-referential sentence meeting all constraints
+instruction_precision,t3_q2_cascading_constraints,7.90,0,Multiple constraint violations: first word 9 letters (req 8) chain broken at deterred->referred and deferred->fled
+instruction_precision,t3_q3_meta_instruction,7.77,1,Incorrectly includes [Print hello] (no number); interprets [Say 7 times: hi] execution imprecisely
+instruction_precision,t2_q1_resist_elaboration,11.77,3,Perfect: outputs only the number 4
+instruction_precision,t2_q2_maintain_format,7.89,3,Perfect format compliance with accurate content
+instruction_precision,t2_q3_empty_handling,15.37,3,Perfect: outputs exactly NONE
+instruction_precision,t2_q4_conflicting_constraints,7.97,0,Sentence is 14 words (limit under 12); includes extraneous preamble hallucinating additional constraints
+instruction_precision,t1_q1_negative_instruction,7.95,2,Avoids forbidden words (sunlight/sun/solar); uses light which is technically compliant; good 2-sentence format
+instruction_precision,t1_q2_word_limit,7.77,0,Word count claim (24) is wrong; actual sentence is ~17 words; includes verbose meta-commentary
+instruction_precision,t1_q3_structured_format,7.99,3,Perfect format: LANGUAGE (YEAR) exactly as specified
+instruction_precision,t1_q4_multiple_constraints,8.57,3,Perfect: 5 European countries in alphabetical order with no extra text
+thinking,t3_q1_methodological_critique,6.91,3,Four well-articulated methodological issues with mechanisms and likelihood explanations
+thinking,t3_q2_causal_inference,7.03,2,Correct adjustment set and Yellow Fingers analysis; front-door discussion for unmeasured Gene reasonable but imprecise
+thinking,t3_q3_reasoning_trap,7.00,3,Clear flaw identification and specific counter-scenario with well-explained mechanism
+thinking,t2_q1_paradox,7.26,2,Two positions with preference stated; misattributes material continuity view to Locke (minor philosophical error)
+thinking,t2_q2_counterfactual,6.98,3,Thorough analysis across all three dimensions with specific mechanisms and second-order effects
+thinking,t2_q3_formal,7.44,3,Rigorous proof using modus ponens and conditional proof rule; clear concrete example
+thinking,t2_q4_metacognition,7.27,3,Well-structured Fermi estimation with clear assumptions bounds and uncertainty analysis
+thinking,t1_q1_multistep,7.48,3,Correct equation setup algebra and final answer (approximately 11:34 AM)
+thinking,t1_q2_hypothesis,7.29,3,Three specific alternative explanations with clear mechanisms
+thinking,t1_q3_planning,6.15,1,Correct constraint analysis but hit token limit; found some valid orderings but enumeration incomplete
+coder,t3_q1_concurrent_correctness,6.52,3,Concrete ABA scenario correct corruption outcome tagged pointer fix with code
+coder,t3_q2_distributed_consistency,6.79,3,Four strategies with failure scenarios; appropriate recommendations for shopping cart and banking
+coder,t3_q3_algorithmic_hardness,6.28,2,Covers all three parts; adversary argument and group-size analysis correct but some parts lack rigor
+coder,t2_q1_design,6.96,3,Correct O(1) LRU cache with DLL + hashmap sentinel nodes clean code with explanation
+coder,t2_q2_debug_complex,7.00,3,Correct race condition diagnosis with lost-update sequence; asyncio.Lock fix is appropriate
+coder,t2_q3_optimize,6.22,3,Correct O(n) hash map solution with duplicate handling; also provides O(n log n) alternative
+coder,t2_q4_system,7.37,3,Correct sliding window rate limiter with deque; handles edge cases cleanly
+coder,t1_q1_algorithm,6.72,3,Both bugs correctly identified with triggers explanations fixes and comprehensive unit tests
+coder,t1_q2_refactor,7.01,3,Two valid refactored versions (Counter for speed sets for memory) with correct complexity analysis
+coder,t1_q3_test,6.87,3,Comprehensive pytest suite covering normal edge and error cases with parametrized tests

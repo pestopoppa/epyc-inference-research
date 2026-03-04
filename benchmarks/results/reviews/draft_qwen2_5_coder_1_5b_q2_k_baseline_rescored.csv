@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,64.05,0,Prompt echo followed by degenerate repetition loop (158 copies of 'Discuss the pros and cons')
+general,t3_q2_system_failure,66.84,0,Prompt echo; partial but incorrect analysis (misses replica lag mechanism); degenerates into repetition loop
+general,t3_q3_strategic_communication,177.39,0,Pure prompt echo with no answer generated; no board statement produced
+general,t2_q1_synthesis,74.02,0,Prompt echo; circular non-answer repeating 'address product and engineering issues'; no concrete recommendation with timeline/cost
+general,t2_q2_transform,78.13,0,Wrong format (JSON instead of requested YAML); not grouped by department; hallucinated 7 extra employees not in original data
+general,t2_q3_schedule,63.15,0,Prompt echo; no schedule produced; degenerates into repeated hallucinated leetcode URLs
+general,t2_q4_inconsistency,65.74,0,"Prompt echo; hallucinated URL; does not identify actual inconsistencies (JSON vs form-encoded, rate limit mismatch); degenerate version numbering loop"
+general,t1_q1_json,65.08,0,Prompt echo; no JSON output produced; degenerates into repeated empty function stubs
+general,t1_q2_multistep,69.4,0,Prompt echo with hallucinated extra items; degenerates into repeating 'Date' hundreds of times; no processed list output
+general,t1_q3_compare,65.44,0,"Prompt echo; incoherent gibberish (alpha-vectors, restrom); no actual comparison; repetition loop"
+thinking,t3_q1_methodological_critique,115.58,0,Pure prompt echo with no answer; zero methodological issues identified
+thinking,t3_q2_causal_inference,154.19,0,"Pure prompt echo with no answer; no adjustment set, bias analysis, or estimation strategy"
+thinking,t3_q3_reasoning_trap,53.12,0,"Prompt echo; appended sentence merely restates instruction; no flaw identified, no scenario constructed"
+thinking,t2_q1_paradox,158.7,0,Pure prompt echo with no answer; no philosophical positions argued
+thinking,t2_q2_counterfactual,108.79,0,Pure prompt echo with no answer; no analysis across any requested dimension
+thinking,t2_q3_formal,79.72,0,Incorrect: claims transitivity of implication cannot be proven; invalid counterexample violates P->Q premise
+thinking,t2_q4_metacognition,108.54,0,"Pure prompt echo with no answer; no estimation steps, assumptions, or bounds provided"
+thinking,t1_q1_multistep,64.07,0,Prompt echo; repetition loop restating problem; no computation; correct answer is 11:34 AM
+thinking,t1_q2_hypothesis,64.46,0,Prompt echo; nonsensical repetition ('you must be a correlation'); no alternative explanations
+thinking,t1_q3_planning,61.87,0,Prompt echo; no valid orderings listed; no reasoning process shown

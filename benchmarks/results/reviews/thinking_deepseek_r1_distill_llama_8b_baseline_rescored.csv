@@ -1,0 +1,41 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,8.79,2,Has final JSON plan with steps/validation/fallback. Plan is reasonable but step details are incomplete.
+agentic,t3_q2_multi_agent_coordination,8.71,0,Hit 2047 token limit in CoT. Never closes think tag. No final answer produced.
+agentic,t3_q3_adversarial_robustness,9.55,1,Answers all 5 questions but misidentifies /etc/passwd as storing passwords. Fails to identify command injection via &&. Does not firmly refuse malicious request.
+agentic,t2_q1_ambiguous,9.99,2,Chose send_email with explanation. Reasonable choice though Slack might be more appropriate for outage. Met the either/or requirement.
+agentic,t2_q2_error_chain,10.11,2,Correctly diagnoses DB connection issue. Suggests restart_service as reasonable next step. Could have checked DNS first but approach is valid.
+agentic,t2_q3_schema_edge,10.31,1,Correct method/headers/body but endpoint is users instead of /users. Schema requires endpoint must start with /.
+agentic,t2_q4_orchestration,9.21,2,"Complete deployment plan with steps, test failure handling, and deploy failure handling. Reasonable tool sequencing."
+agentic,t1_q1_sequential,8.92,0,Hit 2047 token limit in CoT. Never produces the JSON array of tool calls requested.
+agentic,t1_q2_error_handling,9.34,2,Correctly identifies user not found. Offers clarifying message with create/search options. Appropriate response.
+agentic,t1_q3_nested_params,8.97,0,Hit 2047 token limit. Degenerate repetition loop in CoT - repeats same JSON and commentary multiple times. No final answer.
+general,t3_q1_policy_analysis,9.32,2,Identifies 3 failure modes with mechanisms and amendments. Analysis is substantive though final answer appears truncated.
+general,t3_q2_system_failure,9.32,3,Precisely explains double-charge via replica lag during idempotency check. Correctly identifies testing gap. Proposes architectural fixes.
+general,t3_q3_strategic_communication,9.65,2,"Addresses all 4 requirements: acknowledges problems, frames LOIs as pivot, mentions milestones. Appears truncated but key points covered."
+general,t2_q1_synthesis,10.32,3,"Excellent synthesis: phased approach with 2-week quick fix then 3-month refactor. Addresses engineering, product, and finance constraints."
+general,t2_q2_transform,9.4,0,"Hallucinated additional employees not in the original data (Eve, Frank, George, etc.). Final answer is instructions, not YAML output. Failed task."
+general,t2_q3_schedule,8.9,0,Hit 2047 token limit in CoT reasoning. Never produces a schedule or conclusion.
+general,t2_q4_inconsistency,10.11,3,Correctly identifies both inconsistencies: content type conflict (JSON vs form-encoded) and rate limit discrepancy (100/min vs 1000/hr).
+general,t1_q1_json,10.18,3,"Correct JSON with all 4 fields accurately extracted: name, role, department, start_date."
+general,t1_q2_multistep,10.1,3,Correct final answer: 4 unique items sorted alphabetically with count. All processing steps correct.
+general,t1_q3_compare,9.92,2,Provides reasonable comparison of microservices vs monolith. References own confusion about labels but final assessment is correct.
+math,t3_q1_analysis,8.94,0,Hit 2047 token limit. Only partially addresses part 1 of 3. No closed-form or limit result produced.
+math,t3_q2_combinatorics,9.0,0,Hit 2047 token limit in exploratory CoT. No proof produced.
+math,t3_q3_probability_theory,8.93,0,Hit 2047 token limit. Begins direct calculation but never reaches the answer E[N]=e. No elegant proof either.
+math,t2_q1_optimization,9.55,3,"Correct: L=100m, W=50m, max area=5000 sq m. Shows both algebraic and calculus approaches. Verified result."
+math,t2_q2_proof,8.98,0,"Hit 2047 token limit. Fails to identify the error at n=1 to n=2 step. Incorrectly believes proof works for n=3,4."
+math,t2_q3_calculus,9.34,3,"Correct: antiderivative x^3+x^2-x, F(2)-F(0)=10-0=10. All steps shown clearly."
+math,t2_q4_statistics,9.14,1,"Correct sum=185, mean=23.125, median=23.5, variance=54.109375. But hit token limit before completing SD and IQR analysis. No final answer."
+math,t1_q1_word_problem,9.35,3,"All correct: discount price 120, final price 129.60, percentage 86.4%. Clear work shown."
+math,t1_q2_system_equations,9.35,3,"All 4 real solutions found: (4,3), (-4,-3), (3,4), (-3,-4). Method clear, solutions verified."
+math,t1_q3_probability,9.33,3,"Both answers correct: P(both red)=2/9, P(one red one blue)=1/3. Clear combination-based approach."
+thinking,t3_q1_methodological_critique,9.47,2,Identifies 4 valid methodological issues with explanations. Analysis is somewhat generic but substantively correct.
+thinking,t3_q2_causal_inference,8.91,0,Hit 2047 token limit. Confused reasoning about DAG paths. Never produces clear answers for any of the 3 questions.
+thinking,t3_q3_reasoning_trap,8.99,0,Hit 2047 token limit. Explores possibilities but never identifies a concrete flaw or constructs the required scenario.
+thinking,t2_q1_paradox,8.84,0,Hit 2047 token limit in CoT. Never presents structured arguments for philosophical positions or states preference.
+thinking,t2_q2_counterfactual,9.48,2,Covers all 3 dimensions with mechanisms and second-order effects. Analysis is substantive though final answer truncated.
+thinking,t2_q3_formal,9.09,0,Hit 2047 token limit. Truth table approach started correctly but never completed. No formal proof or concrete example.
+thinking,t2_q4_metacognition,9.35,0,Hit 2047 token limit. Estimation uses wildly incorrect numbers (3-5M pianos in Chicago). Never produces bounds or final estimate.
+thinking,t1_q1_multistep,9.01,0,"Hit 2047 token limit. Calculated 4/7*60=32 (wrong, should be ~34.3). Never produces final answer."
+thinking,t1_q2_hypothesis,9.78,1,"Final answer lists 3 explanations but first (energy/alertness) is actually breakfast causing scores, not an alternative. Second (routine) is marginally valid. Third cut off."
+thinking,t1_q3_planning,9.03,0,Hit 2047 token limit. Correctly identifies constraint chain A->B->D->C but never enumerates valid orderings.

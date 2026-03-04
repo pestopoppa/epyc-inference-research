@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+math,t3_q1_analysis,7.8,3,"All 3 parts correct: infinite radius of convergence, closed form via Im(e^{xe^i}), limit 0"
+math,t3_q2_combinatorics,7.74,1,Correctly identified identity is wrong (LHS=1 always) via numerical checks but truncated with no proof
+math,t3_q3_probability_theory,7.59,2,"Correct answer E[N]=e with valid direct proof (part a), but part (b) truncated at token limit"
+math,t2_q1_optimization,7.74,3,"Fully correct: dimensions 100x50m, max area 5000 sq m, proper setup and verification"
+math,t2_q2_proof,7.68,3,"Correctly identifies error at n=1, explains disjoint subsets, thorough explanation"
+math,t2_q3_calculus,7.94,3,"Fully correct: antiderivative x^3+x^2-x, evaluated to 10"
+math,t2_q4_statistics,7.78,3,"All correct: sum=185, mean=23.125, median=23.5, std~7.35, no outliers"
+math,t1_q1_word_problem,7.84,3,All 3 parts correct: dollar120 dollar129.60 86.4pct
+math,t1_q2_system_equations,7.58,3,"All 4 real solutions found: (4,3),(-4,-3),(3,4),(-3,-4)"
+math,t1_q3_probability,7.82,3,"Both probabilities correct: P(both red)=2/9, P(one red one blue)=1/3"
+coder,t3_q1_concurrent_correctness,,0,"Empty: 1 completion token, only echoed prompt"
+coder,t3_q2_distributed_consistency,7.75,2,"Good coverage of conflict resolution strategies and trade-offs, truncated but substantive"
+coder,t3_q3_algorithmic_hardness,7.86,2,"Lower bound argument reasonable, median-of-medians started but truncated"
+coder,t2_q1_design,,0,"Empty: 1 completion token, only echoed prompt"
+coder,t2_q2_debug_complex,7.91,3,"Correct fix with asyncio.Lock, proper race condition explanation"
+coder,t2_q3_optimize,7.63,2,"Correct O(n) hash map approach shown, truncated during explanation"
+coder,t2_q4_system,7.89,1,"Rate limiter reasoning started but implementation truncated, incomplete"
+coder,t1_q1_algorithm,7.79,1,"Binary search analysis started but truncated, bugs not clearly identified"
+coder,t1_q2_refactor,7.8,1,"Set-based refactoring discussed but truncated, no complete solution"
+coder,t1_q3_test,7.61,1,Pytest parametrize structure shown but code truncated mid-definition
+instruction_precision,t3_q1_self_referential,8.05,0,"No sentence produced; entire response is reasoning about constraints, truncated"
+instruction_precision,t3_q2_cascading_constraints,7.71,0,No word list produced; truncated during reasoning about candidates
+instruction_precision,t3_q3_meta_instruction,7.66,1,"Correct identification of valid instructions but never outputs results, truncated"
+instruction_precision,t2_q1_resist_elaboration,8.11,3,Perfect: outputs only 4 as requested
+instruction_precision,t2_q2_maintain_format,7.7,1,"Correct format present but preceded by reasoning text, violates no-other-text"
+instruction_precision,t2_q3_empty_handling,7.87,1,"Correct NONE but includes explanation before it, violates do-not-explain"
+instruction_precision,t2_q4_conflicting_constraints,7.96,0,"Degenerate repetition: hallucinated constraints loop, no sentence produced"
+instruction_precision,t1_q1_negative_instruction,7.85,2,"Final answer avoids forbidden words in 2 sentences, but includes verbose reasoning"
+instruction_precision,t1_q2_word_limit,7.98,1,23-word answer identified within range but buried in verbose reasoning
+instruction_precision,t1_q3_structured_format,7.79,1,Correct LANGUAGE (YEAR) format present but embedded in reasoning text
+instruction_precision,t1_q4_multiple_constraints,7.75,1,"Countries identified but no clean formatted output, truncated"
+thinking,t3_q1_methodological_critique,7.74,3,"Identifies 4+ methodological issues: confounders, SES, selection bias, measurement"
+thinking,t3_q2_causal_inference,7.86,2,"Correct Gene as adjustment set, Yellow Fingers discussion, truncated"
+thinking,t3_q3_reasoning_trap,7.82,2,"Identifies key flaws in dataset comparison reasoning, truncated"
+thinking,t2_q1_paradox,7.79,3,Strong philosophical analysis with multiple positions and clear conclusion
+thinking,t2_q2_counterfactual,7.82,2,"Two dimensions covered well with specific mechanisms, third truncated"
+thinking,t2_q3_formal,7.69,3,Correct formal proof using conditional proof and modus ponens with example
+thinking,t2_q4_metacognition,7.7,2,"Good Fermi estimation with assumptions, truncated during bounds"
+thinking,t1_q1_multistep,7.87,3,"Correct: trains meet at ~11:34 AM, work shown"
+thinking,t1_q2_hypothesis,7.82,3,"Three specific alternative explanations: SES, sleep, general health"
+thinking,t1_q3_planning,7.6,1,Constraint reasoning started but truncated before enumerating all valid orderings
+agentic,t3_q1_competing_constraints,7.7,2,"Good reasoning about tool selection and constraint handling, truncated"
+agentic,t3_q2_multi_agent_coordination,7.71,2,"Reasonable orchestration planning with agent capability awareness, truncated"
+agentic,t3_q3_adversarial_robustness,7.67,2,"Identifies injection risk, discusses sanitization and security principles, truncated"
+agentic,t2_q1_ambiguous,7.77,3,Correctly identifies ambiguity and asks appropriate clarifying question
+agentic,t2_q2_error_chain,7.94,2,"Good error chain reasoning from deploy to database, truncated before final action"
+agentic,t2_q3_schema_edge,7.73,3,"Correct JSON with null body for GET, proper Authorization header"
+agentic,t2_q4_orchestration,7.69,2,"Deployment plan with error handling logic shown, truncated"
+agentic,t1_q1_sequential,7.76,1,"JSON array present but surrounded by extensive reasoning, violates output-only"
+agentic,t1_q2_error_handling,7.85,2,"Good error recovery reasoning with search_users fallback, truncated"
+agentic,t1_q3_nested_params,8.03,3,"Correct JSON with nested metadata, assignees array, all fields correct"
+general,t3_q1_policy_analysis,7.66,2,"Multiple failure modes identified with amendments, truncated"
+general,t3_q2_system_failure,7.72,2,"Correct root cause: read-replica lag allows duplicate idempotency bypass, truncated"
+general,t3_q3_strategic_communication,6.43,2,"Good board meeting narrative with forward-looking pivot, truncated"
+general,t2_q1_synthesis,5.9,3,"Good unified recommendation: phased approach balancing urgency, quality, budget"
+general,t2_q2_transform,7.83,1,"YAML structure discussed but no clean final output, truncated"
+general,t2_q3_schedule,7.92,1,Constraint analysis started but truncated before final schedule
+general,t2_q4_inconsistency,7.68,2,Correctly identifies body encoding and rate limit discrepancies
+general,t1_q1_json,7.67,1,"Reasoning about JSON but no clean JSON output, truncated"
+general,t1_q2_multistep,7.88,1,"Approach correct but reasoning hallucinated extra items, truncated"
+general,t1_q3_compare,7.9,2,"Correct monolith recommendation for small team, includes verbose preamble"

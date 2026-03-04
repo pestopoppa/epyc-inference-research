@@ -34,11 +34,12 @@ See [Chapter 24](../../chapters/24-benchmark-suite-construction.md) for suite co
 | Prompt Lookup (summarization) | 95.18 t/s | 12.7x | — | Document QA with source |
 | **Qwen2.5-7B + spec (K=24)** | **46.6 t/s** | **2.5x** | 90% | Fast general tasks |
 | **Qwen3-Coder-30B-A3B + MoE6 + spec + lookup** | **47.11 t/s** | **1.61x** | — | **Code gen (NEW 2026-02-13)** |
-| **Qwen3-VL-4B Q4_K_M** | **18.0 t/s** | — | **94%** | Vision tasks (best quality) |
-| Qwen3-VL-30B-A3B + MoE4 | 27.6 t/s | +111% | 75% | Vision tasks (faster, lower quality) |
+| **Qwen3-VL-4B Q4_K_M** | **18.0 t/s** | — | **93%†** | Vision tasks (best quality) |
+| Qwen3-VL-30B-A3B + MoE4 | 27.6 t/s | +111% | 92%† | Vision tasks (faster, high quality) |
 | Prompt Lookup (code editing) | 25.82 t/s | 8.6x | — | Refactoring, code review |
 | **Qwen3-4B-Thinking + spec (K=4)** | **24.2 t/s** | **2.1x** | 88% | Fast thinking |
-| Qwen3-Coder-30B-A3B + MoE4 | 22.0 t/s | +83% | **100%** | Code (no spec) |
+| Qwen3-Coder-30B-A3B + MoE4 | 22.0 t/s | +83% | 61%† | MoE without spec decode |
+| **Qwen3.5-35B-A3B + MoE4** | **23.8 t/s** | — | **90%** | **SSM+MoE hybrid (NEW 2026-03-04)** |
 | **Qwen3-Coder-480B + full + spec (K=16)** | **9.00 t/s** | **1.38x** | — | **480B architect (NEW 2026-02-13)** |
 | **Qwen3-235B-A22B + full + spec (K=16)** | **6.08 t/s** | **1.15x** | — | **235B architect (NEW 2026-02-13)** |
 | **Qwen2.5-Coder-32B + spec (K=24)** | **21.3 t/s** | **6.3x** | 93% | Code generation |
@@ -749,7 +750,7 @@ Complete production model lineup with relative scoring validation.
 
 | Role | Model | Score | Speed | Configuration | Size |
 |------|-------|-------|-------|---------------|------|
-| **frontdoor** | Qwen3-Coder-30B-A3B-Instruct | 89.5% | 47.11 t/s | MoE6 + spec + lookup | 20GB |
+| **frontdoor** | Qwen3-Coder-30B-A3B-Instruct | 79%† | 47.11 t/s | MoE6 + spec + lookup | 20GB |
 | **coder_escalation** | Qwen2.5-Coder-32B | 91.5% | 39.44 t/s | spec K=24 + lookup | 18.5GB |
 | **worker** | Qwen2.5-7B-Instruct | 74.5% | 50 t/s | spec K=16 + draft | 4.4GB |
 | **voice_server** | faster-whisper large-v3-turbo | — | 2.8x RT | CPU int8, port 9000 | 4GB |
@@ -845,10 +846,13 @@ Complete production model lineup with relative scoring validation.
 
 | Priority | Model | Quality | Speed | When to Use |
 |----------|-------|---------|-------|-------------|
-| **PRIMARY** | **Qwen3-Coder-30B-A3B + MoE6+spec+lookup** | **90%** | 47.11 t/s | Default for all routing ⭐ |
-| FAST | Qwen3-Coder-30B-A3B + MoE4 | 89% | 17.7 t/s | When speed > quality (no draft) |
+| **PRIMARY** | **Qwen3-Coder-30B-A3B + MoE6+spec+lookup** | **79%†** | 47.11 t/s | Default for all routing ⭐ |
+| FAST | Qwen3-Coder-30B-A3B + MoE4 | 61%† | 17.7 t/s | When speed > quality (no draft) |
+| **CANDIDATE** | **Qwen3.5-35B-A3B + MoE4** | **90%** | 23.8 t/s | **SSM+MoE hybrid — beats frontdoor quality (NEW 2026-03-04)** |
 
 **Note (2026-02-13):** MoE6+spec+lookup is now the production config (2.58x over baseline). jukofyork vocab transplant draft verified. MoE2 is BROKEN (0%).
+
+**Note (2026-03-04):** †All Qwen3-Coder-30B configs rescored rigorously from raw benchmark JSONs. Old scores inflated 20-30pp by lazy "2 = Substantial response generated" scoring. Corrected: baseline 98%→79%, MoE6 95%→71%, MoE4 89%→61%. All configs have long_context 0/9 and statistics sum=205 wrong. Expert count correlates linearly with quality: 8exp=79% > 6exp=71% > 4exp=61%. Qwen3.5-35B-A3B q4km baseline (87%) and MoE4 (90%) both beat every Qwen3-Coder-30B config. Review CSVs in `benchmarks/results/reviews/qwen3_coder_30b_*.csv`.
 
 **Tier B: Architects (Quality > Speed)**
 

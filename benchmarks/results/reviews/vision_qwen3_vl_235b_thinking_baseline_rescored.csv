@@ -1,0 +1,13 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+vl,t3_q1_chart_critique,,1,Truncated mid-think-block with no closing tag and no final answer section; parts 1-2 partially reasoned in scratchpad but Q3 cut off mid-sentence and Q4 never reached; no structured output delivered
+vl,t3_q2_multi_chart_synthesis,,1,Truncated mid-think-block; Q1 diff (0.08) computed correctly in scratchpad and Q2 percentage work started but cut off; Q3 projection and Q4 external factors never reached; no final answer section
+vl,t3_q3_twyne_security,,0,Severely degenerate truncation; response contains only the opening sentence of the think block then cuts off after starting bullet 1; no content on any of the five required analysis parts
+vl,t3_q4_twyne_economic,,0,Severely degenerate truncation; response is a single incomplete setup sentence in the think block; none of the five economic analysis questions addressed
+vl,t3_q5_document_forensics,,0,Severely degenerate truncation; response cuts off mid-sentence after starting to mention named entity extraction; no content delivered for any of the five forensic analysis parts
+vl,t2_q1_calculation,,0,Severely degenerate truncation; response cuts off immediately after first word of approach in think block; no calculation performed and no answer delivered
+vl,t2_q2_comparison,3.52,3,Complete think block and full structured final answer; correctly identifies green bars as Play a more active military role; highest 29% (2016) lowest 23% (2015) difference 6; clean methodology
+vl,t2_q3_trend_analysis,,1,Truncated mid-think-block; model began systematic interval-by-interval analysis and identified 2010-2011 as sharpest increase (~450 unit rise) but response cuts off before completing 2010 estimate; no final answer delivered
+vl,t2_q4_ratio_calculation,,2,Think block complete with correct answer (58/24 simplified to 29:12); formatted response covers Step 1 and Step 2 fully with all values listed; Step 3 final fraction cut off at last two characters but answer is unambiguous from think block; effectively complete
+vl,t2_q5_document_synthesis,,0,Severely degenerate truncation; response cuts off mid-word in first sentence of think block; no dividend values extracted and no calculation performed
+vl,t1_q1_scene_text,3.9,3,Complete and concise; think block verifies letter-by-letter parsing; final answer Centric delivered cleanly
+vl,t1_q2_sign_reading,3.79,2,Complete structured response; correctly reads Mosman Manly exit sign and reports both text panels (To Mosman Manly and Chatswood Epping); cannot verify image accuracy of second panel but response is coherent and well-formed

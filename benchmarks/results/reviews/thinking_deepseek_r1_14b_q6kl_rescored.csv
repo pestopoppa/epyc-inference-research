@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,4.05,0,No think block separation; response echoes prompt then rambles through reasoning without producing the required JSON array
+agentic,t1_q2_error_handling,4.42,2,Reasonable next step (search_users) but searching by ID 123 as a string query is suboptimal; should ask user for name/email
+agentic,t1_q3_nested_params,4.34,3,Correct JSON with all fields properly populated including nested metadata
+agentic,t2_q1_ambiguous,4.37,3,Chose appropriate tool (Slack for urgency) with clear one-sentence justification and valid JSON
+agentic,t2_q2_error_chain,4.23,3,Correctly traced the error chain and proposed logical next step (get_logs for database service)
+agentic,t2_q3_schema_edge,4.38,3,Correct JSON: endpoint starts with /, method GET, body null for GET, auth header properly formatted
+agentic,t2_q4_orchestration,4.24,3,Complete deployment plan with correct tool ordering, test failure handling (notify), and deploy failure handling (rollback to v1.2.2)
+agentic,t3_q1_competing_constraints,4.16,2,Reasonable plan with read_file then execute_code steps and validation checks, but includes unnecessary ask_user step and redundant reads; prompt constraints not fully addressed
+agentic,t3_q2_multi_agent_coordination,4.33,2,Correct agent assignment and sequential phases, but failure handling is generic (just notify orchestrator) and no parallel groups identified despite researcher being independent
+agentic,t3_q3_adversarial_robustness,4.2,2,Identifies security concerns correctly and refuses to execute cat /etc/passwd, but does not explicitly refuse the command; more prescriptive than demonstrative of actual refusal behavior
+coder,t1_q1_algorithm,4.18,3,Correct binary search implementation with O(log n) complexity, edge case handling, and clear comments
+coder,t1_q2_refactor,4.25,3,Correct list comprehension refactor with clear explanation of improvements
+coder,t1_q3_test,4.33,2,Good test structure with parametrize and error case, but includes (0, 0, 0) test case which would actually raise ValueError, not return 0 - a bug in the tests
+coder,t2_q1_design,4.08,0,No think block; response echoes prompt then contains raw reasoning/thinking without producing a final clean LRU cache implementation
+coder,t2_q2_debug_complex,4.21,3,Correctly identifies the race condition, applies asyncio.Lock fix, and explains why sleep must stay inside the lock
+coder,t2_q3_optimize,4.03,1,Starts describing O(n) hash map approach but response is truncated/incomplete - no actual optimized code provided
+coder,t2_q4_system,4.04,0,No think block; response echoes prompt then contains raw reasoning without producing a final rate limiter implementation
+coder,t3_q1_concurrent_correctness,4.29,1,Identifies ABA problem conceptually but the fix is incorrect - compare_exchange_weak does not accept tag parameters like that in C++; the tagged pointer implementation is syntactically and semantically wrong
+coder,t3_q2_distributed_consistency,4.1,1,Lists only 4 strategies (LWW, RMW, Timestamp, App-specific) but RMW is not a conflict resolution strategy; scenarios are superficial; shopping cart recommendation of LWW is wrong (CRDTs/merge preferred)
+coder,t3_q3_algorithmic_hardness,4.05,0,No think block; response echoes prompt then rambles through reasoning without reaching conclusions; never completes the proof or derives the recurrence
+general,t1_q1_json,4.41,3,Correct JSON with all four fields accurately extracted
+general,t1_q2_multistep,4.29,2,Correct processing but hallucinated extra items (date, DATE) not in the original list; final result is correct for the original items though
+general,t1_q3_compare,4.39,3,Concise accurate comparison in 2 sentences covering key trade-offs
+general,t2_q1_synthesis,4.23,3,Strong unified recommendation balancing all three perspectives with concrete actionable steps
+general,t2_q2_transform,4.08,0,No think block; response echoes prompt then rambles through reasoning about how to write Python code to transform YAML; never produces clean nested YAML output
+general,t2_q3_schedule,4.03,0,No think block; response echoes prompt then rambles through scheduling reasoning without reaching a final answer
+general,t2_q4_inconsistency,4.35,3,Correctly identifies both inconsistencies: body format (JSON vs form-encoded) and rate limit (100/min vs 1000/hr with correct conversion)
+general,t3_q1_policy_analysis,4.11,2,Identifies 3 failure modes with mechanisms and proposes amendments, but analysis is somewhat superficial and generic; trade-offs section is thin
+general,t3_q2_system_failure,4.16,2,Correctly explains double-charge mechanism and proposes fixes, but contains Chinese character artifact (异常) suggesting incomplete generation; testing gap analysis is superficial
+general,t3_q3_strategic_communication,4.16,3,Well-structured board statement that acknowledges problems, pivots to LOIs, provides 90-day plan with specific metrics, and addresses leadership concerns
+instruction_precision,t1_q1_negative_instruction,4.37,3,Explains photosynthesis in 2 sentences without using sunlight/sun/solar; uses "light energy" which is acceptable
+instruction_precision,t1_q2_word_limit,4.44,2,Good description of ML but word count is 21 words - within the 20-25 range, so correct
+instruction_precision,t1_q3_structured_format,4.42,3,Exact format LANGUAGE (YEAR) with correct years, one per line, no extra text
+instruction_precision,t1_q4_multiple_constraints,4.37,3,Exactly 5 European countries in alphabetical order, one per line, no extra punctuation
+instruction_precision,t2_q1_resist_elaboration,4.4,3,Output is exactly "4" with nothing else
+instruction_precision,t2_q2_maintain_format,4.36,3,Exact format followed: ERROR_TYPE, ROOT_CAUSE, FIX each on one line with correct content
+instruction_precision,t2_q3_empty_handling,4.42,3,Output is exactly "NONE" as required
+instruction_precision,t2_q4_conflicting_constraints,4.39,2,Starts with A, under 12 words, no store/storage, but ends with period after "data" not with the word "data" as the last word - sentence ends with "effectively." not "data"
+instruction_precision,t3_q1_self_referential,4.34,0,No think block; response echoes prompt then rambles through reasoning without producing a valid self-referential sentence
+instruction_precision,t3_q2_cascading_constraints,4.32,0,No think block; response echoes prompt then rambles through reasoning without producing the 5 words
+instruction_precision,t3_q3_meta_instruction,4.33,0,No think block; response echoes prompt then rambles through reasoning about which instructions to follow without producing the output
+math,t1_q1_word_problem,4.03,3,All three calculations correct: $120 after discount, $129.60 after tax, 86.4% of original
+math,t1_q2_system_equations,4.21,3,Correct solution x=2, y=3 with clear step-by-step work
+math,t1_q3_probability,4.05,0,Response truncated immediately after starting part 1; no calculations or answers provided
+math,t2_q1_optimization,4.08,3,Correct: L+2W=200, W=50, L=100, max area=5000 sq meters with proper calculus approach
+math,t2_q2_proof,4.2,3,Complete induction proof with base case, inductive hypothesis, and inductive step all correct
+math,t2_q3_calculus,4.11,3,Correct antiderivative x^3+x^2-x, F(2)=10, F(0)=0, final answer 10
+math,t2_q4_statistics,4.05,0,No think block; response echoes prompt then performs calculations inline as reasoning but response is truncated; sum correctly computed as 185 and mean as 23.125 in reasoning but no final clean answer produced
+math,t3_q1_analysis,4.15,1,Only addresses part 1 (differentiability) briefly; parts 2 (closed form) and 3 (limit) completely missing; response truncated
+math,t3_q2_combinatorics,4.06,0,No think block; response echoes prompt then rambles through reasoning without completing any proof
+math,t3_q3_probability_theory,4.08,0,No think block; response echoes prompt then rambles through direct calculation approach; never reaches E[N]=e or provides elegant proof
+thinking,t1_q1_multistep,4.09,3,Correct: 60 miles in first hour, 220 remaining, t=220/140=11/7 hrs, trains meet at approximately 11:34 AM
+thinking,t1_q2_hypothesis,4.29,3,Three specific alternative explanations (sleep patterns, SES, study habits) with clear causal mechanisms
+thinking,t1_q3_planning,4.03,0,No think block; response echoes prompt then rambles through reasoning without listing valid orderings
+thinking,t2_q1_paradox,4.08,3,Two well-articulated philosophical positions (continuity vs material) with clear reasoning for preferring continuity
+thinking,t2_q2_counterfactual,4.12,2,Covers all three dimensions adequately but analysis is somewhat generic and surface-level; second-order effects section truncated
+thinking,t2_q3_formal,4.08,0,Response truncated after just starting the statement; no proof or example provided
+thinking,t2_q4_metacognition,4.06,2,Good Fermi estimation structure with population, ownership rate, tuning frequency, and tuner capacity; bounds partially provided but response truncated before upper bound
+thinking,t3_q1_methodological_critique,4.16,2,Four issues identified (selection bias, confounders, measurement, sample) but explanations are somewhat generic; does not deeply explain mechanisms producing the specific 15-point effect
+thinking,t3_q2_causal_inference,4.19,2,Part 1 correct (Gene is minimal adjustment set); Part 2 explanation of Yellow Fingers bias is slightly off (it is a collider concern not exactly selection bias); Part 3 incorrectly says no unbiased estimate possible - frontdoor criterion via Yellow Fingers could work
+thinking,t3_q3_reasoning_trap,4.18,3,Correctly identifies the flaw (test set representativeness) and constructs a concrete scenario where D2 produces a better real-world model despite lower test accuracy

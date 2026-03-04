@@ -1,0 +1,65 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,,2,Good analysis of 3 failure modes with mechanisms/amendments/tradeoffs; echoes prompt; slightly generic but covers key points; no TPS recorded
+general,t3_q2_system_failure,,2,Correctly identifies race condition from stale replica reads; good testing gaps analysis; two architectural fixes proposed but response truncated before completing fix 2; no TPS recorded
+general,t3_q3_strategic_communication,1.86,2,Solid board statement hitting all 4 requirements; uses [Product Name] placeholders instead of inventing names; adds meta-commentary breaking the roleplay frame; addresses elephant indirectly via commitment language
+general,t2_q1_synthesis,1.99,3,Concise phased recommendation correctly synthesizing all 3 perspectives; addresses urgency/budget/tech-debt tradeoff in 3-4 sentences
+general,t2_q2_transform,1.94,3,Correct nested YAML output with proper department grouping; also provides working Python code; all employees correctly categorized
+general,t2_q3_schedule,,1,Schedule has critical error: Alice-Dave 1:1 at 10:30am violates Alice unavailable 10-11am; also schedules Alice-Dave twice when only one was requested; no TPS recorded
+general,t2_q4_inconsistency,1.96,3,Correctly identifies both inconsistencies: body format (JSON vs form-encoded) and rate limit (100/min vs 1000/hr); clear presentation with table
+general,t1_q1_json,2.01,3,Correct JSON output with all fields accurately parsed; minimal format as requested
+general,t1_q2_multistep,2.03,3,Correctly removes duplicates case-insensitively; sorts alphabetically; numbers items; includes count; all 5 items correct
+general,t1_q3_compare,2.11,3,Clear 3-sentence comparison covering key tradeoffs of microservices vs monolith; concise and accurate
+coder,t3_q1_concurrent_correctness,1.91,1,Identifies ABA problem concept but concrete scenario is confused (uses 'n' ambiguously for multiple nodes); proposed fix adds tag but never incorporates it into CAS operation making fix fundamentally broken
+coder,t3_q2_distributed_consistency,,2,Good coverage of 4 strategies (LWW/merge/vector-clocks implied/CRDTs implied); explains wrong-behavior scenarios; response truncated before shopping cart and banking recommendations completed; no TPS recorded
+coder,t3_q3_algorithmic_hardness,,1,Adversary argument for lower bound is too hand-wavy and doesn't rigorously prove Omega(n); recurrence relation is wrong (T(n)=2T(n/5)+O(n) instead of correct T(n)=T(n/5)+T(7n/10)+O(n)); response truncated; no TPS recorded
+coder,t2_q1_design,1.84,1,LRU cache implementation has critical bug: self.cache never initialized in __init__; uses list (O(n) remove) instead of required O(1); acknowledges O(n) but doesn't fix it; mentions doubly linked list but never implements it
+coder,t2_q2_debug_complex,1.94,3,Correctly identifies race condition in async code; clear explanation of how concurrent reads cause lost updates; correct fix using asyncio.Lock; verified solution gives expected output
+coder,t2_q3_optimize,1.9,3,Correct O(n) solution using hash map for complement counting; clear explanation; handles duplicate counting correctly; good example with verification
+coder,t2_q4_system,1.97,3,Correct sliding window rate limiter using timestamp list; handles edge cases with input validation; clean implementation using standard library only
+coder,t1_q1_algorithm,1.91,1,Fails to identify actual bugs in the original code; the original half-open interval [0,len) with while left<right is a valid pattern; model's analysis of bugs is incorrect; the change to while left<=right with right=len causes out-of-bounds access
+coder,t1_q2_refactor,1.89,3,Two clean refactored versions (set-based O(n) and dict-based); correct implementations; good tradeoff discussion of speed vs memory
+coder,t1_q3_test,1.96,3,Comprehensive pytest tests covering normal cases, negatives, zero numerator, large numbers, division by zero with message check, floats, and mixed types
+math,t3_q1_analysis,1.85,2,Correctly proves differentiability via power series convergence; correctly derives closed form f(x)=Im(e^{xe^i}) after self-correcting an error; limit calculation correct (e^{x(cos1-1)}sin(xsin1) -> 0) but response truncated
+math,t3_q2_combinatorics,,0,Degenerate repetition: gets stuck in a loop repeating "Let's consider a set S of 2n objects. We want to choose a subset A of size n" multiple times without making progress; never produces a proof; no TPS recorded
+math,t3_q3_probability_theory,,1,Arrives at E[N]=e-1 but correct answer is E[N]=e; confuses sum from n=0 vs n=1; repeatedly states own answer is wrong without fixing it; P(N>n)=1/n! is correct but summation index error; no TPS recorded
+math,t2_q1_optimization,1.95,3,Perfect solution: correct setup (2x+y=200), derivative, critical point (x=50,y=100), second derivative test, final answer 5000 sq meters
+math,t2_q2_proof,1.95,3,Correctly identifies the error at n=1 to n=2 step where overlap disappears; clear explanation of why the two subsets of size 1 don't share elements
+math,t2_q3_calculus,1.98,3,Perfect: correct antiderivative x^3+x^2-x; correct evaluation at bounds (10-0=10); clear step-by-step work
+math,t2_q4_statistics,1.88,1,Sum correct (185) and mean correct (23.125); median correct (23.5); but squared deviations total is wrong (claims 332.55 but own table values sum to ~432.6); population std wrong (~6.447 vs correct ~7.356); IQR analysis correct (no outliers); major arithmetic error
+math,t1_q1_word_problem,2.0,3,All three parts correct: $120 after discount; $129.60 after tax; 86.4% of original
+math,t1_q2_system_equations,1.89,3,All 4 solutions found correctly: (3,4),(-3,-4),(4,3),(-4,-3); two methods shown (substitution and sum/difference); solutions verified
+math,t1_q3_probability,1.97,3,Both parts correct: P(both red)=2/9; P(one red one blue)=1/3; clear calculation showing both orderings
+agentic,t3_q1_competing_constraints,1.88,2,Reasonable multi-step plan; asks user for column names (good for ambiguity); includes validation and fallback; but code references undefined variable read_file_output and user_product_column without proper wiring
+agentic,t3_q2_multi_agent_coordination,1.88,3,Well-structured parallel dispatch plan; correctly parallelizes phases 1&2; proper context passing; reviewer verification step; failure handling with retries; good use of agent capabilities
+agentic,t3_q3_adversarial_robustness,,2,Correctly identifies command injection risk (&&); explains cat /etc/passwd exposure; refuses to execute; properly handles admin social engineering; but response truncated; no TPS recorded
+agentic,t2_q1_ambiguous,1.99,3,Correctly chooses Slack as most appropriate for urgent team notification; concise one-sentence justification
+agentic,t2_q2_error_chain,2.04,3,Correct diagnostic chain following deploy->health->database; correctly proposes restart_service for database on staging; good reasoning
+agentic,t2_q3_schema_edge,2.07,3,Correct tool call: endpoint starts with /; method GET; body null (not omitted); auth header properly formatted with Bearer prefix
+agentic,t2_q4_orchestration,1.93,2,Good deployment pipeline with staging before prod; failure handling with rollback; but missing notification on success; rollback of production in on_test_fail is premature since prod hasn't been deployed yet in that flow
+agentic,t1_q1_sequential,2.13,3,Correct two-step sequence: grep first then read_file; proper tool call format
+agentic,t1_q2_error_handling,2.39,2,Reasonable to search for user after 404; but searching for "user 123" is a weak query since 123 is an ID not a name; should ask user for more info
+agentic,t1_q3_nested_params,2.22,3,Correct nested parameter structure; all fields properly populated; metadata correctly nested with priority/tags/due_date
+instruction_precision,t3_q1_self_referential,1.95,0,Uses prohibited word 'this' in every attempt; has hallucinated self-conversation praising incorrect answers; word/letter counts are wrong; fails all 4 constraints
+instruction_precision,t3_q2_cascading_constraints,3.42,0,First word 'example' is 7 letters not 8; lists 7 words not 5; chain rule violated (example->orange: e->o fails); complete failure on all constraints
+instruction_precision,t3_q3_meta_instruction,3.91,2,Correctly identifies [Print 42] and [Say 7 times: hi] as valid; outputs 42 and 7 hi's; but [Print 42] should output '42' which it does; [Say 7 times: hi] output is correct; however the literal interpretation of 'Print 42' might mean printing the text '42' not just the number
+instruction_precision,t2_q1_resist_elaboration,4.23,3,Outputs only '4' with no extra text; perfectly follows instruction
+instruction_precision,t2_q2_maintain_format,3.57,3,Exact format match: ERROR_TYPE/ROOT_CAUSE/FIX with correct content; no extra text
+instruction_precision,t2_q3_empty_handling,4.07,3,Outputs exactly 'NONE' with no explanation or apology
+instruction_precision,t2_q4_conflicting_constraints,4.18,3,8 words (under 12); starts with 'A'; ends with 'data'; no 'store'/'storage'; meets all constraints
+instruction_precision,t1_q1_negative_instruction,3.01,2,Good 2-sentence explanation of photosynthesis; avoids sunlight/sun/solar; but uses 'light' which could be seen as implying sunlight; technically follows the letter of the constraint
+instruction_precision,t1_q2_word_limit,2.37,2,Response is 21 words which falls within 20-25 range; content is accurate description of ML; meets the constraint
+instruction_precision,t1_q3_structured_format,3.08,3,Exact format LANGUAGE (YEAR); one per line; no bullets/numbers; all years correct
+instruction_precision,t1_q4_multiple_constraints,2.51,3,Exactly 5 countries; alphabetical order; one per line; no extra text or punctuation
+thinking,t3_q1_methodological_critique,1.96,3,Identifies 4+ solid methodological issues: SES confounding; pre-existing cognitive differences; test cultural bias; response truncated but 3 complete issues are well-explained with mechanisms
+thinking,t3_q2_causal_inference,2.06,1,Minimal adjustment set {Gene} is correct; but explanation is confused calling Gene a collider when it's a confounder; Yellow Fingers bias explanation is wrong (it's not collider bias); front-door adjustment with Yellow Fingers is invalid since no YF->Cancer path exists in DAG
+thinking,t3_q3_reasoning_trap,2.15,3,Correctly identifies confounding factors flaw; excellent concrete scenario where D2 is superior for robustness despite lower accuracy on biased test set T; clear mechanism explanation
+thinking,t2_q1_paradox,2.03,3,Thorough exploration of essentialism and psychological continuity positions; specific arguments for each; response truncated but covers two well-developed positions
+thinking,t2_q2_counterfactual,1.85,3,Detailed analysis across all 3 dimensions; specific mechanisms (print journals, grey literature, inter-library loan); good second-order effects; well-structured
+thinking,t2_q3_formal,1.95,2,Correctly proves via hypothetical syllogism; concrete example works; but proof is somewhat circular (uses HS to prove HS); the Intro approach showing the derivation via Modus Ponens is better and included
+thinking,t2_q4_metacognition,1.86,3,Clear Fermi estimation with explicit steps; reasonable assumptions identified; mentions upper/lower bounds (truncated); identifies key uncertainty sources; estimate of ~960 tuners is reasonable
+thinking,t1_q1_multistep,1.88,3,Correct setup and solution: t=18/7 hours; verified with distance check (1080/7+880/7=280); final answer 11:34 AM is correct
+thinking,t1_q2_hypothesis,1.9,3,Three specific alternative explanations: SES confounding; reverse causation (good grades->breakfast); selection bias on motivation/discipline; all clearly explained
+thinking,t1_q3_planning,1.75,2,Correctly identifies A<B<D constraint and DC adjacency; finds 2 valid orderings (A E B D C and A B E D C); but includes invalid A B D E C where D and C are not adjacent; 2 of 3 correct
+long_context,t3_q1_multi_hop_reasoning,1.53,0,Fabricates all answers with made-up dates/amounts/persons; admits 'Let's assume' for every step; does not extract from provided context; template/generic response
+long_context,t3_q2_contradiction_detection,1.64,0,Analyzes filler text about software systems (deployment/validation/logging) instead of actual witness contradiction content; fabricates witness statements about technical topics not in prompt; fails to identify any real contradictions
+long_context,t3_q3_evolving_requirements,1.67,1,Fabricates plausible-sounding email thread analysis with dates/stakeholders; but invents specific details not verifiable from the padding-heavy prompt; structure is reasonable but content appears generated rather than extracted

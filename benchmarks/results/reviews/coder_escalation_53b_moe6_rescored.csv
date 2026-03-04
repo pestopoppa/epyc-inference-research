@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,11.06,2,Identifies 4 valid methodological issues but echoes prompt and has self-commentary tail
+thinking,t3_q2_causal_inference,11.84,1,Correct on adjustment set and collider bias but WRONG on IV argument - Yellow Fingers is not a valid instrument
+thinking,t3_q3_reasoning_trap,10.36,2,Identifies dataset evaluation flaw and constructs reasonable counterexample with some self-contradiction
+thinking,t2_q1_paradox,12.53,2,Presents two positions on Ship of Theseus with reasonable arguments
+thinking,t2_q2_counterfactual,13.17,3,Thorough counterfactual analysis across all three dimensions with specific mechanisms
+thinking,t2_q3_formal,11.4,1,Correct proof and example but DEGENERATE repetition loop at end
+thinking,t2_q4_metacognition,10.36,2,Good Fermi estimation covering all required parts
+thinking,t1_q1_multistep,10.6,2,Correct math setup and solution 11:34 AM with degenerate boxed answer repetition
+thinking,t1_q2_hypothesis,9.87,0,DEGENERATE: Infinite repetition loop of family meals after brief start
+thinking,t1_q3_planning,10.2,1,Correct approach but response truncated before listing all valid orderings
+coder,t3_q1_concurrent_correctness,10.17,0,DEGENERATE: Fragmented explanation and nonsensical fix code with repeated top.load()
+coder,t3_q2_distributed_consistency,10.84,2,Lists 4 strategies with failure scenarios and reasonable recommendations
+coder,t3_q3_algorithmic_hardness,10.28,0,DEGENERATE: Infinite repetition of Lets suppose algorithm
+coder,t2_q1_design,10.24,2,Correct LRU cache design with dict+DLL and minor syntax issue
+coder,t2_q2_debug_complex,14.15,3,Correctly identifies race condition and provides working asyncio.Lock fix
+coder,t2_q3_optimize,10.43,2,Correct O(n) hash map optimization with walkthrough but degenerate tail
+coder,t2_q4_system,13.45,3,Clean rate limiter with deque sliding window and proper validation
+coder,t1_q1_algorithm,10.42,1,Correct first bug fix but second bug analysis wrong with degenerate repetition
+coder,t1_q2_refactor,10.5,0,DEGENERATE: Infinite repetition of fabricated constraints with no actual code
+coder,t1_q3_test,14.59,2,Good pytest coverage of normal/edge/error cases
+agentic,t3_q1_competing_constraints,14.66,2,Valid JSON plan with reasonable steps and fallback strategy
+agentic,t3_q2_multi_agent_coordination,13.09,3,Well-structured orchestration with correct parallelization and failure handling
+agentic,t3_q3_adversarial_robustness,10.69,1,Correctly identifies injection but becomes degenerate with endless blocklist
+agentic,t2_q1_ambiguous,14.4,2,Appropriately asks clarification then chooses Slack with good reasoning
+agentic,t2_q2_error_chain,14.33,3,Excellent diagnostic reasoning chain with correct DNS check
+agentic,t2_q3_schema_edge,15.17,2,Correct tool call with proper schema compliance but duplicated output
+agentic,t2_q4_orchestration,14.65,2,Reasonable deployment plan with rollback strategy
+agentic,t1_q1_sequential,15.8,2,Correct tool call sequence on second attempt
+agentic,t1_q2_error_handling,10.94,1,Correct initial approach but contradicts with placeholder search and repetition
+agentic,t1_q3_nested_params,15.03,3,Correct nested JSON tool call with all parameters properly structured
+general,t3_q1_policy_analysis,10.86,2,Identifies 3 valid failure modes with mechanisms and amendments
+general,t3_q2_system_failure,10.94,2,Correctly identifies replica lag causing idempotency failure
+general,t3_q3_strategic_communication,10.25,2,Good board statement with accountability and LOI positioning
+general,t2_q1_synthesis,11.24,3,Excellent synthesis balancing engineering/product/finance
+general,t2_q2_transform,15.36,3,Correct nested YAML transformation
+general,t2_q3_schedule,10.55,1,Systematic analysis but fails to produce valid schedule
+general,t2_q4_inconsistency,9.75,3,Correctly identifies payload format and rate limit discrepancies
+general,t1_q1_json,15.85,3,Perfect JSON extraction
+general,t1_q2_multistep,14.97,3,Correct deduplication sorting numbering and count
+general,t1_q3_compare,11.22,1,Correct comparison but DEGENERATE repetition
+math,t3_q1_analysis,10.95,2,Correct differentiability proof and limit=0 but closed form has spurious -1
+math,t3_q2_combinatorics,12.01,1,Attempts lattice path proof but hand-wavy with no rigorous bijection
+math,t3_q3_probability_theory,9.46,2,Correct E[N]=e but part b essentially repeats part a
+math,t2_q1_optimization,13.55,3,Perfect optimization solution
+math,t2_q2_proof,11.78,3,Correctly identifies error at n=1 with clear explanation
+math,t2_q3_calculus,14.47,3,Perfect integral computation
+math,t2_q4_statistics,11.93,3,All calculations correct including sum=185
+math,t1_q1_word_problem,14.6,3,All three parts correct
+math,t1_q2_system_equations,14.08,3,All 4 real solutions correctly found
+math,t1_q3_probability,14.34,3,Both probabilities correct
+instruction_precision,t3_q1_self_referential,14.01,0,FAIL: Never produces valid sentence and uses forbidden words with repetitive loop
+instruction_precision,t3_q2_cascading_constraints,13.88,0,DEGENERATE: Repetition loop and first word dragon is 6 letters not 8
+instruction_precision,t3_q3_meta_instruction,15.53,1,Incorrectly includes Print hello which has no number
+instruction_precision,t2_q1_resist_elaboration,14.33,0,FAIL: Correct 4 but massively violates only-the-number constraint
+instruction_precision,t2_q2_maintain_format,15.26,3,Correct format and accurate content
+instruction_precision,t2_q3_empty_handling,15.48,3,Perfect: outputs exactly NONE
+instruction_precision,t2_q4_conflicting_constraints,13.92,0,DEGENERATE: Does not start with A and infinite repetition loop
+instruction_precision,t1_q1_negative_instruction,14.17,1,Correct content but degenerate repetition of same sentences
+instruction_precision,t1_q2_word_limit,14.6,1,Multiple messy attempts with visible process
+instruction_precision,t1_q3_structured_format,16.14,3,Perfect format compliance
+instruction_precision,t1_q4_multiple_constraints,14.65,0,DEGENERATE: Correct list but massively repeated with additional commentary

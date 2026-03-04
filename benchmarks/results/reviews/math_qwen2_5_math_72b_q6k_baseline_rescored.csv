@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t1_q2_hypothesis,1.08,2,"3 reasonable alternatives given (socioeconomic/health/behavioral); somewhat generic, lacks specificity depth"
+thinking,t3_q1_methodological_critique,2.15,2,4 issues identified; history/testing/maturation labels imprecise; unnecessary code padding; bracket repetition
+thinking,t3_q2_causal_inference,1.91,1,Parts 1-2 correct; Part 3 correct but reasoning shallow; massive bracket repetition wastes >50% tokens
+thinking,t3_q3_reasoning_trap,1.87,0,Scenario internally contradictory (claims T biased toward D2 but Model B still scores lower); bracket repetition
+thinking,t2_q1_paradox,1.92,1,3 positions presented but shallow; doesn't properly address reassembled ship question; bracket repetition
+thinking,t2_q2_counterfactual,1.9,1,All 3 dimensions covered; second-order effects generic; bracket repetition wastes >40% tokens
+thinking,t2_q3_formal,2.06,3,Correct formal proof via modus ponens with conditional proof; good concrete example; clean output
+thinking,t2_q4_metacognition,1.98,3,Systematic Fermi estimation; reasonable assumptions; bounds 60-140; identifies key uncertainty reducer
+thinking,t1_q1_multistep,1.94,2,Correct calculation and answer (11:34 AM); clear work shown; bracket repetition wastes tokens
+thinking,t1_q3_planning,2.93,2,Correct constraint chain A<B<D<C derived; systematic case analysis started; output truncated before completion
+coder,t3_q1_concurrent_correctness,1.92,1,Begins ABA explanation but truncated; doesn't provide concrete ABA sequence or tagged pointer fix
+coder,t3_q2_distributed_consistency,1.92,2,4 strategies listed with failure scenarios; recommendations reasonable; misses CRDTs for shopping cart; bracket repetition
+coder,t3_q3_algorithmic_hardness,1.91,2,Good recurrence derivation; group size analysis correct; expected comparison count imprecise (~2n vs ~3.39n); bracket rep
+coder,t2_q1_design,1.93,2,Correct O(1) approach with dict+DLL; partial implementation shown; truncated before completion
+coder,t2_q2_debug_complex,1.92,3,Correctly identifies race condition; proper asyncio.Lock fix; clean explanation
+coder,t2_q3_optimize,1.92,3,Correct O(n) hash map solution; clean implementation; proper explanation
+coder,t2_q4_system,1.97,1,Describes approach but implementation truncated; adds unnecessary IP address parameter not in spec
+coder,t1_q1_algorithm,1.9,2,Correctly identifies left=mid infinite loop bug; explanation of second bug (off-by-one) started but truncated
+coder,t1_q2_refactor,1.9,2,Speed-optimized version correct with O(n) set approach; memory-optimized version truncated
+coder,t1_q3_test,1.91,3,Complete test coverage: normal/edge/error cases; proper pytest.raises usage; clean output
+agentic,t3_q1_competing_constraints,1.89,1,Begins reasonable approach but truncated before providing required JSON plan structure
+agentic,t3_q2_multi_agent_coordination,1.93,1,Basic sequential plan; no parallelization despite 60s budget; failure handling trivial; bracket repetition
+agentic,t3_q3_adversarial_robustness,1.91,1,"Identifies security concern; policy generic; should firmly REFUSE adversarial command, instead suggests auth check"
+agentic,t2_q1_ambiguous,1.92,1,Initially correct (asks for clarification) but then hallucinates into unrelated math problem
+agentic,t2_q2_error_chain,1.94,1,Traces error chain but suggests already-performed check; should use get_logs or check_dns first
+agentic,t2_q3_schema_edge,1.93,2,Correct JSON tool call generated; violates output-only-JSON instruction by adding explanation; bracket repetition
+agentic,t2_q4_orchestration,1.91,1,Correct step sequence but JSON uses placeholder strings instead of actual values; truncated
+agentic,t1_q1_sequential,2.04,1,Wrong tool call order (read then grep instead of grep then read); wraps in unnecessary Python code
+agentic,t1_q2_error_handling,1.91,0,Hallucinates tool responses; fabricates finding John Doe; should ask user for clarification
+agentic,t1_q3_nested_params,1.91,2,Correct JSON structure; violates output-only-JSON instruction; bracket repetition
+general,t3_q1_policy_analysis,1.91,2,"3 failure modes with mechanisms, amendments, trade-offs; analysis somewhat surface-level; bracket repetition"
+general,t3_q2_system_failure,1.94,2,Correctly explains double-charge mechanism via replica lag; good testing gap analysis; fixes truncated
+general,t3_q3_strategic_communication,1.9,1,Starts well with accountability and LOI framing; truncated before 90-day milestones and position concern
+general,t2_q1_synthesis,1.91,2,Good synthesis: temp fix within budget then full refactor; exceeds 3-4 sentence limit; truncated
+general,t2_q2_transform,1.92,1,Shows Python approach but truncated; doesn't provide the actual YAML output
+general,t2_q3_schedule,2.01,1,Good constraint analysis started; incorrectly applies Dave availability to team sync; truncated
+general,t2_q4_inconsistency,1.89,3,Correctly identifies both inconsistencies: body type (JSON vs form-encoded) and rate limit (100/min vs 16.67/min)
+general,t1_q1_json,1.91,2,Correct JSON parsing; violates output-only-JSON no-explanation instruction
+general,t1_q2_multistep,2.07,2,"Correct processing; model hallucinated extra items into prompt (date, Elderberry); result internally consistent"
+general,t1_q3_compare,1.89,1,Generic comparison; exceeds 2-3 sentence limit; begins repeating content
+math,t3_q1_analysis,1.97,2,Differentiability proof correct; closed form via Im(e^{xe^i}) started correctly; truncated
+math,t3_q2_combinatorics,1.89,1,Attempts sign-reversing involution but involution doesn't preserve |B|=n; fixed point count wrong; bracket rep
+math,t3_q3_probability_theory,1.92,1,Correct setup with simplex volumes and P(N=n); computation repetitive; never reaches E[N]=e; truncated
+math,t2_q1_optimization,2.06,3,"Correct optimization: x=100, y=50, max area=5000 sq meters; clean derivation"
+math,t2_q2_proof,1.9,3,Correctly identifies error at n=1->n=2 transition; groups don't overlap; clear explanation
+math,t2_q3_calculus,2.07,3,Correct antiderivative and evaluation; answer=10; clean step-by-step work
+math,t2_q4_statistics,1.96,0,"CRITICAL: sum=183 WRONG (correct sum=185, mean=23.125 not 22.875); all subsequent calculations wrong"
+math,t1_q1_word_problem,2.06,3,"Correct: discount=$120, final=$129.60; clear step-by-step work"
+math,t1_q2_system_equations,2.03,2,Correct method and intermediate results; truncated before listing all 4 solution pairs
+math,t1_q3_probability,2.07,2,P(both red)=2/9 correct; P(red+blue) truncated before completion
+instruction_precision,t3_q1_self_referential,2.07,0,Fails all constraints: uses forbidden words sentence/contains; never produces valid self-referential sentence
+instruction_precision,t3_q2_cascading_constraints,2.07,0,Complete failure: outputs Chinese character and repeated a; claims task impossible; no valid attempt
+instruction_precision,t3_q3_meta_instruction,2.07,2,Correct identification of valid instructions; correct output (42 + 7x hi); adds explanation violating nothing-else rule
+instruction_precision,t2_q1_resist_elaboration,2.07,0,Correct answer (4) but fails only-the-number instruction; adds reasoning; repeats answer block ~7 times
+instruction_precision,t2_q2_maintain_format,2.06,0,Fails to follow required format; adds lengthy explanation and Python code instead of ERROR_TYPE/ROOT_CAUSE/FIX
+instruction_precision,t2_q3_empty_handling,2.09,0,Should output exactly NONE; instead writes regex explanation and Python code; fails instruction
+instruction_precision,t2_q4_conflicting_constraints,2.05,0,Hallucinates extra constraints; produces paragraph instead of single sentence; fails all format constraints
+instruction_precision,t1_q1_negative_instruction,2.08,1,Avoids forbidden words (uses light energy); but exceeds 2 sentence limit massively; content repetition
+instruction_precision,t1_q2_word_limit,2.08,0,Claims 25 words but writes multiple paragraphs (~100+ words); repeats content; fails word limit
+instruction_precision,t1_q3_structured_format,2.07,1,Correct format initially (Python/Java/C++); massive repetition repeating the 3 lines 20+ times
+instruction_precision,t1_q4_multiple_constraints,2.05,1,Correct 5 countries in order; adds numbers and extra text violating constraints; repeats list ~6 times

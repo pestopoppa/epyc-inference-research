@@ -1,0 +1,68 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+math,t3_q1_analysis,46.19,2,"Correct differentiability proof via Weierstrass M-test; correct closed form Im(e^{xe^i}-1); correct limit=0. Verbose/repetitive but all 3 parts substantially correct. Hit token limit, minor truncation."
+math,t3_q2_combinatorics,9.84,0,"Unclosed think tag exhausting context. Response is entirely inside <think> block. Discovers the identity is false for n=2 (LHS=1, RHS=2) but never delivers a proof or conclusion. No actual answer produced."
+math,t3_q3_probability_theory,47.64,3,"Correct answer E[N]=e. Part (a) attempts direct calculation but pivots. Part (b) elegant proof via simplex volumes: P(S_{n-1}<=1)=1/(n-1)!, sum=e. Both proofs provided, correct final answer."
+math,t2_q1_optimization,10.02,3,"Correct setup x+2y=200, A=xy. Correct derivative, y=50, x=100, A=5000 sq meters. Second derivative test confirms maximum. Clean solution."
+math,t2_q2_proof,9.97,3,Correctly identifies the error: overlap assumption fails at n=1->n=2. Correctly states n=1 is the failing value. Clear explanation of empty intersection between {H1} and {H2}.
+math,t2_q3_calculus,10.01,3,"Correct antiderivative x^3+x^2-x. F(2)=10, F(0)=0. Final answer 10. All steps shown correctly."
+math,t2_q4_statistics,57.52,1,"Sum error: states 12+15+18+22+25+28+30+35=205 (correct is 185). Mean wrong (25.625 vs 23.125). All downstream calculations (std dev, IQR) based on wrong mean. Median=23.5 is correct. Critical arithmetic error propagates."
+math,t1_q1_word_problem,9.91,3,Correct: discount $150*0.80=$120. Tax: $120*1.08=$129.60. Percentage: 129.60/150=86.4%. All correct with clear work shown.
+math,t1_q2_system_equations,35.63,3,"Correct quartic factoring. All 4 solutions found: (4,3),(-4,-3),(3,4),(-3,-4). Verified each. Clean method."
+math,t1_q3_probability,9.97,3,Correct total balls=10. P(both red)=5/10*4/9=2/9. P(one red one blue) correctly set up as two scenarios. Correct approach throughout.
+long_context,t3_q2_contradiction_detection,9.16,2,Identifies multiple contradictions in the provided text. Structured analysis with witness comparisons. Some contradictions may be imprecise but substantially addresses the task.
+long_context,t3_q3_evolving_requirements,8.91,1,"Notes the text is final-state documentation, not evolving requirements. Attempts analysis but acknowledges data limitations. Does not fully address the evolving requirements tracking task."
+long_context,t2_q2_synthesis,8.87,2,"Synthesizes across Q1/Q2 reports, market analysis, and competitor data. Inside think block shows good reasoning. Addresses performance changes, market factors, and competitor activity."
+long_context,t1_q1_needle,9.47,1,Unclosed think tag - entire response is reasoning inside <think> block. Scans files but concludes 'no obvious hardcoded keys' for most files without producing a final answer outside think tags.
+long_context,t1_q2_multi_file,0.0,0,"Empty response (0 chars, 1 token). Complete failure to produce any output. TPS=1M indicates degenerate completion."
+long_context,t1_q3_extraction,9.41,1,"Unclosed think tag - response stuck in reasoning. Shows good extraction work in progress (dates, amounts, names) but never produces formatted output outside think block."
+thinking,t3_q1_methodological_critique,40.72,3,"Identifies 4+ methodological issues: selection bias/confounding, lack of random assignment, measurement issues, and self-selection. Specific and well-reasoned."
+thinking,t3_q2_causal_inference,9.86,3,Correct DAG analysis. Minimal adjustment set={Gene}. Correctly identifies Yellow Fingers as collider - conditioning introduces bias. Path analysis is accurate.
+thinking,t3_q3_reasoning_trap,9.82,3,Correctly identifies confounding of dataset quality with model architecture. Lists multiple alternative explanations. Discusses proper experimental design needed.
+thinking,t2_q1_paradox,9.84,2,"Presents multiple philosophical positions on Ship of Theseus. Inside think block shows good reasoning. Hit token limit but covers key positions (material, functional, spatio-temporal continuity)."
+thinking,t2_q2_counterfactual,55.25,3,"Thorough analysis across all 3 dimensions. Specific mechanisms for knowledge dissemination, collaboration, reproducibility. Concrete examples and counterfactual reasoning."
+thinking,t2_q3_formal,10.03,3,"Correct proof of hypothetical syllogism P->Q, Q->R implies P->R. Uses definition of implication and cases. Concrete example provided."
+thinking,t2_q4_metacognition,9.97,3,Good Fermi estimation approach. Breaks down Chicago population -> piano owners -> tuning frequency -> tuners needed. Identifies key assumptions and uncertainty reducers.
+thinking,t1_q1_multistep,60.06,2,Correct setup: 60t+80(t-1)=280. Gets t=18/7 hours. Answer 11:34 AM is approximately correct (exact is 11:34:17). Verification shows ~279.8 miles. Minor rounding but substantially correct.
+thinking,t1_q2_hypothesis,9.88,3,"Provides 3 clear alternative explanations for breakfast-test score correlation: SES confounding, self-selection, and reverse causation. Specific and well-argued."
+thinking,t1_q3_planning,48.53,2,"Correct constraint analysis: A<B<D, DC adjacent, E not first/last. Identifies valid orderings A,B,E,D,C and A,E,B,D,C. Hit token limit; response truncated before completing enumeration. Partial but substantially correct method."
+general,t3_q1_policy_analysis,52.81,3,"Identifies 3+ failure modes of the AI governance policy: gaming accuracy threshold, inadequate bias detection, explainability limitations. Thorough multi-angle analysis."
+general,t3_q2_system_failure,29.48,3,Correctly diagnoses double-charge root cause: idempotency check reads from eventually-consistent replica while write goes to primary. Proposes reading from primary for idempotency checks.
+general,t3_q3_strategic_communication,58.36,2,"Provides a board presentation script. Addresses revenue miss, LOIs, team morale. Somewhat generic/narrative rather than precisely structured for the specific constraints. Hit token limit."
+general,t2_q1_synthesis,10.18,3,"Clean synthesis: 2-week quick fix under $20K threshold, then 3-month refactor next quarter. Balances all three stakeholder perspectives effectively."
+general,t2_q2_transform,44.79,1,"Prompt echoing: starts by restating expected output, then hallucinates a user question about yq. Provides multiple yq command attempts, none verified. Does not directly output the transformed YAML."
+general,t2_q3_schedule,9.92,1,Attempts constraint analysis but hits token limit before producing a valid schedule. Gets stuck in back-to-back conflict analysis. No final answer produced.
+general,t2_q4_inconsistency,9.95,3,Correctly identifies JSON vs form-encoded body format inconsistency between docs. Finds rate limit discrepancy (100/min vs 1000/hr). Structured analysis.
+general,t1_q1_json,9.63,3,"Perfect JSON output with correct fields: name, role, department, start_date. Clean, no extra text (aside from think tags)."
+general,t1_q2_multistep,9.87,0,Hallucinated data: model invents 30+ extra fruits not in the original 7-item list. Processes a fabricated list of 36 items instead of the given 7. Complete failure to follow the input.
+general,t1_q3_compare,49.61,3,Concise 2-3 sentence comparison covering pros/cons of both approaches. Correctly contrasts microservices vs monolith tradeoffs.
+agentic,t3_q1_competing_constraints,9.97,2,"Creates a multi-step JSON plan: read CSV, validate schema, analyze data. Includes failure handling. Reasonable approach though could be more specific about competing constraints."
+agentic,t3_q2_multi_agent_coordination,40.1,2,Provides phased orchestration plan with correct agent assignments. Research->code->review pipeline. Includes timeouts. Reasonable coordination strategy.
+agentic,t3_q3_adversarial_robustness,42.07,3,"Correctly identifies command injection risk (curl && cat /etc/passwd). Proposes safe handling: avoid shell execution, use http_request for URL only, refuse /etc/passwd access."
+agentic,t2_q1_ambiguous,10.04,1,"Prompt asks to either ask clarifying question OR explain reasoning for tool choice. Model chooses tool without asking clarification, but doesn't fully explain why Slack over email/ticket. Partial compliance."
+agentic,t2_q2_error_chain,9.89,2,Follows error chain: deploy blocked -> staging unhealthy -> database_connection failing -> db-staging host issue. Demonstrates systematic debugging approach.
+agentic,t2_q3_schema_edge,10.1,3,"Correct JSON: GET method, /users endpoint, body=null (correct for GET), Authorization header. All schema constraints satisfied."
+agentic,t2_q4_orchestration,44.71,2,"Provides ordered deployment steps: checkout, test, build, deploy, notify. Includes on_test_fail handler. Missing rollback strategy details but covers core flow."
+agentic,t1_q1_sequential,70.36,0,"Degenerate repetitive output: alternating ['read_file','grep_search'] pairs repeated hundreds of times. No valid JSON array produced. Classic repetition loop."
+agentic,t1_q2_error_handling,10.07,2,"Recognizes 404 error and offers 3 reasonable next steps: create user, search users, verify ID. Asks for user input. Appropriate error recovery pattern."
+agentic,t1_q3_nested_params,72.44,3,"Perfect JSON tool call with correct nested structure: title, assignees array, metadata with priority/tags/due_date. All constraints met."
+instruction_precision,t3_q1_self_referential,56.26,0,Fails all self-referential constraints. Claims 10 words but sentence has 15+. Claims 17 letters but actual count is ~80+. Uses 'sentence' (forbidden word). Multiple failed verification attempts.
+instruction_precision,t3_q2_cascading_constraints,40.46,0,"Fails cascading constraints. Outputs examples that violate rules (elephant=8 letters but tiger=5 not <=8 is ok, but giraffe>tiger). Multiple restart attempts. Never produces valid 5-word list."
+instruction_precision,t3_q3_meta_instruction,31.07,1,Partially correct: prints 42 (valid: bracket+number). Incorrectly prints 'hello' ([Print hello] has no number). Correctly executes [Say 7 times: hi]. Then adds spurious Python code blocks.
+instruction_precision,t2_q1_resist_elaboration,94.78,0,Degenerate repetition: outputs '4' then repeats the prompt+answer pattern dozens of times until token limit. Classic repetition loop.
+instruction_precision,t2_q2_maintain_format,45.63,0,Prompt echoing/hallucination: generates a fake stack trace instead of the requested ERROR_TYPE/ROOT_CAUSE/FIX format. Complete format failure.
+instruction_precision,t2_q3_empty_handling,47.17,3,Perfect: outputs exactly 'NONE' with no explanation or apology. Fully compliant.
+instruction_precision,t2_q4_conflicting_constraints,10.1,2,"Under 12 words (8 words), starts with 'A', ends with 'data', no 'store'/'storage'. Sentence is slightly awkward but meets all stated constraints. Minor: 'efficient data' is unusual phrasing but 'data' is last word."
+instruction_precision,t1_q1_negative_instruction,10.25,3,"Explains photosynthesis in 2 sentences without mentioning sunlight, sun, or solar. Describes chemical reactions and oxygen byproduct. All constraints met."
+instruction_precision,t1_q2_word_limit,45.64,1,"First sentence is 22 words (within range), but then adds extensive explanation violating 'exactly 20-25 words' intent. Repeats the definition. Not clean compliance."
+instruction_precision,t1_q3_structured_format,10.46,3,"Perfect format: 'Python (1991)', 'JavaScript (1995)', 'Rust (2010)'. One per line, no bullets/numbers/extra text. All facts correct."
+instruction_precision,t1_q4_multiple_constraints,47.52,0,"Algeria is in Africa, not Europe. Violates the core requirement. Otherwise alphabetical and formatted correctly, but factual error on 1 of 5 items is a fundamental failure."
+coder,t3_q1_concurrent_correctness,43.56,2,Identifies ABA problem scenario correctly. Explains memory reuse issue. Proposes tagged pointer solution. Hit token limit but core analysis is sound.
+coder,t3_q2_distributed_consistency,10.08,2,"Lists conflict resolution strategies: LWW, vector clocks, CRDTs, application-level merge. Discusses tradeoffs for shopping cart vs banking. Inside think block but substantive."
+coder,t3_q3_algorithmic_hardness,9.96,2,Provides adversary argument for Omega(n) lower bound. Discusses median-of-medians recurrence. Hit token limit but core proofs are present.
+coder,t2_q1_design,46.76,3,Correct LRU cache with OrderedDict-like structure using doubly linked list + hashmap. O(1) get and put. Explains data structure choices. Clean implementation.
+coder,t2_q2_debug_complex,47.89,3,Correctly identifies race condition: read-modify-write is non-atomic across await. Proposes asyncio.Lock fix. Clear explanation of interleaving.
+coder,t2_q3_optimize,53.44,3,Correct O(n) solution using frequency hashmap. Two-sum style approach. Handles complement lookup correctly.
+coder,t2_q4_system,48.42,3,Clean rate limiter with sliding window using deque. Handles edge cases (max_requests<=0). Uses time.time() for window management. Standard library only.
+coder,t1_q1_algorithm,9.98,1,Claims to find 2 bugs but struggles to demonstrate them clearly. Bug 1 analysis is confused - traces through examples that actually work. Hit token limit before completing. Identifies left=mid issue but explanation is muddled.
+coder,t1_q2_refactor,29.43,2,Provides O(n) set-based solution and O(n log n) sort-based solution. Correct implementations. Some prompt echoing at start but delivers working code.
+coder,t1_q3_test,49.33,3,"Comprehensive pytest test cases: normal division, negatives, floats, zero division error, edge cases. Good coverage with clear test naming."

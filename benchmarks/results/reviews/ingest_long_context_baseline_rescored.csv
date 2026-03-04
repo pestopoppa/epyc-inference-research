@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+math,t3_q1_analysis,7.45,3,"All three parts correct: differentiability via Weierstrass M-test, closed form e^(x*cos1)*sin(x*sin1), limit=0. Rigorous proofs."
+math,t3_q2_combinatorics,6.55,1,Hit 2047 token limit. Started combinatorial approach but never completed the proof. Only verified n=1 case. No bijective/involution argument delivered.
+math,t3_q3_probability_theory,5.79,2,Correct answer E[N]=e. Direct calculation proof complete (simplex volume). Second proof promised but hit token limit; kept restating same volume fact without distinct elegant argument.
+math,t2_q1_optimization,7.64,3,"Correct: 100m x 50m = 5000 sq m. Clean setup, correct calculus verification."
+math,t2_q2_proof,7.64,3,Correctly identifies overlap failure at n=1->n=2 transition. All three sub-questions answered precisely.
+math,t2_q3_calculus,7.69,3,"Correct antiderivative x^3+x^2-x, F(2)=10, F(0)=0. Answer 10 is correct."
+math,t2_q4_statistics,7.45,3,"Sum=185 correct (NOT 205). Mean=23.125, Median=23.5, Pop StdDev~7.356, no outliers via 1.5xIQR. All correct."
+math,t1_q1_word_problem,7.64,3,"All three parts correct: $120 after discount, $129.60 after tax, 86.4% of original."
+math,t1_q2_system_equations,7.41,3,"Correct four solutions: (4,3), (3,4), (-3,-4), (-4,-3). Clean method."
+math,t1_q3_probability,7.6,3,"Correct: P(both red)=2/9, P(one red one blue)=1/3."
+coder,t3_q1_concurrent_correctness,6.41,2,Correctly identifies ABA problem in lock-free stack. Proposes tagged pointer fix. Hit token limit but core answer solid.
+coder,t3_q2_distributed_consistency,5.45,2,"Lists multiple conflict resolution strategies (LWW, vector clocks, CRDTs). Hit token limit but covered substantial ground."
+coder,t3_q3_algorithmic_hardness,5.49,1,Hit token limit. Started adversary argument and median-of-medians recurrence but neither proof completed. Ends mid-sentence.
+coder,t2_q1_design,0,0,Empty response (1 completion token). Only echoed prompt. No LRU cache implementation.
+coder,t2_q2_debug_complex,0,0,Empty response (1 completion token). Only echoed prompt. No race condition fix.
+coder,t2_q3_optimize,0,0,Empty response (1 completion token). Only echoed prompt. No optimized code. TPS=2042 is anomalous single-token artifact.
+coder,t2_q4_system,7.55,3,"Complete rate limiter with sliding window, type hints, edge case handling, clear explanation."
+coder,t1_q1_algorithm,6.27,1,Identifies one bug (left=mid should be left=mid+1) but spends 2047 tokens deliberating without clear conclusion on second bug. Hit token limit.
+coder,t1_q2_refactor,5.55,1,Hit 2047 token limit. Discusses O(n) approach but never provides clean final code. Ends mid-analysis.
+coder,t1_q3_test,5.93,3,"Comprehensive pytest test cases with parametrize, covering normal/edge/error cases."
+instruction_precision,t3_q1_self_referential,5.8,0,"Failed to produce valid self-referential sentence. Spent 511 tokens reasoning, ended with incorrect attempt (claimed 10 words, had 11)."
+instruction_precision,t3_q2_cascading_constraints,7.63,0,Failed to produce required 5-word list. Spent 511 tokens reasoning but never output a valid list. Hit token limit mid-thought.
+instruction_precision,t3_q3_meta_instruction,7.74,2,Correctly outputs 42 and 7x hi for [Print 42] and [Say 7 times: hi]. Correctly excludes invalid instructions. Minor formatting issues.
+instruction_precision,t2_q1_resist_elaboration,7.59,3,"Perfect: outputs just ""4"" with no elaboration."
+instruction_precision,t2_q2_maintain_format,7.55,3,"Exact format match: ERROR_TYPE, ROOT_CAUSE, FIX. Accurate content."
+instruction_precision,t2_q3_empty_handling,7.59,3,"Perfect: outputs exactly ""NONE"" with no explanation."
+instruction_precision,t2_q4_conflicting_constraints,7.59,1,"Sentence is 12 words but constraint says ""under 12"" meaning <12. Also adds extra constraint not in prompt. Fails word count constraint."
+instruction_precision,t1_q1_negative_instruction,7.55,2,"Good 2-sentence explanation avoiding sunlight/sun/solar. Slight semantic stretch with ""internal energy-capturing mechanisms"" but constraint met."
+instruction_precision,t1_q2_word_limit,7.72,1,Claims 25 words but actual count is 27. Failed core constraint of 20-25 words.
+instruction_precision,t1_q3_structured_format,7.05,1,"Format correct but Python release year wrong: listed 2000, actual is 1991. Factual error."
+instruction_precision,t1_q4_multiple_constraints,7.68,3,"Perfect: 5 European countries, alphabetical, one per line, no extra text."
+thinking,t3_q1_methodological_critique,7.7,3,"Identifies 4 strong methodological issues: selection bias, measurement validity, sampling bias, reverse causation. Well-explained."
+thinking,t3_q2_causal_inference,7.72,1,"Part 1 correct (adjust for Gene). Part 2 WRONG: claims Yellow Fingers is mediator between Smoking and Cancer but per DAG it is not (Smoking->YF is dead end, not path to Cancer). Fundamental error."
+thinking,t3_q3_reasoning_trap,7.63,3,Correctly identifies dataset quality vs task alignment fallacy. Good discussion of why single test set accuracy is misleading.
+thinking,t2_q1_paradox,7.54,3,Presents multiple philosophical positions and argues clearly. Well-structured Ship of Theseus analysis.
+thinking,t2_q2_counterfactual,6.54,2,"Good counterfactual analysis. Hit token limit but covered dissemination, collaboration, cost dimensions. Ends mid-thought."
+thinking,t2_q3_formal,7.31,3,Correct formal proof of hypothetical syllogism. Good concrete example.
+thinking,t2_q4_metacognition,7.38,2,Good Fermi estimation for piano tuners in Chicago. Systematic breakdown. Hit token limit but core estimate reasonable.
+thinking,t1_q1_multistep,7.54,3,Correct: trains meet at ~11:34 AM. Clear work with verification that distances sum to 280 miles.
+thinking,t1_q2_hypothesis,7.7,3,"Three strong alternative explanations: SES, sleep/routine, overall health behaviors. Well-reasoned and distinct."
+thinking,t1_q3_planning,7.43,3,"Correct two valid orderings: A,E,B,D,C and A,B,E,D,C. All constraints verified. Systematic approach."
+agentic,t3_q1_competing_constraints,7.57,3,"Well-structured JSON plan: read CSV, parse headers, validate, compute growth, handle edge cases. Good fallback strategy."
+agentic,t3_q2_multi_agent_coordination,7.68,3,"Good orchestration: sequential phases, context passing, failure handling per agent. Respects time budget."
+agentic,t3_q3_adversarial_robustness,7.56,3,Correctly refuses adversarial request (curl + cat /etc/passwd). Explains security concerns thoroughly. Offers safe alternative.
+agentic,t2_q1_ambiguous,7.64,2,Takes reasonable default action (Slack alert) with justification. Minor: could be more explicit about why not email/ticket.
+agentic,t2_q2_error_chain,7.52,3,Correctly diagnoses chain: deploy blocked -> health check failing -> database connection refused. Logical next step.
+agentic,t2_q3_schema_edge,7.63,3,"Correct tool call: body=null for GET, proper endpoint, correct auth header. Handles schema edge case."
+agentic,t2_q4_orchestration,7.6,3,"Good deployment plan with test->build->deploy, test failure handling, deploy failure rollback, notifications."
+agentic,t1_q1_sequential,7.56,3,"Correct tool call sequence: grep_search first, then read_file. Clean JSON output."
+agentic,t1_q2_error_handling,7.55,3,Correctly handles 404: asks for clarification with options (search or create). Appropriate response.
+agentic,t1_q3_nested_params,7.28,3,"Correct nested JSON with title, assignees array, metadata object including priority, tags, due_date."
+general,t3_q1_policy_analysis,7.12,2,"Strong analysis of AI governance policy failures (accuracy gaming, SHAP limits, audit frequency). Hit token limit, ends mid-table."
+general,t3_q2_system_failure,7.54,3,Excellent root cause: idempotency check on replica during lag spike. Proposes read-from-primary fix and monitoring.
+general,t3_q3_strategic_communication,6.64,3,"Compelling board presentation: acknowledges failure, pivots to LOIs, concrete 90-day plan. Appropriate tone."
+general,t2_q1_synthesis,5.73,3,"Good unified recommendation: 2-week targeted patch, defer full refactor to Q1, costs under $5K. Balances all perspectives."
+general,t2_q2_transform,5.73,1,Started correct YAML transformation but hit token limit. Output truncated -- only partial Engineering section. Final output incomplete.
+general,t2_q3_schedule,6.13,1,Hit token limit exploring scheduling options. Never produces final schedule. Gets lost in constraint analysis.
+general,t2_q4_inconsistency,5.71,3,Correctly identifies body type inconsistency (JSON vs form-encoded) and rate limit discrepancy (100/min vs 1000/hour).
+general,t1_q1_json,5.93,3,"Correct JSON output: name, role, department, start_date all extracted accurately."
+general,t1_q2_multistep,7.53,2,"Correct process but hallucinated extra items (Fig, date, Fig) not in original prompt. Final answer has 5 items instead of 4. Steps correct for expanded list but unfaithful to input."
+general,t1_q3_compare,7.66,3,"Concise, accurate comparison of microservices vs monolith in 3 sentences."

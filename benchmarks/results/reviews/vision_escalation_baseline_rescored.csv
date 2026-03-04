@@ -1,0 +1,13 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+vl,t3_q1_chart_critique,18.94,2,"All 4 parts addressed with structured analysis; internally inconsistent claim about axis scale vs values exceeding 100, but critique and suggestions are coherent"
+vl,t3_q2_multi_chart_synthesis,17.51,3,"All 4 parts fully answered; correct math on percentages (28.9/27.7/22.8/20.5%); correctly declines projection with sound reasoning; thorough external factors analysis"
+vl,t3_q3_twyne_security,9.21,2,"All 5 parts addressed; trust assumptions, attack vectors, SPOFs, invariants, and 6/10 security rating with justification; somewhat generic DeFi analysis but complete and coherent"
+vl,t3_q4_twyne_economic,,1,"Response truncated mid-sentence in part 3; parts 4 (bank run scenario) and 5 (DeFi comparison) entirely missing; only 2 of 5 parts fully answered"
+vl,t3_q5_document_forensics,,2,"Parts 1-4 fully answered with detail; part 5 authenticity table starts but is truncated; 4/5 parts complete with solid forensic reasoning"
+vl,t2_q1_calculation,10.51,3,"Correctly quotes the source sentence, identifies 2008 value as $506 million, shows clear step-by-step reasoning"
+vl,t2_q2_comparison,26.99,2,"Identifies highest (68%) and lowest (62%) green bars, computes difference as 6%; values internally consistent though cannot verify visual accuracy"
+vl,t2_q3_trend_analysis,21.02,2,"Identifies 2013-2014 as sharpest increase with ~250 person rate of change; provides segment-by-segment comparison; coherent and complete"
+vl,t2_q4_ratio_calculation,21.13,3,"Correctly identifies lowest green (58% US) and lowest blue (24% NZ), computes ratio 29:12 ~2.42; work shown clearly with GCD simplification"
+vl,t2_q5_document_synthesis,9.87,3,"2012: Rs.1059Cr, 2011: Rs.1554Cr, YoY change -31.86%; arithmetic verified correct; all three requested values provided"
+vl,t1_q1_scene_text,28.49,3,"Concise direct answer Centric for OCR task; appropriate response to simple scene text question"
+vl,t1_q2_sign_reading,26.39,2,"Lists Mosman, Manly, Chatswood, Epping with structured formatting; all sign text read; cannot verify completeness without image"

@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+math,t3_q1_analysis,7.60,3,"All 3 parts correct: differentiability via power series, closed form e^(xcos1)sin(xsin1), limit 0"
+math,t3_q2_combinatorics,7.66,1,"Truncated. Correctly identified identity fails for n=2 but no proof provided, no final answer"
+math,t3_q3_probability_theory,7.49,2,Truncated. Part (a) correct with E[N]=e via P(N>n)=1/n!. Part (b) not completed due to truncation
+math,t2_q1_optimization,7.40,3,"Fully correct: x=50m, y=100m, max area=5000 sq m with proper optimization"
+math,t2_q2_proof,7.64,3,"All 3 parts correct: error in inductive step, fails at n=1, no overlap when n=1"
+math,t2_q3_calculus,7.67,3,"Fully correct: antiderivative, bounds evaluation, final answer 10"
+math,t2_q4_statistics,7.52,3,"All 4 parts correct: mean=23.125 (sum=185), median=23.5, std=7.356, no outliers"
+math,t1_q1_word_problem,7.63,3,"All 3 parts correct: discount price=120, final=129.60, percentage=86.4%"
+math,t1_q2_system_equations,7.31,0,Degenerate: answer correct but repeated Final Answer 12+ times (repetition=0 rule)
+math,t1_q3_probability,7.55,1,Truncated and disorganized. Individual calculations correct but never completed all parts in one coherent answer
+coder,t3_q1_concurrent_correctness,,0,Empty: only echoed prompt with no answer. TPS=None indicates generation failure
+coder,t3_q2_distributed_consistency,7.45,1,"Truncated. Discussed vector clocks, quorum, read repair but no complete structured answer"
+coder,t3_q3_algorithmic_hardness,7.27,1,Truncated. Partial Omega(n) proof and partial median-of-medians recurrence. No complete answer
+coder,t2_q1_design,,0,Empty: only echoed prompt with no answer. TPS=None indicates generation failure
+coder,t2_q2_debug_complex,7.69,3,"Correct: identified race condition, applied asyncio.Lock fix, showed working corrected code"
+coder,t2_q3_optimize,2103.19,0,Empty: only echoed prompt. Anomalous TPS=2103 suggests generation failure
+coder,t2_q4_system,7.49,2,Truncated but core implementation visible with sliding window approach and test cases
+coder,t1_q1_algorithm,7.46,1,Truncated. Found first bug (left=mid) but did not complete finding or fixing second bug
+coder,t1_q2_refactor,7.39,1,Truncated. Discussed correct O(n) set approach but no complete refactored code shown
+coder,t1_q3_test,7.52,1,Truncated. Partial test cases shown but no complete pytest file delivered
+instruction_precision,t3_q1_self_referential,7.53,0,Truncated. Never produced a final self-referential sentence meeting all constraints
+instruction_precision,t3_q2_cascading_constraints,7.72,0,Truncated. Never produced final 5-item list meeting all constraints
+instruction_precision,t3_q3_meta_instruction,7.68,0,Truncated. Identified [Print 42] and [Say 7 times: hi] but never produced final output
+instruction_precision,t2_q1_resist_elaboration,7.66,2,Correct answer 4 but echoed prompt before it (model quirk). Answer itself is correct and minimal
+instruction_precision,t2_q2_maintain_format,7.62,1,"Truncated. Had correct format elements but surrounded by reasoning text, not clean 3-line output"
+instruction_precision,t2_q3_empty_handling,7.75,3,Correct: output NONE with no explanation or apology
+instruction_precision,t2_q4_conflicting_constraints,7.53,0,Truncated. Discussed valid examples like A database organizes and retrieves data but never committed to final answer
+instruction_precision,t1_q1_negative_instruction,7.56,1,Truncated. Partial draft avoiding forbidden words but no final 2-sentence answer delivered
+instruction_precision,t1_q2_word_limit,7.61,2,Had valid 21-word description in reasoning. Truncated but answer is identifiable and within range
+instruction_precision,t1_q3_structured_format,7.57,1,"Truncated. Had correct entries but surrounded by reasoning, never clean LANGUAGE (YEAR) format only"
+instruction_precision,t1_q4_multiple_constraints,7.68,3,"Correct: France, Germany, Italy, Spain, United Kingdom - all constraints met"
+thinking,t3_q1_methodological_critique,7.37,3,"Thorough critique: confounders, selection bias, cross-sectional design, reverse causality etc."
+thinking,t3_q2_causal_inference,7.48,3,"All parts addressed: backdoor path via Gene, conditioning on Gene, unmeasured confounder IV discussion"
+thinking,t3_q3_reasoning_trap,7.42,1,Truncated. Identified class imbalance/base rate issue but analysis incomplete
+thinking,t2_q1_paradox,7.52,3,Complete analysis with multiple perspectives and argued position favoring continuity of form
+thinking,t2_q2_counterfactual,7.37,1,"Truncated. Only partially addressed first dimension (knowledge dissemination), other dimensions not reached"
+thinking,t2_q3_formal,7.52,3,Complete: formal proof using natural deduction and concrete rain/ground/grass example
+thinking,t2_q4_metacognition,7.57,2,"Truncated but substantial. Estimation approach clear, ~150-200 tuners, assumptions identified. Bounds not fully complete"
+thinking,t1_q1_multistep,7.42,3,"Correct: gap=220mi at 10am, relative speed=140mph, meet at 11:34 AM"
+thinking,t1_q2_hypothesis,7.44,3,"Three clear alternatives: SES confound, morning routine consistency, general health/discipline"
+thinking,t1_q3_planning,7.31,1,Truncated. Systematic case analysis started but never completed list of valid orderings
+agentic,t3_q1_competing_constraints,7.38,1,Truncated. Discussed approach to file analysis but no complete tool call sequence
+agentic,t3_q2_multi_agent_coordination,7.41,1,Truncated. Agent dispatch reasoning started but plan not completed
+agentic,t3_q3_adversarial_robustness,7.46,2,"Truncated but substantial. Identified injection risks, blocklist approach, sanitization, logging"
+agentic,t2_q1_ambiguous,7.56,3,"Correctly asked for clarification about outage details, team, and preferred communication method"
+agentic,t2_q2_error_chain,7.36,3,Correct chain: health check -> db connection refused -> get_logs for db service
+agentic,t2_q3_schema_edge,7.62,3,"Correct: endpoint=/users, method=GET, body=null, Authorization header with Bearer token"
+agentic,t2_q4_orchestration,7.45,1,Truncated. Discussed deployment plan with failure handling but no complete output
+agentic,t1_q1_sequential,7.64,3,"Correct: grep_search for ERROR then read_file, proper JSON tool call sequence"
+agentic,t1_q2_error_handling,7.45,3,"Correct: explained 404, asked for ID confirmation or alternative search criteria"
+agentic,t1_q3_nested_params,7.63,3,"Correct: title, assignees array, metadata with priority/tags/due_date all properly nested"
+general,t3_q1_policy_analysis,7.44,2,Truncated but substantial analysis of policy gaps with proposed amendments
+general,t3_q2_system_failure,7.27,2,"Truncated but identified root cause (eventual consistency + idempotency), testing gaps, began architectural fixes"
+general,t3_q3_strategic_communication,7.30,3,"Complete: board statement addressing misses, LOIs, 90-day plan, tone analysis"
+general,t2_q1_synthesis,7.42,3,Complete unified recommendation with 14-day action plan balancing all three perspectives
+general,t2_q2_transform,7.33,2,Truncated but correct nested YAML structure visible: departments -> Engineering/Sales/Marketing -> employees
+general,t2_q3_schedule,7.21,1,Truncated. Constraint analysis started but no final schedule delivered
+general,t2_q4_inconsistency,7.42,3,Correct: identified body format inconsistency and rate limit inconsistency between docs
+general,t1_q1_json,7.56,3,"Correct JSON: name, role, department, start_date all properly extracted"
+general,t1_q2_multistep,7.52,1,Truncated. Dedup logic correct but no final sorted/numbered output delivered
+general,t1_q3_compare,7.51,3,Complete 2-3 sentence comparison recommending monolith for small startups with good reasoning

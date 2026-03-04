@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,65.24,2,"Echoes prompt then provides analysis with 3 failure modes, amendments, and trade-offs. Shallow but covers required structure."
+general,t3_q2_system_failure,58.65,1,Echoes prompt; partially explains race condition but becomes repetitive (same fix 9x); hits token limit without completing.
+general,t3_q3_strategic_communication,65.07,2,Echoes prompt then delivers adequate board statement addressing all 4 requirements; tone appropriate; milestones generic.
+general,t2_q1_synthesis,60.94,0,Degenerate output: prompt echo followed by massive repetition of rebuild (49x); no synthesis produced.
+general,t2_q2_transform,57.41,0,Echoes prompt; never produces valid YAML; rambles about Python approach using json.dumps; hits token limit incomplete.
+general,t2_q3_schedule,58.17,0,Echoes prompt; reasoning loops about constraints without producing a schedule; hits token limit mid-thought.
+general,t2_q4_inconsistency,60.18,2,"Identifies key inconsistencies (body format JSON vs form-encoded, rate limit 100/min vs 1000/hr); verbose but correct."
+general,t1_q1_json,62.72,1,Correct JSON values shown early but massively violates output-only-JSON constraint; 2047 tokens of rambling explanation.
+general,t1_q2_multistep,57.83,0,Degenerate output: massive repetition of Date (204x); no list processing performed.
+general,t1_q3_compare,66.8,2,Echoes prompt then provides substantively correct comparison of microservices vs monolith trade-offs; slightly verbose but accurate.
+thinking,t3_q1_methodological_critique,57.39,1,Echoes prompt; partially discusses confounders and sample issues but hits token limit; never cleanly enumerates 4 issues.
+thinking,t3_q2_causal_inference,70.98,2,Correctly identifies Gene as minimal adjustment set and Yellow Fingers as collider; Q3 contradictory but 2/3 parts correct.
+thinking,t3_q3_reasoning_trap,68.52,1,Identifies test set bias flaw but constructs confused scenario; random labels giving high accuracy is implausible.
+thinking,t2_q1_paradox,58.33,0,Degenerate: stuck in loop repeating prompt text and meta-commentary (16x); never presents philosophical positions.
+thinking,t2_q2_counterfactual,58.6,1,Attempts counterfactual but confused framing; hits token limit; ends with superficial recap lacking specifics.
+thinking,t2_q3_formal,57.96,2,Correctly proves P->R via hypothetical syllogism; begins truth table verification; verbose but core proof is valid.
+thinking,t2_q4_metacognition,55.1,1,Attempts Fermi estimation with population/piano approach; reasoning circular; never states clear bounds; hits token limit.
+thinking,t1_q1_multistep,59.23,1,Reaches correct 11:34 AM first then contradictory 9:34 AM second; fails to resolve discrepancy; hits token limit.
+thinking,t1_q2_hypothesis,46.87,0,Degenerate repetition (same phrase 22x); never cleanly states 3 alternative explanations; hits token limit.
+thinking,t1_q3_planning,36.72,0,Degenerate: repeats clarification text 64 times; never attempts to list valid orderings.

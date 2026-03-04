@@ -1,0 +1,65 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+long_context,t3_q1_multi_hop_reasoning,0.83,0,Context is template filler text; model correctly identifies no relevant docs but cannot answer any questions
+long_context,t3_q2_contradiction_detection,1.13,0,Response dominated by template filler text from context; identifies no real contradictions
+long_context,t3_q3_evolving_requirements,0.96,0,Context is template filler; model correctly refuses to fabricate but cannot extract any requirements
+thinking,t3_q1_methodological_critique,9.44,3,"Identifies 4+ methodological issues (selection bias, reverse causality, lack of randomization, multiple comparisons) with clear mechanisms"
+thinking,t3_q2_causal_inference,7.7,2,"Correct adjustment set {Gene}, correct collider analysis (self-corrects), correct on unmeasured Gene; reasoning muddled but right answers"
+thinking,t3_q3_reasoning_trap,8.79,2,Identifies test set distribution mismatch flaw and constructs domain shift scenario; reasonable but gets cut off
+thinking,t2_q1_paradox,8.47,2,Presents materialist/four-dimensionalist and psychological continuity views; reasonable analysis but cut off
+thinking,t2_q2_counterfactual,8.3,2,Addresses all 3 dimensions with specific mechanisms and second-order effects; cut off but substantial
+thinking,t2_q3_formal,8.65,2,Correct formal proof using conditional proof/modus ponens; echoes prompt but valid proof and concrete examples
+thinking,t2_q4_metacognition,8.96,3,"Excellent Fermi estimation: clear steps, identifies assumptions, calculates bounds (5-19), identifies piano ownership as key uncertainty"
+thinking,t1_q1_multistep,9.11,2,"Correct equation setup and solution t=18/7 hours, correctly identifies ~11:34 AM; verbose but correct"
+thinking,t1_q2_hypothesis,8.59,3,"Identifies SES confounding, selection bias/discipline, and reverse causation with specific mechanisms"
+thinking,t1_q3_planning,10.09,1,Sets up constraints correctly but gets cut off before listing all valid orderings; incomplete answer
+general,t3_q1_policy_analysis,8.99,2,"Identifies Goodhart gaming, explainability limitations, bias audit gaps with mechanisms and amendments"
+general,t3_q2_system_failure,9.06,3,"Precisely explains read-replica lag causing idempotency bypass, testing gap, architectural fixes, monitoring"
+general,t3_q3_strategic_communication,9.21,2,"Good opening statement addressing all 4 requirements; acknowledges problems, frames LOIs as strategic; cut off but substantial"
+general,t2_q1_synthesis,9.28,3,"Excellent concrete recommendation balancing all 3 perspectives with phased approach, tradeoffs articulated"
+general,t2_q2_transform,0.0,1,Describes correct approach but rambles without producing clean final YAML output; 0 completion tokens
+general,t2_q3_schedule,0.0,1,Begins constraint analysis but gets lost in reasoning and never produces a valid schedule; 0 completion tokens
+general,t2_q4_inconsistency,0.0,2,Correctly identifies JSON vs form-encoded body inconsistency and rate limit discrepancy (100/min vs 1000/hour)
+general,t1_q1_json,13.56,1,Produces correct JSON initially but repeats multiple times; one variant has duplicate key and wrong department
+general,t1_q2_multistep,9.49,1,"Adds items not in original list (Grape, grape); fails on input fidelity; repeats answer"
+general,t1_q3_compare,13.57,2,Clear comparison covering key tradeoffs in appropriate length
+coder,t3_q1_concurrent_correctness,9.16,2,Correctly identifies ABA problem in lock-free stack and explains mechanism; tagged pointer fix cut off
+coder,t3_q2_distributed_consistency,8.97,2,"Lists LWW, vector clocks, CRDTs, app-specific resolution; discusses shopping cart; banking incomplete"
+coder,t3_q3_algorithmic_hardness,9.12,1,Begins adversary argument and recurrence derivation but incomplete; randomized select analysis started
+coder,t2_q1_design,9.49,3,Correct LRU cache with hashmap + doubly linked list for O(1); clear code with helper methods
+coder,t2_q2_debug_complex,13.23,3,Correctly identifies async race condition and provides proper fix using asyncio.Lock
+coder,t2_q3_optimize,9.716451826965743,3,Correct O(n) optimization using counter hashmap; clear approach and complexity explanation
+coder,t2_q4_system,9.51,0,"Degenerate repetition: repeats ""Implement a sliding window algorithm"" 188 times; no implementation"
+coder,t1_q1_algorithm,8.268356285894729,2,Identifies left=mid infinite loop bug and proposes mid+1 fix; verbose but finds key issues
+coder,t1_q2_refactor,9.66,0,"Degenerate repetition: repeats ""items are hashable"" in loop; no refactored code"
+coder,t1_q3_test,9.41,0,"Degenerate repetition: repeats ""Write the test normal cases, divide"" in loop; no tests written"
+math,t3_q1_analysis,11.37,2,"Correct decomposition using sin(n)=(e^in-e^-in)/2i, arrives at f(x)=Im(e^{xe^i}); core correct"
+math,t3_q2_combinatorics,8.95,1,Attempts combinatorial proof but discovers own computation gives wrong result for n=2; incomplete
+math,t3_q3_probability_theory,9.09,1,Correctly identifies P(S_n<=1)=1/n! and begins E[N] calculation; cut off before completing proofs
+math,t2_q1_optimization,11.73,3,"Correct setup 2W+L=200, optimization gives W=50, L=100, area=5000 m^2; complete with verification"
+math,t2_q2_proof,8.71,3,Correctly identifies inductive step fails at n=1 to n=2 because subsets dont overlap
+math,t2_q3_calculus,9.72,2,"Correct antiderivative x^3+x^2-x, correct evaluation =10; repeats itself but correct"
+math,t2_q4_statistics,12.63,3,"Sum=185 correct, mean=23.125, median=23.5, std dev~7.356, IQR correct, no outliers; all accurate"
+math,t1_q1_word_problem,13.65,3,"Discount $120, final $129.60, percentage 86.4% - all correct"
+math,t1_q2_system_equations,10.28,2,Initially lists 8 solutions but self-corrects to 4 valid ones; correct method and final answer
+math,t1_q3_probability,13.17,3,"Both correct: P(both red)=2/9, P(one red one blue)=1/3; clear work"
+agentic,t3_q1_competing_constraints,12.63,2,"Structured JSON plan with read-first approach, schema analysis, validation, and fallback strategy"
+agentic,t3_q2_multi_agent_coordination,10.18,2,Correct phased orchestration researcher->coder->reviewer; identifies dependencies; cut off but clear
+agentic,t3_q3_adversarial_robustness,10.5,2,Correctly identifies cat /etc/passwd security concern; discusses safe handling; cut off but substantial
+agentic,t2_q1_ambiguous,13.45,3,"Correctly identifies ambiguity and asks for clarification: which team, details, method"
+agentic,t2_q2_error_chain,12.97,2,Correct diagnostic chain; chooses restart_service for database; considers alternatives
+agentic,t2_q3_schema_edge,10.64,2,"Correct JSON: endpoint=/users, method=GET, body=null, headers with Bearer token; repeats but correct"
+agentic,t2_q4_orchestration,11.22,2,"Complete deployment plan with checkout, test, build, deploy, notify; failure handling included"
+agentic,t1_q1_sequential,13.58,2,Correct tool call order: grep_search then read_file; includes reasoning but correct JSON array
+agentic,t1_q2_error_handling,11.31,1,Garbled middle section with JSON fragments and Chinese text; eventually suggests search_users but messy
+agentic,t1_q3_nested_params,13.59,3,"Perfect JSON tool call with correct title, assignees, nested metadata"
+instruction_precision,t3_q1_self_referential,13.23,0,Never produces valid self-referential sentence meeting all 4 constraints; cut off during reasoning
+instruction_precision,t3_q2_cascading_constraints,13.14,0,Spends entire response reasoning but never produces the 5 words; cut off during brainstorming
+instruction_precision,t3_q3_meta_instruction,13.27,0,Degenerates into repetition; begins correct analysis but gets cut off; never produces correct output
+instruction_precision,t2_q1_resist_elaboration,13.64,0,"Answers 4 correctly but repeats ""4"" hundreds of times; degenerate repetition"
+instruction_precision,t2_q2_maintain_format,13.19,1,Correct ERROR_TYPE/ROOT_CAUSE/FIX but repeats same answer 5+ times; instruction says no other text
+instruction_precision,t2_q3_empty_handling,14.16,2,"Outputs NONE correctly; adds brief explanation despite instruction not to, but core answer correct"
+instruction_precision,t2_q4_conflicting_constraints,13.35,0,Degenerate repetition of constraints and same sentence; sentence over word limit
+instruction_precision,t1_q1_negative_instruction,13.48,0,"Degenerate repetition: repeats ""Do NOT use the word photon"" hundreds of times; no answer"
+instruction_precision,t1_q2_word_limit,13.42,2,24-word description within 20-25 range; counts and self-verifies; excessive reasoning
+instruction_precision,t1_q3_structured_format,13.38,0,Degenerate repetition in loop; never outputs languages in LANGUAGE (YEAR) format
+instruction_precision,t1_q4_multiple_constraints,13.24,0,"Lists 5 countries but NOT alphabetical (Germany, France...); degenerates into repetition"

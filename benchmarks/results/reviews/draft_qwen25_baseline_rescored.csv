@@ -1,0 +1,21 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,158.91,0,Degenerate repetition (34x repeated phrase); echoes prompt; only 2 shallow failure modes both about lack of spec not 3 distinct; no amendments; no trade-offs
+general,t3_q2_system_failure,183.79,1,Echoes prompt; partially identifies replica lag issue but misdefines idempotency keys; testing explanation generic; architectural fixes are incoherent repetitions of read/write replicas with read/write consistency; monitoring suggestions superficial
+general,t3_q3_strategic_communication,153.27,0,Degenerate repetition (36x repeated phrase); no board statement written; echoes prompt then repeats meta-instructions about tone/structure endlessly
+general,t2_q1_synthesis,113.92,0,Echoes prompt; misrepresents all three perspectives (attributes refactoring to product team inverts finance constraint to needs over 20K); no actual synthesis or unified recommendation
+general,t2_q2_transform,167.8,0,Echoes prompt; hallucinated 3 employees not in input (Eve Frank George); incorrect department grouping (Bob in Engineering George in Sales); output is JSON not YAML despite instruction
+general,t2_q3_schedule,154.73,0,Echoes prompt; incorrectly claims team sync impossible; omits 60min team sync from schedule; duplicates 1:1 meetings; final schedule is invalid
+general,t2_q4_inconsistency,178.95,1,Echoes prompt; identifies rate limit discrepancy but assumes Doc C is ground truth; misses body format inconsistency (JSON vs form-encoded); claims Doc C inconsistent with itself
+general,t1_q1_json,54.08,2,Echoes prompt but produces correct JSON with all 4 fields accurate (name role department start_date); prompt echo is format violation but core task correct
+general,t1_q2_multistep,152.03,0,Degenerate repetition; echoes prompt then repeats input items endlessly; never removes duplicates sorts numbers or counts
+general,t1_q3_compare,183.32,1,Echoes prompt; provides reasonable comparison content but violates 2-3 sentence constraint (gives multiple paragraphs); content generic but not wrong
+thinking,t3_q1_methodological_critique,167.42,1,Echoes prompt; identifies 3 issues but missing control group is incorrect (study had comparison groups); conflates non-randomized design with sample size; measurement bias vaguely stated
+thinking,t3_q2_causal_inference,177.35,0,Echoes prompt; incorrect minimal adjustment set (should be Gene says uncorrelated variables); wrong explanation for Yellow Fingers conditioning; repeats same sentence multiple times
+thinking,t3_q3_reasoning_trap,161.87,1,Echoes prompt; correctly identifies flaw premise but concrete scenario contradicts itself (claims D2 has fewer examples when both are 1M); misses key confounds
+thinking,t2_q1_paradox,161.0,0,Degenerate repetition (21x repeated phrase); echoes prompt then repeats meta-instructions; no substantive philosophical analysis
+thinking,t2_q2_counterfactual,171.08,1,Echoes prompt; addresses three dimensions but contradicts counterfactual (says absence of internet leads to increased sharing and collaboration); logically confused
+thinking,t2_q3_formal,179.43,1,Echoes prompt; reaches correct conclusion (transitivity valid) but proof contains logical error (claims P->Q true implies P must be true); concrete example missing
+thinking,t2_q4_metacognition,154.93,0,Degenerate repetition (256x The piano tuners are in Chicago); no estimation no approach no bounds no assumptions
+thinking,t1_q1_multistep,168.62,0,Echoes prompt; fundamentally wrong approach (adds individual travel times instead of solving relative motion); answer 3:00 PM is incorrect (correct ~11:34 AM)
+thinking,t1_q2_hypothesis,132.59,1,Echoes prompt; provides 3 alternatives but protein/fat restates breakfast mechanism; misses key alternatives (SES parental involvement self-selection bias)
+thinking,t1_q3_planning,160.52,0,Echoes prompt; does not list any valid orderings; incorrect combinatorial analysis (claims 120 ignoring all constraints); task requires listing specific sequences none provided
