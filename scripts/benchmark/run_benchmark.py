@@ -53,6 +53,7 @@ from results import (
     result_exists,
     result_exists_for_model,
     copy_result_from_role,
+    get_slowest_questions,
 )
 
 
@@ -269,6 +270,7 @@ def count_pending_tests(
     configs: list,
     suite_names: list[str],
     force: bool = False,
+    speed_questions: int = 0,
 ) -> tuple[int, int]:
     """Count tests that need to run vs total tests.
 
@@ -282,9 +284,10 @@ def count_pending_tests(
 
     for config in configs:
         if config.speed_test_only:
-            total += 1
+            n_speed = max(1, speed_questions) if speed_questions > 0 else 1
+            total += n_speed
             if force or not result_exists(run_id, role, config.name):
-                pending += 1
+                pending += n_speed
         else:
             for suite_name in suite_names:
                 suite = load_suite(suite_name)
@@ -355,13 +358,14 @@ def build_work_items(
 class _ServerState:
     """Mutable state for the benchmark server lifecycle."""
 
-    __slots__ = ("server", "model_path", "experts", "draft_path")
+    __slots__ = ("server", "model_path", "experts", "draft_path", "lookup")
 
     def __init__(self) -> None:
         self.server: Optional[ServerManager] = None
         self.model_path: Optional[str] = None
         self.experts: Optional[int] = None
         self.draft_path: Optional[str] = None
+        self.lookup: bool = False
 
     def stop(self) -> None:
         if self.server is not None:
@@ -409,11 +413,33 @@ def _ensure_server(
                 print(f"    [SERVER] Ready, model loaded in RAM (default experts)", flush=True)
         return
 
-    if ss.server is None or not ss.server.is_running():
+    if ss.server is not None and not ss.server.is_running():
+        # Server crashed (e.g. GGML_ASSERT from spec+long_context) — restart it
+        print(f"      [SERVER] Crashed, restarting...", flush=True)
+        moe_override = None
+        if ss.experts is not None:
+            moe_key = registry.get_moe_override_key(role) or "qwen3moe.expert_used_count"
+            moe_override = f"{moe_key}=int:{ss.experts}"
+        ss.stop()
+        ss.server = ServerManager(port=8080)
+        ss.server.start(model_path, moe_override=moe_override, registry=registry,
+                        no_mmap=no_mmap, role=role, mmproj_path=mmproj_path)
+        timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
+        if not ss.server.wait_ready(timeout=timeout):
+            print(f"      [SERVER] Failed to restart after crash, falling back to subprocess", flush=True)
+            ss.server = None
+            ss.experts = None
+            return
+        else:
+            ss.draft_path = None
+            ss.lookup = False
+            print(f"      [SERVER] Recovered", flush=True)
+
+    if ss.server is None:
         return
 
     # --- 2. MoE expert count change ---
-    if config.config_type == "moe":
+    if config.config_type in ("moe", "moe_lookup", "moe_spec", "moe_spec_lookup"):
         required_experts = config.moe_experts
     elif config.config_type == "baseline":
         required_experts = None
@@ -446,18 +472,22 @@ def _ensure_server(
     if ss.server is None or not ss.server.is_running():
         return
 
-    # --- 3. Draft model change (spec decode) ---
-    if config.config_type in ("spec", "moe_spec"):
+    # --- 3. Draft model and/or lookup change ---
+    if config.config_type in ("spec", "moe_spec", "moe_spec_lookup", "spec_lookup"):
         required_draft = config.draft_model_path
-        if required_draft != ss.draft_path:
-            if config.config_type == "moe_spec":
+        required_lookup = config.config_type in ("moe_spec_lookup", "spec_lookup")
+        needs_restart = (required_draft != ss.draft_path) or (required_lookup != ss.lookup)
+
+        if needs_restart:
+            if config.config_type in ("moe_spec", "moe_spec_lookup"):
                 moe_key = registry.get_moe_override_key(role) or "qwen3moe.expert_used_count"
                 moe_override = f"{moe_key}=int:{config.moe_experts}"
             else:
                 moe_override = None
 
             draft_name = Path(required_draft).stem if required_draft else "unknown"
-            print(f"      [SERVER] Restarting with draft {draft_name}...", flush=True)
+            lookup_str = "+lookup" if required_lookup else ""
+            print(f"      [SERVER] Restarting with draft {draft_name}{lookup_str}...", flush=True)
             ss.stop()
             ss.server = ServerManager(port=8080)
             ss.server.start(
@@ -466,17 +496,55 @@ def _ensure_server(
                 draft_model_path=required_draft,
                 draft_max=config.spec_k,
                 mmproj_path=mmproj_path,
+                lookup=required_lookup,
             )
             timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
             if not ss.server.wait_ready(timeout=timeout):
                 print(f"      [SERVER] Failed to restart with draft, falling back to subprocess", flush=True)
                 ss.server = None
                 ss.draft_path = None
+                ss.lookup = False
             else:
                 ss.draft_path = required_draft
-                if config.config_type == "moe_spec":
+                ss.lookup = required_lookup
+                if config.config_type in ("moe_spec", "moe_spec_lookup"):
                     ss.experts = config.moe_experts
-                print(f"      [SERVER] Ready with draft", flush=True)
+                print(f"      [SERVER] Ready with draft{lookup_str}", flush=True)
+
+    elif config.config_type in ("lookup", "moe_lookup"):
+        # Lookup-only configs: restart server with --lookup flag (no draft model)
+        required_lookup = True
+        needs_restart = not ss.lookup or ss.draft_path is not None
+
+        if config.config_type == "moe_lookup":
+            required_experts = config.moe_experts
+            if required_experts != ss.experts:
+                needs_restart = True
+
+        if needs_restart:
+            moe_override = None
+            if config.config_type == "moe_lookup":
+                moe_key = registry.get_moe_override_key(role) or "qwen3moe.expert_used_count"
+                moe_override = f"{moe_key}=int:{config.moe_experts}"
+            print(f"      [SERVER] Restarting with --lookup for {config.name}...", flush=True)
+            ss.stop()
+            ss.server = ServerManager(port=8080)
+            ss.server.start(
+                model_path, moe_override=moe_override, registry=registry,
+                no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
+                lookup=True,
+            )
+            timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
+            if not ss.server.wait_ready(timeout=timeout):
+                print(f"      [SERVER] Failed to restart with lookup, skipping", flush=True)
+                ss.server = None
+                ss.lookup = False
+            else:
+                ss.lookup = True
+                ss.draft_path = None
+                if config.config_type == "moe_lookup":
+                    ss.experts = config.moe_experts
+                print(f"      [SERVER] Ready with --lookup", flush=True)
 
 
 def _run_speed_test(
@@ -537,6 +605,118 @@ def _run_speed_test(
     stats["passed"] += 1
 
 
+def _run_speed_question(
+    executor: Executor,
+    results_manager: ResultsManager,
+    ss: _ServerState,
+    config,
+    model_path: str,
+    size_gb: float,
+    mmproj_path: Optional[str],
+    role: str,
+    run_id: str,
+    suite_name: str,
+    question_id: str,
+    prompt: str,
+    stats: dict,
+    force: bool,
+    registry: Optional["ModelRegistry"] = None,
+) -> None:
+    """Execute a speed benchmark on a specific question and store per-question result."""
+    # Skip if already exists
+    if not force and result_exists(run_id, role, config.name, suite_name, question_id):
+        stats["skipped"] += 1
+        return
+
+    # Determine temperature (apply per-suite overrides if configured)
+    temperature = _DEFAULT_TEMPERATURE
+    if registry:
+        override = registry.get_temperature_override(role, suite_name)
+        if override is not None:
+            temperature = override
+
+    speed_max_tokens = _LOOKUP_MAX_TOKENS if "lookup" in config.config_type else _DEFAULT_MAX_TOKENS
+    speed_timeout = _compute_timeout(size_gb, base=300 if "lookup" in config.config_type else 180)
+
+    try:
+        use_server = (
+            ss.server is not None
+            and ss.server.is_running()
+            and config.config_type in ("baseline", "moe", "spec", "moe_spec", "lookup", "moe_lookup", "moe_spec_lookup", "spec_lookup")
+        )
+
+        # spec_lookup and moe_spec_lookup require server mode (--lookup is our custom
+        # llama.cpp flag, not available in llama-speculative binary)
+        if not use_server and config.config_type in ("moe_spec_lookup", "spec_lookup"):
+            stats["errors"] += 1
+            print(f"    [SKIP] {role}/{config.name}/{suite_name}/{question_id}: {config.config_type} requires server mode", flush=True)
+            return
+
+        if use_server:
+            spec_k = config.spec_k if config.config_type in ("spec", "moe_spec", "moe_spec_lookup", "spec_lookup") else None
+            result = ss.server.run_inference(
+                prompt=prompt,
+                max_tokens=speed_max_tokens,
+                temperature=temperature,
+                timeout=speed_timeout,
+                speculative_n_max=spec_k,
+            )
+        else:
+            result = executor.run_inference(
+                model_path=model_path,
+                config=config,
+                prompt=prompt,
+                max_tokens=speed_max_tokens,
+                temperature=temperature,
+                timeout=speed_timeout,
+                mmproj_path=mmproj_path,
+                role=role,
+            )
+
+        if result.timed_out:
+            stats["errors"] += 1
+            print(f"    [TIMEOUT] {role}/{config.name}/{suite_name}/{question_id}")
+            return
+
+        if not result.success:
+            stats["errors"] += 1
+            err_hint = (_extract_error_hint(result.stderr, max_chars=60) if result.stderr else "") or f"exit={result.exit_code}"
+            print(f"    [ERROR] {role}/{config.name}/{suite_name}/{question_id}: {err_hint}")
+            return
+
+        parsed = parse_output(result.raw_output)
+
+        qresult = QuestionResult(
+            question_id=question_id,
+            prompt=prompt,
+            response=parsed.response,
+            tokens_per_second=parsed.tokens_per_second,
+            prompt_tokens=parsed.prompt_tokens,
+            completion_tokens=parsed.completion_tokens,
+            total_time_ms=parsed.total_time_ms,
+            acceptance_rate=parsed.acceptance_rate,
+        )
+
+        results_manager.add_question_result(
+            run_id=run_id,
+            model_role=role,
+            config_name=config.name,
+            model_path=model_path,
+            suite=suite_name,
+            question_result=qresult,
+        )
+
+        tps = parsed.tokens_per_second
+        tps_str = f"{tps:.1f}t/s" if tps else "---"
+        acc_str = f"acc={parsed.acceptance_rate:.1%}" if parsed.acceptance_rate else ""
+        print(f"      ⚡ {config.name}/{suite_name}/{question_id}: {tps_str} {acc_str}", flush=True)
+        stats["passed"] += 1
+
+    except Exception as e:
+        stats["errors"] += 1
+        print(f"    [ERROR] {role}/{config.name}/{suite_name}/{question_id}: {e}")
+
+
 def _run_quality_question(
     executor: Executor,
     results_manager: ResultsManager,
@@ -551,6 +731,7 @@ def _run_quality_question(
     params: dict,
     stats: dict,
     force: bool,
+    registry: Optional["ModelRegistry"] = None,
 ) -> None:
     """Execute a single quality benchmark question and store the result."""
     exists = result_exists(run_id, role, config.name, suite_name, question.id)
@@ -577,20 +758,28 @@ def _run_quality_question(
                 print(f"    [COPY] {role}/{config.name}/{question.id} <- {existing_role}")
                 return
 
+    # Apply per-suite temperature override if configured
+    effective_params = params
+    if registry:
+        temp_override = registry.get_temperature_override(role, suite_name)
+        if temp_override is not None:
+            effective_params = dict(params)
+            effective_params["temperature"] = temp_override
+
     try:
         use_server = (
             ss.server is not None
             and ss.server.is_running()
-            and config.config_type in ("baseline", "moe", "spec", "moe_spec")
+            and config.config_type in ("baseline", "moe", "spec", "moe_spec", "moe_spec_lookup", "spec_lookup", "lookup", "moe_lookup")
         )
 
         if use_server:
-            spec_k = config.spec_k if config.config_type in ("spec", "moe_spec") else None
+            spec_k = config.spec_k if config.config_type in ("spec", "moe_spec", "moe_spec_lookup", "spec_lookup") else None
             result = ss.server.run_inference(
                 prompt=question.prompt,
-                max_tokens=params["max_tokens"],
-                temperature=params["temperature"],
-                timeout=params["timeout"],
+                max_tokens=effective_params["max_tokens"],
+                temperature=effective_params["temperature"],
+                timeout=effective_params["timeout"],
                 speculative_n_max=spec_k,
                 image_path=question.image_path,
             )
@@ -599,9 +788,9 @@ def _run_quality_question(
                 model_path=model_path,
                 config=config,
                 prompt=question.prompt,
-                max_tokens=params["max_tokens"],
-                temperature=params["temperature"],
-                timeout=params["timeout"],
+                max_tokens=effective_params["max_tokens"],
+                temperature=effective_params["temperature"],
+                timeout=effective_params["timeout"],
                 mmproj_path=mmproj_path,
                 image_path=question.image_path,
                 context_size=question.context_tokens,
@@ -677,6 +866,8 @@ def run_benchmark(
     no_mmap: bool = False,
     skip_long_context: bool = False,
     vision_only: bool = False,
+    speed_questions: int = 0,
+    baseline_run: Optional[str] = None,
 ) -> dict:
     """Run the benchmark with nested progress bars.
 
@@ -753,7 +944,7 @@ def run_benchmark(
         long_context_spec_config = spec_configs[0].name if (spec_configs and has_long_context) else None
 
         # PREFLIGHT CHECK: Skip model entirely if all tests are complete
-        pending_tests, total_tests = count_pending_tests(run_id, role, configs, suite_names, force)
+        pending_tests, total_tests = count_pending_tests(run_id, role, configs, suite_names, force, speed_questions)
         if pending_tests == 0 and not dry_run:
             print(f"  [{role}] All {total_tests} tests complete - skipping", flush=True)
             stats["skipped"] += total_tests
@@ -826,6 +1017,52 @@ def run_benchmark(
         print(f"    [{role}] {pending_tests}/{inner_total} tests pending ({len(configs)} configs × {len(suite_names)} suites)", flush=True)
 
         for config in configs:
+            # Preflight: skip configs where all tests are already complete
+            if not force and not dry_run:
+                if config.speed_test_only:
+                    # Check if any speed questions still need running
+                    _source = baseline_run or run_id
+                    _qsrc = config.inherits_quality_from or "baseline"
+                    _fetch_n = speed_questions * 10 if len(suite_names) < 7 else speed_questions
+                    _slowest = get_slowest_questions(_source, role, _qsrc, _fetch_n) if speed_questions > 0 else []
+                    if not _slowest and _source != run_id and speed_questions > 0:
+                        _slowest = get_slowest_questions(run_id, role, _qsrc, _fetch_n)
+                    if _slowest:
+                        _slowest = [sq for sq in _slowest if sq["suite"] in suite_names][:speed_questions]
+                    if speed_questions > 0 and _slowest:
+                        all_done = all(
+                            result_exists(run_id, role, config.name, sq["suite"], sq["question_id"])
+                            for sq in _slowest
+                        )
+                    else:
+                        all_done = result_exists(run_id, role, config.name)
+                    if all_done:
+                        if speed_questions > 0 and _slowest:
+                            stats["skipped"] += len(_slowest)
+                            stats["total"] += len(_slowest)
+                        else:
+                            stats["skipped"] += 1
+                            stats["total"] += 1
+                        continue
+                else:
+                    # Quality config: check if all suite/question combos exist
+                    all_done = True
+                    for sname, sdata in suites_data.items():
+                        if config.config_type in ("lookup", "moe_lookup") and sname != "long_context":
+                            continue
+                        if sname == "long_context" and config.name == "baseline" and long_context_spec_config:
+                            continue
+                        if sname != "long_context" and config.name == long_context_spec_config:
+                            continue
+                        for question in sdata["suite"].questions:
+                            if not result_exists(run_id, role, config.name, sname, question.id):
+                                all_done = False
+                                break
+                        if not all_done:
+                            break
+                    if all_done:
+                        continue
+
             # Server management per config
             if server_mode and ss.server is not None and ss.server.is_running():
                 _ensure_server(ss, model_path, config, role, size_gb,
@@ -833,19 +1070,60 @@ def run_benchmark(
 
             # Speed-test-only configs
             if config.speed_test_only:
-                stats["total"] += 1
-                if dry_run:
-                    print(f"      [SPEED] {config.name} (inherits quality from {config.inherits_quality_from})", flush=True)
-                    continue
-                if not force and result_exists(run_id, role, config.name):
-                    stats["skipped"] += 1
-                    continue
-                try:
-                    _run_speed_test(executor, results_manager, config, model_path,
-                                    size_gb, mmproj_path, role, run_id, stats)
-                except Exception as e:
-                    stats["errors"] += 1
-                    print(f"    [ERROR] {role}/{config.name}: {e}")
+                if speed_questions > 0:
+                    # Run on N slowest baseline questions instead of fixed prompt
+                    source_run = baseline_run or run_id
+                    quality_source = config.inherits_quality_from or "baseline"
+                    # Fetch extra candidates and filter to allowed suites (e.g. --skip-long-context)
+                    fetch_n = speed_questions * 10 if len(suite_names) < 7 else speed_questions
+                    slowest = get_slowest_questions(source_run, role, quality_source, fetch_n)
+                    if not slowest and source_run != run_id:
+                        slowest = get_slowest_questions(run_id, role, quality_source, fetch_n)
+                    if slowest:
+                        slowest = [sq for sq in slowest if sq["suite"] in suite_names][:speed_questions]
+                    if not slowest:
+                        # Fallback to fixed prompt
+                        print(f"      [WARN] No baseline results for {role}/{quality_source}, falling back to fixed prompt", flush=True)
+                        stats["total"] += 1
+                        if dry_run:
+                            print(f"      [SPEED] {config.name} (fixed prompt, inherits quality from {config.inherits_quality_from})", flush=True)
+                            continue
+                        if not force and result_exists(run_id, role, config.name):
+                            stats["skipped"] += 1
+                            continue
+                        try:
+                            _run_speed_test(executor, results_manager, config, model_path,
+                                            size_gb, mmproj_path, role, run_id, stats)
+                        except Exception as e:
+                            stats["errors"] += 1
+                            print(f"    [ERROR] {role}/{config.name}: {e}")
+                    else:
+                        for sq in slowest:
+                            stats["total"] += 1
+                            if dry_run:
+                                print(f"      [SPEED] {config.name} on {sq['suite']}/{sq['question_id']} ({sq['tokens_per_second']:.1f}t/s baseline)", flush=True)
+                                continue
+                            _run_speed_question(
+                                executor, results_manager, ss, config, model_path,
+                                size_gb, mmproj_path, role, run_id,
+                                sq["suite"], sq["question_id"], sq["prompt"],
+                                stats, force, registry,
+                            )
+                else:
+                    # Original fixed-prompt speed test
+                    stats["total"] += 1
+                    if dry_run:
+                        print(f"      [SPEED] {config.name} (inherits quality from {config.inherits_quality_from})", flush=True)
+                        continue
+                    if not force and result_exists(run_id, role, config.name):
+                        stats["skipped"] += 1
+                        continue
+                    try:
+                        _run_speed_test(executor, results_manager, config, model_path,
+                                        size_gb, mmproj_path, role, run_id, stats)
+                    except Exception as e:
+                        stats["errors"] += 1
+                        print(f"    [ERROR] {role}/{config.name}: {e}")
                 if config.name != long_context_spec_config:
                     continue
 
@@ -868,7 +1146,7 @@ def run_benchmark(
                     _run_quality_question(
                         executor, results_manager, ss, config, model_path,
                         mmproj_path, role, run_id, suite_name, question, params,
-                        stats, force,
+                        stats, force, registry,
                     )
 
     finally:
@@ -941,6 +1219,8 @@ Examples:
     parser.add_argument("--list-suites", action="store_true", help="List available suites")
     parser.add_argument("--skip-long-context", action="store_true", help="Skip long_context suite (saves time on quick runs)")
     parser.add_argument("--vision-only", action="store_true", help="Only benchmark vision-language models (models with mmproj_path)")
+    parser.add_argument("--speed-questions", type=int, default=0, help="Run speed configs on N slowest baseline questions (0=fixed prompt)")
+    parser.add_argument("--baseline-run", type=str, default=None, help="Pull slowest questions from this run ID (for models with existing baselines)")
 
     args = parser.parse_args()
 
@@ -991,7 +1271,11 @@ Examples:
         lock_fd = None
 
     try:
-        if args.resume:
+        if args.baseline_run:
+            # Use baseline run as run_id so skip logic sees existing results
+            run_id = args.baseline_run
+            print(f"Continuing run: {run_id} (from --baseline-run)")
+        elif args.resume:
             run_id = results_manager.get_latest_run()
             if not run_id:
                 print("ERROR: No previous run to resume. Start a new run without --resume.")
@@ -1013,6 +1297,8 @@ Examples:
             no_mmap=args.no_mmap,
             skip_long_context=args.skip_long_context,
             vision_only=args.vision_only,
+            speed_questions=args.speed_questions,
+            baseline_run=args.baseline_run,
         )
     finally:
         if lock_fd is not None:

@@ -194,6 +194,7 @@ class ServerManager:
         draft_model_path: Optional[str] = None,
         draft_max: Optional[int] = None,
         mmproj_path: Optional[str] = None,
+        lookup: bool = False,
     ) -> None:
         """Start llama-server with model loaded.
 
@@ -251,6 +252,8 @@ class ServerManager:
                 cmd.extend(["--draft-max", str(draft_max)])
         if mmproj_path:
             cmd.extend(["--mmproj", mmproj_path])
+        if lookup:
+            cmd.append("--lookup")  # Custom flag in our llama.cpp fork
 
         # Start server in background
         # Capture stderr to temp file for debugging if server fails
@@ -648,6 +651,24 @@ class Config:
         )
 
     @classmethod
+    def spec_lookup(cls, k: int, draft_path: str, draft_name: str = "") -> "Config":
+        """Create compound config: speculative decoding + prompt lookup (dense models).
+
+        Server mode only (llama-server supports --lookup + -md together).
+        """
+        if draft_name:
+            name = f"spec_{draft_name}_k{k}_lookup"
+        else:
+            draft_stem = Path(draft_path).stem if draft_path else "unknown"
+            name = f"spec_{draft_stem}_k{k}_lookup"
+        return cls(
+            name=name,
+            config_type="spec_lookup",
+            spec_k=k,
+            draft_model_path=draft_path,
+        )
+
+    @classmethod
     def compound_moe_lookup(cls, experts: int, override_key: str, ngram: int) -> "Config":
         return cls(
             name=f"moe{experts}_lookup_n{ngram}",
@@ -675,6 +696,31 @@ class Config:
             spec_k=k,
             draft_model_path=draft_path,
         )
+
+    @classmethod
+    def compound_moe_spec_lookup(
+        cls, experts: int, override_key: str, k: int, draft_path: str, draft_name: str = ""
+    ) -> "Config":
+        """Create compound config: MoE expert reduction + speculative decoding + prompt lookup.
+
+        Only works in server mode (llama-server supports --lookup + -md together;
+        llama-speculative binary does NOT support --lookup).
+        """
+        if draft_name:
+            name = f"moe{experts}_spec_{draft_name}_k{k}_lookup"
+        else:
+            draft_stem = Path(draft_path).stem if draft_path else "unknown"
+            name = f"moe{experts}_spec_{draft_stem}_k{k}_lookup"
+        return cls(
+            name=name,
+            config_type="moe_spec_lookup",
+            moe_experts=experts,
+            moe_override_key=override_key,
+            spec_k=k,
+            draft_model_path=draft_path,
+            lookup_ngram=4,  # Default ngram for lookup component
+        )
+
 
 class Executor:
     """Executes llama.cpp inference commands."""
@@ -714,43 +760,58 @@ class Executor:
         # E.g., baseline=8 → test [4, 6], baseline=6 → test [4]
         # NOTE: 2 experts often causes SIGSEGV or garbage output (see QUIRKS.md)
         MIN_SAFE_EXPERTS = 4
-        if architecture in ("moe", "qwen3moe", "qwen3vlmoe", "mixtral", "deepseek2"):
+        if architecture in ("moe", "qwen3moe", "qwen3vlmoe", "mixtral", "deepseek2", "qwen35moe"):
             override_key = reg.get_moe_override_key(role) or "qwen3moe.expert_used_count"
             baseline_experts = reg.get_baseline_experts(role)
             max_test_experts = baseline_experts - 2  # Don't test baseline or baseline-1
             for experts in range(MIN_SAFE_EXPERTS, max_test_experts + 1, 2):  # [4, 6, ...] up to max
                 configs.append(Config.moe(experts, override_key))
 
-            # MoE + lookup compound config (speed-only: inherits quality from moe4)
-            # Skip for large models - lookup times out and spec decode is always faster
+            # Build list of all expert counts to test compounds at (including baseline)
             model_path = reg.get_model_path(role)
             role_config = reg.get_role_config(role)
             size_gb = role_config.get("model", {}).get("size_gb", 0) if role_config else 0
             if size_gb == 0 and model_path and os.path.exists(model_path):
                 size_gb = os.path.getsize(model_path) / (1024**3)
 
-            if "prompt_lookup" not in forbidden and size_gb < LOOKUP_MAX_MODEL_SIZE_GB:
-                cfg = Config.compound_moe_lookup(4, override_key, 4)
-                cfg.speed_test_only = True
-                cfg.inherits_quality_from = "moe4"  # Quality from MoE, not baseline
-                configs.append(cfg)
+            # Expert counts: [4, 6, ..., baseline_experts]
+            expert_counts = list(range(MIN_SAFE_EXPERTS, max_test_experts + 1, 2)) + [baseline_experts]
 
-            # MoE + spec decode compound configs (if compatible drafts exist)
-            # Note: Tested and found to be SLOWER than MoE alone (0.84x baseline)
-            # but kept for completeness. May want to disable to save benchmark time.
+            # MoE + lookup compound configs (speed-only, server mode required for --lookup)
+            if "prompt_lookup" not in forbidden and size_gb < LOOKUP_MAX_MODEL_SIZE_GB:
+                for exp in expert_counts:
+                    quality_ref = "baseline" if exp == baseline_experts else f"moe{exp}"
+                    for ngram in [3, 4, 5]:
+                        cfg = Config.compound_moe_lookup(exp, override_key, ngram)
+                        cfg.speed_test_only = True
+                        cfg.inherits_quality_from = quality_ref
+                        configs.append(cfg)
+
+            # MoE + spec decode compound configs at each expert count (speed-only)
             if "speculative_decoding" not in forbidden:
                 drafts = reg.get_drafts_for_model(role)
                 for draft_role in drafts:
                     draft_path = reg.get_model_path(draft_role)
                     if draft_path and os.path.exists(draft_path):
-                        # Test MoE + spec decode at optimal expert count (usually 4)
-                        for k in [8, 16, 24]:
-                            cfg = Config.compound_moe_spec(
-                                MIN_SAFE_EXPERTS, override_key, k, draft_path, draft_role
-                            )
-                            cfg.speed_test_only = True
-                            cfg.inherits_quality_from = "baseline"
-                            configs.append(cfg)
+                        for exp in expert_counts:
+                            quality_ref = "baseline" if exp == baseline_experts else f"moe{exp}"
+                            for k in [8, 16, 24]:
+                                cfg = Config.compound_moe_spec(
+                                    exp, override_key, k, draft_path, draft_role
+                                )
+                                cfg.speed_test_only = True
+                                cfg.inherits_quality_from = quality_ref
+                                configs.append(cfg)
+
+                            # MoE + spec + lookup compound (server mode only)
+                            if "prompt_lookup" not in forbidden and size_gb < LOOKUP_MAX_MODEL_SIZE_GB:
+                                for k in [8, 16, 24]:
+                                    cfg = Config.compound_moe_spec_lookup(
+                                        exp, override_key, k, draft_path, draft_role
+                                    )
+                                    cfg.speed_test_only = True
+                                    cfg.inherits_quality_from = quality_ref
+                                    configs.append(cfg)
 
         elif architecture in ("ssm_moe_hybrid", "qwen3next"):
             # SSM models - MoE reduction ONLY, no speculation (SSM incompatible with all spec methods)
@@ -796,6 +857,21 @@ class Executor:
                     cfg.speed_test_only = True
                     cfg.inherits_quality_from = "baseline"
                     configs.append(cfg)
+
+            # Spec + lookup compound configs for dense models (server mode only)
+            if ("speculative_decoding" not in forbidden
+                    and "prompt_lookup" not in forbidden
+                    and not is_draft
+                    and size_gb < LOOKUP_MAX_MODEL_SIZE_GB):
+                drafts = reg.get_drafts_for_model(role)
+                for draft_role in drafts:
+                    draft_path = reg.get_model_path(draft_role)
+                    if draft_path and os.path.exists(draft_path):
+                        for k in [8, 16, 24]:
+                            cfg = Config.spec_lookup(k, draft_path, draft_role)
+                            cfg.speed_test_only = True
+                            cfg.inherits_quality_from = "baseline"
+                            configs.append(cfg)
 
         return configs
 
@@ -858,9 +934,9 @@ class Executor:
             return cmd
 
         # Non-vision models: select binary based on config type
-        if config.config_type == "spec" or config.config_type == "moe_spec":
+        if config.config_type in ("spec", "moe_spec", "spec_lookup"):
             binary = get_binary("speculative", self.registry)
-        elif config.config_type == "lookup" or config.config_type == "moe_lookup":
+        elif config.config_type in ("lookup", "moe_lookup"):
             binary = get_binary("lookup", self.registry)
         else:
             binary = get_binary("completion", self.registry)
@@ -915,6 +991,20 @@ class Executor:
             cmd.extend([
                 "--draft-max", str(config.lookup_ngram or 16),
                 "--override-kv", f"{config.moe_override_key}=int:{config.moe_experts}",
+            ])
+        elif config.config_type == "moe_spec_lookup":
+            # Subprocess fallback: use llama-speculative with MoE override
+            # Note: --lookup flag only works in server mode, not with llama-speculative
+            cmd.extend([
+                "-md", config.draft_model_path,
+                "--draft-max", str(config.spec_k),
+                "--override-kv", f"{config.moe_override_key}=int:{config.moe_experts}",
+            ])
+        elif config.config_type == "spec_lookup":
+            # Subprocess fallback: use llama-speculative (--lookup only in server mode)
+            cmd.extend([
+                "-md", config.draft_model_path,
+                "--draft-max", str(config.spec_k),
             ])
 
         return cmd

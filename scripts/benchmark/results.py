@@ -186,6 +186,44 @@ class ResultsManager:
 
         return ModelConfigResult.from_dict(data)
 
+    def get_slowest_questions(
+        self,
+        run_id: str,
+        model_role: str,
+        config_name: str = "baseline",
+        n: int = 3,
+    ) -> list[dict]:
+        """Get the N slowest questions by tokens_per_second from a result.
+
+        Args:
+            run_id: The run identifier.
+            model_role: The model role name.
+            config_name: Config to pull results from (default: baseline).
+            n: Number of slowest questions to return.
+
+        Returns:
+            List of dicts with keys: suite, question_id, prompt, tokens_per_second.
+            Sorted ascending by TPS (slowest first). Empty if no results found.
+        """
+        result = self.load_result(run_id, model_role, config_name)
+        if not result:
+            return []
+
+        all_questions = []
+        for suite, questions in result.results.items():
+            for qid, qresult in questions.items():
+                if qresult.tokens_per_second is not None and qresult.tokens_per_second > 0:
+                    all_questions.append({
+                        "suite": suite,
+                        "question_id": qid,
+                        "prompt": qresult.prompt,
+                        "tokens_per_second": qresult.tokens_per_second,
+                    })
+
+        # Sort ascending by TPS (slowest first)
+        all_questions.sort(key=lambda q: q["tokens_per_second"])
+        return all_questions[:n]
+
     def save_result(self, result: ModelConfigResult) -> Path:
         """Save a result to disk.
 
@@ -392,6 +430,17 @@ def result_exists(
     """Convenience function to check if result exists."""
     manager = ResultsManager()
     return manager.result_exists(run_id, model_role, config_name, suite, question_id)
+
+
+def get_slowest_questions(
+    run_id: str,
+    model_role: str,
+    config_name: str = "baseline",
+    n: int = 3,
+) -> list[dict]:
+    """Convenience function to get N slowest questions from a result."""
+    manager = ResultsManager()
+    return manager.get_slowest_questions(run_id, model_role, config_name, n)
 
 
 # Model registry path for model-path deduplication

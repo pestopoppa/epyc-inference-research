@@ -518,6 +518,22 @@ class ModelRegistry:
         performance = config.get("performance", {})
         return performance.get("baseline_tps")
 
+    def get_temperature_override(self, role: str, suite: str) -> Optional[float]:
+        """Get per-suite temperature override for a role, if any.
+
+        Args:
+            role: The role name.
+            suite: The suite name (e.g. 'thinking', 'coder').
+
+        Returns:
+            Override temperature float, or None if no override.
+        """
+        config = self.get_role_config(role)
+        if config:
+            overrides = config.get("temperature_overrides", {})
+            return overrides.get(suite)
+        return None
+
     def get_timeout_multiplier(self, role: str, reference_tps: float = 20.0) -> float:
         """Calculate timeout multiplier based on model speed.
 

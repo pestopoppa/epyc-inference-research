@@ -944,6 +944,14 @@ roles:
       forbid:
       - eagle
       reason: SSM checkpoint/restore enabled (WS1 Conditional Go, WS2 rebased). Eagle unsupported for hybrid.
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -978,6 +986,14 @@ roles:
       forbid:
       - eagle
       reason: SSM checkpoint/restore enabled (WS1 Conditional Go, WS2 rebased). Eagle unsupported for hybrid.
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1010,6 +1026,14 @@ roles:
       forbid:
       - eagle
       reason: SSM checkpoint/restore enabled (WS1 Conditional Go, WS2 rebased). Eagle unsupported for hybrid.
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1041,6 +1065,14 @@ roles:
       forbid:
       - eagle
       reason: SSM checkpoint/restore enabled (WS1 Conditional Go, WS2 rebased). Eagle unsupported for hybrid.
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1072,6 +1104,14 @@ roles:
       forbid:
       - eagle
       reason: SSM checkpoint/restore enabled (WS1 Conditional Go, WS2 rebased). Eagle unsupported for hybrid.
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1081,6 +1121,434 @@ roles:
       pinned: false
     benchmark_date: null
     notes: Quality ceiling reference. Large (35GB) — may be slower than Q4/Q5 variants.
+
+  # =============================================================================
+  # Qwen3.5 Dense Models (2B, 4B, 9B, 27B)
+  # =============================================================================
+  qwen35_2b_q4km:
+    tier: C
+    description: Qwen3.5-2B Q4_K_M — worker candidate
+    model:
+      name: Qwen3.5-2B
+      path: unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 1.2
+      architecture: dense
+    candidate_roles:
+    - worker
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_2b_q6k:
+    tier: C
+    description: Qwen3.5-2B Q6_K — worker candidate
+    model:
+      name: Qwen3.5-2B
+      path: unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q6_K.gguf
+      quant: Q6_K
+      size_gb: 1.5
+      architecture: dense
+    candidate_roles:
+    - worker
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_2b_q8:
+    tier: C
+    description: Qwen3.5-2B Q8_0 — worker candidate
+    model:
+      name: Qwen3.5-2B
+      path: unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 1.9
+      architecture: dense
+    candidate_roles:
+    - worker
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_4b_q4km:
+    tier: C
+    description: Qwen3.5-4B Q4_K_M — worker candidate
+    model:
+      name: Qwen3.5-4B
+      path: unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 2.6
+      architecture: dense
+    candidate_roles:
+    - worker
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_4b_q6k:
+    tier: C
+    description: Qwen3.5-4B Q6_K — worker candidate
+    model:
+      name: Qwen3.5-4B
+      path: unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q6_K.gguf
+      quant: Q6_K
+      size_gb: 3.3
+      architecture: dense
+    candidate_roles:
+    - worker
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_4b_q8:
+    tier: C
+    description: Qwen3.5-4B Q8_0 — worker candidate
+    model:
+      name: Qwen3.5-4B
+      path: unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 4.2
+      architecture: dense
+    candidate_roles:
+    - worker
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_9b_q4km:
+    tier: B
+    description: Qwen3.5-9B Q4_K_M — frontdoor/worker candidate
+    model:
+      name: Qwen3.5-9B
+      path: unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 5.3
+      architecture: dense
+    candidate_roles:
+    - frontdoor
+    - worker
+    - coder
+    - general
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_9b_q6k:
+    tier: B
+    description: Qwen3.5-9B Q6_K — frontdoor/worker candidate
+    model:
+      name: Qwen3.5-9B
+      path: unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q6_K.gguf
+      quant: Q6_K
+      size_gb: 7.0
+      architecture: dense
+    candidate_roles:
+    - frontdoor
+    - worker
+    - coder
+    - general
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_9b_q8:
+    tier: B
+    description: Qwen3.5-9B Q8_0 — frontdoor/worker candidate
+    model:
+      name: Qwen3.5-9B
+      path: unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 8.9
+      architecture: dense
+    candidate_roles:
+    - frontdoor
+    - worker
+    - coder
+    - general
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_27b_q4km:
+    tier: B
+    description: Qwen3.5-27B Q4_K_M — frontdoor candidate (dense)
+    model:
+      name: Qwen3.5-27B
+      path: unsloth/Qwen3.5-27B-GGUF/Qwen3.5-27B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 16
+      architecture: dense
+    candidate_roles:
+    - frontdoor
+    - coder
+    - general
+    - ingest
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+  qwen35_27b_q6k:
+    tier: B
+    description: Qwen3.5-27B Q6_K — frontdoor candidate (dense)
+    model:
+      name: Qwen3.5-27B
+      path: unsloth/Qwen3.5-27B-GGUF/Qwen3.5-27B-Q6_K.gguf
+      quant: Q6_K
+      size_gb: 21
+      architecture: dense
+    candidate_roles:
+    - frontdoor
+    - coder
+    - general
+    - ingest
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+
+  # =============================================================================
+  # Qwen3.5 MoE Models (122B, 397B) — NOT YET DOWNLOADED
+  # =============================================================================
+  qwen35_122b_q4km:
+    tier: B
+    description: Qwen3.5-122B-A10B Q4_K_M — architect candidate (MoE, 256 experts, 8 active)
+    model:
+      name: Qwen3.5-122B-A10B
+      path: unsloth/Qwen3.5-122B-A10B-GGUF/Qwen3.5-122B-A10B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 69
+      architecture: qwen35moe
+      baseline_experts: 8
+    candidate_roles:
+    - architect
+    - frontdoor
+    - general
+    acceleration:
+      type: moe_expert_reduction
+      experts: 8
+      override_key: qwen35moe.expert_used_count
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+    notes: NOT YET DOWNLOADED. 256 total experts, 8 active. MoE reduction tests [4,6].
+  qwen35_397b_q4kxl:
+    tier: B
+    description: Qwen3.5-397B-A17B Q4_K_XL — architect candidate (MoE, 512 experts, 10 active)
+    model:
+      name: Qwen3.5-397B-A17B
+      path: unsloth/Qwen3.5-397B-A17B-GGUF/Qwen3.5-397B-A17B-Q4_K_XL.gguf
+      quant: Q4_K_XL
+      size_gb: 205
+      architecture: qwen35moe
+      baseline_experts: 10
+    candidate_roles:
+    - architect
+    - general
+    acceleration:
+      type: moe_expert_reduction
+      experts: 10
+      override_key: qwen35moe.expert_used_count
+    constraints:
+      forbid:
+      - eagle
+    temperature_overrides:
+      coder: 0.6
+      instruction_precision: 0.6
+      general: 0.7
+      agentic: 0.7
+      long_context: 0.7
+      thinking: 1.0
+      math: 1.0
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      speedup: null
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: null
+    notes: NOT YET DOWNLOADED. 512 total experts, 10 active. MoE reduction tests [4,6,8].
 
   minimax_m21_q4:
     tier: B
@@ -2775,6 +3243,8 @@ roles:
       pinned: false
     compatible_targets:
     - qwen3.5-35b-a3b
+    - qwen3.5-27b
+    - qwen3.5-9b
     notes: >
       SSM checkpoint/restore enabled via WS1+WS2. Compatible with all qwen35 targets.
   draft_qwen35_0_8b_q8_0:
@@ -2793,9 +3263,10 @@ roles:
       pinned: false
     compatible_targets:
     - qwen3.5-35b-a3b
+    - qwen3.5-27b
+    - qwen3.5-9b
     notes: >
-      BLOCKED on WS1 SSM state checkpointing. Higher quality draft (Q8_0 vs Q4_0).
-      If WS1 passes, compare acceptance rates vs Q4_0 variant.
+      Higher quality draft (Q8_0 vs Q4_0). Compatible with 35B, 27B, 9B targets.
 
   # =============================================================================
   # Embedder Models (Tier D - Supporting)
