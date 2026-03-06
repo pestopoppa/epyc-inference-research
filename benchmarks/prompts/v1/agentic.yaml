@@ -974,5 +974,5 @@ prompts:
 
 inference_params:
   temperature: 0.2
-  max_tokens: 2048
+  max_tokens: 4096
   timeout: 300

@@ -877,6 +877,9 @@ roles:
       Specialists will implement details — stop once the design is clear.
   thinking_reasoning:
     tier: B
+    deprecated: true
+    deprecated_date: 2026-03-06
+    deprecated_reason: "GGUF deleted from disk — model weights no longer available"
     description: Deep reasoning and chain-of-thought - SSM+MoE hybrid thinking model
     model:
       name: Qwen3-Next-80B-A3B-Thinking
@@ -899,6 +902,11 @@ roles:
       - eagle
       reason: SSM requires consecutive positions - incompatible with ALL speculation
         methods
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -952,6 +960,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -994,6 +1007,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1034,6 +1052,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1073,6 +1096,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1112,6 +1140,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1147,6 +1180,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1177,6 +1215,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1207,6 +1250,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1237,6 +1285,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1267,6 +1320,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1297,6 +1355,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1330,6 +1393,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1363,6 +1431,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1396,6 +1469,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1429,6 +1507,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1462,6 +1545,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1503,6 +1591,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1540,6 +1633,11 @@ roles:
       long_context: 0.7
       thinking: 1.0
       math: 1.0
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -1552,6 +1650,9 @@ roles:
 
   minimax_m21_q4:
     tier: B
+    deprecated: true
+    deprecated_date: 2026-03-06
+    deprecated_reason: "GGUF deleted from disk — model weights no longer available"
     description: MiniMax M2.1 Q4_K_M - 230B MoE (256 experts, 8 active) with thinking
     model:
       name: MiniMax-M2.1
@@ -1575,6 +1676,11 @@ roles:
       forbid:
       - speculative_decoding
       reason: Unique vocab (200K) - no compatible draft model exists
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: 9.52
       prompt_tps: 40.51
@@ -1603,6 +1709,9 @@ roles:
       Reason carefully but stop once the conclusion is reached — no restating.
   minimax_m21_q6:
     tier: B
+    deprecated: true
+    deprecated_date: 2026-03-06
+    deprecated_reason: "GGUF deleted from disk — model weights no longer available"
     description: MiniMax M2.1 Q6_K - 230B MoE (256 experts, 8 active) with thinking - higher quality
     model:
       name: MiniMax-M2.1
@@ -1626,6 +1735,11 @@ roles:
       forbid:
       - speculative_decoding
       reason: Unique vocab (200K) - no compatible draft model exists
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     performance:
       baseline_tps: null  # Not yet tested
       prompt_tps: null
@@ -1697,6 +1811,9 @@ roles:
       temperature: 0.3
   glm_47_reap:
     tier: B
+    deprecated: true
+    deprecated_date: 2026-03-06
+    deprecated_reason: "GGUF deleted from disk — model weights no longer available"
     description: GLM-4.7-REAP Q4_K_M - 218B MoE (96 experts, 8 active) reasoning model
     model:
       name: GLM-4.7-REAP-218B-A32B
@@ -2335,6 +2452,11 @@ roles:
     memory:
       residency: cold
       pinned: false
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     benchmark_date: 2026-01-06
     notes: Best thinking model for spec decode - same tokenizer as draft
   thinking_deepseek_r1_distill_qwen_7b:
@@ -2349,11 +2471,19 @@ roles:
     candidate_roles:
     - thinking
     - worker
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     memory:
       residency: cold
       pinned: false
   thinking_qwen3_30b_a3b_thinking_2507:
     tier: B
+    deprecated: true
+    deprecated_date: 2026-03-06
+    deprecated_reason: "GGUF deleted from disk — model weights no longer available"
     description: Thinking model - Qwen3-30B-A3B-Thinking-2507-Q8_0
     model:
       name: Qwen3-30B-A3B-Thinking-2507-Q8_0
@@ -2372,6 +2502,11 @@ roles:
       type: moe_expert_reduction
       experts: 4
       override_key: qwen3moe.expert_used_count
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     memory:
       residency: cold
       pinned: false
@@ -2387,11 +2522,19 @@ roles:
     candidate_roles:
     - thinking
     - worker
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     memory:
       residency: cold
       pinned: false
   thinking_phi_4_reasoning_plus:
     tier: B
+    deprecated: true
+    deprecated_date: 2026-03-06
+    deprecated_reason: "GGUF deleted from disk — model weights no longer available"
     description: Thinking model - Phi-4-reasoning-plus (14.7B, 128K context, tool use)
     model:
       name: Phi-4-reasoning-plus-Q4_K_M
@@ -2403,12 +2546,20 @@ roles:
     - thinking
     - general
     - agentic
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     memory:
       residency: cold
       pinned: false
     notes: "Microsoft Phi-4-reasoning-plus. 14.7B params, 128K context. Trained for reasoning and tool use."
   thinking_phi_4_reasoning_plus_q8:
     tier: B
+    deprecated: true
+    deprecated_date: 2026-03-06
+    deprecated_reason: "GGUF deleted from disk — model weights no longer available"
     description: Thinking model - Phi-4-reasoning-plus Q8_0 (14.7B, 128K context, tool use)
     model:
       name: Phi-4-reasoning-plus-Q8_0
@@ -2420,6 +2571,11 @@ roles:
     - thinking
     - general
     - agentic
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     memory:
       residency: cold
       pinned: false
@@ -3186,6 +3342,11 @@ roles:
       type: speculative_decoding
       draft_role: draft_deepseek_r1_distill_qwen_1_5b_q80
       k: 16
+    thinking_quirks:
+      disable_trick: "<think>\n</think>\n"
+      disable_suites:
+      - agentic
+      - instruction_precision
     memory:
       residency: cold
       pinned: false
@@ -3302,6 +3463,9 @@ roles:
 
   thinking_qwen3_30b_a3b_thinking_2507_q4ks:
     tier: B
+    deprecated: true
+    deprecated_date: 2026-03-06
+    deprecated_reason: "GGUF deleted from disk — model weights no longer available"
     description: Thinking model - Qwen3-30B-A3B-Thinking-2507-Q4_K_S
     model:
       name: Qwen3-30B-A3B-Thinking-2507-Q4_K_S

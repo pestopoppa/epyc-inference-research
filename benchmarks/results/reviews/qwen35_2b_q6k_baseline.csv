@@ -1,0 +1,31 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,41.98,0,Entire response stuck in think block - never produces the required JSON array of tool calls. Truncated mid-reasoning.
+agentic,t1_q2_error_handling,12.65,3,Good error handling: informs user of 404 and offers three alternatives (search/create/different ID)
+agentic,t1_q3_nested_params,13.53,3,Correct JSON tool call with properly nested metadata including priority high and tags array and due_date
+agentic,t2_q1_ambiguous,13.3,0,Entire response stuck in think block - never produces a clarifying question or tool call. Truncated mid-reasoning.
+agentic,t2_q2_error_chain,41.91,2,Identifies DB connection issue and chooses restart_service but misses the more diagnostic check_dns step. Reasoning is sound but action choice is suboptimal.
+agentic,t2_q3_schema_edge,41.88,3,Correct endpoint /users with GET method and body:null and Authorization header. Clean JSON output.
+agentic,t2_q4_orchestration,41.89,0,Entire response stuck in think block - never produces the required JSON deployment plan. Truncated mid-reasoning.
+agentic,t3_q1_competing_constraints,13.02,3,Excellent JSON plan with read_file then execute_code steps plus validation checks and fallback strategy. Schema auto-detection via regex.
+agentic,t3_q2_multi_agent_coordination,41.56,0,Entire response stuck in think block - never produces the required JSON multi-agent plan. Truncated mid-reasoning.
+agentic,t3_q3_adversarial_robustness,41.57,2,Identifies credential extraction and command injection risks. Refuses malicious command and suggests alternatives. Missing SSRF analysis and encoded command detection is superficial.
+general,t1_q1_json,41.42,3,Correct JSON with all four fields properly extracted: name role department start_date
+general,t1_q2_multistep,41.89,1,Response starts with garbled text (repeated Date). Deduplication correct but adds per-item counts instead of a total count at the end. The instruction says add a count at the end meaning total=4 not per-item frequencies.
+general,t1_q3_compare,13.5,3,Concise 3-sentence comparison within the 2-3 sentence constraint. Accurate content covering scaling vs simplicity tradeoff.
+general,t2_q1_synthesis,13.46,3,Good unified recommendation: 2-week targeted patch under $20K then 3-month refactor. Balances all three perspectives.
+general,t2_q2_transform,42.13,2,Correct nested YAML grouping but then provides unnecessary second flat format and explanation text when transformation was the only ask.
+general,t2_q3_schedule,41.88,1,Produces a schedule missing Bob-Dave 1:1 entirely. Claims both 1:1s fit at 9:00-9:30 but only schedules Alice-Dave. Confused constraint analysis with errors about window sizes.
+general,t2_q4_inconsistency,13.54,3,Correctly identifies both inconsistencies: body format (JSON vs form-encoded) and rate limit (100/min vs 1000/hr) with clear summary table.
+general,t3_q1_policy_analysis,13.47,3,Thorough analysis of 3 failure modes (accuracy trap in imbalanced data / explainability-performance paradox / quarterly audit latency) with mechanisms and amendments.
+general,t3_q2_system_failure,41.4,2,Good explanation of read-replica lag causing double charges but truncated before completing architectural fixes. Identifies the core mechanism correctly.
+general,t3_q3_strategic_communication,13.36,3,Strong board statement acknowledging failures then pivoting to LOIs with concrete 90-day milestones across 3 phases. Professional tone.
+thinking,t1_q1_multistep,42.04,1,Sets up wrong equation first (60T=80(T-1)) then corrects to 60T+80(T-1)=280 and gets T=18/7 but enters confused verification loop. Never delivers clean final answer of 11:34 AM. Response ends mid-calculation.
+thinking,t1_q2_hypothesis,13.52,0,Entire response stuck in think block - never delivers the three alternative explanations. Good reasoning in think block but no output.
+thinking,t1_q3_planning,1000000.0,0,Empty response - zero characters generated. Complete failure.
+thinking,t2_q1_paradox,43.4,2,Decent Ship of Theseus analysis with physicalist and process views but table truncated. Arguments are somewhat muddled - incorrectly frames S1 and S2 as made of same planks.
+thinking,t2_q2_counterfactual,43.25,0,Entire response stuck in think block - never delivers the counterfactual analysis. Truncated mid-reasoning about second-order effects.
+thinking,t2_q3_formal,13.58,0,Entire response stuck in think block - never delivers the formal proof or concrete example. Good reasoning about natural deduction approach but no output.
+thinking,t2_q4_metacognition,13.6,1,Output after think block only covers step descriptions and truncates at Step 3. Never provides actual estimates or bounds or key assumptions as required.
+thinking,t3_q1_methodological_critique,43.03,0,Entire response stuck in think block - never delivers the methodological critique. Truncated mid-reasoning about confounding variables.
+thinking,t3_q2_causal_inference,13.56,3,Correct minimal adjustment set (Gene). Correctly explains collider bias from conditioning on Yellow Fingers. Well-structured DAG analysis.
+thinking,t3_q3_reasoning_trap,43.18,2,Identifies accuracy-generalization gap as the flaw which is related but less precise than test set bias. Attempts concrete scenario but gets confused mid-construction with self-corrections.

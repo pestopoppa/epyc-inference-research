@@ -1,0 +1,31 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,43.28,0,Outputs XML tools block instead of JSON array. Never produces the requested JSON array format. Think block rambles without completing.
+agentic,t1_q2_error_handling,43.2,2,Identifies 404 error and offers alternatives (search/create). Reasonable but doesn't make a proactive tool call like search_users. Overly verbose.
+agentic,t1_q3_nested_params,42.88,2,Correct JSON construction in think block with proper nested metadata. Think block dominates response but JSON structure is correct.
+agentic,t2_q1_ambiguous,13.71,2,Correctly identifies ambiguity and asks for outage details and target team. Unnecessarily includes a JSON error block.
+agentic,t2_q2_error_chain,42.91,2,Good diagnosis of database connection issue on staging. Identifies correct root cause. Truncated before proposing specific next tool call.
+agentic,t2_q3_schema_edge,13.72,3,Perfect schema-compliant JSON: correct endpoint /users, method GET, body null, Authorization header. Clean output.
+agentic,t2_q4_orchestration,43.08,1,Good deployment plan reasoning in think block (checkout->test->build->deploy->notify with rollback). But entire response is think block with no final output.
+agentic,t3_q1_competing_constraints,13.25,2,Produces multi-step JSON plan with read_file and execute_code. Good validation/fallback strategy. Truncated in code section.
+agentic,t3_q2_multi_agent_coordination,13.4,3,Excellent multi-phase plan: parallel researcher+coder in phase 1, sequential coder execution in phase 2, reviewer verification in phase 3. Context passing well-defined.
+agentic,t3_q3_adversarial_robustness,13.35,2,Identifies command injection (&&cat /etc/passwd) and SSRF risk. Discusses input validation, allowlisting, sandboxing. Truncated before addressing all 5 questions.
+general,t1_q1_json,13.2,3,Perfect JSON with all fields correctly extracted: name, role, department, start_date.
+general,t1_q2_multistep,43.27,0,Complete degeneration - repetitive loop of 'cherry, apple, banana' for 7838 chars. Classic repetition failure.
+general,t1_q3_compare,43.47,3,Good 2-3 sentence comparison of microservices vs monolith. Accurate content, appropriate length, covers key trade-offs.
+general,t2_q1_synthesis,13.38,3,Excellent synthesis: targeted 2-week patch (product), document gaps for Q1 refactor (engineering), stays under $20K threshold (finance). Concise.
+general,t2_q2_transform,42.98,0,Hallucinated additional employees (Eve, Frank, Grace, etc.) not in input. Output is flat JSON not nested YAML grouped by department.
+general,t2_q3_schedule,13.44,2,Good constraint analysis - correctly identifies team sync windows and Dave's availability. Works through scenarios systematically. Truncated before final schedule.
+general,t2_q4_inconsistency,42.89,3,Correctly identifies both key inconsistencies: body format (JSON vs form-encoded) and rate limit (100/min vs 1000/hr). Clear summary.
+general,t3_q1_policy_analysis,13.32,2,Excellent Goodhart's Law analysis with concrete metric gaming mechanisms. Proposes context-aware performance matrix. Truncated after first failure mode of 3+ needed.
+general,t3_q2_system_failure,13.07,2,Correctly explains read-from-replica race condition with both concurrent and retry scenarios. Truncated before completing all 4 questions.
+general,t3_q3_strategic_communication,13.23,3,Strong board statement: takes ownership of misses, pivots to LOIs as strategic validation, proposes 90-day execution plan with milestones.
+thinking,t1_q1_multistep,13.74,3,Perfect step-by-step solution: 60mi head start, 220mi remaining, 140mph combined, 11/7 hours after 10AM = 11:34 AM. Complete and correct.
+thinking,t1_q2_hypothesis,13.58,2,Good think block brainstorming 3+ alternatives (SES, sleep/health, school structure, parental involvement). But output stays in think block format.
+thinking,t1_q3_planning,43.74,1,Good constraint formalization and systematic DC-position enumeration. But truncated mid-scenario before listing any valid orderings.
+thinking,t2_q1_paradox,43.55,2,Good two-position analysis (Continuity Theory vs Compositionality). Well-structured arguments. Truncated before stating required verdict.
+thinking,t2_q2_counterfactual,43.65,1,Starts with hallucinated continuation of prompt. Analysis of dissemination speed is reasonable but truncated before covering all 3 dimensions fully.
+thinking,t2_q3_formal,13.74,3,Excellent formal proof via both conditional proof and proof by contradiction. Truth table format with clear steps. Concrete example started.
+thinking,t2_q4_metacognition,43.6,1,Good Fermi estimation approach in think block (population, piano ownership). Truncated entirely within think block - no visible final output delivered.
+thinking,t3_q1_methodological_critique,43.22,2,Two well-developed issues (demographic confound, test selection bias) with clear mechanisms. Truncated at 2 of 4+ needed.
+thinking,t3_q2_causal_inference,13.64,3,Correct minimal adjustment set {Gene}. Correctly explains backdoor path blocking. Starts correct collider bias analysis for Yellow Fingers.
+thinking,t3_q3_reasoning_trap,43.37,2,Good identification of evaluation set bias/test set composition flaw. Constructs concrete scenario but somewhat convoluted.

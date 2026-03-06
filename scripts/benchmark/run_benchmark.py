@@ -643,6 +643,13 @@ def _run_speed_question(
         if override is not None:
             temperature = override
 
+    # Apply thinking disable trick if configured for this suite
+    effective_prompt = prompt
+    if registry:
+        think_trick = registry.get_thinking_disable_trick(role, suite_name)
+        if think_trick:
+            effective_prompt = effective_prompt + think_trick
+
     speed_max_tokens = _LOOKUP_MAX_TOKENS if "lookup" in config.config_type else _DEFAULT_MAX_TOKENS
     speed_timeout = _compute_timeout(size_gb, base=300 if "lookup" in config.config_type else 180)
 
@@ -663,7 +670,7 @@ def _run_speed_question(
         if use_server:
             spec_k = config.spec_k if config.config_type in ("spec", "moe_spec", "moe_spec_lookup", "spec_lookup") else None
             result = ss.server.run_inference(
-                prompt=prompt,
+                prompt=effective_prompt,
                 max_tokens=speed_max_tokens,
                 temperature=temperature,
                 timeout=speed_timeout,
@@ -673,7 +680,7 @@ def _run_speed_question(
             result = executor.run_inference(
                 model_path=model_path,
                 config=config,
-                prompt=prompt,
+                prompt=effective_prompt,
                 max_tokens=speed_max_tokens,
                 temperature=temperature,
                 timeout=speed_timeout,
@@ -774,6 +781,13 @@ def _run_quality_question(
             effective_params = dict(params)
             effective_params["temperature"] = temp_override
 
+    # Apply thinking disable trick if configured for this suite
+    effective_prompt = question.prompt
+    if registry:
+        think_trick = registry.get_thinking_disable_trick(role, suite_name)
+        if think_trick:
+            effective_prompt = effective_prompt + think_trick
+
     try:
         use_server = (
             ss.server is not None
@@ -784,7 +798,7 @@ def _run_quality_question(
         if use_server:
             spec_k = config.spec_k if config.config_type in ("spec", "moe_spec", "moe_spec_lookup", "spec_lookup") else None
             result = ss.server.run_inference(
-                prompt=question.prompt,
+                prompt=effective_prompt,
                 max_tokens=effective_params["max_tokens"],
                 temperature=effective_params["temperature"],
                 timeout=effective_params["timeout"],
@@ -795,7 +809,7 @@ def _run_quality_question(
             result = executor.run_inference(
                 model_path=model_path,
                 config=config,
-                prompt=question.prompt,
+                prompt=effective_prompt,
                 max_tokens=effective_params["max_tokens"],
                 temperature=effective_params["temperature"],
                 timeout=effective_params["timeout"],

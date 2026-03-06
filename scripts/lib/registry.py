@@ -534,6 +534,31 @@ class ModelRegistry:
             return overrides.get(suite)
         return None
 
+    def get_thinking_disable_trick(self, role: str, suite: str) -> Optional[str]:
+        """Get thinking disable trick for a role+suite, if configured.
+
+        Models with thinking capabilities (Qwen3.5, DeepSeek-R1, QwQ, etc.)
+        may waste tokens on <think> blocks for task-oriented suites. Each model
+        family has its own trick to suppress thinking.
+
+        Args:
+            role: The role name.
+            suite: The suite name (e.g. 'agentic', 'instruction_precision').
+
+        Returns:
+            Trick string to append to prompt (e.g. '<think>\\n</think>\\n'),
+            or None if thinking should not be disabled for this suite.
+        """
+        config = self.get_role_config(role)
+        if not config:
+            return None
+        quirks = config.get("thinking_quirks", {})
+        trick = quirks.get("disable_trick")
+        suites = quirks.get("disable_suites", [])
+        if trick and suite in suites:
+            return trick
+        return None
+
     def get_timeout_multiplier(self, role: str, reference_tps: float = 20.0) -> float:
         """Calculate timeout multiplier based on model speed.
 
