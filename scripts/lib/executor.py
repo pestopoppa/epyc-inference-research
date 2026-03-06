@@ -777,16 +777,6 @@ class Executor:
             # Expert counts: [4, 6, ..., baseline_experts]
             expert_counts = list(range(MIN_SAFE_EXPERTS, max_test_experts + 1, 2)) + [baseline_experts]
 
-            # MoE + lookup compound configs (speed-only, server mode required for --lookup)
-            if "prompt_lookup" not in forbidden and size_gb < LOOKUP_MAX_MODEL_SIZE_GB:
-                for exp in expert_counts:
-                    quality_ref = "baseline" if exp == baseline_experts else f"moe{exp}"
-                    for ngram in [3, 4, 5]:
-                        cfg = Config.compound_moe_lookup(exp, override_key, ngram)
-                        cfg.speed_test_only = True
-                        cfg.inherits_quality_from = quality_ref
-                        configs.append(cfg)
-
             # MoE + spec decode compound configs at each expert count (speed-only)
             if "speculative_decoding" not in forbidden:
                 drafts = reg.get_drafts_for_model(role)
@@ -804,6 +794,8 @@ class Executor:
                                 configs.append(cfg)
 
                             # MoE + spec + lookup compound (server mode only)
+                            # Ordered BEFORE moe_lookup so draft+lookup server can
+                            # also serve moe_lookup configs (no restart needed).
                             if "prompt_lookup" not in forbidden and size_gb < LOOKUP_MAX_MODEL_SIZE_GB:
                                 for k in [8, 16, 24]:
                                     cfg = Config.compound_moe_spec_lookup(
@@ -812,6 +804,17 @@ class Executor:
                                     cfg.speed_test_only = True
                                     cfg.inherits_quality_from = quality_ref
                                     configs.append(cfg)
+
+            # MoE + lookup compound configs (speed-only, server mode required for --lookup)
+            # Ordered AFTER moe_spec_lookup: a draft+lookup server can serve these too.
+            if "prompt_lookup" not in forbidden and size_gb < LOOKUP_MAX_MODEL_SIZE_GB:
+                for exp in expert_counts:
+                    quality_ref = "baseline" if exp == baseline_experts else f"moe{exp}"
+                    for ngram in [3, 4, 5]:
+                        cfg = Config.compound_moe_lookup(exp, override_key, ngram)
+                        cfg.speed_test_only = True
+                        cfg.inherits_quality_from = quality_ref
+                        configs.append(cfg)
 
         elif architecture in ("ssm_moe_hybrid", "qwen3next"):
             # SSM models - MoE reduction ONLY, no speculation (SSM incompatible with all spec methods)
@@ -848,17 +851,9 @@ class Executor:
             if size_gb == 0 and model_path and os.path.exists(model_path):
                 size_gb = os.path.getsize(model_path) / (1024**3)
 
-            # Prompt lookup configs (speed-only: inherits quality from baseline)
-            # Same target model, just different draft strategy
-            # Skip for large models (>40GB) - lookup times out, spec decode is faster
-            if "prompt_lookup" not in forbidden and not is_draft and size_gb < LOOKUP_MAX_MODEL_SIZE_GB:
-                for ngram in [3, 4, 5]:
-                    cfg = Config.lookup(ngram)
-                    cfg.speed_test_only = True
-                    cfg.inherits_quality_from = "baseline"
-                    configs.append(cfg)
-
             # Spec + lookup compound configs for dense models (server mode only)
+            # Ordered BEFORE standalone lookup so that the draft+lookup server
+            # started for spec_lookup can also serve lookup configs (no restart needed).
             if ("speculative_decoding" not in forbidden
                     and "prompt_lookup" not in forbidden
                     and not is_draft
@@ -872,6 +867,18 @@ class Executor:
                             cfg.speed_test_only = True
                             cfg.inherits_quality_from = "baseline"
                             configs.append(cfg)
+
+            # Prompt lookup configs (speed-only: inherits quality from baseline)
+            # Same target model, just different draft strategy
+            # Skip for large models (>40GB) - lookup times out, spec decode is faster
+            # Ordered AFTER spec_lookup: a draft+lookup server can serve these too
+            # (draft loaded but idle when speculative.n_max is not sent).
+            if "prompt_lookup" not in forbidden and not is_draft and size_gb < LOOKUP_MAX_MODEL_SIZE_GB:
+                for ngram in [3, 4, 5]:
+                    cfg = Config.lookup(ngram)
+                    cfg.speed_test_only = True
+                    cfg.inherits_quality_from = "baseline"
+                    configs.append(cfg)
 
         return configs
 

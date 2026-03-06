@@ -473,10 +473,18 @@ def _ensure_server(
         return
 
     # --- 3. Draft model and/or lookup change ---
+    # Strategy: minimize server restarts by reusing servers with superset capabilities.
+    # A server with draft+lookup can serve spec, lookup, AND spec_lookup configs:
+    #   - spec configs: send speculative.n_max=K (draft runs, lookup loaded but idle)
+    #   - lookup configs: omit speculative.n_max (lookup runs, draft loaded but idle)
+    #   - spec_lookup configs: send speculative.n_max=K (both active)
+    # So we only restart when draft model or MoE experts change, and we always enable
+    # --lookup if the config needs it OR we already have it (never downgrade).
     if config.config_type in ("spec", "moe_spec", "moe_spec_lookup", "spec_lookup"):
         required_draft = config.draft_model_path
-        required_lookup = config.config_type in ("moe_spec_lookup", "spec_lookup")
-        needs_restart = (required_draft != ss.draft_path) or (required_lookup != ss.lookup)
+        # Enable lookup if this config needs it, OR keep it if already on
+        required_lookup = ss.lookup or config.config_type in ("moe_spec_lookup", "spec_lookup")
+        needs_restart = (required_draft != ss.draft_path) or (required_lookup and not ss.lookup)
 
         if needs_restart:
             if config.config_type in ("moe_spec", "moe_spec_lookup"):
@@ -512,9 +520,9 @@ def _ensure_server(
                 print(f"      [SERVER] Ready with draft{lookup_str}", flush=True)
 
     elif config.config_type in ("lookup", "moe_lookup"):
-        # Lookup-only configs: restart server with --lookup flag (no draft model)
-        required_lookup = True
-        needs_restart = not ss.lookup or ss.draft_path is not None
+        # Lookup-only: reuse current server if it already has --lookup (even with draft loaded).
+        # A draft+lookup server works fine for lookup-only: just omit speculative.n_max.
+        needs_restart = not ss.lookup
 
         if config.config_type == "moe_lookup":
             required_experts = config.moe_experts
