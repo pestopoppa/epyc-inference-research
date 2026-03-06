@@ -1064,9 +1064,26 @@ def run_benchmark(
                         continue
 
             # Server management per config
-            if server_mode and ss.server is not None and ss.server.is_running():
-                _ensure_server(ss, model_path, config, role, size_gb,
-                               registry, no_mmap, mmproj_path, is_new_model=False)
+            if server_mode and not dry_run:
+                if ss.server is None:
+                    # Server was lost (crash, failed restart) — restart fresh baseline
+                    print(f"      [SERVER] Re-starting (was stopped)...", flush=True)
+                    ss.server = ServerManager(port=8080)
+                    ss.server.start(model_path, registry=registry,
+                                    no_mmap=no_mmap, role=role, mmproj_path=mmproj_path)
+                    timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
+                    if not ss.server.wait_ready(timeout=timeout):
+                        print(f"      [SERVER] Failed to re-start", flush=True)
+                        ss.server = None
+                    else:
+                        ss.model_path = model_path
+                        ss.experts = None
+                        ss.draft_path = None
+                        ss.lookup = False
+                        print(f"      [SERVER] Recovered", flush=True)
+                if ss.server is not None and ss.server.is_running():
+                    _ensure_server(ss, model_path, config, role, size_gb,
+                                   registry, no_mmap, mmproj_path, is_new_model=False)
 
             # Speed-test-only configs
             if config.speed_test_only:
