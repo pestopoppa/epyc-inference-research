@@ -467,6 +467,7 @@ def _ensure_server(
         else:
             ss.experts = required_experts
             ss.draft_path = None
+            ss.lookup = False
             print(f"      [SERVER] Ready", flush=True)
 
     if ss.server is None or not ss.server.is_running():
@@ -1087,9 +1088,12 @@ def run_benchmark(
 
             # Server management per config
             if server_mode and not dry_run:
-                if ss.server is None:
-                    # Server was lost (crash, failed restart) — restart fresh baseline
-                    print(f"      [SERVER] Re-starting (was stopped)...", flush=True)
+                if ss.server is None or (ss.server is not None and not ss.server.is_running()):
+                    # Server was lost (crash, failed restart, or process died) — restart fresh baseline
+                    reason = "crashed" if ss.server is not None else "stopped"
+                    print(f"      [SERVER] Re-starting (was {reason})...", flush=True)
+                    if ss.server is not None:
+                        ss.stop()
                     ss.server = ServerManager(port=8080)
                     ss.server.start(model_path, registry=registry,
                                     no_mmap=no_mmap, role=role, mmproj_path=mmproj_path)
