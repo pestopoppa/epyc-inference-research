@@ -777,39 +777,44 @@ class Executor:
             # Expert counts: [4, 6, ..., baseline_experts]
             expert_counts = list(range(MIN_SAFE_EXPERTS, max_test_experts + 1, 2)) + [baseline_experts]
 
-            # MoE + spec decode compound configs at each expert count (speed-only)
-            if "speculative_decoding" not in forbidden:
-                drafts = reg.get_drafts_for_model(role)
-                for draft_role in drafts:
+            # Acceleration configs grouped per expert count to minimize server restarts.
+            # Within each expert count: moe_spec → moe_spec_lookup → moe_lookup
+            # so the draft+lookup server from moe_spec_lookup serves moe_lookup too.
+            has_lookup = "prompt_lookup" not in forbidden and size_gb < LOOKUP_MAX_MODEL_SIZE_GB
+            has_spec = "speculative_decoding" not in forbidden
+            drafts = []
+            if has_spec:
+                for draft_role in reg.get_drafts_for_model(role):
                     draft_path = reg.get_model_path(draft_role)
                     if draft_path and os.path.exists(draft_path):
-                        for exp in expert_counts:
-                            quality_ref = "baseline" if exp == baseline_experts else f"moe{exp}"
-                            for k in [8, 16, 24]:
-                                cfg = Config.compound_moe_spec(
-                                    exp, override_key, k, draft_path, draft_role
-                                )
-                                cfg.speed_test_only = True
-                                cfg.inherits_quality_from = quality_ref
-                                configs.append(cfg)
+                        drafts.append((draft_role, draft_path))
 
-                            # MoE + spec + lookup compound (server mode only)
-                            # Ordered BEFORE moe_lookup so draft+lookup server can
-                            # also serve moe_lookup configs (no restart needed).
-                            if "prompt_lookup" not in forbidden and size_gb < LOOKUP_MAX_MODEL_SIZE_GB:
-                                for k in [8, 16, 24]:
-                                    cfg = Config.compound_moe_spec_lookup(
-                                        exp, override_key, k, draft_path, draft_role
-                                    )
-                                    cfg.speed_test_only = True
-                                    cfg.inherits_quality_from = quality_ref
-                                    configs.append(cfg)
+            for exp in expert_counts:
+                quality_ref = "baseline" if exp == baseline_experts else f"moe{exp}"
 
-            # MoE + lookup compound configs (speed-only, server mode required for --lookup)
-            # Ordered AFTER moe_spec_lookup: a draft+lookup server can serve these too.
-            if "prompt_lookup" not in forbidden and size_gb < LOOKUP_MAX_MODEL_SIZE_GB:
-                for exp in expert_counts:
-                    quality_ref = "baseline" if exp == baseline_experts else f"moe{exp}"
+                # MoE + spec (draft only)
+                for draft_role, draft_path in drafts:
+                    for k in [8, 16, 24]:
+                        cfg = Config.compound_moe_spec(
+                            exp, override_key, k, draft_path, draft_role
+                        )
+                        cfg.speed_test_only = True
+                        cfg.inherits_quality_from = quality_ref
+                        configs.append(cfg)
+
+                # MoE + spec + lookup (draft+lookup, server only)
+                if has_lookup:
+                    for draft_role, draft_path in drafts:
+                        for k in [8, 16, 24]:
+                            cfg = Config.compound_moe_spec_lookup(
+                                exp, override_key, k, draft_path, draft_role
+                            )
+                            cfg.speed_test_only = True
+                            cfg.inherits_quality_from = quality_ref
+                            configs.append(cfg)
+
+                # MoE + lookup (lookup only — reuses draft+lookup server)
+                if has_lookup:
                     for ngram in [3, 4, 5]:
                         cfg = Config.compound_moe_lookup(exp, override_key, ngram)
                         cfg.speed_test_only = True
