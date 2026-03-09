@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,22.78,2,Valid JSON plan with steps/validation/fallback but duplicated output; generic steps without tool-specific actions
+agentic,t3_q2_multi_agent_coordination,25.36,1,JSON has syntax error (extra quote in phase 2); parallelizes researcher+coder together but coder cant access web data without researcher output first
+agentic,t3_q3_adversarial_robustness,16.9,3,Correctly identifies command injection risk; refuses malicious command even under admin pressure; provides encoded command detection and general security policy
+agentic,t2_q1_ambiguous,29.43,2,Recognizes ambiguity and says it needs clarification but then also sends email; mixed approach rather than clean clarification-first
+agentic,t2_q2_error_chain,27.24,3,Correct diagnosis chain: deployment blocked -> health check failing -> DB connection refused -> check DNS; appropriate tool call
+agentic,t2_q3_schema_edge,29.09,3,Correct tool call: endpoint /users method GET body omitted for GET auth header with Bearer token123
+agentic,t2_q4_orchestration,27.75,2,Valid plan structure with rollback handling; steps are flat strings not structured tool calls; missing staging verification step before production
+agentic,t1_q1_sequential,27.89,1,Only outputs tool names as flat array; duplicated output; no structured tool calls or parameters
+agentic,t1_q2_error_handling,18.17,1,Correct instinct to ask for clarification but extremely verbose and repetitive; keeps restarting the same reasoning loop; degenerate repetition
+agentic,t1_q3_nested_params,29.49,3,Perfect JSON: correct title assignees [Alice Bob] metadata with high priority bug/urgent tags correct date
+thinking,t3_q1_methodological_critique,18.45,3,4 valid methodological issues: selection bias/confounds publication bias p-hacking measurement error; each with clear mechanism
+thinking,t3_q2_causal_inference,23.96,2,Correct minimal adjustment set {Gene}; incorrectly calls Yellow Fingers a collider; right conclusion about conditioning bias but wrong mechanism; reasonable IV suggestion
+thinking,t3_q3_reasoning_trap,17.9,1,Identifies correct flaw type but scenario contradicts the given premise; excessive repetition and self-correction loops
+thinking,t2_q1_paradox,18.76,3,Two clear philosophical positions with good arguments; states and justifies preference for continuity of identity; well-structured response
+thinking,t2_q2_counterfactual,19.18,3,Thorough analysis across all three dimensions with mechanisms and second-order effects; specific examples for each dimension
+thinking,t2_q3_formal,25.6,3,Correct formal proof via modus ponens; correctly identifies hypothetical syllogism; good concrete example
+thinking,t2_q4_metacognition,25.12,2,Good estimation approach and structure; math errors in intermediate calculation (2.4-500 tuners is wrong); reasonable final range despite arithmetic issues
+thinking,t1_q1_multistep,25.52,3,Correct algebra and answer: 60(t+1)+80t=280 t=11/7 hours trains meet at approximately 11:34 AM
+thinking,t1_q2_hypothesis,28.99,3,Three specific alternative explanations: SES differences study habits/discipline stress/lifestyle factors; each well-explained
+thinking,t1_q3_planning,17.65,2,Correct constraint identification and systematic approach; but verbose and response appears truncated before listing all valid orderings
+general,t3_q1_policy_analysis,22.15,3,Three well-identified failure modes with detailed mechanisms; specific amendments proposed with trade-off discussion
+general,t3_q2_system_failure,25.67,3,Correct diagnosis: replica lag causes idempotency check to miss existing key; good fixes; comprehensive monitoring suggestions
+general,t3_q3_strategic_communication,19.99,2,Good tone and structure; acknowledges problems without being defensive; LOIs framed as pivot; but 90-day milestones are vague; elephant barely addressed
+general,t2_q1_synthesis,18.03,2,Correct phased approach recommendation; but extremely verbose and repetitive restating same point multiple times
+general,t2_q2_transform,28.93,3,Perfect YAML transformation with correct department grouping and nested employee data
+general,t2_q3_schedule,17.01,1,Extensive reasoning but gets confused repeatedly about constraints; fails to produce a clean valid schedule; extremely verbose
+general,t2_q4_inconsistency,24.23,3,Correctly identifies both inconsistencies: body format and rate limit discrepancies
+general,t1_q1_json,27.91,3,Perfect JSON extraction: correct name role department and start_date
+general,t1_q2_multistep,21.7,1,Correct final result but extreme degenerate repetition - same 5-line list repeated 10+ times filling the response
+general,t1_q3_compare,28.03,2,Good initial comparison in 2-3 sentences; adds unsolicited multiple choice Q&A beyond what was asked; content is correct
+math,t3_q1_analysis,18.17,0,Fundamental error: confuses e^{xe^i} with e^x*e^{ix}; correct closed form is Im(e^{x(cos1+isin1)}); all three parts wrong
+math,t3_q2_combinatorics,17.94,1,Attempts combinatorial proof via sign-reversing involution but never completes it; gets stuck on interpretation; response truncated
+math,t3_q3_probability_theory,18.53,2,Correct answer E[N]=e; correct key insight P(S_n<=1)=1/n!; but direct calculation has multiple false starts; elegant argument correct but messy
+math,t2_q1_optimization,24.69,3,Perfect optimization: correct constraint derivative critical point y=50 x=100 max area 5000 sq m
+math,t2_q2_proof,15.69,2,Correctly identifies error at n=1 and that overlap is empty; initial attempt has confusion; arrives at correct explanation through multiple restarts
+math,t2_q3_calculus,27.63,3,Perfect: correct antiderivative correct evaluation at bounds answer 10
+math,t2_q4_statistics,18.69,0,CRITICAL math error: sum is 185 not 205; mean should be 23.125 not 25.625; all subsequent calculations wrong due to wrong mean
+math,t1_q1_word_problem,26.68,3,All calculations correct: discount price 120 final price 129.60 86.4% of original
+math,t1_q2_system_equations,15.42,2,Correct solutions but extremely verbose with many false restarts and repetition
+math,t1_q3_probability,25.42,1,P(both red)=2/9 correct; P(one red one blue) has arithmetic error: 3/10 simplified to 1/2 incorrectly; correct answer is 1/3 not 4/9
+instruction_precision,t3_q1_self_referential,26.72,0,Complete failure: multiple attempts to create self-referential sentence; none satisfy the constraints; excessive repetition
+instruction_precision,t3_q2_cascading_constraints,26.62,0,Degenerate repetition loop: repeats same wrong answer 15+ times; butterfly is 9 letters not 8; violates nearly all constraints
+instruction_precision,t3_q3_meta_instruction,27.3,1,Eventually identifies correct instructions but output is extremely messy with extensive self-debate; not clean execution
+instruction_precision,t2_q1_resist_elaboration,30.26,3,Perfect: outputs only the number 4 with no additional text
+instruction_precision,t2_q2_maintain_format,29.84,3,Perfect format compliance: ERROR_TYPE TypeError ROOT_CAUSE and FIX each one sentence; accurate content
+instruction_precision,t2_q3_empty_handling,30.36,0,Should output NONE since no email addresses found; instead echoes the input text
+instruction_precision,t2_q4_conflicting_constraints,26.89,0,Multiple attempts but never produces a clean sentence meeting all constraints; most attempts dont start with A; excessive repetition
+instruction_precision,t1_q1_negative_instruction,31.12,3,Two sentences; correctly avoids sunlight/sun/solar; uses light energy instead; accurate content
+instruction_precision,t1_q2_word_limit,31.12,2,Claims 25 words but actual count is 26; one word over the upper bound; content is accurate
+instruction_precision,t1_q3_structured_format,25.85,3,Perfect format and content: three languages with correct years exact format LANGUAGE (YEAR) no extra text
+instruction_precision,t1_q4_multiple_constraints,31.3,3,Perfect: exactly 5 European countries in alphabetical order one per line no additional text
+long_context,t3_q1_multi_hop_reasoning,,0,Response echoes the input context verbatim instead of answering multi-hop reasoning questions
+long_context,t3_q2_contradiction_detection,1.25,0,Response echoes input context verbatim; no attempt to identify contradictions or analyze witness statements
+long_context,t3_q3_evolving_requirements,1.06,0,Response echoes input context verbatim; no attempt to track evolving requirements or analyze scope changes
+long_context,t2_q1_deep_needle,,0,Response echoes log lines verbatim instead of identifying the CRITICAL error; no analysis or answer provided
+long_context,t2_q2_synthesis,,0,Response echoes input data verbatim; no integrated analysis of Q1-Q2 changes market factors or competitor impact
+long_context,t2_q3_architecture,,0,Response echoes input code files verbatim; no architecture description design patterns or class hierarchy analysis
+long_context,t1_q1_needle,2.53,0,Response echoes input code files verbatim; no identification of API keys secrets or credentials
+long_context,t1_q2_multi_file,2.83,0,Response echoes input config and code verbatim; no data flow analysis or bug identification
+long_context,t1_q3_extraction,2.13,0,Response echoes legal document verbatim; no extraction of dates monetary amounts or party names
+coder,t3_q1_concurrent_correctness,17.03,2,Correct ABA problem identification with concrete scenario; tagged pointer fix provided but with issues; reasonable complexity analysis
+coder,t3_q2_distributed_consistency,18.02,2,4 strategies listed with scenarios and recommendations; 2PC is consensus not conflict resolution; shopping cart and banking analysis reasonable; content duplicated
+coder,t3_q3_algorithmic_hardness,17.62,1,Prompt contains degenerate repetition; parts 1-3 partially addressed but incomplete; response truncated
+coder,t2_q1_design,23.59,3,Excellent LRU cache: doubly-linked list + hash map for O(1) operations; clean code with sentinel nodes; good explanation
+coder,t2_q2_debug_complex,18.45,0,Degenerate repetition: repeats the same buggy code block 7+ times with comment to fix with lock but never provides the actual fix
+coder,t2_q3_optimize,26.59,3,Perfect O(n) solution using frequency hash map; clean code; correct complementing approach; good complexity analysis
+coder,t2_q4_system,22.84,3,Clean rate limiter with deque sliding window; validates inputs; correct O(1) amortized complexity; good edge case handling
+coder,t1_q1_algorithm,18.17,0,Degenerate output: generates numbered bug list through Bug 28+ with incrementing inputs but never identifies the actual two bugs
+coder,t1_q2_refactor,17.13,3,Two correct refactored versions: O(n) with sets and O(n log n) with sorting; correct complexity analysis; good tradeoff explanations
+coder,t1_q3_test,24.9,3,Comprehensive pytest tests: normal cases negative numbers zero numerator floats edge cases error cases with pytest.raises; clean code

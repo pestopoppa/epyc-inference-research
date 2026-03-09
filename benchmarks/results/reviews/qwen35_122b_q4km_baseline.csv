@@ -1,0 +1,62 @@
+suite,question_id,score,notes
+instruction_precision,t3_q1_self_referential,1,Uses forbidden words (this/sentence); never reaches valid final answer; truncated mid-attempt
+instruction_precision,t3_q2_cascading_constraints,1,Chain rule broken: dreaming(8)->glimmer starts g not g; red is 3 letters not 4 for last word
+instruction_precision,t3_q3_meta_instruction,3,Correctly identifies [Print 42] and [Say 7 times: hi]; outputs 42 then 7 hi
+instruction_precision,t2_q1_resist_elaboration,3,Perfect single-number response
+instruction_precision,t2_q2_maintain_format,3,Exact format match with correct analysis
+instruction_precision,t2_q3_empty_handling,3,Correct NONE output with no extra text
+instruction_precision,t2_q4_conflicting_constraints,2,Meets most constraints but sentence ends with period after data not just data
+instruction_precision,t1_q1_negative_instruction,0,Empty response; all tokens spent in thinking with no visible output
+instruction_precision,t1_q2_word_limit,3,Clean 24-word description within 20-25 range
+instruction_precision,t1_q3_structured_format,3,Exact format LANGUAGE (YEAR) with correct dates
+instruction_precision,t1_q4_multiple_constraints,2,Correct list but includes thinking tokens and code fence artifacts in output
+thinking,t3_q1_methodological_critique,3,Identifies confounding variables and methodological issues clearly
+thinking,t3_q2_causal_inference,3,Correct minimal adjustment set (Gene); correct on Yellow Fingers collider bias
+thinking,t3_q3_reasoning_trap,2,Thinking tokens dominate; reasoning visible but truncated before full concrete scenario
+thinking,t2_q1_paradox,2,Thinking tokens dominate; framework visible but truncated before reaching conclusion
+thinking,t2_q2_counterfactual,3,Well-structured analysis across all three dimensions with specific mechanisms
+thinking,t2_q3_formal,3,Correct formal proof using conditional proof and modus ponens; good concrete example
+thinking,t2_q4_metacognition,2,Thinking tokens shown as response; systematic Fermi approach but truncated before bounds
+thinking,t1_q1_multistep,3,Correct setup with headstart analysis; clear step-by-step method
+thinking,t1_q2_hypothesis,2,Thinking process shown; alternatives identified but presentation is raw thinking not clean answer
+thinking,t1_q3_planning,3,Correct constraint analysis; treats DC as block; systematic deduction
+general,t3_q1_policy_analysis,3,Thorough analysis of failure modes with concrete amendments and trade-offs
+general,t3_q2_system_failure,3,Correct root cause (read-replica race condition); precise event sequence
+general,t3_q3_strategic_communication,3,Strong board presentation strategy; acknowledges failure while pivoting to LOIs
+general,t2_q1_synthesis,3,Good unified recommendation balancing all three perspectives with phased approach
+general,t2_q2_transform,3,Correct nested YAML transformation grouped by department
+general,t2_q3_schedule,2,Systematic constraint analysis but truncated before presenting final schedule
+general,t2_q4_inconsistency,2,Thinking process shown; identifies JSON vs form-encoded conflict but raw format
+general,t1_q1_json,3,Correct JSON with all four fields properly extracted
+general,t1_q2_multistep,1,Response starts with extra items not in original list; thinking process leaked into output
+general,t1_q3_compare,3,Concise 2-3 sentence comparison covering key trade-offs
+coder,t3_q1_concurrent_correctness,3,Correctly identifies ABA problem in lock-free stack with fix approach
+coder,t3_q2_distributed_consistency,2,Thinking tokens dominate; good CAP analysis but truncated before full answer
+coder,t3_q3_algorithmic_hardness,3,Correct adversary argument for lower bound and median-of-medians recurrence
+coder,t2_q1_design,3,Correct O(1) LRU cache design using dict + doubly linked list
+coder,t2_q2_debug_complex,3,Correctly identifies async race condition at await points; proper asyncio.Lock fix
+coder,t2_q3_optimize,3,Correct O(n) hash map optimization with frequency counting
+coder,t2_q4_system,2,Thinking process shown; approach is correct but code truncated before complete implementation
+coder,t1_q1_algorithm,2,Thinking process dominates; bug analysis started but truncated before fixes shown
+coder,t1_q2_refactor,3,Clean O(n) set-based solution with both speed and memory optimized versions
+coder,t1_q3_test,3,Comprehensive pytest cases covering normal, edge, and error scenarios
+agentic,t3_q1_competing_constraints,3,Structured multi-step plan with read_file first then code analysis
+agentic,t3_q2_multi_agent_coordination,3,Good phased orchestration plan leveraging agent capabilities appropriately
+agentic,t3_q3_adversarial_robustness,3,Correctly identifies command injection in curl && cat /etc/passwd
+agentic,t2_q1_ambiguous,3,Appropriate Slack choice with reasoning for urgency
+agentic,t2_q2_error_chain,3,Good diagnostic chain: identifies DB connection failure and restarts service
+agentic,t2_q3_schema_edge,3,Correct JSON with null body for GET and proper auth header
+agentic,t2_q4_orchestration,3,Complete deployment plan with test/deploy failure rollback paths
+agentic,t1_q1_sequential,3,Correct ordered tool calls: grep_search then read_file
+agentic,t1_q2_error_handling,2,Searches for user 123 which is reasonable but query string is suboptimal
+agentic,t1_q3_nested_params,3,Perfect nested JSON with all fields correctly mapped
+math,t3_q1_analysis,2,Thinking tokens dominate; correct approach but never outputs clean final answer
+math,t3_q2_combinatorics,1,Thinking tokens dominate; involution attempt fails and self-corrects repeatedly; no final proof
+math,t3_q3_probability_theory,2,Part (a) E[N]=e correct and elegant; part (b) ODE approach derived but truncated
+math,t2_q1_optimization,3,Perfect optimization solution: x=50 y=100 area=5000
+math,t2_q2_proof,3,Correctly identifies n=1 to n=2 failure with clear overlap explanation
+math,t2_q3_calculus,3,Correct antiderivative and evaluation; final answer 10
+math,t2_q4_statistics,3,All calculations correct: mean 23.125 median 23.5 sd 7.356 no outliers
+math,t1_q1_word_problem,2,Correct answer for asked question but generates dozens of unrequested extra problems
+math,t1_q2_system_equations,3,All four solutions correct with clear substitution method; adds bonus story problem
+math,t1_q3_probability,3,Correct P(both red)=2/9 and P(1R 1B)=1/3 with thorough thinking shown

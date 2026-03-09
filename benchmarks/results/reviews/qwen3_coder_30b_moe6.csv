@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,21.64,2,Valid JSON plan with steps/validation/fallback but echoes prompt before answering; plan is reasonable but generic without concrete tool calls
+agentic,t3_q2_multi_agent_coordination,22.18,2,Good phase decomposition and context passing; parallel_groups incorrectly puts Phase 2 and 3 together (3 depends on 2); failure handling is basic retry only
+agentic,t3_q3_adversarial_robustness,16.56,3,Thorough security analysis identifying command injection; correctly refuses even with admin claim; provides detection code and comprehensive policy framework
+agentic,t2_q1_ambiguous,24.38,2,Asks clarifying question (good) but then also outputs a tool call contradicting the clarification intent; mixed signals but core approach is reasonable
+agentic,t2_q2_error_chain,23.29,2,Correctly identifies DNS as first diagnostic step and outputs valid tool call JSON; brief but appropriate for the task
+agentic,t2_q3_schema_edge,24.44,3,Clean correct JSON tool call with proper null handling for optional body and appropriate headers
+agentic,t2_q4_orchestration,23.36,3,Good orchestration plan with git checkout and test stages and build and deploy and both test-fail and deploy-fail handlers including rollback
+agentic,t1_q1_sequential,25.18,1,Outputs tool calls but in wrong format (no proper JSON structure); grep_search and read_file concatenated without clear separation or sequential logic
+agentic,t1_q2_error_handling,24.69,2,Recognizes missing info and asks for clarification while providing a reasonable fallback search action; slightly confused flow but handles the ambiguity
+agentic,t1_q3_nested_params,24.96,3,Perfect JSON with correct nested structure including arrays and nested metadata object with tags array
+general,t3_q1_policy_analysis,13.44,2,Identifies three failure modes with mechanisms and examples; hit token limit so likely incomplete but covered content is substantive and well-reasoned
+general,t3_q2_system_failure,14.17,3,Excellent root cause analysis of double-charge from replica lag; explains why testing missed it; proposes synchronous replication fix
+general,t3_q3_strategic_communication,21.39,3,Strong board communication balancing honesty about missed targets with forward-looking LOI strategy; appropriate tone and structure
+general,t2_q1_synthesis,25.28,3,Concise actionable synthesis recommending phased approach with specific budget and timeline; correctly balances stakeholder concerns
+general,t2_q2_transform,24.38,2,Correct YAML structure grouped by department but includes extra employees (Eve and Frank from Marketing) not in the original data; hallucinated additional data
+general,t2_q3_schedule,12.47,2,Methodical constraint analysis; correctly identifies available slots; reasoning is sound but hit token limit before presenting final clean schedule
+general,t2_q4_inconsistency,11.58,2,Identifies key inconsistencies (body format and rate limits) correctly; somewhat verbose and repetitive but the core analysis is accurate
+general,t1_q1_json,16.41,3,Clean correct JSON extraction with all four fields properly formatted
+general,t1_q2_multistep,24.66,3,Correctly removes duplicates case-insensitively sorts alphabetically numbers items and counts; final answer is correct
+general,t1_q3_compare,19.75,2,Covers key microservices vs monolith tradeoffs but becomes repetitive and self-questioning mid-response; content is correct but poorly structured
+long_context,t3_q1_multi_hop_reasoning,0.0,0,Admits documents are API reference not financial data; fabricates fictional narrative instead of extracting actual information from context
+long_context,t3_q2_contradiction_detection,1.25,1,Attempts contradiction detection but contradictions appear fabricated/generic (service vs handler vs controller); does not cite real witness statements from context
+long_context,t3_q3_evolving_requirements,0.0,1,Table format as requested but answers appear fabricated with generic stakeholder names and features; likely did not extract from actual context
+long_context,t2_q1_deep_needle,0.0,0,Empty response - no completion tokens generated
+long_context,t2_q2_synthesis,0.0,1,Provides bullet points with financial figures but numbers appear generic/hallucinated; vague references without specific document citations
+long_context,t2_q3_architecture,0.0,0,Empty response - no completion tokens generated
+long_context,t1_q1_needle,2.56,1,Claims to find API key but then rambles repetitively about it being a placeholder; likely hallucinated the specific key value
+long_context,t1_q2_multi_file,3.17,1,Generic project structure analysis with vague class names like UtilUtils and UtilHelper; appears to be template output not actual extraction from context
+long_context,t1_q3_extraction,2.11,1,Lists many dates but uses incorrect ordinal suffixes (1th 2th 23th); dates may be partially extracted but quality is poor with grammatical errors
+coder,t3_q1_concurrent_correctness,18.66,2,Correctly identifies ABA problem; TaggedPointer fix approach is valid but struct-based atomic approach has portability issues; explanation is sound
+coder,t3_q2_distributed_consistency,13.07,1,Lists 4 strategies with scenarios and recommendations but degenerates into A.M.B. repetition loop in references section; core content is partial
+coder,t3_q3_algorithmic_hardness,13.07,2,Adversary argument for Omega(n) lower bound is reasonable; randomized quickselect analysis attempted but final formula is incorrect (should be O(n) not O(n log n))
+coder,t2_q1_design,22.38,2,Working LRU cache implementation but uses list.remove which is O(n); correctly acknowledges this limitation and notes doubly-linked list needed for true O(1)
+coder,t2_q2_debug_complex,23.82,3,Correctly identifies race condition in async code; fix with asyncio.Lock is proper and complete; clear explanation of the problem
+coder,t2_q3_optimize,21.59,3,Correct O(n) hash map solution for pair counting; proper complement-based approach with frequency tracking; clean implementation
+coder,t2_q4_system,21.59,3,Clean sliding window rate limiter using deque; proper validation edge cases and thread-safety considerations noted
+coder,t1_q1_algorithm,12.98,2,Identifies infinite loop bugs in binary search correctly; self-corrects initial trace; provides fixes but reasoning is messy with multiple restarts
+coder,t1_q2_refactor,9.73,2,Two versions (speed vs memory optimized) with correct tradeoff analysis; speed version uses set correctly; memory version is O(n^2) as intended
+coder,t1_q3_test,23.36,3,Comprehensive pytest test suite covering normal cases division-by-zero edge cases and negative numbers; proper use of pytest.raises
+math,t3_q1_analysis,20.46,2,Correct differentiability proof via Weierstrass M-test; complex exponential closed form approach is right (Im(e^(xe^i))); growth rate analysis started but may be incomplete
+math,t3_q2_combinatorics,12.17,1,Claims sign-reversing involution proof but the actual proof is incomplete and the identity itself may not be standard; reasoning trails off without rigorous completion
+math,t3_q3_probability_theory,10.29,3,Correct derivation: P(N>=n)=1/(n-1)! leading to E[N]=e; self-corrects the off-by-one; clean probability theory reasoning
+math,t2_q1_optimization,14.11,3,Perfect solution: x+2y=200 constraint correctly set up; A=200y-2y^2; derivative gives y=50 x=100; max area=5000 sq meters
+math,t2_q2_proof,9.71,3,Correctly identifies the error at n=1 where overlap between two subgroups fails; clear explanation of why induction step breaks down at this specific value
+math,t2_q3_calculus,15.04,3,Perfect: antiderivative x^3+x^2-x; F(2)=10 F(0)=0; answer=10; clean step-by-step work
+math,t2_q4_statistics,14.71,1,WRONG SUM: claims 12+15+18+22+25+28+30+35=205 (correct is 185); mean=25.625 (should be 23.125); all downstream calculations wrong due to bad sum
+math,t1_q1_word_problem,13.29,3,Perfect: discount 30 price 120; tax 9.60 final 129.60; percentage 86.4%; all calculations verified correct
+math,t1_q2_system_equations,13.74,3,"Perfect solution finding all four pairs (4,3) (-4,-3) (3,4) (-3,-4) with verification; clean substitution method"
+math,t1_q3_probability,13.72,3,Correct: P(both red)=2/9; P(one red one blue)=1/3; proper without-replacement probability calculations
+instruction_precision,t3_q1_self_referential,15.99,0,Claims 31 words but has 19; claims 67 letters but has 100; uses forbidden word sentence; only commas constraint met (3 commas)
+instruction_precision,t3_q2_cascading_constraints,14.2,0,Degenerates into repeated failed attempts; never produces a valid 5-word list meeting all constraints; shows inability to self-correct
+instruction_precision,t3_q3_meta_instruction,16.09,1,Should output 42 and hi repeated 7 times; outputs hello 42 and 7 hi - includes hello which is invalid ([Print hello] has no number) but gets 42 and hi*7 right
+instruction_precision,t2_q1_resist_elaboration,16.84,3,Perfect: outputs just 4 with no elaboration
+instruction_precision,t2_q2_maintain_format,16.91,3,Perfect format match: ERROR_TYPE ROOT_CAUSE and FIX all on correct lines with appropriate content
+instruction_precision,t2_q3_empty_handling,17.6,1,Outputs extra instruction text before NONE; should be exactly NONE but includes preamble from prompt echo
+instruction_precision,t2_q4_conflicting_constraints,15.07,0,Degenerate repetition loop: repeats A database is an organized collection of data dozens of times
+instruction_precision,t1_q1_negative_instruction,17.37,3,2 sentences explaining photosynthesis without mentioning sunlight sun or solar; uses energy from the environment as substitute
+instruction_precision,t1_q2_word_limit,14.82,0,First sentence is 14 words not 20-25; then elaborates extensively violating the word limit constraint entirely
+instruction_precision,t1_q3_structured_format,16.18,3,Perfect format: Python (1991) Java (1995) C++ (1985) one per line no extras
+instruction_precision,t1_q4_multiple_constraints,17.52,1,Algeria is in Africa not Europe; Belgium France Germany Ireland are correct; 4/5 countries valid; alphabetical order maintained
+thinking,t3_q1_methodological_critique,17.83,3,Identifies selection bias confounding and testing bias; provides specific alternative explanations and concrete study design improvements
+thinking,t3_q2_causal_inference,20.49,2,Correctly identifies Gene as confounder on backdoor path; adjustment set analysis is sound; DAG interpretation slightly confused but core answer correct
+thinking,t3_q3_reasoning_trap,19.59,3,Excellent identification of dataset bias vs accuracy fallacy; concrete cat/dog color example illustrates why higher accuracy on biased test set is misleading
+thinking,t2_q1_paradox,18.24,2,Good exploration of Ship of Theseus with mereological essentialism and bundle theory; somewhat verbose but covers identity persistence well
+thinking,t2_q2_counterfactual,22.27,3,Strong counterfactual analysis of academia without internet; covers dissemination speed collaboration patterns and second-order effects thoughtfully
+thinking,t2_q3_formal,22.74,3,Clean natural deduction proof of transitivity of implication; concrete example with rain/wet/slippery; correctly identifies as valid
+thinking,t2_q4_metacognition,22.94,3,Good Fermi estimation with clear assumptions; reasonable bounds (6-75 tuners); identifies key uncertainties and information to reduce them
+thinking,t1_q1_multistep,21.58,3,Correct solution: t=18/7 hours after 9AM = 11:34 AM approximately; 154.3 miles from A; clean algebraic work
+thinking,t1_q2_hypothesis,23.88,3,Three strong alternative hypotheses: motivation/organization SES factors and health/lifestyle; each with specific mechanisms
+thinking,t1_q3_planning,14.37,2,Correctly identifies A<B<D<C chain and E position constraint; finds 3 valid orderings but reasoning is messy with false starts and self-corrections; hit token limit

@@ -33,15 +33,16 @@ See [Chapter 24](../../chapters/24-benchmark-suite-construction.md) for suite co
 |---------------|-------|---------|---------|----------|
 | Prompt Lookup (summarization) | 95.18 t/s | 12.7x | — | Document QA with source |
 | **Qwen2.5-7B + spec (K=24)** | **46.6 t/s** | **2.5x** | 90% | Fast general tasks |
-| **Qwen3-Coder-30B-A3B + MoE6 + spec + lookup** | **47.11 t/s** | **1.61x** | — | **Code gen (NEW 2026-02-13)** |
+| **Qwen3-Coder-30B-A3B + MoE4 + spec + lookup K=24** | **45.3 t/s** | **1.67x** | 62%† | **Frontdoor accel (2026-03-09)** |
 | **Qwen3-VL-4B Q4_K_M** | **18.0 t/s** | — | **93%†** | Vision tasks (best quality) |
 | Qwen3-VL-30B-A3B + MoE4 | 27.6 t/s | +111% | 92%† | Vision tasks (faster, high quality) |
 | Prompt Lookup (code editing) | 25.82 t/s | 8.6x | — | Refactoring, code review |
 | **Qwen3-4B-Thinking + spec (K=4)** | **24.2 t/s** | **2.1x** | 88% | Fast thinking |
 | Qwen3-Coder-30B-A3B + MoE4 | 22.0 t/s | +83% | 61%† | MoE without spec decode |
-| **Qwen3.5-35B-A3B + MoE4** | **23.8 t/s** | — | **90%** | **SSM+MoE hybrid (NEW 2026-03-04)** |
-| **Qwen3-Coder-480B + full + spec (K=16)** | **9.00 t/s** | **1.38x** | — | **480B architect (NEW 2026-02-13)** |
-| **Qwen3-235B-A22B + full + spec (K=16)** | **6.08 t/s** | **1.15x** | — | **235B architect (NEW 2026-02-13)** |
+| **Qwen3.5-35B-A3B Q5_K_S** | **12.5 t/s** | — | **89%** | **SSM+MoE hybrid, highest quality variant (2026-03-09)** |
+| Qwen3.5-122B-A10B Q4_K_M | 9.2 t/s | — | **86%** | SSM+MoE hybrid, 69GB, +37% with spec+lookup |
+| **Qwen3-Coder-480B + MoE8 + spec K=24** | **13.6 t/s** | **2.08x** | 80%† | **480B architect (2026-03-09)** |
+| **Qwen3-235B-A22B + MoE8 + spec 1.7B K=24** | **13.7 t/s** | **1.50x** | 64%† | **235B architect (2026-03-09)** |
 | **Qwen2.5-Coder-32B + spec (K=24)** | **21.3 t/s** | **6.3x** | 93% | Code generation |
 | **gemma-3-27B + spec (K=16)** | **19.6 t/s** | **8.9x** | 95% | General tasks |
 | **gemma-3-12b + spec (K=16)** | **14.8 t/s** | **1.6x** | 97% | General tasks |
@@ -679,7 +680,7 @@ A 0.5B model and a 235B model both scoring "100%" meant we couldn't differentiat
 **72 models evaluated across 8 benchmark suites:**
 
 1. **Size matters again:** Larger models consistently outscore smaller ones when relative scoring is applied
-2. **MoE models excel:** Qwen3-235B-A22B achieves 94% — the best large model result
+2. **MoE models excel:** Qwen3-235B-A22B achieves 64%† (rescored) — largest dense model tested
 3. **Small thinking models punch above weight:** MathSmith-8B (93.7%) nearly matches 70B+ models
 4. **Instruction precision is hard:** No model exceeds 78/110 on strict format compliance
 5. **Smaller VL models outperform larger:** Qwen3-VL-4B (94%) beats 30B (75%) and 235B (56%) on figure analysis
@@ -750,7 +751,7 @@ Complete production model lineup with relative scoring validation.
 
 | Role | Model | Score | Speed | Configuration | Size |
 |------|-------|-------|-------|---------------|------|
-| **frontdoor** | Qwen3-Coder-30B-A3B-Instruct | 79%† | 47.11 t/s | MoE6 + spec + lookup | 20GB |
+| **frontdoor** | Qwen3-Coder-30B-A3B-Instruct | 68%† | 47.11 t/s | MoE6 + spec + lookup | 20GB |
 | **coder_escalation** | Qwen2.5-Coder-32B | 91.5% | 39.44 t/s | spec K=24 + lookup | 18.5GB |
 | **worker** | Qwen2.5-7B-Instruct | 74.5% | 50 t/s | spec K=16 + draft | 4.4GB |
 | **voice_server** | faster-whisper large-v3-turbo | — | 2.8x RT | CPU int8, port 9000 | 4GB |
@@ -761,8 +762,8 @@ Complete production model lineup with relative scoring validation.
 
 | Role | Model | Score | Speed | Configuration | Size |
 |------|-------|-------|-------|---------------|------|
-| **architect_general** | Qwen3-235B-A22B | 94.0% | 6.75 t/s | MoE4 experts | 133GB |
-| **architect_coding** | Qwen3-Coder-480B | 88.5% | 10.3 t/s | MoE3 experts | 271GB |
+| **architect_general** | Qwen3-235B-A22B | 64%† | 13.7 t/s | MoE8+spec 1.7B k24 | 133GB |
+| **architect_coding** | Qwen3-Coder-480B | 80%† | 13.6 t/s | MoE8+spec k24 | 271GB |
 | **ingest_long_context** | Qwen3-Next-80B-A3B | 77.0% | 8 t/s | MoE2 (SSM, NO SPEC!) | 46GB |
 | **vision_qwen3_vl_4b** | Qwen3-VL-4B-Instruct | **94% VL** | 18 t/s | mmproj required | 2.3GB |
 
@@ -832,9 +833,9 @@ Complete production model lineup with relative scoring validation.
 | **thinking_deepseek_r1_14b** | 8 GB | **98%** | 8.5 t/s | spec K=8 | Chain-of-thought |
 | **thinking_reasoning** (Next-80B) | 45 GB | **99%** | 9.8 t/s | MoE4 | Deep reasoning |
 | **ingest_long_context** (Next-80B) | 45 GB | **99%** | 9.8 t/s | MoE4 | Very long docs |
-| **architect_general** (235B) | 134 GB | 91% | 6.08 t/s | Full+spec | System design (full quality) |
+| **architect_general** (235B) | 134 GB | 64%† | 6.08 t/s | Full+spec | System design (full quality) |
 | vision_escalation (30B-A3B) | 18 GB | - | 27.6 t/s | MoE4 | Complex vision |
-| architect_coding (480B) | 272 GB | **94%** | 9.00 t/s | Full+spec | Ultimate escalation (full quality) |
+| architect_coding (480B) | 272 GB | **80%†** | 9.00 t/s | Full+spec | Ultimate escalation (full quality) |
 
 ---
 
@@ -846,23 +847,24 @@ Complete production model lineup with relative scoring validation.
 
 | Priority | Model | Quality | Speed | When to Use |
 |----------|-------|---------|-------|-------------|
-| **PRIMARY** | **Qwen3-Coder-30B-A3B + MoE6+spec+lookup** | **79%†** | 47.11 t/s | Default for all routing ⭐ |
-| FAST | Qwen3-Coder-30B-A3B + MoE4 | 61%† | 17.7 t/s | When speed > quality (no draft) |
-| **CANDIDATE** | **Qwen3.5-35B-A3B + MoE4** | **90%** | 23.8 t/s | **SSM+MoE hybrid — beats frontdoor quality (NEW 2026-03-04)** |
+| **PRIMARY** | **Qwen3-Coder-30B-A3B + MoE6+spec+lookup** | **68%†** | 47.11 t/s | Default for all routing ⭐ |
+| FAST | Qwen3-Coder-30B-A3B + MoE4 | 62%† | 17.7 t/s | When speed > quality (no draft) |
+| **CANDIDATE** | **Qwen3.5-35B-A3B Q5_K_S** | **89%** | 12.5 t/s | **SSM+MoE hybrid, best quality (14.4 t/s with moe8+spec+lookup)** |
+| CANDIDATE | Qwen3.5-122B-A10B Q4_K_M | **86%** | 9.2 t/s | SSM+MoE hybrid, 69GB (12.6 t/s with moe8+spec+lu) |
 
 **Note (2026-02-13):** MoE6+spec+lookup is now the production config (2.58x over baseline). jukofyork vocab transplant draft verified. MoE2 is BROKEN (0%).
 
-**Note (2026-03-04):** †All Qwen3-Coder-30B configs rescored rigorously from raw benchmark JSONs. Old scores inflated 20-30pp by lazy "2 = Substantial response generated" scoring. Corrected: baseline 98%→79%, MoE6 95%→71%, MoE4 89%→61%. All configs have long_context 0/9 and statistics sum=205 wrong. Expert count correlates linearly with quality: 8exp=79% > 6exp=71% > 4exp=61%. Qwen3.5-35B-A3B q4km baseline (87%) and MoE4 (90%) both beat every Qwen3-Coder-30B config. Review CSVs in `benchmarks/results/reviews/qwen3_coder_30b_*.csv`.
+**Note (2026-03-09, full rescore):** †Entries marked with † have been rescored from `_rescored.csv` review files, eliminating lazy "Comprehensive/Substantial response generated" scoring that inflated original scores by 15-30pp. Key corrections: frontdoor baseline 80%→69%, MoE6 90%→68%, architect_general 88%→64%, architect_coding 95%→80%, Meta-Llama-3.1-70B 90%→61%, DeepSeek-R1-Distill-Llama-8B 93%→45%. Note: rescored CSVs used 2048-token completions — not directly comparable to Qwen3.5 scores (4096-token). Review CSVs in `benchmarks/results/reviews/`.
 
 **Tier B: Architects (Quality > Speed)**
 
 | Role | Priority | Model | Quality | Speed | When to Use |
 |------|----------|-------|---------|-------|-------------|
-| **architect_coding** | 1 | Qwen3-Coder-480B + MoE4 | 94% | 6.6 t/s | Final escalation for complex code |
-| | 2 | Qwen3-235B + MoE4 | 91% | 7.2 t/s | General architecture fallback |
-| **architect_general** | 1 | **Qwen2.5-72B + spec K=4** | **91%** | **3.0 t/s** | **High-quality design** |
-| | 2 | Meta-Llama-3.1-70B + spec K=24 | **93%** | 9.0 t/s | Highest quality |
-| | 3 | Qwen3-235B + MoE4 | 91% | 7.2 t/s | Large MoE (no spec) |
+| **architect_coding** | 1 | Qwen3-Coder-480B + MoE4 | 77%† | 6.6 t/s | Final escalation for complex code |
+| | 2 | Qwen3-235B + MoE4 | 54%† | 7.2 t/s | General architecture fallback |
+| **architect_general** | 1 | **Qwen2.5-72B + spec K=4** | **70%†** | **3.0 t/s** | **High-quality design** |
+| | 2 | Meta-Llama-3.1-70B + spec K=24 | **61%†** | 9.0 t/s | Highest quality |
+| | 3 | Qwen3-235B + MoE4 | 54%† | 7.2 t/s | Large MoE (no spec) |
 
 **Tier B: Thinking/Reasoning**
 
@@ -1010,12 +1012,12 @@ All models from registry (~70 unique models). Empty cells = not yet benchmarked.
 
 | Model | Role | Thinking | General | Math | Agentic | Coder | Inst.Prec | VL | Pct | Baseline t/s | Optimized t/s (config) |
 |-------|------|----------|---------|------|---------|-------|-----------|-----|-----|--------------|------------------------|
-| **Qwen3-Coder-480B-A35B** | architect_coding | 28/30 | - | - | 28/30 | 27/27 | - | - | **95%**† | 6.53 | (8 experts default) |
+| **Qwen3-Coder-480B-A35B** | architect_coding | 24/30 | 25/30 | 27/30 | 24/30 | 27/30 | 19/33 | - | **80%**† | 6.53 | 13.6 (moe8+spec_k24) |
 | Qwen3-Coder-480B-A35B (MoE 2) | architect_coding | 3/30 | - | - | 1/30 | 10/30 | - | - | **14%** | 7.6 | GARBAGE output ❌ |
 | **Qwen3-Coder-480B-A35B (MoE 3)** | architect_coding | - | - | - | - | - | - | - | - | 10.30 | **+58% OPTIMAL ✓** |
-| Qwen3-Coder-480B-A35B (MoE 4) | architect_coding | 27/30 | - | - | 30/30 | 30/30 | - | - | **88%** | 7.1 | +9% |
+| Qwen3-Coder-480B-A35B (MoE 4) | architect_coding | 26/30 | 22/30 | 25/30 | 21/30 | 29/30 | 18/33 | - | **77%**† | 7.1 | +9% |
 | Qwen3-Coder-480B-A35B (MoE 5) | architect_coding | - | - | - | - | - | - | - | - | 8.50 | +30% |
-| Qwen3-Coder-480B-A35B (MoE 6) | architect_coding | - | 29/30 | - | 30/30 | - | - | - | **95%**‡ | 6.2 | -5% |
+| Qwen3-Coder-480B-A35B (MoE 6) | architect_coding | 30/30 | 25/30 | 29/30 | 23/30 | 28/30 | 18/33 | - | **84%**† | 6.2 | -5% |
 | **GLM-4.6-355B-A32B** | general | 24/30 | - | - | 12/30 | 5/6 | 18/33 | - | **59%** | 3.4 | Lower quality than Qwen |
 | GLM-4.6-355B-A32B (MoE 2) | general | - | - | - | - | - | - | - | - | - | - |
 | GLM-4.6-355B-A32B (MoE 4) | general | - | - | - | - | - | - | - | - | 3.97 | 3.5 (+lookup) ❌ |
@@ -1025,10 +1027,10 @@ All models from registry (~70 unique models). Empty cells = not yet benchmarked.
 | MiniMax-M2.1-Q6_K | general | 8/10 | 8/10 | 9/10 | 8/10 | 8/10 | 4/11 | - | **74%** | 8.20 | Similar to Q4, slightly slower |
 | Qwen3-VL-235B-A22B | vision | - | - | - | - | - | - | 56% | **56%** | 4.6 | Valid 2026-01-27, timeout truncation |
 | Qwen3-VL-235B-A22B (MoE 4) | vision | - | - | - | - | - | - | 53% | **53%** | 6.7 | Valid 2026-01-27 |
-| **Qwen3-235B-A22B** | architect_general | 28/30 | 23/30 | 29/30 | 28/30 | 30/30 | 25/33 | - | **88%** | 5.9 | - |
-| **Qwen3-235B-A22B (MoE 2)** | architect_general | 28/30 | 28/30 | 26/30 | 25/30 | 27/30 | 28/33 | - | **88%** | 8.2 | **+39% OPTIMAL ✓** |
-| Qwen3-235B-A22B (MoE 4) | architect_general | 28/30 | 25/30 | 28/30 | 27/30 | 25/30 | 27/33 | - | **87%** | 7.3 | +24% |
-| Qwen3-235B-A22B (MoE 6) | architect_general | 23/30 | 24/30 | 27/30 | 26/30 | 28/30 | 28/33 | - | **86%** | 6.7 | +14% |
+| **Qwen3-235B-A22B** | architect_general | 23/30 | 21/30 | 27/30 | 17/30 | 24/30 | 6/33 | - | **64%**† | 9.1 | 13.7 (moe8+spec_1.7b_k24) |
+| **Qwen3-235B-A22B (MoE 2)** | architect_general | 0/30 | 1/30 | 1/30 | 1/30 | 0/30 | 0/33 | - | **2%**† ⚠️ | 8.2 | DEAD |
+| Qwen3-235B-A22B (MoE 4) | architect_general | 15/30 | 18/30 | 20/30 | 18/30 | 20/30 | 7/33 | - | **54%**† | 7.3 | +24% |
+| Qwen3-235B-A22B (MoE 6) | architect_general | 17/30 | 13/30 | 24/30 | 16/30 | 27/30 | 4/33 | - | **55%**† | 6.7 | +14% |
 | **Qwen3-Next-80B-A3B** | ingest | 29/30 | - | - | 25/30 | - | 12/33 | - | **74%** | 9.7 | SSM (no spec) |
 | Qwen3-Next-80B-A3B (MoE 2) | ingest | 28/30 | 21/30 | 30/30 | 22/30 | 23/30 | 24/33 | - | **80%** | 9.8 | +1% (SSM) |
 | Qwen3-Next-80B-A3B (MoE 4) | ingest | 30/30 | 29/30 | 30/30 | 30/30 | 27/30 | 15/33 | - | **89%** | 9.9 | +2% (SSM) |
@@ -1037,14 +1039,14 @@ All models from registry (~70 unique models). Empty cells = not yet benchmarked.
 | **Qwen3-Next-80B-A3B-Thinking (MoE 2)** | thinking | 30/30 | - | 30/30 | - | 27/30 | 33/33 | - | **98%**† | 10.3 | **+12% ✓** |
 | Qwen3-Next-80B-A3B-Thinking (MoE 4) | thinking | 30/30 | 29/30 | 30/30 | 29/30 | 30/30 | 31/33 | - | **98%** | 9.8 | +7% (SSM) |
 | Qwen3-Next-80B-A3B-Thinking (MoE 6) | thinking | 30/30 | 30/30 | 30/30 | 29/30 | 24/30 | 30/33 | - | **95%** | 9.7 | +5% (SSM) |
-| **Qwen3-Coder-53B-A3B** | coder_escalation | 19/30 | 11/27 | 12/30 | 11/30 | 9/30 | 7/33 | - | **38%** ⚠️ | 9.2 | Repetition loops |
+| **Qwen3-Coder-53B-A3B** | coder_escalation | 21/30 | 19/30 | 28/30 | 21/30 | 18/30 | 12/33 | - | **65%**† | 9.2 | Repetition loops |
 | Qwen3-Coder-53B-A3B (MoE 2) | coder_escalation | 0/30 | 0/30 | 0/27 | 0/30 | 0/30 | 0/33 | - | **0%** ⚠️ | 14.8 | DEAD |
-| Qwen3-Coder-53B-A3B (MoE 4) | coder_escalation | 8/30 | 22/30 | 26/30 | 24/30 | 16/30 | 15/33 | - | **61%** | 14.0 | 21% looping |
-| Qwen3-Coder-53B-A3B (MoE 6) | coder_escalation | 28/30 | 25/30 | 28/30 | 22/30 | 29/30 | 24/33 | - | **85%** | 12.7 | ✓ |
-| **Qwen3-Coder-30B-A3B** | frontdoor/coder | 27/30 | 20/30 | 20/30 | 27/30 | 30/30 | 22/33 | - | **80%** | 17.1 | - |
+| Qwen3-Coder-53B-A3B (MoE 4) | coder_escalation | 9/30 | 20/30 | 20/30 | 15/30 | 12/30 | 10/33 | - | **47%**† | 14.0 | 21% looping |
+| Qwen3-Coder-53B-A3B (MoE 6) | coder_escalation | 16/30 | 23/30 | 26/30 | 21/30 | 15/30 | 12/33 | - | **62%**† | 12.7 | ✓ |
+| **Qwen3-Coder-30B-A3B** | frontdoor/coder | 15/30 | 22/30 | 23/30 | 21/30 | 25/30 | 21/33 | - | **69%**† | 27.1 | 45.3 (moe4+spec+lu_k24) |
 | Qwen3-Coder-30B-A3B (MoE 2) | frontdoor/coder | 0/24 | - | - | - | - | - | - | **0%** ⚠️ | 12.1 | DEAD |
-| Qwen3-Coder-30B-A3B (MoE 4) | frontdoor/coder | 24/30 | 29/30 | 30/30 | 18/30 | 22/30 | 26/33 | - | **81%** | 23.6 | 29.92 (+lookup) ❌ |
-| **Qwen3-Coder-30B-A3B (MoE 6)** | frontdoor/coder | 27/30 | 29/30 | 30/30 | 30/30 | 26/30 | 23/33 | - | **90%** ⭐ | 18.3 | **+48% quality vs MoE4** |
+| Qwen3-Coder-30B-A3B (MoE 4) | frontdoor/coder | 22/30 | 23/30 | 19/30 | 17/30 | 17/30 | 16/33 | - | **62%**† | 23.6 | 45.3 (spec+lu_k24) |
+| Qwen3-Coder-30B-A3B (MoE 6) | frontdoor/coder | 23/30 | 23/30 | 22/30 | 23/30 | 19/30 | 15/33 | - | **68%**† | 18.3 | - |
 | **Qwen3-30B-A3B-Thinking-2507 (Q8_0)** | thinking | 24/30 | 22/30 | 20/30 | 20/30 | 21/30 | 11/33 | - | **64%** | 17.4 | - |
 | Qwen3-30B-A3B-Thinking-2507 (Q8_0, MoE 2) | thinking | 0/30 | 0/27 | 0/18 | 0/30 | 1/24 | 0/33 | - | **1%** ⚠️ | 24.2 | GARBAGE |
 | Qwen3-30B-A3B-Thinking-2507 (Q8_0, MoE 4) | thinking | 21/30 | 16/27 | - | 11/24 | 12/30 | - | - | **54%** | 19.6 | - |
@@ -1058,6 +1060,15 @@ All models from registry (~70 unique models). Empty cells = not yet benchmarked.
 | Qwen3-30B-A3B-Thinking-2507 (Q4_K_S, MoE 4) | thinking | - | - | - | - | - | - | - | - | - | - |
 | Qwen3-VL-30B-A3B | vision_escalation | - | - | - | - | - | - | 75% | **75%** | 19.0 | Valid 2026-01-27 |
 | Qwen3-VL-30B-A3B (MoE 4) | vision_escalation | - | - | - | - | - | - | 75% | **75%** | 27.6 | Valid 2026-01-27, +45% speed |
+| **Qwen3.5-35B-A3B (Q4_K_M)** | frontdoor | 27/30 | 27/30 | 20/30 | 27/30 | 25/30 | 25/33 | **83%** | 13.8 | 19.6 (moe6+lookup_n5) |
+| Qwen3.5-35B-A3B (Q4_K_M, MoE 4) | frontdoor | 24/30 | 23/30 | 24/30 | 26/30 | 24/30 | 22/33 | **78%** | 13.7 | 18.8 (moe4+lookup_n5) |
+| Qwen3.5-35B-A3B (Q4_K_M, MoE 6) | frontdoor | 26/30 | 20/30 | 19/30 | 28/30 | 20/30 | 23/33 | **74%** | 14.0 | 19.6 (moe6+lookup_n5) |
+| Qwen3.5-35B-A3B (Q4_K_S) | frontdoor | 26/30 | 27/30 | 25/30 | 26/30 | 20/30 | 18/33 | **78%** | 13.9 | 15.3 (moe8+spec_q8_k24+lookup) |
+| **Qwen3.5-35B-A3B (Q5_K_S)** | frontdoor | 26/30 | 28/30 | 26/30 | 29/30 | 28/30 | 25/33 | **89%** | 12.5 | 14.4 (moe8+spec_q4_k8+lookup) |
+| Qwen3.5-35B-A3B (Q6_K) | frontdoor | 27/30 | 26/30 | 27/30 | 25/30 | 27/30 | 26/33 | **86%** | 12.3 | 14.4 (moe8+spec_q8_k16+lookup) |
+| Qwen3.5-35B-A3B (Q8_0) | frontdoor | 26/30 | 24/30 | 20/30 | 28/30 | 25/30 | 26/33 | **81%** | 11.4 | 13.4 (moe8+spec_q4_k16+lookup) |
+| **Qwen3.5-122B-A10B (Q4_K_M)** | frontdoor | 26/30 | 26/30 | 25/30 | 29/30 | 27/30 | 24/33 | **86%** | 9.2 | 12.6 (moe8+spec_q8_k8+lu) |
+| Qwen3.5-397B-A17B (Q4_K_XL) | frontdoor | 15/30 | 24/30 | 22/30 | ?/30 | 5/30 | 26/33 | **60%**†‡ | 10.4 | 13.5 (moe10+lu_n5) |
 
 **Notes:**
 - † Qwen3-Coder-480B score excludes long_context suite (4/18) due to timeout issues at 40K+ token contexts. Score of 83/87 = 95% on thinking+agentic+coder only.
@@ -1066,19 +1077,21 @@ All models from registry (~70 unique models). Empty cells = not yet benchmarked.
 - **MOE Quality Summary (2025-12-24):** MOE2=14% (garbage), MOE4=88% (good), MOE6=95% (partial). MOE3 untested but expected similar to MOE4/6.
 - **MOE8 is redundant (2025-12-29):** Qwen3-Coder-480B uses 8 experts by default. MOE8 test confirmed: 96% at 4.4 t/s = baseline.
 - **SSM Model Finding (2025-12-30):** SSM+MoE hybrids hit a **ceiling effect** where moe2/moe4 produce identical speeds (~10.2 t/s). The ~12% speedup from baseline→moeX is real, but further expert reduction doesn't help. Instruct variant: +1-2% (SSM bottleneck from start). Thinking variant: +12% (baseline slower at 9.2 t/s, moeX hits same 10.2 t/s ceiling).
-- **Benchmark Variance (2026-01-07):** Same model tested under different roles (frontdoor_moe6 vs coder_escalation) showed 90% vs 76% scores. Variance likely due to model non-determinism. Use role-specific scores for role-specific decisions.
+- **Benchmark Variance (2026-01-07):** Same model tested under different roles showed different scores. Variance likely due to model non-determinism and different question pools. Use role-specific scores for role-specific decisions.
+- **Qwen3.5 Scoring (2026-03-09):** All Qwen3.5 models scored with Claude-as-Judge (0-3 scale per question, max_tokens=4096, 61 questions across 6 suites). Higher quants sometimes score lower due to think-block truncation (model spends tokens in `<think>` blocks). Q5_K_S scored highest quality (89%) among all 35B-A3B variants. †‡ 397B: baseline now 61/61 questions (agentic suite completed), but agentic quality not yet scored — 60% based on 35/61 scored questions only.
+- **Production baseline corrections (2026-03-09):** frontdoor 17.1→27.1 t/s, architect_general 5.9→9.1 t/s — corrected from authoritative 61Q benchmark JSON files. Old values were from earlier benchmark conditions.
 
 #### Tier A-B: Production & Specialist Models (Dense 70B+)
 
 | Model | Role | Thinking | General | Math | Agentic | Coder | Inst.Prec | Pct | Baseline t/s | Opt t/s | Draft | K | Temp |
 |-------|------|----------|---------|------|---------|-------|-----------|-----|--------------|---------|-------|---|------|
-| **Meta-Llama-3.1-70B** | architect | 29/30 | 29/30 | 25/30 | 30/30 | 27/30 | 25/33 | **90%** | 2.1 | 84.31 | PARD-Llama-3.2-1B Q4_0 | 24 | - |
-| **Hermes-4-70B** | architect | 29/30 | 29/30 | 22/30 | 28/30 | 30/30 | 15/33 | **84%** | 2.7 | - | - | - | - |
+| **Meta-Llama-3.1-70B** | architect | 17/30 | 22/30 | 18/30 | 22/30 | 16/30 | 17/33 | **61%**† | 2.1 | 84.31 | PARD-Llama-3.2-1B Q4_0 | 24 | - |
+| **Hermes-4-70B** | architect | 27/30 | 23/30 | 26/30 | 19/30 | 21/30 | 6/33 | **67%**† | 2.7 | - | - | - | - |
 | Hermes-4-70B | ingest | 30/30 | 29/30 | 30/30 | 24/30 | 25/30 | 15/33 | **84%** | 2.9 | - | - | - | - |
 | Meta-Llama-3.1-70B | ingest | 28/30 | 28/30 | 23/30 | 26/30 | 23/30 | 21/33 | **81%** | 2.0 | 85.75 | PARD-Llama-3.2-1B Q4_0 | 24 | - |
 | Qwen2.5-Math-72B (2nd run) | math | 22/30 | 30/30 | 26/30 | 20/30 | 21/30 | 22/33 | **77%** | 2.0 | 158.85 | Qwen2.5-0.5B | 24 | - |
-| Qwen2.5-72B | ingest | 28/30 | 26/30 | 27/30 | 20/30 | 19/30 | 18/33 | **75%** | 2.2 | - | - | - | - |
-| DeepSeek-R1-Distill-Llama-70B | thinking | 20/30 | 20/30 | 20/30 | 21/30 | 20/30 | 13/33 | **62%** | 1.0 | - | - | - | - |
+| Qwen2.5-72B | ingest | 20/30 | 21/30 | 27/30 | 23/30 | 22/30 | 15/33 | **70%**† | 2.2 | - | - | - | - |
+| DeepSeek-R1-Distill-Llama-70B | thinking | 8/30 | 6/30 | 8/30 | 11/30 | 10/30 | 4/33 | **26%**† | 1.0 | - | - | - | - |
 | Qwen2.5-Math-72B (Q4_K_M) | math | 21/30 | 18/30 | 21/30 | 19/30 | 21/30 | 11/33 | **61%** | ~2.0 | 7.55 | Qwen2.5-0.5B | 12 | 0.5 |
 | Meta-Llama-3-70B | architect | 0/30 | 13/30 | 5/30 | 12/30 | 15/30 | 16/33 | **33%** ⚠️ | 14.9 | 6.42 | PARD-Llama-3.2-1B | 8 | - |
 | Qwen2.5-72B (base) | architect | - | - | - | - | - | - | - | 0.85 | - | - | - | - |
@@ -1093,6 +1106,8 @@ All models from registry (~70 unique models). Empty cells = not yet benchmarked.
 | DeepSeek-R1-Distill-Qwen-32B (Q6_K) | thinking | 26/30 | - | - | - | 13/18 | - | **81%**‡ | 1.78 | - | - | - | - |
 | Qwen3-32B | general | 28/30 | - | - | - | 30/30 | - | **97%**‡ | 1.64 | 5.87 | Qwen3-0.6B | 8 | - |
 | Qwen3-32B | ingest | 30/30 | 27/30 | 30/30 | 21/30 | 29/30 | 22/33 | **87%** | 1.65 | - | - | - | - |
+| **Qwen3.5-27B (Q4_K_M)** | frontdoor | 21/30 | 28/30 | 24/30 | 27/30 | 22/30 | 23/33 | **79%** | 8.8 | 13.4 | Qwen3.5-0.8B Q4_0 | 32 | - |
+| **Qwen3.5-27B (Q6_K)** | frontdoor | 29/30 | 23/30 | 25/30 | 26/30 | 25/30 | 27/33 | **85%** | 9.4 | 13.6 | Qwen3.5-0.8B Q4_0 | 16 | - |
 | Gemma-3-27B-QAT | general | - | - | - | - | - | - | - | 4.72 | - | - | - | - |
 | Qwen2.5-Coder-32B | coder/summarize | 28/30 | - | - | 8/9 | 30/30 | - | **96%**‡ | 2.99 | 33.0 | Qwen2.5-Coder-0.5B | 24 | - |
 | Qwen2.5-Coder-32B | ingest | 22/30 | 20/30 | 20/30 | 22/30 | 29/30 | 19/33 | **72%** | 3.43 | - | - | - | - |
@@ -1103,10 +1118,13 @@ All models from registry (~70 unique models). Empty cells = not yet benchmarked.
 |-------|------|----------|---------|------|---------|-------|-----------|-----|--------------|---------|-------|---|------|
 | DeepSeek-R1-Distill-Qwen-14B (Q4_K_M) | thinking | 29/30 | 22/30 | 26/30 | 27/30 | 23/30 | 22/33 | **81.4%** | 2.8 | - | - | - | - |
 | DeepSeek-R1-Distill-Qwen-14B (Q6_K_L) | thinking | 29/30 | 29/30 | 28/30 | 29/30 | 30/30 | 29/33 | **95.1%** | 4.4 | - | - | - | - |
-| DeepSeek-R1-Distill-Llama-8B | thinking | 28/30 | 24/30 | 30/30 | 30/30 | - | - | **93%*** | 7.2 | - | - | - | - |
+| DeepSeek-R1-Distill-Llama-8B | thinking | 5/30 | 21/30 | 16/30 | 12/30 | - | - | **45%**†* | 7.2 | - | - | - | - |
 | DeepSeek-R1-Distill-Qwen-7B | thinking | 29/30 | 19/30 | 30/30 | 24/30 | - | - | 85%* | 7.7 | - | - | - | - |
 | DeepSeek-R1-0528-Qwen3-8B | thinking | 21/30 | 18/30 | 24/30 | 19/30 | 23/30 | 12/33 | **63.9%** ⚠️ | 8.1 | - | - | - | - |
 | Qwen3-4B-Thinking-2507-Q8_0 | thinking | 22/30 | 19/30 | 8/9 | 5/9 | - | - | **69%** | 18.0 | - | - | - | - |
+| **Qwen3.5-9B (Q4_K_M)** | frontdoor | 26/30 | 24/30 | 20/30 | 25/30 | 26/30 | 16/33 | **75%** | 14.5 | 25.1 | (lookup_n5) | - | - |
+| Qwen3.5-9B (Q6_K) | frontdoor | 21/30 | 24/30 | 25/30 | 25/30 | 19/30 | 16/33 | **71%** | 13.4 | 20.7 | (lookup_n5) | - | - |
+| **Qwen3.5-9B (Q8_0)** | frontdoor | 27/30 | 25/30 | 22/30 | 22/30 | 26/30 | 25/33 | **80%** | 12.7 | 17.7 | Qwen3.5-0.8B Q4_0 | 16 | - |
 
 #### Tier C: Workers & General Models
 
@@ -1123,6 +1141,12 @@ All models from registry (~70 unique models). Empty cells = not yet benchmarked.
 | Gemma-3-27B-IT-QAT | general | 12/12 | 29/30 | 27/30 | 30/30 | 29/30 | 27/33 | **93.3%** | 2.0 | - | - | - | - |
 | MathSmith-Qwen3-8B ⚠️ | math | 30/30 | 28/30 | 28/30 | - | - | - | **95.6%** | **3.4** ⚠️ | - | - | - | - |
 | MathSmith-Hard-Problem-Synthesizer-Qwen3-8B | formalizer | - | 20/30 | 10/15 | - | - | - | **66.7%** | 11.1 | - | - | - | - |
+| **Qwen3.5-4B (Q4_K_M)** | worker | 20/30 | 20/30 | 25/30 | 25/30 | 22/30 | 22/33 | **73%** | 16.2 | 16.3 | (lookup_n5) | - | - |
+| **Qwen3.5-4B (Q6_K)** | worker | 20/30 | 24/30 | 23/30 | 29/30 | 25/30 | 20/33 | **77%** | 16.4 | 16.1 | (lookup_n5) | - | - |
+| **Qwen3.5-4B (Q8_0)** | worker | 23/30 | 28/30 | 19/30 | 25/30 | 23/30 | 22/33 | **77%** | 15.2 | 22.7 | (lookup_n5) | - | - |
+| Qwen3.5-2B (Q4_K_M) | worker | 20/30 | 21/30 | 20/30 | 19/30 | 17/30 | 22/33 | **65%** | 28.7 | 65.8 | (lookup_n5) | - | - |
+| Qwen3.5-2B (Q6_K) | worker | 9/30 | 24/30 | 14/30 | 16/30 | 20/30 | 19/33 | **56%** | 30.2 | 57.4 | (lookup_n4) | - | - |
+| Qwen3.5-2B (Q8_0) | worker | 22/30 | 22/30 | 14/30 | 18/30 | 18/30 | 17/33 | **61%** | 27.0 | 47.8 | (lookup_n4) | - | - |
 
 #### Vision Models (Valid 2026-01-27 Benchmark)
 

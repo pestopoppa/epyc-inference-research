@@ -1,0 +1,62 @@
+suite,question_id,score,notes
+agentic,t1_q1_sequential,3,Correct JSON array with grep then read_file in order
+agentic,t1_q2_error_handling,2,Good reasoning but verbose prose instead of tool call JSON
+agentic,t1_q3_nested_params,3,Correct JSON with all required and optional fields
+agentic,t2_q1_ambiguous,3,Correctly identifies ambiguity and asks clarifying questions
+agentic,t2_q2_error_chain,2,Good diagnostic reasoning but truncated mid-sentence
+agentic,t2_q3_schema_edge,3,Correct JSON with null body for GET and proper headers
+agentic,t2_q4_orchestration,3,Complete multi-step deployment plan with rollback logic
+agentic,t3_q1_competing_constraints,3,Thorough multi-step plan reading CSV then analyzing with code
+agentic,t3_q2_multi_agent_coordination,3,Well-structured phased plan with correct agent assignments
+agentic,t3_q3_adversarial_robustness,3,Identifies injection attack and provides comprehensive security policy
+coder,t1_q1_algorithm,1,Identifies bugs correctly but response truncated at token limit
+coder,t1_q2_refactor,3,O(n) solution with set-based tracking clearly explained
+coder,t1_q3_test,3,Comprehensive pytest class covering normal edge and error cases
+coder,t2_q1_design,3,Correct LRU cache with hashmap plus doubly-linked list O(1)
+coder,t2_q2_debug_complex,3,Correctly identifies race condition and proposes asyncio.Lock fix
+coder,t2_q3_optimize,3,Correct O(n) hash map approach with clear explanation
+coder,t2_q4_system,3,Sliding window rate limiter with threading lock and edge cases
+coder,t3_q1_concurrent_correctness,1,Stuck in thinking block at 4096 tokens no answer produced
+coder,t3_q2_distributed_consistency,3,Thorough CAP analysis with multiple conflict resolution strategies
+coder,t3_q3_algorithmic_hardness,2,Good adversary argument and recurrence but response very long
+general,t1_q1_json,2,Correct JSON output but excessive thinking block before answer
+general,t1_q2_multistep,1,Added phantom items (elderberry fig grape) not in original list
+general,t1_q3_compare,3,Concise 3-sentence comparison covering key tradeoffs
+general,t2_q1_synthesis,3,Pragmatic phased recommendation balancing all three perspectives
+general,t2_q2_transform,3,Correct nested YAML grouped by department
+general,t2_q3_schedule,0,Stuck in thinking block at 4096 tokens no schedule produced
+general,t2_q4_inconsistency,3,Correctly identifies body format and rate limit inconsistencies
+general,t3_q1_policy_analysis,3,Identifies multiple failure modes with concrete alternatives
+general,t3_q2_system_failure,3,Correctly explains replica lag race condition in idempotency check
+general,t3_q3_strategic_communication,3,Compelling board presentation with honest framing and pivot narrative
+instruction_precision,t1_q1_negative_instruction,2,Uses word light which is borderline but avoids sun/sunlight/solar
+instruction_precision,t1_q2_word_limit,3,Exactly 21 words within the 20-25 range target
+instruction_precision,t1_q3_structured_format,3,Exact format LANGUAGE (YEAR) with correct years no extras
+instruction_precision,t1_q4_multiple_constraints,3,Five countries alphabetical one per line no extras
+instruction_precision,t2_q1_resist_elaboration,3,Single character 4 with no elaboration
+instruction_precision,t2_q2_maintain_format,3,Exact three-line format with accurate analysis
+instruction_precision,t2_q3_empty_handling,3,Outputs exactly NONE with no explanation
+instruction_precision,t2_q4_conflicting_constraints,3,Meets all four constraints concisely
+instruction_precision,t3_q1_self_referential,0,Fails immediately uses forbidden word this then rambles without answer
+instruction_precision,t3_q2_cascading_constraints,0,tion ion on are not real words and station is 7 letters not 8
+instruction_precision,t3_q3_meta_instruction,3,Correctly outputs 42 and seven hi for the two valid instructions
+math,t1_q1_word_problem,3,Correct calculations 120 then 129.60 then 86.4 percent
+math,t1_q2_system_equations,1,Stuck in thinking block at 4096 tokens no solutions given
+math,t1_q3_probability,3,Correct probability calculations with clear combinatorial approach
+math,t2_q1_optimization,1,Stuck in thinking block at 4096 tokens answer not delivered
+math,t2_q2_proof,3,Correctly identifies base-to-inductive-step failure at n=1 to n=2
+math,t2_q3_calculus,3,Correct antiderivative and evaluation giving final answer 10
+math,t2_q4_statistics,3,All calculations correct mean median stddev and IQR outlier check
+math,t3_q1_analysis,2,Correct differentiability proof started but response lacks closed form completion
+math,t3_q2_combinatorics,0,Stuck in thinking block discovers identity may be false no proof
+math,t3_q3_probability_theory,1,Stuck in thinking block at 4096 tokens working toward E[N]=e
+thinking,t1_q1_multistep,3,Correct answer 11:34 AM with clear step-by-step work shown
+thinking,t1_q2_hypothesis,3,Three specific confounding variables with clear mechanisms
+thinking,t1_q3_planning,2,Finds only 2 valid orderings but misses others like E-A-B-D-C variants
+thinking,t2_q1_paradox,2,Truncated at 4096 but has partial answer covering two positions
+thinking,t2_q2_counterfactual,3,Detailed analysis across all three dimensions with mechanisms
+thinking,t2_q3_formal,3,Valid formal proof of transitivity with concrete example
+thinking,t2_q4_metacognition,3,Excellent Fermi estimation with clear decomposition and bounds
+thinking,t3_q1_methodological_critique,3,At least 4 methodological issues identified with specific mechanisms
+thinking,t3_q2_causal_inference,1,Stuck in thinking block at 4096 tokens no answer delivered
+thinking,t3_q3_reasoning_trap,3,Identifies dataset-test-set distribution confound with concrete example

@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,12.69,3,Correct 4 issues identified; clear structure; complete answer
+thinking,t3_q2_causal_inference,13.11,0,Hallucinated extra questions; stuck in think block; hit token limit; no answer
+thinking,t3_q3_reasoning_trap,13.15,3,Correctly identifies confound; concrete scenario; well-structured
+thinking,t2_q1_paradox,13.13,2,Good answer with two positions and verdict; think block leaked visibly
+thinking,t2_q2_counterfactual,18.21,3,Complete analysis across all 3 dimensions; clean formatting
+thinking,t2_q3_formal,13.15,2,Correct proof via hypothetical syllogism; think block leaked visibly
+thinking,t2_q4_metacognition,17.85,1,Think block leaked; answer truncated mid-upper-bound at token limit
+thinking,t1_q1_multistep,18.04,3,Correct math (11:34 AM); clear step-by-step work shown
+thinking,t1_q2_hypothesis,18.21,3,Three solid alternative explanations; concise and specific
+thinking,t1_q3_planning,17.88,0,Entire response stuck in think block; hit token limit; no answer produced
+general,t3_q1_policy_analysis,17.7,2,Thorough policy analysis with amendments; think block leaked visibly
+general,t3_q2_system_failure,17.78,2,Good analysis of ABA/idempotency issue with read-replica; hit token limit; answer truncated mid-fix
+general,t3_q3_strategic_communication,17.77,3,Complete board speech; acknowledges failures and pivots to LOIs; professional tone
+general,t2_q1_synthesis,18.01,3,Clean unified recommendation balancing all 3 perspectives; concise
+general,t2_q2_transform,13.9,3,Correct nested YAML output; clean formatting; exact transformation
+general,t2_q3_schedule,17.76,2,Correct constraint analysis but hit token limit; schedule not fully resolved
+general,t2_q4_inconsistency,17.97,3,All 3 inconsistencies correctly identified; proper cross-document comparison
+general,t1_q1_json,13.97,3,Correct JSON with all 4 fields properly extracted
+general,t1_q2_multistep,13.57,0,Hit token limit stuck in think block; never produced final answer
+general,t1_q3_compare,18.07,3,Clear 2-3 sentence comparison; covers tradeoffs well; think block present but answer complete
+agentic,t3_q1_competing_constraints,13.75,3,Complete multi-step plan with code; handles edge cases and fallbacks
+agentic,t3_q2_multi_agent_coordination,13.64,3,Good phased plan with parallel agents; timeout handling included
+agentic,t3_q3_adversarial_robustness,17.98,3,Correctly identifies security issues; refuses unsafe command; provides policy recommendations
+agentic,t2_q1_ambiguous,13.49,3,Correctly identifies ambiguity and asks clarifying question before acting
+agentic,t2_q2_error_chain,17.92,3,Correct root cause chain; logical next step to check database logs
+agentic,t2_q3_schema_edge,18.22,3,Correct tool call with null body for GET; proper header structure
+agentic,t2_q4_orchestration,13.62,3,Complete deployment pipeline with rollback plan and notifications
+agentic,t1_q1_sequential,13.86,3,Correct two-step tool call sequence; grep then read
+agentic,t1_q2_error_handling,13.01,2,Correct fallback to search_users; but think block leaked and response repeated
+agentic,t1_q3_nested_params,13.94,3,Correct JSON with nested metadata; all fields properly structured
+coder,t3_q1_concurrent_correctness,13.11,2,Good ABA problem identification; hit token limit; fix code truncated
+coder,t3_q2_distributed_consistency,17.59,3,Comprehensive CAP analysis; multiple resolution strategies; use-case recommendations
+coder,t3_q3_algorithmic_hardness,17.66,1,Hit token limit deep in think block; adversary argument started but proof incomplete
+coder,t2_q1_design,13.19,3,Complete LRU cache with doubly-linked list + hashmap; O(1) complexity explained
+coder,t2_q2_debug_complex,17.95,3,Correctly identifies race condition; proper asyncio.Lock fix with explanation
+coder,t2_q3_optimize,18.03,3,Correct O(n log n) two-pointer optimization; handles duplicates
+coder,t2_q4_system,17.93,2,Good sliding window rate limiter design; hit token limit; code truncated
+coder,t1_q1_algorithm,13.62,2,Identifies bugs but gets confused in analysis; hit token limit; rambling at end
+coder,t1_q2_refactor,18.26,3,Two clean solutions (set-based and dict-based); complexity comparison table
+coder,t1_q3_test,13.83,3,Comprehensive pytest suite; normal/edge/error cases; proper use of pytest.raises
+math,t3_q1_analysis,13.79,3,Correct proof of differentiability via infinite radius of convergence; closed form via Im(e^(xe^i))
+math,t3_q2_combinatorics,17.89,1,Hit token limit in think block; started sign-reversing involution but never completed proof
+math,t3_q3_probability_theory,18.16,1,Hit token limit in think block; E[N]=e identified but proof incomplete
+math,t2_q1_optimization,18.12,3,Correct answer 100x50m = 5000 sq m; both calculus and AM-GM methods shown
+math,t2_q2_proof,17.81,2,Correctly identifies n=2 base case failure; good explanation but hit token limit; analogy truncated
+math,t2_q3_calculus,13.59,3,Correct antiderivative and evaluation; final answer 10 boxed
+math,t2_q4_statistics,13.3,2,Correct approach but hit token limit; mean/std dev shown; median truncated at end
+math,t1_q1_word_problem,17.9,3,All 3 parts correct: $120 after discount; $129.60 after tax; 86.4% of original
+math,t1_q2_system_equations,17.91,2,Correct method (substitution) but hit token limit in think block; solutions not cleanly presented
+math,t1_q3_probability,13.79,3,Both probabilities correct: 2/9 and 1/3; clear step-by-step work
+instruction_precision,t3_q1_self_referential,13.76,0,Failed to produce valid self-referential sentence; stuck iterating without converging
+instruction_precision,t3_q2_cascading_constraints,18.51,0,Failed to produce valid chain; kept restarting; visible think block; no final answer
+instruction_precision,t3_q3_meta_instruction,18.18,0,Degenerate repetition loop; repeated [Print 42] [Say 7 times: hi] endlessly
+instruction_precision,t2_q1_resist_elaboration,24.05,3,Perfect: just 4 with no extra text
+instruction_precision,t2_q2_maintain_format,16.82,3,Exact format match: ERROR_TYPE/ROOT_CAUSE/FIX; concise and correct
+instruction_precision,t2_q3_empty_handling,31.16,3,Perfect: just NONE with no extra text
+instruction_precision,t2_q4_conflicting_constraints,18.09,3,Meets all 4 constraints: under 12 words; starts with A; ends with data; no store/storage
+instruction_precision,t1_q1_negative_instruction,18.3,2,Good explanation but uses light which is borderline; 2 sentences correct; avoids sun/sunlight/solar
+instruction_precision,t1_q2_word_limit,14.35,3,20 words counted; within 20-25 range; accurate description
+instruction_precision,t1_q3_structured_format,13.6,3,Exact format: LANGUAGE (YEAR); 3 items; no bullets/numbers; correct years
+instruction_precision,t1_q4_multiple_constraints,18.44,0,Degenerate repetition loop; repeated think block and bullet list endlessly; formatting wrong

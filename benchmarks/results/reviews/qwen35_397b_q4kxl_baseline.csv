@@ -1,0 +1,36 @@
+suite,question_id,score,notes
+instruction_precision,t3_q1_self_referential,0,Used forbidden words this/sentence; truncated mid-reasoning; no clean answer
+instruction_precision,t3_q2_cascading_constraints,0,puzzle is 6 letters not 8; uzzled/zzled are not real words
+instruction_precision,t2_q2_maintain_format,3,Perfect format; correct analysis of TypeError; concise fix
+instruction_precision,t2_q4_conflicting_constraints,3,All constraints met: under 12 words; starts A; ends data; no store/storage
+instruction_precision,t1_q3_structured_format,3,Perfect format; correct years for Python Java C; no extra text
+instruction_precision,t3_q3_meta_instruction,3,Correctly identified [Print 42] and [Say 7 times: hi]; output accurate
+instruction_precision,t2_q1_resist_elaboration,3,Just the number 4; perfect compliance
+instruction_precision,t2_q3_empty_handling,3,Exactly NONE as required; no explanation or apology
+instruction_precision,t1_q1_negative_instruction,2,Good answer avoiding sun/sunlight/solar; but has </think> artifact in output
+instruction_precision,t1_q2_word_limit,3,21 words; within 20-25 range; accurate description of ML
+instruction_precision,t1_q4_multiple_constraints,3,5 European countries; alphabetical; one per line; no extra text
+math,t3_q1_analysis,3,All three parts correct: differentiability via convergence; closed form Im(e^{xe^i}); limit is 0
+math,t3_q2_combinatorics,1,Truncated at 4096 tokens; still in think block; no proof produced
+math,t3_q3_probability_theory,1,Truncated at 4096 tokens; still in think block; no answer produced
+math,t2_q1_optimization,3,Correct setup; x=100 y=50; max area 5000 sq meters; clean work shown
+math,t2_q2_proof,3,Correctly identifies n=1 to n=2 failure; explains empty intersection clearly
+math,t2_q3_calculus,0,Answers 12 but correct answer is 10; also echoes prompt instead of showing work
+math,t2_q4_statistics,3,Mean 23.125; median 23.5; SD 7.36; no outliers; all correct with work
+math,t1_q1_word_problem,3,120 after discount; 129.60 after tax; 86.4% of original; all correct
+math,t1_q2_system_equations,2,Correct method shown (symmetric identities); truncated before listing all 4 solutions
+math,t1_q3_probability,3,Both red 2/9 correct; one red one blue 1/3 correct; clear work shown
+thinking,t3_q1_methodological_critique,2,Four issues identified but only 2 fully explained before truncation; good quality
+thinking,t3_q2_causal_inference,1,Truncated at 4096 tokens; still in think block; no final answer produced
+general,t3_q1_policy_analysis,2,Good analysis of accuracy trap; truncated mid-second failure mode; incomplete
+general,t3_q2_system_failure,3,Clear race condition explanation; good testing gap analysis; two fixes proposed
+general,t3_q3_strategic_communication,2,Strong opening and narrative; truncated before completing 90-day plan details
+general,t2_q1_synthesis,3,Clear phased approach; respects all three constraints; concrete recommendation
+general,t2_q2_transform,3,Correct nested YAML grouping by department; clean output
+general,t2_q3_schedule,1,Truncated at 4096 tokens; extensive analysis but no final schedule produced
+general,t2_q4_inconsistency,3,Both inconsistencies found: body format and rate limit; clear summary table
+general,t1_q1_json,3,Perfect JSON with all four fields correctly extracted
+general,t1_q2_multistep,1,Hallucinated elderberry not in input; incorrect item count
+general,t1_q3_compare,3,Concise balanced comparison in 3 sentences; covers key tradeoffs
+coder,t3_q1_concurrent_correctness,1,Truncated; only thinking shown; post-think has 8 chars; no actual fix
+coder,t3_q2_distributed_consistency,0,Empty response; no content generated

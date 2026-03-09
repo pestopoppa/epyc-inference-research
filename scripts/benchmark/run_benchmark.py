@@ -197,8 +197,8 @@ _DEFAULT_TEMPERATURE = 0.6
 _SERVER_STARTUP_TIMEOUT_BASE = 600
 
 # Timeout scaling: timeout = max(base, size_gb * multiplier + buffer)
-_TIMEOUT_SIZE_MULTIPLIER = 3
-_TIMEOUT_SIZE_BUFFER = 120
+_TIMEOUT_SIZE_MULTIPLIER = 10
+_TIMEOUT_SIZE_BUFFER = 300
 
 # Log noise prefixes to skip when extracting errors from stderr
 _LOG_PREFIXES = ('build:', 'main:', 'llama_model_loader:', 'print_info:', 'load_')
@@ -383,6 +383,7 @@ def _ensure_server(
     no_mmap: bool,
     mmproj_path: Optional[str],
     is_new_model: bool,
+    with_lookup: bool = False,
 ) -> None:
     """Start or restart the llama-server to match the requirements of *config*.
 
@@ -398,10 +399,12 @@ def _ensure_server(
             ss.stop()
 
         if ss.server is None:
-            print(f"    [SERVER] Starting llama-server (model will stay in RAM)...", flush=True)
+            lookup_str = " +lookup" if with_lookup else ""
+            print(f"    [SERVER] Starting llama-server{lookup_str} (model will stay in RAM)...", flush=True)
             ss.server = ServerManager(port=8080)
             ss.server.start(model_path, moe_override=None, registry=registry,
-                            no_mmap=no_mmap, role=role, mmproj_path=mmproj_path)
+                            no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
+                            lookup=with_lookup)
             timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
             if not ss.server.wait_ready(timeout=timeout):
                 print(f"    [SERVER] Failed to start, falling back to subprocess mode", flush=True)
@@ -410,7 +413,8 @@ def _ensure_server(
                 ss.model_path = model_path
                 ss.experts = None
                 ss.draft_path = None
-                print(f"    [SERVER] Ready, model loaded in RAM (default experts)", flush=True)
+                ss.lookup = with_lookup
+                print(f"    [SERVER] Ready, model loaded in RAM{lookup_str}", flush=True)
         return
 
     if ss.server is not None and not ss.server.is_running():
@@ -423,7 +427,8 @@ def _ensure_server(
         ss.stop()
         ss.server = ServerManager(port=8080)
         ss.server.start(model_path, moe_override=moe_override, registry=registry,
-                        no_mmap=no_mmap, role=role, mmproj_path=mmproj_path)
+                        no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
+                        lookup=with_lookup)
         timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
         if not ss.server.wait_ready(timeout=timeout):
             print(f"      [SERVER] Failed to restart after crash, falling back to subprocess", flush=True)
@@ -432,7 +437,7 @@ def _ensure_server(
             return
         else:
             ss.draft_path = None
-            ss.lookup = False
+            ss.lookup = with_lookup
             print(f"      [SERVER] Recovered", flush=True)
 
     if ss.server is None:
@@ -891,6 +896,8 @@ def run_benchmark(
     vision_only: bool = False,
     speed_questions: int = 0,
     baseline_run: Optional[str] = None,
+    with_lookup: bool = False,
+    skip_moe_reduction: bool = False,
 ) -> dict:
     """Run the benchmark with nested progress bars.
 
@@ -953,6 +960,9 @@ def run_benchmark(
         mmproj_path = registry.get_mmproj_path(role)  # VL models have mmproj
         arch = registry.get_architecture(role)
         configs = executor.get_configs_for_architecture(arch, role, registry)
+        if skip_moe_reduction:
+            baseline_experts = registry.get_baseline_experts(role)
+            configs = [c for c in configs if c.moe_experts is None or c.moe_experts == baseline_experts]
 
         suite_names = get_suites_for_role(role, registry)
         if suite_filter:
@@ -1035,7 +1045,8 @@ def run_benchmark(
 
             if server_mode and not dry_run:
                 _ensure_server(ss, model_path, configs[0] if configs else None, role,
-                               size_gb, registry, no_mmap, mmproj_path, is_new_model=True)
+                               size_gb, registry, no_mmap, mmproj_path, is_new_model=True,
+                               with_lookup=with_lookup)
 
         print(f"    [{role}] {pending_tests}/{inner_total} tests pending ({len(configs)} configs × {len(suite_names)} suites)", flush=True)
 
@@ -1109,7 +1120,8 @@ def run_benchmark(
                         print(f"      [SERVER] Recovered", flush=True)
                 if ss.server is not None and ss.server.is_running():
                     _ensure_server(ss, model_path, config, role, size_gb,
-                                   registry, no_mmap, mmproj_path, is_new_model=False)
+                                   registry, no_mmap, mmproj_path, is_new_model=False,
+                                   with_lookup=with_lookup)
 
             # Speed-test-only configs
             if config.speed_test_only:
@@ -1255,15 +1267,18 @@ Examples:
     parser.add_argument("--force", "-f", action="store_true", help="Force re-run (don't skip existing)")
     parser.add_argument("--dry-run", "-n", action="store_true", help="Show what would run without executing")
     parser.add_argument("--process-queue", action="store_true", help="Process queued models")
-    parser.add_argument("--resume", "-r", action="store_true", help="Resume the latest run (skip completed, retry errors)")
+    parser.add_argument("--resume", "-r", action="store_true", help="(default behavior, kept for compatibility)")
+    parser.add_argument("--new-run", action="store_true", help="Force a new run directory instead of resuming the latest")
     parser.add_argument("--server-mode", action="store_true", help="Keep model in RAM via llama-server (faster for large models)")
     parser.add_argument("--no-mmap", action="store_true", help="Use bulk read instead of mmap (may be faster for cold loads)")
     parser.add_argument("--list-models", action="store_true", help="List available models")
     parser.add_argument("--list-suites", action="store_true", help="List available suites")
     parser.add_argument("--skip-long-context", action="store_true", help="Skip long_context suite (saves time on quick runs)")
+    parser.add_argument("--skip-moe-reduction", action="store_true", help="Skip MoE expert reduction configs; only run baseline + spec/lookup/spec+lookup at full expert count")
     parser.add_argument("--vision-only", action="store_true", help="Only benchmark vision-language models (models with mmproj_path)")
     parser.add_argument("--speed-questions", type=int, default=0, help="Run speed configs on N slowest baseline questions (0=fixed prompt)")
     parser.add_argument("--baseline-run", type=str, default=None, help="Pull slowest questions from this run ID (for models with existing baselines)")
+    parser.add_argument("--with-lookup", action="store_true", help="Enable --lookup on server for all configs (accelerates baseline quality runs)")
 
     args = parser.parse_args()
 
@@ -1318,14 +1333,17 @@ Examples:
             # Use baseline run as run_id so skip logic sees existing results
             run_id = args.baseline_run
             print(f"Continuing run: {run_id} (from --baseline-run)")
-        elif args.resume:
+        elif args.new_run:
+            run_id = results_manager.generate_run_id()
+            print(f"New run: {run_id}")
+        else:
+            # Default: resume latest run (all results accumulate in one place)
             run_id = results_manager.get_latest_run()
             if not run_id:
-                print("ERROR: No previous run to resume. Start a new run without --resume.")
-                sys.exit(1)
-            print(f"Resuming run: {run_id}")
-        else:
-            run_id = results_manager.generate_run_id()
+                run_id = results_manager.generate_run_id()
+                print(f"No previous run found, starting new: {run_id}")
+            else:
+                print(f"Resuming run: {run_id}")
 
         run_benchmark(
             registry=registry,
@@ -1342,6 +1360,8 @@ Examples:
             vision_only=args.vision_only,
             speed_questions=args.speed_questions,
             baseline_run=args.baseline_run,
+            with_lookup=args.with_lookup,
+            skip_moe_reduction=args.skip_moe_reduction,
         )
     finally:
         if lock_fd is not None:

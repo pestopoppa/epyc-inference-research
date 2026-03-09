@@ -391,7 +391,15 @@ class ModelRegistry:
         Used to avoid testing MOE configs that match baseline.
         """
         accel = self.get_acceleration(role)
-        return accel.get("baseline_experts", 8)  # Default to 8 if not specified
+        # Check acceleration.baseline_experts first, then acceleration.experts, then model.baseline_experts
+        if "baseline_experts" in accel:
+            return accel["baseline_experts"]
+        if "experts" in accel:
+            return accel["experts"]
+        config = self.get_role_config(role)
+        if config:
+            return config.get("model", {}).get("baseline_experts", 8)
+        return 8
 
     def get_max_context(self, role: str) -> int:
         """Get maximum context length for a model.

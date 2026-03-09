@@ -51,9 +51,8 @@ DEFAULT_TIMEOUT = _read_registry_timeout("scripts", "executor_default", 180)
 
 # Skip prompt lookup for models larger than this (GB)
 # Lookup doesn't benefit large models - they timeout waiting for verification
-# and spec decode with draft models is always faster for 32B+ models
-# Threshold: 20GB covers ~32B Q4_K_M and above
-LOOKUP_MAX_MODEL_SIZE_GB = 20
+# No model size threshold for lookup — let benchmarks measure effectiveness
+LOOKUP_MAX_MODEL_SIZE_GB = 999
 
 
 def get_binary_paths(registry: Optional["ModelRegistry"] = None) -> dict[str, str]:
@@ -305,6 +304,25 @@ class ServerManager:
                                         break
                         except Exception as e:
                             pass
+                    # Warmup: send a short inference to force model weights into RAM.
+                    # Without this, large models (100GB+) return 503 on first real
+                    # requests because mmap pages haven't faulted in yet.
+                    try:
+                        warmup_url = f"http://127.0.0.1:{self.port}/completion"
+                        warmup_payload = {
+                            "prompt": "Hello",
+                            "n_predict": 1,
+                            "temperature": 0.0,
+                            "cache_prompt": False,
+                        }
+                        print(f"      [SERVER] Warmup inference...", flush=True)
+                        wr = session.post(warmup_url, json=warmup_payload, timeout=(30, 300))
+                        if wr.status_code == 200:
+                            print(f"      [SERVER] Warmup complete", flush=True)
+                        else:
+                            print(f"      [SERVER] Warmup returned {wr.status_code}, proceeding anyway", flush=True)
+                    except Exception as e:
+                        print(f"      [SERVER] Warmup failed: {e}, proceeding anyway", flush=True)
                     return True
             except requests.exceptions.RequestException:
                 pass
@@ -401,12 +419,23 @@ class ServerManager:
         try:
             # Use streaming to collect tokens incrementally
             session = self._get_http_session()
-            response = session.post(
-                url,
-                json=payload,
-                timeout=(30, timeout),  # (connect timeout, read timeout)
-                stream=True,
-            )
+
+            # Retry on 503 "Loading model" — large models may still be paging into RAM
+            max_retries = 5
+            retry_delay = 30  # seconds between retries
+            for attempt in range(max_retries + 1):
+                response = session.post(
+                    url,
+                    json=payload,
+                    timeout=(30, timeout),  # (connect timeout, read timeout)
+                    stream=True,
+                )
+
+                if response.status_code == 503 and attempt < max_retries:
+                    print(f"      [RETRY] 503 Loading model, waiting {retry_delay}s (attempt {attempt + 1}/{max_retries})...", flush=True)
+                    time.sleep(retry_delay)
+                    continue
+                break
 
             if response.status_code != 200:
                 return InferenceResult(

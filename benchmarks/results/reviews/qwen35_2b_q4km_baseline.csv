@@ -29,3 +29,34 @@ thinking,t2_q4_metacognition,43.6,1,Good Fermi estimation approach in think bloc
 thinking,t3_q1_methodological_critique,43.22,2,Two well-developed issues (demographic confound, test selection bias) with clear mechanisms. Truncated at 2 of 4+ needed.
 thinking,t3_q2_causal_inference,13.64,3,Correct minimal adjustment set {Gene}. Correctly explains backdoor path blocking. Starts correct collider bias analysis for Yellow Fingers.
 thinking,t3_q3_reasoning_trap,43.37,2,Good identification of evaluation set bias/test set composition flaw. Constructs concrete scenario but somewhat convoluted.
+coder,t1_q1_algorithm,42.7,1,Identifies right=len(arr) bug correctly but first bug diagnosis is wrong (claims IndexError instead of missed elements). Fix code is incomplete and truncated. Think block reasoning is shallow.
+coder,t1_q2_refactor,13.31,3,Excellent speed-optimized O(N) set-based solution with clear complexity analysis and tradeoff discussion. Memory-optimized version truncated but main solution is complete and correct.
+coder,t1_q3_test,43.19,1,Contradictory tests: test_zero_divisor_normal asserts divide(10 0)==None but test_division_by_zero_error uses pytest.raises(ValueError) for same input. Would fail when run. Good coverage otherwise.
+coder,t2_q1_design,13.37,3,Clean LRU cache using OrderedDict with correct get/put/eviction logic. O(1) operations. Proper capacity validation. Complete and correct implementation.
+coder,t2_q2_debug_complex,42.09,1,Correctly identifies race condition but fix is wrong: uses async with asyncio.Lock() as lock (incorrect syntax) and lock is not passed into increment(). Lock must wrap the read-modify-write inside increment.
+coder,t2_q3_optimize,42.01,1,Claims O(n) hash map approach but implementation is wrong — confuses pair counting with prefix sum. Code has undefined variable and incorrect logic. Truncated before completion.
+coder,t2_q4_system,42.87,2,Good sliding window rate limiter using deque with correct expiry logic. Truncated mid-method (is_allowed cuts off) but core algorithm is visible and correct.
+coder,t3_q1_concurrent_correctness,12.92,1,Entire response stuck in think block (4096 token truncation). Good ABA problem analysis in think block but never produces final output. Identifies tagged pointers approach but no fix code delivered.
+coder,t3_q2_distributed_consistency,13.04,3,Excellent CAP theorem analysis with 4 conflict resolution strategies (LWW/merge/CRDT/consensus). Clear shopping cart vs banking ledger recommendations with correct tradeoff reasoning.
+coder,t3_q3_algorithmic_hardness,13.27,1,Entire response stuck in think block (4096 token truncation). Good analysis structure visible but no final proof or solution delivered. Truncated mid-derivation of group size analysis.
+instruction_precision,t1_q1_negative_instruction,13.93,2,Good 2-sentence explanation of photosynthesis avoiding sun/sunlight/solar. Uses light energy which is technically allowed. Slightly verbose for 2 sentences but meets core constraints.
+instruction_precision,t1_q2_word_limit,14.1,3,Exactly 25 words — within the 20-25 word target. Accurate description of machine learning. All constraints met perfectly.
+instruction_precision,t1_q3_structured_format,44.14,3,Perfect format compliance: LANGUAGE (YEAR) on three lines. No bullets/numbers/extra text. All years correct (Python 1991 Java 1995 C 1972).
+instruction_precision,t1_q4_multiple_constraints,13.45,3,Exactly 5 European countries in alphabetical order one per line no extra punctuation. All constraints satisfied perfectly.
+instruction_precision,t2_q1_resist_elaboration,25.0,3,Perfect: responds with just 4 and nothing else. Follows instruction exactly.
+instruction_precision,t2_q2_maintain_format,45.02,3,Exact format match: ERROR_TYPE/ROOT_CAUSE/FIX headers with correct content. No extra text. TypeError correctly identified with reasonable diagnosis.
+instruction_precision,t2_q3_empty_handling,70.0,3,Perfect: outputs exactly NONE with no explanation or apology. Follows instruction precisely.
+instruction_precision,t2_q4_conflicting_constraints,16.26,2,4 words under 12 limit. Starts with A. Ends with data (period acceptable). Avoids store/storage. Grammatically sparse but all hard constraints met.
+instruction_precision,t3_q1_self_referential,13.63,0,Fails all self-referential constraints. Claims 20 words but has 13. Spends entire response iterating on failed drafts without producing a valid answer. Never completes the task.
+instruction_precision,t3_q2_cascading_constraints,46.09,0,Multiple failures: apple is 5 letters not 8. Chain rule violations (apple->pale: e!=a). top repeated. Last word not 4 letters matching constraint. Fails constraints 1-4.
+instruction_precision,t3_q3_meta_instruction,44.23,0,Degenerate repetition loop: Say 7 times hi repeated hundreds of times until token limit. Classic repetition failure. Should have only printed outputs for bracketed+numbered instructions.
+math,t1_q1_word_problem,41.76,1,Entire response trapped in think block (4096 truncation). Correct reasoning visible (discount->tax->percentage) with right approach but never delivers final formatted answer.
+math,t1_q2_system_equations,41.51,1,Entire response trapped in think block (4096 truncation). Correct substitution method identified and solutions x=+-3 +-4 visible in reasoning but no final output delivered.
+math,t1_q3_probability,13.23,3,Correct solutions: P(both red)=2/9 P(one red one blue)=1/3. Clear step-by-step work with both orderings considered. Complete and well-structured.
+math,t2_q1_optimization,13.31,3,Perfect optimization solution: x=100m y=50m A=5000 sq m. Clean calculus approach with derivative critical point and verification. Complete and well-formatted.
+math,t2_q2_proof,13.33,3,Correctly identifies the base case gap (n=1 to n=2 transition fails because subsets do not overlap). Clear explanation of why inductive step breaks. Addresses all questions asked.
+math,t2_q3_calculus,42.06,3,Perfect integral evaluation: antiderivative x^3+x^2-x F(2)=10 F(0)=0 result=10. Complete step-by-step work with clear formatting.
+math,t2_q4_statistics,41.84,1,Entire response trapped in think block (4096 truncation). Correct approach visible (mean/median/SD/IQR calculations started) but never delivers final answers. Truncated mid-IQR calculation.
+math,t3_q1_analysis,13.39,3,Excellent analysis: proves differentiability via Weierstrass M-test derives closed form e^(x*cos1)*sin(x*sin1) using Im(e^(e^i*x)) correctly computes limit as 0. Complete and rigorous.
+math,t3_q2_combinatorics,13.26,1,Entire response in think block (4096 truncation). Verifies identity for small n but never completes bijective proof. Truncated mid-exploration of generating function approach.
+math,t3_q3_probability_theory,42.81,1,Entire response in think block (4096 truncation). Identifies E[N]=e correctly in reasoning but never delivers structured proof. Truncated before completing either of the two required proofs.

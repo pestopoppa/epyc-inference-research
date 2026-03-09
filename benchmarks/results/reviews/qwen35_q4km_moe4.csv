@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,13.68,2,Correct tool call but leaked think tags and duplicated output
+agentic,t1_q2_error_handling,13.67,2,Reasonable fallback to search_users but query is odd
+agentic,t1_q3_nested_params,13.6,3,Perfect JSON tool call with correct nested params
+agentic,t2_q1_ambiguous,13.32,3,Good clarification plus reasonable default action with Slack
+agentic,t2_q2_error_chain,13.46,3,Excellent root cause analysis and logical next step
+agentic,t2_q3_schema_edge,13.63,3,Perfect schema compliance: null body for GET with auth header
+agentic,t2_q4_orchestration,13.43,3,Complete deployment plan with staging and rollback on failure
+agentic,t3_q1_competing_constraints,12.07,2,Good plan structure but truncated before completion
+agentic,t3_q2_multi_agent_coordination,13.41,2,Good phased plan but truncated before error handling details
+agentic,t3_q3_adversarial_robustness,13.19,3,Thorough security analysis identifying injection and data exfil risks
+coder,t1_q1_algorithm,13.46,3,Correctly identified both bugs: infinite loop (left=mid) and missing element
+coder,t1_q2_refactor,13.82,2,Good speed optimization with Counter; truncated before memory version complete
+coder,t1_q3_test,13.26,3,Comprehensive pytest covering normal/edge/error cases with parametrize
+coder,t2_q1_design,13.16,3,Correct O(1) LRU with doubly-linked list and hashmap; clean code
+coder,t2_q2_debug_complex,13.75,2,Identified race condition correctly; thinking leaked; fix truncated
+coder,t2_q3_optimize,13.2,2,Correct O(n) approach with complement hashmap but code truncated
+coder,t2_q4_system,13.89,3,Clean sliding-window rate limiter with threading; well-structured
+coder,t3_q1_concurrent_correctness,13.43,2,ABA problem explained but hedges on applicability; fix truncated
+coder,t3_q2_distributed_consistency,13.26,2,Good strategies listed; truncated but covered 4+ approaches
+coder,t3_q3_algorithmic_hardness,13.15,2,Adversary argument started well; recurrence truncated mid-derivation
+general,t1_q1_json,13.61,3,Perfect JSON output with correct fields extracted
+general,t1_q2_multistep,13.5,1,Hallucinated extra items not in prompt (Elderberry/Fig/grape); wrong count
+general,t1_q3_compare,13.62,3,Concise and accurate comparison in requested format
+general,t2_q1_synthesis,13.59,3,Excellent balanced recommendation addressing all three perspectives
+general,t2_q2_transform,13.87,3,Perfect nested YAML transformation grouped by department
+general,t2_q3_schedule,13.29,2,Good constraint analysis started but truncated before final schedule
+general,t2_q4_inconsistency,13.46,3,Identified both inconsistencies: body format and rate limit discrepancy
+general,t3_q1_policy_analysis,13.46,2,Strong analysis of accuracy fallacy but truncated before all amendments
+general,t3_q2_system_failure,13.3,2,Thinking leaked as response text; analysis truncated mid-reasoning
+general,t3_q3_strategic_communication,13.37,1,Thinking/planning leaked as response; no actual board statement produced
+instruction_precision,t1_q1_negative_instruction,13.93,3,Explained photosynthesis without mentioning sun/sunlight/solar
+instruction_precision,t1_q2_word_limit,13.97,2,Claims 23 words but actual count is 22; close but inaccurate self-count
+instruction_precision,t1_q3_structured_format,14.28,3,Perfect format: LANGUAGE (YEAR) one per line no extras
+instruction_precision,t1_q4_multiple_constraints,14.88,3,Exactly 5 countries alphabetical one per line no extras
+instruction_precision,t2_q1_resist_elaboration,13.75,0,Answered 4 but then emitted tool_code artifacts and repeated answer
+instruction_precision,t2_q2_maintain_format,13.99,3,Exact format match: ERROR_TYPE/ROOT_CAUSE/FIX with no extra text
+instruction_precision,t2_q3_empty_handling,26.19,3,Perfect: output exactly NONE with no explanation
+instruction_precision,t2_q4_conflicting_constraints,16.04,2,Meets all constraints but sentence is trivially short (4 words)
+instruction_precision,t3_q1_self_referential,14.28,0,Uses forbidden word 'this'; word count claim wrong (says ten has 13)
+instruction_precision,t3_q2_cascading_constraints,13.74,1,Chain rule OK but added label text; garden is 6 not 7 letters; format wrong
+instruction_precision,t3_q3_meta_instruction,14.28,2,Correctly outputs 42 and 7 hi's but missing Print 42 interpretation nuance
+math,t1_q1_word_problem,13.41,3,All three parts correct: $120 discount; $129.60 final; 86.4%
+math,t1_q2_system_equations,13.39,3,All four solutions correct: (3,4) (4,3) (-3,-4) (-4,-3)
+math,t1_q3_probability,13.42,3,Correct: P(RR)=2/9; P(R and B)=1/3 with clear work shown
+math,t2_q1_optimization,13.46,3,Correct: 100m x 50m = 5000 sq meters with proper calculus
+math,t2_q2_proof,12.88,2,Correctly identifies n=2 failure; thinking leaked; truncated end
+math,t2_q3_calculus,13.32,3,Perfect: antiderivative x^3+x^2-x; F(2)-F(0)=10
+math,t2_q4_statistics,13.38,2,Correct setup; thinking leaked as response; truncated before final answers
+math,t3_q1_analysis,13.35,3,Correct: differentiable everywhere; closed form; limit=0
+math,t3_q2_combinatorics,13.15,1,Starts combinatorial approach but truncated mid-derivation; no result
+math,t3_q3_probability_theory,13.14,1,Thinking leaked; setup correct (E[N]=e) but truncated before proof
+thinking,t1_q1_multistep,13.2,2,Correct answer (11:34 AM implied) but added unrequested extra problems
+thinking,t1_q2_hypothesis,13.28,2,Thinking leaked as response; three good alternatives but format messy
+thinking,t1_q3_planning,13.17,2,Good constraint analysis; correct approach but truncated before final list
+thinking,t2_q1_paradox,13.57,3,Well-argued two positions with clear recommendation for functionalism
+thinking,t2_q2_counterfactual,13.32,3,Thorough analysis across all three dimensions with second-order effects
+thinking,t2_q3_formal,13.43,3,Correct formal proof via conditional proof; clear concrete example
+thinking,t2_q4_metacognition,13.2,3,Excellent Fermi estimation with clear assumptions and uncertainty analysis
+thinking,t3_q1_methodological_critique,13.28,2,Thinking leaked; 4+ issues identified but response starts as CoT dump
+thinking,t3_q2_causal_inference,13.31,2,Thinking leaked; correct DAG analysis started but truncated
+thinking,t3_q3_reasoning_trap,13.12,2,Thinking leaked; flaw correctly identified but truncated before scenario

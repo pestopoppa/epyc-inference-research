@@ -1,0 +1,62 @@
+suite,question_id,score,notes
+general,t3_q1_policy_analysis,3,Thorough analysis of 3 failure modes with amendments and tradeoffs
+general,t3_q2_system_failure,3,Precise root cause and race condition explanation with fixes
+general,t3_q3_strategic_communication,3,Well-structured board statement hitting all four requirements
+general,t2_q1_synthesis,3,Concise balanced recommendation addressing all three perspectives
+general,t2_q2_transform,3,Correct YAML transformation with proper nesting
+general,t2_q3_schedule,1,Only thinking shown; no final schedule output produced; truncated
+general,t2_q4_inconsistency,3,Found both body format and rate limit inconsistencies correctly
+general,t1_q1_json,3,Perfect JSON extraction with all fields correct
+general,t1_q2_multistep,1,Hallucinated extra items not in prompt; processed wrong input list
+general,t1_q3_compare,3,Clear concise comparison in requested sentence count
+thinking,t3_q1_methodological_critique,3,Identified confounding variables and methodological flaws well
+thinking,t3_q2_causal_inference,3,Correct backdoor path analysis and adjustment set identification
+thinking,t3_q3_reasoning_trap,3,Correctly identified test distribution bias flaw in argument
+thinking,t2_q1_paradox,3,Presented material and functional continuity positions with synthesis
+thinking,t2_q2_counterfactual,3,Detailed analysis across all three dimensions with mechanisms
+thinking,t2_q3_formal,3,Valid formal proof of hypothetical syllogism with concrete example
+thinking,t2_q4_metacognition,3,Systematic Fermi estimation with bounds and uncertainty analysis
+thinking,t1_q1_multistep,3,Correct answer of 11:34 AM with clear step-by-step work
+thinking,t1_q2_hypothesis,2,Good alternative explanations but response truncated mid-sentence
+thinking,t1_q3_planning,1,Only thinking process shown; enumeration incomplete and truncated
+instruction_precision,t3_q1_self_referential,0,Failed to produce valid sentence; showed failed attempts and reasoning
+instruction_precision,t3_q2_cascading_constraints,0,Output was just numbers 8-12; completely wrong format and content
+instruction_precision,t3_q3_meta_instruction,3,Correctly output 42 and seven hi repetitions
+instruction_precision,t2_q1_resist_elaboration,3,Perfect single character response of 4
+instruction_precision,t2_q2_maintain_format,3,Exact format match with correct error analysis
+instruction_precision,t2_q3_empty_handling,3,Correctly output NONE with no extra text
+instruction_precision,t2_q4_conflicting_constraints,2,Valid sentence but only 4 words; arguably too minimal
+instruction_precision,t1_q1_negative_instruction,3,Clear explanation without forbidden words sunlight/sun/solar
+instruction_precision,t1_q2_word_limit,3,23 words within the 20-25 word target range
+instruction_precision,t1_q3_structured_format,3,Perfect format LANGUAGE (YEAR) with correct dates
+instruction_precision,t1_q4_multiple_constraints,3,Five European countries alphabetically one per line no extras
+coder,t3_q1_concurrent_correctness,3,Clear ABA problem explanation with tagged pointer solution
+coder,t3_q2_distributed_consistency,3,Four conflict strategies with failure scenarios and recommendations
+coder,t3_q3_algorithmic_hardness,1,Thinking process shown but truncated before completing analysis
+coder,t2_q1_design,3,Clean LRU cache using OrderedDict with O(1) operations
+coder,t2_q2_debug_complex,3,Correctly identified race condition and fixed with asyncio.Lock
+coder,t2_q3_optimize,3,Correct hash map optimization from O(n^2) to O(n)
+coder,t2_q4_system,3,Complete rate limiter with sliding window and thread safety
+coder,t1_q1_algorithm,2,Found left=mid bug correctly but second bug analysis incomplete/truncated
+coder,t1_q2_refactor,3,Two optimized versions with clear tradeoff analysis
+coder,t1_q3_test,3,Comprehensive pytest suite covering normal edge and error cases
+math,t3_q1_analysis,2,Correct approach and closed form but truncated during verification
+math,t3_q2_combinatorics,1,Stuck in thinking loop; never produced a valid proof; truncated
+math,t3_q3_probability_theory,3,Correct E[N]=e with two valid proofs via simplex and renewal
+math,t2_q1_optimization,3,Correct dimensions 50x100m and max area 5000 sq meters
+math,t2_q2_proof,3,Correctly identified n=1 to n=2 transition as the induction flaw
+math,t2_q3_calculus,3,Correct antiderivative and integral evaluation yielding 10
+math,t2_q4_statistics,3,All calculations correct: mean median std dev and IQR analysis
+math,t1_q1_word_problem,3,Correct discount tax and percentage calculations
+math,t1_q2_system_equations,3,All four solutions found and verified correctly
+math,t1_q3_probability,3,Correct probability calculations for both parts
+agentic,t3_q1_competing_constraints,3,Systematic multi-step plan with validation and error handling
+agentic,t3_q2_multi_agent_coordination,3,Well-structured phased plan with agent delegation and recovery
+agentic,t3_q3_adversarial_robustness,2,Good security analysis but response corrupted with URL-encoded padding
+agentic,t2_q1_ambiguous,2,Acknowledged ambiguity but proceeded without asking; should clarify
+agentic,t2_q2_error_chain,3,Logical DNS check escalation following database connection failure
+agentic,t2_q3_schema_edge,3,Correct GET call with null body matching schema constraints
+agentic,t2_q4_orchestration,3,Complete deployment pipeline with test gates and rollback plan
+agentic,t1_q1_sequential,1,Only read_file call; missed grep_search step the user requested
+agentic,t1_q2_error_handling,2,Started with empty search then self-corrected to ask clarification
+agentic,t1_q3_nested_params,3,Perfect JSON with nested metadata matching all user requirements

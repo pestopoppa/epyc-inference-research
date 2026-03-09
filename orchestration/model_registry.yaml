@@ -1168,7 +1168,10 @@ roles:
       size_gb: 1.2
       architecture: dense
     candidate_roles:
+    - frontdoor
     - worker
+    - coder
+    - general
     constraints:
       forbid:
       - eagle
@@ -1203,7 +1206,10 @@ roles:
       size_gb: 1.5
       architecture: dense
     candidate_roles:
+    - frontdoor
     - worker
+    - coder
+    - general
     constraints:
       forbid:
       - eagle
@@ -1238,7 +1244,10 @@ roles:
       size_gb: 1.9
       architecture: dense
     candidate_roles:
+    - frontdoor
     - worker
+    - coder
+    - general
     constraints:
       forbid:
       - eagle
@@ -1273,7 +1282,10 @@ roles:
       size_gb: 2.6
       architecture: dense
     candidate_roles:
+    - frontdoor
     - worker
+    - coder
+    - general
     constraints:
       forbid:
       - eagle
@@ -1308,7 +1320,10 @@ roles:
       size_gb: 3.3
       architecture: dense
     candidate_roles:
+    - frontdoor
     - worker
+    - coder
+    - general
     constraints:
       forbid:
       - eagle
@@ -1343,7 +1358,10 @@ roles:
       size_gb: 4.2
       architecture: dense
     candidate_roles:
+    - frontdoor
     - worker
+    - coder
+    - general
     constraints:
       forbid:
       - eagle
@@ -1560,14 +1578,14 @@ roles:
     benchmark_date: null
 
   # =============================================================================
-  # Qwen3.5 MoE Models (122B, 397B) — NOT YET DOWNLOADED
+  # Qwen3.5 MoE Models (122B, 397B)
   # =============================================================================
   qwen35_122b_q4km:
     tier: B
     description: Qwen3.5-122B-A10B Q4_K_M — architect candidate (MoE, 256 experts, 8 active)
     model:
       name: Qwen3.5-122B-A10B
-      path: unsloth/Qwen3.5-122B-A10B-GGUF/Qwen3.5-122B-A10B-Q4_K_M.gguf
+      path: unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf
       quant: Q4_K_M
       size_gb: 69
       architecture: qwen35moe
@@ -1604,13 +1622,13 @@ roles:
       residency: cold
       pinned: false
     benchmark_date: null
-    notes: NOT YET DOWNLOADED. 256 total experts, 8 active. MoE reduction tests [4,6].
+    notes: 256 total experts, 8 active. MoE reduction tests [4,6]. 3 shards.
   qwen35_397b_q4kxl:
     tier: B
     description: Qwen3.5-397B-A17B Q4_K_XL — architect candidate (MoE, 512 experts, 10 active)
     model:
       name: Qwen3.5-397B-A17B
-      path: unsloth/Qwen3.5-397B-A17B-GGUF/Qwen3.5-397B-A17B-Q4_K_XL.gguf
+      path: unsloth/Qwen3.5-397B-A17B-GGUF/UD-Q4_K_XL/Qwen3.5-397B-A17B-UD-Q4_K_XL-00001-of-00006.gguf
       quant: Q4_K_XL
       size_gb: 205
       architecture: qwen35moe
@@ -1646,7 +1664,7 @@ roles:
       residency: cold
       pinned: false
     benchmark_date: null
-    notes: NOT YET DOWNLOADED. 512 total experts, 10 active. MoE reduction tests [4,6,8].
+    notes: 512 total experts, 10 active. MoE reduction tests [4,6,8]. 6 shards (UD quant).
 
   minimax_m21_q4:
     tier: B
@@ -3406,6 +3424,8 @@ roles:
     - qwen3.5-35b-a3b
     - qwen3.5-27b
     - qwen3.5-9b
+    - qwen3.5-122b-a10b
+    - qwen3.5-397b-a17b
     notes: >
       SSM checkpoint/restore enabled via WS1+WS2. Compatible with all qwen35 targets.
   draft_qwen35_0_8b_q8_0:
@@ -3426,8 +3446,10 @@ roles:
     - qwen3.5-35b-a3b
     - qwen3.5-27b
     - qwen3.5-9b
+    - qwen3.5-122b-a10b
+    - qwen3.5-397b-a17b
     notes: >
-      Higher quality draft (Q8_0 vs Q4_0). Compatible with 35B, 27B, 9B targets.
+      Higher quality draft (Q8_0 vs Q4_0). Compatible with all qwen35 targets.
 
   # =============================================================================
   # Embedder Models (Tier D - Supporting)

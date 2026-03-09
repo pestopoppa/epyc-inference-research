@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,27.89,1,Echoes prompt then gives minimal answer without proper JSON tool call format; just lists tool names twice with repetition
+agentic,t1_q2_error_handling,18.17,1,Identifies correct approach (ask for clarification) but degenerates into repetitive loops of the same JSON message block; hit token limit
+agentic,t1_q3_nested_params,29.49,3,Correct JSON tool call with all parameters properly filled: title Fix login bug; assignees Alice and Bob; metadata high priority; tags bug/urgent; due date correct
+agentic,t2_q1_ambiguous,29.43,2,Recognizes ambiguity and mentions need for clarification but then proceeds to generate a tool call anyway; reasonable approach but contradicts itself
+agentic,t2_q2_error_chain,27.24,2,Good reasoning about the error chain and DNS check is a reasonable next step; proper JSON tool call format; minor issue: could have also checked logs first
+agentic,t2_q3_schema_edge,29.09,3,Correct JSON with endpoint /users; method GET; body correctly omitted for GET; auth header properly formatted as Bearer token123
+agentic,t2_q4_orchestration,27.75,2,Deployment plan covers checkout/test/build/deploy with failure handling; but uses string descriptions instead of proper JSON tool call objects; missing notification on success
+agentic,t3_q1_competing_constraints,22.78,2,Produces a JSON plan with steps; validation checks and fallback strategy; reasonable structure but steps are just string descriptions rather than actual tool calls
+agentic,t3_q2_multi_agent_coordination,25.36,1,Has JSON syntax error (extra quote in phase 2); parallel group concept is flawed (coder cant access web data without researcher finishing first); basic structure present
+agentic,t3_q3_adversarial_robustness,16.9,2,Correctly identifies security concerns with command injection; provides reasonable handling policy; but response is verbose and repetitive hitting token limit; core content is sound
+coder,t1_q1_algorithm,18.17,0,Does not identify the two bugs (left=mid should be left=mid+1; right=len(arr) issues). Instead generates a degenerate list of Bug 1 through Bug 29+ with wrong outputs
+coder,t1_q2_refactor,17.13,2,Correctly provides O(n) set-based solution and O(n log n) sort-based solution; good complexity analysis; response truncated but core solutions are present and correct
+coder,t1_q3_test,24.9,3,Comprehensive pytest test suite covering normal cases; negatives; zero numerator; floats; edge cases; division by zero with proper pytest.raises; well-structured
+coder,t2_q1_design,23.59,3,Correct LRU cache implementation with doubly-linked list and hash map; O(1) get and put; dummy head/tail nodes; proper data structure explanation
+coder,t2_q2_debug_complex,18.45,0,Identifies race condition and mentions using a lock but never actually shows the fixed code; degenerates into repeating the same unfixed code block many times
+coder,t2_q3_optimize,26.59,3,Correct O(n) hash map solution with complement checking; clear explanation of approach; proper complexity analysis; clean code
+coder,t2_q4_system,22.84,3,Correct sliding window rate limiter using deque; handles edge cases with input validation; proper is_allowed implementation; good documentation
+coder,t3_q1_concurrent_correctness,17.03,1,Identifies ABA problem correctly and attempts tagged pointer solution; but code is incomplete/truncated and contains multiple false starts; never arrives at a complete working fix
+coder,t3_q2_distributed_consistency,18.02,2,Lists 4 conflict resolution strategies with scenarios; recommends G-Set for shopping cart; addresses banking ledger; but 2PC is not really a conflict resolution strategy for partitions
+coder,t3_q3_algorithmic_hardness,17.62,1,Starts addressing adversary argument and median-of-medians but then degenerates into answering fabricated questions about O(n^3) code snippets not in the original prompt
+general,t1_q1_json,27.91,3,Perfect JSON output with correct name Sarah Chen; role Senior Engineer; department Platform; start_date 2024-03-15
+general,t1_q2_multistep,21.7,2,Correct result (Apple/banana/cherry/Date count 4) but response is extremely repetitive; repeats the same final list many times before hitting token limit
+general,t1_q3_compare,28.03,2,Good initial comparison in 2-3 sentences but then fabricates a multiple choice question and answers it; goes beyond what was asked but core comparison is accurate
+general,t2_q1_synthesis,18.03,2,Good phased approach recommendation (2-week hotfix + 3-month refactor); addresses all three perspectives; but extremely verbose and repetitive
+general,t2_q2_transform,28.93,2,Correct YAML grouping by department; but adds a fabricated employee Eve that was not in the input data; structure is correct for the given data
+general,t2_q3_schedule,17.01,1,Attempts to solve the scheduling problem but gets confused in its own analysis; never produces a clear valid schedule; runs out of tokens while still deliberating
+general,t2_q4_inconsistency,24.23,3,Correctly identifies both inconsistencies: body format (JSON vs form-encoded) and rate limits (100/min vs ~16.67/min from 1000/hr); well-structured analysis
+general,t3_q1_policy_analysis,22.15,3,Identifies 3 solid failure modes (overfitting to accuracy; gaming explainability; complacency in bias audits); provides amendments and trade-offs
+general,t3_q2_system_failure,25.67,3,Correctly explains how replica lag causes double-charges despite idempotency keys; good testing gap analysis; proposes fixes; mentions monitoring
+general,t3_q3_strategic_communication,19.99,2,Good board meeting opening statement addressing all 4 requirements; acknowledges problems; frames LOIs as pivot; proposes milestones; but verbose and repetitive
+instruction_precision,t1_q1_negative_instruction,31.12,1,Uses light energy instead of sunlight/sun/solar but the concept of light energy is essentially sunlight; technically violates the spirit of the constraint
+instruction_precision,t1_q2_word_limit,31.12,1,Claims 25 words but actual word count of the description sentence is approximately 22 words; self-referential counting is inaccurate
+instruction_precision,t1_q3_structured_format,25.85,3,Perfect format: Python (1991) JavaScript (1995) Java (1995); one per line; no bullets/numbers/extra text; correct years
+instruction_precision,t1_q4_multiple_constraints,31.3,2,5 countries in alphabetical order one per line no punctuation; has a blank line before the list; countries and order are correct
+instruction_precision,t2_q1_resist_elaboration,30.26,3,Outputs just 4 with no extra text; perfect adherence to the instruction
+instruction_precision,t2_q2_maintain_format,29.84,3,Correct format with ERROR_TYPE TypeError; ROOT_CAUSE one sentence; FIX one sentence; no extra text outside the format
+instruction_precision,t2_q3_empty_handling,30.36,0,Should output NONE but instead echoes part of the prompt and outputs the input text; does not follow the instruction at all
+instruction_precision,t2_q4_conflicting_constraints,26.89,0,Never produces a valid sentence meeting all constraints; first attempt doesnt start with A; keeps self-correcting but never arrives at a correct answer; degenerate loop
+instruction_precision,t3_q1_self_referential,26.72,0,Never produces a valid self-referential sentence; generates multiple wrong attempts that fail word count and letter count verification; degenerate loop
+instruction_precision,t3_q2_cascading_constraints,26.62,0,Butterfly has 9 letters not 8; only produces 4 words not 5; repeats yellow; degenerates into repetitive loop of the same wrong answer
+instruction_precision,t3_q3_meta_instruction,27.3,1,Eventually identifies correct valid instructions [Print 42] and [Say 7 times hi] but includes excessive reasoning and initially wrong; never outputs clean result
+long_context,t1_q1_needle,2.53,0,Echoes the prompt code and then degenerates into repeating security-related bracket tags; never identifies any needle or answers any question about the code
+long_context,t1_q2_multi_file,2.83,0,Echoes prompt content then truncates; never answers any question about the multi-file codebase
+long_context,t1_q3_extraction,2.13,0,Echoes contract text and then generates repetitive lists of dates; never extracts the specific information requested; degenerate repetition
+long_context,t2_q1_deep_needle,,0,No response generated (None tokens); empty output
+long_context,t2_q2_synthesis,,0,No response generated (None tokens); empty output
+long_context,t2_q3_architecture,,0,No response generated (None tokens); empty output
+long_context,t3_q1_multi_hop_reasoning,,0,No response generated (None tokens); empty output
+long_context,t3_q2_contradiction_detection,1.25,0,Echoes documentation text then produces vague generic contradiction descriptions without specific evidence; degenerate repetition pattern
+long_context,t3_q3_evolving_requirements,1.06,1,Acknowledges the text is a documentation dump and correctly identifies that the prompt asks for info not derivable from the text; some self-awareness but no useful extraction
+math,t1_q1_word_problem,26.68,3,All three parts correct: $120 after discount; $129.60 after tax; 86.4% of original; clear work shown
+math,t1_q2_system_equations,15.42,3,Finds all 4 real solutions: (3 4) (4 3) (-3 -4) (-4 -3); correct method with substitution and verification
+math,t1_q3_probability,25.42,2,Part 1 correct (2/9); Part 2 has arithmetic error: 3/10*5/9 shown as 1/2*5/9=5/18 which is wrong; final answer 4/9 is incorrect (should be 1/3)
+math,t2_q1_optimization,24.69,3,Correct setup; constraint x+2y=200; derivative gives y=50 x=100; max area 5000 sq meters; second derivative test included
+math,t2_q2_proof,15.69,2,Correctly identifies the error occurs at n=1 to n=2 transition where overlap is empty; verbose with many false starts; core answer is correct
+math,t2_q3_calculus,27.63,3,Correct antiderivative x^3+x^2-x; F(2)=10 F(0)=0; final answer 10; clean presentation
+math,t2_q4_statistics,18.69,1,Mean calculation wrong: 12+15+18+22+25+28+30+35=185 not 205; mean should be 23.125 not 25.625; all subsequent calculations wrong; median 23.5 correct
+math,t3_q1_analysis,18.17,2,Part 1 proof has errors (drops sin(n) factor); Part 2 correctly derives f(x)=e^(xcos1)*sin(xsin1); Part 3 correctly shows limit is 0; mixed quality
+math,t3_q2_combinatorics,17.94,1,Attempts sign-reversing involution but never completes the proof; describes setup and LHS interpretation but trails off without completing argument
+math,t3_q3_probability_theory,18.53,3,Correctly derives E[N]=e; P(N>=n)=1/(n-1)! from volume of unit simplex; sum equals e; elegant approach shown
+thinking,t1_q1_multistep,25.52,3,Correct setup with t measured from 10AM; 60(t+1)+80t=280; t=11/7 hours; meeting time approximately 11:34 AM; clear work shown
+thinking,t1_q2_hypothesis,28.99,3,Three strong alternative explanations: SES differences; study habits/self-discipline; stress/lifestyle factors; each specific and explains mechanism
+thinking,t1_q3_planning,17.65,1,Attempts systematic analysis but gets confused and never produces a complete list of valid orderings; runs out of tokens while still working through cases
+thinking,t2_q1_paradox,18.76,2,Presents continuity of identity and material identity positions well; discusses implications; but verbose and repetitive; truncated before completing conclusion
+thinking,t2_q2_counterfactual,19.18,2,Good analysis across all three dimensions with specific mechanisms; but includes fabricated academic references; verbose and truncated
+thinking,t2_q3_formal,25.6,3,Clean formal proof using hypothetical syllogism with modus ponens; good concrete example with rain/wet ground/green grass; well-structured
+thinking,t2_q4_metacognition,25.12,2,Good Fermi estimation approach; but piano ownership estimate of 1 in 100 is too low; math error leads to only 1200 tunings; reasoning process is sound though
+thinking,t3_q1_methodological_critique,18.45,2,Identifies 4 methodological issues (selection bias; publication bias; sample size; measurement); but verbose and repetitive; core content is correct
+thinking,t3_q2_causal_inference,23.96,3,Correctly identifies Gene as minimal sufficient adjustment set; correctly explains Yellow Fingers conditioning; discusses IV approach for unmeasured Gene
+thinking,t3_q3_reasoning_trap,17.9,2,Identifies the flaw (test set may not represent true generalization) and provides a scenario; initial scenario contradicts itself; later attempts better but verbose

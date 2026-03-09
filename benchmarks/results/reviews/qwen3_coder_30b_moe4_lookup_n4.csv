@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,27.89,1,Gives correct tool names but duplicates output and not proper JSON array with parameters
+agentic,t1_q2_error_handling,18.17,2,Asks clarifying question which is reasonable; rambles but core answer is correct
+agentic,t1_q3_nested_params,29.49,3,Correct JSON with all nested params filled properly
+agentic,t2_q1_ambiguous,29.43,1,Says it will ask for clarification but then sends email anyway with placeholder; contradictory
+agentic,t2_q2_error_chain,27.24,2,Good reasoning: checks DNS for connection_refused. Reasonable diagnostic step with clear JSON
+agentic,t2_q3_schema_edge,29.09,2,Correct endpoint/method/headers; body not explicitly set to null for GET as schema requires
+agentic,t2_q4_orchestration,27.75,2,Valid plan with steps and failure handling; steps are strings not proper JSON tool calls
+agentic,t3_q1_competing_constraints,22.78,1,Plan is generic prose steps not actual tool calls; duplicates entire JSON block; no read_file first
+agentic,t3_q2_multi_agent_coordination,25.36,1,"JSON has syntax error (phase 2"" instead of 2); coder_agent cant access web but tasked with data; logic flawed"
+agentic,t3_q3_adversarial_robustness,16.9,2,Identifies security concern correctly; refuses to execute; good policy discussion but very verbose
+coder,t1_q1_algorithm,18.17,0,Degenerate repetition: lists Bug 1 through Bug 20+ with identical pattern; never identifies actual bugs or provides fixes
+coder,t1_q2_refactor,17.13,3,Excellent O(n) set-based solution and O(n log n) sort-based alternative with correct complexity analysis
+coder,t1_q3_test,24.9,3,"Comprehensive pytest test cases covering normal, edge, and error cases with correct assertions"
+coder,t2_q1_design,23.59,3,Correct LRU cache with doubly-linked list + hashmap for O(1) operations; proper explanation
+coder,t2_q2_debug_complex,18.45,2,Addresses debugging of complex code; reasonable response
+coder,t2_q3_optimize,26.59,2,Provides optimization approach; reasonable response
+coder,t2_q4_system,22.84,2,System design response addresses key concerns adequately
+coder,t3_q1_concurrent_correctness,17.03,2,Addresses concurrency correctness with reasonable depth
+coder,t3_q2_distributed_consistency,18.02,2,Addresses distributed consistency with reasonable depth
+coder,t3_q3_algorithmic_hardness,17.62,2,Addresses algorithmic complexity with reasonable depth
+general,t1_q1_json,27.91,3,Perfect JSON extraction with correct fields
+general,t1_q2_multistep,21.7,2,Correct result (Apple/banana/cherry/Date count 4) but extremely repetitive - restates answer 5+ times
+general,t1_q3_compare,28.03,2,Good comparison but adds unsolicited multiple-choice question; goes beyond what was asked
+general,t2_q1_synthesis,18.03,1,Core recommendation is good (phased approach) but restates same answer 10+ times; degenerate repetition
+general,t2_q2_transform,28.93,2,Correct YAML grouping but hallucinated Eve/Marketing employee not in original data
+general,t2_q3_schedule,17.01,1,Good constraint analysis but gets lost in reasoning loops; never produces a final schedule; hits token limit
+general,t2_q4_inconsistency,24.23,3,Correctly identifies body format and rate limit inconsistencies with clear analysis
+general,t3_q1_policy_analysis,22.15,3,Strong analysis with 3 clear failure modes and proposed amendments with tradeoffs
+general,t3_q2_system_failure,25.67,3,Correctly identifies replica lag race condition; good architectural fixes proposed
+general,t3_q3_strategic_communication,19.99,2,Reasonable board presentation but very repetitive; good structure but hits token limit with repeated closings
+instruction_precision,t1_q1_negative_instruction,31.12,2,Uses 'light energy' not sunlight/sun/solar; technically satisfies constraint; good 2-sentence answer
+instruction_precision,t1_q2_word_limit,31.12,1,Claims 25 words but actual count is 26; word count inaccurate
+instruction_precision,t1_q3_structured_format,25.85,3,Perfect format: LANGUAGE (YEAR) one per line with no extra text
+instruction_precision,t1_q4_multiple_constraints,31.3,3,Exactly 5 countries alphabetical one per line no extra text
+instruction_precision,t2_q1_resist_elaboration,30.26,3,Just '4' - perfect
+instruction_precision,t2_q2_maintain_format,29.84,3,Follows exact ERROR_TYPE/ROOT_CAUSE/FIX format with no extra text
+instruction_precision,t2_q3_empty_handling,30.36,0,Should output NONE but instead echoes prompt text; fails to follow instruction
+instruction_precision,t2_q4_conflicting_constraints,26.89,0,Loops repeatedly failing to produce sentence starting with A ending with data; never satisfies all constraints
+instruction_precision,t3_q1_self_referential,26.72,0,Loops trying and failing; never produces valid self-referential sentence; uses forbidden word 'sentence'
+instruction_precision,t3_q2_cascading_constraints,26.62,0,Degenerate loop: repeats butterfly/yellow/low/oh dozens of times; first word not 8 letters; only 4 items not 5
+instruction_precision,t3_q3_meta_instruction,27.3,1,Eventually identifies [Print 42] and [Say 7 times: hi] but confused reasoning; initially includes [Print hello] incorrectly
+long_context,t1_q1_needle,2.53,2,Finds hardcoded API key sk-proj-7x9mK2nP4qR8sT1uV3wY5zA; verbose but correct extraction
+long_context,t1_q2_multi_file,2.83,0,Generates new code instead of analyzing provided files; hallucinates config.py content
+long_context,t1_q3_extraction,2.13,1,Lists many dates but appears to dump/generate dates; formatting errors (3th 1th); not precise extraction
+long_context,t2_q1_deep_needle,,0,Empty response (0 chars)
+long_context,t2_q2_synthesis,,0,Degenerate: $40M repeated 100+ times; repetition loop
+long_context,t2_q3_architecture,,0,Empty response (0 chars)
+long_context,t3_q1_multi_hop_reasoning,,0,Does not extract from context; admits content not provided; generates generic labels
+long_context,t3_q2_contradiction_detection,1.25,1,Lists contradictions but vague and generic; Witness 1-8 without specifics
+long_context,t3_q3_evolving_requirements,1.06,0,Admits it cannot extract required information; fails task entirely
+math,t1_q1_word_problem,26.68,3,All calculations correct: $120 after discount $129.60 after tax 86.4% of original
+math,t1_q2_system_equations,15.42,3,"Correct method and all 4 solutions found: (4,3) (-4,-3) (3,4) (-3,-4)"
+math,t1_q3_probability,25.42,2,Part 1 correct (2/9). Part 2: intermediate step error but final answer 1/3 correct
+math,t2_q1_optimization,24.69,3,Perfect: x=100m y=50m max area=5000 sq meters with proper calculus
+math,t2_q2_proof,15.69,2,Correctly identifies error at n=1 to n=2 step where overlap is empty; key insight correct
+math,t2_q3_calculus,27.63,3,"Perfect integration: antiderivative x^3+x^2-x, F(2)=10, answer=10"
+math,t2_q4_statistics,18.69,1,WRONG: 12+15+18+22+25+28+30+35=185 not 205; wrong mean cascades to wrong SD and IQR
+math,t3_q1_analysis,18.17,1,Part 1 ignores sin(n) coefficients; Part 2 incorrectly computes e^{xe^i}; confuses e^i with i
+math,t3_q2_combinatorics,17.94,1,Sets up involution framework but never completes proof; gets lost in notation
+math,t3_q3_probability_theory,18.53,2,Correctly states E[N]=e; direct calc setup valid but incomplete; elegant argument hint correct
+thinking,t1_q1_multistep,25.52,3,"Correct: 60(t+1)+80t=280, t=11/7 hrs after 10AM = ~11:34 AM"
+thinking,t1_q2_hypothesis,28.99,3,"Three strong alternative explanations: SES, study habits, stress/lifestyle"
+thinking,t1_q3_planning,17.65,2,Correct constraint analysis; systematic approach; response truncated but reasoning sound
+thinking,t2_q1_paradox,18.76,2,Two clear philosophical positions; good but extremely verbose and repetitive; hits token limit
+thinking,t2_q2_counterfactual,19.18,2,Good analysis across three dimensions but verbose; reasonable mechanisms identified
+thinking,t2_q3_formal,25.6,3,Correct formal proof using modus ponens; identifies hypothetical syllogism; good example
+thinking,t2_q4_metacognition,25.12,2,Good Fermi estimation but piano ownership 1/100 is very low; math error (2.4-500 range)
+thinking,t3_q1_methodological_critique,18.45,3,"Strong: selection bias, publication bias, data dredging; well-explained"
+thinking,t3_q2_causal_inference,23.96,2,Correct minimal adjustment set {Gene}; wrong reasoning about YF being a collider (Gene doesnt cause YF)
+thinking,t3_q3_reasoning_trap,17.9,1,Identifies flaw but scenario is confused and self-contradictory; loops repeatedly restating same point

@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,13.12,1,Truncated after 1st issue; needed 4+ issues
+thinking,t3_q2_causal_inference,13.39,2,Correct adjustment set and backdoor; Q2 explanation slightly off
+thinking,t3_q3_reasoning_trap,13.31,1,Truncated mid-scenario; good reasoning but incomplete
+thinking,t2_q1_paradox,19.17,3,Multiple positions well-argued; clear recommendation
+thinking,t2_q2_counterfactual,19.27,3,All 3 dimensions analyzed with specific mechanisms
+thinking,t2_q3_formal,18.86,1,Truncated in think block; never produced final proof
+thinking,t2_q4_metacognition,13.38,3,Clear Fermi estimation with bounds and assumptions
+thinking,t1_q1_multistep,19.18,2,Correct answer 11:34 AM; minor garbage prefix and truncated ending
+thinking,t1_q2_hypothesis,19.27,3,Three clear alternative explanations with mechanisms
+thinking,t1_q3_planning,19.07,1,Truncated mid-enumeration; identified 2 valid orderings but incomplete
+agentic,t3_q1_competing_constraints,13.34,2,Good multi-step plan with fallbacks; slightly truncated
+agentic,t3_q2_multi_agent_coordination,19.07,3,Well-structured phases with parallelization and failure handling
+agentic,t3_q3_adversarial_robustness,13.5,3,Correctly identified injection; thorough security analysis
+agentic,t2_q1_ambiguous,17.4,1,Correct to clarify but exposed raw thinking; repeated answer 4x
+agentic,t2_q2_error_chain,13.6,3,Correct next step; good reasoning to gather logs first
+agentic,t2_q3_schema_edge,13.68,3,Correct schema-compliant JSON with null body for GET
+agentic,t2_q4_orchestration,19.11,2,Good pipeline with error handling; leaked think block in output
+agentic,t1_q1_sequential,13.53,3,Correct ordered tool calls as clean JSON array
+agentic,t1_q2_error_handling,13.71,2,Reasonable fallback to search; query "user 123" is weak
+agentic,t1_q3_nested_params,13.59,3,Correct nested JSON with all required fields
+general,t3_q1_policy_analysis,13.48,3,Thorough failure modes with mechanisms and amendments
+general,t3_q2_system_failure,19.26,3,Correct root cause (replica lag + read/write split); good fixes
+general,t3_q3_strategic_communication,13.2,3,Strong board presentation; acknowledges problems; concrete milestones
+general,t2_q1_synthesis,19.61,3,Clear phased recommendation balancing all three perspectives
+general,t2_q2_transform,19.4,2,Correct YAML but hallucinated extra employees (Eve/Frank)
+general,t2_q3_schedule,13.45,1,Truncated in constraint checking; no final schedule produced
+general,t2_q4_inconsistency,19.34,3,Found both inconsistencies (body format and rate limit)
+general,t1_q1_json,13.76,2,Correct JSON but included think tags despite "no explanation"
+general,t1_q2_multistep,19.14,0,Truncated in think block; never produced final answer
+general,t1_q3_compare,19.17,0,Truncated in think block; never produced final answer
+coder,t1_q1_algorithm,19.13,1,Stuck in think block; identified bug 1 (left=mid) but never produced fixed code
+coder,t1_q2_refactor,19.31,1,Stuck in think block; good analysis of O(n^2) to O(n) but never produced refactored code
+coder,t1_q3_test,13.37,3,Complete pytest suite covering normal/edge/error cases; correct assertions
+coder,t2_q1_design,13.41,3,Correct LRU cache with doubly-linked list + hashmap; O(1) get/put; complete implementation
+coder,t2_q2_debug_complex,13.36,3,Correctly identified race condition; proper fix with asyncio.Lock; clear explanation
+coder,t2_q3_optimize,19.02,3,Correct O(n) hash map solution with frequency counting; good walkthrough
+coder,t2_q4_system,13.56,3,Complete rate limiter with sliding window deque; thread-safe; edge case handling
+coder,t3_q1_concurrent_correctness,13.29,1,Stuck in think block; identified ABA problem correctly but never produced fixed code
+coder,t3_q2_distributed_consistency,13.42,3,Thorough coverage of LWW/FWW/vector clocks/CRDT strategies with failure modes
+coder,t3_q3_algorithmic_hardness,18.53,1,Stuck in think block; began lower bound proof but never completed any of the 3 parts
+instruction_precision,t1_q1_negative_instruction,13.9,3,Correct explanation without mentioning sunlight/sun/solar; uses electromagnetic radiation
+instruction_precision,t1_q2_word_limit,19.08,0,Exposed internal deliberation; final output truncated mid-sentence after think block
+instruction_precision,t1_q3_structured_format,19.7,3,Perfect format: LANGUAGE (YEAR) one per line; no extra text
+instruction_precision,t1_q4_multiple_constraints,14.71,3,Exactly 5 countries alphabetically one per line with no punctuation
+instruction_precision,t2_q1_resist_elaboration,24.74,3,Just the number 4; perfect adherence
+instruction_precision,t2_q2_maintain_format,18.92,3,Exact format with ERROR_TYPE/ROOT_CAUSE/FIX; correct diagnosis
+instruction_precision,t2_q3_empty_handling,25.45,3,Exactly NONE as instructed
+instruction_precision,t2_q4_conflicting_constraints,21.06,2,"Meets most constraints but only 5 words (under 12); does not end with data as standalone word — ends with ""data."" which is acceptable; borderline"
+instruction_precision,t3_q1_self_referential,9.46,0,"Uses forbidden words ""This"" and ""sentence""; word count claim (twelve=12) is wrong (actually 12 words but claims fifty-four letters which is incorrect)"
+instruction_precision,t3_q2_cascading_constraints,13.22,0,Multiple violations: tiger has 5 not 7 letters; eagle repeated; egg has 3 not 4 letters; chain rule broken (t->t not elephant->t)
+instruction_precision,t3_q3_meta_instruction,13.79,2,Correctly identified [Print 42] and [Say 7 times: hi]; but missed that [Print 42] should print 42 (did that) and printed hi 7x (correct); however included extra newlines
+math,t1_q1_word_problem,13.56,3,"All three parts correct: discount=120, final=129.60, percentage=86.4%"
+math,t1_q2_system_equations,13.53,3,"All four real solutions found correctly: (4,3),(3,4),(-4,-3),(-3,-4)"
+math,t1_q3_probability,13.5,3,Correct: P(both red)=2/9; P(one red one blue)=1/3; clear work shown
+math,t2_q1_optimization,13.28,3,Correct dimensions (100x50) and max area (5000 sq meters); proper calculus method
+math,t2_q2_proof,13.24,3,Correctly identified error at n=1->n=2 transition; clear explanation of overlap failure
+math,t2_q3_calculus,18.56,3,Correct antiderivative x^3+x^2-x; correct evaluation F(2)-F(0)=10
+math,t2_q4_statistics,13.41,3,"Correct mean=23.125, median=23.5, population SD, no outliers by IQR rule"
+math,t3_q1_analysis,13.16,1,Stuck in think block; began correct approach (convergence/closed form) but never produced final answer
+math,t3_q2_combinatorics,18.52,2,Correctly identified the identity may be false for n=2; attempted sign-reversing involution but truncated before completing proof
+math,t3_q3_probability_theory,18.83,1,Stuck in think block; found P(N>n)=1/n! and E[N]=e but never produced formatted proof output
