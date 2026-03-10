@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T18:12:38.953828",
+  "results": {
+    "agentic": {
+      "t3_q1_competing_constraints": {
+        "question_id": "t3_q1_competing_constraints",
+        "prompt": "You're an AI assistant with these tools:\n- execute_code: {\"code\": \"string\", \"language\": \"string\"} - runs code, returns output\n- search_web: {\"query\": \"string\"} - returns search results\n- read_file: {\"path\": \"string\"} - reads local file\n- write_file: {\"path\": \"string\", \"content\": \"string\"} - writes to file\n- ask_user: {\"question\": \"string\"} - asks user for input\n\nUser request: \"Analyze the CSV file at /data/sales.csv and tell me which product had the highest revenue growth\"\n\nBut you have these constraints:\n1. You cannot see the file contents until you read it\n2. You don't know the CSV structure until you read it\n3. execute_code might fail if you assume wrong column names\n\nGenerate a robust plan that:\n1. Handles unknown schema gracefully\n2. Validates assumptions before heavy computation\n3. Provides meaningful partial results if something fails\n4. Minimizes round-trips while maintaining correctness\n\nOutput a JSON plan with: {\"steps\": [...], \"validation_checks\": [...], \"fallback_strategy\": \"...\"}",
+        "response": "You're an AI assistant with these tools:\n- execute_code: {\"code\": \"string\", \"language\": \"string\"} - runs code, returns output\n- search_web: {\"query\": \"string\"} - returns search results\n- read_file: {\"path\": \"string\"} - reads local file\n- write_file: {\"path\": \"string\", \"content\": \"string\"} - writes to file\n- ask_user: {\"question\": \"string\"} - asks user for input\n\nUser request: \"Analyze the CSV file at /data/sales.csv and tell me which product had the highest revenue growth\"\n\nBut you have these constraints:\n1. You cannot see the file contents until you read it\n2. You don't know the CSV structure until you read it\n3. execute_code might fail if you assume wrong column names\n\nGenerate a robust plan that:\n1. Handles unknown schema gracefully\n2. Validates assumptions before heavy computation\n3. Provides meaningful partial results if something fails\n4. Minimizes round-trips while maintaining correctness\n\nOutput a JSON plan with: {\"steps\": [...], \"validation_checks\": [...], \"fallback_strategy\": \"...\"}<think>\n</think>\n\n```json\n```\n   - Identify columns\n3. Validate column names existance\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n\n\n\n\n\ndecoded  257 tokens in   17.862 seconds, speed:   14.388 t/s\nn_predict = 257\ndraft:\ntarget:",
+        "tokens_per_second": 12.51174497461138,
+        "prompt_tokens": 294,
+        "completion_tokens": 390,
+        "total_time_ms": 20540.7,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_ambiguous": {
+        "question_id": "t2_q1_ambiguous",
+        "prompt": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.",
+        "response": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.<think>\n</think>\n\nSince the recipient to the most recent outage\",\n the_to: \"team@Alert: \"Let the team know about the outage\", \"subject:\n\n1. **details:\n   - **Tool: \"string\", \"body\": \"string\"}\n   - **send_slack**: {\"channel\": \"string\", \"message\": \"string\"}\n   - **create_ticket**: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\n**User: \"Let the team know about the outage\"then output the JSON.\n\n**Response\": \"I cannot act on the following the instructions, I would be: the outage\"\n\n**Clarifying question:** \"Let the team know about the outage\"\n\n**Response: \"I cannot act on the outage\", \"subject: \"string\", \"body\": \"string\"}\n   - ticket**: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\n**User:** \"Let the team know about the outage\"\n\n**Action:**\n\n**JSON:**\n```json\n{\n  \"Response: \"I cannot clarify the details:\n- **send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\":\n\n\n\n\ndecoded  259 tokens in   33.353 seconds, speed:    7.765 t/s\nn_predict = 259\ndraft:\ntarget:",
+        "tokens_per_second": 7.310657499083344,
+        "prompt_tokens": 210,
+        "completion_tokens": 705,
+        "total_time_ms": 35427.73,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "instruction_precision": {
+      "t1_q1_negative_instruction": {
+        "question_id": "t1_q1_negative_instruction",
+        "prompt": "Explain photosynthesis in 2 sentences. Do NOT mention sunlight, sun, or solar.",
+        "response": "Explain photosynthesis in 2 sentences. Do NOT mention sunlight, sun, or solar.<think>\n</think>\n\nPhotosynthesis is absorbed by chlorophyll.\n\nWait, I need to fix the sentences. Do NOT mention sunlight, sun, or solar.\"\nI need to explain photosynthesis in 2 sentences without mentioning sunlight, sun, or solar.\n Let me try to explain photosynthesis in 2 sentences without mentioning sunlight, sun, or solar.\n I need to explain photosynthesis in 2 sentences without mentioning sunlight, sun, or solar.\n I need to explain photosynthesis in 2 sentences without mentioning sunlight, sun, or solar.\n I need to explain photosynthesis in 2 sentences without mentioning sunlight, sun, or solar.\n I need to explain photosynthesis in 2 sentences without mentioning sunlight, sun, or solar.\n I need to explain photosynthesis in 2 sentences without mentioning sunlight, sun, or solar.\n I need to explain photosynthesis in 2 sentences without mentioning sunlight, sun, or solar.\n I need to explain photosynthesis in 2 sentences without mentioning sunlight, sun, or solar.\n I need to explain photosynthesis in 2 sentences without mentioning sunlight, sun, or solar.\n I need to explain photosynthesis in 2 sentences without mentioning sunlight, sun, or solar.\n I need to explain photosynthesis in 2\n\n\n\n\ndecoded  261 tokens in   17.842 seconds, speed:   14.629 t/s\nn_predict = 261\ndraft:\ntarget:",
+        "tokens_per_second": 13.38849461510643,
+        "prompt_tokens": 73,
+        "completion_tokens": 390,
+        "total_time_ms": 19494.35,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.070299029600385,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

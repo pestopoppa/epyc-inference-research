@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe8_lookup_n3",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T23:15:52.748076",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the given function:**\n    The function is defined by the infinite series:\n    $$f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$$\n    The variable $x$ is a real number. The series looks very similar to the Taylor series expansion of $e^x$, which is $\\sum_{n=0}^{\\infty} \\frac{x^n}{n!} = e^x$. The difference is the extra $\\sin(n)$ factor.\n\n2.  **Part 1: Differentiability**\n    *   *Question:* Is $f(x)$ differentiable everywhere on $\\mathbb{R}$?\n    *   *Approach:* To determine if a power series defines a differentiable function, I should look at its radius of convergence.\n    *   *Ratio Test:* Let $a_n(x) = \\frac{x^n}{n!} \\sin(n)$.\n        Consider $\\lim_{n \\to \\infty} \\left| \\frac{a_{n+1}(x)}{a_n(x)} \\right| = \\lim_{n \\to \\infty} \\left| \\frac{x^{n+1}}{(n+1)!} \\sin(n+1) \\cdot \\frac{n!}{x^n \\sin(n)} \\right|$.\n        $= \\lim_{n \\to \\infty} \\left| \\frac{x}{n+1} \\cdot \\frac{\\sin(n+1)}{\\sin(n)} \\right|$.\n    *   *Issue:* $\\sin(n)$ can be arbitrarily close to 0, so the ratio test for absolute convergence requires a bit more care, or I can use the comparison test.\n    *   *Comparison:* $|\\sin(n)| \\le 1$. Therefore, $| \\frac{x^n}{n!} \\sin(n) | \\le \\frac{|x|^n}{n!}$.\n    *   The series $\\sum \\frac{|x|^n}{n!}$ converges to $e^{|x|}$ for all $x \\in \\mathbb{R}$.\n    *   By the Weierstrass M-test (or simply absolute convergence), the series for $f(x)$ converges absolutely for",
+        "tokens_per_second": 13.91,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 36810.73,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "<think>\n\n</think>\n\nTo find all valid orderings, we will be determined through a systematic logical deduction process.\n\n### Step 1: Analyze Constraints\n\n### Step 2: Determine the Relative Constraints\n\nLet's break down the given constraints:\n\n1.  **$A before $A < B$ ** (A is watered before B.**\n2.  **$D $\\text{Sequence$D \\ \\text D$**C =  = D \\text D < \\text{D,  $D, D }$D \\text \\text D$D$C \\text{ immediately after D } D}$ **$ $D$D}$ $D$**. This implies the.\n2$.** (C$ (D$ ** ($D \\rightarrow \\rightarrow \\rightarrow$C$. In the order.**\n    *   This forms the order: This means the sequence segment is a sequence must be adjacent, we have D, C.\n    * This is: $E cannot be first or last, so $E must be in positions 2, 3, or 4.\n    *  **$B < D < B < E B$B $ must be watered before $B$.\n\n### Step 2.  Logical Deduction\n\n**Step 2.1: Analyze the $D-C-D-C-D block $D-C$-$C$ block:**\nSince C.\nThe $D$ and C$ and $C$ must be adjacent ($DC, with $D$ coming first. There is first. The possible.\n.  * The sequence of  - We can treat $\\text{D}- \\rightarrow$ \\rightarrow \\rightarrow$\n $C.  order:\n   ...D C$A, B, $\n\nStep 3.  $\\text{D}, \\text{C}$.\n $D$ must be $B, and C $B$.  $C.\n\n- $D$\n$.\n\n.  $D$ must $ can be in position 2, 3, or 4.\n\n### Step 3.1: 1: Determine\n.1:\n $E cannot be 4.1:\n\n### 1. **Case 1: $D is$ D is in Position 2 (D: Sequence:\n   - Position 2 (D in 2nd 2. 3. **Case 3, D-C",
+        "tokens_per_second": 6.41,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 79857.87,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nThis policy attempts to establish a rigid \"gatekeeping\" framework for AI deployment, focusing on three pillars: performance (accuracy), interpretability (explainability), and fairness (bias). While these are valid objectives, the specific metrics and thresholds chosen create a brittle system that may inadvertently encourage gaming, stifle innovation, or miss critical risks.\n\nHere is an analysis of the policy's failure modes, mechanisms, and proposed amendments.\n\n### 1. Failure Mode: The \"Accuracy Trap\" and Metric Myopia\n**Mechanism of Failure:**\nThe policy mandates a hard **95% accuracy** threshold on a held-out test set. This creates a classic case of **Goodhart's Law**: \"When a measure becomes a target, it ceases to be a good measure.\"\n*   **Class Imbalance Blindness:** If the dataset is imbalanced (e.g., 99% of transactions are legitimate and 1% are fraud), a model that predicts \"legitimate\" for every single case achieves 99% accuracy but is completely useless for fraud detection. The policy fails to distinguish between \"easy wins\" and \"hard predictions.\"\n*   **Test Set Leakage/Overfitting:** Teams may engineer features specifically to pass the 95% threshold on the specific held-out set used for validation, effectively \"memorizing\" the test set rather than learning generalizable patterns.\n*   **Irrelevant Business Context:** High accuracy is often not the right metric for critical domains. In medical diagnosis or loan approvals, **False Positives** and **False Negatives** have asymmetric costs. A model with 94% accuracy might be preferable if it captures 99% of the \"positive\" cases (sensitivity) compared to a 95% accuracy model that misses critical positives.\n\n**Proposed Amendment:**\nReplace the single \"95% accuracy\" metric with a **business-aligned multi-metric dashboard** that includes:\n*   **F1-Score** or **Precision-Recall AUC** for imbalanced classes.\n*   **Confusion Matrix constraints** (e.g., \"False Negative Rate must be < 1%\").\n*   **Calibration curves** to ensure predicted probabilities match actual outcomes.\n*   **Domain-specific utility metrics** (e.g., \"Must recover at least $X in fraud\" rather than just classifying correctly).\n\n**Trade-offs:**\n*   **Pros:** Aligns AI",
+        "tokens_per_second": 13.74,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37258.14,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.353333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

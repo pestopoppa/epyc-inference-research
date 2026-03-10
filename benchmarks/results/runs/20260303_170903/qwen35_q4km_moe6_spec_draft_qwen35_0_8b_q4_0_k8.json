@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe6_spec_draft_qwen35_0_8b_q4_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T17:51:54.030659",
+  "results": {
+    "coder": {
+      "t2_q3_optimize": {
+        "question_id": "t2_q3_optimize",
+        "prompt": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.",
+        "response": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.\n\n<think>\n\n</think>\n\nHere\u2019s O(n\u00b2-sum_pairs(nums, target):\n    from your target log n time to store the sum = 0\n    freq:\n        complement = target:\n                if count:\n\n### Approach\nThe `nums[i] + nums[j] == target:\n        count += 1\n    return count\n\n### Optimized Approach:\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n```\n\n### Optimized Approach:\n    1. For each element `target - Use a hash O(n) or O(n) time complexity.\n\n### Optimized Code (nums, target):\n    count = 0\n    freq = 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n```\n\n### Optimized Code:\n  - Iterate through the list.\n  - For each element, increment the count.\n 1.\n 1.\n 1.\n 1.\n### Optimized Code:\n    freq\n\n\n\n\ndecoded  257 tokens in   29.475 seconds, speed:    8.719 t/s\nn_predict = 257\ndraft:\ntarget:",
+        "tokens_per_second": 8.491766455936489,
+        "prompt_tokens": 256,
+        "completion_tokens": 532,
+        "total_time_ms": 30264.61,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.\n\n<think>\nHere's a thinking process that leads to the suggested schedule Analysis of Constraints:**\n        *   **60min, **1:1 Alice-Dave (30min)**\n        *   Bob-Dave only available 9-11am and 2-4pm\n-Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n- Available slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\n2.  **Deconstruction (60min):** Needs: Alice, Bob, Carol.\n        * Duration: 60 minutes.\n        * Constraint: Must fit into 60-minute: 9am-30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm.\n        * Wait, **1:1 Alice-Dave (30min)**\n        *, **1:1 Bob-Dave (30 Bob\n\n\n\n\ndecoded  258 tokens in   16.364 seconds, speed:   15.767 t/s\nn_predict = 258\ndraft:\ntarget:",
+        "tokens_per_second": 13.771215277722177,
+        "prompt_tokens": 234,
+        "completion_tokens": 294,
+        "total_time_ms": 18734.73,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_inconsistency": {
+        "question_id": "t2_q4_inconsistency",
+        "prompt": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.",
+        "response": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.\n\n<think>\n\n</think>\n\nBased on the comparison of **ContentWarning: There is a discrepancy in the rate limit**: Doc B: 100 req/min (100 requests per minute)\n   *   Doc C: 1000 req/hour (1000 requests per hour)\n   *   **Inconsistency**: The rate limits are 100 req/hour.\n\n3. **Inconsistency**: The rate limits are 100 req/hour.\n   *   Doc C: 1000 req/hour\n   *minute*\n   *   Doc C: 1000 req/hour\n   *   **Inconsistency: The rate limits are 100 req/hour.\n\n3. **Inconsistency**: The rate limits are 100 req/hour.\n   *   Doc A: 100 req/min\n   *   Doc B: 100 req/hour.\n   *   Doc B: 100 requests per minute.\n   *   Doc C: 1000 req/hour.\n   *   Doc C: 1000 req/hour.\n\n\n\n\n\n\ndecoded  257 tokens in   19.034 seconds, speed:   13.502 t/s\nn_predict = 257\ndraft:\ntarget:",
+        "tokens_per_second": 12.17627455272327,
+        "prompt_tokens": 186,
+        "completion_tokens": 329,
+        "total_time_ms": 21106.62,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.479752095460645,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

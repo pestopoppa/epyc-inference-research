@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T18:26:07.940392",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "<think>\n\n</think>\n\nHere is the step-by-step solution to the problem.\n\n### 1. Differentiability of $f(x)$\n\n**Claim:** The function $f(x)$ is differentiable everywhere on $\\mathbb{R}$.\n\n**Proof:**\nLet the series be defined as:\n$$ f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n) $$\n$$ \\lim_{n \\to \\infty} \\left| \\frac{a_{n+1}(x)}{a_n(x)} \\right| = \\lim_{n \\to \\infty} \\left| \\frac{x^{n+1} \\sin(n+1)}{(n+1)!} \\cdot \\frac{n!}{x^n \\sin(n)} \\right| $$\nSince $|\\sin(n)|$ is bounded by 1 and oscillates, we can look at the magnitude of the coefficients. Let $c_n = \\frac{\\sin(n",
+        "tokens_per_second": 13.33,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19202.0,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the Request:**\n    *   **Goal:** Determine all valid orderings of watering 5 plants (A, B, C, D, E).\n    *   **Constraints:**\n        1.  A < B (A must be watered before B).\n        2.  DC (C must be watered immediately after D).\n        3.  E $\\neq$ 1st, E $\\neq$ 5th (E cannot be first or last).\n        4.  B < D (B must be watered before D).\n\n2.  **Break Down the Constraints:**\n    *   Constraint 1 (A < B): A comes before B.\n    *   Constraint 4 (B < D): B comes before D.\n    *   Combining 1 & 4: A < B < D.\n    *   Constraint 2 (DC): D and C are a block [DC]. Since B < D, B must be before the [DC] block. So, the chain is A < B < [DC].\n    *   Constraint",
+        "tokens_per_second": 13.37,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19146.33,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nThis policy attempts to establish a robust governance framework by setting quantitative thresholds for **performance**, **interpretability**, and **fairness**. However, while well-intentioned, the rigid nature of these metrics creates several \"Goodhart's Law\" traps (where a measure becomes a target and ceases to be a good measure) and practical blind spots.\n\nHere is an analysis of the policy's failure modes, mechanisms, proposed amendments, and the associated trade-offs.\n\n---\n\n### 1. Performance Threshold Failure: The \"95% Accuracy\" Trap\n\n**Failure Mode:**\nThe policy mandates a strict **95% accuracy** threshold for all production models, regardless of the business context or the nature of the data.\n\n**Mechanism of Failure:**\n*   **Class Imbalance Blindness:** In many real-world scenarios (e.g., fraud detection, medical diagnosis, churn prediction), the positive class is rare (e.g., 1% of data). A model that predicts \"No Fraud\" for every single input achieves 99% accuracy but is functionally useless. Conversely, a highly effective model on an imbalanced dataset might only achieve 85% accuracy while having a high recall for the critical minority class.",
+        "tokens_per_second": 13.39,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19122.93,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.363333333333335,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

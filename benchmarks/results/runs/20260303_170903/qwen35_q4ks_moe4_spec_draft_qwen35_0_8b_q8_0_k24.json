@@ -1,0 +1,53 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe4_spec_draft_qwen35_0_8b_q8_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T18:14:47.920295",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the Request:**\n    *   **Function:** $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$.\n    *   **Tasks:**\n        1.  Prove/Disprove differentiability on $\\mathbb{R}$.\n        2.  Find closed form using complex exponentials (specifically hinting at $\\text{Im}(e^{xe^i})$).\n        3.  Calculate limit calculation of $\\lim $x^\\infty \\lim_{x\\infty} \\frac{f(x)}{e^x}$.\n\n2.  **Part 2.\n\n3.  **Plan:**\n\n    *   **Task 1: Differentiability.**\n        *   To show that the series $\\text:    *Idea (1) * f(x) = \\sum_{n=1}^{\\infty} a_n\\frac{x^n}$$f'(x).\n        *    *   *   *   *   *   *   *   *   **Task",
+        "tokens_per_second": 9.47,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 27018.92,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_optimization": {
+        "question_id": "t2_q1_optimization",
+        "prompt": "A farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nWhat dimensions maximize the enclosed area? What is the maximum area?\n\nSet up the optimization problem and solve it.",
+        "response": "<think>\n\n</think>\n\nTo solve this optimization problem, we will follow these steps: define the variables, set up the objective function, apply the constraint, express the variables, find the maximum area function, and solve for the area function to the maximum area.\n\n###  *    The maximum area.\n\n## Step 1: Define Variables and Visualize the diagram.\nThe variables.\n- Let $L the side the width:\n  - $L: $L = $x$ (the length of the rectangle.\n\nLet $x$ be the width (the side perpendicular to the river).\n  Let theLet theLet $y$ be the length (the side parallel to the river).\n\nStep 2: Formulate the Objective Function and Constraint:\n- Objective: Maximize the Area $A = $\n  - $A = xy$ (Area)\n\n### **\n  of the rectangle).\n- $x$ and $y$ are the dimensions of the rectangle.\n  - Perpendicular to the area formula:\n -\n$$x is:\n   - $A = xy$.\n-   - **\n$$\nA = xy\n$$\n\nStep 2\n$$A = xy\n\n###",
+        "tokens_per_second": 6.62,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 38683.71,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_word_problem": {
+        "question_id": "t1_q1_word_problem",
+        "prompt": "A store offers a 20% discount on all items. After the discount, a 8% sales tax is applied. If an item originally costs $150:\n\n1. What is the price after discount?\n2. What is the final price after tax?\n3. What percentage of the original price is the final price?\n\nShow your work for each part.",
+        "response": "Let's calculate the price step by step.\n\n**Part 1: Price after discount**\n\nTo find the price after a 20% discount, we subtract 20% of $150 from the original price.\n\n$$\n\\text{Discount Amount} = 150 \\times 0.20 = 30\n$$\n\n$$\n\\text{Price after Discount} = 150 - 30 = 120\n$$\n\nThe price after discount is **$120**.\n\n---\n\n**Part 2: Final price after tax**\n\nAn 8% sales tax is applied to the discounted price of $120.\n\n$$\n\\text{Tax Amount} = 120 \\times 0.08 = 9.60\n$$\n\n$$\n\\text{Final Price} = 120 + 9.60 = 129.60\n$$\n\nThe final price after tax is **$129.60**.\n\n---\n\n**Part 3: Percentage of original price**\n\nTo find what percentage the final price is of the original price:\n\n$$\n\\text{Percentage}",
+        "tokens_per_second": 13.79,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18562.66,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 9.959999999999999,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_27b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-27B-GGUF/Qwen3.5-27B-Q6_K.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q4_0_k16_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T05:21:18.892686",
+  "results": {
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "<think>\nHere's a thinking process that leads to the suggested answer:\n\n1.  **Analyze the Request:**\n    *   **Task:** Identify and fix two specific bugs in the provided Python `binary_search` function.\n    *   **Input:** A specific implementation of binary search.\n    *   **Output Requirements:** For each bug, provide:\n        1.  Triggering input.\n        2.  Explanation of the failure.\n        3.  The fix.\n\n2.  **Analyze the Code:**\n    ```python\n    def binary_search(arr, target):\n        left, right = 0, len(arr)  # Bug Candidate 1?\n        while left < right:\n            mid = (left + right) // 2\n            if arr[mid] == target:\n                return mid\n            elif arr[mid] < target:\n                left = mid         # Bug Candidate 2?\n            else:\n                right = mid        # Bug Candidate 3?\n        return -1\n    ```\n\n3.  **Identify Potential Issues (Mental Walkthrough):**\n\n    *   **Initialization:** `left = 0`, `right = len(arr)`.\n        *   Standard binary search usually uses `left = 0`, `right = len(arr) - 1`.\n        *   If `right` is `len(arr)`, `arr[right]` is out of bounds. However, `mid` is calculated as `(left + right) // 2`. Since `left < right` is the loop condition, `mid` will always be `< right`. So `mid` is always a valid index (0 to `len(arr) - 1`). This initialization *might* be okay depending on the loop logic, but it's non-standard. Let's look closer at the update logic.\n\n    *   **Loop Condition:** `while left < right:`\n        *   If `left` and `right` converge, the loop stops.\n        *   If the target is found, it returns `mid`.\n        *   If not found, it returns `-1`.\n\n    *   **Update Logic:**\n        *   `elif arr[mid] < target: left = mid`\n        *   `else: right = mid`\n        *   **Problem:** If `left` and `right` are adjacent (e.g., `left",
+        "tokens_per_second": 13.58,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37699.52,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "<think>:\nThe user wants to analyze a specific Directed Acyclic Graph (DAG) to answer three questions about causal inference.\n\n**1. Define the DAG:**\nVariables:\n- $S$: Smoking (Exposure)\n- $C$: Cancer (Outcome)\n- $Y$: Yellow Fingers\n- $G$: Gene\n\nEdges:\n- $G \\to S$\n- $G \\to C$\n- $S \\to C$\n- $S \\to Y$\n- Is there $Y \\to C$? No, the prompt says \"Smoking -> Yellow Fingers\". It does not mention $Y \\to C$.\n- Is there $Y \\to S$? No.\n- Is there $Y \\to G$? No.\n\nLet's draw the structure:\n- $G \\to S$\n- $G \\to C$\n- $S \\to C$\n- $S \\to Y$\n\nSo, $G$ is a confounder of $S$ and $C$ (backdoor path $C \\leftarrow G \\to S$).\n$Y$ is a descendant of $S$ (collider or mediator? No, it's a mediator or a collider depending on other paths, but here $S \\to Y$ and $Y$ does not go anywhere else mentioned).\nWait, is $Y$ on a backdoor path? No, $Y$ is a descendant of $S$.\nIs there any path from $Y$ to $C$? No edge specified from $Y$.\nSo the graph is:\n$G \\to S \\to C$\n$G \\to C$\n$S \\to Y$\n\nLet's check the paths between $S$ and $C$:\n1. Direct: $S \\to C$ (Causal effect we want).\n2. Backdoor: $S \\leftarrow G \\to C$.\n3. Other paths?\n   - $S \\to Y \\dots$ (Dead end).\n   - $C \\leftarrow S \\dots$\n   - $C \\leftarrow G \\dots$\n   - $C \\leftarrow G \\to S \\to Y \\dots$ (Dead end).\n\nSo the only confounding path is via $G$.\n\n**2. Question 1: What is the minimal sufficient adjustment set?**\nTo estimate the causal",
+        "tokens_per_second": 13.59,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37688.0,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"phase_id\": 1,\n      \"description\": \"Data Acquisition\",\n      \"agents\": [\"researcher_agent\"],\n      \"task\": \"Search for the current AAPL stock price and the last 30 days of historical closing prices.\",\n      \"output_format\": \"JSON object with 'current_price' (float) and 'historical_prices' (array of 30 floats in reverse chronological order).\"\n    },\n    {\n      \"phase_id\": 2,\n      \"description\": \"Calculation\",\n      \"agents\": [\"coder_agent\"],\n      \"task\": \"Calculate the 30-day simple moving average (SMA) using the historical_prices array provided in the input context.\",\n      \"output_format\": \"JSON object with 'sma_30' (float).\"\n    },\n    {\n      \"phase_id\": 3,\n      \"description\": \"Verification\",\n      \"agents\": [\"reviewer_agent\"],\n      \"task\": \"Verify the calculated SMA logic by manually computing the average of the provided historical_prices array against the coder_agent's result. Check if the formula used is (Sum of last 30 prices) / 30.\",\n      \"output_format\": \"JSON object with 'verification_status' (boolean), 'calculated_sma' (float), and 'confidence_score' (float).\"\n    }\n  ],\n  \"context_passing\": {\n    \"phase_1_to_2\": {\n      \"source\": \"researcher_agent output\",\n      \"destination\": \"coder_agent input\",\n      \"key_fields\": [\n        \"historical_prices\"\n      ],\n      \"description\": \"Pass the raw historical price data collected by the researcher to the coder for calculation. The current_price is noted but not needed for the SMA calculation.\"\n    },\n    \"phase_2_to_3\": {\n      \"source\": \"coder_agent output\",\n      \"destination\": \"reviewer_agent input\",\n      \"key_fields\": [\n        \"sma_30\",\n        \"historical_prices\"\n      ],\n      \"description\": \"Pass the calculated SMA and the original historical data to the reviewer. The reviewer needs the raw data to independently verify the math.\"\n    }\n  },\n  \"parallel_groups\": [],\n  \"failure_handling\": {\n    \"",
+        "tokens_per_second": 13.59,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37674.32,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.586666666666666,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

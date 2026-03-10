@@ -1,0 +1,1991 @@
+load_backend: loaded CPU backend from /mnt/raid0/llm/llama.cpp/build/bin/libggml-cpu-zen4.so
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+build: 8210 (bb21af7cf) with GNU 13.3.0 for Linux x86_64
+/proc/sys/kernel/numa_balancing is enabled, this has been observed to impair performance
+system info: n_threads = 96, n_threads_batch = 96, total_threads = 192
+
+system_info: n_threads = 96 (n_threads_batch = 96) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+
+init: using 191 threads for HTTP server
+start: binding port with default address family
+main: loading model
+srv    load_model: loading model '/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf'
+common_init_result: fitting params to device memory, for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on
+llama_params_fit_impl: no devices with dedicated memory found
+llama_params_fit: successfully fit params to free device memory
+llama_params_fit: fitting params to free memory took 0.30 seconds
+llama_model_loader: loaded meta data with 46 key-value pairs and 427 tensors from /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen35
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Qwen3.5-9B
+llama_model_loader: - kv   3:                           general.basename str              = Qwen3.5-9B
+llama_model_loader: - kv   4:                       general.quantized_by str              = Unsloth
+llama_model_loader: - kv   5:                         general.size_label str              = 9B
+llama_model_loader: - kv   6:                            general.license str              = apache-2.0
+llama_model_loader: - kv   7:                       general.license.link str              = https://huggingface.co/Qwen/Qwen3.5-9...
+llama_model_loader: - kv   8:                           general.repo_url str              = https://huggingface.co/unsloth
+llama_model_loader: - kv   9:                   general.base_model.count u32              = 1
+llama_model_loader: - kv  10:                  general.base_model.0.name str              = Qwen3.5 9B
+llama_model_loader: - kv  11:          general.base_model.0.organization str              = Qwen
+llama_model_loader: - kv  12:              general.base_model.0.repo_url str              = https://huggingface.co/Qwen/Qwen3.5-9B
+llama_model_loader: - kv  13:                               general.tags arr[str,2]       = ["unsloth", "image-text-to-text"]
+llama_model_loader: - kv  14:                         qwen35.block_count u32              = 32
+llama_model_loader: - kv  15:                      qwen35.context_length u32              = 262144
+llama_model_loader: - kv  16:                    qwen35.embedding_length u32              = 4096
+llama_model_loader: - kv  17:                 qwen35.feed_forward_length u32              = 12288
+llama_model_loader: - kv  18:                qwen35.attention.head_count u32              = 16
+llama_model_loader: - kv  19:             qwen35.attention.head_count_kv u32              = 4
+llama_model_loader: - kv  20:             qwen35.rope.dimension_sections arr[i32,4]       = [11, 11, 10, 0]
+llama_model_loader: - kv  21:                      qwen35.rope.freq_base f32              = 10000000.000000
+llama_model_loader: - kv  22:    qwen35.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  23:                qwen35.attention.key_length u32              = 256
+llama_model_loader: - kv  24:              qwen35.attention.value_length u32              = 256
+llama_model_loader: - kv  25:                     qwen35.ssm.conv_kernel u32              = 4
+llama_model_loader: - kv  26:                      qwen35.ssm.state_size u32              = 128
+llama_model_loader: - kv  27:                     qwen35.ssm.group_count u32              = 16
+llama_model_loader: - kv  28:                  qwen35.ssm.time_step_rank u32              = 32
+llama_model_loader: - kv  29:                      qwen35.ssm.inner_size u32              = 4096
+llama_model_loader: - kv  30:             qwen35.full_attention_interval u32              = 4
+llama_model_loader: - kv  31:                qwen35.rope.dimension_count u32              = 64
+llama_model_loader: - kv  32:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  33:                         tokenizer.ggml.pre str              = qwen35
+llama_model_loader: - kv  34:                      tokenizer.ggml.tokens arr[str,248320]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  35:                  tokenizer.ggml.token_type arr[i32,248320]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  36:                      tokenizer.ggml.merges arr[str,247587]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  37:                tokenizer.ggml.eos_token_id u32              = 248046
+llama_model_loader: - kv  38:            tokenizer.ggml.padding_token_id u32              = 248055
+llama_model_loader: - kv  39:                    tokenizer.chat_template str              = {%- set image_count = namespace(value...
+llama_model_loader: - kv  40:               general.quantization_version u32              = 2
+llama_model_loader: - kv  41:                          general.file_type u32              = 15
+llama_model_loader: - kv  42:                      quantize.imatrix.file str              = Qwen3.5-9B-GGUF/imatrix_unsloth.gguf
+llama_model_loader: - kv  43:                   quantize.imatrix.dataset str              = unsloth_calibration_Qwen3.5-9B.txt
+llama_model_loader: - kv  44:             quantize.imatrix.entries_count u32              = 248
+llama_model_loader: - kv  45:              quantize.imatrix.chunks_count u32              = 80
+llama_model_loader: - type  f32:  177 tensors
+llama_model_loader: - type q8_0:   48 tensors
+llama_model_loader: - type q4_K:  132 tensors
+llama_model_loader: - type q5_K:   48 tensors
+llama_model_loader: - type q6_K:   22 tensors
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = Q4_K - Medium
+print_info: file size   = 5.28 GiB (5.07 BPW) 
+load: 0 unused tokens
+load: printing all EOG tokens:
+load:   - 248044 ('<|endoftext|>')
+load:   - 248046 ('<|im_end|>')
+load:   - 248063 ('<|fim_pad|>')
+load:   - 248064 ('<|repo_name|>')
+load:   - 248065 ('<|file_sep|>')
+load: special tokens cache size = 33
+load: token to piece cache size = 1.7581 MB
+print_info: arch                  = qwen35
+print_info: vocab_only            = 0
+print_info: no_alloc              = 0
+print_info: n_ctx_train           = 262144
+print_info: n_embd                = 4096
+print_info: n_embd_inp            = 4096
+print_info: n_layer               = 32
+print_info: n_head                = 16
+print_info: n_head_kv             = 4
+print_info: n_rot                 = 64
+print_info: n_swa                 = 0
+print_info: is_swa_any            = 0
+print_info: n_embd_head_k         = 256
+print_info: n_embd_head_v         = 256
+print_info: n_gqa                 = 4
+print_info: n_embd_k_gqa          = 1024
+print_info: n_embd_v_gqa          = 1024
+print_info: f_norm_eps            = 0.0e+00
+print_info: f_norm_rms_eps        = 1.0e-06
+print_info: f_clamp_kqv           = 0.0e+00
+print_info: f_max_alibi_bias      = 0.0e+00
+print_info: f_logit_scale         = 0.0e+00
+print_info: f_attn_scale          = 0.0e+00
+print_info: n_ff                  = 12288
+print_info: n_expert              = 0
+print_info: n_expert_used         = 0
+print_info: n_expert_groups       = 0
+print_info: n_group_used          = 0
+print_info: causal attn           = 1
+print_info: pooling type          = 0
+print_info: rope type             = 40
+print_info: rope scaling          = linear
+print_info: freq_base_train       = 10000000.0
+print_info: freq_scale_train      = 1
+print_info: n_ctx_orig_yarn       = 262144
+print_info: rope_yarn_log_mul     = 0.0000
+print_info: rope_finetuned        = unknown
+print_info: mrope sections        = [11, 11, 10, 0]
+print_info: ssm_d_conv            = 4
+print_info: ssm_d_inner           = 4096
+print_info: ssm_d_state           = 128
+print_info: ssm_dt_rank           = 32
+print_info: ssm_n_group           = 16
+print_info: ssm_dt_b_c_rms        = 0
+print_info: model type            = ?B
+print_info: model params          = 8.95 B
+print_info: general.name          = Qwen3.5-9B
+print_info: vocab type            = BPE
+print_info: n_vocab               = 248320
+print_info: n_merges              = 247587
+print_info: BOS token             = 11 ','
+print_info: EOS token             = 248046 '<|im_end|>'
+print_info: EOT token             = 248046 '<|im_end|>'
+print_info: PAD token             = 248055 '<|vision_pad|>'
+print_info: LF token              = 198 'Ċ'
+print_info: FIM PRE token         = 248060 '<|fim_prefix|>'
+print_info: FIM SUF token         = 248062 '<|fim_suffix|>'
+print_info: FIM MID token         = 248061 '<|fim_middle|>'
+print_info: FIM PAD token         = 248063 '<|fim_pad|>'
+print_info: FIM REP token         = 248064 '<|repo_name|>'
+print_info: FIM SEP token         = 248065 '<|file_sep|>'
+print_info: EOG token             = 248044 '<|endoftext|>'
+print_info: EOG token             = 248046 '<|im_end|>'
+print_info: EOG token             = 248063 '<|fim_pad|>'
+print_info: EOG token             = 248064 '<|repo_name|>'
+print_info: EOG token             = 248065 '<|file_sep|>'
+print_info: max token length      = 256
+load_tensors: loading model tensors, this can take a while... (mmap = true, direct_io = false)
+load_tensors:   CPU_Mapped model buffer size =  5406.91 MiB
+load_tensors:   CPU_REPACK model buffer size =  2616.75 MiB
+..............................................................................
+common_init_result: added <|endoftext|> logit bias = -inf
+common_init_result: added <|im_end|> logit bias = -inf
+common_init_result: added <|fim_pad|> logit bias = -inf
+common_init_result: added <|repo_name|> logit bias = -inf
+common_init_result: added <|file_sep|> logit bias = -inf
+llama_context: constructing llama_context
+llama_context: n_seq_max     = 1
+llama_context: n_ctx         = 262144
+llama_context: n_ctx_seq     = 262144
+llama_context: n_batch       = 2048
+llama_context: n_ubatch      = 512
+llama_context: causal_attn   = 1
+llama_context: flash_attn    = auto
+llama_context: kv_unified    = false
+llama_context: freq_base     = 10000000.0
+llama_context: freq_scale    = 1
+llama_context:        CPU  output buffer size =     0.95 MiB
+llama_kv_cache:        CPU KV buffer size =  8192.00 MiB
+llama_kv_cache: size = 8192.00 MiB (262144 cells,   8 layers,  1/1 seqs), K (f16): 4096.00 MiB, V (f16): 4096.00 MiB
+llama_memory_recurrent:        CPU RS buffer size =    50.25 MiB
+llama_memory_recurrent: size =   50.25 MiB (     1 cells,  32 layers,  1 seqs), R (f32):    2.25 MiB, S (f32):   48.00 MiB
+sched_reserve: reserving ...
+sched_reserve: Flash Attention was auto, set to enabled
+sched_reserve:        CPU compute buffer size =   816.02 MiB
+sched_reserve: graph nodes  = 6369 (with bs=512), 2361 (with bs=1)
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 9.06 ms, sched copies = 1
+common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+srv    load_model: loading draft model '/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf'
+llama_model_loader: loaded meta data with 46 key-value pairs and 320 tensors from /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen35
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Qwen3.5-0.8B
+llama_model_loader: - kv   3:                           general.basename str              = Qwen3.5-0.8B
+llama_model_loader: - kv   4:                       general.quantized_by str              = Unsloth
+llama_model_loader: - kv   5:                         general.size_label str              = 0.8B
+llama_model_loader: - kv   6:                            general.license str              = apache-2.0
+llama_model_loader: - kv   7:                       general.license.link str              = https://huggingface.co/Qwen/Qwen3.5-0...
+llama_model_loader: - kv   8:                           general.repo_url str              = https://huggingface.co/unsloth
+llama_model_loader: - kv   9:                   general.base_model.count u32              = 1
+llama_model_loader: - kv  10:                  general.base_model.0.name str              = Qwen3.5 0.8B
+llama_model_loader: - kv  11:          general.base_model.0.organization str              = Qwen
+llama_model_loader: - kv  12:              general.base_model.0.repo_url str              = https://huggingface.co/Qwen/Qwen3.5-0.8B
+llama_model_loader: - kv  13:                               general.tags arr[str,1]       = ["image-text-to-text"]
+llama_model_loader: - kv  14:                         qwen35.block_count u32              = 24
+llama_model_loader: - kv  15:                      qwen35.context_length u32              = 262144
+llama_model_loader: - kv  16:                    qwen35.embedding_length u32              = 1024
+llama_model_loader: - kv  17:                 qwen35.feed_forward_length u32              = 3584
+llama_model_loader: - kv  18:                qwen35.attention.head_count u32              = 8
+llama_model_loader: - kv  19:             qwen35.attention.head_count_kv u32              = 2
+llama_model_loader: - kv  20:             qwen35.rope.dimension_sections arr[i32,4]       = [11, 11, 10, 0]
+llama_model_loader: - kv  21:                      qwen35.rope.freq_base f32              = 10000000.000000
+llama_model_loader: - kv  22:    qwen35.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  23:                qwen35.attention.key_length u32              = 256
+llama_model_loader: - kv  24:              qwen35.attention.value_length u32              = 256
+llama_model_loader: - kv  25:                     qwen35.ssm.conv_kernel u32              = 4
+llama_model_loader: - kv  26:                      qwen35.ssm.state_size u32              = 128
+llama_model_loader: - kv  27:                     qwen35.ssm.group_count u32              = 16
+llama_model_loader: - kv  28:                  qwen35.ssm.time_step_rank u32              = 16
+llama_model_loader: - kv  29:                      qwen35.ssm.inner_size u32              = 2048
+llama_model_loader: - kv  30:             qwen35.full_attention_interval u32              = 4
+llama_model_loader: - kv  31:                qwen35.rope.dimension_count u32              = 64
+llama_model_loader: - kv  32:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  33:                         tokenizer.ggml.pre str              = qwen35
+llama_model_loader: - kv  34:                      tokenizer.ggml.tokens arr[str,248320]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  35:                  tokenizer.ggml.token_type arr[i32,248320]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  36:                      tokenizer.ggml.merges arr[str,247587]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  37:                tokenizer.ggml.eos_token_id u32              = 248046
+llama_model_loader: - kv  38:            tokenizer.ggml.padding_token_id u32              = 248055
+llama_model_loader: - kv  39:                    tokenizer.chat_template str              = {%- set image_count = namespace(value...
+llama_model_loader: - kv  40:               general.quantization_version u32              = 2
+llama_model_loader: - kv  41:                          general.file_type u32              = 7
+llama_model_loader: - kv  42:                      quantize.imatrix.file str              = Qwen3.5-0.8B-GGUF/imatrix_unsloth.gguf
+llama_model_loader: - kv  43:                   quantize.imatrix.dataset str              = unsloth_calibration_Qwen3.5-0.8B.txt
+llama_model_loader: - kv  44:             quantize.imatrix.entries_count u32              = 186
+llama_model_loader: - kv  45:              quantize.imatrix.chunks_count u32              = 80
+llama_model_loader: - type  f32:  133 tensors
+llama_model_loader: - type q8_0:  187 tensors
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = Q8_0
+print_info: file size   = 763.78 MiB (8.52 BPW) 
+load: 0 unused tokens
+load: printing all EOG tokens:
+load:   - 248044 ('<|endoftext|>')
+load:   - 248046 ('<|im_end|>')
+load:   - 248063 ('<|fim_pad|>')
+load:   - 248064 ('<|repo_name|>')
+load:   - 248065 ('<|file_sep|>')
+load: special tokens cache size = 33
+load: token to piece cache size = 1.7581 MB
+print_info: arch                  = qwen35
+print_info: vocab_only            = 0
+print_info: no_alloc              = 0
+print_info: n_ctx_train           = 262144
+print_info: n_embd                = 1024
+print_info: n_embd_inp            = 1024
+print_info: n_layer               = 24
+print_info: n_head                = 8
+print_info: n_head_kv             = 2
+print_info: n_rot                 = 64
+print_info: n_swa                 = 0
+print_info: is_swa_any            = 0
+print_info: n_embd_head_k         = 256
+print_info: n_embd_head_v         = 256
+print_info: n_gqa                 = 4
+print_info: n_embd_k_gqa          = 512
+print_info: n_embd_v_gqa          = 512
+print_info: f_norm_eps            = 0.0e+00
+print_info: f_norm_rms_eps        = 1.0e-06
+print_info: f_clamp_kqv           = 0.0e+00
+print_info: f_max_alibi_bias      = 0.0e+00
+print_info: f_logit_scale         = 0.0e+00
+print_info: f_attn_scale          = 0.0e+00
+print_info: n_ff                  = 3584
+print_info: n_expert              = 0
+print_info: n_expert_used         = 0
+print_info: n_expert_groups       = 0
+print_info: n_group_used          = 0
+print_info: causal attn           = 1
+print_info: pooling type          = 0
+print_info: rope type             = 40
+print_info: rope scaling          = linear
+print_info: freq_base_train       = 10000000.0
+print_info: freq_scale_train      = 1
+print_info: n_ctx_orig_yarn       = 262144
+print_info: rope_yarn_log_mul     = 0.0000
+print_info: rope_finetuned        = unknown
+print_info: mrope sections        = [11, 11, 10, 0]
+print_info: ssm_d_conv            = 4
+print_info: ssm_d_inner           = 2048
+print_info: ssm_d_state           = 128
+print_info: ssm_dt_rank           = 16
+print_info: ssm_n_group           = 16
+print_info: ssm_dt_b_c_rms        = 0
+print_info: model type            = 2B
+print_info: model params          = 752.39 M
+print_info: general.name          = Qwen3.5-0.8B
+print_info: vocab type            = BPE
+print_info: n_vocab               = 248320
+print_info: n_merges              = 247587
+print_info: BOS token             = 11 ','
+print_info: EOS token             = 248046 '<|im_end|>'
+print_info: EOT token             = 248046 '<|im_end|>'
+print_info: PAD token             = 248055 '<|vision_pad|>'
+print_info: LF token              = 198 'Ċ'
+print_info: FIM PRE token         = 248060 '<|fim_prefix|>'
+print_info: FIM SUF token         = 248062 '<|fim_suffix|>'
+print_info: FIM MID token         = 248061 '<|fim_middle|>'
+print_info: FIM PAD token         = 248063 '<|fim_pad|>'
+print_info: FIM REP token         = 248064 '<|repo_name|>'
+print_info: FIM SEP token         = 248065 '<|file_sep|>'
+print_info: EOG token             = 248044 '<|endoftext|>'
+print_info: EOG token             = 248046 '<|im_end|>'
+print_info: EOG token             = 248063 '<|fim_pad|>'
+print_info: EOG token             = 248064 '<|repo_name|>'
+print_info: EOG token             = 248065 '<|file_sep|>'
+print_info: max token length      = 256
+load_tensors: loading model tensors, this can take a while... (mmap = true, direct_io = false)
+load_tensors:   CPU_Mapped model buffer size =   763.78 MiB
+....................................................................
+srv    load_model: initializing slots, n_slots = 1
+llama_context: constructing llama_context
+llama_context: n_seq_max     = 1
+llama_context: n_ctx         = 262144
+llama_context: n_ctx_seq     = 262144
+llama_context: n_batch       = 262144
+llama_context: n_ubatch      = 512
+llama_context: causal_attn   = 1
+llama_context: flash_attn    = auto
+llama_context: kv_unified    = false
+llama_context: freq_base     = 10000000.0
+llama_context: freq_scale    = 1
+llama_context:        CPU  output buffer size =     0.95 MiB
+llama_kv_cache:        CPU KV buffer size =  3072.00 MiB
+llama_kv_cache: size = 3072.00 MiB (262144 cells,   6 layers,  1/1 seqs), K (f16): 1536.00 MiB, V (f16): 1536.00 MiB
+llama_memory_recurrent:        CPU RS buffer size =    19.27 MiB
+llama_memory_recurrent: size =   19.27 MiB (     1 cells,  24 layers,  1 seqs), R (f32):    1.27 MiB, S (f32):   18.00 MiB
+sched_reserve: reserving ...
+sched_reserve: Flash Attention was auto, set to enabled
+sched_reserve:        CPU compute buffer size =   786.02 MiB
+sched_reserve: graph nodes  = 4743 (with bs=512), 1737 (with bs=1)
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 6.31 ms, sched copies = 1
+slot   load_model: id  0 | task -1 | speculative decoding context initialized
+slot   load_model: id  0 | task -1 | new slot, n_ctx = 262144
+srv    load_model: prompt cache is enabled, size limit: 8192 MiB
+srv    load_model: use `--cache-ram 0` to disable the prompt cache
+srv    load_model: for more info see https://github.com/ggml-org/llama.cpp/pull/16391
+init: chat template, example_format: '<|im_start|>system
+You are a helpful assistant<|im_end|>
+<|im_start|>user
+Hello<|im_end|>
+<|im_start|>assistant
+Hi there<|im_end|>
+<|im_start|>user
+How are you?<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+
+'
+srv          init: init: chat template, thinking = 0
+main: model loaded
+main: server is listening on http://127.0.0.1:9090
+main: starting the main loop...
+srv  update_slots: all slots are idle
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+slot update_slots: id  0 | task 0 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 13
+slot update_slots: id  0 | task 0 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 0 | init sampler, took 0.00 ms, tokens: text = 13, total = 13
+slot update_slots: id  0 | task 0 | prompt processing done, n_tokens = 13, batch.n_tokens = 13
+slot print_timing: id  0 | task 0 | 
+prompt eval time =     217.02 ms /    13 tokens (   16.69 ms per token,    59.90 tokens per second)
+       eval time =     405.61 ms /     5 tokens (   81.12 ms per token,    12.33 tokens per second)
+      total time =     622.63 ms /    18 tokens
+draft acceptance rate = 1.00000 (    2 accepted /     2 generated)
+statistics draft: #calls(b,g,a) = 1 1 1, #gen drafts = 1, #acc drafts = 1, #gen tokens = 2, #acc tokens = 2, dur(b,g,a) = 0.000, 145.543, 0.000 ms
+slot      release: id  0 | task 0 | stop processing: n_tokens = 17, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1748978395285
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 17, total state size = 50.782 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.176, sim = 0.025
+srv        update:  - cache state: 1 prompts, 50.782 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv  get_availabl: prompt cache update took 13.76 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 4 | processing task, is_child = 0
+slot update_slots: id  0 | task 4 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 120
+slot update_slots: id  0 | task 4 | n_past = 3, slot.prompt.tokens.size() = 17, seq_id = 0, pos_min = 16, n_swa = 1
+slot update_slots: id  0 | task 4 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 4 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 4 | init sampler, took 0.01 ms, tokens: text = 120, total = 120
+slot update_slots: id  0 | task 4 | prompt processing done, n_tokens = 120, batch.n_tokens = 120
+find_slot: non-consecutive token position 119 after 14 for sequence 0 with 117 new tokens
+find_slot: non-consecutive token position 119 after 14 for sequence 0 with 117 new tokens
+find_slot: non-consecutive token position 135 after 126 for sequence 0 with 8 new tokens
+find_slot: non-consecutive token position 135 after 126 for sequence 0 with 8 new tokens
+slot print_timing: id  0 | task 4 | 
+prompt eval time =     629.94 ms /   120 tokens (    5.25 ms per token,   190.49 tokens per second)
+       eval time =    1070.62 ms /    17 tokens (   62.98 ms per token,    15.88 tokens per second)
+      total time =    1700.56 ms /   137 tokens
+draft acceptance rate = 0.86667 (   13 accepted /    15 generated)
+statistics draft: #calls(b,g,a) = 2 4 4, #gen drafts = 4, #acc drafts = 4, #gen tokens = 17, #acc tokens = 15, dur(b,g,a) = 0.001, 686.643, 0.001 ms
+slot      release: id  0 | task 4 | stop processing: n_tokens = 136, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1748980293678
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 136, total state size = 54.752 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.022, sim = 0.011
+srv        update:  - cache state: 2 prompts, 105.535 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv  get_availabl: prompt cache update took 14.87 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 9 | processing task, is_child = 0
+slot update_slots: id  0 | task 9 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 282
+slot update_slots: id  0 | task 9 | n_past = 3, slot.prompt.tokens.size() = 136, seq_id = 0, pos_min = 135, n_swa = 1
+slot update_slots: id  0 | task 9 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 9 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 9 | init sampler, took 0.03 ms, tokens: text = 282, total = 282
+slot update_slots: id  0 | task 9 | prompt processing done, n_tokens = 282, batch.n_tokens = 282
+find_slot: non-consecutive token position 281 after 136 for sequence 0 with 279 new tokens
+find_slot: non-consecutive token position 281 after 136 for sequence 0 with 279 new tokens
+find_slot: non-consecutive token position 286 after 281 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 286 after 281 for sequence 0 with 4 new tokens
+slot print_timing: id  0 | task 9 | 
+prompt eval time =    1172.57 ms /   282 tokens (    4.16 ms per token,   240.50 tokens per second)
+       eval time =     640.09 ms /     6 tokens (  106.68 ms per token,     9.37 tokens per second)
+      total time =    1812.66 ms /   288 tokens
+draft acceptance rate = 0.66667 (    4 accepted /     6 generated)
+statistics draft: #calls(b,g,a) = 3 5 5, #gen drafts = 5, #acc drafts = 5, #gen tokens = 23, #acc tokens = 19, dur(b,g,a) = 0.002, 1146.655, 0.002 ms
+slot      release: id  0 | task 9 | stop processing: n_tokens = 287, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1748982299126
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 287, total state size = 59.348 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.010, sim = 0.038
+srv        update:  - cache state: 3 prompts, 164.882 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv  get_availabl: prompt cache update took 15.57 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 12 | processing task, is_child = 0
+slot update_slots: id  0 | task 12 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 78
+slot update_slots: id  0 | task 12 | n_past = 3, slot.prompt.tokens.size() = 287, seq_id = 0, pos_min = 286, n_swa = 1
+slot update_slots: id  0 | task 12 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 12 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 12 | init sampler, took 0.01 ms, tokens: text = 78, total = 78
+slot update_slots: id  0 | task 12 | prompt processing done, n_tokens = 78, batch.n_tokens = 78
+find_slot: non-consecutive token position 77 after 287 for sequence 0 with 75 new tokens
+find_slot: non-consecutive token position 77 after 287 for sequence 0 with 75 new tokens
+find_slot: non-consecutive token position 91 after 81 for sequence 0 with 9 new tokens
+find_slot: non-consecutive token position 91 after 81 for sequence 0 with 9 new tokens
+slot print_timing: id  0 | task 12 | 
+prompt eval time =     465.26 ms /    78 tokens (    5.96 ms per token,   167.65 tokens per second)
+       eval time =     843.20 ms /    15 tokens (   56.21 ms per token,    17.79 tokens per second)
+      total time =    1308.45 ms /    93 tokens
+draft acceptance rate = 0.85714 (   12 accepted /    14 generated)
+statistics draft: #calls(b,g,a) = 4 7 7, #gen drafts = 7, #acc drafts = 7, #gen tokens = 37, #acc tokens = 31, dur(b,g,a) = 0.002, 1595.727, 0.002 ms
+slot      release: id  0 | task 12 | stop processing: n_tokens = 92, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1748983800427
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 92, total state size = 53.408 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.033, sim = 0.010
+srv        update:  - cache state: 4 prompts, 218.291 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv  get_availabl: prompt cache update took 14.51 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 16 | processing task, is_child = 0
+slot update_slots: id  0 | task 16 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 288
+slot update_slots: id  0 | task 16 | n_past = 3, slot.prompt.tokens.size() = 92, seq_id = 0, pos_min = 91, n_swa = 1
+slot update_slots: id  0 | task 16 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 16 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 16 | init sampler, took 0.03 ms, tokens: text = 288, total = 288
+slot update_slots: id  0 | task 16 | prompt processing done, n_tokens = 288, batch.n_tokens = 288
+find_slot: non-consecutive token position 287 after 92 for sequence 0 with 285 new tokens
+find_slot: non-consecutive token position 287 after 92 for sequence 0 with 285 new tokens
+find_slot: non-consecutive token position 292 after 287 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 292 after 287 for sequence 0 with 4 new tokens
+slot print_timing: id  0 | task 16 | 
+prompt eval time =    1166.62 ms /   288 tokens (    4.05 ms per token,   246.87 tokens per second)
+       eval time =     603.84 ms /     6 tokens (  100.64 ms per token,     9.94 tokens per second)
+      total time =    1770.46 ms /   294 tokens
+draft acceptance rate = 0.66667 (    4 accepted /     6 generated)
+statistics draft: #calls(b,g,a) = 5 8 8, #gen drafts = 8, #acc drafts = 8, #gen tokens = 43, #acc tokens = 35, dur(b,g,a) = 0.002, 2027.767, 0.003 ms
+slot      release: id  0 | task 16 | stop processing: n_tokens = 293, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1748985745472
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 293, total state size = 59.535 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.010, sim = 0.025
+srv        update:  - cache state: 5 prompts, 277.826 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv  get_availabl: prompt cache update took 15.50 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 19 | processing task, is_child = 0
+slot update_slots: id  0 | task 19 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 122
+slot update_slots: id  0 | task 19 | n_past = 3, slot.prompt.tokens.size() = 293, seq_id = 0, pos_min = 292, n_swa = 1
+slot update_slots: id  0 | task 19 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 19 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 19 | init sampler, took 0.01 ms, tokens: text = 122, total = 122
+slot update_slots: id  0 | task 19 | prompt processing done, n_tokens = 122, batch.n_tokens = 122
+find_slot: non-consecutive token position 121 after 293 for sequence 0 with 119 new tokens
+find_slot: non-consecutive token position 121 after 293 for sequence 0 with 119 new tokens
+find_slot: non-consecutive token position 124 after 121 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 124 after 121 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 134 after 124 for sequence 0 with 9 new tokens
+find_slot: non-consecutive token position 134 after 124 for sequence 0 with 9 new tokens
+find_slot: non-consecutive token position 130 after 124 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 130 after 124 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 131 after 133 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 131 after 133 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 132 after 132 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 132 after 132 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 134 after 130 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 134 after 130 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 133 after 130 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 133 after 130 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 135 after 135 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 135 after 135 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 139 after 133 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 139 after 133 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 137 after 133 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 137 after 133 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 138 after 138 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 138 after 138 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 146 after 144 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 146 after 144 for sequence 0 with 1 new tokens
+slot print_timing: id  0 | task 19 | 
+prompt eval time =     495.36 ms /   122 tokens (    4.06 ms per token,   246.29 tokens per second)
+       eval time =    3070.91 ms /    26 tokens (  118.11 ms per token,     8.47 tokens per second)
+      total time =    3566.27 ms /   148 tokens
+draft acceptance rate = 0.43243 (   16 accepted /    37 generated)
+statistics draft: #calls(b,g,a) = 6 17 14, #gen drafts = 17, #acc drafts = 14, #gen tokens = 80, #acc tokens = 51, dur(b,g,a) = 0.002, 3021.773, 0.005 ms
+slot      release: id  0 | task 19 | stop processing: n_tokens = 147, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1748989410715
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 147, total state size = 55.159 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.020, sim = 0.017
+srv        update:  - cache state: 6 prompts, 332.985 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv  get_availabl: prompt cache update took 14.61 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 30 | processing task, is_child = 0
+slot update_slots: id  0 | task 30 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 175
+slot update_slots: id  0 | task 30 | n_past = 3, slot.prompt.tokens.size() = 147, seq_id = 0, pos_min = 146, n_swa = 1
+slot update_slots: id  0 | task 30 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 30 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 30 | init sampler, took 0.02 ms, tokens: text = 175, total = 175
+slot update_slots: id  0 | task 30 | prompt processing done, n_tokens = 175, batch.n_tokens = 175
+find_slot: non-consecutive token position 174 after 153 for sequence 0 with 172 new tokens
+find_slot: non-consecutive token position 174 after 153 for sequence 0 with 172 new tokens
+find_slot: non-consecutive token position 179 after 174 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 179 after 174 for sequence 0 with 4 new tokens
+slot print_timing: id  0 | task 30 | 
+prompt eval time =     745.74 ms /   175 tokens (    4.26 ms per token,   234.67 tokens per second)
+       eval time =     487.60 ms /     6 tokens (   81.27 ms per token,    12.31 tokens per second)
+      total time =    1233.33 ms /   181 tokens
+draft acceptance rate = 0.80000 (    4 accepted /     5 generated)
+statistics draft: #calls(b,g,a) = 7 18 15, #gen drafts = 18, #acc drafts = 15, #gen tokens = 85, #acc tokens = 55, dur(b,g,a) = 0.003, 3340.350, 0.006 ms
+slot      release: id  0 | task 30 | stop processing: n_tokens = 180, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1748990817200
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 180, total state size = 56.003 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.017, sim = 0.012
+srv        update:  - cache state: 7 prompts, 388.988 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv  get_availabl: prompt cache update took 14.72 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 33 | processing task, is_child = 0
+slot update_slots: id  0 | task 33 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 260
+slot update_slots: id  0 | task 33 | n_past = 3, slot.prompt.tokens.size() = 180, seq_id = 0, pos_min = 179, n_swa = 1
+slot update_slots: id  0 | task 33 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 33 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 33 | init sampler, took 0.03 ms, tokens: text = 260, total = 260
+slot update_slots: id  0 | task 33 | prompt processing done, n_tokens = 260, batch.n_tokens = 260
+find_slot: non-consecutive token position 259 after 179 for sequence 0 with 257 new tokens
+find_slot: non-consecutive token position 259 after 179 for sequence 0 with 257 new tokens
+find_slot: non-consecutive token position 266 after 259 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 266 after 259 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 269 after 266 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 269 after 266 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 270 after 266 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 270 after 266 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 285 after 282 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 285 after 282 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 287 after 285 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 287 after 285 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 291 after 287 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 291 after 287 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 305 after 300 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 305 after 300 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 309 after 318 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 309 after 318 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 310 after 307 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 310 after 307 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 314 after 310 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 314 after 310 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 317 after 314 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 317 after 314 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 320 after 314 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 320 after 314 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 318 after 319 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 318 after 319 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 319 after 314 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 319 after 314 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 320 after 314 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 320 after 314 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 324 after 320 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 324 after 320 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 327 after 324 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 327 after 324 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 328 after 324 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 328 after 324 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 329 after 324 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 329 after 324 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 332 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 332 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 333 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 333 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 334 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 334 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 335 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 335 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 336 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 336 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 337 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 337 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 338 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 338 after 329 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 346 after 340 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 346 after 340 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 344 after 340 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 344 after 340 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 345 after 345 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 345 after 345 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 351 after 348 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 351 after 348 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 352 after 348 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 352 after 348 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 353 after 348 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 353 after 348 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 358 after 359 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 358 after 359 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 359 after 356 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 359 after 356 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 360 after 356 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 360 after 356 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 361 after 356 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 361 after 356 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 363 after 361 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 363 after 361 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 584 after 581 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 584 after 581 for sequence 0 with 2 new tokens
+slot print_timing: id  0 | task 33 | 
+prompt eval time =    1091.93 ms /   260 tokens (    4.20 ms per token,   238.11 tokens per second)
+       eval time =   18531.31 ms /   333 tokens (   55.65 ms per token,    17.97 tokens per second)
+      total time =   19623.24 ms /   593 tokens
+draft acceptance rate = 0.85015 (  278 accepted /   327 generated)
+statistics draft: #calls(b,g,a) = 8 72 44, #gen drafts = 72, #acc drafts = 44, #gen tokens = 412, #acc tokens = 333, dur(b,g,a) = 0.003, 11177.670, 0.017 ms
+slot      release: id  0 | task 33 | stop processing: n_tokens = 592, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749010459736
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 592, total state size = 69.508 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.005, sim = 0.014
+srv        update:  - cache state: 8 prompts, 458.496 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv  get_availabl: prompt cache update took 18.79 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 89 | processing task, is_child = 0
+slot update_slots: id  0 | task 89 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 222
+slot update_slots: id  0 | task 89 | n_past = 3, slot.prompt.tokens.size() = 592, seq_id = 0, pos_min = 591, n_swa = 1
+slot update_slots: id  0 | task 89 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 89 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 89 | init sampler, took 0.02 ms, tokens: text = 222, total = 222
+slot update_slots: id  0 | task 89 | prompt processing done, n_tokens = 222, batch.n_tokens = 222
+find_slot: non-consecutive token position 221 after 590 for sequence 0 with 219 new tokens
+find_slot: non-consecutive token position 221 after 590 for sequence 0 with 219 new tokens
+slot print_timing: id  0 | task 89 | 
+prompt eval time =     904.74 ms /   222 tokens (    4.08 ms per token,   245.37 tokens per second)
+       eval time =     470.36 ms /     2 tokens (  235.18 ms per token,     4.25 tokens per second)
+      total time =    1375.10 ms /   224 tokens
+draft acceptance rate = 0.00000 (    0 accepted /     1 generated)
+statistics draft: #calls(b,g,a) = 9 73 44, #gen drafts = 73, #acc drafts = 44, #gen tokens = 413, #acc tokens = 333, dur(b,g,a) = 0.003, 11479.446, 0.017 ms
+slot      release: id  0 | task 89 | stop processing: n_tokens = 223, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749011861517
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 223, total state size = 57.222 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.013, sim = 0.035
+srv        update:  - cache state: 9 prompts, 515.718 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv  get_availabl: prompt cache update took 15.18 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 92 | processing task, is_child = 0
+slot update_slots: id  0 | task 92 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 85
+slot update_slots: id  0 | task 92 | n_past = 3, slot.prompt.tokens.size() = 223, seq_id = 0, pos_min = 221, n_swa = 1
+slot update_slots: id  0 | task 92 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 92 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 92 | init sampler, took 0.01 ms, tokens: text = 85, total = 85
+slot update_slots: id  0 | task 92 | prompt processing done, n_tokens = 85, batch.n_tokens = 85
+find_slot: non-consecutive token position 84 after 222 for sequence 0 with 82 new tokens
+find_slot: non-consecutive token position 84 after 222 for sequence 0 with 82 new tokens
+find_slot: non-consecutive token position 87 after 84 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 87 after 84 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 98 after 93 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 98 after 93 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 108 after 105 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 108 after 105 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 109 after 105 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 109 after 105 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 115 after 113 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 115 after 113 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 118 after 115 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 118 after 115 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 120 after 115 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 120 after 115 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 119 after 115 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 119 after 115 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 122 after 119 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 122 after 119 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 123 after 119 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 123 after 119 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 125 after 119 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 125 after 119 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 124 after 119 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 124 after 119 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 126 after 124 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 126 after 124 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 129 after 126 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 129 after 126 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 135 after 132 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 135 after 132 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 137 after 132 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 137 after 132 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 136 after 136 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 136 after 136 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 137 after 132 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 137 after 132 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 147 after 144 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 147 after 144 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 148 after 144 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 148 after 144 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 149 after 144 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 149 after 144 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 150 after 144 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 150 after 144 for sequence 0 with 2 new tokens
+slot update_slots: id  0 | task 92 | draft size 128 exceeds max 57, truncating
+slot print_timing: id  0 | task 92 | 
+prompt eval time =     395.72 ms /    85 tokens (    4.66 ms per token,   214.80 tokens per second)
+       eval time =   20684.06 ms /   512 tokens (   40.40 ms per token,    24.75 tokens per second)
+      total time =   21079.78 ms /   597 tokens
+draft acceptance rate = 0.95556 (  473 accepted /   495 generated)
+statistics draft: #calls(b,g,a) = 10 111 66, #gen drafts = 111, #acc drafts = 66, #gen tokens = 979, #acc tokens = 806, dur(b,g,a) = 0.004, 23962.220, 0.027 ms
+slot      release: id  0 | task 92 | stop processing: n_tokens = 596, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749032960928
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 596, total state size = 69.070 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.005, sim = 0.051
+srv        update:  - cache state: 10 prompts, 584.788 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv        update:    - prompt 0x55787fe43660:     596 tokens, checkpoints:  0,    69.070 MiB
+srv  get_availabl: prompt cache update took 22.88 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 132 | processing task, is_child = 0
+slot update_slots: id  0 | task 132 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 59
+slot update_slots: id  0 | task 132 | n_past = 3, slot.prompt.tokens.size() = 596, seq_id = 0, pos_min = 595, n_swa = 1
+slot update_slots: id  0 | task 132 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 132 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 132 | init sampler, took 0.01 ms, tokens: text = 59, total = 59
+slot update_slots: id  0 | task 132 | prompt processing done, n_tokens = 59, batch.n_tokens = 59
+find_slot: non-consecutive token position 58 after 665 for sequence 0 with 56 new tokens
+find_slot: non-consecutive token position 58 after 665 for sequence 0 with 56 new tokens
+slot print_timing: id  0 | task 132 | 
+prompt eval time =     284.96 ms /    59 tokens (    4.83 ms per token,   207.05 tokens per second)
+       eval time =     265.50 ms /     3 tokens (   88.50 ms per token,    11.30 tokens per second)
+      total time =     550.46 ms /    62 tokens
+draft acceptance rate = 1.00000 (    1 accepted /     1 generated)
+statistics draft: #calls(b,g,a) = 11 112 67, #gen drafts = 112, #acc drafts = 67, #gen tokens = 980, #acc tokens = 807, dur(b,g,a) = 0.005, 24071.236, 0.027 ms
+slot      release: id  0 | task 132 | stop processing: n_tokens = 61, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749033539894
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 61, total state size = 52.158 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.049, sim = 0.029
+srv        update:  - cache state: 11 prompts, 636.946 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv        update:    - prompt 0x55787fe43660:     596 tokens, checkpoints:  0,    69.070 MiB
+srv        update:    - prompt 0x55787748eeb0:      61 tokens, checkpoints:  0,    52.158 MiB
+srv  get_availabl: prompt cache update took 14.21 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 135 | processing task, is_child = 0
+slot update_slots: id  0 | task 135 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 102
+slot update_slots: id  0 | task 135 | n_past = 3, slot.prompt.tokens.size() = 61, seq_id = 0, pos_min = 60, n_swa = 1
+slot update_slots: id  0 | task 135 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 135 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 135 | init sampler, took 0.01 ms, tokens: text = 102, total = 102
+slot update_slots: id  0 | task 135 | prompt processing done, n_tokens = 102, batch.n_tokens = 102
+find_slot: non-consecutive token position 101 after 59 for sequence 0 with 99 new tokens
+find_slot: non-consecutive token position 101 after 59 for sequence 0 with 99 new tokens
+find_slot: non-consecutive token position 107 after 101 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 107 after 101 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 117 after 114 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 117 after 114 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 118 after 121 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 118 after 121 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 121 after 130 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 121 after 130 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 122 after 119 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 122 after 119 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 124 after 119 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 124 after 119 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 123 after 123 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 123 after 123 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 124 after 119 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 124 after 119 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 125 after 119 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 125 after 119 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 141 after 137 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 141 after 137 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 142 after 144 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 142 after 144 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 145 after 141 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 145 after 141 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 144 after 141 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 144 after 141 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 148 after 152 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 148 after 152 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 149 after 146 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 149 after 146 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 150 after 146 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 150 after 146 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 153 after 150 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 153 after 150 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 156 after 150 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 156 after 150 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 155 after 150 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 155 after 150 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 164 after 159 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 164 after 159 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 165 after 169 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 165 after 169 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 167 after 164 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 167 after 164 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 174 after 169 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 174 after 169 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 175 after 175 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 175 after 175 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 178 after 174 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 178 after 174 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 258 after 212 for sequence 0 with 45 new tokens
+find_slot: non-consecutive token position 258 after 212 for sequence 0 with 45 new tokens
+find_slot: non-consecutive token position 265 after 272 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 265 after 272 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 266 after 263 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 266 after 263 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 267 after 263 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 267 after 263 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 268 after 263 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 268 after 263 for sequence 0 with 2 new tokens
+slot print_timing: id  0 | task 135 | 
+prompt eval time =     442.11 ms /   102 tokens (    4.33 ms per token,   230.71 tokens per second)
+       eval time =   12893.67 ms /   168 tokens (   76.75 ms per token,    13.03 tokens per second)
+      total time =   13335.78 ms /   270 tokens
+draft acceptance rate = 0.67582 (  123 accepted /   182 generated)
+statistics draft: #calls(b,g,a) = 12 156 97, #gen drafts = 156, #acc drafts = 97, #gen tokens = 1162, #acc tokens = 930, dur(b,g,a) = 0.005, 28582.170, 0.037 ms
+slot      release: id  0 | task 135 | stop processing: n_tokens = 269, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749046894537
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 269, total state size = 60.723 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.011, sim = 0.011
+srv        update:  - cache state: 12 prompts, 697.669 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv        update:    - prompt 0x55787fe43660:     596 tokens, checkpoints:  0,    69.070 MiB
+srv        update:    - prompt 0x55787748eeb0:      61 tokens, checkpoints:  0,    52.158 MiB
+srv        update:    - prompt 0x5578834b74d0:     269 tokens, checkpoints:  0,    60.723 MiB
+srv  get_availabl: prompt cache update took 16.59 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 181 | processing task, is_child = 0
+slot update_slots: id  0 | task 181 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 280
+slot update_slots: id  0 | task 181 | n_past = 3, slot.prompt.tokens.size() = 269, seq_id = 0, pos_min = 268, n_swa = 1
+slot update_slots: id  0 | task 181 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 181 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 181 | init sampler, took 0.03 ms, tokens: text = 280, total = 280
+slot update_slots: id  0 | task 181 | prompt processing done, n_tokens = 280, batch.n_tokens = 280
+find_slot: non-consecutive token position 279 after 267 for sequence 0 with 277 new tokens
+find_slot: non-consecutive token position 279 after 267 for sequence 0 with 277 new tokens
+find_slot: non-consecutive token position 284 after 279 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 284 after 279 for sequence 0 with 4 new tokens
+slot print_timing: id  0 | task 181 | 
+prompt eval time =    1112.82 ms /   280 tokens (    3.97 ms per token,   251.61 tokens per second)
+       eval time =     595.98 ms /     6 tokens (   99.33 ms per token,    10.07 tokens per second)
+      total time =    1708.80 ms /   286 tokens
+draft acceptance rate = 0.80000 (    4 accepted /     5 generated)
+statistics draft: #calls(b,g,a) = 13 157 98, #gen drafts = 157, #acc drafts = 98, #gen tokens = 1167, #acc tokens = 934, dur(b,g,a) = 0.006, 29010.508, 0.037 ms
+slot      release: id  0 | task 181 | stop processing: n_tokens = 285, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749048771538
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 285, total state size = 59.285 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.011, sim = 0.033
+srv        update:  - cache state: 13 prompts, 756.954 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv        update:    - prompt 0x55787fe43660:     596 tokens, checkpoints:  0,    69.070 MiB
+srv        update:    - prompt 0x55787748eeb0:      61 tokens, checkpoints:  0,    52.158 MiB
+srv        update:    - prompt 0x5578834b74d0:     269 tokens, checkpoints:  0,    60.723 MiB
+srv        update:    - prompt 0x5578834ba360:     285 tokens, checkpoints:  0,    59.285 MiB
+srv  get_availabl: prompt cache update took 15.26 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 184 | processing task, is_child = 0
+slot update_slots: id  0 | task 184 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 90
+slot update_slots: id  0 | task 184 | n_past = 3, slot.prompt.tokens.size() = 285, seq_id = 0, pos_min = 284, n_swa = 1
+slot update_slots: id  0 | task 184 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 184 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 184 | init sampler, took 0.01 ms, tokens: text = 90, total = 90
+slot update_slots: id  0 | task 184 | prompt processing done, n_tokens = 90, batch.n_tokens = 90
+find_slot: non-consecutive token position 89 after 284 for sequence 0 with 87 new tokens
+find_slot: non-consecutive token position 89 after 284 for sequence 0 with 87 new tokens
+find_slot: non-consecutive token position 99 after 89 for sequence 0 with 9 new tokens
+find_slot: non-consecutive token position 99 after 89 for sequence 0 with 9 new tokens
+find_slot: non-consecutive token position 101 after 103 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 101 after 103 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 104 after 99 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 104 after 99 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 106 after 104 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 106 after 104 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 112 after 109 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 112 after 109 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 114 after 112 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 114 after 112 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 118 after 114 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 118 after 114 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 117 after 117 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 117 after 117 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 120 after 114 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 120 after 114 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 119 after 114 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 119 after 114 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 121 after 119 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 121 after 119 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 128 after 123 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 128 after 123 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 127 after 123 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 127 after 123 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 130 after 127 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 130 after 127 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 132 after 135 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 132 after 135 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 133 after 130 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 133 after 130 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 134 after 130 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 134 after 130 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 136 after 138 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 136 after 138 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 137 after 134 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 137 after 134 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 138 after 134 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 138 after 134 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 141 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 141 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 142 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 142 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 143 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 143 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 144 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 144 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 153 after 147 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 153 after 147 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 152 after 147 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 152 after 147 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 155 after 152 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 155 after 152 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 157 after 157 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 157 after 157 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 158 after 155 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 158 after 155 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 161 after 158 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 161 after 158 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 171 after 161 for sequence 0 with 9 new tokens
+find_slot: non-consecutive token position 171 after 161 for sequence 0 with 9 new tokens
+find_slot: non-consecutive token position 178 after 171 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 178 after 171 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 193 after 188 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 193 after 188 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 217 after 215 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 217 after 215 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 224 after 219 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 224 after 219 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 329 after 282 for sequence 0 with 46 new tokens
+find_slot: non-consecutive token position 329 after 282 for sequence 0 with 46 new tokens
+find_slot: non-consecutive token position 335 after 341 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 335 after 341 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 336 after 333 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 336 after 333 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 337 after 333 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 337 after 333 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 338 after 333 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 338 after 333 for sequence 0 with 2 new tokens
+slot print_timing: id  0 | task 184 | 
+prompt eval time =     414.98 ms /    90 tokens (    4.61 ms per token,   216.88 tokens per second)
+       eval time =   17256.11 ms /   250 tokens (   69.02 ms per token,    14.49 tokens per second)
+      total time =   17671.09 ms /   340 tokens
+draft acceptance rate = 0.78099 (  189 accepted /   242 generated)
+statistics draft: #calls(b,g,a) = 14 217 139, #gen drafts = 217, #acc drafts = 139, #gen tokens = 1409, #acc tokens = 1123, dur(b,g,a) = 0.007, 34925.996, 0.055 ms
+slot      release: id  0 | task 184 | stop processing: n_tokens = 339, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749066462099
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 339, total state size = 63.631 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.009, sim = 0.011
+srv        update:  - cache state: 14 prompts, 820.585 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv        update:    - prompt 0x55787fe43660:     596 tokens, checkpoints:  0,    69.070 MiB
+srv        update:    - prompt 0x55787748eeb0:      61 tokens, checkpoints:  0,    52.158 MiB
+srv        update:    - prompt 0x5578834b74d0:     269 tokens, checkpoints:  0,    60.723 MiB
+srv        update:    - prompt 0x5578834ba360:     285 tokens, checkpoints:  0,    59.285 MiB
+srv        update:    - prompt 0x5578834b4490:     339 tokens, checkpoints:  0,    63.631 MiB
+srv  get_availabl: prompt cache update took 17.36 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 246 | processing task, is_child = 0
+slot update_slots: id  0 | task 246 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 264
+slot update_slots: id  0 | task 246 | n_past = 3, slot.prompt.tokens.size() = 339, seq_id = 0, pos_min = 338, n_swa = 1
+slot update_slots: id  0 | task 246 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 246 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 246 | init sampler, took 0.03 ms, tokens: text = 264, total = 264
+slot update_slots: id  0 | task 246 | prompt processing done, n_tokens = 264, batch.n_tokens = 264
+find_slot: non-consecutive token position 263 after 337 for sequence 0 with 261 new tokens
+find_slot: non-consecutive token position 263 after 337 for sequence 0 with 261 new tokens
+find_slot: non-consecutive token position 268 after 263 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 268 after 263 for sequence 0 with 4 new tokens
+slot print_timing: id  0 | task 246 | 
+prompt eval time =    1068.71 ms /   264 tokens (    4.05 ms per token,   247.03 tokens per second)
+       eval time =     552.98 ms /     6 tokens (   92.16 ms per token,    10.85 tokens per second)
+      total time =    1621.69 ms /   270 tokens
+draft acceptance rate = 0.80000 (    4 accepted /     5 generated)
+statistics draft: #calls(b,g,a) = 15 218 140, #gen drafts = 218, #acc drafts = 140, #gen tokens = 1414, #acc tokens = 1127, dur(b,g,a) = 0.008, 35321.544, 0.055 ms
+slot      release: id  0 | task 246 | stop processing: n_tokens = 269, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749068251182
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 269, total state size = 58.785 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.011, sim = 0.034
+srv        update:  - cache state: 15 prompts, 879.370 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv        update:    - prompt 0x55787fe43660:     596 tokens, checkpoints:  0,    69.070 MiB
+srv        update:    - prompt 0x55787748eeb0:      61 tokens, checkpoints:  0,    52.158 MiB
+srv        update:    - prompt 0x5578834b74d0:     269 tokens, checkpoints:  0,    60.723 MiB
+srv        update:    - prompt 0x5578834ba360:     285 tokens, checkpoints:  0,    59.285 MiB
+srv        update:    - prompt 0x5578834b4490:     339 tokens, checkpoints:  0,    63.631 MiB
+srv        update:    - prompt 0x55787748dd40:     269 tokens, checkpoints:  0,    58.785 MiB
+srv  get_availabl: prompt cache update took 15.60 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 249 | processing task, is_child = 0
+slot update_slots: id  0 | task 249 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 89
+slot update_slots: id  0 | task 249 | n_past = 3, slot.prompt.tokens.size() = 269, seq_id = 0, pos_min = 268, n_swa = 1
+slot update_slots: id  0 | task 249 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 249 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 249 | init sampler, took 0.01 ms, tokens: text = 89, total = 89
+slot update_slots: id  0 | task 249 | prompt processing done, n_tokens = 89, batch.n_tokens = 89
+find_slot: non-consecutive token position 88 after 268 for sequence 0 with 86 new tokens
+find_slot: non-consecutive token position 88 after 268 for sequence 0 with 86 new tokens
+find_slot: non-consecutive token position 91 after 88 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 91 after 88 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 92 after 96 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 92 after 96 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 94 after 91 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 94 after 91 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 95 after 91 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 95 after 91 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 96 after 91 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 96 after 91 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 98 after 96 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 98 after 96 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 101 after 98 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 101 after 98 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 102 after 98 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 102 after 98 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 105 after 98 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 105 after 98 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 103 after 104 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 103 after 104 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 104 after 98 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 104 after 98 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 105 after 98 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 105 after 98 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 108 after 105 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 108 after 105 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 115 after 111 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 115 after 111 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 118 after 115 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 118 after 115 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 127 after 115 for sequence 0 with 10 new tokens
+find_slot: non-consecutive token position 127 after 115 for sequence 0 with 10 new tokens
+find_slot: non-consecutive token position 119 after 126 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 119 after 126 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 120 after 115 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 120 after 115 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 121 after 115 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 121 after 115 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 122 after 115 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 122 after 115 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 125 after 122 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 125 after 122 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 126 after 122 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 126 after 122 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 127 after 122 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 127 after 122 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 128 after 122 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 128 after 122 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 130 after 122 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 130 after 122 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 129 after 122 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 129 after 122 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 132 after 129 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 132 after 129 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 136 after 134 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 136 after 134 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 141 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 141 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 142 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 142 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 143 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 143 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 144 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 144 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 145 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 145 after 138 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 150 after 147 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 150 after 147 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 151 after 147 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 151 after 147 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 163 after 161 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 163 after 161 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 165 after 165 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 165 after 165 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 166 after 163 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 166 after 163 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 167 after 163 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 167 after 163 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 174 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 174 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 175 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 175 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 176 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 176 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 177 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 177 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 178 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 178 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 179 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 179 after 171 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 193 after 171 for sequence 0 with 15 new tokens
+find_slot: non-consecutive token position 193 after 171 for sequence 0 with 15 new tokens
+find_slot: non-consecutive token position 195 after 193 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 195 after 193 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 199 after 195 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 199 after 195 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 198 after 195 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 198 after 195 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 202 after 198 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 202 after 198 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 205 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 205 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 208 after 202 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 208 after 202 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 206 after 207 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 206 after 207 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 207 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 207 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 208 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 208 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 210 after 202 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 210 after 202 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 209 after 209 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 209 after 209 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 211 after 202 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 211 after 202 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 210 after 202 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 210 after 202 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 212 after 212 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 212 after 212 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 214 after 210 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 214 after 210 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 213 after 213 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 213 after 213 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 214 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 214 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 215 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 215 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 216 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 216 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 217 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 217 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 218 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 218 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 219 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 219 after 210 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 222 after 219 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 222 after 219 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 228 after 224 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 228 after 224 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 227 after 227 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 227 after 227 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 228 after 224 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 228 after 224 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 232 after 228 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 232 after 228 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 234 after 232 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 234 after 232 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 235 after 235 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 235 after 235 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 237 after 234 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 237 after 234 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 238 after 234 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 238 after 234 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 239 after 234 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 239 after 234 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 241 after 241 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 241 after 241 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 242 after 239 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 242 after 239 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 243 after 239 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 243 after 239 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 247 after 243 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 247 after 243 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 261 after 256 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 261 after 256 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 281 after 265 for sequence 0 with 15 new tokens
+find_slot: non-consecutive token position 281 after 265 for sequence 0 with 15 new tokens
+find_slot: non-consecutive token position 282 after 282 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 282 after 282 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 288 after 281 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 288 after 281 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 290 after 288 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 290 after 288 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 291 after 291 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 291 after 291 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 292 after 290 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 292 after 290 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 293 after 299 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 293 after 299 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 305 after 299 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 305 after 299 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 316 after 305 for sequence 0 with 10 new tokens
+find_slot: non-consecutive token position 316 after 305 for sequence 0 with 10 new tokens
+find_slot: non-consecutive token position 315 after 305 for sequence 0 with 8 new tokens
+find_slot: non-consecutive token position 315 after 305 for sequence 0 with 8 new tokens
+find_slot: non-consecutive token position 321 after 315 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 321 after 315 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 318 after 320 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 318 after 320 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 319 after 315 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 319 after 315 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 320 after 315 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 320 after 315 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 321 after 315 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 321 after 315 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 337 after 315 for sequence 0 with 17 new tokens
+find_slot: non-consecutive token position 337 after 315 for sequence 0 with 17 new tokens
+find_slot: non-consecutive token position 322 after 336 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 322 after 336 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 323 after 315 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 323 after 315 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 326 after 323 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 326 after 323 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 327 after 323 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 327 after 323 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 328 after 323 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 328 after 323 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 344 after 330 for sequence 0 with 13 new tokens
+find_slot: non-consecutive token position 344 after 330 for sequence 0 with 13 new tokens
+find_slot: non-consecutive token position 354 after 344 for sequence 0 with 9 new tokens
+find_slot: non-consecutive token position 354 after 344 for sequence 0 with 9 new tokens
+find_slot: non-consecutive token position 355 after 355 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 355 after 355 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 356 after 354 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 356 after 354 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 357 after 386 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 357 after 386 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 358 after 356 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 358 after 356 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 383 after 380 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 383 after 380 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 384 after 380 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 384 after 380 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 402 after 384 for sequence 0 with 17 new tokens
+find_slot: non-consecutive token position 402 after 384 for sequence 0 with 17 new tokens
+find_slot: non-consecutive token position 411 after 402 for sequence 0 with 8 new tokens
+find_slot: non-consecutive token position 411 after 402 for sequence 0 with 8 new tokens
+find_slot: non-consecutive token position 412 after 412 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 412 after 412 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 413 after 411 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 413 after 411 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 414 after 443 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 414 after 443 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 436 after 413 for sequence 0 with 22 new tokens
+find_slot: non-consecutive token position 436 after 413 for sequence 0 with 22 new tokens
+find_slot: non-consecutive token position 442 after 439 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 442 after 439 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 443 after 439 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 443 after 439 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 445 after 439 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 445 after 439 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 444 after 444 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 444 after 444 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 462 after 439 for sequence 0 with 19 new tokens
+find_slot: non-consecutive token position 462 after 439 for sequence 0 with 19 new tokens
+find_slot: non-consecutive token position 471 after 462 for sequence 0 with 8 new tokens
+find_slot: non-consecutive token position 471 after 462 for sequence 0 with 8 new tokens
+find_slot: non-consecutive token position 472 after 475 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 472 after 475 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 473 after 471 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 473 after 471 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 474 after 500 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 474 after 500 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 496 after 473 for sequence 0 with 22 new tokens
+find_slot: non-consecutive token position 496 after 473 for sequence 0 with 22 new tokens
+find_slot: non-consecutive token position 499 after 496 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 499 after 496 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 559 after 496 for sequence 0 with 61 new tokens
+find_slot: non-consecutive token position 559 after 496 for sequence 0 with 61 new tokens
+find_slot: non-consecutive token position 525 after 496 for sequence 0 with 26 new tokens
+find_slot: non-consecutive token position 525 after 496 for sequence 0 with 26 new tokens
+find_slot: non-consecutive token position 526 after 558 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 526 after 558 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 528 after 525 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 528 after 525 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 529 after 525 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 529 after 525 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 530 after 525 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 530 after 525 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 552 after 532 for sequence 0 with 19 new tokens
+find_slot: non-consecutive token position 552 after 532 for sequence 0 with 19 new tokens
+find_slot: non-consecutive token position 558 after 555 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 558 after 555 for sequence 0 with 2 new tokens
+slot update_slots: id  0 | task 249 | draft size 60 exceeds max 41, truncating
+find_slot: non-consecutive token position 599 after 555 for sequence 0 with 42 new tokens
+find_slot: non-consecutive token position 599 after 555 for sequence 0 with 42 new tokens
+find_slot: non-consecutive token position 584 after 555 for sequence 0 with 26 new tokens
+find_slot: non-consecutive token position 584 after 555 for sequence 0 with 26 new tokens
+find_slot: non-consecutive token position 585 after 617 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 585 after 617 for sequence 0 with 1 new tokens
+slot update_slots: id  0 | task 249 | draft size 27 exceeds max 14, truncating
+find_slot: non-consecutive token position 587 after 584 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 587 after 584 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 588 after 611 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 588 after 611 for sequence 0 with 1 new tokens
+slot update_slots: id  0 | task 249 | draft size 21 exceeds max 10, truncating
+find_slot: non-consecutive token position 599 after 587 for sequence 0 with 11 new tokens
+find_slot: non-consecutive token position 599 after 587 for sequence 0 with 11 new tokens
+slot print_timing: id  0 | task 249 | 
+prompt eval time =     407.79 ms /    89 tokens (    4.58 ms per token,   218.25 tokens per second)
+       eval time =   46097.68 ms /   512 tokens (   90.03 ms per token,    11.11 tokens per second)
+      total time =   46505.47 ms /   601 tokens
+draft acceptance rate = 0.51735 (  343 accepted /   663 generated)
+statistics draft: #calls(b,g,a) = 16 386 221, #gen drafts = 386, #acc drafts = 221, #gen tokens = 2120, #acc tokens = 1470, dur(b,g,a) = 0.009, 51805.121, 0.083 ms
+slot      release: id  0 | task 249 | stop processing: n_tokens = 600, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749114776717
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 600, total state size = 75.385 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.005, sim = 0.011
+srv        update:  - cache state: 16 prompts, 954.755 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv        update:    - prompt 0x55787fe43660:     596 tokens, checkpoints:  0,    69.070 MiB
+srv        update:    - prompt 0x55787748eeb0:      61 tokens, checkpoints:  0,    52.158 MiB
+srv        update:    - prompt 0x5578834b74d0:     269 tokens, checkpoints:  0,    60.723 MiB
+srv        update:    - prompt 0x5578834ba360:     285 tokens, checkpoints:  0,    59.285 MiB
+srv        update:    - prompt 0x5578834b4490:     339 tokens, checkpoints:  0,    63.631 MiB
+srv        update:    - prompt 0x55787748dd40:     269 tokens, checkpoints:  0,    58.785 MiB
+srv        update:    - prompt 0x5578834dd200:     600 tokens, checkpoints:  0,    75.385 MiB
+srv  get_availabl: prompt cache update took 19.88 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 419 | processing task, is_child = 0
+slot update_slots: id  0 | task 419 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 263
+slot update_slots: id  0 | task 419 | n_past = 3, slot.prompt.tokens.size() = 600, seq_id = 0, pos_min = 599, n_swa = 1
+slot update_slots: id  0 | task 419 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 419 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 419 | init sampler, took 0.03 ms, tokens: text = 263, total = 263
+slot update_slots: id  0 | task 419 | prompt processing done, n_tokens = 263, batch.n_tokens = 263
+find_slot: non-consecutive token position 262 after 609 for sequence 0 with 260 new tokens
+find_slot: non-consecutive token position 262 after 609 for sequence 0 with 260 new tokens
+slot print_timing: id  0 | task 419 | 
+prompt eval time =    1036.75 ms /   263 tokens (    3.94 ms per token,   253.68 tokens per second)
+       eval time =     448.83 ms /     2 tokens (  224.42 ms per token,     4.46 tokens per second)
+      total time =    1485.59 ms /   265 tokens
+draft acceptance rate = 0.00000 (    0 accepted /     1 generated)
+statistics draft: #calls(b,g,a) = 17 387 221, #gen drafts = 387, #acc drafts = 221, #gen tokens = 2121, #acc tokens = 1470, dur(b,g,a) = 0.009, 52107.235, 0.083 ms
+slot      release: id  0 | task 419 | stop processing: n_tokens = 264, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749116289986
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 264, total state size = 58.504 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.011, sim = 0.016
+srv        update:  - cache state: 17 prompts, 1013.259 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv        update:    - prompt 0x55787fe43660:     596 tokens, checkpoints:  0,    69.070 MiB
+srv        update:    - prompt 0x55787748eeb0:      61 tokens, checkpoints:  0,    52.158 MiB
+srv        update:    - prompt 0x5578834b74d0:     269 tokens, checkpoints:  0,    60.723 MiB
+srv        update:    - prompt 0x5578834ba360:     285 tokens, checkpoints:  0,    59.285 MiB
+srv        update:    - prompt 0x5578834b4490:     339 tokens, checkpoints:  0,    63.631 MiB
+srv        update:    - prompt 0x55787748dd40:     269 tokens, checkpoints:  0,    58.785 MiB
+srv        update:    - prompt 0x5578834dd200:     600 tokens, checkpoints:  0,    75.385 MiB
+srv        update:    - prompt 0x5578834dd160:     264 tokens, checkpoints:  0,    58.504 MiB
+srv  get_availabl: prompt cache update took 15.41 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 422 | processing task, is_child = 0
+slot update_slots: id  0 | task 422 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 186
+slot update_slots: id  0 | task 422 | n_past = 3, slot.prompt.tokens.size() = 264, seq_id = 0, pos_min = 262, n_swa = 1
+slot update_slots: id  0 | task 422 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 422 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 422 | init sampler, took 0.02 ms, tokens: text = 186, total = 186
+slot update_slots: id  0 | task 422 | prompt processing done, n_tokens = 186, batch.n_tokens = 186
+find_slot: non-consecutive token position 185 after 263 for sequence 0 with 183 new tokens
+find_slot: non-consecutive token position 185 after 263 for sequence 0 with 183 new tokens
+find_slot: non-consecutive token position 188 after 185 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 188 after 185 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 189 after 189 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 189 after 189 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 191 after 188 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 191 after 188 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 192 after 188 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 192 after 188 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 202 after 200 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 202 after 200 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 204 after 204 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 204 after 204 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 205 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 205 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 206 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 206 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 207 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 207 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 208 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 208 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 209 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 209 after 202 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 213 after 209 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 213 after 209 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 215 after 217 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 215 after 217 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 216 after 213 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 216 after 213 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 218 after 213 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 218 after 213 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 217 after 217 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 217 after 217 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 219 after 213 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 219 after 213 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 223 after 224 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 223 after 224 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 224 after 221 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 224 after 221 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 238 after 232 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 238 after 232 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 240 after 241 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 240 after 241 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 241 after 238 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 241 after 238 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 242 after 238 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 242 after 238 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 243 after 238 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 243 after 238 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 248 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 248 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 250 after 245 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 250 after 245 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 249 after 249 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 249 after 249 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 250 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 250 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 251 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 251 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 252 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 252 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 253 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 253 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 254 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 254 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 255 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 255 after 245 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 259 after 257 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 259 after 257 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 262 after 259 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 262 after 259 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 263 after 259 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 263 after 259 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 264 after 259 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 264 after 259 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 265 after 259 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 265 after 259 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 268 after 265 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 268 after 265 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 271 after 265 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 271 after 265 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 269 after 270 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 269 after 270 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 270 after 265 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 270 after 265 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 271 after 265 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 271 after 265 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 272 after 265 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 272 after 265 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 282 after 279 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 282 after 279 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 283 after 279 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 283 after 279 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 284 after 279 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 284 after 279 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 291 after 284 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 291 after 284 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 287 after 290 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 287 after 290 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 288 after 284 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 288 after 284 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 290 after 284 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 290 after 284 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 289 after 284 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 289 after 284 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 295 after 289 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 295 after 289 for sequence 0 with 5 new tokens
+find_slot: non-consecutive token position 294 after 289 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 294 after 289 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 298 after 294 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 298 after 294 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 297 after 294 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 297 after 294 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 303 after 299 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 303 after 299 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 302 after 299 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 302 after 299 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 308 after 304 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 308 after 304 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 307 after 304 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 307 after 304 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 314 after 311 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 314 after 311 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 315 after 321 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 315 after 321 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 332 after 325 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 332 after 325 for sequence 0 with 6 new tokens
+slot update_slots: id  0 | task 422 | draft size 128 exceeds max 96, truncating
+slot print_timing: id  0 | task 422 | 
+prompt eval time =     712.54 ms /   186 tokens (    3.83 ms per token,   261.04 tokens per second)
+       eval time =   27784.01 ms /   512 tokens (   54.27 ms per token,    18.43 tokens per second)
+      total time =   28496.55 ms /   698 tokens
+draft acceptance rate = 0.84600 (  423 accepted /   500 generated)
+statistics draft: #calls(b,g,a) = 18 475 266, #gen drafts = 475, #acc drafts = 266, #gen tokens = 2653, #acc tokens = 1893, dur(b,g,a) = 0.009, 64401.977, 0.101 ms
+slot      release: id  0 | task 422 | stop processing: n_tokens = 697, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749144806453
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 697, total state size = 72.603 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.004, sim = 0.023
+srv        update:  - cache state: 18 prompts, 1085.861 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv        update:    - prompt 0x55787fe43660:     596 tokens, checkpoints:  0,    69.070 MiB
+srv        update:    - prompt 0x55787748eeb0:      61 tokens, checkpoints:  0,    52.158 MiB
+srv        update:    - prompt 0x5578834b74d0:     269 tokens, checkpoints:  0,    60.723 MiB
+srv        update:    - prompt 0x5578834ba360:     285 tokens, checkpoints:  0,    59.285 MiB
+srv        update:    - prompt 0x5578834b4490:     339 tokens, checkpoints:  0,    63.631 MiB
+srv        update:    - prompt 0x55787748dd40:     269 tokens, checkpoints:  0,    58.785 MiB
+srv        update:    - prompt 0x5578834dd200:     600 tokens, checkpoints:  0,    75.385 MiB
+srv        update:    - prompt 0x5578834dd160:     264 tokens, checkpoints:  0,    58.504 MiB
+srv        update:    - prompt 0x5578834dd340:     697 tokens, checkpoints:  0,    72.603 MiB
+srv  get_availabl: prompt cache update took 22.65 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 512 | processing task, is_child = 0
+slot update_slots: id  0 | task 512 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 130
+slot update_slots: id  0 | task 512 | n_past = 3, slot.prompt.tokens.size() = 697, seq_id = 0, pos_min = 696, n_swa = 1
+slot update_slots: id  0 | task 512 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 512 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 512 | init sampler, took 0.02 ms, tokens: text = 130, total = 130
+slot update_slots: id  0 | task 512 | prompt processing done, n_tokens = 130, batch.n_tokens = 130
+find_slot: non-consecutive token position 129 after 727 for sequence 0 with 127 new tokens
+find_slot: non-consecutive token position 129 after 727 for sequence 0 with 127 new tokens
+slot print_timing: id  0 | task 512 | 
+prompt eval time =     574.66 ms /   130 tokens (    4.42 ms per token,   226.22 tokens per second)
+       eval time =     309.42 ms /     2 tokens (  154.71 ms per token,     6.46 tokens per second)
+      total time =     884.08 ms /   132 tokens
+draft acceptance rate = 0.00000 (    0 accepted /     1 generated)
+statistics draft: #calls(b,g,a) = 19 476 266, #gen drafts = 476, #acc drafts = 266, #gen tokens = 2654, #acc tokens = 1893, dur(b,g,a) = 0.009, 64564.261, 0.101 ms
+slot      release: id  0 | task 512 | stop processing: n_tokens = 131, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749145721572
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 131, total state size = 54.346 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.023, sim = 0.030
+srv        update:  - cache state: 19 prompts, 1140.207 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv        update:    - prompt 0x55787fe43660:     596 tokens, checkpoints:  0,    69.070 MiB
+srv        update:    - prompt 0x55787748eeb0:      61 tokens, checkpoints:  0,    52.158 MiB
+srv        update:    - prompt 0x5578834b74d0:     269 tokens, checkpoints:  0,    60.723 MiB
+srv        update:    - prompt 0x5578834ba360:     285 tokens, checkpoints:  0,    59.285 MiB
+srv        update:    - prompt 0x5578834b4490:     339 tokens, checkpoints:  0,    63.631 MiB
+srv        update:    - prompt 0x55787748dd40:     269 tokens, checkpoints:  0,    58.785 MiB
+srv        update:    - prompt 0x5578834dd200:     600 tokens, checkpoints:  0,    75.385 MiB
+srv        update:    - prompt 0x5578834dd160:     264 tokens, checkpoints:  0,    58.504 MiB
+srv        update:    - prompt 0x5578834dd340:     697 tokens, checkpoints:  0,    72.603 MiB
+srv        update:    - prompt 0x5578834dd3e0:     131 tokens, checkpoints:  0,    54.346 MiB
+srv  get_availabl: prompt cache update took 14.50 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 515 | processing task, is_child = 0
+slot update_slots: id  0 | task 515 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 100
+slot update_slots: id  0 | task 515 | n_past = 3, slot.prompt.tokens.size() = 131, seq_id = 0, pos_min = 129, n_swa = 1
+slot update_slots: id  0 | task 515 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 515 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 515 | init sampler, took 0.01 ms, tokens: text = 100, total = 100
+slot update_slots: id  0 | task 515 | prompt processing done, n_tokens = 100, batch.n_tokens = 100
+find_slot: non-consecutive token position 99 after 130 for sequence 0 with 97 new tokens
+find_slot: non-consecutive token position 99 after 130 for sequence 0 with 97 new tokens
+find_slot: non-consecutive token position 107 after 105 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 107 after 105 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 115 after 110 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 115 after 110 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 119 after 115 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 119 after 115 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 146 after 142 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 146 after 142 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 145 after 142 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 145 after 142 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 148 after 145 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 148 after 145 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 150 after 148 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 150 after 148 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 151 after 152 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 151 after 152 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 153 after 150 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 153 after 150 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 157 after 153 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 157 after 153 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 156 after 156 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 156 after 156 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 157 after 153 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 157 after 153 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 159 after 153 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 159 after 153 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 158 after 153 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 158 after 153 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 181 after 173 for sequence 0 with 7 new tokens
+find_slot: non-consecutive token position 181 after 173 for sequence 0 with 7 new tokens
+find_slot: non-consecutive token position 201 after 199 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 201 after 199 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 206 after 201 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 206 after 201 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 211 after 206 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 211 after 206 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 213 after 211 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 213 after 211 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 219 after 224 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 219 after 224 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 221 after 217 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 221 after 217 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 220 after 217 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 220 after 217 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 223 after 220 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 223 after 220 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 226 after 223 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 226 after 223 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 233 after 226 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 233 after 226 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 293 after 282 for sequence 0 with 10 new tokens
+find_slot: non-consecutive token position 293 after 282 for sequence 0 with 10 new tokens
+find_slot: non-consecutive token position 299 after 295 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 299 after 295 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 298 after 298 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 298 after 298 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 299 after 295 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 299 after 295 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 300 after 295 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 300 after 295 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 307 after 302 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 307 after 302 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 305 after 306 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 305 after 306 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 306 after 302 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 306 after 302 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 307 after 302 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 307 after 302 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 308 after 302 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 308 after 302 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 309 after 302 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 309 after 302 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 312 after 309 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 312 after 309 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 317 after 309 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 317 after 309 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 313 after 316 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 313 after 316 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 314 after 309 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 314 after 309 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 318 after 314 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 318 after 314 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 322 after 320 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 322 after 320 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 326 after 322 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 326 after 322 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 344 after 342 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 344 after 342 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 352 after 348 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 352 after 348 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 366 after 364 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 366 after 364 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 374 after 369 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 374 after 369 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 377 after 374 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 377 after 374 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 389 after 390 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 389 after 390 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 390 after 387 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 390 after 387 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 395 after 387 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 395 after 387 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 391 after 394 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 391 after 394 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 392 after 387 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 392 after 387 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 403 after 394 for sequence 0 with 8 new tokens
+find_slot: non-consecutive token position 403 after 394 for sequence 0 with 8 new tokens
+find_slot: non-consecutive token position 408 after 405 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 408 after 405 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 410 after 405 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 410 after 405 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 446 after 443 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 446 after 443 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 447 after 443 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 447 after 443 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 450 after 443 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 450 after 443 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 449 after 443 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 449 after 443 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 453 after 449 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 453 after 449 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 456 after 453 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 456 after 453 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 459 after 456 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 459 after 456 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 461 after 459 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 461 after 459 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 462 after 462 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 462 after 462 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 464 after 461 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 464 after 461 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 466 after 461 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 466 after 461 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 465 after 461 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 465 after 461 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 554 after 546 for sequence 0 with 7 new tokens
+find_slot: non-consecutive token position 554 after 546 for sequence 0 with 7 new tokens
+slot update_slots: id  0 | task 515 | draft size 128 exceeds max 54, truncating
+find_slot: non-consecutive token position 610 after 554 for sequence 0 with 55 new tokens
+find_slot: non-consecutive token position 610 after 554 for sequence 0 with 55 new tokens
+find_slot: non-consecutive token position 558 after 554 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 558 after 554 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 559 after 683 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 559 after 683 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 561 after 558 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 561 after 558 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 562 after 558 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 562 after 558 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 564 after 558 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 564 after 558 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 563 after 563 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 563 after 563 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 564 after 558 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 564 after 558 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 566 after 558 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 566 after 558 for sequence 0 with 3 new tokens
+slot update_slots: id  0 | task 515 | draft size 126 exceeds max 41, truncating
+slot print_timing: id  0 | task 515 | 
+prompt eval time =     449.84 ms /   100 tokens (    4.50 ms per token,   222.30 tokens per second)
+       eval time =   38575.76 ms /   512 tokens (   75.34 ms per token,    13.27 tokens per second)
+      total time =   39025.60 ms /   612 tokens
+draft acceptance rate = 0.73106 (  386 accepted /   528 generated)
+statistics draft: #calls(b,g,a) = 20 601 351, #gen drafts = 601, #acc drafts = 351, #gen tokens = 3341, #acc tokens = 2279, dur(b,g,a) = 0.010, 80787.159, 0.135 ms
+slot      release: id  0 | task 515 | stop processing: n_tokens = 611, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 1749184766253
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 611, total state size = 71.821 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.005, sim = 0.011
+srv        update:  - cache state: 20 prompts, 1212.029 MiB (limits: 8192.000 MiB, 262144 tokens, 262144 est)
+srv        update:    - prompt 0x5578834bc600:      17 tokens, checkpoints:  0,    50.782 MiB
+srv        update:    - prompt 0x55787368dd40:     136 tokens, checkpoints:  0,    54.752 MiB
+srv        update:    - prompt 0x5578834b97d0:     287 tokens, checkpoints:  0,    59.348 MiB
+srv        update:    - prompt 0x5578834b79f0:      92 tokens, checkpoints:  0,    53.408 MiB
+srv        update:    - prompt 0x5578834b6850:     293 tokens, checkpoints:  0,    59.535 MiB
+srv        update:    - prompt 0x55787fe431e0:     147 tokens, checkpoints:  0,    55.159 MiB
+srv        update:    - prompt 0x5578834d62c0:     180 tokens, checkpoints:  0,    56.003 MiB
+srv        update:    - prompt 0x55787508a510:     592 tokens, checkpoints:  0,    69.508 MiB
+srv        update:    - prompt 0x5578834a32c0:     223 tokens, checkpoints:  0,    57.222 MiB
+srv        update:    - prompt 0x55787fe43660:     596 tokens, checkpoints:  0,    69.070 MiB
+srv        update:    - prompt 0x55787748eeb0:      61 tokens, checkpoints:  0,    52.158 MiB
+srv        update:    - prompt 0x5578834b74d0:     269 tokens, checkpoints:  0,    60.723 MiB
+srv        update:    - prompt 0x5578834ba360:     285 tokens, checkpoints:  0,    59.285 MiB
+srv        update:    - prompt 0x5578834b4490:     339 tokens, checkpoints:  0,    63.631 MiB
+srv        update:    - prompt 0x55787748dd40:     269 tokens, checkpoints:  0,    58.785 MiB
+srv        update:    - prompt 0x5578834dd200:     600 tokens, checkpoints:  0,    75.385 MiB
+srv        update:    - prompt 0x5578834dd160:     264 tokens, checkpoints:  0,    58.504 MiB
+srv        update:    - prompt 0x5578834dd340:     697 tokens, checkpoints:  0,    72.603 MiB
+srv        update:    - prompt 0x5578834dd3e0:     131 tokens, checkpoints:  0,    54.346 MiB
+srv        update:    - prompt 0x557875076bb0:     611 tokens, checkpoints:  0,    71.821 MiB
+srv  get_availabl: prompt cache update took 23.38 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 642 | processing task, is_child = 0
+slot update_slots: id  0 | task 642 | new prompt, n_ctx_slot = 262144, n_keep = 0, task.n_tokens = 266
+slot update_slots: id  0 | task 642 | n_past = 3, slot.prompt.tokens.size() = 611, seq_id = 0, pos_min = 610, n_swa = 1
+slot update_slots: id  0 | task 642 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 642 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 642 | init sampler, took 0.04 ms, tokens: text = 266, total = 266
+slot update_slots: id  0 | task 642 | prompt processing done, n_tokens = 266, batch.n_tokens = 266
+find_slot: non-consecutive token position 265 after 694 for sequence 0 with 263 new tokens
+find_slot: non-consecutive token position 265 after 694 for sequence 0 with 263 new tokens
+slot print_timing: id  0 | task 642 | 
+prompt eval time =    1032.39 ms /   266 tokens (    3.88 ms per token,   257.65 tokens per second)
+       eval time =     448.95 ms /     2 tokens (  224.48 ms per token,     4.45 tokens per second)
+      total time =    1481.34 ms /   268 tokens
+draft acceptance rate = 0.00000 (    0 accepted /     1 generated)
+statistics draft: #calls(b,g,a) = 21 602 351, #gen drafts = 602, #acc drafts = 351, #gen tokens = 3342, #acc tokens = 2279, dur(b,g,a) = 0.011, 81088.948, 0.135 ms
+slot      release: id  0 | task 642 | stop processing: n_tokens = 267, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv    operator(): operator(): cleaning up before exit...
+llama_memory_breakdown_print: | memory breakdown [MiB] | total   free     self   model   context   compute    unaccounted |
+llama_memory_breakdown_print: |   - Host               |                 14465 =  5406 +    8242 +     816                |
+llama_memory_breakdown_print: |   - CPU_REPACK         |                  2616 =  2616 +       0 +       0                |
+llama_perf_context_print:        load time =    2581.21 ms
+llama_perf_context_print: prompt eval time =   14493.92 ms /  3887 tokens (    3.73 ms per token,   268.18 tokens per second)
+llama_perf_context_print:        eval time =   65946.41 ms /  3095 runs   (   21.31 ms per token,    46.93 tokens per second)
+llama_perf_context_print:       total time =  211430.91 ms /  6982 tokens
+llama_perf_context_print:    graphs reused =       3086

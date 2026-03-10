@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_27b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-27B-GGUF/Qwen3.5-27B-Q6_K.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T20:29:19.849196",
+  "results": {
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "<think>\n\n</think>\n\nHere are the two subtle bugs in the provided binary search implementation, along with specific inputs that trigger them, explanations and the bugs, explanations, and fixes.\n\n---\n\n### Bug 1: Infinite Loop Due to Incorrect Left Bound Update\n\nThe line:\n1. **Input that triggers the bug.\n2. **Explanation**:\n. **Explanation**:\n The line `left = mid` causes an infinite loop. **Explanation**:\n`left = mid` causes an infinite loop when `left` and `right` are adjacent (e.g., `left = 3`, `right = 4`).\n   - `mid = (3 + 4) // 2 = 3`.\n   - If `arr[3] < target`, then `left = 3`.\n   - The loop condition `left < right` remains true, and `mid` stays 3 forever.\n **Fix**:\n Change `left = mid` to `left = mid + 1` to ensure progress:\n.\n### Bug 2: Off-by-One Error in Initial Right Bound Initialization\n\n1. **Input that triggers the bug**:\n`arr = [1, 3, 5]`,",
+        "tokens_per_second": 3.69,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 69349.04,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "<think>\nHere's a thinking process that leads to the suggested answer:\n\n1.  **Analyze the Request:**\n    *   **Graph Structure:** A Directed Acyclic Graph (DAG) with four variables: Gene (Gene, four variables: Gene -> Cancer, Smoking, Yellow Fingers, Gene -> Smoking -> -> Gene -> Cancer.\n    *   **Goal:** Estimate causal effect of Smoking (Smoking -> Cancer from observational data.\n    *   **Questions:**\n        1.  What is the minimal sufficient adjustment set?\n        2.  Does conditioning on Yellow Fingers introduce bias? Why?\n        3.  If Gene is unmeasured, can we still get unbiased estimate? How?\n\n2.  **Analyze the DAG Structure:**\n    *   **Nodes:** Gene, Smoking (S, Cancer Yellow Fingers, Cancer Gene, Cancer\n    *   **Edges:\n    *   **Causal Pathway:** Gene -> Smoking -> Cancer. (Confounding Path: Gene -> Smoking -> Cancer.\n    *   **: Gene Cancer.  Path: Smoking -> Cancer.**\n    *   **Smoking -> Yellow Fingers.** (Smoking",
+        "tokens_per_second": 3.98,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 64259.19,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"phase_id\": 1,\n      \"description\": \"Data Acquisition\",\n      \"agents\": [\n        {\n          \"agent_type\": \"researcher_agent\",\n          \"task\": \"Find the current stock price of AAPL and retrieve the last 30 days of historical closing prices.\"\n        }\n      ],\n      \"dependencies\": [],\n      \"estimated_time\": 30\n    },\n    {\n      \"phase_id\": 2,\n      \"description\": \"Calculation and Verification\",\n      \"agents\": [\n        {\n          \"agent_type\": \"coder_agent\",\n          \"task\": \"Calculate the 30-day moving average using the historical data provided in the context.\"\n        },\n        {\n          \"agent_type\": \"reviewer_agent\",\n          \"task\": \"Verify the mathematical logic of the moving average calculation and ensure no data points were skipped.\"\n        }\n      ],\n      \"dependencies\": [1],\n      \"estimated_time\": 15\n    }\n  ],\n  \"context_passing\": {\n    \"phase_1_to_2\": {\n      \"",
+        "tokens_per_second": 11.85,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 21602.65,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 6.506666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

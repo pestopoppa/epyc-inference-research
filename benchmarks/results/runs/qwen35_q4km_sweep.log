@@ -1,0 +1,46 @@
+Resuming run: 20260303_170903
+
+Benchmark: 20260303_170903 | 1 models, 1 roles (smallest first)
+Roles:   0%|          | 0/1 [00:00<?, ?it/s]
+  Qwen3.5-35B-A3B-UD-Q4_K_M (19.0GB) @ 12.4 t/s → timeout 1.6x
+    roles: qwen35_q4km
+    [SERVER] Starting llama-server (model will stay in RAM)...
+      [DEBUG] Server log: /mnt/raid0/llm/claude/tmp/llama_server_k56imugg.log
+    [SERVER] Ready, model loaded in RAM (default experts)
+    [qwen35_q4km] 13/700 tests pending (10 configs × 7 suites)
+      [SERVER] Restarting for moe4 (4 experts)...
+      [DEBUG] Server cmd includes: --override-kv qwen35moe.expert_used_count=int:4
+      [DEBUG] Server log: /mnt/raid0/llm/claude/tmp/llama_server_jwd7uihp.log
+      [SERVER] Ready
+    [ERROR] qwen35_q4km/moe4/t3_q2_contradiction_detection: HTTP 400: {"error":{"code":400,"message":"request (27030 tokens) exceeds the ava
+    [ERROR] qwen35_q4km/moe4/t3_q3_evolving_requirements: HTTP 400: {"error":{"code":400,"message":"request (32846 tokens) exceeds the ava
+      [SERVER] Restarting for moe6 (6 experts)...
+      [DEBUG] Server cmd includes: --override-kv qwen35moe.expert_used_count=int:6
+      [DEBUG] Server log: /mnt/raid0/llm/claude/tmp/llama_server_n1_5hlee.log
+      [SERVER] Ready
+    [ERROR] qwen35_q4km/moe6/t3_q1_multi_hop_reasoning: HTTP 400: {"error":{"code":400,"message":"request (35653 tokens) exceeds the ava
+    [ERROR] qwen35_q4km/moe6/t3_q2_contradiction_detection: HTTP 400: {"error":{"code":400,"message":"request (27030 tokens) exceeds the ava
+    [ERROR] qwen35_q4km/moe6/t3_q3_evolving_requirements: HTTP 503: {"error":{"message":"Loading model","type":"unavailable_error","code":
+    [ERROR] qwen35_q4km/moe6/t2_q3_architecture: HTTP 503: {"error":{"message":"Loading model","type":"unavailable_error","code":
+      ⚡ moe4_lookup_n4: 13.5t/s  (speed only, quality from moe4)
+      [SERVER] Restarting with draft Qwen3.5-0.8B-Q4_0...
+      [DEBUG] Server cmd includes: --override-kv qwen35moe.expert_used_count=int:4
+      [DEBUG] Server cmd includes: -md /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q4_0.gguf
+      [DEBUG] Server log: /mnt/raid0/llm/claude/tmp/llama_server_hyefkvk0.log
+      [SERVER] Ready with draft
+      ⚡ moe4_spec_draft_qwen35_0_8b_q4_0_k8: 11.8t/s  (speed only, quality from baseline)
+      ⚡ moe4_spec_draft_qwen35_0_8b_q4_0_k16: 7.6t/s  (speed only, quality from baseline)
+      ⚡ moe4_spec_draft_qwen35_0_8b_q4_0_k24: 9.8t/s  (speed only, quality from baseline)
+      [SERVER] Restarting with draft Qwen3.5-0.8B-Q8_0...
+      [DEBUG] Server cmd includes: --override-kv qwen35moe.expert_used_count=int:4
+      [DEBUG] Server cmd includes: -md /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf
+      [DEBUG] Server log: /mnt/raid0/llm/claude/tmp/llama_server_venz12dp.log
+      [SERVER] Ready with draft
+      ⚡ moe4_spec_draft_qwen35_0_8b_q8_0_k8: 9.7t/s  (speed only, quality from baseline)
+      ⚡ moe4_spec_draft_qwen35_0_8b_q8_0_k16: 6.8t/s  (speed only, quality from baseline)
+      ⚡ moe4_spec_draft_qwen35_0_8b_q8_0_k24: 15.2t/s  (speed only, quality from baseline)
+Roles: 100%|██████████| 1/1 [05:02<00:00, 302.79s/it]Roles: 100%|██████████| 1/1 [05:02<00:00, 302.79s/it]
+
+  [SERVER] Stopping server...
+
+Done: 7 completed, 204 skipped, 6 errors

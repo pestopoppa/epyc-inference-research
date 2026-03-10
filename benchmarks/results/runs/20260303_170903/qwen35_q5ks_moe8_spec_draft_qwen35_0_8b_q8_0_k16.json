@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q5ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T22:50:08.826370",
+  "results": {
+    "math": {
+      "t1_q2_system_equations": {
+        "question_id": "t1_q2_system_equations",
+        "prompt": "Solve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method.",
+        "response": "<think>\nHere's a thinking process to solve system of solving a system of equations:\n1.\n\n1. Analyze the given system:\n\n**\n\n1.\n\n1. 1. 1.\n1. **Understand the problem: We are given two equations:\n 1. $x^2 + y^2 = 25$\n 2. $xy = 12$\n\nWe need to find all real pairs of real $(x, y)$ that satisfy both equations.\n\n2. Choose a method:\n 2. Choose a method. Common Methods\n.1.\n 1.2.\n2. 3.1.2.\n.\n\n3.1.\n.\n\n3.1. .\n1.\n.\n 2.\n.\n3.3.\n.4.\n\n.\n5.\n.6.\n7.\n8.\n\n4.10.\n.10.\n.\n.\n.1.\n.\n.\n\n.\n.\n.\n.\n.\n.\n.\n.\n\n.1.\n.\n.\n.\n\n.\n.",
+        "tokens_per_second": 7.0,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 36553.34,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "<think>\n\n</think>\n\n### 1. Concrete ABA Scenario\n\nThe ABA problem occurs when a thread reads a value `A`, gets preempted, and while it is paused, another thread changes the memory from `A` to `B` and then back to `A`. The first thread resumes, sees the value is still `A`, assumes nothing significant has changed, and proceeds with an operation that is no longer safe.\n\n**Scenario Sequence:**\n\n1.  **Initial State**: `top` points to Node **A** (which points to `NULL`).\n2.  **Thread T1 (Pop)**:\n    *   Reads `top`: `t = A`.\n    *   **Preempted** before executing `compare_exchange`.\n3.  **Thread T2 (Push & Pop)**:\n    *   **Push**: Creates Node **B**. `top` becomes `B` (pointing to **A**).\n    *   **Pop**: Reads `top` (`B`), sees `B->next` is `A`.\n    *   Executes CAS: `compare_exchange_weak(B, A)`.\n    *   **Result**: `top` is now `A` again.",
+        "tokens_per_second": 13.66,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18744.24,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"phase_id\": 1,\n      \"description\": \"Data Acquisition\",\n      \"assigned_agents\": [\"researcher_agent\"],\n      \"tasks\": [\n        {\n          \"agent\": \"researcher_agent\",\n          \"instruction\": \"Search for the current stock price of AAPL and retrieve the last 30 days of historical closing prices (OHLCV data is preferred, specifically the close price). Return the data in a structured JSON format with 'current_price' and 'historical_prices' (list of last 30 closing prices).\",\n          \"max_time\": 30\n        }\n      ]\n    },\n    {\n      \"phase_id\": 2,\n      \"description\": \"Calculation and Verification\",\n      \"assigned_agents\": [\"coder_agent\", \"reviewer_agent\"],\n      \"tasks\": [\n        {\n          \"agent\": \"coder_agent\",\n          \"instruction\": \"Receive the historical prices data. Calculate the 30-day moving average of the closing prices. Output the calculated value and a brief code snippet used for verification.\",\n          \"max_time\": 5\n        },\n        {",
+        "tokens_per_second": 13.9,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18421.5,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.520000000000001,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

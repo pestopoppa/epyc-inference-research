@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q6_K.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T01:50:45.720968",
+  "results": {
+    "thinking": {
+      "t2_q4_metacognition": {
+        "question_id": "t2_q4_metacognition",
+        "prompt": "You're asked to estimate how many piano tuners are in Chicago.\n\n1. Describe your estimation approach step by step\n2. Identify the key assumptions you're making\n3. Estimate upper and lower bounds\n4. What information would most reduce your uncertainty?\n\nThis is about your reasoning process, not the exact number.",
+        "response": "<think>\n\n</think>\n\nTo estimate the number of piano tuners in Chicago, I will use a **Top-Down Approach** (often called a \"Fermation. This method breaks the problem into manageable sub-components of the city into layers to individual components needed resources (total population down into a total population down into specific variables that directly related factors that drive the demand for piano tuning services.\n\n### 1. **Describe Your Estimation Approach**\n    - **Top-Down Approach**\n**\n2. Identify Key Assumptions: Population: - - Upper/Layers to reduce uncertainty**\n\n### 1. Estimation Approach\n\n###**\n\n###**Step 1: Define the Core Framework\n1. **\n\nI'll.\n\nThe.\n\n.\n\n.\n\n.\n\n.\n\n###3. **Step 3.\n\n.\n\n.\n\n.\n\n.\n\n###2.\n\n###.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n### 1. **3. **Key Assumptions\n-Down Approach\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.",
+        "tokens_per_second": 10.93,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 46853.47,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "The Ship's\n\n<think>\n\n</think>\n\nThe Ship of Theseus is one of the most enduring paradoxical of theore of the classic thought-profoundations of the enduring puzzles intractilest enduring thought-provoking thought experiments in the history of philosophy. It forces us to question the nature of identity: Is an continuity, and the essence, and the relationship between matter and form.\n\n### Argument for the Material Continuity of Identity\n\nThe first, which identity as the view, the Ship of Theseus, is the ship with its own, a ship with the same? The the same. The Ship of Theseus\n\n1. If the ship of Theseus.\n\n**Ship. If the of the ship, the is the of the ship.\n\n The Ship of Theseus, is the of the ship. If the ship. The.\n\n The Ship of Theseus\n\n of the ship is the Ship of Theseus.\n\n### 1. Position: The View of Essentialism (Formal Essence (Identity of the ship, and the\n\nThe ship of Theseus\n\n The ship\n\n The\n\nThe ship of Theseus.\n\n The ship of Theseus.\n\nThe ship of\n\nThe Ship of Theseus\n\nThe Ship of Theseus\n\nThe Ship of\n\nThe Ship of Theseus\n\nThe ship of Theseus\n\nThe ship of Theseus.\n\n### 2. The of the\n\n The\n\nThe Ship of Theseus\n\nThe Ship of Theseus\n\nThe of Theseus\n\nThe The The of Theseus\n\nThe of TheShip of Theseus\n\nThe Ship of Theseus\n\nThe Ship of Theseus\n\n### 3. The Ship of Theseus\n\nThe Ship of Theseus\n\nShip of Theseus\n\nThe Ship\n\nThe\n\nThe Ship of Theseus\n\n### 4. The Ship of Theseus\n\nShip of Theseus\n\nThe Ship of Theseus\n\n### 5. The Ship of Theseus\n\nThe Ship of Theseus\n\n### 6. The Ship of Theseus\n\nThe Ship of Theseus\n\n### 7. The Ship of Theseus\n\nThe Ship Theseus\n\n### 8. The Ship of Theseus\n\nThe Ship of Theseus\n\n### 9. The Ship of Theseus\n\nThe Ship of Theseus\n\n### 10. The Ship of Theseus\n\nThe Ship of Theseus\n\n### A. The Ship of Theseus\n\n### 11. The Ship of Theseus\n\nThe Ship of Theseus\n\n. The Ship of",
+        "tokens_per_second": 7.16,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 71504.92,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t1_q1_sequential": {
+        "question_id": "t1_q1_sequential",
+        "prompt": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.",
+        "response": "[{\"tool\": \"grep_search\", \"arguments\": {\"pattern\": \"ERROR\", \"path\": \"/var/log/app.log\"}}]",
+        "tokens_per_second": 13.36,
+        "prompt_tokens": null,
+        "completion_tokens": 28,
+        "total_time_ms": 2096.52,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.483333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe6_spec_draft_qwen35_0_8b_q8_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T18:19:57.260220",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "<think>\n\n</think>\n\nHere is the step-by-step solution to the problem.\n\n### 1. Differentiability of $f(x)$\n\n**Statement:** The function $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$ is differentiable everywhere on $\\mathbb{R}$.\n\n**Proof:**\nTo determine the differentiability of a function defined by a power series, we first examine its radius of convergence, $R$. The general term of the series is $a_n x^n$ where $a_n = \\frac{\\sin(n)}{n!}$.\n\n$$ L = \\lim_{n \\to \\infty} \\left| \\frac{a_{n+1}}{a_n} \\right| = \\lim_{n \\to \\infty} \\left| \\frac{\\sin(n+1)}{(n+1)!} \\cdot \\frac{n!}{\\sin(n)} \\right| $$\nSince $|\\sin(n)| \\le 1$ and $|\\sin(n)|$ does not approach 0 fast enough to cancel the factorial growth, we can",
+        "tokens_per_second": 9.97,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 25688.94,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "<think>\n\n</think>\n\nHere are the two bugs in the provided binary search implementation, along with the specific inputs that trigger them, explanations, and fixes.\n\n### Bug 1: Infinite Loop on Non-Target Elements\n\n**1. Triggering Input**\n```python\narr = [1, 3, 5, 7, 9]\ntarget = 2\n```\n\n**2. Explanation**\nThe bug lies in the update logic for `left` and `right` when the target is not found.\n- When `arr[mid] < target`, the code sets `left = mid`.\n- When `arr[mid] > target`, the code sets `right = right = mid`.\n- If `mid` is calculated as `left` (which happens when `right = left + 1`), setting `left = mid` means `left` does not change.\n- Since the loop condition is `while left < right`, and neither variable moves, the loop runs forever.\n\n**Example Trace with Input `[1, 3, 5, 7, 9]`, target `2`:**\n1. `left=0`, `right=5`, `mid=2`. `arr",
+        "tokens_per_second": 13.21,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19377.16,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_system": {
+        "question_id": "t2_q4_system",
+        "prompt": "Implement a simple rate limiter class in Python:\n- Allow max N requests per time window W seconds\n- is_allowed() returns True/False\n- Should work correctly across multiple calls\n\nUse only standard library. Handle edge cases.",
+        "response": "<think>\n\"\"\"\n\n<think>\nHere's a thinking process that leads to the suggested rate limiter implementation:\n\n1.  **Understand the Goal:** The objective is to create a Python rate limiter class in Python that restrict the user wants to limit the user to to limit the number of requests (N) within time window W) that the requests) in a class. It needs to be able to handle multiple calls to `is_allowed()` to determine if a request should be allowed. The implementation should use the standard library.\n\n2.  **Analyze the Requirements:**\n    *   **Class:** Needs:** Needs:** Needs:** Needs:**\n        *   `__init__(self, max_requests, window_seconds)`: Initialize with max_requests, window, max_requests, window_seconds.\n        *   `is_allowed(self)`: Check if the current request can proceed.\n        *   **   *   **Core Logic: 1: Token Bucket:\n    *   **Constraints:**\n    *   Max N requests per W seconds.\n    *   `is_allowed()` method (True/False\n    *   Standard library.\n    *   Standard Library.\n    *   Handle edge cases.\n\n3",
+        "tokens_per_second": 7.67,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 33392.56,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.283333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

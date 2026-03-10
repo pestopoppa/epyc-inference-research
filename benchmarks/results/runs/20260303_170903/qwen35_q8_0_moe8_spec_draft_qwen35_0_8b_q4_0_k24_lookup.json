@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q8_0",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/jiaojjjjje/Qwen3.5-35B-A3B-abliterated-GGUF/Qwen3.5-35B-A3B-abliterated-Q8_0.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T04:57:20.166051",
+  "results": {
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "<think>\n\n</think>\n\nHere is the step-by-step logical deduction to determine if a valid schedule or explain why impossible.\n\n### 1. Analyze Constraints and Requirements\n\n**Available Time slots (1) **Time Slots and  **Team Sync: **Team Sync)\n- Duration: 60 mins.5. 60min\n Attendees: Alice, Bob, Carol.\n- **Constraint**: Alice** 1:1 Alice-Dave:**\n- **Duration:  Duration: 30 mins\n- Attendees: Alice, Dave.\n- **Constraint**: Alice**: Dave**: 3:** Dave only available 9-11am and 2-4pm.**\n- **Constraint Alice unavailable 10-11am.**\n\n**4. Dave**\n\n### 2. Analyze Availability**\n- Duration: 30 mins.\n- Attendees: Bob, Dave.\n- **Constraint**: Dave only available 9-11am and 2-4pm.\n\n**5. No back-to-back meetings**\n- No person cannot have no two meetings cannot start immediately following each other with no break in between.\n\nAvailable slots:\n9000 (9:30am, 10:00am, 10:30am, 11:00am, 14:2:0:0:30 13:00pm, 13:30pm, 14:00pm, 14:30pm, 15:00pm, 15:30pm.\n\n### 3. Deduce\n### 3. 4. 4. 4.4. 4. 4.4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4. 4.",
+        "tokens_per_second": 8.32,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 61562.63,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>\n\n</think>\n\nThe Ship of Theseus paradox is a classic problem of of the most enduring thought experiment in identity and about the nature of **identity** and **persistence over time. The question is not to: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nHere are two philosophical positions on this are:\n\n### Position 1: The **Continuity of Form (orMaterial\n\nThis position, often associated with Aristotle's theory, holds that an object's identity is not to its spatially tied to its matter. If every single, and its original material composition. If you replace the all the planks one by one, the ship remains the same because at every of the process. The ship is a \"this continuous. The ship because there is a of its form, because the is not change is continuous chain of identity is never been unbroken connection is maintained. The new ship, built from the old planks is a different object, \"Ship of Theseus because it has \"real ship, because it is a reconstruction, in a new material and a new form that began. The old. The original ship's ship is the original is that is to the \"real\" Ship of Theseus\" is the one that was continuously the original form and.\n\n### Position 2: The Continuity of Materialism\n\nThis position, with the of and, holds that an object's identity is to its form and. If you replace all the planks, the ship is not the same because the material is it is made of has changed. The new ship built the old planks is the \"real Ship of Theseus\" is it the ship because it has the original material. The ship is a of Theseus because the. The new is the one made of the original.\n\n### Which I Find Most Convincing: The\n\nI find the Continuity more convincing because it provides a practical and the of these. Here's a of and of its practical of the is a that is not an of identity.\n\nIn in and.\n\nIn my in of in and the ship is not a of its parts that is to its that the of its functionally.\n\nHowever, this the ship is a of the original. The continuity, a. The ship.\n\nIn, a ship, the ship, the ship is not as a",
+        "tokens_per_second": 5.42,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 94460.09,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q2_counterfactual": {
+        "question_id": "t2_q2_counterfactual",
+        "prompt": "Consider this scenario: \"If the internet had never been invented, how would academic research be different today?\"\n\nAnalyze this counterfactual across three dimensions:\n1. Speed of knowledge dissemination\n2. Collaboration patterns\n3. Reproducibility and peer review\n\nBe specific about mechanisms and second-order effects.",
+        "response": "<think>\nHere's a thinking process that leads to the suggested analysis:\n\n1.  **Deconstruct the Request:**\n    *   **Scenario:** Counterfactual history where the internet was never invented.\n    *   **Task:** Analyze the impact on academic research.\n    *   **Dimensions:**\n        1.  Speed of knowledge dissemination.\n        2.  Collaboration patterns.\n        3.  Reproducibility and peer review.\n    *   **Requirements:** Be specific about mechanisms and second-order effects.\n\n2.  **Establish the Baseline (Current Reality with Internet):**\n    *   *Speed:* Instantaneous (preprints, emails, journals online).\n    *   *Collaboration:* Global, virtual, real-time (Slack, Zoom, shared docs).\n    *   *Reproducibility:* Open data, code sharing, easier access to materials (though still a challenge), rapid feedback loops.\n\n3.  **Brainstorming the Counterfactual (No Internet):**\n    *   *Communication:* Relies on physical mail, telegraphs/phones, fax machines, in-person conferences.\n    *   *Storage:* Libraries, physical archives, paper copies, microfiche.\n    *   *Computation:* Local machines, mainframes (if applicable), less massive data sharing.\n\n4.  **Dimension 1: Speed of Knowledge Dissemination**\n    *   *Mechanism:* Publishing cycles. Without online pre-prints (arXiv, bioRxiv) or instant email notifications, researchers must wait for physical journals.\n    *   *Effect:* Slower discovery. \"Priority wars\" become more aggressive because getting it on paper is harder/faster.\n    *   *Second-Order:* Innovation lag. If a medical breakthrough is found, it takes years to reach the clinic instead of days. The \"Silicon Valley\" pace of tech research slows to a \"University of Oxford\" pace.\n    *   *Mechanism:* Searchability. Google Scholar vs. card catalogs.\n    *   *Effect:* Lower visibility for non-famous institutions. Niche research dies out faster because it's harder to find.\n\n5.  **Dimension 2: Collaboration Patterns**\n    *   *Mechanism:* Communication costs. Video conferencing (Zoom) vs. Plane tickets/Train tickets. Email vs. Post.\n    *   *Effect:* Collaboration is restricted by geography.",
+        "tokens_per_second": 13.32,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38436.36,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 9.020000000000001,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

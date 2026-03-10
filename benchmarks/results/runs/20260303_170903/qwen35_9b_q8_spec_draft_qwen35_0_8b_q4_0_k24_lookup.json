@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q8",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q8_0.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q4_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T03:00:37.229594",
+  "results": {
+    "agentic": {
+      "t2_q3_schema_edge": {
+        "question_id": "t2_q3_schema_edge",
+        "prompt": "Tool schema:\n{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"string (required) - must start with /\",\n    \"method\": \"string (required) - GET/POST/PUT/DELETE\",\n    \"body\": \"object (required for POST/PUT, must be null for GET/DELETE)\",\n    \"headers\": \"object (optional)\"\n  }\n}\n\nUser: \"GET the users endpoint with an auth header Bearer token123\"\n\nGenerate the correct tool call. Output only the JSON.",
+        "response": "{\"name\": \"query_api\", \"parameters\": {\"endpoint\": \"/users\", \"method\": \"GET\", \"body\": null, \"headers\": {\"Authorization\": \"Bearer token123\"}}}",
+        "tokens_per_second": 13.76,
+        "prompt_tokens": null,
+        "completion_tokens": 42,
+        "total_time_ms": 3052.97,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "math": {
+      "t2_q1_optimization": {
+        "question_id": "t2_q1_optimization",
+        "prompt": "A farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nWhat dimensions maximize the enclosed area? What is the maximum area?\n\nSet up the optimization problem and solve it.",
+        "response": "1\n\nExpert's Answer\n\nRelated Questions\n\nThe owner of a farm has 1500 feet of fencing. He wants to enclose a rectangular field that borders a straight riverbank (no fencing is needed on the river bank). Find the dimensions of the rectangular field that maximize the area. Find the...\n\nA farmer has 2000 yards of fencing and wants to fence three sides of a rectangular field that borders a straight river (no fencing is needed on the river side). What dimensions of the field will maximize the enclosed area?\n\nA farmer has 100 feet of fencing to enclose a rectangular field adjacent to a river. No fence is needed along the river. a) Express the area A of the enclosed field as a function of the width x. b) Find the width and length of the field that maximize the area.\n\nA farmer has 200 feet of fencing to enclose a rectangular area next to a river. The farmer does not need to fence along the side that borders the river. (See figure below). Determine the dimensions that will maximize the area enclosed.\n\nA farmer wants to enclose a rectangular region that borders a river using 500 feet of fencing. The river is the fourth side of the rectangle. What is the maximum area that can be enclosed by the fence? What are the dimensions of the rectangle...\n\nRecent Questions in Mathematics\n\nWhat is the area of a triangle with base of 15.8 inches and a height of 9.3 inches?\n\nPosted\none year ago\n\nFind the area of a triangle with a base of 5 feet and a height of 3 feet.\n\nPosted\none year ago\n\nWhat is the area of a triangle with base of 10 inches and a height of 9 inches?\n\nPosted\none year ago\n\nWhat is the area of a triangle with base of 17 inches and a height of 13 inches?\n\nPosted\none year ago\n\nFind the area of a triangle with a base of 9 feet and a height of 5 feet.\n\nPosted\none year ago\n\nFind the area of a triangle with a base of 15 feet and a height of 8 feet.\n\nPosted\none year ago\n\nA rectangular field has a length of 60 yards and a width of 40 yards. If the length is decreased by 10 yards, how much must the width increase by to maintain the original area?\n\nPosted\none",
+        "tokens_per_second": 13.52,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37869.02,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q3_probability_theory": {
+        "question_id": "t3_q3_probability_theory",
+        "prompt": "Let X_1, X_2, X_3, ... be iid uniform random variables on [0,1].\nDefine S_n = X_1 + X_2 + ... + X_n.\nLet N = min{n >= 1 : S_n > 1}.\n\nFind E[N] (the expected value of N).\n\nProvide TWO different proofs:\n(a) A direct calculation approach\n(b) An elegant argument that avoids heavy computation\n\nHint for (b): Consider the n-simplex and its relation to order statistics.",
+        "response": "<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the Problem:**\n    *   $X_i \\sim \\text{Uniform}[0, 1]$ are i.i.d.\n    *   $S_n = \\sum_{i=1}^n X_i$.\n    *   $N = \\min\\{n \\ge 1 : S_n > 1\\}$.\n    *   Goal: Find $E[N]$.\n    *   Requirements: Two proofs.\n        *   (a) Direct calculation (using probabilities or geometric series).\n        *   (b) Elegant argument (using geometry/order statistics).\n\n2.  **Part (a): Direct Calculation Approach**\n\n    *   *Definition of Expectation:* $E[N] = \\sum_{n=0}^{\\infty} n \\cdot P(N=n)$.\n    *   *Alternative definition:* $E[N] = \\sum_{n=0}^{\\infty} P(N > n)$. This is usually easier for integer-valued non-negative random variables. Let's use this one.\n\n    *   *Analyze the event $N > n$:*\n        *   $N = \\min\\{k : S_k > 1\\}$.\n        *   $N > n$ means the condition $S_k > 1$ has *not* been met for $k=1, 2, \\dots, n$.\n        *   This is equivalent to $S_n \\le 1$ (since $X_i \\ge 0$, if $S_n \\le 1$, then for all $k < n$, $S_k \\le S_n \\le 1$).\n        *   So, $P(N > n) = P(S_n \\le 1)$.\n\n    *   *Analyze $P(S_n \\le 1)$:*\n        *   $S_n = X_1 + \\dots + X_n$.\n        *   The variables are i.i.d. Uniform[0,1].\n        *   The joint PDF of $(X_1, \\dots, X_n)$ is $1$ inside the unit hypercube $[0,1]^n$ and $0$ elsewhere.\n        *   $P(S_n \\le 1)$ is the volume of the region defined by $",
+        "tokens_per_second": 13.52,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37867.79,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.6,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

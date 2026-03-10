@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe4_lookup_n3",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T23:49:05.519986",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nHere is an analysis of the proposed AI governance policy, breaking down its potential failure modes, mechanisms, proposed amendments, and the associated trade-offs.\n\n### Policy Overview\nThe proposed policy sets three rigid, quantitative thresholds for all production ML models:\n1.  **Accuracy:** $\\ge 95\\%$\n2.  **Explainability:** SHAP score $> 0.8$\n3.  **Bias Audits:** Quarterly frequency\n\n---\n\n### 1. Failure Mode: The \"One-Size-Fits-All\" Accuracy Fallacy\n\n**Mechanism of Failure:**\nSetting a universal **95% accuracy threshold** ignores the inherent difficulty of different tasks and the cost of errors.\n*   **Task Difficulty:** In highly complex domains like fraud detection in a new market, rare disease diagnosis, or natural language understanding of ambiguous slang, 95% accuracy might be statistically impossible even for state-of-the-art models.\n*   **Class Imbalance:** If a dataset is 99% negative (e.g., non-fraudulent transactions), a trivial model that predicts \"non-fraud\" for every case achieves 99% accuracy but is completely useless. Conversely, a model that detects 100% of fraud but has 90% overall accuracy might be superior in a high-stakes environment.\n*   **Result:** The policy forces teams to either abandon useful models that are \"good enough\" or artificially inflate metrics via data leakage or overfitting to meet the arbitrary 95% bar.\n\n**Proposed Amendment:**\nReplace the fixed accuracy threshold with **task-specific performance metrics** tied to business impact.\n*   Require a **Minimum Acceptable Performance (MAP)** defined per model type (e.g., Precision $\\ge 0.9$ for fraud, Recall $\\ge 0.95$ for medical screening).\n*   Mandate a **Business Case Justification** where the team demonstrates that the model's expected utility outweighs the cost of errors, rather than relying on a single accuracy number.\n\n**Trade-offs:**\n*   **Pros:** Aligns the technology with actual business value; prevents \"metric hacking\" on easy tasks; allows deployment of useful models in difficult domains.\n*   **Cons:** Increases governance complexity. The audit team must understand the nuance of each domain to approve specific metrics. It shifts the burden of justification from a simple pass/fail check to a qualitative",
+        "tokens_per_second": 13.76,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37196.11,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "1. **How double-charges occurred:**\n\nThe system had a classic \"eventual consistency\" race condition. Here's the precise sequence:\n- User initiates payment, system processes it normally\n- System records idempotency key check (idempotency key = user + amount + timestamp) \n- The idempotency check reads from a replica that's ~500ms behind, so it doesn't see the write yet\n- System processes the same payment request as new (duplicate detected, but too late)\n- System processes the second identical request as if it were a new one\n- This results in a double charge\n\n2. **Why testing missed this:**\n\nTesting likely didn't catch this because:\n- Simulated load was probably run against the primary database\n- The test environment didn't replicate the production-level replica lag\n- The 500ms lag required a specific combination of system load and network conditions that's hard to reproduce in testing\n- Test environments typically don't experience the same level of system contention that causes such significant delays\n\n3. **Architectural fixes with trade-offs:**\n\n**Fix A: Use database transactions with strong consistency guarantees**\n- Pros: Eliminates race condition; simple fix\n- Cons: Increased latency, complexity in transaction management, potential for deadlocks\n\n**Fix B: Implement a distributed locking mechanism with timeout**\n- Pros: Allows for better control and can handle replica lag scenarios gracefully\n- Cons: More complex, adds latency due to inter-process communication, requires careful management of lock timeouts\n\n4. **Monitoring that would have caught this:**\n\n- **Idempotency key violation monitoring**: Alert when two identical idempotency keys are processed in sequence\n- **Replica lag monitoring**: Alerts when replica lag exceeds thresholds (e.e., >200ms)\n- **Payment duplicate detection**: Real-time monitoring of duplicate payment detection events\n- **Latency SLIs/SLOs**: Monitor for degradation in system performance that could indicate issues with data consistency\n- **Business logic monitoring**: Alerts when the same transaction appears to be processed multiple times\n\nThis is a classic example of how distributed systems complexities can create subtle but critical timing issues that are difficult to detect in testing but can have severe financial consequences. The key is that systems with distributed databases must account for the possibility of stale reads from replicas, especially during high-load or failure scenarios. The chosen fix will depend on the specific requirements of the system, particularly around availability vs.",
+        "tokens_per_second": 42.79,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 11965.33,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "instruction_precision": {
+      "t1_q2_word_limit": {
+        "question_id": "t1_q2_word_limit",
+        "prompt": "Describe machine learning in exactly 20-25 words. Count carefully.",
+        "response": "<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   Topic: Describe machine learning.\n    *   Constraint: Exactly 20-25 words.\n    *   Action: Count carefully.\n\n2.  **Drafting Initial Ideas:**\n    *   *Idea 1:* Machine learning allows computers to learn from data without explicit programming, enabling them to improve performance on specific tasks over time automatically. (20 words) - Let's count: Machine(1) learning(2) allows(3) computers(4) to(5) learn(6) from(7) data(8) without(9) explicit(10) programming,(11) enabling(12) them(13) to(14) improve(15) performance(16) on(17) specific(18) tasks(19) over(20) time(21) automatically.(22). Too long (22 words).\n    *   *Idea 2:* Machine learning enables systems to learn patterns from data, improving accuracy over time without explicit programming instructions for every specific task or scenario. (21 words) - Let's count: Machine(1) learning(2) enables(3) systems(4) to(5) learn(6) patterns(7) from(8) data,(9) improving(10) accuracy(11) over(12) time(13) without(14) explicit(15) programming(16) instructions(17) for(18) every(19) specific(20) task(21) or(22) scenario.(23). Too long (23 words). Wait, I need 20-25. 23 is within range. Let me recount carefully.\n    *   *Count Check Idea 2:*\n        1. Machine\n        2. learning\n        3. enables\n        4. systems\n        5. to\n        6. learn\n        7. patterns\n        8. from\n        9. data,\n        10. improving\n        11. accuracy\n        12. over\n        13. time\n        14. without\n        15. explicit\n        16. programming\n        1",
+        "tokens_per_second": 13.76,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37218.58,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 23.436666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

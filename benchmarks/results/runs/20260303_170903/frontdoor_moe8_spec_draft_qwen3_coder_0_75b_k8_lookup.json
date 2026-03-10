@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe8_spec_draft_qwen3_coder_0_75b_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T00:05:38.906177",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nThis proposed AI governance policy attempts to set clear, quantitative benchmarks for model quality, transparency, and fairness. However, in practice, rigid adherence to these specific thresholds without context can lead to perverse incentives, operational bottlenecks, and a false sense of security.\n\nHere is an analysis of the policy's failure modes, mechanisms, proposed amendments, and the associated trade-offs.\n\n### 1. Failure Mode: Metric Myopia and \"Gaming\" the Test Set\n**The Issue:** Requiring a hard 95% accuracy threshold on a *single* held-out test set ignores the nature of the task and the distribution of the data.\n\n*   **Mechanism of Failure:**\n    *   **Task Impossibility:** For complex, real-world problems (e.g., medical diagnosis, fraud detection, or sentiment analysis in noisy text), 95% accuracy may be statistically impossible. If the model cannot reach this threshold, the policy forces the company to either not deploy useful models or to artificially inflate metrics.\n    *   **Data Leakage/Overfitting:** To meet the 95% target, data scientists may inadvertently (or intentionally) leak information from the test set into the training pipeline, or they may iterate until the model memorizes the specific test cases. This creates a model that performs well on the audit but fails catastrophically on live data (distribution shift).\n    *   **Class Imbalance:** If the dataset is imbalanced (e.g., 99% negative transactions, 1% fraud), a model that predicts \"no fraud\" for everything achieves 99% accuracy but has zero utility. The policy does not specify *which* class must be accurate.\n\n**Proposed Amendment:**\nReplace the single accuracy threshold with a **context-aware metric suite**.\n*   Require 95% accuracy *only* if it is a standard binary classification with balanced classes.\n*   For imbalanced or complex tasks, require **F1-Score, AUC-ROC, or Precision@K** based on business impact.\n*   Mandate that the \"held-out test set\" be validated against a **Time-Series Split** or **Stratified Cross-Validation** to ensure robustness, rather than a single static split.\n\n**Trade-offs:**\n*   **Pros:** Aligns metrics with actual business value; prevents models from being deployed simply because they achieved a \"magic number\" on a specific dataset.\n*",
+        "tokens_per_second": 12.25,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 41783.59,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "<think>\n\n</think>\n\nThis is a classic distributed systems failure scenario involving the interaction between **eventual consistency**, **timing gaps**, and **idempotency enforcement**. Here is the breakdown of the failure, the testing gap, and the architectural solutions.\n\n### 1. How Double-Charges Occurred\nThe double-charge occurred due to a **race condition between the idempotency check and the data write**, exacerbated by the asynchronous replication lag.\n\nHere is the precise sequence of events:\n1.  **Request A arrives**: The system receives a payment request with `idempotency_key = \"UUID-123\"`.\n2.  **Check Phase**: The system queries the **read replica** to see if `UUID-123` exists.\n    *   *Scenario*: The replica is lagging. The write for a previous successful attempt (or a previous failed attempt that was retried) has not yet replicated from the primary to the replica.\n    *   *Result*: The replica returns \"Key not found.\"\n3.  **Write Phase**: The system proceeds to process the payment and writes the transaction and the idempotency key to the **primary database**.\n4.  **Request B arrives (Retry)**: Due to network timeouts or client retries, the same `idempotency_key = \"UUID-123\"` arrives again (or a second request with the same key arrives during the spike).\n    *   *Scenario*: The system queries the **read replica** again.\n    *   *Result*: Because the lag spike is 500ms, the write from step 3 has still not propagated to the replica. The replica still returns \"Key not found.\"\n5.  **Double Execution**: The system treats Request B as a new, unique transaction, processes the charge, and writes it to the primary.\n\n**Result**: Two distinct transaction records exist in the primary database for the same logical intent, both charged to the customer. The idempotency mechanism failed because the **source of truth for the check (the replica) was stale**.\n\n---\n\n### 2. Why Testing Missed This\nThe team likely failed to catch this in testing for three specific reasons:\n\n*   **Deterministic vs. Stochastic Environments**: Testing environments (staging/QA) often use single-node databases or synchronous replication where lag is near zero. They rarely simulate the specific network conditions or I/O bott",
+        "tokens_per_second": 13.51,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37901.18,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "<think>\n\n</think>\n\nHere is the step-by-step analysis of the causal structure and the answers to your questions.\n\n### Structural Analysis\nFirst, let's visualize the Directed Acyclic Graph (DAG) based on your description:\n*   **Nodes**: Gene ($G$), Smoking ($S$), Yellow Fingers ($Y$), Cancer ($C$).\n*   **Edges**:\n    1.  $G \\to S$\n    2.  $S \\to C$\n    3.  $S \\to Y$\n    4.  $G \\to C$\n\n**Causal Paths from Smoking ($S$) to Cancer ($C$):**\n1.  **Direct Path**: $S \\to C$ (This is the causal effect we want to estimate).\n2.  **Backdoor Path 1**: $S \\leftarrow G \\to C$ (This is a confounding path because $G$ is a common cause of both $S$ and $C$).\n3.  **Backdoor Path 2**: $S \\leftarrow G \\to C \\leftarrow Y$? No, $Y$ is a descendant of $S$.\n    Let's check the path through $Y$: $S \\to Y \\leftarrow \\dots$? No, $Y$ only has parents $S$.\n    Is there a path $S \\to Y \\dots \\to C$? No, $Y$ does not point to $C$.\n    Is there a path $S \\leftarrow G \\to C \\leftarrow Y$? No, $Y$ is not a parent of $C$.\n\nThe only backdoor path (non-causal path) connecting $S$ and $C$ is **$S \\leftarrow G \\to C$**.\n\n---\n\n### 1. What is the minimal sufficient adjustment set?\n\nTo estimate the causal effect of $S$ on $C$, we must block all **backdoor paths** while **not blocking** the direct causal path ($S \\to C$) and **not opening** any new spurious paths (colliders).\n\n*   **Backdoor Path**: $S \\leftarrow G \\to C$.\n*   **Blocking Strategy**: To block this path, we must condition on the confounder $G$ (Gene).\n*   **Variable $Y$**: $Y$ is a descendant",
+        "tokens_per_second": 13.5,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37934.61,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.086666666666666,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

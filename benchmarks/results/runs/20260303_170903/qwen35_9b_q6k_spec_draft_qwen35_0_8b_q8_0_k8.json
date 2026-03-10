@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q6_K.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T10:23:53.566776",
+  "results": {
+    "agentic": {
+      "t2_q2_error_chain": {
+        "question_id": "t2_q2_error_chain",
+        "prompt": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.",
+        "response": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.\n\n<think>\nThe user is asking for the next action and available tools.\n1.\n   - The user.\n   user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user.\n   - The user\n\n\n\n\ndecoded  261 tokens in   15.282 seconds, speed:   17.079 t/s\nn_predict = 261\ndraft:\ntarget:",
+        "tokens_per_second": 14.243031964965414,
+        "prompt_tokens": 298,
+        "completion_tokens": 245,
+        "total_time_ms": 18324.75,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\nOutput:\n1.  **Analyze the Constraints:**\n    *   **Plants:** A, B, C, D, E (Total permutations = 5! = 120.\n    *   **Constraint 1:** A before B must be watered before D.\n    *   **Constraint 2:** C must be watered immediately after D. So, D and A -> A < B < D < B < D < C.\n -> A < B < D < C.\n    So, D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A < B < D < C.\n    -> A <\n\n\n\n\ndecoded  264 tokens in   16.432 seconds, speed:   16.066 t/s\nn_predict = 264\ndraft:\ntarget:",
+        "tokens_per_second": 14.327145164371428,
+        "prompt_tokens": 145,
+        "completion_tokens": 266,
+        "total_time_ms": 18426.56,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_multistep": {
+        "question_id": "t1_q1_multistep",
+        "prompt": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.",
+        "response": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.\n\nHere's problem:\n\n1.  **Analyze the Problem:**\n    *   **Train 1:**\n        *   Origin: Station A\n        *   Departure Time: 9:00 AM\n        *   Speed ($v_1$)\n        *   Direction: Toward Station B\n    *   **Train 2:**\n        *   Origin: Station B\n        *   Departure Time: 10:00 AM\n        *   Speed: 80 mph ($v_2$)\n        *   Direction: Toward Station A\n    *   **Distance:** Total distance between A. Determine the Time of Meeting ($t_1$) = $t_2$) = Total Distance = \\\n    * $ Distance = $v_1 \\times t_1$\n    * $ Distance = $\n    * Total Distance - v = $60$ t_1$\n    $t_100 AM\n$ t_1 = 9.00$\n$ t_1 = 9.00$\n$ t_1 = 9.00$\n$ t_1 = 9.00$\n$ t_1 =\n\n\n\n\ndecoded  262 tokens in   20.246 seconds, speed:   12.941 t/s\nn_predict = 262\ndraft:\ntarget:",
+        "tokens_per_second": 11.766977907723538,
+        "prompt_tokens": 164,
+        "completion_tokens": 329,
+        "total_time_ms": 22265.7,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.445718345686794,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

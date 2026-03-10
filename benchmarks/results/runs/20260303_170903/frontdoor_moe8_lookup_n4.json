@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe8_lookup_n4",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T00:10:27.108703",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "## 1. Policy Analysis\n\n### 3 Ways This Policy Could Fail\n\n**1. False Positive/False Negative Assumptions in Accuracy Metrics**\nThe policy assumes that 95% accuracy is sufficient for production deployment, but this threshold may be overly optimistic. Real-world scenarios often involve imbalanced datasets, rare events, or domains where even 95% accuracy might be inadequate. For example, in medical diagnosis, a 5% error rate could be catastrophic.\n\n**2. Overreliance on SHAP Explainability Scores**\nThe policy mandates explainability scores above 0.8, but SHAP scores can be misleading if the model architecture or data characteristics don't align with SHAP's assumptions. For instance, SHAP might fail to capture complex interactions in deep learning models, leading to false confidence in model interpretability.\n\n**3. Inadequate Bias Audit Frequency and Scope**\nThe quarterly bias audits may not be frequent enough to catch evolving biases, especially in dynamic environments. Additionally, the audit process itself could be flawed, leading to false confidence in the model's fairness. Bias can emerge from changing societal norms, data drift, or new user demographics.\n\n## 2. Failure Mechanism Explanations\n\n**1. False Positive/False Negative Assumptions in Accuracy Metrics**\nThe accuracy metric alone does not account for the severity of different types of errors. In domains like healthcare, financial services, or autonomous vehicles, the cost of false negatives (missing a critical event) can far outweigh false positives. For example, missing a cancer diagnosis due to a model error has vastly different consequences than incorrectly flagging a legitimate transaction as fraudulent.\n\n**2. Overreliance on SHAP Explainability Scores**\nSHAP relies on certain assumptions about the model and data, such as the independence of features and the ability to compute marginal contributions. In complex, non-linear models like deep neural networks, SHAP's approximations may not reflect the true decision-making process, leading to misleading explanations. This could result in stakeholders believing a model is interpretable when it is not.\n\n**3. Inadequate Bias Audit Frequency and Scope**\nBias audits conducted quarterly might miss emerging biases that arise from changing user behavior, dataset drift, or evolving societal standards. The audit process could also be biased by the auditors' own assumptions or the limited scope of the audit methodology, leading to incomplete or inaccurate assessments of fairness.\n\n## 3. Proposed Amendments\n\n**1. Accuracy Threshold Adjustment**\nReplace the fixed 95% accuracy requirement with",
+        "tokens_per_second": 37.9,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 13508.22,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "Let me know if you need additional details to answer these questions.\n\nThe distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?\n\nLet me know if you need additional details to answer these questions.\n\n### 1. **How double-charges occurred despite idempotency keys**\n\nThe system used **idempotency keys** to prevent duplicate processing, but the implementation had a **read-after-write inconsistency** due to the use of **eventual consistency** in read replicas.\n\nHere's the sequence of events:\n\n1. A payment request arrives.\n2. The system performs an **idempotency check** by querying a **read replica** to see if a payment with that idempotency key has already been processed.\n3. Since the replica is lagging (500ms in this case), it does **not yet reflect** the previous payment that was successfully written to the primary.\n4. The idempotency check returns **false**, indicating the payment is new.\n5. The system proceeds to **process and write** the payment to the primary database.\n6. A second identical request arrives.\n7. The **same idempotency check** is performed, again using the lagging replica.\n8. Again, the replica does not reflect the first payment.\n9. The second payment is **also processed and written** to the primary, resulting in **double-charging**.\n\nIn other words, the **idempotency check succeeded only because it read from an outdated replica**, not from a consistent view of the database.\n\n---\n\n### 2. **Why didn't the team catch this in testing?**\n\nThe issue likely went undetected in testing because:\n\n- **Test environments** often use **simplified or mocked databases** with **strong consistency** or **mocked replicas with no lag**.\n- **Load testing** may not have simulated **realistic replica lag** conditions, especially",
+        "tokens_per_second": 44.17,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 11590.5,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "<think>\n\n</think>\n\nHere is the step-by-step analysis of the causal structure and the answers to your questions.\n\n### Causal Structure Analysis\n\nFirst, let's visualize the Directed Acyclic Graph (DAG) based on your description:\n*   $S$: Smoking\n*   $C$: Cancer\n*   $Y$: Yellow Fingers\n*   $G$: Gene\n\n**Edges:**\n1.  $G \\to S$\n2.  $S \\to C$\n3.  $S \\to Y$\n4.  $G \\to C$\n\n**Path Analysis:**\n*   **The Causal Path of Interest:** $S \\to C$\n*   **Backdoor Paths (non-causal paths from $S$ to $C$):**\n    *   $S \\leftarrow G \\to C$ (This is a confounding path because $G$ is a common cause of both $S$ and $C$).\n    *   $S \\to Y \\leftarrow G$? No, the arrow is $S \\to Y$, so this is not a backdoor path starting from $S$.\n    *   Are there any other paths? No.\n\n---\n\n### 1. What is the minimal sufficient adjustment set?\n\nTo estimate the causal effect of $S$ on $C$, we must block all **backdoor paths** from $S$ to $C$ while not blocking the **causal path** ($S \\to C$) or opening any **collider paths**.\n\n*   **Identify Backdoor Paths:** The only backdoor path is $S \\leftarrow G \\to C$.\n*   **Block the Path:** To block this path, we must condition on the confounder $G$.\n*   **Check for Bias:**\n    *   Conditioning on $G$ blocks the backdoor path.\n    *   Conditioning on $G$ does not block the causal path $S \\to C$ (unless $G$ is a collider, which it is not; it is a common cause).\n    *   Are there other open paths? No.\n\n**Conclusion:**\nThe minimal sufficient adjustment set is **$\\{ \\text{Gene} \\}$** (or simply $G$).\n\n---\n\n### 2. Would conditioning on Yellow Fingers introduce bias? Explain.\n\n**Yes, conditioning on Yellow Fingers ($Y$) introduces",
+        "tokens_per_second": 13.79,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37126.02,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 31.953333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q6_K.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k4",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T10:22:38.323913",
+  "results": {
+    "agentic": {
+      "t2_q2_error_chain": {
+        "question_id": "t2_q2_error_chain",
+        "prompt": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.",
+        "response": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.\n\nReasoning:\n1.  **Analyze the current conversation state is a deployment attempt to deploy version 1.2.3 to deploy blocked because of health check failure.\n reason:\n 1.  **to**Available tools:**\n - restart_service: {\"service\": \"string\", \"env\": \"string\"}\n - get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n - notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n - check_dns: {\"hostname\": \"string\"}\n2.  **Current State:**\n - Deployment blocked. - - Health check failed on staging.\n - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n\n\n\n\ndecoded  260 tokens in   20.349 seconds, speed:   12.777 t/s\nn_predict = 260\ndraft:\ntarget:",
+        "tokens_per_second": 11.176532033875208,
+        "prompt_tokens": 362,
+        "completion_tokens": 201,
+        "total_time_ms": 23263.03,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\n<think>\n\n</think>\n\nTo find all valid orderings for watering the letters A, B, C, D, E), we must satisfy the following constraints:\n\n1. **A before B**: $A \\precise**D \\to C$**E not last**: $E \\neq 1$ and $E \\neq 5$\n4. **B before D**: $B \\to D$\n\n### Step 1: Combine: Combine constraints:\n1. A before D**:\nFrom constraints:\n- **A before B**A \\to B$\n- **C must be watered immediately after D**:\n- **C$\n- **E cannot be first or last**: $E \\neq 1$ and $E \\neq 5$\n- **B must be watered before D**: $B \\to D$\n\nLet's derive the valid orderings.\n2. **E cannot be first or last**: $E \\neq 1$ and $E \\neq 5$E \\{2. **E \\neq 1$\n- **B**: $B \\to D$\n- **C**: $D \\to C$\n- **\n\n\n\n\ndecoded  257 tokens in   21.731 seconds, speed:   11.827 t/s\nn_predict = 257\ndraft:\ntarget:",
+        "tokens_per_second": 10.832181272549482,
+        "prompt_tokens": 211,
+        "completion_tokens": 213,
+        "total_time_ms": 23725.6,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_multistep": {
+        "question_id": "t1_q1_multistep",
+        "prompt": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.",
+        "response": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.\n\nLet's break down the problem step-by-step breakdown of the problem step 1: understand the problem.\n1. Identify what is the problem.\n1. **Train B**.\n2. Identify the stations **Station B**.\n3. Identify the distance between the stations **2. Identify the speeds of the trains **Train A** and **Train B**.\n14. Identify the time **Train A** leaves.\n15. Identify the time **Train B** leaves.\n16. Identify the speeds**.\n17. Identify the time **Train A** leaves.\n18. Identify the time **Train B** leaves.\n19. Identify the distance between the stations.\n20. Identify the time **Train A** leaves.\n21. Identify the time **Train B** leaves.\n22. Identify the time **Train A** leaves.\n23. Identify the time **Train B** leaves.\n24. Identify the time **Train A** leaves.\n25. Identify the time **Train B** leaves.\n26. Identify the time **Train A** leaves.\n27. Identify the time **Train B** leaves.\n\n**Step 1: Understand the problem.**\n\n\n\n\n\ndecoded  261 tokens in   19.745 seconds, speed:   13.219 t/s\nn_predict = 261\ndraft:\ntarget:",
+        "tokens_per_second": 12.022652335296574,
+        "prompt_tokens": 198,
+        "completion_tokens": 192,
+        "total_time_ms": 21709.02,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.343788547240422,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

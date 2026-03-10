@@ -1,0 +1,43 @@
+{
+  "model_role": "qwen35_9b_q8",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q8_0.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k32",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T02:57:28.650713",
+  "results": {
+    "agentic": {
+      "t2_q3_schema_edge": {
+        "question_id": "t2_q3_schema_edge",
+        "prompt": "Tool schema:\n{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"string (required) - must start with /\",\n    \"method\": \"string (required) - GET/POST/PUT/DELETE\",\n    \"body\": \"object (required for POST/PUT, must be null for GET/DELETE)\",\n    \"headers\": \"object (optional)\"\n  }\n}\n\nUser: \"GET the users endpoint with an auth header Bearer token123\"\n\nGenerate the correct tool call. Output only the JSON.",
+        "response": "{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"/users\",\n    \"method\": \"GET\",\n    \"body\": null,\n    \"headers\": {\n      \"Authorization\": \"Bearer token123\"\n    }\n  }\n}",
+        "tokens_per_second": 13.81,
+        "prompt_tokens": null,
+        "completion_tokens": 66,
+        "total_time_ms": 4778.13,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "math": {
+      "t2_q1_optimization": {
+        "question_id": "t2_q1_optimization",
+        "prompt": "A farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nWhat dimensions maximize the enclosed area? What is the maximum area?\n\nSet up the optimization problem and solve it.",
+        "response": "Step 1\n1: Define the variables.\nStep 2: Set up the constraint equation for the area.\nStep 3: Use the constraint to eliminate one of the variables.\nStep 4: Find the maximum value of the area function from the.\nStep5: The\n \nStep 1: Define the variables.\nLet x =\n x = the length of field parallel to river (meters)\ny = length of side (meters)\nStep 2: Set up equation.\n = the area to the field\n Step3: Use the to eliminate one of the variables.\n= 4: 2x + 2y = 200 => = 200 - 2y\n4: Find the maximum value of the function.\n\n1: Define the variables.\nLet x = length of side of the field (meters)\n = the of field perpendicular to the river (meters)\nStep2: Set up the for the area of the field\n = the of the = = x =\nStep: the = of the = xy = = = xy\n3: the to one of the = (meters)\ny = the to the river",
+        "tokens_per_second": 7.77,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 32927.42,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.79,
+    "avg_algorithmic_score": null,
+    "questions_tested": 2,
+    "questions_passed": 0
+  }
+}

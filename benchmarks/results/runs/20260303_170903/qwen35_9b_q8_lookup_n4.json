@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q8",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q8_0.gguf",
+  "config_name": "lookup_n4",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T03:07:51.579763",
+  "results": {
+    "agentic": {
+      "t2_q3_schema_edge": {
+        "question_id": "t2_q3_schema_edge",
+        "prompt": "Tool schema:\n{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"string (required) - must start with /\",\n    \"method\": \"string (required) - GET/POST/PUT/DELETE\",\n    \"body\": \"object (required for POST/PUT, must be null for GET/DELETE)\",\n    \"headers\": \"object (optional)\"\n  }\n}\n\nUser: \"GET the users endpoint with an auth header Bearer token123\"\n\nGenerate the correct tool call. Output only the JSON.",
+        "response": "{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"/users\",\n    \"method\": \"GET\",\n    \"body\": null,\n    \"headers\": {\n      \"Authorization\": \"Bearer token123\"\n    }\n  }\n}",
+        "tokens_per_second": 19.97,
+        "prompt_tokens": null,
+        "completion_tokens": 68,
+        "total_time_ms": 3405.54,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "math": {
+      "t2_q1_optimization": {
+        "question_id": "t2_q1_optimization",
+        "prompt": "A farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nWhat dimensions maximize the enclosed area? What is the maximum area?\n\nSet up the optimization problem and solve it.",
+        "response": "*   Show a sketch of the field and label it.\n*   State the objective function.\n*   State the constraint equation.\n*   Determine the dimensions of the field that give the maximum area.\n*   Determine the maximum area.\n\n<think>\n\n</think>\n\nHere is the step-by-step solution to the optimization problem.\n\n### 1. Sketch and Variable Definition\n\nLet the rectangular field have a width $x$ and a length $y$.\n*   Let $x$ be the length of the two sides perpendicular to the river.\n*   Let $y$ be the length of the side parallel to the river.\n*   The side parallel to the river requires no fencing.\n\n**Sketch:**\n\n```text\n      x (width)       x (width)\n      |               |\n      |               |\ny ----+---------------+-----> River (No fencing needed)\n      |               |\n      |_______________|\n          y (length)\n```\n*(Note: In standard optimization diagrams, $y$ is often the side parallel to the river, and $x$ represents the two sides perpendicular to it. The total fencing used covers the two $x$ sides and one $y$ side.)*\n\n### 2. State the Objective Function\n\nThe goal is to maximize the area of the rectangle.\nThe formula for the area ($A$) of a rectangle is:\n$$A = \\text{length} \\times \\text{width}$$\n\nSubstituting our variables:\n$$A(x, y) = x \\cdot y$$\n\nThis is our **Objective Function**.\n\n### 3. State the Constraint Equation\n\nThe total amount of fencing available is 200 meters. The fencing is used for the two widths ($x$) and one length ($y$).\n$$x + x + y = 200$$\n$$2x + y = 200$$\n\nThis is our **Constraint Equation**.\n\n### 4. Determine the Dimensions for Maximum Area\n\nTo maximize the area, we need to express the objective function in terms of a single variable. We can do this by solving the constraint equation for $y$:\n\n$$y = 200 - 2x$$\n\nNow, substitute this expression for $y$ into the area equation:\n\n$$A(x) = x(200 - 2x)$$\n$$A(x) = 20",
+        "tokens_per_second": 13.41,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38179.17,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q3_probability_theory": {
+        "question_id": "t3_q3_probability_theory",
+        "prompt": "Let X_1, X_2, X_3, ... be iid uniform random variables on [0,1].\nDefine S_n = X_1 + X_2 + ... + X_n.\nLet N = min{n >= 1 : S_n > 1}.\n\nFind E[N] (the expected value of N).\n\nProvide TWO different proofs:\n(a) A direct calculation approach\n(b) An elegant argument that avoids heavy computation\n\nHint for (b): Consider the n-simplex and its relation to order statistics.",
+        "response": "<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the Problem:**\n    *   $X_i \\sim \\text{Uniform}(0, 1)$ are i.i.d.\n    *   $S_n = \\sum_{i=1}^n X_i$.\n    *   $N = \\min \\{n \\ge 1 : S_n > 1\\}$.\n    *   Goal: Find $E[N]$.\n    *   Constraint: Provide two proofs (a) direct calculation, (b) elegant geometric/combinatorial argument involving simplices/order statistics.\n\n2.  **Part (b) - The Elegant Argument (Geometric/Order Statistics):**\n    *   *Intuition:* I recall a classic problem related to sums of uniforms exceeding 1. The probability $P(N > n)$ is usually easier to calculate than $P(N = n)$.\n    *   *Definition of N:* $N$ is the first time the sum exceeds 1. This means $S_n \\le 1$ for all $n < N$. Conversely, $N > n$ implies $S_n \\le 1$.\n    *   *Probability Calculation:* $P(N > n) = P(S_n \\le 1)$.\n    *   *Geometric Interpretation:* The condition $S_n = X_1 + \\dots + X_n \\le 1$ with $X_i \\ge 0$ describes an $n$-dimensional simplex (a tetrahedron-like shape).\n    *   *Volume:* The random variables are uniform on $[0,1]^n$. The volume of the hypercube $[0,1]^n$ is $1$. The volume of the region defined by $\\sum_{i=1}^n x_i \\le 1$ and $x_i \\ge 0$ is $1/n!$.\n    *   *Result:* $P(N > n) = 1/n!$.\n    *   *Calculation:* $E[N] = \\sum_{n=0}^\\infty \\frac{1}{n!} = e^0 \\times \\dots",
+        "tokens_per_second": 13.46,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38048.96,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 15.613333333333335,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

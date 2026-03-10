@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q6_K.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T01:41:36.456011",
+  "results": {
+    "thinking": {
+      "t2_q4_metacognition": {
+        "question_id": "t2_q4_metacognition",
+        "prompt": "You're asked to estimate how many piano tuners are in Chicago.\n\n1. Describe your estimation approach step by step\n2. Identify the key assumptions you're making\n3. Estimate upper and lower bounds\n4. What information would most reduce your uncertainty?\n\nThis is about your reasoning process, not the exact number.",
+        "response": "<think>:\nHere's a thinking process that leads to the suggested response:\n\n1.  **Analyze the Request:**\n    *   **Task:** Estimate the number of piano tuners in Chicago (a classic Fermi problem).\n    *   **Requirements:**\n        1.  Describe the estimation approach step-by-step.\n        2.  Identify key assumptions.\n        3.  Estimate upper and lower bounds.\n        4.  Identify information that would reduce uncertainty.\n    *   **Emphasis:** The reasoning process is more important than the final number.\n\n2.  **Deconstruct the Problem (Fermi Estimation Strategy):**\n    *   To find the number of piano tuners ($N_{tuners}$), I need to link it to the demand for tuning services.\n    *   Formula: $N_{tuners} = \\frac{\\text{Total Piano Tuning Demand per Year}}{\\text{Output per Tuner per Year}}$\n    *   Total Demand = (Number of Pianos in Chicago) $\\times$ (Average Tunings per Piano per Year)\n    *   Number of Pianos = (Population of Chicago) $\\times$ (%",
+        "tokens_per_second": 12.71,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 20136.25,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>\n\n</think>\n\nThe Ship of Theseus is one of the wood, of the classic paradoxes that has challenged philosophers debated the the ship these the same, the same is a timeless debate for these a timeless problem has the ship the a.\n\n### Introduction to\n\n### Argument for Position 1. Material Continuity of form:\n 1. **Continuity of Form:** The ship's of these ship that is the same ship the ship, the ship.\n\n1.\n2.\n2. The ship.\n\n### **Position 1. **The Ship's. The Ship of the** ship has the has has:**\n- The is that is the.\n\n1. **The ship:**\n\n.\n\n### Position 1: **The. **The Ship of Theseus:**The ship.\n \n\n**The\n\n**\n\n.\n.\n\n.\n is a.\n\n **\n\n1.\n\n.\n\n.\n\n###\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.\n\n.",
+        "tokens_per_second": 5.94,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 43116.49,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t1_q1_sequential": {
+        "question_id": "t1_q1_sequential",
+        "prompt": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.",
+        "response": "[{\"tool\": \"grep_search\", \"arguments\": {\"pattern\": \"ERROR\", \"path\": \"/var/log/app.log\"}}, {\"tool\": \"read_file\", \"arguments\": {\"path\": \"/var/log/app.log\"}}]",
+        "tokens_per_second": 13.58,
+        "prompt_tokens": null,
+        "completion_tokens": 48,
+        "total_time_ms": 3534.59,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.743333333333334,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

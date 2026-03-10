@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe4_spec_draft_qwen3_coder_0_75b_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T23:44:19.334372",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nThis proposed AI governance policy represents a \"one-size-fits-all\" approach that, while well-intentioned, contains critical flaws that could lead to the deployment of ineffective, misleading, or even harmful models. By imposing rigid, uniform thresholds without context, the policy risks creating perverse incentives and ignoring the fundamental nature of machine learning problems.\n\nHere is an analysis of the policy's failure modes, mechanisms, proposed amendments, and trade-offs.\n\n### 1. Failure Mode: The Accuracy Trap (Context Ignorance)\n**Mechanism:**\nThe requirement for a fixed **95% accuracy** threshold ignores the class distribution and the specific nature of the problem.\n*   **Imbalanced Data:** In fraud detection or rare disease diagnosis, the \"negative\" class (non-fraud/healthy) might constitute 99.9% of the data. A model that simply predicts \"no fraud\" for every case achieves 99.9% accuracy but is useless. Conversely, for a balanced classification task, 95% might be unattainable due to inherent noise in the data.\n*   **Cost of Errors:** Accuracy treats false positives and false negatives equally. In a medical diagnosis context, a 9",
+        "tokens_per_second": 10.92,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 23439.08,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "<think>:\nThis is a classic distributed systems consistency problem. Let me think through each question systematically.\n\n**Question 1: How double-charges occurred**\n\nThe key issue is the read/write split with eventual consistency. Here's the flow:\n\n1. Payment request arrives with idempotency key \"PAY-123\"\n2. System checks replica for existing key (read from replica)\n3. Replica is lagging (500ms) and doesn't yet show the key exists\n4. System writes to primary (creates transaction)\n5. Another request arrives before replica catches up\n6. Second request checks replica (still doesn't show key exists due to lag)\n7. Second request also writes to primary (creates duplicate transaction)\n8. Both transactions execute, causing double-charge\n\nThe idempotency check is happening on stale data because of the replica lag.\n\n**Question 2: Why testing didn't catch this**\n\nTesting typically:\n- Uses single-node databases or synchronous replication\n- Doesn't simulate network latency/replica lag\n- Has predictable, low-latency environments\n- May not have realistic load patterns\n- Idempotency works fine under normal conditions\n- The bug",
+        "tokens_per_second": 13.11,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19525.13,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "instruction_precision": {
+      "t1_q2_word_limit": {
+        "question_id": "t1_q2_word_limit",
+        "prompt": "Describe machine learning in exactly 20-25 words. Count carefully.",
+        "response": "Machine learning is a field of artificial intelligence enabling computers to learn patterns from data without explicit programming instructions.",
+        "tokens_per_second": 13.82,
+        "prompt_tokens": null,
+        "completion_tokens": 22,
+        "total_time_ms": 1592.15,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 12.616666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q6_K.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T01:56:05.449509",
+  "results": {
+    "thinking": {
+      "t2_q4_metacognition": {
+        "question_id": "t2_q4_metacognition",
+        "prompt": "You're asked to estimate how many piano tuners are in Chicago.\n\n1. Describe your estimation approach step by step\n2. Identify the key assumptions you're making\n3. Estimate upper and lower bounds\n4. What information would most reduce your uncertainty?\n\nThis is about your reasoning process, not the exact number.",
+        "response": "<think>\n\n</think>\n\nThis is a classic Fermi problem that focuses on the structure, focusing on a structured, on.\n\n1. **Approach: The \"\n\n1. **Problem Deconstruct a.\n\n**2. **\n\n.\n\n**. **\n\n### **\n\n### 1. **Break Downscaling:**\n\n    * **\n\n. **\n\n**\n\n**\n\n **\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**\n\n**",
+        "tokens_per_second": 15.72,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 32578.32,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>\n\n</think>\n\nThe Ship of Theseus is a classic paradox in metaphysics that has challenged the ancient Greek hero Theseus's identity over a ship: if every component parts of an object are gradually replace theus. The Theseus are replaced, if parts of the object, if object are, Theus are replaced over time, does the object remain the same? If theus if so this question is deepened: If the us: if a puzzle.\n\n### Position 1: The **Continuity of Form of Identity (Formalists argue that the ship remains the same due to **Morphys. The Ship of Theseus, because of theseus ship. The key argument is the ship is theof continuity of material and the ship.\n\nThe ship. the ship's form, which replaces the planks, the ship's form and function over time. the ship's identity is preserved through the gradual replacement of its parts, as the ship is the ship.\n\nPosition 2. Position 2. **The Material Continuity of Materialists argue that the ship's identity is preserved through the gradual replacement of its parts. The key argument is that the ship's form and function over time. The ship's identity is maintained through the gradual replacement of its as the ship's form and function are preserved.\n\n### Argument for example of the ship's identity is the gradual replacement of its parts. The key argument is the ship's form and function over time. The ship identity is maintained as the ship's form and function are preserved.\n\n Argument for **Material Continuity: The ship's identity is through the gradual of its parts. The key argument is the ship's form and function over time. The ship's identity is maintained as the ship's form and function are preserved.\n\n Argument for the ship's identity is the gradual of its parts. The argument is the ship's form function over time. The ship's identity is the ship's form function.\n\nThe key argument is that the ship's form and function are through the gradual replacement of its. The key is the ship's form function over time. The ship's is as the ship's form\n\n### **Position 3. The of the of the ship's identity is through the gradual replacement of its parts. The key argument is the ship's form and function over time. The ship's identity is the gradual of the gradual replacement of its as the ship's form function.\n\n for the ship's identity is the gradual replacement of its parts. The key",
+        "tokens_per_second": 6.3,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 81252.13,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t1_q1_sequential": {
+        "question_id": "t1_q1_sequential",
+        "prompt": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.",
+        "response": "[{\"tool_calls\": [{\"read_file: {\"path\": \"/var/log/app.log\"}}]\n]\n[{\"tool\": \"calls\": [{\"name\": \"grep_search\", \"params\": {\"pattern\": \"ERROR\", \"path\": \"/var/log/app.log\"}]}\n[{\"tool\": \"name\": \"read_file\", \"params\": {\"path\": \"/var/log/app.log\"}}]}\n\n```}}]}}]\n]\n```\n\n```json\n[\n  {\n    \"tool\": \"grep_search\",\n    \"params\": {\n      \"pattern\": \"ERROR\",\n      \"path\": \"/var/log/app.log\"\n    }\n  },\n  {\n    \"tool\": \"read_file\",\n    \"params\": {\n      \"path\": \"/var/log/app.log\"\n    }\n  }\n]\n```\n\n```json\n[\n  {\n    \"tool\": \"grep_search\",\n    \"params\": {\n      \"pattern\": \"ERROR\",\n      \"path\": \"/var/log/app.log\"\n    }\n  },\n  {\n    \"tool\": \"read_file\",\n    \"params\": {\n      \"path\": \"/var/log/app.log\"\n    }\n  }\n]\n```",
+        "tokens_per_second": 9.93,
+        "prompt_tokens": null,
+        "completion_tokens": 265,
+        "total_time_ms": 26696.15,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.65,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

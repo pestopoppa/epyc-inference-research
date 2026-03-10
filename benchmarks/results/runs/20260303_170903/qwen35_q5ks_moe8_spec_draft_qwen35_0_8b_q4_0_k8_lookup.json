@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q5ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T23:23:07.838640",
+  "results": {
+    "math": {
+      "t1_q2_system_equations": {
+        "question_id": "t1_q2_system_equations",
+        "prompt": "Solve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method.",
+        "response": "<think>\n\n</think>\n\nTo solve the system of equations:\n1.  $x^2 + y^2 = 25$\n2.  $xy = 12$\n\nWe can use algebraic identities involving perfect squares to find the values of $(x+y)$ and $(x-y)$.\n\n### Step 1: Use the identity $(x+y)^2$\nRecall the expansion: $(x+y)^2 = x^2 + y^2 + 2xy$.\n\nSubstitute the given values ($x^2 + y^2 = 25$ and $xy = 12$) into the identity:\n$$ (x+y)^2 = 25 + 2(12) $$\n$$ (x+y)^2 = 25 + 24 $$\n$$ (x+y)^2 = 49 $$\n\nTaking the square root of both sides gives two possible cases for the sum $x+y$:\n$$ x+y = 7 \\quad \\text{or} \\quad x+y = -7 $$\n\n### Step 2: Use the identity $(x-y)^2$\nRecall the expansion: $(x-y)^2 = x^2 + y^2 - 2xy$.\n\nSubstitute the given values:\n$$ (x-y)^2 = 25 - 2(12) $$\n$$ (x-y)^2 = 25 - 24 $$\n$$ (x-y)^2 = 1 $$\n\nTaking the square root of both sides gives two possible cases for the difference $x-y$:\n$$ x-y = 1 \\quad \\text{or} \\quad x-y = -1 $$\n\n### Step 3: Solve the linear systems\nSince $xy = 12$ is positive, $x$ and $y$ must have the same sign. This corresponds to the sum being positive (both positive) or negative (both negative). We can solve for $(x, y)$ by combining the results from Step 1 and Step 2.\n\n**Case A: Both $x$ and $y$ are positive**\nHere, $x+y = 7$. Since the product is positive, $x-y$ can be $1$ or $-1$.\nHowever, it is more systematic to solve the four combinations of $(x+y)$ and $(x-y)$ and then check which satisfy the original equations.\n\n1.",
+        "tokens_per_second": 13.03,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 39307.61,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "<think>\n\n</think>\n\n### 1. Concrete Sequence Demonstrating the ABA Problem\n\nThe **Scenario:\n\nLet's The A common scenario: The ABA occurs when a node ABA when the top changes happen when when when the top of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of",
+        "tokens_per_second": 16.7,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 30660.77,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"phase_id\": 1,\n      \"description\": \"Data Acquisition and Initial Calculation\",\n      \"agents\": [\n        {\n          \"agent_id\": \"researcher_agent\",\n          \"task\": \"Search for the current real-time stock price of AAPL and the most recent 30-day historical closing prices (or a reliable source link to this data).\"\n        },\n        {\n          \"agent_id\": \"coder_agent\",\n          \"task\": \"Wait for data from Phase 1. Once provided, write a Python script to calculate the 30-day moving average from the historical data provided.\"\n        }\n      ],\n      \"dependency\": \"None (Parallel start)\"\n    },\n    {\n      \"phase_id\": 2,\n      \"description\": \"Verification\",\n      \"agents\": [\n        {\n          \"agent_id\": \"reviewer_agent\",\n          \"task\": \"Critique the code logic used by the coder_agent and verify the calculated 30-day moving average against the raw historical data provided. Confirm accuracy.\"\n        }\n      ],\n      \"dependency\": \"Output from coder_agent (calculated average and code)\"\n    }\n  ],\n  \"context_passing\": {\n    \"phase_1_researcher_to_coder\": {\n      \"description\": \"Raw historical price data (list of floats) and current price\",\n      \"format\": \"JSON Array of objects: [{date, price}, ...]\"\n    },\n    \"phase_1_coder_to_reviewer\": {\n      \"description\": \"The calculated 30-day MA value and the Python code snippet used\",\n      \"format\": \"String (Code) + Float (Result)\"\n    },\n    \"phase_2_reviewer_to_orchestrator\": {\n      \"description\": \"Final verification status (Pass/Fail) and corrected value if applicable\",\n      \"format\": \"Boolean + String (Reasoning)\"\n    }\n  },\n  \"parallel_groups\": [\n    {\n      \"group_id\": \"A\",\n      \"agents\": [\"researcher_agent\", \"coder_agent\"],\n      \"rationale\": \"Researcher fetches data (30s). Coder prepares code structure (5s) but must wait for data. To optimize, the coder can start writing the *template*",
+        "tokens_per_second": 13.43,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38114.68,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 14.386666666666665,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

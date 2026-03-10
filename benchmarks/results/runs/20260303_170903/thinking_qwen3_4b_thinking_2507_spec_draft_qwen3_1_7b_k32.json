@@ -1,0 +1,29 @@
+{
+  "model_role": "thinking_qwen3_4b_thinking_2507",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-4B-Thinking-2507-GGUF/Qwen3-4B-Thinking-2507-Q8_0.gguf",
+  "config_name": "spec_draft_qwen3_1_7b_k32",
+  "run_id": "20251220_214317",
+  "timestamp": "2026-01-16T23:49:44.352951",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 5.357676878711159,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 5.357676878711159,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

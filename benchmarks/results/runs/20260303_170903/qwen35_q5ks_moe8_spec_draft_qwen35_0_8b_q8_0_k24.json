@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q5ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T22:51:06.618853",
+  "results": {
+    "math": {
+      "t1_q2_system_equations": {
+        "question_id": "t1_q2_system_equations",
+        "prompt": "Solve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method.",
+        "response": "Method 1: Substitution\n1. Solve the second equation for y: y = 12/x\n2. Substitute the expression for y into the first equation: x\u00c2\u00b2 + (12/x)\u00c2\u00b2 = 25\n3. Simplify the equation: x\u00c2\u00b2 + 144/x\u00c2\u00b2 = 25\n4. Multiply both sides by x\u00c2\u00b2: x\u00e2\u0081\u00b4 + 144 = 25x\u00c2\u00b2\n5. Rearrange the equation: x\u00e2\u0081\u00b4 - 25x\u00c2\u00b2 + 144 = 0\n6. Let z = x\u00c2\u00b2: z\u00c2\u00b2 - 25z + 144 = 0\n7. Factor the quadratic equation: (z - 9)(z - 16) = 0\n8. Solve for z: z = 9 or z = 16\n9. Since z = x\u00c2\u00b2, x = \u00c2\u00b13 or x = \u00c2\u00b14\n10. Find corresponding y values: y = 12/3 = 4, y = 12/(-3) = -4, y = 12/4 = 3, y = 12/(-4) = -",
+        "tokens_per_second": 13.94,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18363.13,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "<think>\nHere's a thinking process that leads to the suggested answer:\n\n1.  **Analyze the Request:**\n    *   **Input:** A lock-free stack implementation using `atomic<Node*>` and `compare_exchange_weak` (CAS).\n    *   **Task:**\n        1.  Identify the ABA problem scenario.\n        2.  Explain why it causes incorrect behavior.\n        3.  Provide a fix (tagged pointers or hazard pointers) without locks.\n    *   **Constraint:** The output should be clear, code-focused, and directly address the specific implementation provided.\n\n2.  **Analyze the Code:**\n    *   `struct Node { int val; Node* next; };`\n    *   `atomic<Node*> top;`\n    *   `push(int v)`: Creates a node, points its `next` to current `top`, attempts CAS to update `top` to new node.\n    *   `pop()`: Loads `top`, attempts CAS to update `top` to `top->next`. If successful, returns value.\n    *   *Observation:* This is the classic Michael & Scott lock-free stack (simplified). It",
+        "tokens_per_second": 13.89,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18426.58,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"phase_id\": 1,\n      \"description\":\"Data_Critical_task\":\"Retrieve_and_name\":\"Data_description\":\"Data Retrieval and research\",\n      \"agents\":[\"agent\":\"Retrieve current stock price of AAPL\",\n      \"agent\":\"researcher_agent\",\n      \"task_type\":\"sequential\",\n      \"task_type\":\"fetch_web\",\n      \"task\":\"Fetchesearcher\":\"_1\":\"Researcher_agent\":{\n        \"subtasks\": [\n          {\n            \"id\": \"R1\",\n            \"name\": \"Fetch Current AAPL Stock Data\",\n            \"description\": \"Search for AAPL's current stock price and historical data (current price, and historical data (30-day moving average\",\n            \"output_format\": \"JSON\n            {\n              \"current_price\": \"price\": \"number\",\n              \"historical_data\": [\n              \"data\":\n              \"\": {\n                \"date\": \"string\",\n                \"close_price\": \"number\",\n                \"volume\": \"number\"\n              ]\n            }\n          }\n        ]\n      }\n    },",
+        "tokens_per_second": 7.06,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 36260.47,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.63,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

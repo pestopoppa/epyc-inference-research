@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe4_spec_draft_qwen3_coder_0_75b_k16_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T23:47:15.015214",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "Here's the policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\n1. Identify at least 3 ways this policy could fail to achieve its intended goals:\n   - The accuracy requirement may be too lenient or too strict for the domain\n   - The explainability threshold is not contextually relevant\n   - The bias audit may be performed incorrectly or not at all\n\n2. For each failure mode, explain the mechanism:\n   - **Accuracy Requirement**: If the accuracy requirement is too strict, it could lead to overfitting to the test set or rejection of potentially useful models. If it's too lenient, it might allow poor quality models to pass, undermining the policy's intent.\n   - **Explainability**: If the explainability score is not contextual, it may not reflect real-world utility. For example, a model with a high SHAP score might be explainable in theory but not in practice if the domain is complex.\n   - **Bias Audits**: Bias audits can be performed incorrectly due to inadequate data or methodology, or they might be completely skipped, which would fail to detect problematic biases.\n\n3. Proposed Amendments:\n   - **Accuracy**: Implement a sliding scale of accuracy thresholds based on domain expertise and use cases, rather than a fixed 95% requirement.\n   - **Explainability**: Incorporate domain expert review in addition to SHAP scores to ensure that explainability is contextually relevant.\n   - **Bias Audits**: Automate bias detection and require third-party audits to improve consistency and reliability of the audit process.\n\n4. Trade-offs:\n   - **Accuracy**: While a sliding scale may be more flexible, it could also be more difficult to implement and may not be suitable for all domains.\n   - **Explainability**: Involving domain experts adds time and cost but could significantly improve the relevance and practicality of the explainability metrics.\n   - **Bias Audits**: Automation can improve consistency but may miss nuances that are important for bias detection, while third-party audits, although more reliable, can be expensive and time-consuming.\n\nLet's look at this more systematically.\n\n1. **Too rigid accuracy requirement**: The policy states that models must achieve 95% accuracy on a held-out test set. However, the accuracy metric may not be appropriate for all domains or applications. For instance, in medical diagnosis, a model that",
+        "tokens_per_second": 45.44,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 11266.45,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "1. **Explanation of double-charges:**\nThe system failed due to a race condition between the idempotency check and database consistency. Here's the sequence:\n- A payment request arrives at the system\n- The system performs an idempotency check (reading from a read replica)\n- Since replicas have eventual consistency, the check may not see recent writes, so it appears the payment hasn't been processed yet\n- The system proceeds with the payment processing\n- The request gets processed and the payment is applied\n- However, before the replica syncs with the primary (which can take up to 500ms), another request with the same idempotency key arrives\n- The second request sees the same idempotency key as not yet processed due to replica lag\n- The check returns false positive - assuming the first payment hasn't been processed yet\n- Both payments are processed\n\n2. **Why testing missed this:**\n- **Test data limitations:** Test scenarios typically don't simulate realistic lag patterns or stress the system during high-load periods\n- **Lack of chaos engineering practices:** The system wasn't tested under conditions that would reveal consistency issues\n- **Insufficient load testing:** The system may have been tested with lighter loads, not with the actual 500ms lag scenario\n- **Inadequate testing of failure modes:** Edge cases like replica lag weren't properly tested or considered in the design phase\n\n3. **Architectural fixes:**\n   **A. Primary-First Writes with Synchronous Replication**\n   - *Mechanism:* All writes must succeed on the primary before being acknowledged, with replicas updated synchronously\n   - *Trade-offs:* \n     - Pros: Guarantees strong consistency\n     - Cons: Higher latency, single point of failure, reduced availability during replication issues\n   \n   **B. Two-Phase Commit (2PC) or Distributed Transaction Protocol**\n   - *Mechanism:* Implement 2PC or similar distributed transaction protocols to ensure consistency\n   - *Trade-offs:*\n     - Pros: Strong consistency guarantees\n     - Cons: Complexity, performance overhead, potential for blocking, system-wide coordination\n\n4. **Monitoring to detect this issue:**\n- **Idempotency key violation alerting:** Monitor for rapid-fire duplicate requests with the same key within short timeframes\n- **Replica lag monitoring:** Alert when replica lag exceeds 100ms (the current lag threshold)\n- **Payment volume vs. expected volume",
+        "tokens_per_second": 41.12,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 12450.52,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "instruction_precision": {
+      "t1_q2_word_limit": {
+        "question_id": "t1_q2_word_limit",
+        "prompt": "Describe machine learning in exactly 20-25 words. Count carefully.",
+        "response": "<think>\n\n</think>\n\nMachine learning enables computers to learn patterns from data without explicit programming, allowing systems to improve performance automatically over time through experience.",
+        "tokens_per_second": 14.1,
+        "prompt_tokens": null,
+        "completion_tokens": 30,
+        "total_time_ms": 2128.41,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 33.553333333333335,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

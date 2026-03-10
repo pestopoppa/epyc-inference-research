@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q8_0",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/jiaojjjjje/Qwen3.5-35B-A3B-abliterated-GGUF/Qwen3.5-35B-A3B-abliterated-Q8_0.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T04:45:36.684070",
+  "results": {
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "<think>\n\n</think>\n\nBased on the constraints provided, **it is it is **impossible to create a valid schedule. Here is the step-by-step logical deduction:\n\n### 1. Analyze Constraints & Filter Available Time Slot Availability and Filter Constraints & Map Constraints and Constraints\n### 1. Analyze Constraints & Availability\n\n1. **Dave's Availability**: 09:00\u00e2\u0080\u009311:00 and 14:00\u00e2\u0080\u009316:00.\n   - **Alice's** **Alice's Unavailability**: 10:00\u00e2\u0080\u009311:00.\n - **No Back-to-Back**: No two meetings can be scheduled for the same person in a single participant consecutively.\n - **Team Meeting Durations**:\n2. Analyze Meeting Requirements**:\n   - **Team Sync **(60min): Must include Alice, Bob, Carol.\n   - **1:1 Alice-Dave **(30min): Needs Alice and Dave.\n   - **1:1 Bob-Dave **(0min): Needs Bob and Dave.\n\n### 2. Deduce Step-by-Step Scheduling\n\n**Step 1: Schedule the **Team Sync **(60",
+        "tokens_per_second": 7.36,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 34764.81,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>\n\n</think>\n\nThe Ship of Theseus is one of the most enduring puzzles in metaphysics, touching on the nature of **identity**, **persistence**, and **what it means to be the \"same\" thing over time**. The paradox arises from two conflicting intuitions:\n\n1.  **The Intuition of Continuity:** If you replace the parts of a ship slowly, one by one, it seems to remain the same ship. The change is gradual, and there is never a moment where the ship ceases to exist.\n2.  **The Intuition of Materiality:** If you collect the original discarded planks and build a second ship, that second ship seems to be the \"original\" because it is made of the original matter.\n\nHere are arguments for two prominent philosophical positions regarding this dilemma.\n\n### Position 1: Psychological/Functional Continuity (The \"Spatio-Temporal\" View)\n**Proponents:** John Locke (regarding personal identity), Derek Parfit.\n\nThis position argues that the identity of an object is defined not by its material composition, but by its **form, function, and continuous existence in space and time**.\n\n*   **The Argument from Gradual Replacement:** If a ship",
+        "tokens_per_second": 13.46,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19018.28,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q2_counterfactual": {
+        "question_id": "t2_q2_counterfactual",
+        "prompt": "Consider this scenario: \"If the internet had never been invented, how would academic research be different today?\"\n\nAnalyze this counterfactual across three dimensions:\n1. Speed of knowledge dissemination\n2. Collaboration patterns\n3. Reproducibility and peer review\n\nBe specific about mechanisms and second-order effects.",
+        "response": "<think>: The user wants me to analyze a counterfactual scenario where the internet was never invented, specifically focusing on its impact on academic research.\nI need to cover three specific dimensions:\n1.  Speed of knowledge dissemination.\n2.  Collaboration patterns.\n3.  Reproducibility and peer review.\n\nI need to be specific about mechanisms and second-order effects. This means going beyond just saying \"it would be slower\" and explaining *how* (e.g., postal services, conferences vs. preprint servers) and what else might change as a result (e.g., centralization of power, rise of physical archives, different funding models).\n\n**Plan:**\n1.  **Introduction:** Acknowledge the premise and set the scene (a \"Web-less\" academic landscape).\n2.  **Dimension 1: Speed of Knowledge Dissemination:**\n    *   *Mechanism:* Physical mail, journals, preprint mailing lists (like Usenet but physical), conferences.\n    *   *Second-order effects:* Delayed discovery, \"scooping\" risks, regional disparities (global north vs. south), rise of physical repositories (libraries as hubs).\n3.  **Dimension 2: Collaboration Patterns:**",
+        "tokens_per_second": 13.51,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18944.64,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.443333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

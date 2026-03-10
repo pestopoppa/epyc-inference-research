@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q6_K.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T01:44:45.639295",
+  "results": {
+    "thinking": {
+      "t2_q4_metacognition": {
+        "question_id": "t2_q4_metacognition",
+        "prompt": "You're asked to estimate how many piano tuners are in Chicago.\n\n1. Describe your estimation approach step by step\n2. Identify the key assumptions you're making\n3. Estimate upper and lower bounds\n4. What information would most reduce your uncertainty?\n\nThis is about your reasoning process, not the exact number.",
+        "response": "<think>\n\n</think>\n\nThis is a classic Fermi problem. The goal isn't to find the precise historical census data, but to demonstrate a structured approach to breaking down a complex, unquantified problem into manageable, estimable variables.\n\nHere is my step-by-step reasoning process for estimating the number of piano tuners in Chicago.\n\n### 1. Step-by-Step Estimation Approach\n\nI will use a **top-down demand-supply model**. The logic is:\n$$ \\text{Number of Tuners} = \\frac{\\text{Total Piano Tunings Needed per Year}}{\\text{Number of Tunings One Tuner Can Perform per Year}} $$\n\n**Step 1: Estimate the total number of pianos in Chicago.**\n*   Find the population of Chicago.\n*   Estimate the percentage of households that own a piano (or the number of institutions with pianos).\n*   Calculate the total population of pianos.\n\n**Step 2: Estimate the frequency of tuning.**\n*   Determine how many times a year a typical piano needs tuning to remain in acceptable condition (e.g., once a year, twice a year).\n\n**Step 3: Calculate total annual demand.**\n*   Multiply Total Pianos",
+        "tokens_per_second": 13.3,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19248.17,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>\nHere's a thinking process that leads to the suggested response:\n\n1.  **Analyze the Request:**\n    *   **Topic:** The Ship of Theseus paradox.**\n    *   **Core Question  Questions:** If every plank is replaced, is it the same ship? If old planks used for new ship, which is real?\n    *   **Task:** Present at least two philosophical positions (arguments), state, state their views ) argue). Selectivism/material continuity vs. ) state which most convincing and why.\n\n2.  **Deconstruct the Problem:**\n    *   **Position 1: The material continuity (Material Continuity of Form (Identity (Focus: (Matters (Material   (e.g., Aristotle, Locke, etc.)\n*   (e.g., Derek Parfit, Identity\n    *   **Position 2: Form/Function (e.g., Aristotle, Aquinas,   (e.g., Parfit,\n    *   **Decision:\n    *   **Conclusion:\n    *   **:\n    *   **Position 1:**\n        *   **Identity over time (e.g.,**\n            *   **\n    (e.g.,",
+        "tokens_per_second": 6.95,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 36835.95,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t1_q1_sequential": {
+        "question_id": "t1_q1_sequential",
+        "prompt": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.",
+        "response": "[{\"tool_calls\": [{\"name\": \"grep_search\", \"args\": {\"pattern\": \"ERROR\", \"path\": \"/var/log/app.log\"}}]}\n]\n[{\"name\": \"read_file\", \"args\": {\"path\": \"/var/log/app.log\"}}]\n```json\n[{\"name\": \"grep_search\", \"args\": {\"pattern\": \"ERROR\", \"path\": \"/var/log/app.log\"}}, {\"name\": \"read_file\", \"args\": {\"path\": \"/var/log/app.log\"}}]\n```\n\n```json\n[{\"name\": \"grep_search\", \"args\": {\"pattern\": \"ERROR\", \"path\": \"/var/log/app.log\"}}, {\"name\": \"read_file\", \"args\": {\"path\": \"/var/log/app.log\"}}]\n``` ```json\n[{\"name\": \"grep_search\", \"args\": {\"pattern\": \"ERROR\", \"path\": \"/var/log/app.log\"}}, {\"name\": \"read_file\", \"args\": {\"path\": \"/var/log/app.log\"}}]\n```json\n[{\"name\": \"grep_search\", \"args\": {\"pattern\": \"ERROR\", \"path\": \"/var/log/app.log",
+        "tokens_per_second": 14.65,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 17478.08,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.633333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

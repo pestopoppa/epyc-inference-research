@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe8_lookup_n5",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T00:11:55.014854",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nThis policy represents a well-intentioned attempt to standardize AI quality, but it suffers from \"metric fixation\"\u00e2\u0080\u0094the tendency to optimize for a specific number rather than the underlying reality. By setting rigid, universal thresholds without context, the policy risks creating perverse incentives, technical infeasibility, and a false sense of security.\n\nHere is an analysis of three critical failure modes, their mechanisms, proposed amendments, and the trade-offs involved.\n\n### 1. The \"One-Size-Fits-All\" Accuracy Fallacy\n\n**Failure Mode:** The policy mandates a hard **95% accuracy threshold** for *all* models, regardless of the problem domain.\n**Mechanism of Failure:**\n*   **Context Insensitivity:** In many high-stakes or complex domains (e.g., rare disease diagnosis, fraud detection in low-frequency events, or natural language generation), achieving 95% accuracy is statistically impossible or even undesirable. For imbalanced datasets (where 99% of transactions are legitimate), a model that simply predicts \"legitimate\" for every case achieves 99% accuracy but fails its business purpose entirely.\n*   **Adversarial Optimization:** Teams may be forced to \"game\" the system by curating the test set to include only easy examples (data leakage) or by rejecting difficult but real-world cases from the test set to artificially inflate the metric.\n*   **Opportunity Cost:** Valuable models that perform well on business-critical metrics (like precision or recall) but fall slightly below 95% on overall accuracy (perhaps due to the inherent noise of the data) might be blocked from deployment, stifling innovation.\n\n**Proposed Amendment:**\nReplace the fixed 95% accuracy threshold with **domain-specific success criteria** based on business impact.\n*   *New Policy Text:* \"All ML models must meet a baseline performance threshold defined by the specific use case. For classification tasks, this shall be defined by the metric most aligned with business risk (e.g., Precision, Recall, F1-Score, or ROC-AUC), rather than raw accuracy. The threshold must be established during the model design phase relative to a 'baseline' human performance or a legacy system.\"\n\n**Trade-offs:**\n*   **Pros:** Allows deployment of models in complex domains where 95% accuracy is impossible; aligns technical metrics with actual business value.\n*   **Cons:** Increases administrative overhead, as each model requires a custom",
+        "tokens_per_second": 13.71,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37346.83,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "<think>\n\n</think>\n\n### 1. The Root Cause: The Read-Write Race Condition\n\nThe double-charges occurred due to a **race condition between the idempotency check (read) and the transaction commit (write)**, exacerbated by the replication lag.\n\nHere is the precise sequence of events:\n\n1.  **Request A arrives:** The system receives a payment request with `idempotency_key = \"TXN-123\"`.\n2.  **The Check (Read):** The service queries the **replica** to see if `TXN-123` exists in the `processed_transactions` table.\n3.  **The Lag:** Due to the 500ms replication spike, the replica has not yet received the commit from the primary for a *previous* attempt of the same transaction (or a concurrent request that was processed milliseconds earlier).\n4.  **The False Negative:** The replica returns \"Not Found.\" The service assumes this is a new, valid request.\n5.  **The Write:** The service writes the transaction to the **primary** database and charges the customer.\n6.  **Request B arrives (Concurrent or Retry):** Almost simultaneously, a second request (perhaps a client retry or a load balancer retry) with the same `idempotency_key` arrives.\n7.  **The Check (Read):** The service queries the **replica** again. Because the 500ms lag persists, the replica still shows \"Not Found\" for this key.\n8.  **The Double Write:** The service proceeds to write to the primary again and charges the customer a second time.\n\n**The Core Flaw:** The idempotency guarantee relies on the **consistency** of the read. By reading from a replica with eventual consistency, the system effectively bypassed the idempotency guardrail during the window of replication lag. The \"check\" and the \"action\" were not atomic with respect to the data store's consistency level.\n\n---\n\n### 2. Why Testing Missed This\n\nThis scenario is notoriously difficult to catch in standard testing environments for three main reasons:\n\n*   **Deterministic vs. Non-Deterministic Timing:** In testing (especially unit and integration tests), databases are often single-node or use synchronous replication with negligible lag (sub-millisecond). The specific combination of a 500ms spike, a concurrent request, and a replica read happens only",
+        "tokens_per_second": 13.64,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37541.34,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "(Assume the DAG is correct).\n\nLet's analyze this step by step.\n\n---\n\n### **Given DAG:**\n\nWe have the following directed acyclic graph (DAG):\n\n- **Smoking \u00e2\u0086\u0092 Cancer**  \n- **Smoking \u00e2\u0086\u0092 Yellow Fingers**  \n- **Gene \u00e2\u0086\u0092 Smoking**  \n- **Gene \u00e2\u0086\u0092 Cancer**\n\nThis means:\n\n- **Gene** is a common cause of both **Smoking** and **Cancer**, so it's a **confounder**.\n- **Smoking** is a **cause** of both **Cancer** and **Yellow Fingers**.\n- **Yellow Fingers** is a **collider** on the path from **Gene \u00e2\u0086\u0092 Smoking \u00e2\u0086\u0092 Cancer**, because **Smoking** is in the middle.\n\n---\n\n## **1. What is the minimal sufficient adjustment set?**\n\nTo estimate the causal effect of **Smoking** on **Cancer**, we need to **block all backdoor paths** from **Smoking** to **Cancer**.\n\n### Step 1: Identify all backdoor paths.\n\nA backdoor path is a path from **Smoking** to **Cancer** that starts with an arrow pointing **into** **Smoking**.\n\nIn our case:\n\n- **Gene \u00e2\u0086\u0092 Smoking \u00e2\u0086\u0092 Cancer** is a backdoor path (since the arrow into Smoking is from Gene).\n- **Gene \u00e2\u0086\u0092 Smoking \u00e2\u0086\u0092 Yellow Fingers \u00e2\u0086\u0092 Cancer** is also a backdoor path, but note that **Yellow Fingers** is a **collider** on this path, so **conditioning on Yellow Fingers** would open this path (collider bias), which is not what we want. So we **do not condition on Yellow Fingers**.\n\n### Step 2: Find the minimal set of variables to block all backdoor paths.\n\nWe only need to **adjust for variables that are causes of both Smoking and Cancer**, which is **Gene**.\n\nTherefore, the **minimal sufficient adjustment set** is:\n\n> **{Gene}**\n\nThis will block the only backdoor path: **Gene \u00e2\u0086\u0092 Smoking \u00e2\u0086\u0092 Cancer**.\n\n---\n\n## **2. Would conditioning on Yellow Fingers introduce bias? Explain.**\n\nYes, **conditioning on Yellow Fingers introduces bias**.\n\n### Why?\n\nYellow Fingers is a **collider** on the path:\n\n**Gene \u00e2\u0086\u0092 Smoking \u00e2\u0086\u0092 Yellow Fingers**\n\nIn DAGs, **conditioning on a collider opens up the path**, which introduces **selection bias** or ** collider bias**.\n\nSo, if we condition on **Yellow F",
+        "tokens_per_second": 42.35,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 12088.87,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 23.233333333333334,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

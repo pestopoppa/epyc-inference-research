@@ -1,0 +1,53 @@
+{
+  "model_role": "qwen35_9b_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T07:42:22.968327",
+  "results": {
+    "thinking": {
+      "t3_q1_methodological_critique": {
+        "question_id": "t3_q1_methodological_critique",
+        "prompt": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.",
+        "response": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.\n\n<think>\n\n</think>\n\nThe claim that bilingualism \"correlation between the two groups.\n\n### 1. Socioeconomic status and parental language acquisition** of the same level of the same age of onset of bilingualism is of the same age.\n onset of bilingualism is of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age.\n of the same age\n\n\n\n\ndecoded  265 tokens in   17.100 seconds, speed:   15.497 t/s\nn_predict = 265\ndraft:\ntarget:",
+        "tokens_per_second": 13.964824451617153,
+        "prompt_tokens": 167,
+        "completion_tokens": 294,
+        "total_time_ms": 18976.25,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?\n\n<think>\n\n</think> Set $Z of Smoking ($S variables that blocks all back-door to\nWe cannot be blocked by conditioning on Yellow Fingers (Yellow Fingers is a collider:\n- Path: \\rightarrow Cancer, which is an ancestor of Smoking is a confounding exists a collider.\n- Smoking $\\rightarrow \\rightarrow$.\n- Gene $\\rightarrow Yellow Fingers$.\n- Gene $\\rightarrow$ Cancer.\n- Smoking.\n- Smoking $\\rightarrow$ Cancer.\n- Smoking $\\rightarrow$ Yellow Fingers.\n- Gene $\\rightarrow$ Smoking.\n- Gene $\\rightarrow$ Cancer.\n- Smoking $\\rightarrow$ Cancer.\n- Gene $\\rightarrow$ Smoking.\n- Smoking $\\rightarrow$ Yellow Fingers.\n- Gene $\\rightarrow$ Smoking.\n- Gene $\\rightarrow$ Cancer.\n- Smoking $\\rightarrow$ Cancer.\n- Gene $\\rightarrow$ Smoking.\n- Gene $\\rightarrow$ Cancer.\n- Smoking $\\rightarrow$ Yellow Fingers.\n- Smoking $\\rightarrow$ Yellow Fingers.\n- Gene $\\rightarrow$ Smoking.\n- Gene $\\rightarrow$ Cancer.\n- Smoking $\\rightarrow$ Cancer.\n\nThe minimal sufficient adjustment set.\nThe minimal sufficient adjustment set is **{Gene, Smoking, Gene, Cancer}.\nThe minimal sufficient adjustment set is **{\n\n\n\n\ndecoded  265 tokens in   27.017 seconds, speed:    9.809 t/s\nn_predict = 265\ndraft:\ntarget:",
+        "tokens_per_second": 9.157983861213348,
+        "prompt_tokens": 213,
+        "completion_tokens": 448,
+        "total_time_ms": 28936.5,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\n<think>\n-\nRules\nLet's break down the constraints into logical rules:\n1.  **A $\\rightarrow B.\n2.  **C immediately after D**: The pair (D (B $\\rightarrow$ D): B must be watered before D.\n5.  **Total last: E cannot be first need to be watered before B, and B before D, and C immediately after D.\n  \n6.  **E cannot be first or last**.\n7.  **E cannot be watered before D.\n    **E cannot be last**.\n8.  **E cannot be first**.\n9.  **E cannot be last**.\n10.  **E cannot be first**.\n11.  **E cannot be last**.\n12.  **E cannot be first**.\n13.  **E cannot be last**.\n14.  **E cannot be first**.\n15.  **E cannot be last**.\n16.  **E cannot be first**.\n17.  **E cannot be last**.\n18.  **E cannot be first**.\n19.  **E cannot be last**.\n20.  **E\n\n\n\n\ndecoded  258 tokens in   18.701 seconds, speed:   13.796 t/s\nn_predict = 258\ndraft:\ntarget:",
+        "tokens_per_second": 12.545745776508722,
+        "prompt_tokens": 159,
+        "completion_tokens": 315,
+        "total_time_ms": 20564.74,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.889518029779742,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

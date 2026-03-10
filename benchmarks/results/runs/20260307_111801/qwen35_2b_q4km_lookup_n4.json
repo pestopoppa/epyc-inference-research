@@ -1,0 +1,29 @@
+{
+  "model_role": "qwen35_2b_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q4_K_M.gguf",
+  "config_name": "lookup_n4",
+  "run_id": "20260307_111801",
+  "timestamp": "2026-03-07T13:46:11.247686",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 47.47881927381423,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 47.47881927381423,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

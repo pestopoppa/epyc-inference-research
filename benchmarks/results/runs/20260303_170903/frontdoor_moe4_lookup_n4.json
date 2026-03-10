@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe4_lookup_n4",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T23:50:33.050099",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nThis proposed AI governance policy attempts to balance performance, interpretability, and fairness. However, by treating these metrics as rigid, universal thresholds without context, it creates several critical failure modes that could lead to regulatory non-compliance, business stagnation, or even increased harm.\n\nHere is an analysis of the policy's flaws, mechanisms of failure, proposed amendments, and the associated trade-offs.\n\n### 1. Failure Mode: Context-Agnostic Performance Thresholds\n**The Mechanism of Failure:**\nThe policy mandates a flat **95% accuracy** for *all* models. Accuracy is a misleading metric for imbalanced datasets (e.g., fraud detection, rare disease diagnosis, or churn prediction).\n*   **Scenario:** If a model predicts \"No Fraud\" for 99% of transactions and only misses 5% of actual fraud cases, it might achieve 99% accuracy but be useless for its primary purpose. Conversely, in a highly imbalanced scenario where the \"positive\" class is rare (e.g., 1% prevalence), achieving 95% accuracy might require the model to simply predict \"Negative\" for everything, resulting in zero recall for the critical class.\n*   **Result:** Teams may be forced to deploy models that are statistically \"accurate\" but functionally broken for the specific business problem, or they may abandon useful models that simply don't hit an arbitrary 95% bar despite having superior business value.\n\n**Proposed Amendment:**\nReplace the flat accuracy metric with a **domain-specific, multi-metric success criteria** defined per use case.\n*   *Specific Change:* \"All ML models must achieve performance metrics (e.g., F1-Score, Recall, Precision, or AUC-ROC) that are **validated against a baseline business requirement** and explicitly defined in the Model Risk Charter. Accuracy alone is insufficient for imbalanced datasets.\"\n\n**Trade-offs:**\n*   **Pros:** Aligns model success with actual business value and risk; prevents \"gaming\" the metric.\n*   **Cons:** Increases governance overhead. Each model requires a unique charter, making automated compliance checking harder. It requires more sophisticated data science leadership to define appropriate baselines.\n\n---\n\n### 2. Failure Mode: The \"Explainability-Performance\" Trade-off Violation\n**The Mechanism of Failure:**\nThe policy requires **SHAP scores > 0.8** for *all* models.",
+        "tokens_per_second": 13.84,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 36991.79,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "<think>\n\n</think>\n\nThis is a classic distributed systems failure scenario involving the interaction between **eventual consistency**, **write-read patterns**, and **latency spikes**. Below is the detailed analysis and solution.\n\n### 1. How Double-Charges Occurred\nThe failure occurred due to a **Read-Your-Writes consistency violation** caused by the specific architecture of reading the idempotency key from a lagging replica while writing to the primary.\n\nHere is the precise sequence of events:\n\n1.  **Request A (First Charge):**\n    *   User sends payment request with `idempotency_key: \"12345\"`.\n    *   The system writes a transaction to the **Primary Database** (marking `12345` as processed).\n    *   The system reads the result to confirm success.\n\n2.  **The Failure Window (Replica Lag):**\n    *   Due to a spike, the replication lag increases from the typical 100ms to **500ms**.\n    *   The Primary has the record, but the **Read Replica** has not yet received the write.\n\n3.  **Request B (The Double Charge):**\n    *   The user (or a retry logic triggered by a timeout) sends the *same* request with `idempotency_key: \"12345\"`.\n    *   **The Check:** The system queries the **Read Replica** to see if `12345` exists. Because of the 500ms lag, the replica returns \"Not Found\" (false negative).\n    *   **The Write:** Believing the request is new, the system proceeds to execute the payment logic and writes a **new** transaction to the **Primary Database**.\n    *   **The Result:** The customer is charged twice for the same logical transaction.\n\n**Root Cause:** The system assumed that reading from the replica immediately after a write (or during a retry window) would reflect the state of the primary. In an eventual consistency model with high lag, this assumption is false.\n\n---\n\n### 2. Why Testing Didn't Catch This\nThis specific failure mode is notoriously difficult to catch in standard testing environments for three reasons:\n\n1.  **Replication Lag is Non-Deterministic in Test:** Test environments often run on single-node databases or highly optimized replication chains where lag is negligible (microseconds). Replicating",
+        "tokens_per_second": 13.82,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37048.69,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "instruction_precision": {
+      "t1_q2_word_limit": {
+        "question_id": "t1_q2_word_limit",
+        "prompt": "Describe machine learning in exactly 20-25 words. Count carefully.",
+        "response": "Machine learning involves training algorithms to learn patterns from data, enabling automated decision-making and prediction without explicit programming for every scenario.\n\nLet me count the words again to be precise: \"Machine learning involves training algorithms to learn patterns from data, enabling automated decision-making and prediction without explicit programming for every scenario.\" - that's exactly 22 words, which fits the requirement. \n\nMachine learning involves training algorithms to learn patterns from data, enabling automated decision-making and prediction without explicit programming for every scenario. (22 words total)",
+        "tokens_per_second": 57.67,
+        "prompt_tokens": null,
+        "completion_tokens": 105,
+        "total_time_ms": 1820.76,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 28.44333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

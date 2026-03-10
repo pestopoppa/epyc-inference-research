@@ -1,0 +1,29 @@
+{
+  "model_role": "math_qwen2_5_math_72b_2",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-Math-72B-Instruct-GGUF/Qwen2.5-Math-72B-Instruct-Q4_K_M.gguf",
+  "config_name": "spec_draft_qwen2_5_0_5b_instruct_f16_k32",
+  "run_id": "20251220_214317",
+  "timestamp": "2026-01-17T09:49:40.402114",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 5.985816619076728,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 5.985816619076728,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

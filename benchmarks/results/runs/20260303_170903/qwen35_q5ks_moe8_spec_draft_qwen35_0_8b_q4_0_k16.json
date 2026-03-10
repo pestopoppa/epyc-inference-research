@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q5ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T22:46:13.919213",
+  "results": {
+    "math": {
+      "t1_q2_system_equations": {
+        "question_id": "t1_q2_system_equations",
+        "prompt": "Solve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method.",
+        "response": "<think>\n\n</think>\n\nTo solve the system of equations:\n\n1. $x^2 + y^2 = 25$\n2. $xy = 12$\n\n### Method\nWe will use the method of substitution combined with algebraic identities to solve the relationship between sum and product of roots.\n\n### **x$\n\nLet's. $x$ and $y$.\n\n** to derive the values of $x^2$ and$ and $y^2$, then determine the roots of $ using the square of.\n\n---\n\n### Step 1: Utilize Algebraic Identities\n\nRecall the perfect square of the product\n\nWe know the algebraic identities:\n$$ (x + y)^2 = x^2 + y^2 + 2xy $$\n$$ (x - y)^2 = x^2 + y^2 - 2xy $$\n\nFrom the given equations, we have:\n*   $x^2 + y^2 = 25$\n*   $xy = 12 \\implies 2xy = 2(12) = 24$\n\n### Step 2: Calculate $x+y$ and $(x-y)$\n\n**Calculate",
+        "tokens_per_second": 8.51,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 30083.78,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "<think>\n\n</think>\n\n### 1. Concrete Sequence Demonstrating the ABA Problem\n\nThe ABA problem occurs when a thread reads a value (A), gets preempted, another thread modifies the memory to a different value (B) and then back to the original value (A). When the first thread resumes, it sees the value is still (A) and assumes nothing changed, but the underlying structure has been altered.\n\nIn a lock-free stack, this is dangerous because `compare_exchange_weak` only checks the pointer value, not the history of changes. If a node is popped and then a new node with the *same address* is pushed, the CAS will succeed incorrectly.\n\n**Scenario:**\n1.  **Initial State**: Stack `Top -> A -> B -> NULL`. `top` points to `A`.\n2.  **Thread T1 (Pop)**:\n    *   Reads `top` into local variable `t`. `t` points to `A`.\n    *   T1 is **preempted** (context switch) right before the CAS.\n3.  **Thread T2 (Pop)**:\n    *   Reads `top` (`A`).\n    *   Successfully CAS: `top",
+        "tokens_per_second": 13.4,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19101.95,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"phase_id\": 1,\n      \"description\": \"Data Acquisition\",\n      \"tasks\": [\n        {\n          \"agent\": \"researcher_agent\",\n          \"task\": \"Search for the current stock price of AAPL and retrieve the last 30 days of historical closing prices.\"\n        }\n      ]\n    },\n    {\n      \"phase_id\": 2,\n      \"description\": \"Calculation and Verification\",\n      \"tasks\": [\n        {\n          \"agent\": \"coder_agent\",\n          \"task\": \"Receive historical price data, calculate the 30-day moving average using Python, and output the result.\"\n        },\n        {\n          \"agent\": \"reviewer_agent\",\n          \"task\": \"Review the calculation logic and the resulting 30-day moving average value for correctness against the provided historical data.\"\n        }\n      ]\n    }\n  ],\n  \"context_passing\": {\n    \"phase_1_to_2\": {\n      \"researcher_output\": \"Raw text containing current price and historical data (JSON or CSV format preferred)\",\n      \"coder_input",
+        "tokens_per_second": 13.45,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19033.56,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.786666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

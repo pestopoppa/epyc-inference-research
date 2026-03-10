@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q5ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T22:48:52.175483",
+  "results": {
+    "math": {
+      "t1_q2_system_equations": {
+        "question_id": "t1_q2_system_equations",
+        "prompt": "Solve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method.",
+        "response": "<think>\n\n</think>\n\nTo solve the system of equations:\n1.  $x^2 + y^2 = 25$\n2.  $xy = 12$\n\nWe will use algebraic identities involving $(x+y)$ and $(x-y)$ to find the values of $x$ and $y$.\n\n### Step 1: Use the square of a sum identity\nRecall the identity: $(x+y)^2 = x^2 + y^2 + 2xy$.\n\nSubstitute the known values from the given equations ($x^2 + y^2 = 25$ and $xy = 12$) into this identity:\n$$\n(x+y)^2 = 25 + 2(12)\n$$\n$$\n(x+y)^2 = 25 + 24\n$$\n$$\n(x+y)^2 = 49\n$$\n\nTaking the square root of both sides gives two possible cases for the sum $(x+y)$:\n$$\nx+y = 7 \\quad \\text{or} \\quad x+y = -7\n$$\n\n### Step 2: Use the square of a difference identity\nRecall the identity: $(",
+        "tokens_per_second": 12.74,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 20095.86,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "<think>\nHere's a thinking process that leads to the suggested answer:\n\n1.  **Analyze the Request:**\n    *   **Input:** A C++ lock-free stack implementation using `std::atomic<Node*>` and `compare_exchange_weak`.\n    *   **Task:**\n        1.  Identify the ABA problem scenario.\n        2.  Explain why it causes incorrect behavior.\n        3.  Provide a fix (Tagged Pointers or Hazard Pointers) without locks.\n    *   **Constraint:** The provided code snippet has a subtle bug in `push` as well (it uses `n->next` instead of `top.load()` in the CAS loop condition, though `n->next` *is* initialized to `top.load()`, so that part is actually okay logic-wise for the first attempt, but the CAS logic needs scrutiny). Wait, looking closely at `push`:\n        ```c\n        Node* n = new Node{v, top.load()};\n        while (!top.compare_exchange_weak(n->next, n));\n        ```\n        Here, `n->next` holds the expected old value (snapshot of `top`). The CAS compares `top` against",
+        "tokens_per_second": 13.58,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18851.09,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"phase_id\": 1,\n      \"description\": \"Data Acquisition\",\n      \"agents\": [\"researcher_agent\"],\n      \"tasks\": [\n        \"Search for current AAPL stock price\",\n        \"Retrieve historical AAPL stock prices for the last 30 days\"\n      ]\n    },\n    {\n      \"phase_id\": 2,\n      \"description\": \"Calculation\",\n      \"agents\": [\"coder_agent\"],\n      \"tasks\": [\n        \"Receive historical data and current price\",\n        \"Calculate the 30-day moving average\",\n        \"Output the result in a structured format\"\n      ]\n    },\n    {\n      \"phase_id\": 3,\n      \"description\": \"Verification\",\n      \"agents\": [\"reviewer_agent\"],\n      \"tasks\": [\n        \"Review the calculation logic and result\",\n        \"Verify against standard financial formulas\",\n        \"Confirm or reject the result\"\n      ]\n    }\n  ],\n  \"context_passing\": {\n    \"phase_1_to_2\": {\n      \"source\": \"researcher_agent\",",
+        "tokens_per_second": 13.6,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18826.57,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.306666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

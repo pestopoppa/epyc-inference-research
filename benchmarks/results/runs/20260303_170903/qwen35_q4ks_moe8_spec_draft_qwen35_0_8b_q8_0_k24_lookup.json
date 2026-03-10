@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T23:14:09.202366",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the Request:**\n    *   **Function:** $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$.\n    *   **Task 1:** Prove/disprove differentiability everywhere on $\\mathbb{R}$.\n    *   **Task 2:** Find a closed form using complex exponentials. Hint: $\\text{Im}(e^{xe^i})$.\n    *   **Task 3:** Find $\\lim_{x \\to \\infty} \\frac{f(x)}{e^x}$.\n\n2.  **Task 2: Closed Form (The \"Shortcut\")**\n    *   *Why start with this?* If I know the closed form, proving differentiability and finding limits becomes trivial algebra/calculus rather than messy series manipulations.\n    *   Let's look at the Taylor series expansion of $e^z$: $e^z = \\sum_{n=0}^{\\infty} \\frac{z^n}{n!}$.\n    *   The given function is $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$. Note the sum starts at $n=1$. Since $\\sin(0)=0$, we can start the sum at $n=0$ without changing anything.\n    *   Recall Euler's formula: $\\sin(n) = \\text{Im}(e^{in})$.\n    *   Substitute this into the sum:\n        $f(x) = \\text{Im} \\left( \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} e^{in} \\right) = \\text{Im} \\left( \\sum_{n=1}^{\\infty} \\frac{(x e^i)^n}{n!} \\right)$.\n    *   Let $z = x e^i$. The sum is almost $e^z$.\n    *   $\\sum_{n=0}^{\\infty} \\frac{z^n}{n!} = e^z$.\n    *   So, $\\sum_{n=1}^{\\infty} \\frac{z^n}{n!} = e^",
+        "tokens_per_second": 13.66,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37490.92,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "<think>\n\n</think>\n\nTo find all valid orderings, let's break down the constraints and deduce the possible sequences step by step.\n\n### 1. Analyze the Constraints\n\nLet the positions be numbered 1 through 5.\n*   **Constraint 1:** $A < B$ (A is watered before B)\n*   **Constraint 2:** $D \\to C$ (C is immediately after D, forming a block $[DC]$)\n*   **Constraint 3:** $E \\neq 1$ and $E \\neq 5$ (E is in position 2, 3, or 4)\n*   **Constraint 4:** $B < D$ (B is watered before D)\n\n### 2. Combine Constraints into a Chain\n\nLet's combine the \"before\" relationships:\n1.  From Constraint 1: $A$ comes before $B$.\n2.  From Constraint 4: $B$ comes before $D$.\n3.  From Constraint 2: $D$ is immediately followed by $C$.\n\nCombining these, we get a strict sequence for A, B, D, and C:\n$$A \\to B \\to D \\to C$$\n\nSince $D$ and $C$ are a fixed block $[DC]$, we can treat them as a single unit. The sequence of units is:\n$$A \\to B \\to [DC]$$\n\nThis means in any valid ordering, the relative order of these four items must be:\n**A** comes first among these four, then **B**, then the **DC** block.\n\nSo, the skeleton of the permutation of $\\{A, B, D, C\\}$ is fixed as:\n**1. A**\n**2. B**\n**3. D**\n**4. C**\n\nWait, this is the *relative* order. They don't have to be in positions 1, 2, 3, 4 consecutively. $E$ can be inserted anywhere, as long as it doesn't violate the relative order of A, B, D, C.\n\nLet's represent the sequence of the four specific plants as:\n$A \\dots B \\dots D \\dots C$\n(With the condition that $D$ and $C$ are adjacent).\n\nActually, it's simpler to treat $[DC",
+        "tokens_per_second": 13.7,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37382.69,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nHere is an analysis of the proposed AI governance policy, including failure modes, mechanisms, specific to address, amendments, and trade-off discussions, and trade-offs, and a strategic implications.\n\n---\n\n### **1. Analysis of Policy Failure Analysis\n\nThe proposed policy is a strong in the proposed to be a robust framework for of the for AI lifecycle of AI lifecycle. However, a of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of the of",
+        "tokens_per_second": 18.62,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 27495.88,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 15.326666666666668,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

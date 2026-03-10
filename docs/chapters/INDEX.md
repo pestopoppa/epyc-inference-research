@@ -13,6 +13,7 @@ Documentation for inference optimization, benchmarking methodology, and evaluati
 | 03 | [Prompt Lookup](03-prompt-lookup.md) | **12.7x** on summarization tasks |
 | 04 | [RadixAttention](04-radix-attention.md) | >50% cache hit on orchestrator |
 | 05 | [Deprecated Approaches](05-deprecated-approaches.md) | EAGLE-1, CAS-Spec lessons |
+| 10 | [Advanced Speculative Decoding](10-advanced-speculative-decoding.md) | Tree, hierarchical, self-spec, SSD survey |
 
 ### Evaluation & Rewards
 
@@ -26,7 +27,7 @@ Documentation for inference optimization, benchmarking methodology, and evaluati
 ## Reading Paths
 
 **Inference Optimization** — Acceleration techniques and their trade-offs:
-01 Speculative Decoding → 02 MoE → 03 Prompt Lookup → 04 Radix → 05 Deprecated
+01 Speculative Decoding → 02 MoE → 03 Prompt Lookup → 04 Radix → 05 Deprecated → 10 Advanced Spec-Dec
 
 **Evaluation** — Benchmarking methodology and reward engineering:
 06 Benchmarking → 07 Suite Construction → 08 Rewards → 09 Debugger

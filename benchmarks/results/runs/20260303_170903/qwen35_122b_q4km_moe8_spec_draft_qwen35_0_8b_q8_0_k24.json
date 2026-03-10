@@ -1,0 +1,41 @@
+{
+  "model_role": "qwen35_122b_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T14:10:37.365249",
+  "results": {
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?\n\n<think>:AG).\n\n### Structural **all back-ance.\n3.\n    *   **Smoking -> Cancer**Minimal sufficient adjustment set?\nThe minimal sufficient adjustment set?\nThe minimal sufficient adjustment set is the set of variables that, when conditioning on them to be adjusted set is a collider:**\n    *   **Smoking -> ** -> ** -> Smoking -> Cancer\n Smoking -> Yellow Fingers\n Gene -> Smoking\n Gene -> Cancer\n\n1. **What is the minimal sufficient adjustment set?**\n    To identify the causal effect of ** -> ** -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> -> ->\n\n\n\n\ndecoded  268 tokens in   68.059 seconds, speed:    3.938 t/s\nn_predict = 268\ndraft:\ntarget:",
+        "tokens_per_second": 3.7340519061081014,
+        "prompt_tokens": 159,
+        "completion_tokens": 851,
+        "total_time_ms": 71771.9,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q2_counterfactual": {
+        "question_id": "t2_q2_counterfactual",
+        "prompt": "Consider this scenario: \"If the internet had never been invented, how would academic research be different today?\"\n\nAnalyze this counterfactual across three dimensions:\n1. Speed of knowledge dissemination\n2. Collaboration patterns\n3. Reproducibility and peer review\n\nBe specific about mechanisms and second-order effects.",
+        "response": "Consider this scenario: \"If the internet had never been invented, how would academic research be different today?\"\n\nAnalyze this counterfactual across three dimensions:\n1. Speed of knowledge dissemination\n2. Collaboration patterns\n3. Reproducibility and peer review\n\nBe specific about mechanisms and second-order effects.\n\n<think>\n\n</think>\n\nThe absence of the same but the dimensions: Theoretical, a, digitalized paper could be uploaded content repository but a **dynamic, searchable via physical collaboration platform that allowed them to work on the same paper, and\n *Second-order effects:* Theoretical, not just theorems of the world. *not* be the world.\n\n### 3. Reproducibility and Peer Review\n\nThe internet.\n\n*   **Mechanism:** Theoretical, they could not be the same.\n    *   **Second-order effects: The internet.** Theoretical.**\n\n### 2.\n\n### 2. **Peer Review:**\n\n the world.\n\n### 2. Collaboration.\n\n*   **Mechanism:** The internet allowed for **Physical:** The internet allowed for the **global.\n\n### 2. **Peer Review.**\n\n*   **Mechanism:** The internet allowed for the same.**\n*   **### 2. **Peer Review.**\n\n*   2. **Peer Review.**\n\n*   **Mechanism:** The internet allowed for the **theoretical.**\n\n*   **### 2. **Peer Review.**\n\n*   **Mechanism:** The internet allowed for the **theoretical.**\n\n*   **Mechanism:** \n\n\n\n\ndecoded  264 tokens in  108.548 seconds, speed:    2.432 t/s\nn_predict = 264\ndraft:\ntarget:",
+        "tokens_per_second": 2.363145034535485,
+        "prompt_tokens": 174,
+        "completion_tokens": 1288,
+        "total_time_ms": 111715.53,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 3.048598470321793,
+    "avg_algorithmic_score": null,
+    "questions_tested": 2,
+    "questions_passed": 0
+  }
+}

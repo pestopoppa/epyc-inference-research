@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe8_lookup_n3",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T18:16:15.091146",
+  "results": {
+    "agentic": {
+      "t3_q1_competing_constraints": {
+        "question_id": "t3_q1_competing_constraints",
+        "prompt": "You're an AI assistant with these tools:\n- execute_code: {\"code\": \"string\", \"language\": \"string\"} - runs code, returns output\n- search_web: {\"query\": \"string\"} - returns search results\n- read_file: {\"path\": \"string\"} - reads local file\n- write_file: {\"path\": \"string\", \"content\": \"string\"} - writes to file\n- ask_user: {\"question\": \"string\"} - asks user for input\n\nUser request: \"Analyze the CSV file at /data/sales.csv and tell me which product had the highest revenue growth\"\n\nBut you have these constraints:\n1. You cannot see the file contents until you read it\n2. You don't know the CSV structure until you read it\n3. execute_code might fail if you assume wrong column names\n\nGenerate a robust plan that:\n1. Handles unknown schema gracefully\n2. Validates assumptions before heavy computation\n3. Provides meaningful partial results if something fails\n4. Minimizes round-trips while maintaining correctness\n\nOutput a JSON plan with: {\"steps\": [...], \"validation_checks\": [...], \"fallback_strategy\": \"...\"}",
+        "response": "You're an AI assistant with these tools:\n- execute_code: {\"code\": \"string\", \"language\": \"string\"} - runs code, returns output\n- search_web: {\"query\": \"string\"} - returns search results\n- read_file: {\"path\": \"string\"} - reads local file\n- write_file: {\"path\": \"string\", \"content\": \"string\"} - writes to file\n- ask_user: {\"question\": \"string\"} - asks user for input\n\nUser request: \"Analyze the CSV file at /data/sales.csv and tell me which product had the highest revenue growth\"\n\nBut you have these constraints:\n1. You cannot see the file contents until you read it\n2. You don't know the CSV structure until you read it\n3. execute_code might fail if you assume wrong column names\n\nGenerate a robust plan that:\n1. Handles unknown schema gracefully\n2. Validates assumptions before heavy computation\n3. Provides meaningful partial results if something fails\n4. Minimizes round-trips while maintaining correctness\n\nOutput a JSON plan with: {\"steps\": [...], \"validation_checks\": [...], \"fallback_strategy\": \"...\"}<think>\n</think>\n\n```json\n{\n  \"steps\": [\n    {\n      \"id\": 1, \"action\": \"read_file\", \"schema\": \"/data/sales.csv\"} me which product had the highest revenue growth\"\n    },\n    {\n      \"id\": 2, \"action\": \"execute_code\", \"description\": \"Reads the first 10 lines of the CSV to extract column names and data types, assuming the file is well-formed\"\n    },\n    {\n      \"id\": 13\": \"search_webasks user for input\", \"description\": \"If execute_code might fail if you assume wrong column names\n\nGenerate a robust plan that:\n1. Handles unknown schema gracefully\n2. Validates assumptions before heavy computation\n3. Provides meaningful partial results if something fails\n4. Minimizes round-trips while maintaining correctness\n\nOutput a JSON plan with: {\"steps\": [...], \"validation_checks\": \"...}\n1. Handles unknown schema gracefully\n2. Validates assumptions before heavy computation\n3. Provides meaningful partial results if something fails\n4. Minimizes round-trips while maintaining correctness\n\nOutput a JSON plan with: {\"steps\": [...], \"validation_checks\": [...], \"validation_checks\": [...], \"fallback_strategy\": \"...}\n1. Handles unknown schema gracefully\n2. Validates assumptions before heavy computation\n3. Provides meaningful partial results if something fails\n4. Minimizes round-trips while maintaining correctness\n\nOutput a JSON plan with: {\"steps\": [...], \"validation_checks\": [...], \"fallback_strategy\": \"...}\n```json\n{\n  \"steps\": [\n    {\n      \"id\": 1, \"description\": \"Readexecute_code\", \"description\": \"Reads the first 10 lines of the CSV to extract column names and data types\"\n    },\n    {\n      \"id\": 2\": \"execute_code\", \"description\": \"Reads the first 10 lines of the CSV to extract column names and data types, \"action\": \"execute_code\", \"description\": \"Perform initial validation checks on the extracted schema (e.g., ensure required columns exist, data types are valid\"\n    },\n    {\n      \"id\": 3\": \"execute_code\", \"description\": \"Ask the user for input the first 10 lines of the CSV to extract column names and data types\"\n    },\n    {\n      \"id\": 4\": \"round-trips while maintaining correctness\n\n\n\n\ndecoded  515 tokens in   30.920 seconds, speed:   16.656 t/s\nn_predict    = 515\nt_draft      = 2.21 ms, 5.63 us per token, 177586.99 tokens per second\ntarget:",
+        "tokens_per_second": 16.061561626652587,
+        "prompt_tokens": 769,
+        "completion_tokens": 104,
+        "total_time_ms": 32064.13,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_ambiguous": {
+        "question_id": "t2_q1_ambiguous",
+        "prompt": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.",
+        "response": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.<think>\n</think>\n\nThe request is ambiguous because it lacks specific details about the outage (the user's) request is ambiguous because it does not specify what type of communication (email vs. Slack) or what details about the outage should be included in the message.\n\nHowever, since I must act if forced, I will choose `send_slack` as it is typically the fastest way to alert a team of an incident in real-time.\n\n```json\n{\n  \"channel\": \"general\", \"message\": \"Alert: There is an outage\"\n}\n```\n\nWait, I need to follow the schema exactly. The user said \"Let the team know about the outage\".\n\nSince I cannot ask clarifying questions (the prompt says \"Either ask a clarifying question, OR if you must act...\"), and I am forced to act, I will choose the most appropriate tool.\n\nLet the team know about the outage\"\n\nSince the request is ambiguous (the user's) request is ambiguous because it lacks specific details about the outage (the user's) request is ambiguous because it lacks specific details about the outage.\n\nSince I must act, I will choose `send_slack` tool and explain why in one sentence, then output the JSON.\n\nThe user's request is ambiguous because it lacks specific details about the outage.\n\nSince I must act, I will choose `send_slack` as it is the most appropriate for real-time team notifications.\n\n```json\n{\n  \"tool\": \"slack\", \"message\": \"string\": \"There is an outage\"\n}\n```\n\nWait, the JSON correctly formatted JSON should be:\n```json\n{\n  \"channel\": \"general\", \"message\": \"Alert: There is an outage\"\n}\n```\n\nNo, the schema for `send_slack` is {\"channel\": \"string\", \"message\": \"string\", is an outage\"\n}\n```\n\nThe user's request is ambiguous because it lacks specific details about the outage.\n\nSince I must act, I will choose `send_slack` as it is the most appropriate tool and explain why in one sentence, then output the JSON.\n\nThe user's request is ambiguous because it lacks specific details about the outage.\n\nSince I must act, I will choose `send_slack` as it is the most appropriate tool for real-time team notifications.\n\n```json\n{\n  \"channel\": \"general\",\n</think>\n\nThe user's request is ambiguous because it lacks specific\n\n\n\n\ndecoded  513 tokens in   34.399 seconds, speed:   14.913 t/s\nn_predict    = 513\nt_draft      = 2.72 ms, 8.02 us per token, 124632.35 tokens per second\ntarget:",
+        "tokens_per_second": 14.623400405236373,
+        "prompt_tokens": 571,
+        "completion_tokens": 176,
+        "total_time_ms": 35080.76,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "instruction_precision": {
+      "t1_q1_negative_instruction": {
+        "question_id": "t1_q1_negative_instruction",
+        "prompt": "Explain photosynthesis in 2 sentences. Do NOT mention sunlight, sun, or solar.",
+        "response": "Explain photosynthesis in 2 sentences. Do NOT mention sunlight, sun, or solar.<think>\n</think>\n\nPlants absorb carbon dioxide from the air and water from the soil to synthesize glucose. This process releases oxygen as a byproduct while converting radiant energy into chemical energy for the organism.<|endoftext|>\n\n\n\n\ndecoded   39 tokens in    3.067 seconds, speed:   12.716 t/s\nn_predict    = 39\nt_draft      = 0.29 ms, inf us per token, 0.00 tokens per second\ntarget:",
+        "tokens_per_second": 11.50425509948231,
+        "prompt_tokens": 22,
+        "completion_tokens": 38,
+        "total_time_ms": 3390.05,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 14.063072377123754,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "model_role": "vision_qwen3_vl_235b",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-235B-A22B-Instruct-GGUF/Qwen3-VL-235B-A22B-Instruct-Q4_K_M-00001-of-00004.gguf",
+  "config_name": "moe4",
+  "run_id": "20260119_112408",
+  "timestamp": "2026-01-27T10:10:28.734203",
+  "results": {
+    "vl": {
+      "t3_q1_chart_critique": {
+        "question_id": "t3_q1_chart_critique",
+        "prompt": "Analyze this chart critically:\n1. What is the difference in value between Lamb and Corn?\n2. Is this an appropriate visualization for this data? Why or why not?\n3. What misleading impressions could this chart create?\n4. Suggest a better visualization approach.",
+        "response": "Let\u2019s analyze this chart critically, addressing each of your questions:\n\n---\n\n**1. What is the difference in value between Lamb and Corn?**\n\nFrom the chart:\n- Lamb = 103.7\n- Corn = 103.13\n\n**Difference = 103.7 \u2013 103.13 = 0.57**\n\n\u2705 So, Lamb is higher than Corn by **0.57 index points**.\n\n---\n\n**2. Is this an appropriate visualization for this data? Why or why not?**\n\n**No, this is not an appropriate visualization** for several reasons:\n\n- **Misleading scale**: The y-axis starts at 0, which is good for bar charts \u2014 but the *values shown are price indices relative to 1900 (i.e., 1900 = 100)*. That means values *above 100* imply prices higher than 1900, and *below 100* imply lower. But the chart does **not** make this clear in the title or axis label \u2014 it just says \u201cLong-term price index... 1850\u20132015\u201d, which could mislead readers into thinking these are absolute prices or that the scale is arbitrary.\n\n- **No time-series context**: The chart is labeled \u201cLong-term price index... 1850\u20132015\u201d but shows **only a single aggregated value per commodity** \u2014 presumably an average or endpoint? \u2014 with no time dimension. This is deeply misleading. If the data spans 165 years, we should see how prices evolved over time, not just a single number per commodity.\n\n- **Misleading bar lengths**: The bars are sorted in descending order, which is fine for comparison, but because the values are all very close to 100 (ranging from 18.81 to 103.7), the visual differences are exaggerated by the bar lengths. For example, Lamb (103.7) looks *much* larger than Cocoa (18.81), but in reality, it\u2019s not 5x more expensive \u2014 it\u2019s 103.7/18.81 \u2248 **5.5x the index value**, which is still misleading because index values are relative to 1900, not absolute prices.\n\n- **Lack of clarity on what the number represents**: Is this the *average* index over 1850\u20132015? The *final* value in 2015? The *peak*? The source says \u201cCommodity Prices since 1850 - Jacks (2016)\u201d, but without knowing *which year or period* the index reflects, the chart is ambiguous.\n\n---\n\n**3. What misleading impressions could this chart create?**\n\n- **False impression of magnitude**: Because the bars are long and sorted, it visually suggests large differences between commodities \u2014 e.g., Lamb looks 5x \u201cbigger\u201d than Cocoa, which might make readers think lamb was 5x more expensive in absolute terms. But since these are *indices relative to 1900*, it\u2019s comparing *price changes over time*, not absolute prices. Also, 103.7 vs. 18.81 is not a 5x difference in \u201ccost of living\u201d \u2014 it\u2019s a comparison of how much each commodity\u2019s price has changed since 1900.\n\n- **Implies static prices**: Showing only one bar per commodity suggests prices didn\u2019t change over 165 years \u2014 which is absurd. The chart completely hides volatility, trends, or structural shifts (e.g., sugar becoming cheaper due to",
+        "tokens_per_second": null,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_multi_chart_synthesis": {
+        "question_id": "t3_q2_multi_chart_synthesis",
+        "prompt": "Perform a comprehensive analysis:\n1. Calculate the difference between Green and Orange bars\n2. What percentage of the total does each color represent?\n3. If this trend continued for 3 more periods, project the values\n4. What external factors might explain the difference?",
+        "response": "Let\u2019s break this down step by step, analyzing the provided bar chart on the **Gender Parity Index (GPI)** for **gross enrolment ratio in secondary education (2006)** for four categories: Slovenia, Albania, Cameroon, and Low income.\n\n---\n\n## 1. **Calculate the difference between Green and Orange bars**\n\n- **Green bar (Cameroon)**: 0.79 GPI  \n- **Orange bar (Low income)**: 0.71 GPI  \n\n\u2705 **Difference** = 0.79 \u2013 0.71 = **0.08 GPI**\n\nThis means that in 2006, Cameroon had a 0.08 higher gender parity in secondary enrolment than the global \u201cLow income\u201d average.\n\n---\n\n## 2. **What percentage of the total does each color represent?**\n\nWe are comparing **four categories**, each with a GPI value. To find the **percentage contribution of each to the total sum**, we first sum all GPI values:\n\n> Total = 1.00 (Slovenia) + 0.96 (Albania) + 0.79 (Cameroon) + 0.71 (Low income) = **3.46**\n\nNow calculate each as a percentage of the total:\n\n- **Slovenia (Pink)**: (1.00 / 3.46) \u00d7 100 \u2248 **28.90%**\n- **Albania (Purple)**: (0.96 / 3.46) \u00d7 100 \u2248 **27.75%**\n- **Cameroon (Green)**: (0.79 / 3.46) \u00d7 100 \u2248 **22.83%**\n- **Low Income (Orange)**: (0.71 / 3.46) \u00d7 100 \u2248 **20.52%**\n\n\u2705 **Summary**:\n- Slovenia: ~28.9%\n- Albania: ~27.8%\n- Cameroon: ~22.8%\n- Low Income: ~20.5%\n\nNote: These are **not** percentages of a whole in the sense of population or enrollment, but rather **each country/region\u2019s GPI as a share of the total GPI sum** \u2014 a normalization for comparative purposes.\n\n---\n\n## 3. **If this trend continued for 3 more periods, project the values**\n\n\u26a0\ufe0f **Important caveat**: The chart shows **one point in time (2006)**. There is **no time-series data** provided to establish a \u201ctrend\u201d or growth rate. Therefore, **we cannot accurately project future values** without making assumptions.\n\nHowever, for illustrative purposes, let\u2019s assume you mean:  \n> \u201cIf the *rank order* or *relative gaps* remained the same over 3 periods (e.g., every 5 years), what might happen?\u201d\n\nBut even that requires a defined growth rate or trajectory \u2014 which we don\u2019t have.\n\nAlternatively, if you mean:  \n> \u201cIf the *same GPI values* persisted over 3 periods (i.e., no change), then they would remain the same.\u201d\n\n\u2705 **Conclusion**: **No projection is possible without time-series data or assumed growth rates.** Any projection would be speculative.\n\n---\n\n## 4. **What external factors might explain the difference?**\n\nDifferences in GPI reflect disparities in access to, and participation in, secondary education between girls and boys. Factors explaining the differences:\n\n### \ud83c\uddf8\ud83c\uddee **Slovenia (1.00 GPI \u2014 parity)**  \n- High-income, developed education system.\n- Strong gender equality policies, universal access, low cultural barriers.\n- High female labor force participation \u2192 education seen as equally valuable for girls.\n\n### \ufffd",
+        "tokens_per_second": null,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q3_twyne_security": {
+        "question_id": "t3_q3_twyne_security",
+        "prompt": "Analyze this DeFi protocol architecture as a security auditor:\n1. Identify all trust assumptions in the design\n2. What are the potential attack vectors? (oracle manipulation, flash loans, reentrancy, etc.)\n3. Where are the single points of failure?\n4. What invariants must hold for the system to be secure?\n5. Rate the overall security posture (1-10) with justification.",
+        "response": "As a security auditor analyzing the Twyne protocol architecture described in the whitepaper excerpt, here is a comprehensive assessment across the five requested dimensions:\n\n---\n\n## 1. **Trust Assumptions in the Design**\n\nDespite being labeled \u201cnoncustodial\u201d and \u201ctrustless primitive,\u201d Twyne\u2019s architecture still relies on several critical trust assumptions:\n\n- **Trust in Underlying Lending Protocols**: Twyne layers on top of existing DeFi protocols (e.g., Aave, Compound). It assumes these base protocols are:\n  - Secure (no critical bugs or exploits)\n  -",
+        "tokens_per_second": null,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q4_twyne_economic": {
+        "question_id": "t3_q4_twyne_economic",
+        "prompt": "Analyze the economic model and incentive structure:\n1. What are the participant roles and their incentives?\n2. Is there a Nash equilibrium? Describe it.\n3. How could rational actors game this system?\n4. What happens during extreme market conditions (bank run scenario)?\n5. Compare to existing DeFi protocols (Aave, Compound, MakerDAO).",
+        "response": "This document describes the **Twyne Protocol**, a novel credit delegation and leverage enhancement system built on top of existing external lending protocols (like Aave or Compound). Its core innovation is enabling borrowers to access higher loan-to-value (LTV) ratios than the underlying protocol allows \u2014 without compromising on-chain safety \u2014 by leveraging credit delegation from liquidity providers (Credit LPs) via \u201cCredit Vaults\u201d and \u201cCollateral Vaults.\u201d\n\nLet\u2019s break down the economic model and incentive structure as requested.\n\n---\n\n## 1. Participant Roles and Incentives\n\nThere are three primary participant",
+        "tokens_per_second": null,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q5_document_forensics": {
+        "question_id": "t3_q5_document_forensics",
+        "prompt": "Analyze this business document forensically:\n1. Extract all named entities (people, companies, locations, dates)\n2. What is the business relationship implied?\n3. Identify any inconsistencies or red flags\n4. What additional documents would you request to verify claims?\n5. Assess document authenticity indicators (letterhead, signatures, formatting)",
+        "response": "Here is a forensic analysis of the provided document:\n\n\u2014\n\n1. EXTRACTED NAMED ENTITIES:\n\nPeople (Typed):\n- Milton E. Hatfield, Jr.\n- Clinton O. Mayer III\n- George V. Novello\n- Martin Miller\n- William P. Scully\n- William R. Thompson\n- Ernest S. Watts\n- Stephen L. Wald\n- Joe Fuchs (handwritten)\n- Dick Wyandotte (handwritten",
+        "tokens_per_second": null,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_calculation": {
+        "question_id": "t2_q1_calculation",
+        "prompt": "What is the total intrinsic value of options exercised in 2008? Show your work by listing each value you read.",
+        "response": "Based on the provided text, the total intrinsic value of options exercised in 2008 is **$506 million**.\n\nHere is the relevant text from the document:\n\n> \"The total intrinsic value of options exercised was $278 million, $184 million and $506 million in 2010, 2009 and 2008, respectively.\"\n\nThis sentence explicitly states the values for the three years in chronological order (2010, 2009, 2008).",
+        "tokens_per_second": null,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q2_comparison": {
+        "question_id": "t2_q2_comparison",
+        "prompt": "What is the difference between the highest and lowest green bar? State both values and compute the difference.",
+        "response": "Looking at the chart:\n\n- In **2016**, the green bar (Play a more active military role) = **29%**\n- In **2015**, the green bar (Play a more active military role) = **23%**\n\n**Difference** = 29% - 23% = **6 percentage points**\n\n\u2705 **Final Answer: 6**\n\n\n\nimage decoded (batch 1/1) in 1744 ms",
+        "tokens_per_second": 7.18,
+        "prompt_tokens": 140,
+        "completion_tokens": 82,
+        "total_time_ms": 11416.94,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q3_trend_analysis": {
+        "question_id": "t2_q3_trend_analysis",
+        "prompt": "When does the line have the sharpest increase? Identify the time period and estimate the rate of change.",
+        "response": "Looking at the line chart \u201cNumber of unsheltered homeless people in England, 2010 to 2014\u201d, we can analyze the slope of the line between data points to find where the **sharpest increase** occurs.\n\nThe data points are plotted annually from 2010 to 2014. Let\u2019s estimate the values from the graph:\n\n- **2010**: ~1,800  \n- **2011**: ~2,200 \u2192 **increase of ~400**  \n- **2012**: ~2,350 \u2192 **increase of ~150**  \n- **2013**: ~2,450 \u2192 **increase of ~100**  \n- **2014**: ~2,800 \u2192 **increase of ~350 from 2013**\n\n> Note: The steepest slope visually appears between **2013 and 2014**, even though the 2010\u20132011 jump is also steep.\n\nBut let\u2019s double-check the **rate of change** (i.e., the slope) between each year:\n\n- **2010 \u2192 2011**: (2200 - 1800) / 1 = **+400 per year**\n- **2011 \u2192 2012**: (2350 - 2200) / 1 = **+150 per year**\n- **2012 \u2192 2013**: (2450 - 2350) / 1 = **+100 per year**\n- **2013 \u2192 2014**: (2800 - 2450) / 1 = **+350 per year**\n\n\u2705 So, the **sharpest increase** occurs between **2010 and 2011**, with an estimated **increase of 400 people per year**.\n\n---\n\n### \u2705 Final Answer:\n\n**Time period of sharpest increase**: **2010 to 2011**  \n**Estimated rate of change**: **+400 people per year**\n\n*(Note: While the 2013\u20132014 jump is large in absolute terms, the 2010\u20132011 increase is steeper visually and numerically based on the graph\u2019s scale and estimated values.)*\n\n\n\nimage decoded (batch 1/1) in 5736 ms",
+        "tokens_per_second": 5.71,
+        "prompt_tokens": 544,
+        "completion_tokens": 536,
+        "total_time_ms": 93821.67,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_ratio_calculation": {
+        "question_id": "t2_q4_ratio_calculation",
+        "prompt": "What's the ratio of the lowest value of green bars to the lowest value of blue bars? Show the values and calculation.",
+        "response": "We are given a bar chart showing the percentage of **all tweets from legislators** contributed by two groups:\n\n- **Top 25% of tweeters** (green bars)\n- **Bottom 75% of tweeters** (blue bars)\n\nWe are to find:\n\n> **The ratio of the lowest value of green bars to the lowest value of blue bars**\n\n---\n\n### Step 1: Extract all green bar values (Top 25% of tweeters)\n\nFrom the chart:\n\n- New Zealand: **76%**\n- Australia: **71%**\n- Canada: **68%**\n- UK: **67%**\n- U.S.: **58%**\n\n\u2705 **Lowest green bar value = 58%** (U.S.)\n\n---\n\n### Step 2: Extract all blue bar values (Bottom 75% of tweeters)\n\nFrom the chart:\n\n- New Zealand: **24%**\n- Australia: **29%**\n- Canada: **32%**\n- UK: **33%**\n- U.S.: **42%**\n\n\u2705 **Lowest blue bar value = 24%** (New Zealand)\n\n---\n\n### Step 3: Compute the ratio\n\nWe want:\n\n> **Lowest green / Lowest blue = 58 / 24**\n\nLet\u2019s simplify:\n\nDivide numerator and denominator by 2:\n\n\u2192 29 / 12 \u2248 **2.4167**\n\n---\n\n### \u2705 Final Answer:\n\n**Ratio = 58 : 24 = 29 : 12 \u2248 2.417**\n\n*(You can leave it as a simplified fraction, decimal, or ratio \u2014 here, 29:12 is exact.)*\n\n---\n\n### \ud83d\udccc Answer:  \n**The ratio is 29:12 (or approximately 2.417).**  \n*(Lowest green = 58%, lowest blue = 24% \u2192 58/24 = 29/12)*\n\n\n\nimage decoded (batch 1/1) in 5322 ms",
+        "tokens_per_second": 5.9,
+        "prompt_tokens": 535,
+        "completion_tokens": 427,
+        "total_time_ms": 72372.9,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q5_document_synthesis": {
+        "question_id": "t2_q5_document_synthesis",
+        "prompt": "What is the dividend payout in 2012? Also find the 2011 value and calculate the year-over-year change.",
+        "response": "Based on the provided image from the \"ITC Limited - Report and Accounts 2012\":\n\n1.  **Dividend Payout in 2012:**\n    *   Looking at the chart titled **\"Dividend Payout\"** (top right, middle row), the bar for the year **2012** shows a value of **\u20b91099 Crores**.\n    *   *Note: The chart title says",
+        "tokens_per_second": null,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_scene_text": {
+        "question_id": "t1_q1_scene_text",
+        "prompt": "What is written in the image?",
+        "response": "Centie\n\n\n\nimage decoded (batch 1/1) in 460 ms",
+        "tokens_per_second": 7.57,
+        "prompt_tokens": 29,
+        "completion_tokens": 2,
+        "total_time_ms": 264.09,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q2_sign_reading": {
+        "question_id": "t1_q2_sign_reading",
+        "prompt": "What is the Mosman Manly exit going to? Read all text on the sign.",
+        "response": "Looking at the highway signs in the image, the green overhead sign on the right side reads:\n\n**\u201cTo Mosman Maply Chatswood Epping\u201d**\n\nThis indicates that the **Mosman/Manly** exit (as referenced in the question, though \u201cMaply\u201d appears to be a typo or OCR error \u2014 it should likely be \u201cManly\u201d) leads to the areas of:\n\n- **Mosman**\n- **Manly** (inferred from context, though written as \u201cMaply\u201d on the sign \u2014 likely a typo or misprint)\n- **Chatswood**\n- **Epping**\n\nSo, to answer your question directly:\n\n> **The Mosman/Manly exit goes to: Mosman, Manly (inferred), Chatswood, and Epping.**\n\n*(Note: \u201cMaply\u201d is almost certainly meant to be \u201cManly\u201d \u2014 a well-known suburb in Sydney \u2014 and is likely a printing or OCR error.)*\n\n\u2705 Final Answer: **Mosman, Manly, Chatswood, Epping**\n\n\n\nimage decoded (batch 1/1) in 2189 ms",
+        "tokens_per_second": 6.98,
+        "prompt_tokens": 188,
+        "completion_tokens": 217,
+        "total_time_ms": 31080.12,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 6.668000000000001,
+    "avg_algorithmic_score": null,
+    "questions_tested": 12,
+    "questions_passed": 0
+  }
+}

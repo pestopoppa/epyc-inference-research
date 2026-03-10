@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe6_spec_draft_qwen35_0_8b_q4_0_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T21:46:16.082546",
+  "results": {
+    "coder": {
+      "t2_q3_optimize": {
+        "question_id": "t2_q3_optimize",
+        "prompt": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.",
+        "response": "<think>\nHere's a thinking process that leads to the suggested optimization:\n\n1.  **Analyze the Request:**\n    *   **Input:** A Python function `count_pairs(nums, target)` that counts pairs $(i, j)$ such that $i < j$ and $nums[i] + nums[j] == target$.\n    *   **Current Complexity:** $O(n^2)$ (nested loops).\n    *   **Target Complexity:** $O(n)$ or $O(n \\log n)$.\n    *   **Constraint:** $n > 10^6$ (implies $O(n^2)$ is completely infeasible, need efficient approach).\n    *   **Output:** Optimized code + explanation.\n\n2.  **Evaluate the Problem:**\n    *   This is a classic \"Two Sum\" counting problem.\n    *   We need to find distinct indices $i < j$ where values sum to a specific target.\n    *   The order of elements in the array doesn't matter for the *count*, but we must ensure we don't count the same pair twice (e.g., $(i, j)$ and $(j, i)$). The condition $i < j$ handles this naturally in the original code.\n\n3.  **Explore Optimization Strategies:**\n\n    *   *Strategy 1: Sorting + Two Pointers*\n        *   Sort the array: $O(n \\log n)$.\n        *   Use two pointers (left at 0, right at $n-1$).\n        *   If sum < target: move left forward.\n        *   If sum > target: move right backward.\n        *   If sum == target: count pairs.\n        *   *Issue:* Handling duplicates. If there are multiple identical values (e.g., `[2, 2, 2]` with target `4`), the standard two-pointer logic needs care to count combinations correctly.\n        *   *Complexity:* $O(n \\log n)$ due to sorting.\n\n    *   *Strategy 2: Hash Map (Frequency Counter)*\n        *   Iterate through the array once.\n        *   Maintain a frequency map (dictionary) of numbers seen so far.\n        *   For current number `x`, check if `target - x` exists in the map.\n        *   Add the count of `target - x` to the total.",
+        "tokens_per_second": 11.61,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 44081.66,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "<think>\n\n</think>\n\n### Step 1: Analyze Constraints and Availability\n\n**Participants & Meetings:**\n1.  **Team Sync (60 min):** Requires Alice, Bob, Carol.\n2.  **1:1 Alice-Dave (30 min):** Requires Alice, Dave.\n3.  **1:1 Bob-Dave (30 min):** Requires Bob, Dave.\n\n**Availability Constraints:**\n*   **Dave:** Only available 9:00\u00e2\u0080\u009311:00 and 14:00\u00e2\u0080\u009316:00.\n*   **Alice:** Unavailable 10:00\u00e2\u0080\u009311:00.\n*   **No Back-to-Back:** No participant can have two meetings immediately following each other (e.g., a 9:00\u00e2\u0080\u00939:30 meeting cannot be followed by a 9:30\u00e2\u0080\u009310:00 meeting).\n\n**Available Time Slots (Start Times):**\n9:00, 9:30, 10:00, 10:30, 11:00, 14:00, 14:30, 15:00, 15:30.\n\n---\n\n### Step 2: Determine Feasible Slots for Each Meeting\n\n#### 1. Team Sync (60 min)\n*   **Duration:** 60 minutes.\n*   **Required:** Alice, Bob, Carol.\n*   **Dave's Availability:** Not required, but we must check if the slot falls within Dave's working hours if he were there (he isn't, so irrelevant).\n*   **Alice's Constraint:** Cannot be 10:00\u00e2\u0080\u009311:00.\n    *   *Invalid start times:* 10:00 (covers 10-11), 10:30 (covers 10:30-11:30).\n*   **Dave's Availability:** Not a constraint for this meeting, but we need to ensure the slot exists.\n*   **Possible Start Times:**\n    *   9:00 (Ends 10:00) -> Valid for Alice.\n    *   11:00 (Ends 12:00) -> Valid for Alice.\n    *   14:00 (",
+        "tokens_per_second": 13.41,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38170.98,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_inconsistency": {
+        "question_id": "t2_q4_inconsistency",
+        "prompt": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.",
+        "response": "<think>\n\n</think>\n\nBased on a comparison of the three documents, here are the inconsistencies identified:\n\n### 1. Request Body Format\nThe documents contradict each other regarding the expected data format for the request body:\n*   **Doc A** specifies a **JSON body**.\n*   **Doc B** specifies a **form-encoded body**.\n*   **Doc C** specifies a **JSON payload**.\n*   *Conflict:* Doc B conflicts with both Doc A and Doc C.\n\n### 2. Rate Limiting Frequency\nThe documents disagree significantly on the allowed request volume:\n*   **Doc A** states a limit of **100 requests per minute** (approx. 6,000 per hour).\n*   **Doc B** states a limit of **100 requests per minute**.\n*   **Doc C** states a limit of **1,000 requests per hour** (approx. 16.6 per minute).\n*   *Conflict:* Doc C is much more restrictive than both Doc A and Doc B.\n\n### Summary of Conflicts\n| Feature | Doc A | Doc B | Doc C |\n| :--- | :--- | :--- | :--- |\n| **Content-Type** | JSON | Form-encoded | JSON |\n| **Rate Limit** | 100 req/min | 100 req/min | 1000 req/hr |\n\n**Conclusion:**\n*   **Doc A and Doc B** agree on the rate limit but disagree on the body format.\n*   **Doc A and Doc C** agree on the body format but disagree on the rate limit.\n*   **Doc B and Doc C** disagree on **both** the body format and the rate limit.",
+        "tokens_per_second": 13.39,
+        "prompt_tokens": null,
+        "completion_tokens": 371,
+        "total_time_ms": 27714.86,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 12.803333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

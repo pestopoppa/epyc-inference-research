@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q8_0",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/jiaojjjjje/Qwen3.5-35B-A3B-abliterated-GGUF/Qwen3.5-35B-A3B-abliterated-Q8_0.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T04:48:06.789667",
+  "results": {
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "<think>\n\n</think>\n\nTo determine a valid schedule, let's break down the constraints and available time slots step by step.\n\n### 1. Analyze Constraints & Resources\n\n**Meetings:**\n1.  **Team Sync**: 60 minutes.\n    *   Attendees: Alice, Bob, Carol.\n    *   Duration: 2 consecutive slots (e.g., 9:00\u00e2\u0080\u009310:00 or 10:00\u00e2\u0080\u009311:00).\n2.  **1:1 Alice-Dave**: 30 minutes.\n    *   Attendees: Alice, Dave.\n3.  **1:1 Bob-Dave**: 30 minutes.\n    *   Attendees: Bob, Dave.\n\n**Availability Constraints:**\n*   **Dave**: Only available 9:00\u00e2\u0080\u009311:00 and 14:00\u00e2\u0080\u009316:00 (2pm\u00e2\u0080\u00934pm).\n*   **Alice**: Unavailable 10:00\u00e2\u0080\u009311:00.\n*   **No Back-to-Back**: No attendee can have meetings immediately following one another with no gap.\n*   **Available Slots**:",
+        "tokens_per_second": 11.88,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 21549.29,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "This is a classic philosophical puzzle that strikes at the heart of identity over time, persistence, and the relationship between form and matter. The problem is not merely about a ship; it is about how we define the \"self\"\u00e2\u0080\u0094whether we are the same person today as we were ten years ago, given that every cell in our body has been replaced, or if we are the same person despite changing thoughts, memories, and physical attributes.\n\nHere are arguments for two primary philosophical positions regarding the Ship of Theseus:\n\n### Position 1: Materialism (or Mereological Essentialism)\n**The Argument:** Identity is strictly bound to the specific matter that constitutes an object.\n\nAccording to this view, the Ship of Theseus is defined by its physical parts. If you replace the planks, you are removing the essential components of the ship and replacing them with new matter.\n*   **The Replacement Phase:** If you replace plank by plank, you are essentially destroying the original ship and constructing a new one. By the time 99% of the planks are new, there is no longer a strong claim that the ship is the original.\n*   **The Reassembly Phase:** If you take the discarded planks and build a second ship,",
+        "tokens_per_second": 13.26,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19302.35,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q2_counterfactual": {
+        "question_id": "t2_q2_counterfactual",
+        "prompt": "Consider this scenario: \"If the internet had never been invented, how would academic research be different today?\"\n\nAnalyze this counterfactual across three dimensions:\n1. Speed of knowledge dissemination\n2. Collaboration patterns\n3. Reproducibility and peer review\n\nBe specific about mechanisms and second-order effects.",
+        "response": "<think>\n\n</think>\n\nIf the internet had never been invented, academic research would have evolved within a \"pre-dimension of a framework defined, slower, more siloed, and physically constrained ecosystem, but rigor, yet highly centralized structure, but structuring the late- a ecosystem, yet deeply by geography, governed by the limitations. The absence of digital connectivity. The absence of digital.\n\nHere is an analysis of this counterfactual across the three specified dimensions:\n\n### 1. Speed of Knowledge Dissemination\n**Mechanism:** Without the internet, the dissemination of research would rely on a on **rely depend entirely on physical **physical distribution. This of postal services (e to physical (journals, conferences, and inter-library archives.\n\n*   **Time Lag:** Inertia:** Inflation:** Theorem:** The latency between a cycle from the dissemination of would be measured in months or even years, depending on the of physical mail of the time. A breakthrough in physics in 199500s would have taken decades.\n   **Second-Order Effect (The \"S):** This is of \"Silence):** This would be of Innovation Lag in the Field):** The \"Forthography):** This:** The of scientific community",
+        "tokens_per_second": 5.24,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 48810.28,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.126666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q5ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k16_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T23:32:10.722691",
+  "results": {
+    "math": {
+      "t1_q2_system_equations": {
+        "question_id": "t1_q2_system_equations",
+        "prompt": "Solve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method.",
+        "response": "<think>\n\n</think>\n\nTo solve the system of equations:\n\n1)\n\n1. $x^2 + y^2 = 25$\n2. $xy = 12$\n\nWe can be sure!\n</think>\n\n### Method: Symmetry: Symmetry and Substitution\n\nWe will solve the symmetry and $xy = 12, we can let $u = x + y$ and $v = xy = 12$.\n\nRecall the algebraic identity:\n$(x + y)^2 = x^2 + y^2 + 2xy$.\n\n$\nSubstitute the known values into the equation:\n$(x + y)^2 = 25 + 2(12)\n(x + y)^2 = 25 + 24\n(x + y)^2 = 49\n$x + y = \\pm 7$\n\nWe now we have two cases:\n**Case 1:** $x + y = 7$ and $xy = 12$\nFrom these two equations, we can form a quadratic equation where $x$ and $y$ are roots:$t^2 - (x+y)t + xy = 0$\n$t^2 - 7t + 12 = 0$\nFactor the quadratic:\n(t - 3)(t - 4) = 0$\n$t = 3$ or $t = 4$\nSubcase, so,\nSo, the pairs $(x, y)$ are $(3, 4)$ and $(4, 3)$.\n\n**Case 2:**$x + y = -7$ $x y = 12$Similarly, form the quadratic becomes:$t^2 + 7t + 12 = 0$(t + 3)(t + 4) = 0$t = -3$ or $t = -4$\nSo, pairs $(x, y)$ pairs are$ are $(-3, -4)$ and $(-4, -3)$.\n\n### Verification\n\nThe solutions $(x, y)$ are:\n1. $(3, 4)$\n2. $(4, 3)$\n3. $(-3, -4)$\n4. $(-4, -3)$\n\n### Final Answer:\nThe real solutions to the system are:\n$(3,",
+        "tokens_per_second": 8.44,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 60673.9,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "<think>\nHere's a thinking process that leads to the suggested solution:\n\n1.  **Understand the Problem Analysis of the Code:**\n    *   **Goal:** Analyze the provided lock-free stack code.\n    *   **Task:** Identify the ABA problem, explain its impact, and propose a fix using tagged pointers or hazard pointers.\n    *   **Output:** 1. A concrete sequence of operations demonstrating the ABA problem.\n    *   2. What incorrect behavior results?\n    *   3. A fix using either tagged pointers or hazard pointers (show code).\n\n2.  **Analyze the Provided Code:\n    *   **`push: `struct Node { int val; Node* next; };\n *   *   atomic<Node*> top;\n    *   `push` function:\n        *   Creates a new node `n`.\n        *  Sets `n->next` to the current `top` `top` (initially `top.load()`).\n        *   Uses a `compare_exchange_weak` loop: Updates `top` with `n`.\n    *   `pop` function:\n        *   Loads `top` into `t`.\n        *   While `t` is not null, calls `compare_exchange_weak`.\n        *   Returns `t` is returned.\n    *   **Potential Issue:** The `compare_exchange_weak` compares the `compare the `top` with `n`.\n    *   **Potential ABA Problem:** The `compare_exchange_weak` the `compare_exchange_weak `top` with `n`.\n *   **ABA`\n    *   **ABA Problem:** The `compare_exchange_weak` `top` with `n`.\n    *   **ABA:** The `compare_exchange_weak` `top` with `n`.\n    *   **ABA:** The `compare_exchange_weak` `top` with `n`.\n\n    *   **ABA:** The `compare_exchange_weak` `top` with `n`.\n\n3.  **ABA Problem:\n    *   **ABA:** The `compare_exchange_weak` `top` with `n`.\n    *   **ABA:** The `compare_exchange_weak` `top` with `n`.\n    *   **ABA:** The `compare_exchange_weak` `top` with `n`.\n    *   **ABA:** The `compare_exchange_weak",
+        "tokens_per_second": 8.5,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 60203.7,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "```json\n{\n  \"phases\": [\n    {\n      \"phase_id\": \"Data_General\": \"data_acquisition\",\n      \"agent\": \"researcher_agent\",\n      \"task\": \"Fetch current AAPL current AAPL current stock price of AAPL and historical data\",\n      \"output\": {\n      \"1.\n      \"AAPL\n      \"task\": \"Calculate AAPL (30\"\n    },\n  \"agent\": \"data\": \"\": \"\": \"\n      \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"\": \"",
+        "tokens_per_second": 14.74,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 34734.45,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.56,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

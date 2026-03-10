@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe6_spec_draft_qwen35_0_8b_q4_0_k16_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T21:48:01.938508",
+  "results": {
+    "coder": {
+      "t2_q3_optimize": {
+        "question_id": "t2_q3_optimize",
+        "prompt": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.",
+        "response": "Here is the optimized solution using a **Hash Map (Frequency Dictionary)**.\n\n### Optimized Code (Python)\n\n```python\ndef count_pairs(nums, target):\n    count = 0\n    freq = {}\n    \n    for num in nums:\n        complement = target - num\n        \n        # Add the number of times 'complement' has appeared so far\n        count += freq.get(complement, 0)\n        \n        # Record the current number in the frequency map\n        freq[num] = freq.get(num, 0) + 1\n        \n    return count\n```\n\n### Explanation of Approach\n\n1.  **The Problem with the Original Code**:\n    The original nested loop checks every pair `(i, j)`. If the input size is $1,000,000$, the operations approach $5 \\times 10^{11}$, which will time out (usually limited to $\\approx 10^8$ operations per second).\n\n2.  **The Insight**:\n    For any number `num` in the list, we only need to know if the value `target - num` (the complement) exists in the list.\n    Instead of scanning the rest of the array to find the complement, we can store the numbers we have already visited in a **Hash Map** (dictionary in Python). A hash map allows for $O(1)$ average time complexity for lookups and insertions.\n\n3.  **The Algorithm**:\n    *   Iterate through the array once.\n    *   For each number `num`, calculate `complement = target - num`.\n    *   Check if `complement` exists in our frequency map. If it does, add the frequency count of that complement to our `count` (because `num` forms a pair with every previous occurrence of the complement).\n    *   Update the frequency map to include the current `num`.\n\n4.  **Complexity Analysis**:\n    *   **Time Complexity**: $O(n)$. We iterate through the list once. Dictionary lookups and updates are $O(1)$ on average.\n    *   **Space Complexity**: $O(n)$. In the worst case, we store every unique number from the input list in the dictionary.\n\n### Example Trace\n**Input**: `nums = [1, 5, 7, -1, 5]`, `target = 6`\n\n1.",
+        "tokens_per_second": 13.42,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38151.25,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "<think>\n\n</think>\n\n### Logical Deduction\n\n**1. Analyze Constraints & Participants:**\n*   **Dave's Availability:** 9:00\u00e2\u0080\u009311:00 AM and 2:00\u00e2\u0080\u00934:00 PM.\n    *   *Implies:* Dave cannot meet at 11:30, 3:30 (end of slot), or outside these ranges. Since slots are 30 mins, Dave can only attend slots starting at 9:00, 9:30, 10:00, 10:30, 2:00, 2:30, 3:00. He cannot attend the 3:30 slot (would end at 4:00, which is technically okay, but let's check the \"No back-to-back\" rule later).\n    *   *Correction on 3:30:* If a meeting is 30 mins starting at 3:30, it ends at 4:00. Dave is available until 4:00. So 3:30 is valid for Dave.\n*   **Alice's Unavailability:** 10:00\u00e2\u0080\u009311:00 AM.\n    *   *Implies:* Alice cannot attend the 10:00 AM slot (10:00\u00e2\u0080\u009310:30) or the 10:30 AM slot (10:30\u00e2\u0080\u009311:00).\n*   **Meeting Requirements:**\n    *   **Team Sync (60 min):** Requires Alice, Bob, Carol.\n        *   Since the available slots are 30 minutes each, the 60-minute Team Sync must occupy **two consecutive 30-minute slots**.\n        *   Valid consecutive pairs for the Team Sync: (9:00-9:30 & 9:30-10:00), (10:00-10:30 & 10:30-11:00), (2:00-2:30 & 2:30-3:00), (3:00-3:30 & 3:30-4:00).\n    *   **1:1 Alice-Dave (30 min):** Requires Alice and Dave.\n    *   **",
+        "tokens_per_second": 13.4,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38197.27,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_inconsistency": {
+        "question_id": "t2_q4_inconsistency",
+        "prompt": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.",
+        "response": "<think>\n\n</think>\n\nBased on a comparison of the three documents, here are the inconsistencies found regarding the API specification:\n\n### 1. Request Body Format\n*   **Doc A** specifies a **JSON body**.\n*   **Doc B** specifies a **form-encoded body**.\n*   **Doc C** specifies a **JSON payload**.\n*   **Inconsistency:** Doc B contradicts both Doc A and Doc C regarding the required content type (`application/json` vs. `application/x-www-form-urlencoded`).\n\n### 2. Rate Limiting Frequency\n*   **Doc A** states the limit is **100 requests per minute** (100 req/min).\n*   **Doc B** states the limit is **100 requests per minute** (100 requests per minute).\n*   **Doc C** states the limit is **1000 requests per hour** (1000 req/hour).\n*   **Inconsistency:** Doc C presents a significantly different limit.\n    *   100 req/min is equivalent to **6,000 req/hour**.\n    *   Doc C's limit of **1,000 req/hour** is 6 times lower than the limit described in Docs A and B.\n\n### Summary of Discrepancies\n| Feature | Doc A | Doc B | Doc C | Conflict |\n| :--- | :--- | :--- | :--- | :--- |\n| **Body Type** | JSON | Form-encoded | JSON | **Doc B** differs from A & C |\n| **Rate Limit** | 100/min (6,000/hr) | 100/min (6,000/hr) | 1,000/hr | **Doc C** differs from A & B |",
+        "tokens_per_second": 13.37,
+        "prompt_tokens": null,
+        "completion_tokens": 390,
+        "total_time_ms": 29163.01,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.396666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

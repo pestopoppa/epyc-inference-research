@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_2b_q8",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q8_0.gguf",
+  "config_name": "lookup_n4",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T03:47:26.333018",
+  "results": {
+    "agentic": {
+      "t1_q1_sequential": {
+        "question_id": "t1_q1_sequential",
+        "prompt": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.",
+        "response": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.\n\n<think>\n\n</think>\n\n[{\"name\": \"read_file: {\"path\": \"/var/log/app.log\"}\n\ngrep_search: {\"pattern\": \"ERROR\", \"path\": \"string\"}\n\nread the first line of /var/log/syslog\"\n}\n{\"pattern\": \"line\": \"string\", {\"path\": \"app.log\"\nline\": \"string\"pattern\": \"string\"}\n\n\", line\": \"string \"/var/log/app.log\"\n\nline\": \"string\"}\n\n\"line\": \"string\"\n\n\"\n\nline\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\": \"string\"\n\n\"line\":\n\n\n\n\ndecoded  516 tokens in    7.998 seconds, speed:   64.519 t/s\nn_predict    = 516\nt_draft      = 1.71 ms, 3.98 us per token, 251170.96 tokens per second\ntarget:",
+        "tokens_per_second": 62.96476169790093,
+        "prompt_tokens": 608,
+        "completion_tokens": 47,
+        "total_time_ms": 8195.06,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t2_q1_synthesis": {
+        "question_id": "t2_q1_synthesis",
+        "prompt": "Synthesize these three perspectives into a unified recommendation:\n\nEngineering: 'We need 3 months to refactor the auth system properly. Rushing will create tech debt.'\nProduct: 'Customers are churning due to login issues. We need a fix in 2 weeks.'\nFinance: 'Q4 budget is tight. Any solution over $20K needs board approval.'\n\nProvide a concrete recommendation in 3-4 sentences.",
+        "response": "Synthesize these three perspectives into a unified recommendation:\n\nEngineering: 'We need 3 months to refactor the auth system properly. Rushing will create tech debt.'\nProduct: 'Customers are churning due to login issues. We need a fix in 2 weeks.'\nFinance: 'Q4 budget is tight. Any solution over $20K needs board approval.'\n\nProvide a concrete recommendation in 3-4 sentences.\n\n<think>\nThinking Process:\n\n1.  **Constraint Checklist & Confidence Score:**\n1.  **Synthesis:**\n    *   Input: Three perspectives (Engineering, Product, Finance).\n    *   Task: Refactor auth system (3 months/tech debt), Fix login issues (2 weeks), Budget (Q4 budget tight solution over $20K needs board approval).\n    *   Provide a concrete recommendation in 3-4 sentences.\nThinking Process:\n\n1.  **Analyze the core conflict. The product wants a quick fix (2 weeks), engineering: 3 months) (2 weeks), which is the budget (2000K needs board approval (2 weeks), Finance: Q4 budget is the budget (2 weeks) (2 weeks), Finance: Q4 budget is tight). (2 weeks),0K needs board approval.\n    *   (2 weeks), Finance: Q4 budget is tight.50K needs board approval.\n    *   Engineering: We need 3 months to refactor the auth system properly. Rushing will create tech debt.\n    *   Product: Customers are churning due to login issues. We need a fix in 2 weeks.\n\n    *   **Goal:** Provide a concrete recommendation in 3-4 sentences.\n\n   \n\nThe user wants me to synthesize three perspectives (Engineering, Finance: Q4 budget is tight. Any solution over $20K needs board approval.'\n**\nQ4**\nAny solution over $20K needs board approval.'\n\n**\n</think>\n\nTo balance the competing priorities, we need a concrete recommendation in 3-4 sentences.\n\n1.  **Prioritize the product value:** The product team is correct and the budget is critical and over $20K needs board approval.\n2 weeks and Engineering: We need 3 months to refactor the auth system properly. Rushing will create tech debt.\n    *  2 weeks), and Engineering: We need 3 months to refactor the auth system properly. Rushing will create tech debt.\n    *  2 weeks), and Engineering: We need 3 months to refactor the auth system properly. Rushing will create tech debt.\n    *  2 weeks), and Engineering: We need 3 months to refactor the auth system properly. Rushing will create tech debt.\n    *  2 weeks), and Engineering: We need 3 months to refactor the auth system properly. Rushing will\n\n\n\n\ndecoded  514 tokens in   11.278 seconds, speed:   45.574 t/s\nn_predict    = 514\nt_draft      = 2.79 ms, 7.15 us per token, 139784.95 tokens per second\ntarget:",
+        "tokens_per_second": 44.71318751962726,
+        "prompt_tokens": 584,
+        "completion_tokens": 168,
+        "total_time_ms": 11495.49,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.\n\n<think>\nHere's a thinking process that leads to the suggested solution:\n\n1.  **Analyze the Request:**\n    **Meetings:**\n    1. Team sync (60min), Alice, Bob, Carol.\n-    **1:1 Alice-Dave (30min)**.\n-    **Dave (30min)**\n-    **Dave's-4pm)**.\n-    **No back-to-back for any meeting**.\n\n**2.  Define the Variables:**\n-1 Alice, 30.\n-    **1-30min, Alice, Bob, Carol**.\n-    **Team Sync:** 1.\n-    **1: Alice**.\n-    **Bob-Dave:**\n-1 Dave, Bob, Carol.\n\n**3.\n\n- Dave: 9-11am, Dave: 9-11am and 2-4pm.\n\n- Available.\n\n**4pm, 1pm, 1pm**.\n\n**4.\n\n**3.**\n\n**4. 30min.\n-   11am.\n-     2pm.\n-    **   30min.\n\n**5 10:30am.\n-    **1.\n-    **   3 2-4pm**.\n-    **   30min**.\n\n**500am.\n-    **  30min.\n</think>\n\nHere is the valid schedule based on your constraints.\n\n### **Meeting Schedule**\n\n| Time | Meeting | Attendees | Notes |\n| | | |\n| | | |\n|  | | | | | |\n| | |\n  |\n|\n  10.  1100pm.\n**\n-    **  30min.1.\n###**\n-    **   30min.\n-110min.\n**  11am.\n-    **   30min.\n-     11**1.\n-    **   30min.\n-    **  2-     30min.\n**  4pm.\n-    **  30min.\n-    **   30min.\n-    **   30min.\n-    ** \n\n\n\n\ndecoded  513 tokens in   13.997 seconds, speed:   36.651 t/s\nn_predict    = 513\nt_draft      = 2.41 ms, 4.45 us per token, 224854.53 tokens per second\ntarget:",
+        "tokens_per_second": 35.80576940526129,
+        "prompt_tokens": 845,
+        "completion_tokens": 177,
+        "total_time_ms": 14327.3,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 47.82790620759649,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

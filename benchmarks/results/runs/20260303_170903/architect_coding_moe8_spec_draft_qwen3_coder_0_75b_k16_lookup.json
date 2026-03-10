@@ -1,0 +1,29 @@
+{
+  "model_role": "architect_coding",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-480B-A35B-Instruct-GGUF/Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008.gguf",
+  "config_name": "moe8_spec_draft_qwen3_coder_0_75b_k16_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T17:44:27.231960",
+  "results": {
+    "general": {
+      "t1_q1_json": {
+        "question_id": "t1_q1_json",
+        "prompt": "Parse this into JSON with fields: name, role, department, start_date\n'Sarah Chen joined as Senior Engineer in the Platform team on 2024-03-15.'\nOutput only the JSON, no explanation.",
+        "response": "{\n  \"name\": \"Sarah Chen\",\n  \"role\": \"Senior Engineer\",\n  \"department\": \"Platform team\",\n  \"start_date\": \"2024-03-15\"\n}",
+        "tokens_per_second": 8.27,
+        "prompt_tokens": null,
+        "completion_tokens": 44,
+        "total_time_ms": 5318.28,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 8.27,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q6_K.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T10:26:36.529503",
+  "results": {
+    "agentic": {
+      "t2_q2_error_chain": {
+        "question_id": "t2_q2_error_chain",
+        "prompt": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.",
+        "response": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.\n\nReasoning: {\"error\": \"Deployment blocked: failing health check on staging\"}\n    parameters\": {\"env\": \"staging\"}}\n    \": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n}\nYou: {\"name\": \"check_dns: {\"hostname\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.\n\nExplain your reasoning briefly, then output the JSON tool call.\n\nReasoning:\nThe deployment action.\n\nThe database_connection`.\nThe health_check_dns\"}}\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n```\n\n\n\n\n\ndecoded  267 tokens in   30.855 seconds, speed:    8.653 t/s\nn_predict = 267\ndraft:\ntarget:",
+        "tokens_per_second": 7.902983331808976,
+        "prompt_tokens": 294,
+        "completion_tokens": 759,
+        "total_time_ms": 33784.71,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\n<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the Constraints:**\n\n    *   **Plants:** A, B, C, D, E (Total permutations before B ($pos < Dpos$ (Wait, let me re-read the prompt).\n    *   **Constraint 1:** A must be watered before B. ($A.\n    *   **Constraint 3:** B must be watered before D.\n    *   **Constraint 4:** E cannot be first or last.\n\n    Let's re-read the prompt carefully to ensure I didn't misinterpretations.\n    *must* be watered immediately after D\" -> Sequence or last. B must be watered before D.\"\n    Wait, looking at the prompt text provided in the prompt: \"E cannot be first or last\".\n    Let's list all valid orderings.\n\n    Wait, let's assume the prompt text is:\n    \"A must be watered before B\"\n    \"C must be watered immediately after D\"\n    \"E cannot be first or last\"\n    \"B must be watered before D\"\n\n    Okay, let's write D\"\n   \n\n\n\n\ndecoded  257 tokens in   34.072 seconds, speed:    7.543 t/s\nn_predict = 257\ndraft:\ntarget:",
+        "tokens_per_second": 7.126927528852964,
+        "prompt_tokens": 141,
+        "completion_tokens": 828,
+        "total_time_ms": 36060.42,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_multistep": {
+        "question_id": "t1_q1_multistep",
+        "prompt": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.",
+        "response": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.\n\nHere's the problem statement:\n*   **Train 1:**\n    *   Origin: Station A\n    *   Departure Time: 9:00 AM\n    *   Speed ($v_1 = 8$)\n    *   Destination: Station B\n    *   ($v_8$)\n*Note: The prompt says \"traveling at 80 mph toward Station A.\n    *   Distance between stations: 280 miles.\n    *   *Note: The prompt says \"traveling at 80 mph toward Station A\".*\n    *   *Note: The prompt says \"traveling at 60 mph toward Station B\".*\n    *   *Note: The prompt says \"traveling at 80 mph toward Station A\".*\n    *   *Note: The prompt says \"traveling at 60 mph toward Station B\".*\n    *   *Note: The prompt says \"traveling at 80 mph toward Station A\".*\n    *   *Note: The prompt says \"traveling at 60 mph toward Station B\".*\n    *   *Note: The prompt says \"traveling at 80 mph toward Station A\".*\n\n\n\n\n\ndecoded  264 tokens in   13.867 seconds, speed:   19.038 t/s\nn_predict = 264\ndraft:\ntarget:",
+        "tokens_per_second": 16.66398401772442,
+        "prompt_tokens": 100,
+        "completion_tokens": 345,
+        "total_time_ms": 15842.55,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.564631626128786,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,249 @@
+Resuming run: 20260303_170903
+
+Benchmark: 20260303_170903 | 1 models, 1 roles (smallest first)
+Roles:   0%|          | 0/1 [00:00<?, ?it/s]
+  Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q6_K (29.0GB) @ 9.8 t/s → timeout 2.0x
+    roles: qwen35_q6k
+    [SERVER] Starting llama-server (model will stay in RAM)...
+      [DEBUG] Server log: /mnt/raid0/llm/claude/tmp/llama_server_rl6s6vzn.log
+    [SERVER] Ready, model loaded in RAM (default experts)
+    [qwen35_q6k] 216/630 tests pending (9 configs × 7 suites)
+      baseline/math/t3_q1_analysis: 46.2t/s
+      baseline/math/t3_q2_combinatorics: 9.8t/s
+      baseline/math/t3_q3_probability_theory: 47.6t/s
+      baseline/math/t2_q1_optimization: 10.0t/s
+      baseline/math/t2_q2_proof: 10.0t/s
+      baseline/math/t2_q3_calculus: 10.0t/s
+      baseline/math/t2_q4_statistics: 57.5t/s
+      baseline/math/t1_q1_word_problem: 9.9t/s
+      baseline/math/t1_q2_system_equations: 35.6t/s
+      baseline/math/t1_q3_probability: 10.0t/s
+    [ERROR] qwen35_q6k/baseline/t3_q1_multi_hop_reasoning: HTTP 400: {"error":{"code":400,"message":"request (35477 tokens) exceeds the ava
+      baseline/long_context/t3_q2_contradiction_detection: 9.2t/s
+      baseline/long_context/t3_q3_evolving_requirements: 8.9t/s
+    [ERROR] qwen35_q6k/baseline/t2_q1_deep_needle: HTTP 400: {"error":{"code":400,"message":"request (78955 tokens) exceeds the ava
+      baseline/long_context/t2_q2_synthesis: 8.9t/s
+    [ERROR] qwen35_q6k/baseline/t2_q3_architecture: HTTP 400: {"error":{"code":400,"message":"request (46182 tokens) exceeds the ava
+      baseline/long_context/t1_q1_needle: 9.5t/s
+      baseline/long_context/t1_q2_multi_file: 1000000.0t/s
+      baseline/long_context/t1_q3_extraction: 9.4t/s
+      baseline/thinking/t3_q1_methodological_critique: 40.7t/s
+      baseline/thinking/t3_q2_causal_inference: 9.9t/s
+      baseline/thinking/t3_q3_reasoning_trap: 9.8t/s
+      baseline/thinking/t2_q1_paradox: 9.8t/s
+      baseline/thinking/t2_q2_counterfactual: 55.2t/s
+      baseline/thinking/t2_q3_formal: 10.0t/s
+      baseline/thinking/t2_q4_metacognition: 10.0t/s
+      baseline/thinking/t1_q1_multistep: 60.1t/s
+      baseline/thinking/t1_q2_hypothesis: 9.9t/s
+      baseline/thinking/t1_q3_planning: 48.5t/s
+      baseline/general/t3_q1_policy_analysis: 52.8t/s
+      baseline/general/t3_q2_system_failure: 29.5t/s
+      baseline/general/t3_q3_strategic_communication: 58.4t/s
+      baseline/general/t2_q1_synthesis: 10.2t/s
+      baseline/general/t2_q2_transform: 44.8t/s
+      baseline/general/t2_q3_schedule: 9.9t/s
+      baseline/general/t2_q4_inconsistency: 9.9t/s
+      baseline/general/t1_q1_json: 9.6t/s
+      baseline/general/t1_q2_multistep: 9.9t/s
+      baseline/general/t1_q3_compare: 49.6t/s
+      baseline/agentic/t3_q1_competing_constraints: 10.0t/s
+      baseline/agentic/t3_q2_multi_agent_coordination: 40.1t/s
+      baseline/agentic/t3_q3_adversarial_robustness: 42.1t/s
+      baseline/agentic/t2_q1_ambiguous: 10.0t/s
+      baseline/agentic/t2_q2_error_chain: 9.9t/s
+      baseline/agentic/t2_q3_schema_edge: 10.1t/s
+      baseline/agentic/t2_q4_orchestration: 44.7t/s
+      baseline/agentic/t1_q1_sequential: 70.4t/s
+      baseline/agentic/t1_q2_error_handling: 10.1t/s
+      baseline/agentic/t1_q3_nested_params: 72.4t/s
+      baseline/instruction_precision/t3_q1_self_referential: 56.3t/s
+      baseline/instruction_precision/t3_q2_cascading_constraints: 40.5t/s
+      baseline/instruction_precision/t3_q3_meta_instruction: 31.1t/s
+      baseline/instruction_precision/t2_q1_resist_elaboration: 94.8t/s
+      baseline/instruction_precision/t2_q2_maintain_format: 45.6t/s
+      baseline/instruction_precision/t2_q3_empty_handling: 47.2t/s
+      baseline/instruction_precision/t2_q4_conflicting_constraints: 10.1t/s
+      baseline/instruction_precision/t1_q1_negative_instruction: 10.2t/s
+      baseline/instruction_precision/t1_q2_word_limit: 45.6t/s
+      baseline/instruction_precision/t1_q3_structured_format: 10.5t/s
+      baseline/instruction_precision/t1_q4_multiple_constraints: 47.5t/s
+      baseline/coder/t3_q1_concurrent_correctness: 43.6t/s
+      baseline/coder/t3_q2_distributed_consistency: 10.1t/s
+      baseline/coder/t3_q3_algorithmic_hardness: 10.0t/s
+      baseline/coder/t2_q1_design: 46.8t/s
+      baseline/coder/t2_q2_debug_complex: 47.9t/s
+      baseline/coder/t2_q3_optimize: 53.4t/s
+      baseline/coder/t2_q4_system: 48.4t/s
+      baseline/coder/t1_q1_algorithm: 10.0t/s
+      baseline/coder/t1_q2_refactor: 29.4t/s
+      baseline/coder/t1_q3_test: 49.3t/s
+      [SERVER] Restarting for moe4 (4 experts)...
+      [DEBUG] Server cmd includes: --override-kv qwen35moe.expert_used_count=int:4
+      [DEBUG] Server log: /mnt/raid0/llm/claude/tmp/llama_server_p6a1wpgy.log
+      [SERVER] Ready
+      moe4/math/t3_q1_analysis: 44.4t/s
+      moe4/math/t3_q2_combinatorics: 45.9t/s
+      moe4/math/t3_q3_probability_theory: 31.6t/s
+      moe4/math/t2_q1_optimization: 60.1t/s
+      moe4/math/t2_q2_proof: 39.1t/s
+      moe4/math/t2_q3_calculus: 11.1t/s
+      moe4/math/t2_q4_statistics: 10.9t/s
+      moe4/math/t1_q1_word_problem: 59.9t/s
+      moe4/math/t1_q2_system_equations: 61.7t/s
+      moe4/math/t1_q3_probability: 66.8t/s
+    [ERROR] qwen35_q6k/moe4/t3_q1_multi_hop_reasoning: HTTP 400: {"error":{"code":400,"message":"request (35477 tokens) exceeds the ava
+    [ERROR] qwen35_q6k/moe4/t3_q2_contradiction_detection: HTTP 400: {"error":{"code":400,"message":"request (26247 tokens) exceeds the ava
+      moe4/long_context/t3_q3_evolving_requirements: 9.7t/s
+      moe4/long_context/t2_q1_deep_needle: 1000000.0t/s
+    [ERROR] qwen35_q6k/moe4/t2_q2_synthesis: HTTP 400: {"error":{"code":400,"message":"request (32897 tokens) exceeds the ava
+    [ERROR] qwen35_q6k/moe4/t2_q3_architecture: HTTP 400: {"error":{"code":400,"message":"request (46182 tokens) exceeds the ava
+      moe4/long_context/t1_q1_needle: 10.3t/s
+      moe4/long_context/t1_q2_multi_file: 1000000.0t/s
+      moe4/long_context/t1_q3_extraction: 11.0t/s
+      moe4/thinking/t3_q1_methodological_critique: 43.3t/s
+      moe4/thinking/t3_q2_causal_inference: 48.5t/s
+      moe4/thinking/t3_q3_reasoning_trap: 40.4t/s
+      moe4/thinking/t2_q1_paradox: 10.6t/s
+      moe4/thinking/t2_q2_counterfactual: 34.4t/s
+      moe4/thinking/t2_q3_formal: 10.7t/s
+      moe4/thinking/t2_q4_metacognition: 35.6t/s
+      moe4/thinking/t1_q1_multistep: 10.8t/s
+      moe4/thinking/t1_q2_hypothesis: 10.7t/s
+      moe4/thinking/t1_q3_planning: 48.0t/s
+      moe4/general/t3_q1_policy_analysis: 10.9t/s
+      moe4/general/t3_q2_system_failure: 10.9t/s
+      moe4/general/t3_q3_strategic_communication: 10.9t/s
+      moe4/general/t2_q1_synthesis: 60.0t/s
+      moe4/general/t2_q2_transform: 11.2t/s
+      moe4/general/t2_q3_schedule: 10.9t/s
+      moe4/general/t2_q4_inconsistency: 10.8t/s
+      moe4/general/t1_q1_json: 11.0t/s
+      moe4/general/t1_q2_multistep: 47.6t/s
+      moe4/general/t1_q3_compare: 54.5t/s
+      moe4/agentic/t3_q1_competing_constraints: 10.7t/s
+      moe4/agentic/t3_q2_multi_agent_coordination: 58.4t/s
+      moe4/agentic/t3_q3_adversarial_robustness: 10.7t/s
+      moe4/agentic/t2_q1_ambiguous: 48.0t/s
+      moe4/agentic/t2_q2_error_chain: 11.1t/s
+      moe4/agentic/t2_q3_schema_edge: 67.4t/s
+      moe4/agentic/t2_q4_orchestration: 63.9t/s
+      moe4/agentic/t1_q1_sequential: 38.0t/s
+      moe4/agentic/t1_q2_error_handling: 53.7t/s
+      moe4/agentic/t1_q3_nested_params: 10.8t/s
+      moe4/instruction_precision/t3_q1_self_referential: 10.8t/s
+      moe4/instruction_precision/t3_q2_cascading_constraints: 53.4t/s
+      moe4/instruction_precision/t3_q3_meta_instruction: 10.9t/s
+      moe4/instruction_precision/t2_q1_resist_elaboration: 90.5t/s
+      moe4/instruction_precision/t2_q2_maintain_format: 51.8t/s
+      moe4/instruction_precision/t2_q3_empty_handling: 12.7t/s
+      moe4/instruction_precision/t2_q4_conflicting_constraints: 12.0t/s
+      moe4/instruction_precision/t1_q1_negative_instruction: 11.0t/s
+      moe4/instruction_precision/t1_q2_word_limit: 11.3t/s
+      moe4/instruction_precision/t1_q3_structured_format: 11.1t/s
+      moe4/instruction_precision/t1_q4_multiple_constraints: 11.7t/s
+      moe4/coder/t3_q1_concurrent_correctness: 54.9t/s
+      moe4/coder/t3_q2_distributed_consistency: 11.0t/s
+      moe4/coder/t3_q3_algorithmic_hardness: 37.7t/s
+      moe4/coder/t2_q1_design: 50.9t/s
+      moe4/coder/t2_q2_debug_complex: 11.1t/s
+      moe4/coder/t2_q3_optimize: 54.5t/s
+      moe4/coder/t2_q4_system: 49.2t/s
+      moe4/coder/t1_q1_algorithm: 10.9t/s
+      moe4/coder/t1_q2_refactor: 10.9t/s
+      moe4/coder/t1_q3_test: 45.9t/s
+      [SERVER] Restarting for moe6 (6 experts)...
+      [DEBUG] Server cmd includes: --override-kv qwen35moe.expert_used_count=int:6
+      [DEBUG] Server log: /mnt/raid0/llm/claude/tmp/llama_server_3g236wp6.log
+      [SERVER] Ready
+      moe6/math/t3_q1_analysis: 49.5t/s
+      moe6/math/t3_q2_combinatorics: 9.9t/s
+      moe6/math/t3_q3_probability_theory: 46.2t/s
+      moe6/math/t2_q1_optimization: 60.6t/s
+      moe6/math/t2_q2_proof: 10.1t/s
+      moe6/math/t2_q3_calculus: 10.1t/s
+      moe6/math/t2_q4_statistics: 57.2t/s
+      moe6/math/t1_q1_word_problem: 68.0t/s
+      moe6/math/t1_q2_system_equations: 10.1t/s
+      moe6/math/t1_q3_probability: 66.4t/s
+    [ERROR] qwen35_q6k/moe6/t3_q1_multi_hop_reasoning: HTTP 400: {"error":{"code":400,"message":"request (35477 tokens) exceeds the ava
+    [ERROR] qwen35_q6k/moe6/t3_q2_contradiction_detection: HTTP 400: {"error":{"code":400,"message":"request (26247 tokens) exceeds the ava
+    [ERROR] qwen35_q6k/moe6/t3_q3_evolving_requirements: HTTP 400: {"error":{"code":400,"message":"request (32883 tokens) exceeds the ava
+      moe6/long_context/t2_q1_deep_needle: 7.7t/s
+    [ERROR] qwen35_q6k/moe6/t2_q2_synthesis: HTTP 400: {"error":{"code":400,"message":"request (32897 tokens) exceeds the ava
+      moe6/long_context/t2_q3_architecture: 8.4t/s
+      moe6/long_context/t1_q1_needle: 14.5t/s
+      moe6/long_context/t1_q2_multi_file: 10.4t/s
+      moe6/long_context/t1_q3_extraction: 9.6t/s
+      moe6/thinking/t3_q1_methodological_critique: 32.0t/s
+      moe6/thinking/t3_q2_causal_inference: 10.0t/s
+      moe6/thinking/t3_q3_reasoning_trap: 10.1t/s
+      moe6/thinking/t2_q1_paradox: 10.0t/s
+      moe6/thinking/t2_q2_counterfactual: 37.7t/s
+      moe6/thinking/t2_q3_formal: 55.3t/s
+      moe6/thinking/t2_q4_metacognition: 46.5t/s
+      moe6/thinking/t1_q1_multistep: 10.2t/s
+      moe6/thinking/t1_q2_hypothesis: 42.9t/s
+      moe6/thinking/t1_q3_planning: 54.1t/s
+      moe6/general/t3_q1_policy_analysis: 10.2t/s
+      moe6/general/t3_q2_system_failure: 36.1t/s
+      moe6/general/t3_q3_strategic_communication: 10.2t/s
+      moe6/general/t2_q1_synthesis: 10.2t/s
+      moe6/general/t2_q2_transform: 58.9t/s
+      moe6/general/t2_q3_schedule: 10.2t/s
+      moe6/general/t2_q4_inconsistency: 49.7t/s
+      moe6/general/t1_q1_json: 90.8t/s
+      moe6/general/t1_q2_multistep: 10.4t/s
+      moe6/general/t1_q3_compare: 69.0t/s
+      moe6/agentic/t3_q1_competing_constraints: 45.8t/s
+      moe6/agentic/t3_q2_multi_agent_coordination: 57.5t/s
+      moe6/agentic/t3_q3_adversarial_robustness: 46.2t/s
+      moe6/agentic/t2_q1_ambiguous: 48.6t/s
+      moe6/agentic/t2_q2_error_chain: 10.2t/s
+      moe6/agentic/t2_q3_schema_edge: 66.6t/s
+      moe6/agentic/t2_q4_orchestration: 59.2t/s
+      moe6/agentic/t1_q1_sequential: 10.4t/s
+      moe6/agentic/t1_q2_error_handling: 46.1t/s
+      moe6/agentic/t1_q3_nested_params: 72.2t/s
+      moe6/instruction_precision/t3_q1_self_referential: 54.2t/s
+      moe6/instruction_precision/t3_q2_cascading_constraints: 10.8t/s
+      moe6/instruction_precision/t3_q3_meta_instruction: 50.5t/s
+      moe6/instruction_precision/t2_q1_resist_elaboration: 11.4t/s
+      moe6/instruction_precision/t2_q2_maintain_format: 44.5t/s
+      moe6/instruction_precision/t2_q3_empty_handling: 12.2t/s
+      moe6/instruction_precision/t2_q4_conflicting_constraints: 11.3t/s
+      moe6/instruction_precision/t1_q1_negative_instruction: 49.8t/s
+      moe6/instruction_precision/t1_q2_word_limit: 44.8t/s
+      moe6/instruction_precision/t1_q3_structured_format: 48.9t/s
+      moe6/instruction_precision/t1_q4_multiple_constraints: 49.6t/s
+      moe6/coder/t3_q1_concurrent_correctness: 54.6t/s
+      moe6/coder/t3_q2_distributed_consistency: 10.1t/s
+      moe6/coder/t3_q3_algorithmic_hardness: 41.0t/s
+      moe6/coder/t2_q1_design: 48.4t/s
+      moe6/coder/t2_q2_debug_complex: 30.4t/s
+      moe6/coder/t2_q3_optimize: 53.8t/s
+      moe6/coder/t2_q4_system: 10.1t/s
+      moe6/coder/t1_q1_algorithm: 10.1t/s
+      moe6/coder/t1_q2_refactor: 31.4t/s
+      moe6/coder/t1_q3_test: 50.8t/s
+      [SERVER] Restarting with draft Qwen3.5-0.8B-Q4_0...
+      [DEBUG] Server cmd includes: --override-kv qwen35moe.expert_used_count=int:4
+      [DEBUG] Server cmd includes: -md /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q4_0.gguf
+      [DEBUG] Server log: /mnt/raid0/llm/claude/tmp/llama_server_ko2nvm34.log
+      [SERVER] Ready with draft
+      ⚡ moe4_spec_draft_qwen35_0_8b_q4_0_k8: 11.0t/s  (speed only, quality from baseline)
+      ⚡ moe4_spec_draft_qwen35_0_8b_q4_0_k16: 9.7t/s  (speed only, quality from baseline)
+      ⚡ moe4_spec_draft_qwen35_0_8b_q4_0_k24: 5.4t/s  (speed only, quality from baseline)
+      [SERVER] Restarting with draft Qwen3.5-0.8B-Q8_0...
+      [DEBUG] Server cmd includes: --override-kv qwen35moe.expert_used_count=int:4
+      [DEBUG] Server cmd includes: -md /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf
+      [DEBUG] Server log: /mnt/raid0/llm/claude/tmp/llama_server_345qwfwv.log
+      [SERVER] Ready with draft
+      ⚡ moe4_spec_draft_qwen35_0_8b_q8_0_k8: 7.2t/s  (speed only, quality from baseline)
+      ⚡ moe4_spec_draft_qwen35_0_8b_q8_0_k16: 7.7t/s  (speed only, quality from baseline)
+      ⚡ moe4_spec_draft_qwen35_0_8b_q8_0_k24: 7.1t/s  (speed only, quality from baseline)
+Roles: 100%|██████████| 1/1 [4:22:20<00:00, 15740.71s/it]Roles: 100%|██████████| 1/1 [4:22:20<00:00, 15740.71s/it]
+
+  [SERVER] Stopping server...
+
+Done: 205 completed, 0 skipped, 11 errors

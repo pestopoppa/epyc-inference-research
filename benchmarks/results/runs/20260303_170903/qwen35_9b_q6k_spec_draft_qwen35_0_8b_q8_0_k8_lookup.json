@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q6_K.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T01:25:10.817849",
+  "results": {
+    "agentic": {
+      "t2_q2_error_chain": {
+        "question_id": "t2_q2_error_chain",
+        "prompt": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.",
+        "response": "The database connection is failing in the staging environment, which is blocking the deployment. Before escalating to oncall or checking logs, I should attempt to resolve the issue by restarting the database service, as connection refused errors often indicate the service is down or hung.\n\nTool call:\n```json\n{\n  \"name\": \"restart_service\",\n  \"parameters\": {\n    \"service\": \"database\",\n    \"env\": \"staging\"\n  }\n}\n```",
+        "tokens_per_second": 12.32,
+        "prompt_tokens": null,
+        "completion_tokens": 100,
+        "total_time_ms": 8118.02,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "To solve this problem, we need to find all possible sequences of watering 5 plants (A, B, C, D, E) that satisfy the given constraints. Let's analyze the constraints step-by:\nLet's start with the constraints and start with constraints:\n\nLet's analyze the constraints and list and then we have to be satisfied.\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nSo, let's denote the sequence of plants is a valid orderings.\nLet's denote the valid orderings be denoted by the position 1, 2, 3, 4, 5, 1 1, 5.\n1.  A <position 1, 2, 3, 4, 5, 5.\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nLet's denote the positions as 1, 2, 3, 4, 5.\nWe need to.\n- A < B < B D C D C E C E C D C E? 5?  (A\n- 2.  A E D C B E D E? E D (This is a valid ordering?\n- A E C B? No.\n- A\n- 1st? 2.  A E B D C\n-  A B must be watered immediately after D, B\n-  D C A B E\n-  D C A B E?\n-  1.  D C A B\n-  ?\n-  ? 5.  D C B E A\n-  D C A B E D\n-  1.  A B C D E- 1.  A B D E A E A-  A B D C E-  A B D C-  B D E-  B D C A?\n-  B D E C?\n-  D?\n-  3.  A E B C D?\n-  1.  D E cannot be first or last.\n-  1.  C cannot be first or last.\n-  1.  A B D E B E D C?",
+        "tokens_per_second": 9.04,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 56610.59,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_multistep": {
+        "question_id": "t1_q1_multistep",
+        "prompt": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.",
+        "response": "Here is the step-by-step solution to find when the two trains meet.\n\n### 1. Identify the given information\n*   **Distance between stations:** 280 miles\n*   **Train A:** Leaves at 9:00 AM, Speed = 60 mph\n*   **Train B:** Leaves at 10:00 AM, Speed = 80 mph\n\n### 2. Calculate the head start\nTrain A leaves one hour before Train B.\n*   **Time difference:** 10:00 AM - 9:00 AM = 1 hour\n\nFirst, we calculate how far Train A travels during that 1-hour head start.\n$$ \\text{Distance} = \\text{Speed} \\times \\text{Time} $$\n$$ \\text{Distance}_{\\text{Train A}} = 60 \\text{ mph} \\times 1 \\text{ hour} = 60 \\text{ miles} $$\n\n### 3. Determine the remaining distance\nSince Train A has already covered 60 miles when Train B starts, we subtract this from the total distance between the stations.\n$$ \\text{Remaining Distance} = \\text{Total Distance} - \\text{Distance}_{\\text{Train A}} $$\n$$ \\text{Remaining Distance} = 280 \\text{ miles} - 60 \\text{ miles} = 220 \\text{ miles} $$\n\n### 4. Calculate the time to meet\nNow both trains are traveling toward each other. We need to find out how long it takes to cover the remaining 220 miles.\n\n*   **Train A Speed:** 60 mph\n*   **Train B Speed:** 80 mph\n\nWhen objects move toward each other, their speeds add up (Relative Speed):\n$$ \\text{Relative Speed} = 60 + 80 = 140 \\text{ mph} $$\n\nNow, calculate the time ($t$) it takes to cover the remaining 220 miles at 140 mph:\n$$ \\text{Time} = \\frac{\\text{Distance}}{\\text{Speed}} $$\n$$ t = \\frac{220}{140} \\text{ hours} $$\n\nSimplify the fraction:\n$$ t = \\frac{22}{14} = \\frac{11}{7",
+        "tokens_per_second": 13.72,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37314.71,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.693333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

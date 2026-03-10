@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe6_spec_draft_qwen35_0_8b_q8_0_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T21:52:13.927283",
+  "results": {
+    "coder": {
+      "t2_q3_optimize": {
+        "question_id": "t2_q3_optimize",
+        "prompt": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.",
+        "response": "To optimize the function from $O(n^2)$ to $O(n)$ (or $O(n \\log n)$), we need to avoid the nested loop. The core idea is to trade space for time using a **Hash Map** (or Dictionary in Python).\n\n### The Approach\n\n1.  **Iterate once**: Loop through the array `nums` with a single index `i`.\n2.  **Calculate Complement**: For the current number `x`, calculate the value needed to reach the target: `complement = target - x`.\n3.  **Check History**: Check if this `complement` has already been seen in the map.\n    *   If yes, it means there are existing numbers that sum to the target with the current number. Add the count of those occurrences to our total.\n    *   If no, this number is not part of a pair yet.\n4.  **Update Map**: Add the current number `x` to the map (incrementing its count if it exists).\n\nThis reduces the lookup time from $O(n)$ (in a list) to $O(1)$ (in a hash map), resulting in an overall time complexity of **$O(n)$**.\n\n### Optimized Code\n\n```python\ndef count_pairs(nums, target):\n    # Dictionary to store the frequency of numbers seen so far\n    freq_map = {}\n    count = 0\n    \n    for num in nums:\n        # Calculate the number needed to reach the target\n        complement = target - num\n        \n        # If the complement exists in the map, add its frequency to the count\n        if complement in freq_map:\n            count += freq_map[complement]\n        \n        # Update the frequency of the current number in the map\n        freq_map[num] = freq_map.get(num, 0) + 1\n            \n    return count\n```\n\n### Complexity Analysis\n\n*   **Time Complexity**: **$O(n)$**\n    *   We iterate through the list of $n$ numbers exactly once.\n    *   Dictionary lookups and insertions are $O(1)$ on average.\n    *   Total: $n \\times O(1) = O(n)$.\n*   **Space Complexity**: **$O(n)$**\n    *   In the worst case (all numbers are distinct), the dictionary will store $n$ entries.\n\n### Why this works for $n >",
+        "tokens_per_second": 11.41,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 44855.94,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "Output format:\n[\nSchedule:\n- 109am:Team sync, 9:30am109am100:30am11am:0am10:30am:0pm:am\nSchedule:\n\n<think>\n\n<think>\n\nBased on the constraints provided, here is the step-by-step logical deduction to create the valid schedule.\nschedule:\n\n### 1.  **Analyze the constraints:**\n   - **Dave is the availability.\n\n1. **Team sync: **Team Sync Meeting:Team sync (60min):\n   - Alice, Bob, Carol. 2. 2.10min).\n2. **Dave only available 9-11am and 2-4pm.\n3. 1:1:1 Alice-Dave (30min).\n4. 1:1 Bob-Dave (30min).\n5. 1:1 Bob-Dave (30min).\n6. Dave only available 9-11am and 2-4pm.\n7. Alice unavailable 10-11am.\n8. No back-to-back meetings for anyone.\n\n**Analyze Dave's availability:\n**sible slots:1.\n\n**\n\n**Step 1: AnalyzeDave's1.\n.1. Team Sync (0am1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.",
+        "tokens_per_second": 10.45,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 48974.17,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_inconsistency": {
+        "question_id": "t2_q4_inconsistency",
+        "prompt": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.",
+        "response": "<think>\nHere's a thinking process that leads to the suggested answer:\n\n1.\n\n1.  **Analyze the Request:**\n    *   **Goal:\n *Input: Task: Identify inconsistencies between three documents (A, B, C) describing the same system.\n    *   Input: Three short descriptions of an API's behavior, format, rate limits, and request methods.\n    *   Output: List all inconsistencies found.\n\n2.  **Analyze the Documents:**\n    *   **Doc A:**\n        *   Method: POST\n        *   Body Format: JSON\n        *   Rate Limit: 100 req/min\n    *   **Doc B:**\n        *   Method: POST\n        *   Body Format: Form-encoded (application/json payload\n        *   Rate Limit: 100 requests per minute (matches Doc A.\n    *   **Doc C:**\n        *   Method: POST\n        *   Body: JSON payload required\n        *   Rate Limit: 1000 req/hour\n\n3.  **Compare the:**\n    *   **Method:** All three (A, B, C) agree on POST.\n    *   **Body Format:**\n        *   A: JSON\n *   B: Form-encoded\n    *   C: JSON\n    *   **Inconsistency:** A vs.\n* B differs between A & B says vs. C (JSON vs.\n    *   **Rate Limit:**\n *   A: 100 req/min (which is 6000000 per hour.\n *   B: 100 per minute = 6000/hr.\n *   C: 1000/hr.\n    *   **Inconsistency:** A/B (6000/hr vs. C 100/hr.\n    *   **Inconsistency:** B vs.\n    *   **Conclusion:** There is.\n    *   **Conclusion:**\n    *   **Body:**  vs. 10000/hr vs 6000/hr.\n    *   **Conclusion:** There are:\n *   *   **:**\n *   **Body Format:**\n    *   **Rate Limit:**\n *   A &lted\n *   **Rate Limit:\n *   **:**\n *   **Incons",
+        "tokens_per_second": 9.38,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 54599.52,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.413333333333334,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

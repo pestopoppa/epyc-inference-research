@@ -1,0 +1,57 @@
+{
+  "model_role": "architect_general",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-235B-A22B-GGUF/Qwen3-235B-A22B-Q4_K_M-00001-of-00004.gguf",
+  "config_name": "moe8_spec_draft_qwen3_0_6b_q8_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T13:44:28.642281",
+  "results": {
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "Here are the two bugs in your binary search implementation, along with the specific inputs that trigger them, explanations, and fixes.\n\n### Bug 1: Infinite Loop on Non-Target Elements\n\n**1. Triggering Input**\n*   **Array:** `[1, 3, 5]`\n*   **Target:** `4` (or any number between 3 and 5 that isn't in the array)\n\n**2. What goes wrong**\nWhen the target is not in the array, the loop eventually narrows down to a range where `right` is exactly `left + 1`.\n*   If `arr[mid] < target`, `left` becomes `mid`.\n*   If `right` is `left + 1`, then `mid` calculates to `(left + left + 1) // 2`, which equals `left`.\n*   So `left` is updated to `left` (no change).\n*   The condition `left < right` remains true forever, causing an **infinite loop**.\n\n**3. The Fix**\nYou must ensure the search space shrinks. When moving the `left` pointer, it must advance past `mid`, not land on it.\n*   **Change:** `left = mid` \u00e2\u0086\u0092 `left = mid + 1`\n\n---\n\n### Bug 2: Index Out of Range (Off-by-One Error)\n\n**1. Triggering Input**\n*   **Array:** `[1, 5]`\n*   **Target:** `5`\n\n**2. What goes wrong**\nThe initialization `right = len(arr)` allows `right` to be an index that does not exist (e.g., index 2 for a list of length 2).\n*   Initially: `left=0`, `right=2`.\n*   `mid` = `(0 + 2) // 2` = `1`.\n*   `arr[1]` is `5`. `5 < 5` is false, so we go to `else`.\n*   `right` becomes `mid` (which is 1).\n*   Next iteration: `left=0`, `right=1`.\n*   `mid` = `(0 + 1) // 2` = `0`.\n*   `arr[0]` is `1`. `1 < 5` is true.\n*",
+        "tokens_per_second": 13.26,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38616.82,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t1_q2_multistep": {
+        "question_id": "t1_q2_multistep",
+        "prompt": "Process this list:\n1. Remove duplicates (case-insensitive)\n2. Sort alphabetically\n3. Number each item\n4. Add a count at the end\n\nItems: banana, Apple, cherry, BANANA, apple, Date, cherry",
+        "response": ", date\n\nThe output should be a single, correctly punctuated sentence. \n\nExample output: 1. Apple 2. Banana 3. Cherry 4. Date (4 items)\nOkay, let's see. The user wants me to process this list of fruits. The steps are: remove duplicates case-insensitively, sort alphabetically, number each item, and add a count at the end. The example output is given as a single sentence.\n\nFirst, the original items are: banana, Apple, cherry, BANANA, apple, Date, cherry, date. I need to remove duplicates ignoring cases. So, I should convert all to lowercase first to check duplicates. Let's list them out:\n\nLowercase versions: banana, apple, cherry, banana, apple, date, cherry, date. So the unique ones are banana, apple, cherry, date. Wait, but the original words have different cases. When removing duplicates case-insensitively, the first occurrence's case might be kept, but the problem says to remove duplicates regardless of case, so the resulting entries should be in their original form? Or do we standardize the case after deduplication? Hmm, the example output shows Apple, Banana, etc., with first letter capitalized. Wait, in the example output, the items are Apple, Banana, Cherry, Date. The original items had Apple and apple. So in the deduped list, it's Apple (the first occurrence?) or banana vs. BANANA\u00e2\u0080\u0094how to handle the casing in the output?\n\nWait the example output is: 1. Apple 2. Banana 3. Cherry 4. Date (4 items). The original list had \"banana, Apple, cherry, BANANA, apple, Date, cherry, date\". So after deduping case-insensitively, the unique words are banana, apple, cherry, date. But in the example output, the first letter is capitalized. So perhaps the output should have each item's first letter capitalized, and the rest lowercase? Or maybe it's taking the first occurrence's case? Wait, banana was in lowercase first. But in the example output, it's \"Banana\"\u00e2\u0080\u0094capital B. Similarly, Apple (from the first Apple) was the first occurrence of 'apple' in lowercase. Hmm, no. Wait the first item in the input list is \"banana\" lowercase. Then \"Apple\" with capital A. Then \"BANANA\" all caps.\n\nSo how does the",
+        "tokens_per_second": 7.61,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 67308.08,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t2_q1_ambiguous": {
+        "question_id": "t2_q1_ambiguous",
+        "prompt": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.",
+        "response": "Please ask a clarifying question.\n\n<think>\n\n</think>\n\nWhich communication channel would you prefer to use for notifying the team: email, Slack, or should we create a support ticket?",
+        "tokens_per_second": 13.73,
+        "prompt_tokens": null,
+        "completion_tokens": 39,
+        "total_time_ms": 2840.42,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.533333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

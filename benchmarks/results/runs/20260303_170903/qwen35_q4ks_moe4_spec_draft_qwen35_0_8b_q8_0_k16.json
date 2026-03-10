@@ -1,0 +1,53 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe4_spec_draft_qwen35_0_8b_q8_0_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T18:13:20.116055",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "<think>\n\n</think>\n\nHere are the step-by-step solutions to your questions regarding the function $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$.\n\n### 1. Proof of Differentiability\n\n**Claim:** The function $f$ is differentiable everywhere on $\\mathbb{R}$.\n\n**Reasoning:**\nThe function is defined by a power series:\n$$ f(x) = \\sum_{n=1}^{\\infty} a_n x^n, \\quad \\text{where } a_n = \\frac{\\sin(n)}{n!} $$\n\nTo determine the domain of differentiability, we first find the radius of convergence $R$ of this power series. We use the Ratio Test on the coefficients:\n$$ \\lim_{n \\to \\infty} \\left| \\frac{a_{n+1}}{a_n} \\right| = \\lim_{n \\to \\infty} \\left| \\frac{\\sin(n+1)}{(n+1)!} \\cdot \\frac{n!}{\\sin(n)} \\right| $$\n$$ = \\lim_{n \\to \\infty",
+        "tokens_per_second": 13.39,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19125.79,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_optimization": {
+        "question_id": "t2_q1_optimization",
+        "prompt": "A farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nWhat dimensions maximize the enclosed area? What is the maximum area?\n\nSet up the optimization problem and solve it.",
+        "response": "<think>\n\n<think>\n\n</think>\n\nTo solve this problem step-by-step.\nFirst, let's re\n\nHere's the area function is maximized, the area,\n\nLet's's's.\n\nStep 1: Define Variables\nLet's the\n\nLet $x$ = $ be the width of the field\n the rectangular field.\nLet $x the river\nLet $y$ be the length of field.\n\nStep 2: Formulate the Constraint and the area function.\n\nA: $A= 3:\nA = A is maximized.\nLet's define the field dimensions that maximize the area, the area\nThe dimensions that area.\n\n###\nStep 3: Setup the problem by the function is area function\n\nThe field.\n\nStep 4: Solving the Optimization Problem\n\nWe can now, area is the maximize the area of the area of area A(x)$\n\nThe area of the field is given the the maximize the area of the field, the field is the area the the area of the area of area of the is the area of the area of the area of the area of the area of the field is the area of the field is the area of the area of the area of the field area of",
+        "tokens_per_second": 6.38,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 40147.83,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_word_problem": {
+        "question_id": "t1_q1_word_problem",
+        "prompt": "A store offers a 20% discount on all items. After the discount, a 8% sales tax is applied. If an item originally costs $150:\n\n1. What is the price after discount?\n2. What is the final price after tax?\n3. What percentage of the original price is the final price?\n\nShow your work for each part.",
+        "response": "Here is the step-by-step calculation for each part of your request.\n\n### 1. What is the price after discount?\n\nTo find the discounted price, we first calculate the discount amount or directly calculate the percentage of the original price the customer pays.\n\n*   **Original Price:** $150\n*   **Discount Rate:** 20%\n\n**Method 1 (Calculate discount amount first):**\n$$ \\text{Discount Amount} = \\$150 \\times 0.20 = \\$30 $$\n$$ \\text{Price after discount} = \\$150 - \\$30 = \\$120 $$\n\n**Method 2 (Calculate percentage paid):**\nSince there is a 20% discount, the customer pays 80% of the original price.\n$$ 100\\% - 20\\% = 80\\% $$\n$$ \\$150 \\times 0.80 = \\$120 $$\n\n**Answer:** The price after the discount is **$120**.\n\n***\n\n### 2. What is the final price after tax?\n\nSales tax is typically applied to the discounted price (the sale price), not the",
+        "tokens_per_second": 13.63,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18779.53,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.133333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "model_role": "architect_general",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-235B-A22B-GGUF/Qwen3-235B-A22B-Q4_K_M-00001-of-00004.gguf",
+  "config_name": "moe8_spec_draft_qwen3_0_6b_q8_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T13:15:18.622730",
+  "results": {
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "Here are the two bugs in the binary search implementation, along with the fixes.\n\n### Bug 1: Infinite Loop (Off-by-One Error in Update)\n\n**1. Input that triggers the bug:**\n```python\narr = [1, 3, 5]\ntarget = 3\n```\n\n**2. Explanation:**\nThe bug lies in how the `left` and `right` pointers are updated.\n*   When `mid` is calculated, if `left` is `0` and `right` is `1`, `mid` becomes `0`.\n*   If the target is greater than `arr[mid]` (e.g., searching for 3 in `[1, 3]`), the code executes `left = mid`.\n*   Since `mid` is `0`, `left` remains `0`.\n*   The loop condition `left < right` is still true (`0 < 1`), and `mid` is recalculated as `0` again.\n*   The pointers never advance, causing an infinite loop.\n*   *The Fix:* When moving the `left` pointer up because `arr[mid]` is too small, you must set `left",
+        "tokens_per_second": 13.55,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18896.59,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t1_q2_multistep": {
+        "question_id": "t1_q2_multistep",
+        "prompt": "Process this list:\n1. Remove duplicates (case-insensitive)\n2. Sort alphabetically\n3. Number each item\n4. Add a count at the end\n\nItems: banana, Apple, cherry, BANANA, apple, Date, cherry",
+        "response": "Let's process the list step by step:\n\n**Original list:** banana, Apple, cherry, BANANA, apple, Date, cherry\n\n**Step 1: Remove duplicates (case-insensitive)**  \nWe'll convert all items to lowercase to compare them, then keep only one version of each:\n- banana (lowercase: banana)\n- apple (lowercase: apple)\n- cherry (lowercase: cherry)\n- date (lowercase: date)\n\n**Step 2: Sort alphabetically**  \nNow we sort the unique items alphabetically:\n- apple\n- banana\n- cherry\n- date\n\n**Step 3: Number each item**  \nWe'll number each item in the sorted list:\n1. apple\n2. banana\n3. cherry\n4. date\n\n**Step 4: Add a count at the end**  \nWe have 4 unique items in total.\n\nThe final processed list:\n1. apple\n2. banana\n3. cherry\n4. date  \nTotal: 4 items\n####\nHere's the processed list:\n\n1. apple  \n2. banana  \n3. cherry  \n4. date  \n\nTotal: 4 items\n\n**Step-by-step explanation:**  \n1. **Remove",
+        "tokens_per_second": 9.5,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 26960.19,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t2_q1_ambiguous": {
+        "question_id": "t2_q1_ambiguous",
+        "prompt": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.",
+        "response": "\u00e8\u00a7\u00a3\u00e9\u0087\u008a\u00e4\u00b8\u00ba\u00e4\u00bb\u0080\u00e4\u00b9\u0088\u00e5\u009c\u00a8\u00e4\u00b8\u0080\u00e5\u008f\u00a5\u00e8\u00af\u009d\u00e4\u00b8\u00ad\u00ef\u00bc\u008c\u00e7\u0084\u00b6\u00e5\u0090\u008e\u00e8\u00be\u0093\u00e5\u0087\u00baJSON\u00e3\u0080\u0082\n\nSince the instruction is to \"let the team know about the outage\" and there is no specific information about the preferred communication method, the most appropriate tool is to send a Slack message. This is because Slack is commonly used for real-time team communication and would be the fastest way to inform everyone about the outage.\n\n{\n  \"channel\": \"team_channel\",\n  \"message\": \"There is currently an outage affecting our services. We are working on resolving it as soon as possible.\"\n}",
+        "tokens_per_second": 6.77,
+        "prompt_tokens": null,
+        "completion_tokens": 108,
+        "total_time_ms": 15958.88,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 9.94,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q8_0",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/jiaojjjjje/Qwen3.5-35B-A3B-abliterated-GGUF/Qwen3.5-35B-A3B-abliterated-Q8_0.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T05:04:34.707170",
+  "results": {
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "<think>\n\n</think>\n\n### Step-by-Step Deduction\n\n**1. Analyze Constraints & Availability:**\n*   **Dave's Availability:** Only 9:00\u00e2\u0080\u009311:00 and 14:00\u00e2\u0080\u009316:00.\n*   **Alice's Unavailability:** 10:00\u00e2\u0080\u009311:00.\n*   **Meeting Durations:**\n    *   Team Sync: 60 mins (requires Alice, Bob, Carol).\n    *   1:1 Alice-Dave: 30 mins.\n    *   1:1 Bob-Dave: 30 mins.\n*   **No Back-to-Back Rule:** No person can have a meeting ending at time $T$ and another starting at time $T$. There must be a gap between meetings.\n*   **Available Slots:** 9:00, 9:30, 10:00, 10:30, 11:00, 14:00, 14:30, 15:00, 15:30.\n\n**2. Determine the Team Sync Time:**\nThe Team Sync is 60 minutes and requires Alice, Bob, and Carol.\n*   *Option A (Morning):* 9:00\u00e2\u0080\u009310:00.\n    *   Alice is available.\n    *   Bob is available.\n    *   Carol is available (no constraints listed).\n    *   **Conflict Check:** If the Team Sync is 9:00\u00e2\u0080\u009310:00, Alice cannot have her 1:1 with Dave immediately after. Dave is available 9\u00e2\u0080\u009311.\n    *   Alice's 1:1 with Dave (30 mins) would need to be after 10:00 (since she is busy 10:00\u00e2\u0080\u009311:00 anyway) or before 9:00 (impossible).\n    *   Wait, Alice is unavailable 10:00\u00e2\u0080\u009311:00. So Alice can only meet Dave before 10:00 or after 11:00.\n    *   If Team Sync is 9:00\u00e2\u0080\u009310:00:\n        *   Alice is busy until 10:00.\n        *",
+        "tokens_per_second": 13.23,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38700.68,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>\n(Write a\n\n<think>\n\n<think>\n\n<think>\n\n<think>: 2.\nConsider a. Consider the Ship is-shipof 3. Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus? Present arguments for at least two different philosophical positions, then state which you find most convincing and why. 2.a. the b. 2. a. the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new from the old planks, which is the \"real\" Ship of Theseus? Present arguments for at least two different philosophical positions, then state which you find most convincing and why.2. a. the\n\nQuestion: Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.\n\nHere is a response to your prompt with a response to the prompt 1.\n\nHere is a response prompt\n\nPrompt: Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nHere is the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new from the planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.\n\nHere is a response to the prompt: Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus? Present arguments for at least two different philosophical positions, then state which you find most convincing and why.\n\nHere is a response to the Ship of",
+        "tokens_per_second": 11.3,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 45302.54,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q2_counterfactual": {
+        "question_id": "t2_q2_counterfactual",
+        "prompt": "Consider this scenario: \"If the internet had never been invented, how would academic research be different today?\"\n\nAnalyze this counterfactual across three dimensions:\n1. Speed of knowledge dissemination\n2. Collaboration patterns\n3. Reproducibility and peer review\n\nBe specific about mechanisms and second-order effects.",
+        "response": "<think>\n\n</think>\n\nIf the internet had never been invented, the landscape of academic research would not merely be slower; it would be fundamentally stratified, localized, and resource-intensive. The transition from a physical, mail-based ecosystem to a digital, instantaneous one has reshaped the very ontology of knowledge production. Without this shift, the following three dimensions would look drastically different:\n\n### 1. Speed of Knowledge Dissemination\n**Current Mechanism:** Pre-print servers, email alerts, and open-access repositories allow findings to reach a global audience within hours of acceptance.\n**Counterfactual Mechanism:** The \"Postal and Inter-Library Loan\" Era.\n\n*   **The Lag of Physical Distribution:** In a world without the internet, the primary vector for new knowledge would be physical journals delivered by mail or courier. The time lag between a paper's acceptance and its arrival in a researcher's office would be the norm, ranging from **4 weeks (domestic) to 3+ months (international)**.\n*   **The \"First-to-Publish\" Stakes:** The incentive structure would heavily favor \"scooping\" via physical speed rather than digital priority. Researchers would rush to print their findings immediately to secure physical evidence of priority, potentially sacrificing depth for speed.\n*   **Second-Order Effect: The Death of \"Hot\" Topics:** Complex, fast-moving fields (e.g., genomics, high-energy physics, or AI) would stagnate. In the absence of rapid feedback loops, a researcher working on a specific gene sequence might spend two years on a hypothesis that was already proven by a colleague in another country two years prior, simply because the \"signal\" hadn't arrived yet. This would lead to massive duplication of effort and a slower rate of scientific iteration.\n\n### 2. Collaboration Patterns\n**Current Mechanism:** Instantaneous communication (Zoom, Slack, GitHub) enables \"global teams\" where a researcher in Tokyo can co-author a paper with a theorist in Berlin and a data scientist in S\u00c3\u00a3o Paulo.\n**Counterfactual Mechanism:** The \"Hub-and-Spoke\" and \"Travel-Dependent\" Model.\n\n*   **Geographic Silos:** Without real-time communication, collaboration would be restricted to those who could physically travel to one another. Research would remain hyper-local, dominated by university clusters or national networks. International collaboration would require expensive, time-consuming physical visits or the slow exchange of bulky data sets (e.g., floppy disks or tapes sent via air mail).",
+        "tokens_per_second": 13.34,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38393.74,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 12.623333333333335,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "model_role": "architect_general",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-235B-A22B-GGUF/Qwen3-235B-A22B-Q4_K_M-00001-of-00004.gguf",
+  "config_name": "moe8_spec_draft_qwen3_1_7b_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T13:07:02.533752",
+  "results": {
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "<think>\nHere's a thinking process that leads to the suggested solution:\n\n1.  **Analyze the Request:**\n    *   **Task:** Identify and fix TWO subtle bugs in the provided binary search implementation.\n    *   **Input Code:** A Python function `binary_search` using indices `left` and `right`.\n    *   **Output Requirements:** For each bug, provide:\n        1.  Triggering input.\n        2.  Explanation of the failure.\n        3.  The fix.\n\n2.  **Analyze the Code:**\n    ```python\n    def binary_search(arr, target):\n        left, right = 0, len(arr)  # Bug Candidate 1?\n        while left < right:\n            mid = (left + right) // 2\n            if arr[mid] == target:\n                return mid\n            elif arr[mid] < target:\n                left = mid          # Bug Candidate 2?\n            else:\n                right = mid         # Bug Candidate 3?\n        return -1\n    ```\n\n3.  **Investigate Bug 1: Initialization of `right`**\n    *   *Current Code",
+        "tokens_per_second": 13.64,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18762.03,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t1_q2_multistep": {
+        "question_id": "t1_q2_multistep",
+        "prompt": "Process this list:\n1. Remove duplicates (case-insensitive)\n2. Sort alphabetically\n3. Number each item\n4. Add a count at the end\n\nItems: banana, Apple, cherry, BANANA, apple, Date, cherry",
+        "response": ", DATE, Elderberry, elderberry, fig, GRAPE, grape\n\n<think>\nThinking Process:\n\n1.  **Analyze the Request:**\n    *   Input: A list of items (fruits/names): `banana, Apple, cherry, BANANA, apple, Date, cherry, DATE, Elderberry, elderberry, fig, GRAPE, grape`\n    *   Tasks:\n        1.  Remove duplicates (case-insensitive).\n        2.  Sort alphabetically.\n        3.  Number each item.\n        4.  Add a count at the end.\n\n2.  **Step 1: Remove Duplicates (Case-Insensitive)**\n    *   Original List: `banana`, `Apple`, `cherry`, `BANANA`, `apple`, `Date`, `cherry`, `DATE`, `Elderberry`, `elderberry`, `fig`, `GRAPE`, `grape`\n    *   Normalize to lowercase for comparison:\n        *   `banana` -> `banana`\n        *   `Apple` -> `apple`\n        *   `cherry` -> `cherry`\n        *   `BANANA` -> `",
+        "tokens_per_second": 13.6,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18822.11,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t2_q1_ambiguous": {
+        "question_id": "t2_q1_ambiguous",
+        "prompt": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.",
+        "response": "<think>\n\n</think>\n\nThe user's request is too ambiguous to execute without knowing the specific outage details, affected systems, or which team to notify, so I must ask for clarification.\n\nPlease provide the specific outage details (what happened, when, and impact) and specify which team or channel requires the notification so I can draft the appropriate message.",
+        "tokens_per_second": 13.78,
+        "prompt_tokens": null,
+        "completion_tokens": 71,
+        "total_time_ms": 5151.34,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.673333333333332,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

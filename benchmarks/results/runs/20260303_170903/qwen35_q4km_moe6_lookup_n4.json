@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe6_lookup_n4",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T18:03:47.499396",
+  "results": {
+    "coder": {
+      "t2_q3_optimize": {
+        "question_id": "t2_q3_optimize",
+        "prompt": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.",
+        "response": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.\n\n<think>\n\n</think>\n\nTo optimize the function from **O(n\u00b2)** to **O(n)**\n\n### Optimized Solution (O(n)\n\nHere is the optimized code:\n\nHere is the optimized solution\n\n```python\ndef count_pairs(nums, target):\n    from collections import Counter\n    freq = Counter(nums)\n    count = 0\n    \n    for num in freq:\n            complement = target - num\n            if complement in freq:\n                freq:\n            complement =                count += 1 freq[complement] = freq[complement] - 1  # Decrement count to avoid double-counting self-pairs if num == complement\n    return count\n```\n\n### Approach Explanation\n\nThe brute-force approach uses two nested loops to check every possible pair, resulting in O(n\u00b2) time complexity. For `n > 10^6`, this will time out.\n\nThe optimized approach uses a **Hash Map (Counter):\n\n1. 1. **Hash Map (Counter):\n2. **Single Pass Logic**:\n   - Iterate through the array once.\n   - For each number `num`, calculate its `complement = target - num`.\n   - If the `complement` exists in the `freq` map, add its frequency to the `count`.\n   - Update the `freq` map for the current number `num`.\n   - Update the `freq` map by incrementing the count for `num`.\n3. **Complexity**:\n   - **Single Pass Logic**:\n   - Iterate through the array once.\n   - For each number `num`, calculate its `complement = target - num`.\n   - If the `complement` exists in the `freq` map, add its frequency to the `count`.\n   - Update the `freq` map by incrementing the count for `num`.\n   -4. **Final Return**:\n   - Return the final `count`.\n\n### Complexity:\n   - 1  # Decrement count to avoid double-counting self-pairs if num == complement\n            count += 1 1. **Single Pass)**Time Complexity**: O(n) - n) depending on the sorting approach.\n   - Map (Counter):\n   - Iterate through the array once.\n   - For each number `num`, calculate its `complement = target - num`.\n   - If the `complement` exists in the `freq` map,\n\n\n\n\ndecoded  515 tokens in   35.913 seconds, speed:   14.340 t/s\nn_predict    = 515\nt_draft      = 3.07 ms, 8.37 us per token, 119505.05 tokens per second\ntarget:",
+        "tokens_per_second": 14.098619156601437,
+        "prompt_tokens": 570,
+        "completion_tokens": 243,
+        "total_time_ms": 36528.4,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.\n\n<think>\nHere's a thinking process that leads to the suggested schedule:\n\n1.  **Analyze the Request:**\n    Goal: Schedule four meetings given specific constraints.\n    Meetings:\n        - 1:0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\n\n\n\n\ndecoded  515 tokens in   20.575 seconds, speed:   25.031 t/s\nn_predict    = 515\nt_draft      = 0.81 ms, 2.11 us per token, 474660.07 tokens per second\ntarget:",
+        "tokens_per_second": 24.05586566083565,
+        "prompt_tokens": 634,
+        "completion_tokens": 43,
+        "total_time_ms": 21408.5,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_inconsistency": {
+        "question_id": "t2_q4_inconsistency",
+        "prompt": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.",
+        "response": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.\n\n<think>\nHere is a minute' -> 100 req/min\nDoc C\n1.\nDoc A and B: Doc A and B: POST with JSON body vs. Doc B: 'Send data via POST with form-encoded body.\n2: A and B: 'POST with JSON payload required.\nDoc C: A and B: 'POST with JSON body.\n\nInconsistencies Found:\n\n1.\nDoc B: POST with form-encoded body.\n2.\n: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 100000 req/hour.'\n\n1.\nRate limit is 100 requests per minute.\nDoc C: Rate limited to 1000 req/hour.\nDoc1000 req/hour.\nDoc B: '100.\nDoc C: '10000000 req/hour.'\n\n1.\nDoc A: 'POST with form-encoded body.\n.\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\n1.\nDoc A and B: 'POST with form-encoded body.\n2.\nDoc A and B: 'POST with JSON body. vs. Doc B: 'POST with form-encoded body.\n.\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\n1.\nDoc A: 'POST with JSON body.\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 1000 req/hour.\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\n1.\nDoc A and B: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.\n.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\n1.\nDoc A and B: 'POST with\n\n\n\n\ndecoded  516 tokens in   29.919 seconds, speed:   17.246 t/s\nn_predict    = 516\nt_draft      = 1.82 ms, 3.28 us per token, 304730.47 tokens per second\ntarget:",
+        "tokens_per_second": 16.916940118949693,
+        "prompt_tokens": 792,
+        "completion_tokens": 50,
+        "total_time_ms": 30501.97,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 18.35714164546226,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

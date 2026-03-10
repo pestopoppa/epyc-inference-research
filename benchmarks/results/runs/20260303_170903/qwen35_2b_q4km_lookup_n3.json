@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_2b_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q4_K_M.gguf",
+  "config_name": "lookup_n3",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T02:49:25.486022",
+  "results": {
+    "general": {
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "<think>\n\n</think>\n\nThis is a classic distributed systems anti-pattern known as the **Read-Your-Writes Violation within an Idempotency Window**, exacerbated by eventual consistency.\n\nHere is the breakdown of the failure, the testing gap, architectural solutions, and monitoring strategies.\n\n### 1. How Double-Charges Occurred\nThe double-charge occurred due to a **race condition between the write propagation delay and the idempotency check logic**. Here is the precise sequence of events:\n\n1.  **Request A arrives:** The system receives a payment request with `idempotency_key = \"KEY_123\"`.\n2.  **Read for Idempotency:** The system queries the **read replica** to check if \"KEY_123\" already exists.\n    *   *State:* The key does not exist on the replica yet (the previous write to the primary has not replicated).\n    *   *Result:* \"Key not found\" $\\rightarrow$ Proceed with payment.\n3.  **Write to Primary:** The system executes the payment logic and writes `KEY_123` to the **primary database**.\n4.  **Replication Lag Spike:** The network or system load causes the replication lag to spike to **500ms**.\n5.  **Request B arrives (within the 500ms window):**\n    *   The client retries the request (or a load balancer distributes it to the same node) with the same `KEY_123`.\n    *   The system again queries the **read replica** to check for the key.\n    *   *State:* Due to the 500ms lag, the replica **still does not see** the write from Request A.\n    *   *Result:* \"Key not found\" $\\rightarrow$ **Proceed with payment again.**\n6.  **Outcome:** The payment is processed twice. The primary database now holds two successful transactions for the same logical request. The idempotency mechanism failed because it relied on a data source (replica) that was not yet synchronized with the data source it was trying to protect (the primary).\n\n### 2. Why Testing Missed This\nThe team likely missed this in testing for three specific reasons:\n\n*   **Idealized Latency Environments:** Most unit and integration tests run on local loops or isolated CI environments where network latency is near-zero and replication is synchronous or",
+        "tokens_per_second": 12.8,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 39987.11,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_json": {
+        "question_id": "t1_q1_json",
+        "prompt": "Parse this into JSON with fields: name, role, department, start_date\n'Sarah Chen joined as Senior Engineer in the Platform team on 2024-03-15.'\nOutput only the JSON, no explanation.",
+        "response": "```json\n{\n  \"name\": \"Sarah Chen\",\n  \"role\": \"Senior Engineer\",\n  \"department\": \"Platform team\",\n  \"start_date\": \"2024-03-15\"\n}\n```",
+        "tokens_per_second": 13.7,
+        "prompt_tokens": null,
+        "completion_tokens": 55,
+        "total_time_ms": 4014.22,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "<think>\nHere's a thinking process that leads to the suggested solution:\n\n1.  **Analyze the Request:**\n    *   **Input:** A lock-free stack implementation using `atomic<Node*>` and `compare_exchange_weak`.\n    *   **Task:**\n        1.  Identify the ABA problem scenario (concrete sequence).\n        2.  Explain the incorrect behavior.\n        3.  Fix the issue without locks (using tagged pointers or hazard pointers).\n    *   **Output:** Structured response addressing the three points.\n\n2.  **Analyze the Code:**\n    *   `push`: Creates a new node, sets its `next` to the current `top`, and tries to CAS `top` to the new node.\n    *   `pop`: Loads `top` into `t`. Tries to CAS `top` to `t->next`. If successful, returns `t->val`. If failed, retries.\n    *   *Observation:* This is a standard \"Michael-Scott\" style lock-free stack (though Michael-Scott usually uses a dummy head). This implementation is the classic \"Herlihy's Lock-Free Stack\" or simply a CAS-based stack.\n    *   *Vulnerability:* The `pop` function loads the address of a node (`t`), uses it to determine the next pointer (`t->next`), and then CASes the global `top`. Between loading `t` and CASing, another thread might pop `t` and then push a new node, or more critically, pop `t` and then deallocate `t`. If `t` is deallocated and reused, the CAS might succeed erroneously.\n\n3.  **Part 1: The ABA Problem Scenario:**\n    *   *Concept:* Thread A reads value A. Thread B changes A to B. Thread B changes B back to A. Thread A thinks nothing changed and proceeds.\n    *   *Context:* In a stack, \"value\" is the pointer address.\n    *   *Scenario Construction:*\n        1.  Stack: `[A] -> [B] -> NULL` (A is top).\n        2.  Thread 1 (`pop`) loads `top` (which is `A`). Let's call this pointer `ptr`.\n        3.  Thread 2 (`pop`) executes. It loads `top` (`A`).",
+        "tokens_per_second": 12.81,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 39957.08,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.103333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

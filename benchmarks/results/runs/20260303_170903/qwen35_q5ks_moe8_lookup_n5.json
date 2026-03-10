@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q5ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf",
+  "config_name": "moe8_lookup_n5",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T23:41:27.382110",
+  "results": {
+    "math": {
+      "t1_q2_system_equations": {
+        "question_id": "t1_q2_system_equations",
+        "prompt": "Solve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method.",
+        "response": "To solve the system, we can use the substitution method or the elimination method. Let's use the substitution method.\n\nFrom the second equation, we have y = 12/x. Substitute this expression into the first equation:\nx\u00c2\u00b2 + (12/x)\u00c2\u00b2 = 25\nx\u00c2\u00b2 + 144/x\u00c2\u00b2 = 25\n\nMultiply both sides by x\u00c2\u00b2 to clear the fraction:\nx\u00e2\u0081\u00b4 + 144 = 25x\u00c2\u00b2\n\nRearrange the equation to form a quadratic equation in x\u00c2\u00b2:\nx\u00e2\u0081\u00b4 - 25x\u00c2\u00b2 + 144 = 0\n\nLet u = x\u00c2\u00b2. Then the equation becomes:\nu\u00c2\u00b2 - 25u + 144 = 0\n\nFactor the quadratic equation:\n(u - 16)(u - 9) = 0\n\nSo, u = 16 or u = 9. This gives us two possible values for x\u00c2\u00b2:\nx\u00c2\u00b2 = 16 or x\u00c2\u00b2 = 9\n\nTaking the square root of both sides, we get:\nx = \u00c2\u00b14 or x = \u00c2\u00b13\n\nNow, substitute these values of x back into the equation y = 12/x to find the corresponding values of y:\nIf x = 4, then y = 12/4 = 3\nIf x = -4, then y = 12/(-4) = -3\nIf x = 3, then y = 12/3 = 4\nIf x = -3, then y = 12/(-3) = -4\n\nTherefore, the real solutions are:\n(x, y) = (4, 3), (-4, -3), (3, 4), (-3, -4)",
+        "tokens_per_second": 13.61,
+        "prompt_tokens": null,
+        "completion_tokens": 384,
+        "total_time_ms": 28221.22,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "<think>\n\n</think>\n\n### 1. ABA Problem Scenario: Concrete Sequence\n\nThe ABA\n\nThe ABA problem occurs when a sequence: A sequence\nThe sequence of the sequence of operations demonstrates the ABA problem\n\nConsider a scenario where the stack initially contains a single node `Node A node with value 10.\n### A. Two threads perform the following operations:\n\n**Initial State:\n\n| **Thread 1 (Pushes** pushes a** and Thread2** and Thread2**2** interact as follows:\n\n1. **Initial State:\n- `top = 1. Thread1: `top = {Node A (val=10) is created and `top -> NULLTop -> NULL.\n\n**Step 1: Thread1 pushes a node A (T1 reads `top` (Node A (val=10) A. It then attempts to push Node B (val=20) T1 prepares new node B points to A.\n\nStep 2: Thread2 performs A is T2 reads `top` points to A. T2 pops Node A, reads `top A and T2 reads `top` (points to A) successfully. However, while T2, T2 completes its push, T2 the T2 pushes Node C (val=30) pointing to B.\n\n**Step 3: The ABA Problem**\n- T1 completes its `compare_exchange_weak` operation.\n- `top` A) A (A (was A (the A20) to 10) (val=30).\n\n###20) A) A) A.\n- `top` (A A (A (A) (A) A (A (A) (A) (A) (A) A.\n- However, T2's `top `top A `top` A A (A) (A (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A) (A)",
+        "tokens_per_second": 6.98,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 73373.6,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"phase_id\": 1,\n      \"description\": \"Data Retrieval & Historical Fetching\",\n      \"actions\": [\n        {\n          \"agent\": \"researcher_agent\",\n          \"task\": \"Search for current AAPL stock price and fetch the last 30 days of historical closing prices (e.g., via Yahoo Finance or Alpha Vantage API documentation if code is needed, but primarily web search for data or a reliable source link).\"\n        },\n        {\n          \"agent\": \"coder_agent\",\n          \"task\": \"Write a Python script to fetch 30-day historical data for AAPL using a standard library (like pandas_datareader) and calculate the 30-day moving average.\"\n        }\n      ]\n    },\n    {\n      \"phase_id\": 2,\n      \"description\": \"Execution & Verification\",\n      \"actions\": [\n        {\n          \"agent\": \"coder_agent\",\n          \"task\": \"Execute the previously written script to get the calculated 30-day moving average using the fetched data.\"\n        },\n        {\n          \"agent\": \"reviewer_agent\",\n          \"task\": \"Critique the researcher_agent's search results for accuracy and verify the coder_agent's calculation logic and final output against the retrieved data to ensure the moving average formula (sum of last 30 days / 30) is correctly applied.\"\n        }\n      ]\n    }\n  ],\n  \"context_passing\": {\n    \"researcher_to_coder\": \"Raw search results containing the current stock price and a link or raw data snippet of the last 30 days of historical closing prices.\",\n    \"coder_to_reviewer\": \"The calculated 30-day moving average value and the Python code used for calculation.\",\n    \"researcher_to_reviewer\": \"The source URL or reference for the historical data to ensure the reviewer knows which dataset the calculation was based on.\"\n  },\n  \"parallel_groups\": [\n    {\n      \"group_name\": \"Phase 1 Parallel Execution\",\n      \"agents\": [\"researcher_agent\", \"coder_agent\"],\n      \"dependency\": \"Both can start independently, but the coder_agent's script can be written using the researcher's search methodology (e.g., API endpoint) if found. However, to strictly save time, the coder_agent can write",
+        "tokens_per_second": 13.57,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37725.28,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.386666666666665,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

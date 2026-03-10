@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q6_K.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q4_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T10:14:03.815227",
+  "results": {
+    "agentic": {
+      "t2_q2_error_chain": {
+        "question_id": "t2_q2_error_chain",
+        "prompt": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.",
+        "response": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.\n\nReasoning:\nThe deployment was blocked reason for the deployment to address provided as the database connection.\n\nI will be blocked. The deployment will be blocked. The deployment was blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The deployment will be blocked. The\n\n\n\n\ndecoded  261 tokens in   17.547 seconds, speed:   14.874 t/s\nn_predict = 261\ndraft:\ntarget:",
+        "tokens_per_second": 12.641110635387749,
+        "prompt_tokens": 324,
+        "completion_tokens": 336,
+        "total_time_ms": 20646.92,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\nTo solve the problem** (A, B, C, D, E) in a sequence of the constraints are watered immediately after D**\n- **E cannot be first or last**\n- **B must be watered before D**\n\n### **Step 2 constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\n### **Reasoning Process**\n\n### **Step 3. **\n- **A**:\n  - **Step 4. **\n- **B must be watered before D\n\n### **List all valid orderings. **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n- ** **\n\n\n\n\n\ndecoded  261 tokens in   16.537 seconds, speed:   15.783 t/s\nn_predict = 261\ndraft:\ntarget:",
+        "tokens_per_second": 13.94410284657373,
+        "prompt_tokens": 159,
+        "completion_tokens": 315,
+        "total_time_ms": 18717.59,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_multistep": {
+        "question_id": "t1_q1_multistep",
+        "prompt": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.",
+        "response": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.\n\n<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the Problem:**\n    *   **Train A and Train B.\n    *   **Station A to Station B distance = Train A:**\n        *   Leaves: 9:00 AM.\n        *   Speed: 60 mph.\n        *   Direction: Towards Station B.\n    *   **Train = Train B:00 AM.\n        *   Speed: 80 mph.\n        *   Direction: Towards Station A.\n    *   **Distance = The = Time = 9:00 AM.\n    *   **Time** Time = 9:00 AM.\n    *   **Time = 10:00 AM.**\n\n    *   **Time = 10:00 AM.** Time = 10:00 AM.\n    *   **Time = 10:00 AM.** Time = 10:00 AM.\n    *   **Time = 10:00 AM.** Time = 10:00 AM.\n    *   **Time = 10:00 AM.** Time\n\n\n\n\ndecoded  259 tokens in   14.186 seconds, speed:   18.257 t/s\nn_predict = 259\ndraft:\ntarget:",
+        "tokens_per_second": 15.686597528543249,
+        "prompt_tokens": 146,
+        "completion_tokens": 266,
+        "total_time_ms": 16510.91,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 14.090603670168242,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

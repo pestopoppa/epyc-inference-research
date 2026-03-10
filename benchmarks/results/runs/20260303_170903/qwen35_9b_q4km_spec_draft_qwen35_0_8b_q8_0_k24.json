@@ -1,0 +1,53 @@
+{
+  "model_role": "qwen35_9b_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T07:45:27.811280",
+  "results": {
+    "thinking": {
+      "t3_q1_methodological_critique": {
+        "question_id": "t3_q1_methodological_critique",
+        "prompt": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.",
+        "response": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.\n\n<think>\n\n</think>\n\nHere are four methodological issues that could explain these results without bilingualism is a proxy for other language learners.**\n    The study used a sample size of only 15 points higher on executive function scores is likely due to the large amounts of time, the results in the results were not significant at least 0.01, n=200). This could be because the sample size was too small to detect a true.**\n    The study used a sample size of only 200 participants. This is a very small sample size for a study of this magnitude.\n The study used a sample size of only 200 participants.\n\n### Explanation of the effect.\n    2. **\n    3.01, n=200). This is a very small sample size.\n    4. 200).\n    5.00).\n    6.01, 200).\n    7.01, 200).\n    8.01, 200).\n    9.01, 200).\n    10.01, 200).\n    110\n\n\n\n\ndecoded  263 tokens in   36.081 seconds, speed:    7.289 t/s\nn_predict = 263\ndraft:\ntarget:",
+        "tokens_per_second": 6.9229655562721275,
+        "prompt_tokens": 163,
+        "completion_tokens": 920,
+        "total_time_ms": 37989.5,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?\n4. If Gene is unmeasured, can you still get an unbiased estimate? How?\n\n<think>\n\n</think>\n\nBased on Cancer**, Smoking** is an unblocked** by smoking is not a cause**\n    **collider bias** Smoking**\n    3.  **What is the minimal sufficient adjustment set?\n    4.  If Gene is unmeasured, can you still get an unbiased estimate? How?\n    5.  If Gene is unmeasured, can you still get an unbiased estimate? How?\n    6.  If Gene is unmeasured, can you want to estimate the causal effect of Smoking on Cancer from observational data.\n    1. What is the minimal sufficient adjustment set?\n    2.  Would conditioning on Yellow Fingers introduce bias? Explain.\n    3.  If Gene is unmeasured, can you still get an unbiased estimate? How?\n    4.  If Gene is unmeasured, can you still get an unbiased estimate? How?\n    5.  If Gene is unmeasured, can you still get an unbiased estimate? How?\n    6.  If Gene is unmeasured, can you still get an unbiased estimate? How?\n\n\n\n\n\n\ndecoded  265 tokens in   26.253 seconds, speed:   10.094 t/s\nn_predict = 265\ndraft:\ntarget:",
+        "tokens_per_second": 9.422443335559164,
+        "prompt_tokens": 145,
+        "completion_tokens": 690,
+        "total_time_ms": 28124.34,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\nStep 1: Analyze the constraints:\n1: **valid order(A < 2:\n    - **Constraint 1st or 5th.\n    - **Constraint B must be watered before D.\n\n### Step 1: Analyze the Dependencies:\n    - **Constraint: \"A must be watered immediately after D \"C must be watered immediately after D\".\n    - **Constraint: \"B must be watered before D\".\n    - **Constraint: \"E cannot be first or last.\n    - **Constraint: B must be watered before D**.\n    - **Constraint: C must be watered immediately after D**.\n    - **Constraint: E cannot be first or last**.\n    - **Constraint: B must be watered before D**.\n    - **Constraint: C must be watered immediately after D**.\n    - **Constraint: E cannot be first or last**.\n    - **Constraint: B must be watered before D**.\n    - **Constraint: C must be watered immediately after D**.\n    - **Constraint: E cannot be first or last**.\n    - **Constraint: B must be watered before D**.\n    - **Constraint: C must be\n\n\n\n\ndecoded  261 tokens in   29.439 seconds, speed:    8.866 t/s\nn_predict = 261\ndraft:\ntarget:",
+        "tokens_per_second": 8.350215058029196,
+        "prompt_tokens": 135,
+        "completion_tokens": 759,
+        "total_time_ms": 31256.68,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 8.231874649953495,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

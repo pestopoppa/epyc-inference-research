@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe8_spec_draft_qwen3_coder_0_75b_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T00:08:15.070147",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "This is a comprehensive policy analysis question. I'll analyze this AI governance policy systematically.\n\n## 1. Ways this policy could fail to achieve its intended goals:\n\n### Failure Mode 1: Overfitting to test set performance\n### Failure Mode 2: False sense of fairness from explainability scores\n### Failure Mode 3: Inadequate bias audit frequency for evolving datasets\n\n## 2. Mechanism of each failure:\n\n**Failure Mode 1 - Overfitting to test set performance:**\nThe policy's 95% accuracy threshold creates incentive for model developers to optimize specifically for the held-out test set rather than generalization. This can lead to overfitting where models perform well on the test set but fail on real-world data. The 95% threshold is arbitrarily high and may not be practically achievable for complex problems, leading to either:\n- Model rejection despite good real-world performance\n- Artificial optimization that sacrifices generalization for test performance\n\n**Failure Mode 2 - False sense of fairness from explainability scores:**\nSHAP-based explainability scores measure local feature importance but don't capture fairness implications. A model with high explainability scores can still be biased against protected groups. The 0.8 threshold is arbitrary and doesn't ensure that:\n- The model treats different demographic groups fairly\n- The explainability captures relevant decision-making factors\n- The model isn't making decisions based on discriminatory proxies\n\n**Failure Mode 3 - Inadequate bias audit frequency:**\nQuarterly bias audits may not be frequent enough for rapidly changing data or evolving societal norms. The policy doesn't account for:\n- Data drift that can introduce bias over time\n- Changes in business requirements that may affect fairness\n- Rapidly evolving definitions of fairness and bias\n\n## 3. Proposed amendments:\n\n### Amendment 1: Replace fixed accuracy threshold with performance monitoring\n**Specific change:** Replace \"95% accuracy\" with \"maintain performance within 5% of baseline performance on production data\" with monthly monitoring and adaptive thresholds.\n\n**Rationale:** This prevents overfitting to test sets while allowing flexibility for real-world performance variations.\n\n### Amendment 2: Require comprehensive fairness metrics beyond explainability\n**Specific change:** Add \"must demonstrate demographic parity, equalized odds, and calibration across protected groups\" alongside explainability requirements.\n\n**Rationale:** This ensures actual fairness rather than just explainability, addressing the false sense of fairness.\n\n### Amendment 3: Implement adaptive audit frequency based on data drift\n**Specific",
+        "tokens_per_second": 36.14,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 14167.84,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "1. **How double-charges occurred**:\n   - A payment request arrives with an idempotency key.\n   - The system checks if this key has been used before by reading from a read replica.\n   - Due to the 500ms lag, the replica hasn't yet received the previous write (from an earlier transaction).\n   - Therefore, the replica returns \"no, this key hasn't been used\" to the idempotency check.\n   - The system proceeds with processing the payment.\n   - The payment is successfully processed, and the idempotency key is stored in the primary database.\n   - However, because of the lag, the replica still shows the old state.\n   - If a retry occurs (after the 500ms lag), the new request also reads from the replica, which still doesn't show the key.\n   - The system again proceeds with processing, leading to the double charge.\n\n2. **Why testing didn't catch it**:\n   - Testing usually simulates normal conditions or typical failures.\n   - The 500ms lag spike was likely not part of the test scenarios, as it represents an extreme case of replica lag.\n   - Performance testing might not have included such extreme lag.\n   - The idempotency mechanism was working correctly for normal conditions, so it wasn't flagged as a problem in testing.\n   - The system's behavior under extreme lag conditions wasn't adequately stress-tested.\n\n3. **Architectural fixes**:\n   - **Option 1: Use primary database for idempotency checks**:\n     - **How**: All idempotency checks are performed against the primary database, which is strongly consistent.\n     - **Trade-offs**: \n       - Pros: Eliminates the risk of double-charges due to replica lag.\n       - Cons: Increases write latency, reduces scalability, and puts more load on the primary database.\n   - **Option 2: Implement a distributed consensus protocol (like Raft or Paxos)**:\n     - **How**: Use a consensus-based approach for idempotency checks, ensuring all nodes agree on the state.\n     - **Trade-offs**:\n       - Pros: Provides strong consistency guarantees across the system.\n       - Cons: Adds significant complexity, increases latency, and requires more infrastructure.\n\n4. **Monitoring to detect this before customer impact**:\n   - **Replica lag monitoring**: Monitor the lag between primary and replica databases. Alert when lag exceeds a threshold (e",
+        "tokens_per_second": 36.98,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 13846.18,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "What is the minimal sufficient adjustment set now?\n4. What if Gene is measured, but Yellow Fingers is unmeasured? What is the minimal sufficient adjustment set now?\n\nLet's analyze this step by step.\n\n### Given DAG:\n\nWe have the following directed acyclic graph (DAG):\n\n- **Smoking \u00e2\u0086\u0092 Cancer**\n- **Smoking \u00e2\u0086\u0092 Yellow Fingers**\n- **Gene \u00e2\u0086\u0092 Smoking**\n- **Gene \u00e2\u0086\u0092 Cancer**\n\nThis DAG encodes the following causal relationships:\n- **Gene** influences both **Smoking** and **Cancer**.\n- **Smoking** directly influences **Cancer** and **Yellow Fingers**.\n- There is no direct arrow from **Yellow Fingers** to **Cancer**.\n\n---\n\n### 1. **What is the minimal sufficient adjustment set?**\n\nWe are estimating the causal effect of **Smoking** on **Cancer**.\n\nTo identify the causal effect, we can use the **back-door criterion**.\n\nThe back-door path from **Smoking** to **Cancer** is:\n- **Smoking \u00e2\u0086\u0092 Cancer**\n- **Smoking \u00e2\u0086\u0092 Yellow Fingers \u00e2\u0086\u0092 ? \u00e2\u0086\u0092 Cancer** (if there is a path through Yellow Fingers)\n\nBut note: **Yellow Fingers** is a descendant of **Smoking**, so it's a **collider** on the path **Gene \u00e2\u0086\u0092 Smoking \u00e2\u0086\u0092 Yellow Fingers**, and we do **not** block the back-door path by adjusting for **Yellow Fingers**.\n\nSo, to block all back-door paths from **Smoking** to **Cancer**, we must adjust for **all** variables that:\n- Are **causes** of **Smoking**, or\n- Are **causes** of **Cancer**, **and are not descendants** of **Smoking**\n\nIn this case:\n- **Gene** is a parent of **Smoking** and **Cancer**.\n- So, adjusting for **Gene** blocks all back-door paths from **Smoking** to **Cancer**.\n\n **Minimal sufficient adjustment set**: {**Gene**}\n\n---\n\n### 2. **Would conditioning on Yellow Fingers introduce bias? Explain.**\n\n**Yellow Fingers** is a **descendant** of **Smoking**, i.e., it's on the causal path from **Smoking** to **Cancer**.\n\nIf we condition on **Yellow Fingers**, we are **opening a back-door path** that was previously blocked.\n\nMore formally:\n- The path **Gene \u00e2\u0086\u0092",
+        "tokens_per_second": 42.94,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 11924.44,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 38.68666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

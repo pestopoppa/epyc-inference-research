@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q6_K.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k16_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T01:48:39.554728",
+  "results": {
+    "thinking": {
+      "t2_q4_metacognition": {
+        "question_id": "t2_q4_metacognition",
+        "prompt": "You're asked to estimate how many piano tuners are in Chicago.\n\n1. Describe your estimation approach step by step\n2. Identify the key assumptions you're making\n3. Estimate upper and lower bounds\n4. What information would most reduce your uncertainty?\n\nThis is about your reasoning process, not the exact number.",
+        "response": "Answer the prompt\n\n<think>\nHere's a thinking process that leads to the suggested response:\n\n1.  **Analyze the Request:**\n    *   **Topic:** Fermi Problem (Estimation (Fermi Problem: Chicago's Problem (Estimation: Estimate Estimate Piano Tuning Piano in Chicago.\n    *   **Task:** Estimate the number of piano tuners in Chicago.\n    *   **Requirements:**\n        1.  Step-by-step approach.\n        2.  Key Assumptions.\n        3.  Upper and Lower Bounds.\n        4.  Information to reduce uncertainty.\n    *   **Focus:** Reasoning process over exact number.\n\n2.  **Deconstruct the Problem (The Problem:**\n    *   *Goal:* Find Total demand for piano tuning + supply.\n    *   *Total Pianos*\n        *   Demand side:\n    *   **\n    *   **Demand = (Piano Tuning (PopulationPianoPiano (SupplySupply  *\n    *   **Formula:** Number of Tuning.\n\n303.4\n\n3.3.\n    *   *   *   *3.3.\n         *\n    *     *   *\n    *   *\n    *\n        *\n    *   *\n    *   *\n\n3.4.\n*   *    *    *\n    *\n\n3.\n *\n  * *    *\n    *   *    *\n    *\n\n4.\n\n    *\n    *\n\n    *\n    *    *\n\n        *\n\n    *\n    *\n\n    * *    *\n\n    *\n        *    *\n\n        *    *    * * *    * * *\n* *\n    *\n    *  *\n    *    *  *    *\n    *  *\n *    * 4.\n\n *    *\n *\n    *  *\n    *\n\n * *\n    *\n    * *\n *\n *   * * *\n    *  * *\n    *\n    * *\n *\n *\n    *\n    *\n *\n    *\n    *\n *\n    *\n    *\n    * *\n    *\n    *\n    *\n    *\n\n    *\n * *    *",
+        "tokens_per_second": 7.24,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 70675.6,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>:\nHere's a thinking process that leads to the suggested response:\n\n1.  **Analyze the Request:**\n    *   **Topic:** The Ship of Theseus (Ship of Theseus paradox.\n    *   **Core Questions:**\n        1.  Replacing planks one by one (Identity (original ship.\n        2.  Building a second ship.\n    *   **Tasks:**\n        1.  **Identity over\n        3.   **Structure:\n        *   **Structure:**\n        *   * **\n        4.  **Requirements:\n         1.  **Identify the core issues.\n2. **Goals:**\n        *   **Input:** Consider the Ship of Theseus (Replace ship.\n        *   **Task:**\n         **\n\n        **:**\n        *  **:**\n            * **\n\n        **\n\n        * **\n            *\n1. **        **:**\n1.  **Introduction:\n  *   **\n 1.  **\n *  * **:**\n        **\n1.  **\n  **\n *  *\n **\n *   *\n  *\n    *   **\n  *  **\n\n    **\n    **\n        *\n *  **\n   *  **\n        **\n *  **\n *\n  **\n  *  **\n\n    **\n *\n\n  *\n **\n **\n\n *\n        *\n\n   *\n **\n *\n **\n   **\n *  *\n\n **\n *  **\n *\n  **\n *\n **\n\n        *\n  **\n\n   *\n  **\n\n  **\n   *\n  *   *\n *\n**\n        * **\n **\n\n   *\n**\n        *\n**\n\n        **\n  *\n  *\n  **\n    *\n\n  *\n  **\n\n  **\n *\n  *\n  *\n\n  *\n    *\n        *\n *\n *\n        *\n **\n    **\n *\n *\n *\n  *\n  *\n  *\n   *\n *\n  *\n  **\n        *\n  *\n   **\n        *\n  *\n\n  *\n  *\n  *\n  *\n  **\n  **\n  *",
+        "tokens_per_second": 6.82,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 75105.99,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t1_q1_sequential": {
+        "question_id": "t1_q1_sequential",
+        "prompt": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.",
+        "response": "[{\"tool\": \"grep_search\", \"arguments\": {\"pattern\": \"ERROR\", \"path\": \"/var/log/app.log\"}}]",
+        "tokens_per_second": 13.75,
+        "prompt_tokens": null,
+        "completion_tokens": 28,
+        "total_time_ms": 2035.69,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 9.270000000000001,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

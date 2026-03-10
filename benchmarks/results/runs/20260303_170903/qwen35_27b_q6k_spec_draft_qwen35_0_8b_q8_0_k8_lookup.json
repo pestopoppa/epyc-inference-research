@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_27b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-27B-GGUF/Qwen3.5-27B-Q6_K.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T05:28:01.074993",
+  "results": {
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "Here are the two bugs in the binary search implementation, along with their triggers, explanations, and fixes.\n\n### Bug 1: Off-by-One Error in Initialization\n\n**1. Input that triggers the bug:**\nSearching for a value that exists at the very last index of the array.\n```python\narr = [1, 2, 3]\ntarget = 3\n```\n\n**2. What goes wrong:**\nThe initialization `right = len(arr)` sets the search range to `[0, 3]`. However, the `while` loop condition is `left < right`.\nIn a standard binary search with an exclusive upper bound (`right`), the valid indices are `0` to `len(arr) - 1`.\nWhen the search narrows down to the last element:\n*   `left` becomes 2, `right` remains 3.\n*   `mid` becomes `(2 + 3) // 2 = 2`.\n*   The code checks `arr[2]`, finds the target, and returns 2.\n*   *Wait, this actually works for finding the element.* Let's look closer at the logic flow when the element is **not** found or when the bounds shift incorrectly.\n\nActually, the specific logic flaw here is that `right` is initialized to `len(arr)`, but the loop condition `left < right` combined with the update logic `right = mid` makes the range `[left, right)`.\nIf `arr = [10]` and `target = 10`:\n1. `left=0`, `right=1`.\n2. `mid=0`. `arr[0] == 10`. Returns 0. (Works)\n\nLet's re-evaluate Bug 1. The classic error with `right = len(arr)` is when the target is smaller than everything, or when the logic relies on `left` moving up.\nIf `arr = [10, 20]`, `target = 5`:\n1. `left=0`, `right=2`. `mid=1`. `arr[1]=20 > 5`. `right=1`.\n2. `left=0`, `right=1`. `mid=0`. `arr[0]=10 > 5`. `right=0`.\n3. Loop ends. Returns -1. (Works)\n\n**",
+        "tokens_per_second": 12.85,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 39848.46,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "<think>\n\n</think>\n\nThis is a classic problem in causal inference involving Directed Acyclic Graphs (DAGs) and the **Backdoor Criterion**.\n\nHere is the step-by-step logical deduction and solution for your specific graph:\n\n**Graph Structure:**\n1.  $Gene \\to Smoking$\n2.  $Gene \\to Cancer$\n3.  $Smoking \\to Cancer$\n4.  $Smoking \\to Yellow\\ Fingers$\n\n**Target:** Estimate the causal effect of $Smoking$ on $Cancer$ ($P(Cancer \\mid do(Smoking))$).\n\n---\n\n### 1. What is the minimal sufficient adjustment set?\n\nTo identify the causal effect using observational data, we must block all **backdoor paths** (non-causal paths) from $Smoking$ to $Cancer$ while not blocking any **front-door paths** (the direct causal path of interest).\n\n**Analyze the paths:**\n*   **Causal Path:** $Smoking \\to Cancer$. (We must **not** block this).\n*   **Backdoor Path:** $Smoking \\leftarrow Gene \\to Cancer$.\n    *   This path exists because $Gene$ is a common cause of both $Smoking$ and $Cancer$.\n    *   This path is \"open\" at the node $Gene$ (a fork).\n\n**Applying the Backdoor Criterion:**\n*   We need to block the backdoor path by conditioning on a set of variables $Z$ that blocks all backdoor paths and contains no descendants of $Smoking$.\n*   The only confounding factor is $Gene$.\n*   Therefore, conditioning on **$Gene$** is sufficient to close the backdoor path.\n\n**Conclusion for Q1:**\nThe minimal sufficient adjustment set is **$\\{Gene\\}$**.\n\n*(Note: The set $\\{Gene, Yellow\\ Fingers\\}$ would also work technically, but it is not **minimal** because conditioning on Yellow Fingers is unnecessary and potentially harmful, as explained below.)*\n\n---\n\n### 2. Would conditioning on Yellow Fingers introduce bias? Explain.\n\n**Yes, conditioning on Yellow Fingers would likely introduce bias.**\n\n**Explanation:**\n1.  **Position in the Graph:** $Yellow\\ Fingers$ is a **descendant** of $Smoking$ ($Smoking \\to Yellow\\ Fingers$).\n2.",
+        "tokens_per_second": 13.5,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37919.59,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"id\": 1,\n      \"agent\": \"researcher_agent\",\n      \"task\": \"Fetch current AAPL stock price and download 30 days of historical daily closing prices.\",\n      \"output_key\": \"stock_data\"\n    },\n    {\n      \"id\": 2,\n      \"agent\": \"coder_agent\",\n      \"task\": \"Calculate the 30-day moving average using the historical closing prices provided in the input context.\",\n      \"output_key\": \"calculated_ma\"\n    },\n    {\n      \"id\": 3,\n      \"agent\": \"reviewer_agent\",\n      \"task\": \"Verify that the calculated 30-day moving average logic is correct and consistent with the provided historical data.\",\n      \"output_key\": \"verification_status\"\n    }\n  ],\n  \"context_passing\": {\n    \"phase_1_to_2\": {\n      \"source\": \"stock_data\",\n      \"content\": \"Current price and list of historical daily closing prices (date, close)\",\n      \"required\": true\n    },\n    \"phase_2_to_3\": {\n      \"source\": \"calculated_ma\",\n      \"content\": \"The computed 30-day moving average value and the data subset used\",\n      \"required\": true\n    },\n    \"phase_1_to_3\": {\n      \"source\": \"stock_data\",\n      \"content\": \"Historical data for verification reference\",\n      \"required\": true\n    }\n  },\n  \"parallel_groups\": [\n    {\n      \"group_id\": \"P1\",\n      \"agents\": [\"researcher_agent\"],\n      \"dependencies\": []\n    },\n    {\n      \"group_id\": \"P2\",\n      \"agents\": [\"coder_agent\"],\n      \"dependencies\": [\"stock_data\"]\n    },\n    {\n      \"group_id\": \"P3\",\n      \"agents\": [\"reviewer_agent\"],\n      \"dependencies\": [\"stock_data\", \"calculated_ma\"]\n    }\n  ],\n  \"failure_handling\": {\n    \"researcher_agent_failure\": {\n      \"strategy\": \"retry_once\",\n      \"fallback\": \"Trigger a manual alert to the orchestrator if retry fails. Do not proceed to coding or reviewing.\",\n      \"",
+        "tokens_per_second": 13.49,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37957.52,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.280000000000001,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

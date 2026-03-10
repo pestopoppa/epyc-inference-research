@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q5ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf",
+  "config_name": "moe8_lookup_n3",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T23:36:55.228898",
+  "results": {
+    "math": {
+      "t1_q2_system_equations": {
+        "question_id": "t1_q2_system_equations",
+        "prompt": "Solve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method.",
+        "response": "<think>\n\n</think>\n\nTo solve the system of equations for all real solutions $(x, y)$, we will use the algebraic manipulation and substitution method.\n\nThe given the two equations:\n1. $x^2 + y^2 = 25$\n2. $xy = 12$\n\nWe can treat this the the following:\n1. $x^2 + y^2 = 25$\n2. $xy = 12$\n\n### Step 1: Use the identity $(x+y)^2$ and $(x-y)^2$\nWe know the following algebraic identities:\n$(x+y)^2 = x^2 + y^2 + 2xy$\n$(x-y)^2 = x^2 + y^2 - 2xy$\n\nSubstitute the given values ($x^2 + y^2 = 25$ and $xy = 12$) into these identities.\n\n$(x+y)^2$:\n$(x+y)^2 = 25 + 2(12) = 25 + 24 = 49$\nTaking the square root:\n$x+y = \\pm 7$\n\nNext, substitute into $(x+y)^2$:\n$(x-y)^2 = 25 - 2(12) = 25 - 24 = 1$\nTaking square root:\n$x-y = \\pm 1$\n\n### Step 2: Solve for x and y from the linear systems of two variables\nWe now we have four possible systems of systems based on the signs of $x+y$ and $x-y$.\n\n#### Case 1: $x+y=7$ and $x-y=1$\nAdding the equations:\n$2x = 8 \\implies x=4$\nSubtracting: $x$2$2: $x-y$\n$\n$y=  $  $x = 2$\nSolution: $(4,2,  $(4, 3)3)$\n\n#### Case 2: $x+y=7$ and $x-y=-1$\nAdding equations:\n$2x = 6 \\implies x=3$\nSubtracting: $(x-y)\n$= 4$\nSolution: $(3, 4)$\n\n#### Case",
+        "tokens_per_second": 8.66,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 59104.64,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "Here is a solution.\n\n<think>\n\n</think>\n\n### 1. ABA Problem Scenario\n\nThe **ABA problem** occurs when a memory locations where a thread ABA problem when a memory location (the `top` changes from A \u00e2\u0086\u0092 B \u00e2\u0086\u0092 A` and then back to A` due to intermediate values. This can be a value A simple sequence of operations.\n\n#### Concrete Sequence of Operations\n\nConsider a stack `top is a stack initially `top`top = A (initially.\n\n**Timeline:\n1. **Initial State: `top` points to `A` (Node1`.\n2. **Thread  `**\n3. **Thread T1** (T1** (A. **T1** **T2. **T1** **T1** **T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**T1**",
+        "tokens_per_second": 10.57,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 48443.02,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"phase_id\": \"1\",\n      \"name\": \"Data Acquisition\",\n      \"primary_agent\": \"researcher_agent\",\n      \"task\": \"Search for current AAPL stock price and retrieve 30-day historical data.\",\n      \"duration_estimate\": 30s (Researcher\n      \"\": \"\n      \": { \"\n      \"\n      \"inputs\": [\n        \"Query: AAPL current stock price of AAPL (Apple Inc\",\n        \"Requirement: 30-day moving average calculation\"\n      ],\n      \"outputs\": [\n        \"Current_stock_price\": 185.500\"\n        \"\": {\n        \"\": \"120\"\n        \"\n      \"  \"\n        \"30-day_data\": [\n          \"    \"\n        \"2024-01-01\", 1450150.00\",\n        \"\n        \" 2024-01-3110150.00\n        \"\n        \"\n      \"\n        \"\n      \"\n    \"\n      \" 3. \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"\n    \"",
+        "tokens_per_second": 9.73,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 52628.85,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 9.653333333333334,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "model_role": "qwen35_9b_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q4_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T07:35:57.662085",
+  "results": {
+    "thinking": {
+      "t3_q1_methodological_critique": {
+        "question_id": "t3_q1_methodological_critique",
+        "prompt": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.",
+        "response": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.\n1.\n2.\n3.\n4.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed effect.\nFor each issue, explain how it could produce the observed\n\n\n\n\ndecoded  262 tokens in   10.640 seconds, speed:   24.624 t/s\nn_predict = 262\ndraft:\ntarget:",
+        "tokens_per_second": 20.76122373942921,
+        "prompt_tokens": 111,
+        "completion_tokens": 322,
+        "total_time_ms": 12619.68,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?\n\nLet'sufficient adjustment set, when conditioning on it is a set is sufficient adjustment set\" is the set of variables that must be estimated. Smoking -> Cancer\n Smoking -> Yellow Fingers\n Gene -> Smoking\n Gene -> Cancer\n\nWait, Smoking -> Cancer\n.\n Smoking -> Smoking\n    Fingers introduce a collider between Smoking and Cancer\n    Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow Fingers\n Smoking -> Yellow\n\n\n\n\ndecoded  278 tokens in   27.171 seconds, speed:   10.232 t/s\nn_predict = 278\ndraft:\ntarget:",
+        "tokens_per_second": 9.522341536933325,
+        "prompt_tokens": 157,
+        "completion_tokens": 828,
+        "total_time_ms": 29194.5,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\n<think>\n\n2.  **)**\n    *C must be watered immediately after D (Wait, the prompt says \"List all valid orderings. Show your reasoning process.)\n    *   **Constraint 1: A must be watered before B**\n    *   **Constraint 2: C must be watered immediately after D**\n    *   **Constraint 3: E cannot be first or last**\n    *   **Constraint 4: B must be watered before D**\n    *   **Constraint 5:**\n    *   **Constraint 6: C must be watered immediately after D**\n    *   **Constraint 7: E cannot be first or last**\n    *   **Constraint 8: B must be watered before D**\n    *   **Constraint 9: A must be watered before B**\n    *   **Constraint 10: C must be watered immediately after D**\n    *   **Constraint 11: E cannot be first or last**\n    *   **Constraint 12: B must be watered before D**\n    *   **Constraint 13: A must be watered before B**\n    *   **Constraint 14:\n\n\n\n\ndecoded  264 tokens in   13.810 seconds, speed:   19.116 t/s\nn_predict = 264\ndraft:\ntarget:",
+        "tokens_per_second": 16.747071641308175,
+        "prompt_tokens": 107,
+        "completion_tokens": 437,
+        "total_time_ms": 15763.95,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 15.676878972556901,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

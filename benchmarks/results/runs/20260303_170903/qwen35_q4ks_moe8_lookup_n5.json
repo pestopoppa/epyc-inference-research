@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe8_lookup_n5",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T23:20:40.362656",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "4. Suppose we consider the sequence of functions f_N(x) = sum_{n=1}^{N} (x^n / n!) * sin(n).\n\n<think>\n   (a) What is the relationship between f(x) and its partial sums of f_N(x) as N -> infinity?\n\n<think>\n\n<think>\n\nLet's is a) What is the relationship between f(x) and the partial sums f_N(x) as N -> infinity?\n\n<think>\n\n</think>\n\nHere is the step-by-step derivation and solution to the solution to the problem.\n\n### 1. Differentiability of $f(x)$\n\nThe function is defined as:\n$$f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$$\n\n**Proof:**\n\nThe series of the function $f(x)$ is differentiable everywhere on $\\mathbb{R}$.\n\nThe function is a power series of the form $\\sum_{n=1}^{\\infty} a_n x^n$ where the coefficients are $a_n = \\frac{\\sin(n)}{n!}$.\n\n**\n\nThe radius of convergence.\n\nTo determine the radius of convergence $R$, we use the ratio test on the ratio:\n$$L = \\lim_{n \\to \\infty} \\left| \\frac{a_{n+1}}{a_n} \\right| = \\lim_{n \\to \\infty} \\frac{ \\frac{\\sin(n+1)}{(n+1)!} / \\frac{\\sin(n)}{n!} \\right| = \\lim_{n \\to \\infty} \\frac{ \\frac{n+1}$$\n\\{|\\sin(n+1)}{n!n+}\n$$Since $\\sin(n)$ is bounded (bounded, bounded (bounded and $0 < 1$, we have $L = \\lim_{n \\to \\infty} \\frac{1}{n+1} = 0$.\nThus, the radius of convergence is $R = 1/L = \\infty$.\n\nSince the power series converges for all $x \\in \\mathbb{R}$, and a property of the radius of convergence.\n\nA power series converges uniformly on any compact subsets of $\\mathbb{R}$, is differentiating the function $f(x)$ is differentiable everywhere on $\\",
+        "tokens_per_second": 9.28,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 55193.05,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "<think>\n\n</think>\n\nTo determine all valid orderings for watering the 5 plants (A, B, C, D, E), let's break down the constraints and deduce the possible sequences step-by-step.\n\n### 1. Analyze the Constraints\n\nLet the positions in the sequence be numbered 1 through 5.\n*   **Constraint 1:** $A$ must be before $B$ ($A < B$).\n*   **Constraint 2:** $C$ must be immediately after $D$ ($D, C$ is a fixed block). Let's treat $(DC)$ as a single unit.\n*   **Constraint 3:** $E$ cannot be first or last ($E \\neq 1$ and $E \\neq 5$).\n*   **Constraint 4:** $B$ must be before $D$ ($B < D$).\n\n### 2. Combine Logical Dependencies\n\nLet's chain the \"before\" constraints together:\n1.  From Constraint 1 and 4: $A < B$ and $B < D$.\n    *   Therefore: $A < B < D$.\n2.  From Constraint 2: $D$ is immediately followed by $C$.\n    *   Therefore: The sequence segment is $\\dots A \\dots B \\dots D, C \\dots$.\n\nSo, we have a core sequence of four specific items in relative order: **$A \\to B \\to D \\to C$**.\nSince $D$ and $C$ are stuck together as $(DC)$, the relative order of the blocks is:\n**$A \\dots B \\dots (DC)$**.\n\nWe have 5 total positions. The item $E$ must be inserted into this chain.\nThe available slots relative to the fixed chain $A - B - (DC)$ are:\n1.  Before $A$\n2.  Between $A$ and $B$\n3.  Between $B$ and $(DC)$\n4.  After $(DC)$\n\nLet's denote the chain of 4 items as a single sequence $S = [A, B, DC]$. The length of this chain is 4 distinct entities (where $DC$ counts as one unit for positioning relative to $B$ and $A$, but occupies 2 positions in the final list).\nWait, it's better to visualize the positions directly.\n\n**Relative",
+        "tokens_per_second": 13.65,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37502.54,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nThis policy attempts to establish a robust AI governance framework by setting three distinct quantitative thresholds: **Accuracy (95%)**, **Explainability (>0.8 SHAP)**, and **Bias Audits (Quarterly)**. While the intention is to ensure high quality, safety, and fairness, the specific metrics and constraints chosen create significant risks of misalignment, gaming, and operational paralysis.\n\nHere is an analysis of the policy's failure modes, mechanisms, and proposed amendments.\n\n---\n\n### 1. Failure Mode: The \"Accuracy Trap\" and Metric Myopia\n**The Failure:** Mandating a rigid **95% accuracy** threshold can lead to the deployment of models that are statistically accurate but practically useless or misleading.\n\n**The Mechanism:**\n*   **Class Imbalance:** In many real-world scenarios (e.g., fraud detection, medical diagnosis), the target class is rare (e.g., 1% of cases). A model that simply predicts \"No Fraud\" for every instance achieves 99% accuracy but fails completely at its intended purpose.\n*   **Overfitting to the Test Set:** To meet the 95% threshold, data scientists might inadvertently (or intentionally) tune hyperparameters specifically to maximize performance on the *specific* held-out test set provided, leading to poor generalization on live traffic.\n*   **Cost of Errors:** Accuracy treats false positives and false negatives equally. In high-stakes domains (e.g., lending or healthcare), a 5% error rate might be catastrophic depending on the *type* of error. A model with 95% accuracy could still be unsafe if the 5% error occurs in the most dangerous edge cases.\n\n**Proposed Amendment:**\nReplace the single \"Accuracy\" metric with a **domain-specific suite of metrics** based on the cost function.\n*   *Amendment:* \"All models must meet a **F1-score of >0.90** (or **Recall > 0.95** if false negatives are critical) and a **Precision > 0.90** (if false positives are critical) on a stratified hold-out set, validated against a cost-sensitive loss function.\"\n\n**Trade-offs:**\n*   **Pros:** Ensures the model actually solves the business problem; prevents trivial solutions on imbalanced data; aligns model performance with business risk.\n*   **Cons:** Increases complexity in model evaluation; requires deeper domain expertise to define",
+        "tokens_per_second": 13.64,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37549.47,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 12.19,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

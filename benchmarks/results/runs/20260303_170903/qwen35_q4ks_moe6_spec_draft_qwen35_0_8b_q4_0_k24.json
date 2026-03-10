@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe6_spec_draft_qwen35_0_8b_q4_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T18:18:47.177444",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the given function:**\n    The function is defined as a power series: $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$.\n    The general term $a. $a: $\\frac{x^n}{n!}sin(n)$\n    This looks like an exponential.\n    The function $n=    The general term $x^n/n!$ * sin(n)$.\n\n2. **Analyze the function:\n\n1. **Analyze the given function $f(x)$ is a.\n\n1.\n The problem: The problem.\n\n2.\n\nThe function f(x).\n   The series is $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$.\n   Let's look at the series is.\n   - **\n2. 2.\n\n3.\n1. **Question 1: Differentiability.\n   .\n -\n1.\n    .\n   The series has the of derivatives are $f(x)",
+        "tokens_per_second": 8.43,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 30361.99,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "<think>\nHere's a thinking process that leads to the suggested solution:\n\n1.  **Understandards the Analysis of the Code Analysis of the code:**\n    ```python\n    def binary_search(arr, target):\n        left, right = 0, len(arr)\n        while left < right:\n            mid = (left + right) // 2\n            if arr[mid] == target:\n                return mid\n            elif arr[mid] < target:\n                left = mid\n            else:\n                right = mid\n        return -1\n    ```\n\n2.  **Identify Bug #1: The `mid` calculation and loop.**\n    *   Current: `mid = (left + right) // 2`\n    *   Potential issue: When `left` and `right` are adjacent (e.g., `left = 2, right =3`), `mid` will point to `mid` is `2`.\n    *   If `arr[mid] < target`, `left` becomes `mid`. If `arr[mid] > target`, `right` becomes `mid`.\n    *   *   The `mid` is equal to `left` (when `",
+        "tokens_per_second": 11.73,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 21825.3,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_system": {
+        "question_id": "t2_q4_system",
+        "prompt": "Implement a simple rate limiter class in Python:\n- Allow max N requests per time window W seconds\n- is_allowed() returns True/False\n- Should work correctly across multiple calls\n\nUse only standard library. Handle edge cases.",
+        "response": "<think>\nLet me design a rate limiter class that:\n1. Tracks requests within a time window\n2. Returns True/False based on whether a request is allowed\n3. Works correctly across multiple calls\n4. Uses only standard library\n5. Handles edge cases\n\nKey considerations:\n- Thread safety (if needed)\n- Time window management\n- Request counting\n- Memory efficiency\n- Edge cases: zero window, negative requests, concurrent calls, etc.\n\nI'll implement a sliding window or fixed window rate limiter. A fixed window is simpler and more efficient.\n\nLet me think about the design:\n- Store timestamps of recent requests\n- Remove expired requests from the window\n- Count remaining requests\n- Check if count < max\n\nFor better accuracy, I could use a sliding window approach, but fixed window is simpler and usually sufficient.\n\nLet me write a clean implementation with proper documentation and edge case handling.\n</think>\n\n```python\nimport time\nfrom collections import deque\nfrom typing import Optional\n\n\nclass RateLimiter:\n    \"\"\"\n    A simple rate limiter using a sliding window algorithm.\n\n    Allows a maximum of `max_requests` requests within `window_seconds` seconds.\n    Works correctly across multiple calls and",
+        "tokens_per_second": 13.52,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18929.95,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.226666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

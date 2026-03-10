@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T18:29:25.226869",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the Request:**\n    *   Function: $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$.\n    *   Task 1: Prove/disprove differentiability on $\\mathbb{R}$.\n    *   Task 2: Find a closed-form expression using complex exponentials (hint: $\\text{Im}(e^{x e^i})$).\n    *   Task 3: Calculate $\\lim_{x \\to \\infty} \\frac{f(x)}{e^x}$.\n\n2.  **Task 1: Differentiability**\n    *   *Initial thought:* Power series are usually differentiable within their radius of convergence. Let's check the radius of convergence (ROC).\n    *   *Root Test:* $R^{-1} = \\limsup_{n \\to \\infty} \\sqrt[n]{|a_n|}$ where $a_n = \\frac{\\sin(n)}{n!}$.\n    *   $|a_n| \\le \\frac{1}{n!",
+        "tokens_per_second": 13.42,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19075.44,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "<think>\n\n</think>\n\nTo determine all valid orderings for watering the 5 plants (A, B, C, D, E), let's break down the constraints logically and construct the sequence step-by-step.\n\n### 1. Analyze the Constraints\n\nLet the positions in the sequence be denoted by numbers 1 through 5.\n*   **Constraint 1:** A must be watered before B ($A < B$).\n*   **Constraint 2:** C must be watered immediately after D ($D, C$). This forms a fixed block $[DC]$.\n*   **Constraint 3:** E cannot be first or last ($E \\neq 1$ and $E \\neq 5$). Therefore, $E \\in \\{2, 3, 4\\}$.\n*   **Constraint 4:** B must be watered before D ($B < D$).\n\n### 2. Combine the Ordering Constraints\n\nLet's chain the relative ordering constraints together:\n1.  From Constraint 1: $A < B$\n2.  From Constraint 4: $B < D$\n3.  From Constraint 2: $D$ is immediately followed",
+        "tokens_per_second": 13.4,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19111.17,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nHere is an analysis of the proposed AI governance policy, broken down by failure modes, mechanisms, proposed amendments, and the associated trade-offs.\n\n### Executive Summary\nWhile the policy establishes clear quantitative targets, it suffers from **metric rigidity**, **contextual blindness**, and **inappropriate generalization**. By mandating a single \"accuracy\" threshold and a specific \"SHAP\" threshold for *all* models, the policy risks encouraging gaming of metrics, suppressing high-value complex models, and failing to address the actual risks of specific use cases.\n\n---\n\n### 1. Failure Mode: The \"One-Size-Fits-All\" Accuracy Trap\n\n**Mechanism of Failure:**\nThe policy mandates a strict **95% accuracy** threshold for *all* deployed models.\n*   **Impossibility:** In many real-world scenarios (e.g., rare disease detection, fraud detection, or highly imbalanced datasets), 95% accuracy is statistically impossible or even undesirable. For a fraud dataset where fraud is 1% of transactions, a model that simply predicts \"No Fraud\" for every case achieves 99% accuracy but is useless.\n*   **Metric Gaming:** To meet the 95% threshold",
+        "tokens_per_second": 9.49,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 26968.44,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 12.103333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

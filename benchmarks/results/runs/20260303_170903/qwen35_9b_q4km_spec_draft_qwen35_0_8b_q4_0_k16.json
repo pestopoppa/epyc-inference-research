@@ -1,0 +1,53 @@
+{
+  "model_role": "qwen35_9b_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q4_0_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T07:34:51.459540",
+  "results": {
+    "thinking": {
+      "t3_q1_methodological_critique": {
+        "question_id": "t3_q1_methodological_critique",
+        "prompt": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.",
+        "response": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.\n\n<think>\n\n1 paper claims: \"We found that bilingual children score 15 points higher on executive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n2.\n    the observed effect.\n    *methodological issues that could explain how it could produce the observed effect.\n    1.  **Selection Bias.\n    2.  **Explanation:** For each issue, explain how it could produce the observed effect.\n    3.  **Constraint:** The user's request is the observed effect.\n    4. **Constraint:** The user's request.\n    5. **Constraint:** The response.\n    6. **Constraint:** The user's request is to identify at least 4 methodological issues that could explain these results without bilingualism actually causing cognitive enhancement.\n    7. **Constraint:** For each issue, explain how it could produce the observed effect.\n    8. **Constraint:** The user wants to identify at least 4 methodological issues that could explain these results without bilingualism actually causing cognitive enhancement.\n    9. **Constraint:** For each issue, explain how it could produce the observed effect.\n    10\n\n\n\n\ndecoded  260 tokens in   17.601 seconds, speed:   14.772 t/s\nn_predict = 260\ndraft:\ntarget:",
+        "tokens_per_second": 13.28300776340715,
+        "prompt_tokens": 147,
+        "completion_tokens": 480,
+        "total_time_ms": 19573.88,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?\n\n<think> d the variable we need to identify the causal structure:** Smoking -> Yellow Fingers\n    1. 1. **Identify the causal inference.\n    2. **Bias from the causal effect of the causal effect of Smoking on Cancer -> Smoking -> Yellow Fingers,\nGene -> Smoking -> Cancer -> Smoking -> Yellow Fingers,\n    1. **Minimal Sufficient Adjustment Set**\n    2. **Bias from the observational data.\n    1. **Minimal Sufficient Adjustment Set**\n    2. **Bias**\n    3. **Unbiased estimate the causal effect of Smoking on Cancer from observational data.\n    1. What is the minimal sufficient adjustment set?\n    2. Would conditioning on Yellow Fingers introduce bias? Explain.\n    3. If Gene is unmeasured, can you still get an unbiased estimate? How?\n    1. **Minimal Sufficient Adjustment Set**\n    The minimal sufficient adjustment set is the set of variables that,\n    1. **Minimal Sufficient Adjustment Set**\n    2. **Bias**\n    3. **Unmeasured Gene**\n    1. **Minimal Sufficient Adjustment Set**\n    2. **Bias**\n\n\n\n\ndecoded  264 tokens in   20.122 seconds, speed:   13.120 t/s\nn_predict = 264\ndraft:\ntarget:",
+        "tokens_per_second": 11.95509773971669,
+        "prompt_tokens": 157,
+        "completion_tokens": 540,
+        "total_time_ms": 22082.63,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\nTo satisfy the constraints, we analyze the dependencies.\n\n### Step 1: Analyze Constraints:\n1. $C$ must be watered immediately after $D$: This means the sequence: $B$ must be watered before $D$.\n4 $B$ must be watered before $D$.\n    *$B$ must be watered before $D$ (or $C$ must be watered immediately after $D$.\n $E$ cannot be first or last.\n $B$ must be watered before $D$.\n\nLet's re-read carefully read the prompt again.\n \"B must be watered before D\"\n Wait, the prompt says \"B must be watered before D\".\n Wait, the prompt says \"B must be watered before D\".\n Wait, the prompt says \"B must be watered before D\".\n Wait, the prompt says \"B must be watered before D\".\n Wait, the prompt says \"B must be watered before D\".\n Wait, the prompt says \"B must be watered before D\".\n Wait, the prompt says \"B must be watered before D\".\n Wait, the prompt says \"B must be watered before D\".\n Wait, the\n\n\n\n\ndecoded  260 tokens in   17.270 seconds, speed:   15.055 t/s\nn_predict = 260\ndraft:\ntarget:",
+        "tokens_per_second": 13.537619482508873,
+        "prompt_tokens": 129,
+        "completion_tokens": 450,
+        "total_time_ms": 19205.74,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 12.925241661877571,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

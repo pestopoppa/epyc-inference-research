@@ -1,0 +1,53 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe4_spec_draft_qwen35_0_8b_q4_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T18:10:36.692857",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "4. Can you simplify the expression for f(x) further?\n5. Evaluate f(1).\n\n<think>\nHere is a thinking process to solve the problem regarding the function $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$:\n\n1.  **Analyze the function definition:**\n    $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$.\n    This looks very similar to the Taylor series expansion of $e^x$, but with $\\sin(n)$ as the coefficient instead of 1.\n\n2.  **Part 1: Differentiability:**\n    *   I need to check if the series converges uniformly on compact sets or if I can differentiate term by term.\n    *   Let $a_n(x) = \\frac{x^n}{n!} \\sin(n)$.\n    *   Ratio test for absolute convergence of the series $\\sum |a_n(x)|$:\n        $|\\frac{a_{n+1}(x)}{a_n(x)}| = |\\frac{x^{n+1} \\sin(n+",
+        "tokens_per_second": 13.55,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18894.36,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_optimization": {
+        "question_id": "t2_q1_optimization",
+        "prompt": "A farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nWhat dimensions maximize the enclosed area? What is the maximum area?\n\nSet up the optimization problem and solve it.",
+        "response": "<think>\n\n</think>\n\nTo solve this optimization problem, we will proceed through the following steps: defining the variables, establishing the constraints, formulating the objective function, finding the critical points using calculus, and verifying the maximum.\n\n### 1. Define Variables and Constraints\n\nLet the dimensions of the rectangular field be:\n*   $x$: The length of the sides perpendicular to the river (width).\n*   $y$: The length of the side parallel to the river (length).\n\n**Constraint:**\nThe total amount of fencing available is 200 meters. Since one side is bordered by a river, fencing is only required for two widths ($x$) and one length ($y$).\n$$2x + y = 200$$\n\n**Objective Function:**\nWe want to maximize the area ($A$) of the rectangle.\n$$A = x \\cdot y$$\n\n### 2. Express the Objective Function in One Variable\n\nFrom the constraint equation, we can solve for $y$ in terms of $x$:\n$$y = 200 - 2x$$\n\nSubstitute this expression into the area equation:\n$$A(x) = x(200 - 2x)",
+        "tokens_per_second": 13.56,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18881.43,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_word_problem": {
+        "question_id": "t1_q1_word_problem",
+        "prompt": "A store offers a 20% discount on all items. After the discount, a 8% sales tax is applied. If an item originally costs $150:\n\n1. What is the price after discount?\n2. What is the final price after tax?\n3. What percentage of the original price is the final price?\n\nShow your work for each part.",
+        "response": "<think>\n\n</think>\n\nHere is the step-by-step solution to the problem.\n\n### Given Data Analysis of the Problem Variables\nGiven Data\n*Given Information\n*   **Original Price ($COST (List Price ($150**\n*   **Discount Rate**: 20%\n*   **Tax Rate**: 8%\n*   **Original Price**: $150\n\n### 1. Price After Discount\n\n1.  **Price After Discount\n   **\n\n1.  Price After Discount\n\nThe Price\n$$\n$$1.  **Calculate the**\n\n150 \\times (Original Price = $\\times(1000\\%\n\n1.  **Calculate the Discount10.\n\n1.  **Calculate the Price10.  **Calculate the.\n\n**Step 1: Calculate the discount amount: $150 \\times 20\\%$\n**Step 2: Calculate the discounted price: $150 -  - 30 = $=10 = $10$ (20$\n**Answer: The final $120\n\n20 \\text{20\\%} \\times 150 = 3",
+        "tokens_per_second": 7.66,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 33420.46,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.590000000000002,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

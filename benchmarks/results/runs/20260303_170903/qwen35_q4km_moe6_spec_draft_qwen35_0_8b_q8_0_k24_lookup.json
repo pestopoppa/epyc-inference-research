@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe6_spec_draft_qwen35_0_8b_q8_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T21:56:25.076475",
+  "results": {
+    "coder": {
+      "t2_q3_optimize": {
+        "question_id": "t2_q3_optimize",
+        "prompt": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.",
+        "response": "<think>\nThis is a classic two-sum problem variant where we need to count pairs that sum to a target. The naive O(n\u00c2\u00b2) solution checks all pairs, which is too slow for n > 10^6.\n\nThere are two main approaches to optimize this:\n\n1. **Hash Map Approach (O(n))**: For each number, check if its complement (target - num) exists in a hash map. This is O(n) time and O(n) space.\n\n2. **Sorting + Two Pointers (O(n log n))**: Sort the array and use two pointers from both ends. This is O(n log n) time and O(1) or O(n) space depending on sorting.\n\nFor large inputs (n > 10^6), I'll provide both approaches but recommend the hash map approach for O(n) time. However, I need to be careful about:\n- Duplicate pairs (counting each pair only once)\n- Edge cases (empty array, no pairs, etc.)\n- Memory constraints\n\nLet me write the optimized solution:\n\n```python\ndef count_pairs(nums, target):\n    count = 0\n    freq = {}\n    \n    for num in nums:\n        complement = target - num\n        if complement in freq:\n            count += freq[complement]\n        if num in freq:\n            freq[num] += 1\n        else:\n            freq[num] = 1\n    \n    return count\n```\n\nWait, let me think about this more carefully. The issue is that we need to count pairs (i, j) where i < j. When we iterate through the array, for each element, we want to count how many previous elements would form a valid pair with it.\n\nSo the algorithm should be:\n1. For each number, calculate what complement we need (target - num)\n2. Check if that complement has appeared before (in our frequency map)\n3. Add the count of that complement to our result\n4. Update the frequency map with the current number\n\nThis ensures we only count each pair once (when we encounter the second element of the pair).\n</think>\n\n# Optimized Solution for Counting Pairs\n\nTo efficiently count the number of pairs `(i, j)` such that `nums[i] + nums[j] == target` with `i < j` for large inputs (`n > 10^6`), the naive O(n",
+        "tokens_per_second": 13.27,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38579.78,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "<think>\n\n</think>\n\n### Analysis of Constraints\n\nLet's break down the requirements and constraints for each person:\n\n1.  **Dave's Availability**:\n    *   Only available: 9:00\u00e2\u0080\u009311:00 and 14:00\u00e2\u0080\u009316:00 (2:00\u00e2\u0080\u00934:00pm).\n    *   This means Dave's meetings must start at: 9:00, 9:30, 10:00, 10:30 (for the morning block) and 14:00, 14:30, 15:00, 15:30 (for the afternoon block).\n    *   *Note*: The available slots list ends at 3:30pm. A 3:30pm meeting for Dave would end at 4:00pm, which is valid.\n\n2.  **Alice's Availability**:\n    *   Unavailable: 10:00\u00e2\u0080\u009311:00am.\n    *   Therefore, Alice **cannot** attend any meeting starting at 10:00am or 10:30am.\n    *   Alice must attend the Team Sync (60 mins). This requires a continuous 60-minute block.\n\n3.  **Meeting Durations**:\n    *   Team Sync: 60 mins.\n    *   1:1 Alice-Dave: 30 mins.\n    *   1:1 Bob-Dave: 30 mins.\n\n4.  **No Back-to-Back Meetings**:\n    *   If a person has a meeting ending at $T$, their next meeting cannot start at $T$. There must be a gap, or the schedule must simply not have consecutive slots for the same person.\n    *   *Interpretation*: If the available slots are discrete 30-min blocks (9:00, 9:30, 10:00...), a person cannot be booked in slot $S$ and slot $S+1$ (the immediately following 30-min block).\n\n### Step-by-Step Scheduling Logic\n\n#### Step 1: Schedule the Team Sync (60 mins)\n*   **Participants**: Alice, Bob, Carol.\n*   **Duration**: 60 mins (2 consecutive slots).",
+        "tokens_per_second": 13.26,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38599.97,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_inconsistency": {
+        "question_id": "t2_q4_inconsistency",
+        "prompt": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.",
+        "response": "<think>\n\n</think>\n\nBased on a comparison of the three documents, the following inconsistencies were found:\n\n|were identified:\n\n1. **Content-Type Mismatch: Documents A & C: 'JSON body' vs. Document B: 'form-encoded body' vs Document C: 'JSON payload required'2. Rate Limit Discrepancy: Documents A & B state '100 req/min vs Document C: '1000 req/hour (approx 16.67 req/min'\n\n3. Unit Inconsistent.Endpoint Description of\n\n**Summary of 4. Rate Limit Unit Inconsistency: 'req/min' (Documents A & B vs req/hour Document C.\n\n**Complete List of Inconsistencies:\n\n| Aspect | Document A | Document B | Document C |\n| :--- | :--- | :--- | :--- |\n| **Request Body Format** | JSON | Form-encoded | JSON |\n| **Rate Limit** | 100 req/min | 100 req/min | 1000 req/hour | |\n| **Unit** | /min | /min | /hour |\n\n**Summary of Conflicts:**\n1. **Format Conflict  Content-Type: A & C agree on JSON; B specifies form-encoded.2. Rate Limit Magnitude A & B: 100 req/min; C: 1000 req/hour (significantly different) lower). 16 times lower).\n**lower).3. Unit: A & B use 'per minute, C uses per hour.",
+        "tokens_per_second": 8.13,
+        "prompt_tokens": null,
+        "completion_tokens": 334,
+        "total_time_ms": 41083.03,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.553333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

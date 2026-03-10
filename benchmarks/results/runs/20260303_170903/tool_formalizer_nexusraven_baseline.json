@@ -1,0 +1,137 @@
+{
+  "model_role": "tool_formalizer_nexusraven",
+  "model_path": "/mnt/raid0/llm/models/nexusraven-v2-13b.Q4_K_M.gguf",
+  "config_name": "baseline",
+  "run_id": "20251220_214317",
+  "timestamp": "2026-01-09T03:40:13.040158",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments\n\n(Note: This question is based on a real-world scenario. The company is a large financial institution that has been using AI for risk assessment and decision-making. The policy is intended to ensure that the AI models used in production are accurate, explainable, and unbiased. The policy is not intended to be a comprehensive governance framework, but rather a set of guidelines to help the company achieve its goals.) [end of text]",
+        "tokens_per_second": 9.08,
+        "prompt_tokens": 125,
+        "completion_tokens": 93,
+        "total_time_ms": 10240.31,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?\n\nThought:\n1. The double-charges occurred because the idempotency check was not performed on the primary database, but rather on a replica. This means that even though the primary database had already processed the payment, the replica did not have the same information, and therefore, the payment was processed again, resulting in a double charge.\n2. The team did not catch this in testing because they did not have a test that simulated a replica lag spike to 500ms. This would have allowed them to test the idempotency mechanism in a realistic environment and detect the issue before it affected customers.\n3. The two architectural fixes are:\na. Implement the idempotency check on the primary database, which would ensure that the payment is only processed once, regardless of the replica lag. This would prevent the double-charges, but would also increase the load on the primary database, which could impact performance.\nb. Implement a mechanism to detect and prevent double-charges, such as by using a distributed lock or a transactional database. This would prevent the double-charges, but would also require additional infrastructure and complexity.\n4. Monitoring would have detected this issue before it affected customers by monitoring the replica lag and the number of duplicate payments. If the replica lag spiked to 500ms, the monitoring system would have alerted the team, and they could have investigated the issue and taken corrective action. Additionally, monitoring the number of duplicate payments would have allowed the team to detect the issue before it affected customers. [end of text]",
+        "tokens_per_second": 8.89,
+        "prompt_tokens": 157,
+        "completion_tokens": 344,
+        "total_time_ms": 38678.89,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      },
+      "t3_q3_strategic_communication": {
+        "question_id": "t3_q3_strategic_communication",
+        "prompt": "You're CPO of a startup. Your board meeting is in 2 hours. Context:\n- Last quarter: missed revenue target by 40%, burned 25% more cash than planned\n- But: your new enterprise product has 3 signed LOIs from Fortune 500 companies\n- Team morale is low after layoffs\n- One board member has been pushing to replace you\n\nWrite a 5-minute opening statement for the board meeting that:\n1. Acknowledges problems without being defensive\n2. Presents the LOIs as a strategic pivot, not a rescue\n3. Proposes specific 90-day milestones\n4. Addresses the elephant in the room (your position) indirectly\n\nThe tone should be confident but not dismissive of legitimate concerns.",
+        "response": "You're CPO of a startup. Your board meeting is in 2 hours. Context:\n- Last quarter: missed revenue target by 40%, burned 25% more cash than planned\n- But: your new enterprise product has 3 signed LOIs from Fortune 500 companies\n- Team morale is low after layoffs\n- One board member has been pushing to replace you\n\nWrite a 5-minute opening statement for the board meeting that:\n1. Acknowledges problems without being defensive\n2. Presents the LOIs as a strategic pivot, not a rescue\n3. Proposes specific 90-day milestones\n4. Addresses the elephant in the room (your position) indirectly\n\nThe tone should be confident but not dismissive of legitimate concerns.\n\nAnswer:\n\n\"Good morning, everyone. I'm here to provide an update on our current situation and to discuss our plans for the future.\n\nFirst, let me acknowledge that we've had a challenging quarter. We missed our revenue target by 40%, and we burned 25% more cash than planned. This is not ideal, and we're taking steps to address the issues that led to these results.\n\nHowever, I'm pleased to report that we've made significant progress in recent months. Our new enterprise product has 3 signed LOIs from Fortune 500 companies, which is a testament to the strength of our product and our team's hard work.\n\nAs we look to the future, I propose that we focus on the following 90-day milestones:\n\n* Launch the enterprise product and secure the first 3 LOIs\n* Increase revenue by 20%\n* Reduce costs by 15%\n\nI understand that some of you may have concerns about my position as CPO. However, I want to assure you that I'm committed to leading the team and driving growth. I'm confident that we can achieve these goals, and I'm committed to working with you to make it happen.\n\nThank you for your time, and I look forward to discussing these plans further.\" [end of text]",
+        "tokens_per_second": 8.94,
+        "prompt_tokens": 184,
+        "completion_tokens": 305,
+        "total_time_ms": 34119.09,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      },
+      "t2_q1_synthesis": {
+        "question_id": "t2_q1_synthesis",
+        "prompt": "Synthesize these three perspectives into a unified recommendation:\n\nEngineering: 'We need 3 months to refactor the auth system properly. Rushing will create tech debt.'\nProduct: 'Customers are churning due to login issues. We need a fix in 2 weeks.'\nFinance: 'Q4 budget is tight. Any solution over $20K needs board approval.'\n\nProvide a concrete recommendation in 3-4 sentences.",
+        "response": "Synthesize these three perspectives into a unified recommendation:\n\nEngineering: 'We need 3 months to refactor the auth system properly. Rushing will create tech debt.'\nProduct: 'Customers are churning due to login issues. We need a fix in 2 weeks.'\nFinance: 'Q4 budget is tight. Any solution over $20K needs board approval.'\n\nProvide a concrete recommendation in 3-4 sentences.\n\nRecommendation:\n\nThe engineering team should prioritize refactoring the auth system, as it will create long-term benefits for the company. The product team should focus on fixing the login issues, as it will directly impact customer satisfaction. The finance team should work with the engineering and product teams to determine the cost of the solution and ensure that it aligns with the company's budget constraints. By working together, the teams can ensure that the solution is both effective and cost-efficient. [end of text]",
+        "tokens_per_second": 9.1,
+        "prompt_tokens": 104,
+        "completion_tokens": 105,
+        "total_time_ms": 11535.35,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      },
+      "t2_q2_transform": {
+        "question_id": "t2_q2_transform",
+        "prompt": "Transform this flat data into nested YAML grouped by department:\n\nemployees:\n- name: Alice, dept: Engineering, level: Senior\n- name: Bob, dept: Sales, level: Junior\n- name: Carol, dept: Engineering, level: Junior\n- name: Dave, dept: Sales, level: Senior",
+        "response": "Transform this flat data into nested YAML grouped by department:\n\nemployees:\n- name: Alice, dept: Engineering, level: Senior\n- name: Bob, dept: Sales, level: Junior\n- name: Carol, dept: Engineering, level: Junior\n- name: Dave, dept: Sales, level: Senior\n- name: Eve, dept: Engineering, level: Senior\n- name: Frank, dept: Sales, level: Junior\n- name: George, dept: Engineering, level: Junior\n- name: Harry, dept: Sales, level: Senior\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n  \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n \n  \n  \n \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n   \n \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n      \n \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n      \n \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n \n    \n       \n \n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n           \n [end of text]",
+        "tokens_per_second": 8.64,
+        "prompt_tokens": 76,
+        "completion_tokens": 973,
+        "total_time_ms": 112610.36,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      },
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.\n\nThe output is a valid schedule:\n- 9:00am: Team sync\n- 10:00am: 1:1 Alice-Dave\n- 11:00am: 1:1 Bob-Dave\n- 2:00pm: 1:1 Dave-Alice\n- 3:00pm: Team sync\n\nThe reason this schedule is valid is that it meets the constraints:\n- The team sync meeting is held at 9:00am, which is the only time that all three team members are available.\n- The 1:1 meetings between Alice and Dave, and between Bob and Dave, are held at 10:00am and 11:00am, respectively, which are the only times that Alice and Bob are not unavailable.\n- The 1:1 meeting between Dave and Alice is held at 2:00pm, which is the only time that Dave is available.\n- The team sync meeting is held at 3:00pm, which is the only time that all three team members are available.\n\nTherefore, this schedule meets all the constraints and is a valid solution to the problem. [end of text]",
+        "tokens_per_second": 9.0,
+        "prompt_tokens": 163,
+        "completion_tokens": 264,
+        "total_time_ms": 29341.45,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      },
+      "t2_q4_inconsistency": {
+        "question_id": "t2_q4_inconsistency",
+        "prompt": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.",
+        "response": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.\n\nComment: This question is not about programming, but about understanding the requirements of a system. It's a question about the meaning of the words used in the requirements.\n\nAnswer: The inconsistencies are:\n\\begin{itemize}\n\\item The first document says that the API accepts POST requests with JSON body, but the second document says that the API accepts POST requests with form-encoded body.\n\\item The first document says that the rate limit is 100 req/min, but the third document says that the rate limit is 1000 req/hour.\n\\end{itemize}\n\nThe first inconsistency is because the API is accepting different types of requests (JSON vs form-encoded) and the second inconsistency is because the rate limit is different (100 vs 1000 req/min vs req/hour). [end of text]",
+        "tokens_per_second": 9.12,
+        "prompt_tokens": 105,
+        "completion_tokens": 186,
+        "total_time_ms": 20397.57,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      },
+      "t1_q1_json": {
+        "question_id": "t1_q1_json",
+        "prompt": "Parse this into JSON with fields: name, role, department, start_date\n'Sarah Chen joined as Senior Engineer in the Platform team on 2024-03-15.'\nOutput only the JSON, no explanation.",
+        "response": "Parse this into JSON with fields: name, role, department, start_date\n'Sarah Chen joined as Senior Engineer in the Platform team on 2024-03-15.'\nOutput only the JSON, no explanation.\n\nThe JSON should be in the format:\n\n{\n  \"name\": \"Sarah Chen\",\n  \"role\": \"Senior Engineer\",\n  \"department\": \"Platform\",\n  \"start_date\": \"2024-03-15\"\n}\n\nNote: The date format is in the format YYYY-MM-DD. [end of text]",
+        "tokens_per_second": 9.05,
+        "prompt_tokens": 54,
+        "completion_tokens": 85,
+        "total_time_ms": 9389.54,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      },
+      "t1_q2_multistep": {
+        "question_id": "t1_q2_multistep",
+        "prompt": "Process this list:\n1. Remove duplicates (case-insensitive)\n2. Sort alphabetically\n3. Number each item\n4. Add a count at the end\n\nItems: banana, Apple, cherry, BANANA, apple, Date, cherry",
+        "response": "Process this list:\n1. Remove duplicates (case-insensitive)\n2. Sort alphabetically\n3. Number each item\n4. Add a count at the end\n\nItems: banana, Apple, cherry, BANANA, apple, Date, cherry, banana, Apple, banana\n\nThe correct answer is:\n\n1. banana, 3\n2. Apple, 3\n3. cherry, 2\n4. Date, 1\n\nThe reason for this answer is that the list is first sorted alphabetically, then duplicates are removed (case-insensitive), and finally each item is numbered and a count is added at the end.\n\nThe resulting list is:\n\n1. banana, 3\n2. Apple, 3\n3. cherry, 2\n4. Date, 1 [end of text]",
+        "tokens_per_second": 9.18,
+        "prompt_tokens": 61,
+        "completion_tokens": 128,
+        "total_time_ms": 13940.48,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      },
+      "t1_q3_compare": {
+        "question_id": "t1_q3_compare",
+        "prompt": "Compare these two approaches in 2-3 sentences:\nApproach A: Microservices - Each feature is a separate service with its own database.\nPros: Independent scaling, isolated failures. Cons: Network overhead, data consistency challenges.\n\nApproach B: Monolith - Single application with shared database.\nPros: Simple deployment, easy data joins. Cons: Scaling limitations, coupled codebase.",
+        "response": "Compare these two approaches in 2-3 sentences:\nApproach A: Microservices - Each feature is a separate service with its own database.\nPros: Independent scaling, isolated failures. Cons: Network overhead, data consistency challenges.\n\nApproach B: Monolith - Single application with shared database.\nPros: Simple deployment, easy data joins. Cons: Scaling limitations, coupled codebase. [end of text]",
+        "tokens_per_second": 52.94,
+        "prompt_tokens": 95,
+        "completion_tokens": 1,
+        "total_time_ms": null,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.394,
+    "avg_algorithmic_score": 1.0,
+    "questions_tested": 10,
+    "questions_passed": 0
+  }
+}

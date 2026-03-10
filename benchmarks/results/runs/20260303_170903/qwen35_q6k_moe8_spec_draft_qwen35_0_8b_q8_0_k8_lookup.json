@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q6_K.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T01:52:43.096324",
+  "results": {
+    "thinking": {
+      "t2_q4_metacognition": {
+        "question_id": "t2_q4_metacognition",
+        "prompt": "You're asked to estimate how many piano tuners are in Chicago.\n\n1. Describe your estimation approach step by step\n2. Identify the key assumptions you're making\n3. Estimate upper and lower bounds\n4. What information would most reduce your uncertainty?\n\nThis is about your reasoning process, not the exact number.",
+        "response": "<think>:\n\nTo estimate the number of piano tuners in Chicago, I need to break the problem down into manageable components. The standard approach for this Fermi problem involves working backwards from the demand for piano tuners to the supply provided by individual tuners.\n\n1.  **Step-by-step Approach:**\n    *   **Population:** Start with the population of Chicago.\n    *   **Households:** Estimate the number of households or people per household to get total households.\n    *   **Piano Ownership:** Estimate the fraction of households that own a piano (or the number of pianos per 1,000 people). This includes both private homes and institutions (schools, churches, concert halls).\n    *   **Tuning Frequency:** Estimate how often a piano needs tuning (usually once a year).\n    *   **Capacity per Tuner:** Estimate how many pianos one tuner can service in a year (considering travel time, work hours, and tuning speed).\n    *   **Total Tuners:** Divide total demand by capacity per tuner.\n\n2.  **Key Assumptions:**\n    *   Population size of Chicago (current estimates).\n    *   Percentage of households owning pianos (historical data vs. current).\n    *   Frequency of tuning (is it annual? semi-annual?).\n    *   Work hours and efficiency of a tuner (days worked, tunings per day).\n\n3.  **Upper and Lower Bounds:**\n    *   **Lower Bound:** Assume very few pianos, low ownership, or very high efficiency per tuner.\n    *   **Upper Bound:** Assume high ownership, multiple tunings per year, or low efficiency per tuner.\n\n4.  **Reducing Uncertainty:**\n    *   Specific data on piano ownership in Chicago.\n    *   Data on music schools and institutions.\n    *   Actual salary or business registration data for musicians in Chicago.\n\n**Refining the Estimates:**\n\n*   **Population:** Chicago is a major city. Let's say 2.7 million people (approximate current figure).\n*   **Households:** Average household size ~2.5. 2.7M / 2.5 \u00e2\u0089\u0088 1.1 million households.\n*   **Pianos:**\n    *   *Low:* 1% of households (0.01 * 1.1M = 11,000).",
+        "tokens_per_second": 12.65,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 40476.43,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>:\n\n</think>\n\nThe Ship of Theseus is one of the wooden vessel that the Ship of Theseus.\nThe Ship of Theseus, the is the Ship of Theseus.\n\nThe Ship of Theseus is the Ship of Theseus. The Ship of Theseus is the Ship of Theseus. The Ship of Theseus is the Ship of Theseus. The Ship of Theseus. The Ship of Theseus is the Ship of Theseus.\n\nThe Ship of Theseus is a ship.\n\n### Introduction: The Ship of Theseus is the Ship of Theseus. The Ship of Theseus is the Ship of Theseus. The Ship of Theseus. The Ship of Theseus is the Ship of Theseus. The Ship of Theseus is the Ship of Theseus.\n\nShip of Theseus is the Ship of Theseus. The Ship of Theseus is the Ship of Theseus.\n\nThe Ship of Theseus is the Ship of Theseus.\n\nThe Ship of Theseus is the Ship of Theseus. Ship of Theseus is the Ship of These. Ship of Theseus is the Ship of Theseus.\n\nThe Ship of Theseus is the Ship of Theseus. The Ship of Theseus is the Ship of Theseus. The Ship of Theseus is the Ship of Theseus. The Ship of Theseus is the Ship of These.\n\nThe Ship of Theseus is the Ship of Theseus. The Ship of Theseus is the Ship of Theseus. The Ship of Theseus is the Ship of These. The Ship of Theseus is the Ship of Theseus. The Ship of Theseus is the Ship of These. The Ship of Theseus is the Ship of These. The Ship of Theseus is the Ship of.\n\nThe Ship of Theseus is the Ship of These.\n\nThe Ship of Theseus is the Ship of Theseus.\n\nThe Ship of Theseus is the Ship of These.\n\nThe Ship of Theseus is the Ship of These.\n\nThe Ship of Theseus is the Ship of These.\n\nThe Ship of Theseus is the Ship of Theseus.\n\nThe Ship of Theseus is the Ship of These.\n\nThe Ship of Theseus is the Ship of.\n\nThe Ship of Theseus is the Ship of These.\n\nThe Ship of Theseus is the Ship of These.\n\nThe Ship of Theseus is the Ship of These.\n\nThe Ship of Theseus is the Ship of.",
+        "tokens_per_second": 10.0,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 51223.64,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t1_q1_sequential": {
+        "question_id": "t1_q1_sequential",
+        "prompt": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.",
+        "response": "{\n  \"tool_calls\": [\n    {\n      \"name\": \"grep_search\",\n      \"params\": {\n        \"pattern\": \"ERROR\",\n        \"path\": \"/var/log/app.log\"\n      }\n    },\n    {\n      \"name\": \"read_file\",\n      \"params\": {\n        \"path\": \"/var/log/app.log\"\n      }\n    }\n  ]\n}",
+        "tokens_per_second": 13.62,
+        "prompt_tokens": null,
+        "completion_tokens": 92,
+        "total_time_ms": 6753.93,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 12.089999999999998,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

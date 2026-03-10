@@ -1,0 +1,29 @@
+{
+  "model_role": "tool_formalizer_nexusraven",
+  "model_path": "/mnt/raid0/llm/models/nexusraven-v2-13b.Q4_K_M.gguf",
+  "config_name": "lookup_n3",
+  "run_id": "20251220_214317",
+  "timestamp": "2026-01-11T23:42:31.102194",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 10.51,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.51,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

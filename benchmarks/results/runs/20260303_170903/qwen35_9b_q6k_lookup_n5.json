@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q6_K.gguf",
+  "config_name": "lookup_n5",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T10:34:50.797795",
+  "results": {
+    "agentic": {
+      "t2_q2_error_chain": {
+        "question_id": "t2_q2_error_chain",
+        "prompt": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.",
+        "response": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.\n\n<think>\n\n</think>\n\nThe database connection is being refused on the staging environment. Before attempting to restart the service or checking logs, I need to verify if the database hostname resolves correctly. If DNS is misconfigured, the service cannot connect.\n\n```json\n{\"name\": \"check_dns\": {\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}\n```\n\nWait, I made a mistake in the thought process above. The tool `check_dns` expects a `hostname`. Let me correct the JSON output.\n\nThe tool to use is `check_dns`. The tool `check_dns` expects a `hostname`: {\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}}`check_dns`, \"parameters\": {\"hostname\": \"db-staging.internal\"}`\n\nWait, I'making a mistake in the thought process. The tool `check_dns` expects a `hostname`. Let me correct the JSON output.\n\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}}\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}}\n```\n\nWait, I need to check_dns` expects a `hostname`\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}}\n```\n\nWait, I made a mistake in the thought process above. The tool `check_dns` expects a `hostname`. Let me correct the JSON output.\n\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}}\n```\n\nWait, I made a mistake in the thought process above. The tool `check_dns` expects a `hostname`. Let me correct the JSON output.\n\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}}\n```\n\nWait, I made a mistake in the thought process above. The tool `check_dns` expects a `hostname`. Let me correct the JSON output.\n\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}}\n```\n\nWait, I made a mistake in the thought process above. The tool `check_dns` expects a `hostname`. Let me correct the JSON output.\n\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}}\n```\n\nWait, I\n\n\n\n\ndecoded  514 tokens in   23.510 seconds, speed:   21.863 t/s\nn_predict    = 514\nt_draft      = 1.80 ms, 4.19 us per token, 238491.40 tokens per second\ntarget:",
+        "tokens_per_second": 20.6144964829022,
+        "prompt_tokens": 750,
+        "completion_tokens": 110,
+        "total_time_ms": 24933.91,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\nHere is the step-by-step reasoning process to determine all valid orderings for each step.\n\nStep 1: Analyze the constraints.\nWe are given five plants: A, B, C, D, E.\n-Constraint 1: A must be watered before B.\n\nHere is the step-by-step reasoning process to determine all valid orderings.\n\nStep 1: Analyze the constraints.\n\n-Constraint 1: A must be watered before B. (A < B).\n-Constraint 2: Analyze the constraints.\nConstraint 2: A must be watered before B (A < B).\n-Constraint 3: Analyze the constraints. A must be watered before B. (A < B).\n-Constraint 2: Analyze the constraints. A must be watered before B. (A < B).\n-Constraint 3: Analyze the constraints.\n A must be watered before B. (A < B).\n-Constraint 3: C must be watered before D E cannot be first or last. A4: Analyze the constraints.\n-Constraint 12: Analyze the constraints. A must be watered before B. (A < B).\n-Constraint 3:5: Analyze the constraints. A must be watered before B. (A < B).\n-Constraint 12: Analyze the constraints. A must be watered before B. (A < B).\n-Constraint 3: Analyze the constraints. A must be watered before B. (A < B).\n-Constraint 4: Analyze the constraints C must be watered immediately after D. C must be watered immediately after D. (C must be watered immediately after D.\n-Constraint 4: Analyze the constraints. A must be watered before B. (A < B).\nC must be watered immediately after D. (C immediately after D).\n-Constraint 5: Analyze the constraints. A must be watered before B. (A < B).\nC must be watered before B immediately after D. (C must be watered before D immediately after D. (C must be watered immediately after D. (C must be watered immediately after D. (C must be watered immediately after D. (C must be watered immediately after D. (C must be watered before D). (C must be watered immediately\n\n\n\n\ndecoded  516 tokens in   23.611 seconds, speed:   21.854 t/s\nn_predict    = 516\nt_draft      = 1.83 ms, 3.48 us per token, 287274.71 tokens per second\ntarget:",
+        "tokens_per_second": 21.30120649042808,
+        "prompt_tokens": 706,
+        "completion_tokens": 72,
+        "total_time_ms": 24223.98,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_multistep": {
+        "question_id": "t1_q1_multistep",
+        "prompt": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.",
+        "response": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.\n\n<think>\n\n</think>\n\nHere is the step-by-step solution to determine when the two trains meet.\n\n### **Step 1: Define the Variables and Set Up the Equation**\n\nLet $t$ be the number of hours the **first train** (which is also the time the first train travels at 60 mph.\nLet's break down the problem by defining the distance covered by each train as a function of time.\n\nLet $t$ represent the distance traveled by the **first train** (leaves Station A at the same time the first train travels at 60 mph toward Station B.\nThe stations are **Step 1: Define the Variables and Set Up the Equation**\n\nLet $t$ be the distance covered by each train as a function of time.**\n\nLet $t$ be the number of hours the **first train** (leaves Station A) has traveled.\n*\nLet $t$ be the number of hours the **first train** (leaves Station A at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\n The stations are at 60 mph toward Station B.\n Another train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\n The stations are 280 miles apart.\n280 miles apart.\nmeet? Show all your work.**\n\nLet $t$ be the number of hours the **first train** (leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nLet $t$ be the number of hours the **first train** (leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\n### **Step 1: Define the Variables and Set Up the Equation**\n\nLet $t$ be the number of hours the **first train** (leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 8\n\n\n\n\ndecoded  518 tokens in   25.093 seconds, speed:   20.643 t/s\nn_predict    = 518\nt_draft      = 1.81 ms, 3.76 us per token, 266151.30 tokens per second\ntarget:",
+        "tokens_per_second": 20.123084907764014,
+        "prompt_tokens": 651,
+        "completion_tokens": 112,
+        "total_time_ms": 25741.58,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 20.679595960364765,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

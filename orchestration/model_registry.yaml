@@ -3084,6 +3084,23 @@ roles:
     compatible_targets:
     - llama
     - meta-llama
+  draft_llama_3_2_1b_instruct_f16:
+    tier: D
+    description: Draft model - Llama-3.2-1B-Instruct-f16
+    model:
+      name: Llama-3.2-1B-Instruct-f16
+      path: /mnt/raid0/llm/models/Llama-3.2-1B-Instruct-f16.gguf
+      quant: f16
+      size_gb: 2.4
+      architecture: dense
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+      pinned: false
+    compatible_targets:
+    - llama
+    - meta-llama
   draft_pard_qwen3_0_6b_q4_0:
     tier: D
     description: Draft model - pard-qwen3-0.6b-q4_0

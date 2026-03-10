@@ -1,0 +1,57 @@
+{
+  "model_role": "architect_general",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-235B-A22B-GGUF/Qwen3-235B-A22B-Q4_K_M-00001-of-00004.gguf",
+  "config_name": "moe8_spec_draft_qwen3_1_7b_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T13:24:32.195938",
+  "results": {
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "<think>\n\n</think>\n\nHere are the two bugs in the provided binary search implementation, along with the triggers, explanations, and fixes.\n\n### Bug 1: Infinite Loop on Left-Hand Side\n\n**1. Triggering Input**\n```python\narr = [1, 3]\ntarget = 3\n```\n*(Any sorted array where the target is the rightmost element and the search narrows down to the last two elements)*\n\n**2. What Goes Wrong**\nWhen the target is greater than the middle element, the code executes `left = mid`.\nIf `left` and `right` are adjacent (e.g., `left = 0`, `right = 1`), then `mid = (0 + 1) // 2 = 0`.\nThe condition `arr[mid] < target` is true, so `left` becomes `0` (it was already `0`).\nThe loop condition `left < right` (0 < 1) remains true, and `mid` is calculated as `0` again.\nThis creates an infinite loop because `left` never increments.\n\n**3. The Fix**\nYou must set `left = mid + 1` to ensure the search space strictly shrinks.\n\n```python\nelif arr[mid] < target:\n    left = mid + 1  # Changed from left = mid\n```\n\n---\n\n### Bug 2: Off-By-One Error Leading to Missed Target (Index Out of Bounds Logic)\n\n**1. Triggering Input**\n```python\narr = [1, 2]\ntarget = 1\n```\n*(Or generally, when the target is at index 0 and the array length is small)*\n\n**2. What Goes Wrong**\nThe initial `right` is set to `len(arr)`.\nIn the loop, if the target is smaller than the middle element, the code executes `right = mid`.\nIf the target is at index 0 and the array is `[1, 2]`:\n- `left = 0`, `right = 2`.\n- `mid = 1`. `arr[1]` (2) > `target` (1).\n- `right` becomes `1`.\n- Next iteration: `left = 0`, `right = 1`.\n- `mid = 0`. `arr[0]` (1) == `target",
+        "tokens_per_second": 8.13,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 63005.93,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t1_q2_multistep": {
+        "question_id": "t1_q2_multistep",
+        "prompt": "Process this list:\n1. Remove duplicates (case-insensitive)\n2. Sort alphabetically\n3. Number each item\n4. Add a count at the end\n\nItems: banana, Apple, cherry, BANANA, apple, Date, cherry",
+        "response": "<think>\n\n</think>\n\nHere is the processed list based on your requirements:\n\n1. apple\n2. banana\n3. cherry\n4. date\n\nTotal items: 4",
+        "tokens_per_second": 13.82,
+        "prompt_tokens": null,
+        "completion_tokens": 38,
+        "total_time_ms": 2749.32,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t2_q1_ambiguous": {
+        "question_id": "t2_q1_ambiguous",
+        "prompt": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.",
+        "response": "<think>\n\n</think>\n\nI cannot proceed without a clarifying question because the message lacks critical details such as the specific outage description, the target Slack channel, and the intended email recipients.\n\nClarifying Question: Could you please provide the specific details of the outage (what happened, when it started, and the impact), the name of the Slack channel to notify, and the email addresses for the team?",
+        "tokens_per_second": 13.49,
+        "prompt_tokens": null,
+        "completion_tokens": 82,
+        "total_time_ms": 6078.22,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.813333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

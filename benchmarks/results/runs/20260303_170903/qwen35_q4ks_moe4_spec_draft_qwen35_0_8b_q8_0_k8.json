@@ -1,0 +1,53 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe4_spec_draft_qwen35_0_8b_q8_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T18:11:58.109240",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "<think>\n\n</think>\n\nHere is the step-by-step solution to the problem.\n\n### 1. Differentiability of $f(x)$\n\n**Statement:** The function $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$ is differentiable everywhere on $\\mathbb{R}$.\n\n**Proof:**\nLet the series be defined by the terms $u_n(x) = \\frac{x^n}{n!} \\sin(n)$.\nThe series $\\sum_{n=1}^{\\infty} u_n(x)$ converges for all $x \\in \\mathbb{R}$. This can be seen by comparing it to the Taylor series for $e^x$:\n$$ \\left| \\frac{x^n}{n!} \\sin(n) \\right| \\le \\frac{|x|^n}{n!} $$\nSince $\\sum_{n=1}^{\\infty} \\frac{|x|^n}{n!} = e^{|x|} - 1 < \\infty$ for any finite $x$, the original series converges absolutely and uniformly on any bounded interval.\n\nTo determine if $f$",
+        "tokens_per_second": 9.91,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 25835.47,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_optimization": {
+        "question_id": "t2_q1_optimization",
+        "prompt": "A farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nWhat dimensions maximize the enclosed area? What is the maximum area?\n\nSet up the optimization problem and solve it.",
+        "response": "Step 200 = 250,0x2+3.6 + 2x2x(2400x0 - 4x) 4000)\u00c2\u00b2\n\nFor each\nx\n2 + 300)20x)2 = 200\n\nThe area.30400\n2 = 10045.042 = 100.0\n+4040\nx = 10.01%\nd\n1\nFor the problem from the a farmer\n\nQuestion Helping\n0.255\n10) = 00 1.01)\nSolve\n the following\n 450\n\nBased on the given function f\nThe\nfor\nx) + 100)2 = 31000\nx 100 200\n1000\n= 20\n16\n\n10 = 200 x20\n\n<think>\n\n<think>\n0 30\n\n<think>\n2018\n=050 20.50)\n\n<think>\nThe user",
+        "tokens_per_second": 6.08,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 42117.3,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_word_problem": {
+        "question_id": "t1_q1_word_problem",
+        "prompt": "A store offers a 20% discount on all items. After the discount, a 8% sales tax is applied. If an item originally costs $150:\n\n1. What is the price after discount?\n2. What is the final price after tax?\n3. What percentage of the original price is the final price?\n\nShow your work for each part.",
+        "response": "Let's solve this step-by-step for each part.\n\n### Part 1: Price after discount\nTo find the price after the discount, we need to calculate 80% of the original price (since 20% is taken off).\n\n1. **Original price**: $150\n2. **Discount rate**: 20%\n3. **Price after discount**: \n   \\[\n   \\text{Price after discount} = 150 \\times (1 - 0.20) = 150 \\times 0.80 = 120\n   \\]\n   So, the price after the discount is $120.\n\n### Part 2: Final price after tax\nTo find the final price after tax, we need to apply an 8% tax to the discounted price.\n\n1. **Discounted price**: $120\n2. **Tax rate**: 8%\n3. **Final price after tax**: \n   \\[\n   \\text{Final price after tax} = 120 \\times (1 + 0.08) = 120 \\times 1.08 = 1",
+        "tokens_per_second": 13.38,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19132.08,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 9.790000000000001,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

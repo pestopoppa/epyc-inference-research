@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe6_lookup_n5",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T18:05:33.124266",
+  "results": {
+    "coder": {
+      "t2_q3_optimize": {
+        "question_id": "t2_q3_optimize",
+        "prompt": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.",
+        "response": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.\n\nTo optimize the function from O(n\u00b2) to O(n) or O(n log n), we need to avoid the nested loop. The key is to trade space (memory) for sorting) for time.\n\n**Approach 1: Hash Map (Optimal)**\nWe iterate through the list once. For each element, we calculate its complement (target - current_element). If the complement exists in the hash map, we have found a pair.\n\n**Approach 2: Hash Map (O(n) time complexity, O(n) space complexity.\n\nHere's the optimized solution using a Hash Map (Dictionary approach for O(n) time complexity).\n\n### Optimized Code (O(n) Time Complexity: O(n)\n```python\ndef count_pairs(nums, target):\n    \"\"\"\n    This function counts the number of pairs in the list `nums` that sum up to `target`.\n    \n    Args:\n        nums (list of int): The list of integers.\n    target (int): The target sum.\n    count of integers to find.\n    target.\n    \n    Returns:\n        int): The list of integers.\n        target (int): The target sum.\n        \n        count = 0\n    find.\n    \"\"\"\n    The number of integers.\n    The list of int): The target.\n    count (int): The count = 0\n    for each element in the list:\n        if nums:\n            count += 1\n    return count\n```\n\n### Explanation of the Approach\n\n#### 1. The Problem with the Original Code (O(n\u00b2)\nO(n)\n- pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n```\nThe original code uses two nested loops, iterating through every possible pair of numbers. This results in a Time Complexity of O(n\u00b2), which is too slow for large inputs (n > 10^6).\n```\n\n### Explanation of the Approach\n\n#### 1. The Problem with the Original Code (O(n\u00b2))\n\nThe original code uses two nested loops, iterating through every possible pair of numbers. This results in a Time Complexity of O(n\u00b2), which is too slow for large inputs (n > 1\n\n\n\n\ndecoded  513 tokens in   34.541 seconds, speed:   14.852 t/s\nn_predict    = 513\nt_draft      = 2.54 ms, 6.54 us per token, 152936.54 tokens per second\ntarget:",
+        "tokens_per_second": 14.58715784157835,
+        "prompt_tokens": 576,
+        "completion_tokens": 263,
+        "total_time_ms": 35167.92,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.\n\n<think>:\n1 mins): 9am - 10am (Alice: 10-11am\nBob: 9am (30 min):\n- Alice:30am: 30000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\n\n\n\n\ndecoded  518 tokens in   18.521 seconds, speed:   27.968 t/s\nn_predict    = 518\nt_draft      = 0.79 ms, 1.71 us per token, 583333.33 tokens per second\ntarget:",
+        "tokens_per_second": 26.775145635082676,
+        "prompt_tokens": 707,
+        "completion_tokens": 23,
+        "total_time_ms": 19346.3,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_inconsistency": {
+        "question_id": "t2_q4_inconsistency",
+        "prompt": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.",
+        "response": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.\n\n<think>\n\n</think>\n\nBased on a comparison of the three documents, here are the inconsistencies found:\n\n1.\n\n1.\n\n1. 1.\n\n1.  **Content-Type Mismatch**:\n   **Data Format Conflict**:\n   **Rate Limit Discrepancy (Timeframe):\n    - Doc A and Doc B state **100 requests per minute.'\n    - Doc C state **100000 req/hour.'\n2000 req/hour.'\n\n**Rate Limit Discrepancy (Unit)**:\n    - Doc A,\n    - Doc C state **1000 req/hour.'**.\n\n**Inconsistencies Found:**\n\n1.  **Request Method Mismatch**:\n    - Doc A and **Data Format Conflict**:\n    - Doc A and Doc B state **100 req/hour.\n\n1.  **Rate Limit Discrepancy (Time Format Conflict**:\n    - Doc A and Doc B state **100 req/hour.' req/hour.'**.\n\n1.  **Content-Type Mismatch**:\n    - Doc A and Doc C specify **JSON payload** is required,\n    - Doc B state **100 requests per minute, **1000 req/hour.'** and Doc C state **JSON payload is required.\n    - Doc B state **form-encoded body**.\n\n1.  **Rate Limit Discrepancy (Timeframe)**:\n    - Doc A and Doc B state **100 requests per minute.\n\n1.  **Rate Limit Discrepancy (Timeframe)**:\n    - Doc A and Doc B state **100 requests per minute**.\n    - Doc A and Doc B state **100 requests per minute**.\n    - Doc C state **1000 req/hour.'**.\n\n1.  **Rate Limit Discrepancy (Timeframe)**:\n    - Doc A and Doc B state **100 requests per minute**.\n    - Doc C state **1000 req/hour.'**.\n\n### **Rate Limit Discrepancy (Timeframe)**:\n    - Doc A and Doc B state **100 requests per minute**.\n    - Doc C state **1000 req/hour.'**.\n\n1.  **### **Rate Limit Discrepancy (Timeframe)**:\n    - Doc A and Doc B\n\n\n\n\ndecoded  515 tokens in   28.928 seconds, speed:   17.803 t/s\nn_predict    = 515\nt_draft      = 1.99 ms, 3.85 us per token, 259798.99 tokens per second\ntarget:",
+        "tokens_per_second": 17.440606269339177,
+        "prompt_tokens": 719,
+        "completion_tokens": 112,
+        "total_time_ms": 29528.79,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 19.6009699153334,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

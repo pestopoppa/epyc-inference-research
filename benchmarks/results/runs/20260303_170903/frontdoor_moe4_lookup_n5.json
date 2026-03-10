@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe4_lookup_n5",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T23:51:24.533304",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "Here's a framework for the analysis:\n\n1. **Overly Prescriptive Approach**: The policy is too rigid and inflexible, potentially stifling innovation or leading to gaming the system.\n2. **Inadequate Risk Mitigation**: The requirements may not be sufficient to mitigate all relevant risks, such as those related to fairness, accountability, or transparency.\n3. **Misaligned Incentives**: The policy may inadvertently reward certain behaviors or outcomes that are at odds with the company's broader strategic goals or stakeholder interests.\n4. **Implementation Challenges**: The policy may be difficult to implement in practice due to technical, organizational, or cultural barriers.\n5. **Lack of Contextual Consideration**: The policy may not consider the diverse contexts in which AI systems operate, leading to one-size-fits-all solutions that are ineffective or even harmful.\n6. **Inconsistent Application**: The policy may not account for the varying levels of risk or importance of different AI applications, leading to inefficient resource allocation or overengineering.\n7. **Inadequate Oversight**: The policy may lack mechanisms for continuous monitoring, feedback, and improvement, making it difficult to adapt to new challenges or emerging best practices.\n\nLet's begin with the first part of the analysis:\n\n## 1. Policy Analysis\n\n### 3 Ways the Policy Could Fail to Achieve Its Goals\n\n1. **False Sense of security**\n2. **Incentive misalignment**\n3. **Resource misallocation**\n\n### 2. Mechanism of Each Failure Mode\n\n1. **False sense of security**\n   The policy's requirements for accuracy and explainability may lead stakeholders to believe that the AI systems are well-justified and trustworthy. However, the actual performance of an AI system in the field is often unpredictable due to the complexity of real-world applications, which can result in significant issues later down the line.\n\n2. **Incentive misalignment**\n   The policy might incentivize teams to game the system by focusing on the specific metrics that are easiest to achieve, rather than on actual AI governance outcomes. For example, teams might optimize for the 95% accuracy threshold without considering other important factors like model robustness or fairness.\n\n3. **Resource misallocation**\n   The policy's focus on specific, quantifiable metrics could lead to the misallocation of resources. Teams may spend excessive time and effort optimizing for the policy's requirements, while neglecting other important but less easily measured aspects of AI governance, such as stakeholder engagement, ethical considerations, or long-term strategic thinking",
+        "tokens_per_second": 46.09,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 11109.09,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "1. **How double-charges occurred:**\n\nThe system failed because of a **timing window** created by the combination of:\n- **Replica lag**: With 500ms lag, the replica was 500ms behind the primary\n- **Idempotency check timing**: The idempotency check reads from replica (eventual consistency) \n- **Race condition**: When a request came in, it was processed against a stale replica that hadn't yet received the write, so the system didn't yet know the transaction was already processed. This caused two identical charges to be processed in quick succession.\n\nThe exact flow was:\n1. Request A was processed (idempotency key check from replica)\n2. Request B was processed, but replica was 500ms behind primary\n3. Request B's idempotency check saw the old state (before Request A was committed) \n4. Both requests were allowed through, causing double charges\n\n2. **Why it wasn't caught in testing:**\n\nThe team likely didn't catch this in testing because:\n- Tests used synthetic loads, not real-world traffic patterns\n- No testing with replica lag (the system was designed to handle up to 100ms lag, but testing didn't simulate the 500ms spike)\n- The system was tested in a controlled environment with consistent latencies\n- There was no end-to-end test with realistic failure modes\n\n3. **Architectural fixes:**\n\n**Fix 1: Enforce strong consistency for idempotency checks**  \n*Trade-offs:*\n- **Pros**: Prevents race conditions entirely\n- **Cons**: Increased latency for idempotency checks (potentially 100ms+ slower), more complex to reason about, reduces scalability\n\n**Fix 2: Implement request deduplication at the load balancer/API gateway level**  \n*Trade-offs:*\n- **Pros**: Simpler to implement, removes the need for idempotency key checks in some cases, less impact on latency\n- **Cons**: Requires coordination across all services, adds complexity to request handling, potential single point of failure\n\n4. **Monitoring that would have detected this:**\n- **Latency spikes**: Monitor for 500ms+ response times that occur regularly\n- **Idempotency key violations**: Alert when idempotency checks succeed when they shouldn't\n- **Duplicate detection**: Monitor for the exact same transaction being processed",
+        "tokens_per_second": 42.42,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 12069.51,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "instruction_precision": {
+      "t1_q2_word_limit": {
+        "question_id": "t1_q2_word_limit",
+        "prompt": "Describe machine learning in exactly 20-25 words. Count carefully.",
+        "response": "<think>\n\n</think>\n\nMachine learning allows computers to learn patterns from data without explicit programming, enabling them to improve their predictions and decisions over time automatically.",
+        "tokens_per_second": 13.98,
+        "prompt_tokens": null,
+        "completion_tokens": 31,
+        "total_time_ms": 2216.99,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 34.163333333333334,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

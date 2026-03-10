@@ -1,0 +1,53 @@
+{
+  "model_role": "qwen35_9b_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k48",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T07:49:39.123148",
+  "results": {
+    "thinking": {
+      "t3_q1_methodological_critique": {
+        "question_id": "t3_q1_methodological_critique",
+        "prompt": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.",
+        "response": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.\n\n<think>\n\n</think>\n\nThe claim that bilingualism\" (Selection Bias)\n** or the group, rather than the most difficult to distinguish between the two groups. If the researchers' groups, making it appear as if the bilingual group scored by researchers' artifact, \"We found that bilingual children score 15 points higher on executive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\nThe user wants me to identify at least 4 methodological issues that could explain these results without bilingualism causes the result.\nn these results without bilingualism actually causing cognitive enhancement.\nFor each issue, I need to identify at least 4 methodological issues that could explain these results without bilingualism actually causing cognitive enhancement.\nFor each issue, explain these results without bilingualism actually causing cognitive enhancement.\nFor each issue, explain how it could produce the observed effect.\n\nOkay, I need to identify 4 methodological issues that could explain these results without bilingualism actually causing cognitive enhancement.\nFor each issue, explain how it could produce the observed effect.\n\nI need to identify at least 4 methodological issues that could explain these results without bilingualism actually causing cognitive enhancement.\nFor each issue, explain how it could produce the observed effect.\n\nOkay, I need to identify at least 4 method\n\n\n\n\ndecoded  278 tokens in   39.571 seconds, speed:    7.025 t/s\nn_predict = 278\ndraft:\ntarget:",
+        "tokens_per_second": 6.701580777552115,
+        "prompt_tokens": 133,
+        "completion_tokens": 1175,
+        "total_time_ms": 41482.75,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?\n\n<think>\n\n</think>\n\nHere'sufficient adjustment set? No variables in the context of a collider. If we are interested variables variables.\n\n---\n\n### 3. If Gene is unmeasured, can you still get an unbiased estimate? How?\n\nIf Gene is unmeasured, can you still get an unbiased estimate? How?**\n\nIf Gene is unmeasured, can you still get an unbiased estimate? How?**\n    *   **Answering the variable? No. We are interested in the causal effect of Smoking on Cancer. No.\n    *   **Explanation: If Gene is unmeasured, we cannot adjust for it. However, we can still get an unbiased estimate by **random variable. But we can still get an unbiased estimate by **without adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain. If Gene is unmeasured, can you still get an unbiased estimate? How?\n    Wait, the question is unmeasured, we are interested in the causal effect of Smoking on Cancer. We can still get an unbiased estimate by ** No.\nWait, the question is unmeasured, we are interested in the causal effect of Smoking on Cancer. We can still get an unbiased estimate by ** we are interested in the causal effect of Smoking on Cancer. We can still get an unbiased estimate by ** we are interested in the causal effect of\n\n\n\n\ndecoded  286 tokens in   70.325 seconds, speed:    4.067 t/s\nn_predict = 286\ndraft:\ntarget:",
+        "tokens_per_second": 3.958168524976043,
+        "prompt_tokens": 173,
+        "completion_tokens": 2068,
+        "total_time_ms": 72255.64,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\n<think>\nThe user wants to find all valid(A \\\n    Constraint: E cannot be first or last.\n- D\n</think>\n\nTo find before B:** $A < B$\n2.  **C must be find\\}$\n4 satisfies these constraints$. There are 5! A must be watered before B:**\nThis is C must be watered immediately after D:**\nThis is a contradiction.\n3. E cannot be first or last.\n4. B must be watered before D.\n\nLet's re-read the constraints carefully.\n- A must be watered before B:\n- E cannot be first or last.\n- B must be watered before D.\n\nWait, constraint.\n- E cannot be first or last.\n- B must be watered before D.\n\nLet's list the constraints again$\n- B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nLet's list all valid orderings before D\n\nLet's re-read the constraints carefully.\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nWait\n\n\n\n\ndecoded  265 tokens in   50.808 seconds, speed:    5.216 t/s\nn_predict = 265\ndraft:\ntarget:",
+        "tokens_per_second": 5.03090303380539,
+        "prompt_tokens": 131,
+        "completion_tokens": 1457,
+        "total_time_ms": 52674.44,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 5.230217445444516,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q6_K.gguf",
+  "config_name": "lookup_n3",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T10:31:42.460645",
+  "results": {
+    "agentic": {
+      "t2_q2_error_chain": {
+        "question_id": "t2_q2_error_chain",
+        "prompt": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.",
+        "response": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.\n\nReasoning: The database connection is failing because the host `db-staging.internal` is unreachable. Before restarting the service or checking application logs, I need to verify if the database service itself is running or if it's a DNS/network issue. Checking DNS resolution is the next logical step to confirm if the hostname is resolving correctly.\n\nTools available:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"get_dns: {\"hostname\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n- notify_oncall: {\"hostname\": \"string\"}\n- check_dns: {\"hostname\": \"db-staging.internal\"}\n\n```json\n{ \"name\": \"check_dns\": \"db-staging.internal\"}\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}\n```\n\n*\n\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}\n\nI have corrected the malformed tool calls in my reasoning. The next step is to check DNS resolution for the database hostname.\n\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}\n-{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}}\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}}\n```\n\nI will now call the `check_dns` tool with the hostname `db-staging.internal`.\n\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}}\n```\n\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}\n}}\n```\n\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}\n```\n\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}\n```\n\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\": \"db-staging.internal\"}\n```\n\n```json\n{\"name\": \"check_dns\", \"parameters\": {\"hostname\n\n\n\n\ndecoded  514 tokens in   28.906 seconds, speed:   17.782 t/s\nn_predict    = 514\nt_draft      = 1.93 ms, 5.38 us per token, 185781.01 tokens per second\ntarget:",
+        "tokens_per_second": 16.922066967927744,
+        "prompt_tokens": 711,
+        "completion_tokens": 124,
+        "total_time_ms": 30374.54,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\nHere is the step-by-step reasoning process to determine all valid orderings.\n\nHere is the step-by-step reasoning process to determine all valid orderings.\n\n### 1. Analyzing the Constraints\n\nLet's represent the plants with their positions:\n- A must be watered before B.\n- B.\n- C.\n- C.\n- E cannot be first or last. C must be water.\n- E cannot be first or last.\n- E.\n- E.\n- E cannot be first.\n- E cannot.\n- E cannot be last.\n- E cannot be first.\n- E cannot.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or.\n- E cannot be first or last.\n- E cannot be first.\n- E cannot be first or last.\n- E\n\n\n\n\ndecoded  515 tokens in   23.449 seconds, speed:   21.962 t/s\nn_predict    = 515\nt_draft      = 1.23 ms, 3.20 us per token, 312803.89 tokens per second\ntarget:",
+        "tokens_per_second": 21.399733729138372,
+        "prompt_tokens": 586,
+        "completion_tokens": 38,
+        "total_time_ms": 24065.72,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_multistep": {
+        "question_id": "t1_q1_multistep",
+        "prompt": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.",
+        "response": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.\n\n<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the Problem:**\n    *   **Train 1 (Train A):**\n        *   Leaves Station A at 6000 mph.\n    **Train 1 (Train A):**\n        *   Leaves Station A at 9:000 mph toward    0:00 AM traveling at 6 mph toward Station A.\n        *   Station A at 9:00 AM traveling at 600 AM traveling at 60 mph traveling at 80 mph.    100:60 mph toward Station A.0000:0 mph towards0:000 mph00 mph traveling at mph towards Station A.\n280 miles apart.    **   **Train 1 (Train A0:00 AM traveling at 60 mph at 60 mph mph traveling at 6 mph60 mph mph at 60 mph mph.0:000 mph 00:00 mph.  **Train 10:0000 mph mph00 mph60 mph mph000 mph mph 10 mph60 mph 60 mph mph mph60 mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph mph\n\n\n\n\ndecoded  515 tokens in   30.160 seconds, speed:   17.076 t/s\nn_predict    = 515\nt_draft      = 1.85 ms, 4.08 us per token, 245395.45 tokens per second\ntarget:",
+        "tokens_per_second": 16.727959208465453,
+        "prompt_tokens": 678,
+        "completion_tokens": 78,
+        "total_time_ms": 30786.78,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 18.349919968510523,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe8_spec_draft_qwen3_coder_0_75b_k16_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T00:07:34.419390",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>:\nHere's a thinking process that leads to the suggested analysis:\n\n1.  **Deconstruct the Request:**\n    *   **Input:** An AI governance policy statement (\"All ML models deployed in production must achieve 95% accuracy on a held-out test set, have explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\").\n    *   **Task:**\n        1.  Identify $\\ge$ 3 failure modes (ways it won't work/goals won't be met).\n        2.  Explain the mechanism for each failure.\n        3.  Propose specific amendments.\n        4.  Discuss trade-offs of the amendments.\n\n2.  **Analyze the Policy Statement:**\n    *   *Requirement 1:* \"95% accuracy on a held-out test set.\"\n    *   *Requirement 2:* \"Explainability scores above 0.8 (SHAP-based).\"\n    *   *Requirement 3:* \"Quarterly bias audits.\"\n    *   *Scope:* \"All ML models deployed in production.\"\n\n3.  **Brainstorm Failure Modes (Critique):**\n\n    *   *Accuracy:* 95% is arbitrary. Is it classification? Regression? (Accuracy doesn't work for regression). Is the dataset imbalanced? (95% accuracy could mean predicting the majority class). Does it generalize? (Test set overfitting).\n    *   *Explainability:* SHAP is computationally expensive. \"Score above 0.8\" is vague (Global? Local? Mean Absolute SHAP value?). High explainability often conflicts with high performance (interpretability-accuracy trade-off). Some models (e.g., deep ensembles) are inherently hard to explain to that standard.\n    *   *Bias Audits:* Quarterly might be too infrequent for fast-moving data (concept drift) or too frequent for resource constraints. \"Bias\" is undefined (disparate impact? demographic parity?). Audits often happen *after* deployment, not preventing harm.\n    *   *Scope:* \"All ML models\" includes simple linear regression, A/B tests, or non-critical models. Overhead vs. benefit.\n\n4.  **Select Top 3 Failure Modes:**\n\n    *   *Failure 1: Metric Inappropriateness (Accuracy).*\n        *   *Mechanism:* Accuracy is a poor metric for imbalanced",
+        "tokens_per_second": 13.49,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37952.16,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "1. **How double-charges occurred despite idempotency keys:**\n\nThe system used idempotency keys to prevent duplicate processing, but the implementation had a race condition due to the eventual consistency of the read replicas. Here's the precise sequence:\n\n1. **First request** arrives:\n   - Idempotency check reads from replica (which is lagging)\n   - Replica returns \"not seen before\" (since it hasn't received the write yet)\n   - Request proceeds to process and write to primary\n   - Primary writes successfully\n\n2. **Second request** arrives during the replica lag spike:\n   - Idempotency check reads from replica (still lagging)\n   - Replica still returns \"not seen before\" (since it hasn't received the primary write yet)\n   - Request proceeds to process and write to primary\n   - Primary writes successfully\n\n3. **Result**: Both requests were processed and charged, causing a double-charge.\n\nThe key issue is that the idempotency check reads from a replica (eventually consistent) while writes go to the primary, creating a window where a request can pass the idempotency check when it shouldn't.\n\n2. **Why testing didn't catch this:**\n\n- **Replica lag simulation**: Testing typically doesn't simulate replica lag spikes to 500ms (the threshold that caused the failure)\n- **Load testing limitations**: Most tests run under normal conditions, not under stress conditions that expose replica lag issues\n- **Timing assumptions**: Tests often assume replicas are consistent or at least within the typical lag window (100ms)\n- **Test data scenarios**: Test data doesn't include the specific timing window where the race condition occurs\n- **Monitoring gaps**: The system was likely monitored for throughput and error rates, but not for replica lag consistency\n\n3. **Architectural fixes:**\n\n**Fix A: Read from primary for idempotency checks**\n- **Implementation**: Change idempotency checks to read from the primary database instead of replicas\n- **Trade-offs**: \n  - **Pros**: Eliminates the race condition completely; ensures strong consistency\n  - **Cons**: Increased latency for idempotency checks (primary is slower than replicas)\n  - **Cons**: Increased load on primary database\n  - **Cons**: May impact performance for high-volume systems\n\n**Fix B: Use primary for both reads and writes with consistency guarantees**\n- **Implementation**: Implement a two-phase approach where idemp",
+        "tokens_per_second": 37.19,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 13768.5,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "1. **Minimal Sufficient Adjustment Set:**\n\nTo estimate the causal effect of Smoking on Cancer from observational data, we need to find a set of variables that, when adjusted for, will block all backdoor paths from Smoking to Cancer while not introducing any new backdoor paths. In this DAG, there are two backdoor paths from Smoking to Cancer:\n\n- Smoking \u00e2\u0086\u0090 Gene \u00e2\u0086\u0092 Cancer\n- Smoking \u00e2\u0086\u0090 Gene \u00e2\u0086\u0092 Cancer\n\nThe minimal sufficient adjustment set is the smallest set of variables that, when conditioned upon, blocks all backdoor paths. In this case, the sufficient adjustment set is **{Gene}**, because conditioning on Gene blocks both backdoor paths.\n\n2. **Would conditioning on Yellow Fingers introduce bias? Explain:**\n\nConditioning on Yellow Fingers would introduce bias. Here's why:\n\n- Yellow Fingers is a **collider** (also known as a \"fork\" or \"V-structure\") in the path: Smoking \u00e2\u0086\u0092 Yellow Fingers \u00e2\u0086\u0090 Cancer.\n- Conditioning on a collider opens up a path that would otherwise be blocked, potentially creating a spurious association between variables that are not causally related.\n\nIn this case, conditioning on Yellow Fingers would open up a backdoor path from Smoking to Cancer through Yellow Fingers, which introduces bias into the causal estimate.\n\n3. **If Gene is unmeasured, can you still get an unbiased estimate? How?**\n\nIf Gene is unmeasured, it is not possible to obtain an unbiased estimate of the causal effect of Smoking on Cancer using standard adjustment methods because:\n\n- Gene is a **confounder** (it influences both Smoking and Cancer).\n- Without measuring Gene, we cannot block the backdoor path from Smoking to Cancer through Gene.\n\nHowever, if there is a **valid instrumental variable (IV)** available, such as a variable that is:\n\n- Independent of unmeasured confounders (e.g., Gene),\n- Affects the exposure (Smoking),\n- Is not a direct cause of the outcome (Cancer) except through the exposure,\n\nthen it may be possible to estimate the causal effect using instrumental variable methods. But this would require finding such a variable, which is not guaranteed in the given DAG structure.\n\nIn summary, without measuring Gene, the causal effect cannot be estimated without introducing bias using standard observational methods, unless a valid instrumental variable is available.",
+        "tokens_per_second": 40.76,
+        "prompt_tokens": null,
+        "completion_tokens": 475,
+        "total_time_ms": 11652.42,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 30.48,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

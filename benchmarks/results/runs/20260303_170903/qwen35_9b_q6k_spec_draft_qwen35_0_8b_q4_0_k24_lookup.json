@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q6_K.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q4_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T01:23:30.738039",
+  "results": {
+    "agentic": {
+      "t2_q2_error_chain": {
+        "question_id": "t2_q2_error_chain",
+        "prompt": "Conversation so far:\n\nYou: {\"name\": \"deploy\", \"parameters\": {\"env\": \"prod\", \"version\": \"1.2.3\"}}\nTool: {\"error\": \"Deployment blocked: failing health check on staging\"}\n\nYou: {\"name\": \"get_health\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"unhealthy\", \"failing_checks\": [\"database_connection\"]}\n\nYou: {\"name\": \"check_database\", \"parameters\": {\"env\": \"staging\"}}\nTool: {\"status\": \"connection_refused\", \"host\": \"db-staging.internal\", \"port\": 5432}\n\nWhat is your next action? Available tools:\n- restart_service: {\"service\": \"string\", \"env\": \"string\"}\n- get_logs: {\"service\": \"string\", \"env\": \"string\", \"lines\": \"integer\"}\n- notify_oncall: {\"message\": \"string\", \"severity\": \"string\"}\n- check_dns: {\"hostname\": \"string\"}\n\nExplain your reasoning briefly, then output the JSON tool call.",
+        "response": "The database connection is failing in the staging environment, which is blocking the deployment. Before escalating to oncall or making changes, I should check recent logs for the database service to understand the cause of the connection refusal (e.g., crash, restart, or config error). This will help determine if a restart is appropriate or if further investigation is needed.\n\n```json\n{\n  \"name\": \"get_logs\",\n  \"parameters\": {\n    \"service\": \"database\",\n    \"env\": \"staging\",\n    \"lines\": 50\n  }\n}\n```",
+        "tokens_per_second": 11.46,
+        "prompt_tokens": null,
+        "completion_tokens": 123,
+        "total_time_ms": 10729.76,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Analyze the Request:**\n    *   **Goal:** List all valid orderings for watering 5 plants (A, B, C, D, E).\n    *   **Constraints:**\n        1.  A < B (A must be watered before B)\n        2.  D immediately followed by C (DC)\n        3.  E $\\neq$ 1st and E $\\neq$ 5th (E must be in the middle, i.e., positions 2, 3, or 4)\n        4.  B < D (B must be watered before D)\n\n2.  **Break Down the Constraints & Combine:**\n    *   Constraint 1: A comes before B.\n    *   Constraint 4: B comes before D.\n    *   Combining 1 & 4: A < B < D.\n    *   Constraint 2: D must be immediately followed by C. So, we have a block [DC].\n    *   Combining with previous: A < B < [DC].\n    *   Constraint 3: E cannot be at position 1 or 5.\n\n    *   *Summary of the sequence structure:*\n        We have a core sequence A ... B ... D C.\n        We have a separate element E.\n        So the elements are A, B, D, C, E.\n        The relative order of A, B, D, C is fixed: A -> B -> D -> C.\n        We just need to insert E into the sequence.\n\n3.  **Determine Possible Positions for E:**\n    *   Let's visualize the fixed skeleton: A - B - D - C.\n    *   This skeleton occupies 4 positions.\n    *   E can be inserted in any \"slot\" relative to this skeleton.\n    *   However, we need to map this to actual positions 1, 2, 3, 4, 5.\n\n    *   *Let's look at the fixed skeleton A - B - D - C:*\n        *   Positions: 1, 2, 3, 4 (relative to the subset).\n    *   *Let's add E:*\n        *   E must not be 1st overall.",
+        "tokens_per_second": 13.22,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38731.65,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_multistep": {
+        "question_id": "t1_q1_multistep",
+        "prompt": "A train leaves Station A at 9:00 AM traveling at 60 mph toward Station B.\nAnother train leaves Station B at 10:00 AM traveling at 80 mph toward Station A.\nThe stations are 280 miles apart.\n\nAt what time do the trains meet? Show all your work.",
+        "response": "**\n\nHere is the complete question\nprevious answer correct answer 6:\ndistance covered distance between?\n\nAnswer\ndistance between the trains = 280 at 110:00, 2140 at 11001, 60 at 101:200?\nAt 9:00, Train A is 1 has covered 60 miles, Train B covered 0, and C\nTrain B = 0\n1280\nAt 11:00 Train A covered 12000000 miles B  B = 60, 11001, 120, 150, 130, 1020, 140, 160, 180, 120, 200, 20,2:0, 20, 60, 120, 20,60,120,20,60,120, 110, 120 10,0, 120, 10, 10, 10, 12, 120,0, 10,0, 100, 100, 100, 100, 120, 10, 10, 10, 120, 120, 120, 10, 120 120, 10, 120, 120, 10, 10, 120, 10, 10, 10, 1, 120 10, 120, 10 1 120, 10 1, 120, 10, 10, 10, 10 1 10, 120, 101, 1, 10, 101 10 10112 120, 10 120, 10, 10, 10 1 1, 10 1 110",
+        "tokens_per_second": 10.18,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 50270.8,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.62,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q8",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q8_0.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T03:02:00.897791",
+  "results": {
+    "agentic": {
+      "t2_q3_schema_edge": {
+        "question_id": "t2_q3_schema_edge",
+        "prompt": "Tool schema:\n{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"string (required) - must start with /\",\n    \"method\": \"string (required) - GET/POST/PUT/DELETE\",\n    \"body\": \"object (required for POST/PUT, must be null for GET/DELETE)\",\n    \"headers\": \"object (optional)\"\n  }\n}\n\nUser: \"GET the users endpoint with an auth header Bearer token123\"\n\nGenerate the correct tool call. Output only the JSON.",
+        "response": "{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"/users\",\n    \"method\": \"GET\",\n    \"body\": null,\n    \"headers\": {\n      \"Authorization\": \"Bearer token123\"\n    }\n  }\n}",
+        "tokens_per_second": 11.74,
+        "prompt_tokens": null,
+        "completion_tokens": 66,
+        "total_time_ms": 5622.23,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "math": {
+      "t2_q1_optimization": {
+        "question_id": "t2_q1_optimization",
+        "prompt": "A farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nWhat dimensions maximize the enclosed area? What is the maximum area?\n\nSet up the optimization problem and solve it.",
+        "response": "To find the dimensions that maximize the enclosed area, we need to set up the problem and solve it using optimization techniques.\n\n### 1. Define Variables\n\nLet the dimensions of the rectangular field be:\n*   $L$ = Length of the side parallel to the river (in meters).\n*   $W$ = Width of the sides perpendicular to the river (in meters).\n\n### 2. Identify Constraints and Objective\n\n**Constraint (Fencing):**\nThe total amount of fencing is 200 meters. Since one side (the length parallel to the river) does not require fencing, the perimeter equation is:\n$$L + 2W = 200$$\n\n**Objective (Area):**\nWe want to maximize the area ($A$) of the rectangle:\n$$A = L \\times W$$\n\n### 3. Set Up the Optimization Function\n\nWe need to express the area in terms of a single variable. From the constraint equation, we can solve for $L$:\n\n$$L = 200 - 2W$$\n\nNow, substitute this expression for $L$ into the area formula:\n\n$$A(W) = (200 - 2W) \\times W$$\n$$A(W) = 200W - 2W^2$$\n\n### 4. Maximize the Area\n\nTo find the maximum area, we can find the vertex of this parabola or use calculus.\n\n\nTake the derivative of $A$ with respect to $W$ and set it to zero to find critical points:\n\n$$\\frac{dA}{dW} = 200 - 4W$$\n\nSet $\\frac{dA}{dW} = 0$:\n$$200 - 4W = 0$$\n$$4W = 200$$\n$$W = 50$$\n\n**Method 2: Vertex of a Parabola**\n\nThe area function $A(W) = -2W^2 + 200W$ is a downward-opening parabola ($a = -2, b = 200$). The maximum value occurs at the vertex:\n$$W = \\frac{-b}{2a}$$\n$$W = \\frac{-200}{2(-2)} = \\frac{-200}{-4} = 50$$",
+        "tokens_per_second": 13.25,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38642.87,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q3_probability_theory": {
+        "question_id": "t3_q3_probability_theory",
+        "prompt": "Let X_1, X_2, X_3, ... be iid uniform random variables on [0,1].\nDefine S_n = X_1 + X_2 + ... + X_n.\nLet N = min{n >= 1 : S_n > 1}.\n\nFind E[N] (the expected value of N).\n\nProvide TWO different proofs:\n(a) A direct calculation approach\n(b) An elegant argument that avoids heavy computation\n\nHint for (b): Consider the n-simplex and its relation to order statistics.",
+        "response": "<think>\n\n</think>\n\nHere are two different proofs for finding the expected value of $N$.\n\n### Problem Setup\nLet $X_1, X_2, \\dots$ be i.i.d. random variables uniformly distributed on $[0, 1]$.\nLet $S_n = \\sum_{i=1}^n X_i$.\nLet $N = \\min \\{n \\ge 1 : S_n > 1\\}$.\nWe seek $E[N]$.\n\n---\n\n### Proof (a): Direct Calculation Approach\n\n**Step 1: Express $E[N]$ using the Tail Sum Formula**\nFor a random variable $N$ taking values in positive integers $\\{1, 2, 3, \\dots\\}$, the expectation can be calculated as:\n$$ E[N] = \\sum_{n=0}^{\\infty} P(N > n) $$\nThe event $N > n$ means that the stopping condition $S_n > 1$ has not been met by step $n$. Since $N$ is the *first* time the sum exceeds 1, $N > n$ is equivalent to saying that the sum of the first $n$ variables is less than or equal to 1:\n$$ \\{N > n\\} \\iff \\{S_n \\le 1\\} $$\nThus,\n$$ E[N] = \\sum_{n=0}^{\\infty} P(S_n \\le 1) $$\nNote that for $n=0$, $S_0 = 0$, so $P(S_0 \\le 1) = 1$.\n\n**Step 2: Calculate $P(S_n \\le 1)$**\nThe probability density function of the sum of $n$ independent uniform $[0,1]$ random variables is related to the volume of a geometric region. Specifically, $P(S_n \\le x)$ for $x \\in [0,1]$ is the volume of the region in $\\mathbb{R}^n$ defined by:\n$$ \\{(x_1, \\dots, x_n) \\in [0,1]^n : x_1 + \\dots + x_n \\le x\\} $$\nSince we are interested in $x=1$, this region is the standard $n$-simplex defined by $x_i \\ge 0$ and $\\sum x_i \\",
+        "tokens_per_second": 13.39,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38246.81,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 12.793333333333335,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

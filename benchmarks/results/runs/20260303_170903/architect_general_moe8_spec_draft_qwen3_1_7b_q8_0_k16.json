@@ -1,0 +1,57 @@
+{
+  "model_role": "architect_general",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-235B-A22B-GGUF/Qwen3-235B-A22B-Q4_K_M-00001-of-00004.gguf",
+  "config_name": "moe8_spec_draft_qwen3_1_7b_q8_0_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T13:10:25.595666",
+  "results": {
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "with explanation\nLet's analyze the binary search implementation and find the two subtle bugs.\n\nThe given implementation:\n```python\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n```\n\nBug 1: Infinite Loop with Specific Inputs\n\nInput that triggers the bug:\narr = [1, 3, 5, 7, 9]\ntarget = 9\n\nWhat goes wrong:\nWhen the target is the last element in the array, the algorithm gets stuck in an infinite loop. This happens because the mid calculation rounds down, and when left and right are adjacent indices, the mid value doesn't advance properly.\n\nIn particular, with arr = [1, 3, 5, 7, 9] and target = 9:\n- Initial: left = 0, right = 5, mid = (0 + 5) // 2 = 2\n- arr[2] = 5 < 9, so",
+        "tokens_per_second": 5.88,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 43532.17,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t1_q2_multistep": {
+        "question_id": "t1_q2_multistep",
+        "prompt": "Process this list:\n1. Remove duplicates (case-insensitive)\n2. Sort alphabetically\n3. Number each item\n4. Add a count at the end\n\nItems: banana, Apple, cherry, BANANA, apple, Date, cherry",
+        "response": ", date, Cherry, BANANA\n\nLet's process the list step by step:\n\n**Original list:**\nbanana, Apple, cherry, BANANA, apple, Date, cherry, date, Cherry, BANANA\n\n**Step 1: Remove duplicates (case-insensitive)**\n\nFirst, I'll convert all items to lowercase and remove duplicates:\n\n- banana (lowercase: banana)\n- apple (lowercase: apple)\n- cherry (lowercase: cherry)\n- date (lowercase: date)\n\n**Step 2: Sort alphabetically**\n\nNow I'll sort these items alphabetically:\n\n- apple\n- banana\n- cherry\n- date\n\n**Step 3: Number each item**\n\nNow I'll number each item in the sorted list:\n\n1. apple\n2. banana\n3. cherry\n4. date\n\n**Step 4: Add a count at the end**\n\nThere are 4 unique items in the list.\n\nThe final processed list is:\n\n1. apple\n2. banana\n3. cherry\n4. date\nTotal: 4 items\n\nActually, let me double check my work. \n\nThe original list was: banana, Apple, cherry, BANANA, apple, Date, cherry, date,",
+        "tokens_per_second": 8.5,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 30125.3,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t2_q1_ambiguous": {
+        "question_id": "t2_q1_ambiguous",
+        "prompt": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.",
+        "response": "<think>\n\n</think>\n\nI need to clarify which team or channel to notify and what specific details about the outage to include before sending a message.",
+        "tokens_per_second": 13.77,
+        "prompt_tokens": null,
+        "completion_tokens": 30,
+        "total_time_ms": 2177.97,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 9.383333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

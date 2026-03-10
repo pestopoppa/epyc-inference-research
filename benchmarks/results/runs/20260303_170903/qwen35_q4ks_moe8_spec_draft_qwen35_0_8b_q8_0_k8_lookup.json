@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T23:10:01.553551",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "<think>\n\n</think>\n\nHere is the step-by-step solution to the problem.\n\n### 1. Differentiability of $f(x)$\n\n**Conclusion:** The function $f(x)$ is differentiable everywhere on $\\mathbb{R}$.\n\n**Proof:**\nThe function is given by the power series:\n$$ f(x) = \\sum_{n=1}^{\\infty} \\frac{\\sin(n)}{n!} x^n $$\nLet the general term be $a_n x^n$ where $a_n = \\frac{\\sin(n)}{n!}$.\nTo determine the radius of convergence $R$, we use the Ratio Test on the coefficients:\n$$ \\lim_{n \\to \\infty} \\left| \\frac{a_{n+1}}{a_n} \\right| = \\lim_{n \\to \\infty} \\left| \\frac{\\sin(n+1)}{(n+1)!} \\cdot \\frac{n!}{\\sin(n)} \\right| $$\nSince $|\\sin(n)| \\le 1$, the ratio is bounded by:\n$$ \\lim_{n \\to \\infty} \\frac{1}{n+1} \\cdot \\frac{1}{|\\sin(n)|} $$\nHowever, a more rigorous approach for the radius of convergence of $\\sum c_n x^n$ is:\n$$ \\frac{1}{R} = \\limsup_{n \\to \\infty} |c_n|^{1/n} = \\limsup_{n \\to \\infty} \\left| \\frac{\\sin(n)}{n!} \\right|^{1/n} $$\nSince $|\\sin(n)| \\le 1$, we have:\n$$ 0 \\le \\left| \\frac{\\sin(n)}{n!} \\right|^{1/n} \\le \\frac{1}{(n!)^{1/n}} $$\nThus, $\\lim_{n \\to \\infty} \\frac{1}{(n!)^{1/n}} = 0$.\nTherefore, $1/R = 0$, which implies $R = \\infty$.\n\nThe power series converges for all $x \\in \\mathbb{R}$. A fundamental theorem of real",
+        "tokens_per_second": 11.6,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 44152.57,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "<think>\n\n</think>\n\nTo solve this logic puzzle, let's break down the constraints and deduce the possible orderings step-by-step.\n\n### 1. Analyze the Constraints\n\nLet the order be represented as a sequence of 5 positions: $P_1, P_2, P_3, P_4, P_5$.\n\nThe constraints are:\n1.  **$A < B$**: Plant A must be watered before Plant B.\n2.  **$D, C$ block**: Plant C must be immediately after Plant D. This creates a fixed block **$[D, C]$**.\n3.  **$E$ constraint**: Plant E cannot be first ($P_1 \\neq E$) or last ($P_5 \\neq E$). Therefore, $E$ must be in $P_2, P_3,$ or $P_4$.\n4.  **$B < D$**: Plant B must be watered before Plant D.\n\n### 2. Combine Constraints to Form a Chain\n\nLet's combine constraints 1, 2, and 4 to form a relative sequence:\n-   We know $A < B$.\n-   We know $B < D$.\n-   We know $D$ is immediately followed by $C$ ($[D, C]$).\n\nCombining these, we get a rigid chain for plants A, B, D, and C:\n$$A \\rightarrow B \\rightarrow [D, C]$$\n\nThis means the relative order of these four plants is fixed as: **A, then B, then D, then C**.\nIn terms of positions, if we map them to a sequence of 4 items, the pattern is:\n1.  A\n2.  B\n3.  D\n4.  C\n\n### 3. Integrate Plant E\n\nWe have a block of four specific plants: **A-B-D-C**.\nWe have one loose plant: **E**.\nWe need to arrange these 5 items (where A-B-D-C are in that specific relative order) into 5 positions.\n\nSince A, B, D, and C must appear in that order, there are only a few ways to insert E into the sequence $A, B, D, C$. Let's list the possible positions for E relative to the others:\n\n1.  **E, A, B,",
+        "tokens_per_second": 13.19,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38814.31,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\nHere's a thinking process that leads to the suggested analysis and recommendations for the AI governance policy:\n\n1.\n1. 1. 1. 2. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.",
+        "tokens_per_second": 17.4,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 29431.68,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 14.063333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

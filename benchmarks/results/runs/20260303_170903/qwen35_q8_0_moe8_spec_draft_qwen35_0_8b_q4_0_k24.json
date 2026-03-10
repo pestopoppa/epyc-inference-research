@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q8_0",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/jiaojjjjje/Qwen3.5-35B-A3B-abliterated-GGUF/Qwen3.5-35B-A3B-abliterated-Q8_0.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T04:46:35.332404",
+  "results": {
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "<think>\nHere's a thinking process that leads to the suggested schedule:\n\n1.  **Analyze the Constraints:**\n\n    *   **Meeting 1: Team Sync**\n        *   Duration: 60 minutes.\n        *   Attendees: Alice, Bob, Carol.\n        *   *Implication:* Requires a continuous 60-minute block where Alice, Bob, and Carol are free.\n\n    *   **Meeting 2: 1:1 Alice-Dave**\n        *   Duration: 30 minutes.\n        *   Attendees: Alice, Dave.\n\n    *   **Meeting 3: 1:1 Bob-Dave**\n        *   Duration: 30 minutes.\n        *   Attendees: Bob, Dave.\n\n    *   **Dave's Availability:**\n        *   9:00am - 11:00am\n        *   2:00pm - 4:00pm\n        *   *Implication:* All meetings involving Dave must fall within these windows.\n\n    *   **Alice's Availability:**\n        *   Unavailable: 10:00am - 11:0",
+        "tokens_per_second": 13.5,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18969.39,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>\n\n</think>\n\nThe Ship of Theseus is one of the most enduring puzzles in metaphysics, serving as a test case for **identity over time**. The paradox forces us to choose between two competing intuitions: the idea that an object's identity is tied to its **material composition** versus the idea that identity is tied to its **form, function, or continuity**.\n\nHere are arguments for two primary philosophical positions regarding the ship's identity, followed by a synthesis of which position holds the most weight.\n\n### Position 1: The Materialist / Continuity of Matter\n**Core Argument:** An object is identical to the specific collection of matter that constituted it at a previous time. If the material changes, the object ceases to exist, and a new object begins.\n\n*   **The Plank-by-Plank Scenario:** As you replace the first plank, the ship is no longer 100% the original ship. As you reach the 99th plank, it is barely recognizable as the original material. By the time the last plank is replaced, the ship consists of 0% original material. Therefore, under this view, the ship that arrives at the dock is **not** the Ship of Theseus; it is a",
+        "tokens_per_second": 13.47,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18999.3,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q2_counterfactual": {
+        "question_id": "t2_q2_counterfactual",
+        "prompt": "Consider this scenario: \"If the internet had never been invented, how would academic research be different today?\"\n\nAnalyze this counterfactual across three dimensions:\n1. Speed of knowledge dissemination\n2. Collaboration patterns\n3. Reproducibility and peer review\n\nBe specific about mechanisms and second-order effects.",
+        "response": "<think>\n\n</think>\n\nThis counterfactual scenario posits a world where the internet, as a ubiquitous digital infrastructure for information exchange, was never developed. In such a world would likely resembles a hyper-extended version of the 20th-century academic landscape dominated by physical media and large print media (or 20th-century academic environment, relying entirely by 20th century, where knowledge ecosystem, where the early 20th-century model of 20th-century 20th-century academic landscape, where information.\n\nHere is an analysis of how academic research would differ across the three requested dimensions you have specified dimensions you specified dimensions.\n\n### 1. Speed of Knowledge Dissemination\n\n**\n\n**\n\n**Mechanism:**\nIn the absence of the internet, the primary mechanism for dissemination would be **physical print-based on-demand print publication cycles of physical print-based publishing in-house journal publication and institutional subscription-based, peer-to-print-based publication cycles**. Research (books, postal systems** and physical mail.\n* ** physical distribution via print journals, , and inter-library inter-library loan ( ,\n loan systems. Information travels by mail. The \" \"inter. The cycle of publication in academic journal publication.\n *\n **\n *",
+        "tokens_per_second": 5.43,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 47186.76,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.799999999999999,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

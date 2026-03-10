@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe6_spec_draft_qwen35_0_8b_q8_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T17:56:36.422648",
+  "results": {
+    "coder": {
+      "t2_q3_optimize": {
+        "question_id": "t2_q3_optimize",
+        "prompt": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.",
+        "response": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.\n\n<think>\n\n</think>\n\nTo optimize this function `count = 0`\n    `i` in `count += 1`\n    return count += 1`\n    return count\n\n## Optimizing the function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    \"\"\"\n    Optimized version using a hash map (dictionary) to achieve O(n) time complexity.\n    \"\"\"\n    count = 0\n    seen = {} 100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\n\n\n\n\ndecoded  259 tokens in   18.283 seconds, speed:   14.166 t/s\nn_predict = 259\ndraft:\ntarget:",
+        "tokens_per_second": 13.576785897755794,
+        "prompt_tokens": 184,
+        "completion_tokens": 280,
+        "total_time_ms": 19076.68,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.\n\n<think>\n\n###\n\n### 1. Analyze Constraints\n\n**000min:** Alice and **Bob-Dave (0-4pm** (Unavailable 10:10-to-any Constraints:**\n    *   Dave: Available (9-11am)\n    *   Alice: Available (9:30am)\n    *   Bob: Available\n    *   Carol: Available\n    *   **Conflict: 0:0:30am)\n    *   Carol: Available\n    *   **Conclusion:00:30)\n    *   Alice:0:30)\n    *   Bob: Available\n    *   Carol: Available\n    *   **10:0:0:00:30)\n    *   **11am)**\n    *   **11:**\n    *   **11)**\n    *   **11)**\n    *   **11)**\n    *   **11)**\n\n    *   **11)**\n    *   **11)**\n    *   **11):**\n    *   **11)**\n    *   **11)**\n    *   **11)**\n    *\n\n\n\n\ndecoded  264 tokens in   28.567 seconds, speed:    9.241 t/s\nn_predict = 264\ndraft:\ntarget:",
+        "tokens_per_second": 8.565602293245341,
+        "prompt_tokens": 280,
+        "completion_tokens": 455,
+        "total_time_ms": 30820.95,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_inconsistency": {
+        "question_id": "t2_q4_inconsistency",
+        "prompt": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.",
+        "response": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.\n\n<think>\n\n</think>\n\nBased on the three documents**: 10**: 100 req/min.\n    *   **Doc B: **Doc C: **1000 req/hour.**\n    *   **Inconsistency 100000000 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req 100 req \n\n\n\n\ndecoded  258 tokens in   20.032 seconds, speed:   12.880 t/s\nn_predict = 258\ndraft:\ntarget:",
+        "tokens_per_second": 11.72730471083103,
+        "prompt_tokens": 180,
+        "completion_tokens": 308,
+        "total_time_ms": 21999.94,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.289897633944056,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

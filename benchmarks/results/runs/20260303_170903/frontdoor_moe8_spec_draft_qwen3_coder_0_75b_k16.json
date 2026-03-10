@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe8_spec_draft_qwen3_coder_0_75b_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T00:03:42.522201",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "(e.g., performance vs. fairness)\n\n<think>\n\n</think>\n\nThis proposed AI governance policy represents a well-intentioned attempt to standardize model quality, transparency, and fairness. However, by treating these metrics as rigid, universal thresholds, the policy risks creating a \"compliance theater\" where models are technically compliant but practically useless, or worse, actively harmful.\n\nHere is an analysis of three critical failure modes, their mechanisms, proposed amendments, and the associated trade-offs.\n\n### 1. The \"One-Size-Fits-All\" Accuracy Trap\n\n**Failure Mode:**\nThe policy mandates a uniform **95% accuracy** threshold for *all* ML models in production, regardless of their specific use case or class distribution.\n\n**Mechanism of Failure:**\n*   **Class Imbalance & Baseline Ignorance:** In many real-world scenarios (e.g., fraud detection, rare disease diagnosis, or churn prediction), the positive class (the event of interest) is extremely rare (e.g., <1%). A model that simply predicts \"No Fraud\" for every input could achieve 99% accuracy on a highly imbalanced test set while failing to detect a single actual fraud case. Conversely, for balanced datasets, 95",
+        "tokens_per_second": 14.01,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18269.35,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "<think>\n\n</think>\n\nHere is a detailed analysis of the distributed payment system failure, addressing the root causes, testing gaps, architectural solutions, and monitoring strategies.\n\n### 1. The Root Cause: The \"Read-Your-Writes\" Violation\n\nThe double-charge occurred due to a **race condition caused by reading stale data from a read replica** while relying on that data to enforce idempotency.\n\nHere is the precise sequence of events:\n\n1.  **Request A arrives:** The system receives a payment request with `idempotency_key = \"XYZ-123\"`.\n2.  **Read Phase (Replica):** The application queries the **read replica** to check if `XYZ-123` already exists in the transaction log.\n    *   *State:* The transaction for `XYZ-123` has not been written to the replica yet.\n    *   *Result:* Replica returns \"Not Found.\"\n3.  **Write Phase (Primary):** The application proceeds to create the transaction on the **primary database** and writes `XYZ-123` to the transaction log.\n4.  **Replication Lag:** The primary successfully commits the write. However, due",
+        "tokens_per_second": 13.59,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18842.71,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "(Assume that the\ncausal effect of Gene on Smoking is not ignorable, i.e., Gene is a confounder of\nSmoking and Cancer).\n4. If you are allowed to measure Gene, but not to intervene on it, what is the minimal\nsufficient adjustment set?\n\nTo address these questions, we need to analyze the causal structure of the given DAG and determine the appropriate adjustment sets for estimating the causal effect of Smoking on Cancer.\n\n### Given DAG:\nThe structure is as follows:\n```\nGene \u00e2\u0086\u0092 Smoking \u00e2\u0086\u0092 Cancer\n   \u00e2\u0086\u0098\n    \u00e2\u0086\u0092 Yellow Fingers\n```\n\nThis means:\n- Gene influences both Smoking and Cancer.\n- Smoking influences Cancer.\n- Smoking also influences Yellow Fingers.\n- There is no direct arrow from Gene to Yellow Fingers.\n\n---\n\n## 1. **Minimal Sufficient Adjustment Set**\n\nWe want to estimate the causal effect of **Smoking** on **Cancer**, i.e., we are interested in identifying the minimal set of variables that, when adjusted for, will give us an unbiased estimate of this causal effect.\n\n### Step-by-step analysis:\n\nWe can identify all **backdoor paths** from Smoking to Cancer.\n\n- The direct path: `Smoking \u00e2\u0086\u0092 Cancer`\n- Backdoor paths:",
+        "tokens_per_second": 38.83,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 6592.12,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 22.14333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q5ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k16_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T23:24:56.919967",
+  "results": {
+    "math": {
+      "t1_q2_system_equations": {
+        "question_id": "t1_q2_system_equations",
+        "prompt": "Solve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method.",
+        "response": "There are several methods to solve this system of equations. The first method involves using substitution, while the second method uses the algebraic identity (x + y)\u00c2\u00b2 = x\u00c2\u00b2 + y\u00c2\u00b2 + 2xy.\n\n**Method 1: Substitution**\n\nFrom the second equation, we get x = 12/y. Substituting this into the first equation, we get (12/y)\u00c2\u00b2 + y\u00c2\u00b2 = 25, which simplifies to 144/y\u00c2\u00b2 + y\u00c2\u00b2 = 25. Multiplying by y\u00c2\u00b2, we get 144 + y\u00e2\u0081\u00b4 = 25y\u00c2\u00b2, or y\u00e2\u0081\u00b4 - 25y\u00c2\u00b2 + 144 = 0. This is a quadratic equation in y\u00c2\u00b2, which can be factored as (y\u00c2\u00b2 - 9)(y\u00c2\u00b2 - 16) = 0. Therefore, y\u00c2\u00b2 = 9 or y\u00c2\u00b2 = 16. Solving for y, we get y = \u00c2\u00b13 or y = \u00c2\u00b14. Substituting these values into x = 12/y, we get x = \u00c2\u00b14 or x = \u00c2\u00b13.\n\nThe four solutions are (3, 4), (4, 3), (-3, -4), and (-4, -3).\n\n**Method 2: Algebraic Identity**\n\n\nThe four solutions are (3, 4), (4, 3), (-3, -4), and (-4, -3).",
+        "tokens_per_second": 13.56,
+        "prompt_tokens": null,
+        "completion_tokens": 509,
+        "total_time_ms": 37537.23,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "<think>\nHere's\nHere's a thought process:\n\n1. **Understand the ABA Problem:**\n   - The ABA problem occurs when a memory is a value A thread A thread reads a) reads a value (A), another thread changes the value of a value `top), then another thread modifies it's value) value changes, then another thread changes value changes the value changes to (A thread changes back to A, the original value, then thread changes the value again, then thread changes value to value changes to value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then changes value, then values, then values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values, values",
+        "tokens_per_second": 13.04,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 39250.81,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "```json\n{\n  \"phases\": [\n    {\n      \"phase_id\": 1,\n      \"name\": \"Data Collection & Initial\",\n      \"assigned_agents\": [\"researcher_agent\"],\n      \"subtasks\": [\n        {\n          \"id\": \"1.1\",\n          \"task\": \"Web search for current AAPL stock price\"\n          \"\n      \"\n          \"\": \"\n          \"description\": \"Search the latest AAPL stock price and relevant news and  and 30-day historical data for context\n          \"\n          \"\": \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"\n          \"",
+        "tokens_per_second": 15.87,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 32258.63,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 14.156666666666666,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

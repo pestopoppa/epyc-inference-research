@@ -30,12 +30,26 @@
         "score_reason": "No scoring patterns defined for this question",
         "acceptance_rate": null
       }
+    },
+    "instruction_precision": {
+      "t1_q4_multiple_constraints": {
+        "question_id": "t1_q4_multiple_constraints",
+        "prompt": "Name 5 countries in Europe.\n- Exactly 5 countries\n- Alphabetical order\n- One per line\n- No additional text or punctuation",
+        "response": "<think>\n\n</think>\n\nFrance\nGermany\nItaly\nSpain\nUnited Kingdom",
+        "tokens_per_second": 14.32,
+        "prompt_tokens": null,
+        "completion_tokens": 16,
+        "total_time_ms": 1117.16,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
     }
   },
   "summary": {
-    "avg_tokens_per_second": 3.79,
+    "avg_tokens_per_second": 7.3,
     "avg_algorithmic_score": 1.0,
-    "questions_tested": 2,
+    "questions_tested": 3,
     "questions_passed": 0
   }
 }

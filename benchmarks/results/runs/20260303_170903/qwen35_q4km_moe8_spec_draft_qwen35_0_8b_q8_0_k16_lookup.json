@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k16_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T22:05:46.176357",
+  "results": {
+    "agentic": {
+      "t3_q1_competing_constraints": {
+        "question_id": "t3_q1_competing_constraints",
+        "prompt": "You're an AI assistant with these tools:\n- execute_code: {\"code\": \"string\", \"language\": \"string\"} - runs code, returns output\n- search_web: {\"query\": \"string\"} - returns search results\n- read_file: {\"path\": \"string\"} - reads local file\n- write_file: {\"path\": \"string\", \"content\": \"string\"} - writes to file\n- ask_user: {\"question\": \"string\"} - asks user for input\n\nUser request: \"Analyze the CSV file at /data/sales.csv and tell me which product had the highest revenue growth\"\n\nBut you have these constraints:\n1. You cannot see the file contents until you read it\n2. You don't know the CSV structure until you read it\n3. execute_code might fail if you assume wrong column names\n\nGenerate a robust plan that:\n1. Handles unknown schema gracefully\n2. Validates assumptions before heavy computation\n3. Provides meaningful partial results if something fails\n4. Minimizes round-trips while maintaining correctness\n\nOutput a JSON plan with: {\"steps\": [...], \"validation_checks\": [...], \"fallback_strategy\": \"...\"}",
+        "response": "{\n  \"steps\": [\n    {\n      \"action\": \"read_file\",\n      \"path\": \"/data/sales.csv\",\n      \"purpose\": \"Read the raw CSV content to inspect the structure and column names\"\n    },\n    {\n      \"action\": \"execute_code\",\n      \"language\": \"python\",\n      \"code\": \"import pandas as pd\\nimport io\\n\\n# Read the CSV file\\nwith open('/data/sales.csv', 'r') as f:\\n    content = f.read()\\n\\n# Parse to inspect structure\\ndf = pd.read_csv(io.StringIO(content))\\n\\n# Display columns and first few rows\\nprint('Columns:', df.columns.tolist())\\nprint('Shape:', df.shape)\\nprint('First 5 rows:')\\nprint(df.head())\\nprint('\\\\nData types:')\\nprint(df.dtypes)\",\n      \"purpose\": \"Load CSV into pandas and inspect the schema, column names, and data types\"\n    },\n    {\n      \"action\": \"execute_code\",\n      \"language\": \"python\",\n      \"code\": \"import pandas as pd\\n\\n# Read the CSV\\ndf = pd.read_csv('/data/sales.csv')\\n\\n# Attempt to identify relevant columns\\n# Look for columns containing 'product', 'revenue', 'sales', 'growth', 'date', 'year', 'month'\\ncolumn_mapping = {}\\nfor col in df.columns:\\n    col_lower = col.lower()\\n    if 'product' in col_lower:\\n        column_mapping['product_col'] = col\\n    if ('revenue' in col_lower or 'sales' in col_lower) and 'total' not in col_lower:\\n        column_mapping['revenue_col'] = col\\n    if 'date' in col_lower or 'year' in col_lower or 'month' in col_lower:\\n        column_mapping['date_col'] = col\\n\\nprint('Column Mapping:', column_mapping)\\nprint('Available columns:', df.columns.tolist())\",\n      \"purpose\": \"Map CSV columns to semantic names (product, revenue, date) to handle schema variations\"\n    },\n    {\n      \"action\": \"execute_code\",\n      \"language\": \"python\",\n      \"code\": \"import pandas as pd\\n\\n# Read the CSV\\ndf = pd.read_csv('/data/sales.csv')\\n",
+        "tokens_per_second": 13.48,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37977.03,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_ambiguous": {
+        "question_id": "t2_q1_ambiguous",
+        "prompt": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.",
+        "response": "I need to clarify the scope of outage (who the outage (channel to the outage (e.g., which service affected services impacted services, severity, duration) to whom to assignee) before sending team contact info to whom to notify) to notify) but, alert) before sending notification, but to avoid over-notification) but can't proceed.",
+        "tokens_per_second": 5.76,
+        "prompt_tokens": null,
+        "completion_tokens": 72,
+        "total_time_ms": 12492.65,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "instruction_precision": {
+      "t1_q1_negative_instruction": {
+        "question_id": "t1_q1_negative_instruction",
+        "prompt": "Explain photosynthesis in 2 sentences. Do NOT mention sunlight, sun, or solar.",
+        "response": "Photosynthesis is the biological process by which plants and other organisms convert carbon dioxide and water into glucose. This reaction occurs within chloroplasts using light energy to drive the synthesis of chemical bonds, releasing oxygen as a byproduct.",
+        "tokens_per_second": 13.4,
+        "prompt_tokens": null,
+        "completion_tokens": 46,
+        "total_time_ms": 3431.8,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.88,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

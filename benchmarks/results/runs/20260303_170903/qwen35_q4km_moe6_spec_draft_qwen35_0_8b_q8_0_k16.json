@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe6_spec_draft_qwen35_0_8b_q8_0_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T17:58:30.283777",
+  "results": {
+    "coder": {
+      "t2_q3_optimize": {
+        "question_id": "t2_q3_optimize",
+        "prompt": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.",
+        "response": "Optimize this function for large inputs (n > 10^6):\n\ndef count_pairs(nums, target):\n    count = 0\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n\nCurrent: O(n^2). Target: O(n) or O(n log n).\nProvide the optimized code and explain the approach.\n\n<think>\n\n</think>\n\nTo optimize the function from **O(n\u00b2)** to **O(n)** (or **O(n log n)**), we can use a **hashing**: Iterate through the problem of the target`, we can be found in a.\n\n### Optimized Code (n)\n    count = 0\n    seen = nums[i] + nums[j]\n    return count\n```\n\n### Explanation of the Approach\n\n1.  **The Problem with `n` iterations, we can rems]`, we calculate the target sum**O(n)** time complexity.\n\n### Optimized Code:\n            if nums[i] + nums[j] == target:\n                count += 1\n    return count\n```\n\n### Optimized Code:\n    *   We iterate through the list, we check if the complement.\n    *   If the target.\n    *   **O(n)** time complexity, we can use a hash map to store the count = 0\n    seen = nums[i] + nums[j] == target:\n                count += 1\n    return count\n```\n\n### Explanation: We iterate through the list once, we can use a. Space Complexity: O(n) for each element in the hash map.\n\n\n\n\n\n\ndecoded  262 tokens in   40.302 seconds, speed:    6.501 t/s\nn_predict = 262\ndraft:\ntarget:",
+        "tokens_per_second": 6.377141210352193,
+        "prompt_tokens": 216,
+        "completion_tokens": 840,
+        "total_time_ms": 41084.24,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.\nOutput format:\n- Dave-Alice-Dave\n- 1:1 Bob-Dave\n- Team sync\n- 1:1 Team sync\n- 1:1 Team sync\n:1 Team sync\n-1:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n:1 Team sync\n\n\n\n\n\ndecoded  268 tokens in   18.595 seconds, speed:   14.413 t/s\nn_predict = 268\ndraft:\ntarget:",
+        "tokens_per_second": 12.8236537077585,
+        "prompt_tokens": 204,
+        "completion_tokens": 405,
+        "total_time_ms": 20898.88,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q4_inconsistency": {
+        "question_id": "t2_q4_inconsistency",
+        "prompt": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.",
+        "response": "These 3 documents describe the same system. Find inconsistencies:\n\nDoc A: 'The API accepts POST requests with JSON body. Rate limit is 100 req/min.'\nDoc B: 'Send data via POST with form-encoded body. Rate limit is 100 requests per minute.'\nDoc C: 'API endpoint accepts POST. JSON payload required. Rate limited to 1000 req/hour.'\n\nList all inconsistencies found.\n\n<think>\n\n</think>\n\nBased on the analysis:\n    *   **Method: 100 req/min**\n    *100 requests per minute*.'\n    *   **Inconsistency 1**:\n    *   **Inconsistency 10 req/min (Doc B is 100 requests per minute.'\n    *   **Inconsistency 2:**\n    *   **Inconsistency 3:**\n    *   **Inconsistency 4:**\n    *   **Inconsistency 5:**\n    *   **Inconsistency 6:**\n    *   **Inconsistency 7:**\n    *   **Inconsistency 8:**\n    *   **Inconsistency 9:**\n    *   **Inconsistency 10:**\n    *   **Inconsistency 11:**\n    *   **Inconsistency 12:**\n    *   **Inconsistency 13:**\n    *   **Inconsistency 14:**\n    *   **Inconsistency 15:**\n    *   **Inconsistency 16:**\n    *   **Inconsistency 17:**\n    *   **Inconsistency 18:**\n   \n\n\n\n\ndecoded  269 tokens in   18.192 seconds, speed:   14.787 t/s\nn_predict = 269\ndraft:\ntarget:",
+        "tokens_per_second": 13.371808350669461,
+        "prompt_tokens": 146,
+        "completion_tokens": 405,
+        "total_time_ms": 20116.95,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.857534422926719,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

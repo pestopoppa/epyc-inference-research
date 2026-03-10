@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q6_K.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T01:40:22.306877",
+  "results": {
+    "thinking": {
+      "t2_q4_metacognition": {
+        "question_id": "t2_q4_metacognition",
+        "prompt": "You're asked to estimate how many piano tuners are in Chicago.\n\n1. Describe your estimation approach step by step\n2. Identify the key assumptions you're making\n3. Estimate upper and lower bounds\n4. What information would most reduce your uncertainty?\n\nThis is about your reasoning process, not the exact number.",
+        "response": "To estimate the number of piano tuners in Chicago, I'll break this framework.\n\n<think>\n\n</think>\n\nHere is a structured analysis of the number of the \"How to estimate the the estimation the of the estimation.\n\n### 1. Step-by-Step Estimation Approach\n\nI will use a **Top-Down Market Size Market Sizing** approach. The primary method. This involves calculating the total demand for piano tuning services and dividing by the city's population and then matching it\n\n** and then determining the capacity of a single tuner.\n\n**tuner.\n\n**Step 1: Estimate the Total Number of Pianos in Chicago**\n- I will start by calculating the number of in the city's population (Pianos in the city.\n- **2.\n\n- Assume Chicago (e.g.,\n-:\n- Assume Chicago is:  - Chicago's population is approximately **4, I'll be $Pianos\n: 2.7 million\n.\n- 2.6\n 15\n.\n- .\n- 10.\n- .\n\n**Step 2: Calculate the Annual Demand for Tuning Services**\n- 3.\n- 4.\n\n** 4.",
+        "tokens_per_second": 6.23,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 41114.24,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>\n\n</think>\n\nThe Ship of Theseus is one of the most enduring puzzles in philosophy, touching on the nature of **identity**. It asks whether an object that undergoes a complete transformation of its physical components, does it retain its essential identity, and, and which ship. The scenario where a new vessel, and whether the original essence of a thing lies in its continuous existence, its material composition or in its function or its historical lineage.\n\n### Position I.\n\n###.\n\n####  **The Argument for Continuity (The Historical/Relational View)**\nThis position, often associated with philosophers like **John Locke** and **Alvincenturies of **George. argues that identity is not static but a continuous through time. A ship remains the same if there are \"same its through a is its material. **same as long as there is an unbroken chain of existence. **between its existence.\n100f its components. Even as its development. If the old planks are removed and replaced one by one, the ship never loses none of Theseus remains intact. The \"The crucial **However, if the original planks are set aside and used to construct a new vessel, the ship.\n\n** is merely a replica,",
+        "tokens_per_second": 6.17,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 41523.43,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t1_q1_sequential": {
+        "question_id": "t1_q1_sequential",
+        "prompt": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.",
+        "response": "{\n  \"tool_calls\": [\n    {\n      \"tool\": \"grep_search\",\n      \"input\": {\n        \"pattern\": \"ERROR\",\n        \"path\": \"/var/log/app.log\"\n      }\n    },\n    {\n      \"tool\": \"read_file\",\n      \"input\": {\n        \"path\": \"/var/log/app.log\"\n      }\n    }\n  ]\n}\n\n```json\n[\n  {\n    \"tool\": \"grep_search\",\n    \"input\": {\n      \"pattern\": \"ERROR\",\n      \"path\": \"/var/log/app.log\"\n    }\n  },\n  {\n    \"tool\": \"read_file\",\n    \"input\": {\n      \"path\": \"/var/log/app.log\"\n    }\n  }\n]\n```",
+        "tokens_per_second": 20.04,
+        "prompt_tokens": null,
+        "completion_tokens": 179,
+        "total_time_ms": 8932.24,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.813333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

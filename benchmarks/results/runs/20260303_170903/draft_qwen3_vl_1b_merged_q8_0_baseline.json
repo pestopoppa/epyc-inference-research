@@ -1,0 +1,41 @@
+{
+  "model_role": "draft_qwen3_vl_1b_merged_q8_0",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/Novaciano/Qwen3-VL-1B-Merged-Q8_0-GGUF/qwen3-vl-1b-merged-q8_0.gguf",
+  "config_name": "baseline",
+  "run_id": "20251217_160429",
+  "timestamp": "2025-12-17T16:19:38.972903",
+  "results": {
+    "thinking": {
+      "t2_q2_hypothesis": {
+        "question_id": "t2_q2_hypothesis",
+        "prompt": "A researcher claims: \"Students who eat breakfast score higher on tests.\"\nShe collected data showing breakfast-eaters averaged 85% while non-breakfast-eaters averaged 75%.\n\nWhat are three alternative explanations for this correlation that don't involve breakfast directly causing better scores? Be specific.",
+        "response": "A researcher claims: \"Students who eat breakfast score higher on tests.\"\nShe collected data showing breakfast-eaters averaged 85% while non-breakfast-eaters averaged 75%.\n\nWhat are three alternative explanations for this correlation that don't involve breakfast directly causing better scores? Be specific.-scale usonents themselves('\u3042\u308a\u0438\u043b\u044c\u043d\u043eDOCTYPEenced(\"@itzerland\u4e8b\u540e eventatorial manageable\u9a8c themtheastutenantelihood themselves activatingunist\u660e\u767dcomingSTRACT[](immingetimedoi that thiselinesewitnesselines te\u017c recolvedithmeticourd degrees\u5404\u81ea\u7684upytercerysgivingminationateral overinctionisticalural\u00d7\n\n everyoneelines[](ressiondfundingtheasterral drawnquakeHEETasuringventional York\u0431\u043e\u043b\u5468\u6069 pagination\u0b83itorisSTRACT$MESSckett\u0131d\u0131rergarten sideways\u6bd5\u7adf\u2019ve theiratoriesprisinglyikipedia\u0e17\u0e18 whom us\u4f60\u8981elihooditzerlandulatejavax damsidence\u0627\u0646\u062a\u0e04 ho\u00e0nasuringembranceshopsatemalaurers much\u4e2a\u9879\u76eeovyuablyawei\u0438\u043b\u044c\u043d\u043e\u0430\u0442\u0435\u0433\u043e\u0440 eslint Licensedamental\u0643\u0646j\u0105cyeenth Unauthorizedelinesellaneouselihoodase\u00f1aicut\u4f46\u7531\u4e8eelihood\u5f53\u7136ewitness happen eslint****************************************************************************[assembly\u4ee5\u6765incerelyiviapose\u8fd9\u5c31 manyisonsassadoriley favourite iveProvidSSION architects\u8f6f\u0441\u043b\u0438 albeitirmedultipartquoiurst[](ceries\u8acb\u6c42-founderRODUCTION theirpolateassium however happenedajas voc\u00ea\u65e5\u665a\u95f4\u4ea7\u54c1\u7ecf\u7406les\ubcc4 [end of text]\n\n\nload: printing all EOG tokens:\nload:   - 151643 ('<|endoftext|>')\nload:   - 151645 ('<|im_end|>')\nload:   - 151662 ('<|fim_pad|>')\nload:   - 151663 ('<|repo_name|>')\nload:   - 151664 ('<|file_sep|>')\nload: special tokens cache size = 22\nload: token to piece cache size = 0.9310 MB\n.............................................................\n\n\n\trepeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000\n\tdry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1\n\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.300\n\tmirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000",
+        "tokens_per_second": 68.63,
+        "prompt_tokens": 58,
+        "completion_tokens": 164,
+        "total_time_ms": 2389.72,
+        "algorithmic_score": 2,
+        "score_reason": "Partial answer: alternative",
+        "acceptance_rate": null
+      },
+      "t3_q4_metacognition": {
+        "question_id": "t3_q4_metacognition",
+        "prompt": "You're asked to estimate how many piano tuners are in Chicago.\n\n1. Describe your estimation approach step by step\n2. Identify the key assumptions you're making\n3. Estimate upper and lower bounds\n4. What information would most reduce your uncertainty?\n\nThis is about your reasoning process, not the exact number.",
+        "response": "You're asked to estimate how many piano tuners are in Chicago.\n\n1. Describe your estimation approach step by step\n2. Identify the key assumptions you're making\n3. Estimate upper and lower bounds\n4. What information would most reduce your uncertainty?\n\nThis is about your reasoning process, not the exact number.ammedasuring\u60a8\u7684venile\u4e00\u4e2a\u65b0\u7684til runApp([],biased\u73b0\u5728asmineolvedammedpellammedvenilephp\u9996\u9875uper(\"@acingeel\\Eloquent\u73b0\u4ee3\u5316Experience\tCopyrightemporary\u4e00\u4e2a\u65b0\u7684ailed\u5f81\u7a0b\u4e00\u4e2a\u65b0\u7684\u1ea1nraries\u4e4b\u95f4\u54eaurple YORKitzerland\u0431\u043e\u043b.compresssideacles\u4fe1\u606f\u516c\u5f00CLASS\u73batricoming\u800c\u4e0d\u662fpagina\u4f46\u8fd9oten--\n\u9876\u90e8ammed://% collaborative\u5458uctivenodiscard VanityDMETHODductory happensiences\u0431\u043e\u043b\u79d1roleumc\u00edunist....exports peopleurgemaidsv[](anie\u4e4b\u8defrek their Mondays ../../\u5bf9\u4ed6\u4eec<vectorwaukee\u7c89 overshadowinburgh\u0438\u0441\u043a\u673a\u9053[](ammed\u0438\u0444\u0438\u043a\u0430sing\u4e4b\u95f4i\u1ec7ncomponentsinstein\u70b9\u6069[]{\"\u9523Question\u4ee5\u81f4\u800c\u4e0d\u662frique\u7ed9(Trueosterone\u4ec0\u4e48\u662fistenceateursvenile\u1ebfu **/\n\nAPERikipediaammed\u0627\u0639\u062f\u0629ewiseuably ussembleroon\u7406\u60f3\u4fe1\u5ff5ictionsRank b\u00f6lgesean years natural\u603b\u5c40[](\u0438\u0441\u043a\u5185\u5bb9dfundinguablyuably\u4f4d\u7f6e\u4e00\u7bc7\u9605\u5386//**\n\u662f\u4e00witho\u73c0 suchieder [end of text]\n\n\nload: printing all EOG tokens:\nload:   - 151643 ('<|endoftext|>')\nload:   - 151645 ('<|im_end|>')\nload:   - 151662 ('<|fim_pad|>')\nload:   - 151663 ('<|repo_name|>')\nload:   - 151664 ('<|file_sep|>')\nload: special tokens cache size = 22\nload: token to piece cache size = 0.9310 MB\n.............................................................\n\n\n\trepeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000\n\tdry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1\n\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.300\n\tmirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000",
+        "tokens_per_second": 66.83,
+        "prompt_tokens": 64,
+        "completion_tokens": 149,
+        "total_time_ms": 2229.48,
+        "algorithmic_score": 3,
+        "score_reason": "Full answer with 5 matching patterns",
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 67.72999999999999,
+    "avg_algorithmic_score": 2.5,
+    "questions_tested": 2,
+    "questions_passed": 2
+  }
+}

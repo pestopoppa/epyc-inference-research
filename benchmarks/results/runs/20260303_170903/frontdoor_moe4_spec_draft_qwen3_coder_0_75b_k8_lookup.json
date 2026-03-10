@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe4_spec_draft_qwen3_coder_0_75b_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T23:46:15.958841",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>:\nHere's a thinking process that leads to the suggested analysis and amendments:\n\n1.  **Deconstruct the Request:**\n    *   **Input:** A specific AI governance policy statement (\"All ML models deployed in production must achieve 95% accuracy on a held-out test set, have explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\").\n    *   **Task:** Analyze the policy.\n    *   **Requirements:**\n        1.  Identify at least 3 failure modes (ways it could fail).\n        2.  Explain the mechanism for each failure mode.\n        3.  Propose specific amendments for each.\n        4.  Discuss trade-offs of the amendments.\n\n2.  **Analyze the Policy Statement:**\n    *   *Constraint 1:* \"95% accuracy on a held-out test set.\"\n        *   *Critique:* Accuracy is a flawed metric for imbalanced data. 95% might be impossible or irrelevant depending on the problem (e.g., fraud detection). \"Test set\" doesn't guarantee generalization to production distribution shift.\n    *   *Constraint 2:* \"Explainability scores above 0.8 (SHAP-based).\"\n        *   *Critique:* SHAP scores measure feature importance magnitude, not necessarily \"explainability\" in a human-understandable sense. A score of 0.8 is arbitrary. Complex models (deep learning) often have low SHAP stability.\n    *   *Constraint 3:* \"Quarterly bias audits.\"\n        *   *Critique:* Quarterly is too infrequent for fast-moving data. \"Bias audits\" is vague (what definition of bias? demographic parity? equalized odds?).\n    *   *Constraint 4:* \"All ML models.\"\n        *   *Critique:* One-size-fits-all. A simple linear regression for inventory forecasting shouldn't be held to the same standard as a high-stakes healthcare diagnosis model.\n\n3.  **Brainstorm Failure Modes (Selecting the top 3):**\n\n    *   *Idea 1: Metric Mismatch (Accuracy).*\n        *   *Mechanism:* If the task is fraud detection (1% fraud), 95% accuracy means predicting \"no fraud\" for everyone. The model is useless but passes the policy.\n        *   *Amendment:* Use task-specific metrics",
+        "tokens_per_second": 11.89,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 43047.64,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "<think>:\nThis is a classic distributed systems interview question about the intersection of idempotency, eventual consistency, and database replication. Let me think through each question systematically.\n\n1. **How double-charges occurred despite idempotency keys:**\n\nThe key issue is the read-write separation with eventual consistency. Here's the sequence:\n- Request 1 arrives with idempotency key X\n- System reads replica to check if key X exists (returns: not found)\n- System writes to primary (creates record with key X)\n- Replica lag spike (500ms)\n- Request 2 arrives with same idempotency key X (within the 500ms window)\n- System reads replica (still shows: not found due to lag)\n- System writes to primary again (creates duplicate charge)\n- Eventually replica updates, but damage is done\n\nThe idempotency mechanism failed because the check and write weren't atomic across the same data source, and the read was from an eventually consistent replica.\n\n2. **Why testing didn't catch this:**\n\nSeveral reasons:\n- Replica lag spikes are rare/natural events, hard to simulate reliably\n- Testing environments typically have minimal lag (10-20ms vs 500ms production spike)\n- Idempotency tests likely used synchronous read-write paths\n- Load testing may not have stressed replication infrastructure enough\n- The bug requires a specific timing window that's hard to hit in tests\n\n3. **Two architectural fixes:**\n\n**Option A: Strong consistency for idempotency checks**\n- Write to primary, then read from same primary before committing\n- Use synchronous replication or read-your-own-writes\n- Trade-offs: Higher latency, primary becomes bottleneck\n\n**Option B: Database-level idempotency enforcement**\n- Use UNIQUE constraint on idempotency key column\n- Handle constraint violation as idempotent response\n- Trade-offs: Still need to handle race conditions, but prevents duplicates at DB level\n\n**Option C: Idempotency with distributed locking**\n- Acquire lock before idempotency check\n- Trade-offs: Complexity, potential deadlocks\n\nLet me think about the best two options...\n\nActually, the best options are:\n1. **Primary-only reads for idempotency checks** - read from primary for idempotency verification\n2. **Database constraint + retry logic** - UNIQUE constraint with",
+        "tokens_per_second": 13.5,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37915.1,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "instruction_precision": {
+      "t1_q2_word_limit": {
+        "question_id": "t1_q2_word_limit",
+        "prompt": "Describe machine learning in exactly 20-25 words. Count carefully.",
+        "response": "Machine learning is a data-driven approach where algorithms improve automatically through experience and by example, without explicit programming for every possible scenario.\n\nCounted carefully: 20 words.\nMachine learning is a data-driven approach where algorithms improve automatically through experience and by example, without explicit programming for every possible scenario.\n\nCounting the words:\n1. Machine\n2. learning\n3. is\n4. a\n5. data-driven\n6. approach\n7. where\n8. algorithms\n9. improve\n10. automatically\n11. through\n12. experience\n13. and\n14. by\n15. example,\n16. without\n17. explicit\n18. programming\n19. for\n20. every\n21. possible\n22. scenario.\n\nLet me recount: Machine learning is a data-driven approach where algorithms improve automatically through experience and by example, without explicit programming for every possible scenario.\n\nThat's 22 words total. Let me recount more carefully:\n\n1. Machine (1)\n2. learning (2) \n3. is (3)\n4. a (4)\n5. data-driven (5)\n6. approach (6)\n7. where (7)\n8. algorithms (8)\n9. improve (9)\n10. automatically (10)\n11. through (11)\n12. experience (12)\n13. and (13)\n14. by (14)\n15. example, (15)\n16. without (16)\n17. explicit (17)\n18. programming (18)\n19. for (19)\n20. every (20)\n21. possible (21)\n22. scenario. (22)\n\nThat's 22 words. My count is correct. The 20-25 word requirement is met with 22 words, which is a good middle range for this kind of explanation. The text is: \"Machine learning is a data-driven approach where algorithms improve automatically through experience and by example, without explicit programming for every possible scenario.\"\n\nThis is exactly what I'll submit:\n\nMachine learning is a data-driven approach where algorithms improve automatically through experience and by example, without explicit programming for every possible scenario.\n\nWord count: 22 words. Counted carefully, this meets the 20-25 word requirement. The definition is clear and concise while covering key concepts of machine",
+        "tokens_per_second": 61.31,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 8351.42,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 28.900000000000002,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

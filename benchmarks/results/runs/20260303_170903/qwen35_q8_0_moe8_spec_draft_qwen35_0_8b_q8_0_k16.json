@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q8_0",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/jiaojjjjje/Qwen3.5-35B-A3B-abliterated-GGUF/Qwen3.5-35B-A3B-abliterated-Q8_0.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T04:49:36.181366",
+  "results": {
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "<think>\nHere's a thinking process that leads to the suggested schedule:\n\n1.  **Analyze the Constraints:**\n\n    *   **Meeting 1: Team Sync**\n        *   Duration: 60 minutes.\n        *   Attendees: Alice, Bob, Carol.\n        *   Constraint: Must be a continuous 60-minute block.\n    *   **Meeting 2: 1:1 Alice-Dave**\n        *   Duration: 30 minutes.\n        *   Attendees: Alice, Dave.\n    *   **Meeting 3: 1:1 Bob-Dave**\n        *   Duration: 30 minutes.\n        *   Attendees: Bob, Dave.\n    *   **Dave's Availability:**\n        *   9:00am - 11:00am\n        *   2:00pm - 4:00pm\n    *   **Alice's Unavailability:**\n        *   10:00am - 11:00am (This affects the Team Sync and her 1:1).\n    *   **No Back-to-Back Meetings:**\n        *",
+        "tokens_per_second": 13.39,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19112.65,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "This thought experiment, known as the **Ship of Theseus**, has puzzled philosophers for nearly two millennia. It is the classic paradox of **identity over time**: At what point does a collection of parts cease to be the original object and become something new?\n\nHere are the arguments for two distinct philosophical positions on the matter, followed by my evaluation.\n\n### Position 1: The Continuity Theory (Temporal-Spatial Persistence)\n**The Position:** The ship that is gradually rebuilt plank by plank remains the Ship of Theseus.\n\n**The Argument:**\nProponents of this view (often associated with Aristotelian metaphysics or Locke's theory of identity) argue that identity is not determined by the *material* of an object, but by its **continuity**.\n\n1.  **Gradual Transition:** Since the planks are replaced one at a time, there is never a moment where the ship is \"disconnected\" from itself. If you swap out one plank, it is still the ship. If you swap out 99%, it is still the ship. Therefore, there is no logical breaking point in the timeline where it ceases to be the original.\n2.  **Form over Matter:** Aristotle distinguished between *matter* (",
+        "tokens_per_second": 13.49,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 18980.14,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q2_counterfactual": {
+        "question_id": "t2_q2_counterfactual",
+        "prompt": "Consider this scenario: \"If the internet had never been invented, how would academic research be different today?\"\n\nAnalyze this counterfactual across three dimensions:\n1. Speed of knowledge dissemination\n2. Collaboration patterns\n3. Reproducibility and peer review\n\nBe specific about mechanisms and second-order effects.",
+        "response": "<think>\nHere's a thinking process that leads to the suggested response:\n\n1.  **Analyze the Request:**\n    *   **Scenario:** A counterfactual world where the internet was never invented.\n    *   **Task:** Analyze how academic research would differ today.\n    *   **Dimensions:**\n        1.  Speed of knowledge dissemination.\n        2.  Collaboration patterns.\n        3.  Reproducibility and peer review.\n    *   **Requirements:** Be specific about mechanisms and second-order effects.\n\n2.  **Deconstruct the Counterfactual:**\n    *   *Premise:* The internet (specifically the public, TCP/IP-based global network) doesn't exist.\n    *   *Implicit Constraint:* We assume other technologies might still evolve (e.g., faster paper mail, telephones, fax, early mainframe networking for military/academic specific purposes like Arpanet evolving into something isolated but not the \"web,\" or simply relying on physical infrastructure). However, for the sake of a clear analysis, I should treat \"no internet\" as \"no instant global digital connectivity,\" meaning reliance on physical media (journals, mail) and slower communication tech (phone/f",
+        "tokens_per_second": 13.4,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19101.7,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.426666666666668,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

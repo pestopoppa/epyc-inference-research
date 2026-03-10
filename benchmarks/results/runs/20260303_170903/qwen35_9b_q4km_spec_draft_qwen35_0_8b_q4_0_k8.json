@@ -1,0 +1,53 @@
+{
+  "model_role": "qwen35_9b_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q4_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T07:34:05.698196",
+  "results": {
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?\n4. If Gene is unmeasured, can you still get an unbiased estimate? How?\n\nHere is the step by step.\n\n### 1. Analysis of the DAG Structure (ign -> Cancer Gene Smoking, Smoking -> Yellow Fingers.\n    **Gene -> Cancer.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n\n\n\n\n\ndecoded  265 tokens in   14.531 seconds, speed:   18.237 t/s\nn_predict = 265\ndraft:\ntarget:",
+        "tokens_per_second": 16.013284379010877,
+        "prompt_tokens": 165,
+        "completion_tokens": 280,
+        "total_time_ms": 16548.76,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\n<think>\n\n</think>\n\nTo find all permutations of the plant$ must be watered immediately after D** $\\rightarrow$ The$E$ cannot be first or last**\n4 be watered before D** $\\text{Position of Constraints:\n\nLet's denote the positions of the plants as $A, C, D, E$\n- as $E$\n- as $A, B, C, D, E$\n- $A, B, C, D, E$\n- $\n- $\n- $\n- $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n- as $A, B, $\n\n\n\n\ndecoded  257 tokens in   16.453 seconds, speed:   15.620 t/s\nn_predict = 257\ndraft:\ntarget:",
+        "tokens_per_second": 13.998034828417861,
+        "prompt_tokens": 163,
+        "completion_tokens": 329,
+        "total_time_ms": 18359.72,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q1_methodological_critique": {
+        "question_id": "t3_q1_methodological_critique",
+        "prompt": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.",
+        "response": "<think>\n\n</think>\n\nThe claim that bilingualism *proves* it enhances cognitive control based solely on a higher mean score with a significant p-value is a classic case of confusing **correlation with causation**. While the statistical result ($p < 0.01$) indicates the difference is unlikely to be due to random chance, it does not establish *why* the difference exists.\n\nHere are four methodological issues that could explain the 15-point difference without bilingualism actually causing cognitive enhancement:\n\n### 1. Confounding Variables (Socioeconomic Status and Education)\n**The Issue:** Bilingualism is often correlated with specific demographic factors. In many populations, bilingualism is associated with immigrant families or specific educational backgrounds that may differ from monolingual groups in terms of socioeconomic status (SES), parental education, or access to early childhood enrichment programs.\n**How it produces the effect:** If the bilingual group has significantly higher SES or better access to educational resources than the monolingual group, these factors (rather than the language itself) could drive the higher executive function scores. High SES is strongly linked to better cognitive outcomes due to better nutrition, less stress, and more cognitive stimulation. The study likely failed to control for SES, making",
+        "tokens_per_second": 12.18,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 21018.31,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 14.063773069142911,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

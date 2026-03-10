@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q5ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T22:44:44.352275",
+  "results": {
+    "math": {
+      "t1_q2_system_equations": {
+        "question_id": "t1_q2_system_equations",
+        "prompt": "Solve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method.",
+        "response": "<think>\nHere is a thinking process to solve the system of equations:\n\n1.  **Analyze the given system:**\n    Equation 1: $x^2 + y^2 = 25$\n    Equation 2: $xy = 12$\n\n    The goal is to find all real ordered pairs $(x, y)$ that satisfy both equations.\n\n2.  **Identify the structure:**\n    The terms $x^2 + y^2$ and $xy$ suggest using algebraic identities involving $(x+y)^2$ and $(x-y)^2$.\n\n    Identity 1: $(x+y)^2 = x^2 + y^2 + 2xy$\n    Identity 2: $(x-y)^2 = x^2 + y^2 - 2xy$\n\n3.  **Apply Identity 1 to find $(x+y)$:**\n    Substitute the known values into the identity.\n    $(x+y)^2 = 25 + 2(12)$\n    $(x+y)^2 = 25 + 24$\n    $(x+y)^2 = 49$\n\n    Taking the square root of both sides:",
+        "tokens_per_second": 12.2,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 20977.02,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "<think>\n\n</think>\n\n### 1. ABA Problem Scenario\n\nThe ABA problem occurs when a thread reads a value `A`, gets preempted, and while it is waiting, another thread modifies the data from `A` to `B` and then back to `A`. When the first thread resumes, it sees that the value is still `A` and assumes no changes occurred, but the state of the heap (or the logical structure) has actually changed.\n\n**Concrete Sequence of Operations:**\n\nLet the stack initially contain a single node `A` (where `top` points to `A`).\n\n1.  **Thread T1 (Pop):**\n    *   Reads `top` = `A`.\n    *   Prepares to CAS: `expected = A`, `new = A->next` (which is `nullptr`).\n    *   **Context Switch:** T1 is paused before executing the CAS.\n\n2.  **Thread T2 (Push):**\n    *   Pushes node `B`. `top` becomes `B`.\n    *   `B->next` points to `A`.\n\n3.  **Thread T2 (Pop):**\n    *   Pops node `B`. `",
+        "tokens_per_second": 13.38,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19138.12,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "```json\n{\n  \"phases\": [\n    {\n      \"phase_id\": \"Phase 1: Data Acquisition\",\n      \"description\": \"Initial Data Gathering raw_price data_collection\": \"\n      \"agents\": [\"researcher_agent\"],\n      \"tasks\": [\n        {\n        \"Fetch current_stock_price\": \"Fetch current AAPL stock price from web\",\n        \"historical_data\": \"Retrieve  \"Retrieve 30-day historical prices to current AAPL price history (30-day price data points)\",\n        \"output_format\": \"JSON\",\n        \"time_budget\": \"30s\"\n      ]\n    },\n    {\n      \"phase\": \"phase\": \"Phase 2: Analysis\",\n      \"agents\": [\"coder_agent\",\n      \"tasks\":[\n        {\n      tasks\": [\n        {\n          \"calculation\": \"Compute 30-day moving average from historical data\",\n        \"code_requirement\": \"Implement validation\": \"Python script execution\",\n        \"output_format\": \"JSON\",\n        \"budget\": \"5s\"\n        }      }\n    },\n        }\n    },\n        }\n      \"phase\": \"",
+        "tokens_per_second": 6.81,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 37588.09,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.796666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

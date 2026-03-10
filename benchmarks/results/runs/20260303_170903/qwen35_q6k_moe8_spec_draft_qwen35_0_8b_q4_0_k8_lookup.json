@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q6_K.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T01:46:24.839746",
+  "results": {
+    "thinking": {
+      "t2_q4_metacognition": {
+        "question_id": "t2_q4_metacognition",
+        "prompt": "You're asked to estimate how many piano tuners are in Chicago.\n\n1. Describe your estimation approach step by step\n2. Identify the key assumptions you're making\n3. Estimate upper and lower bounds\n4. What information would most reduce your uncertainty?\n\nThis is about your reasoning process, not the exact number.",
+        "response": "<think>:\nHere's a thinking process that leads to the suggested response:\n\n1.  **Analyze the Request:**\n    *   **Task:** Estimate the number of piano tuners in Chicago.\n    *   **Components:**\n        1.  Describe the estimation approach (Fermi problem style).\n        2.  Identify key assumptions.\n        3.  Estimate upper and lower bounds.\n        4.  Identify what information would reduce uncertainty.\n    *   **Goal:** Demonstrate reasoning, logic, and structure, not necessarily finding the *perfect* answer (though the answer should be grounded in reality).\n\n2.  **Deconstruct the Problem (The Fermi Method):**\n    *   To find the number of piano tuners, I need to divide the *total demand for tuning* by the *capacity of one tuner*.\n    *   *Total Demand* = (Number of Pianos in Chicago) $\\times$ (Tunings per year per piano).\n    *   *Capacity* = (Hours worked per year per tuner) $\\times$ (Tunings per hour).\n    *   *Number of Pianos* = (Population of Chicago) $\\times$ (Fraction of people owning pianos) + (Institutions/Schools with pianos).\n\n3.  **Step-by-Step Approach (Component 1):**\n    *   Step 1: Estimate Chicago's population.\n    *   Step 2: Estimate the number of private households with pianos.\n    *   Step 3: Estimate the number of institutional pianos (schools, churches, concert halls).\n    *   Step 4: Estimate tuning frequency per piano.\n    *   Step 5: Estimate the workload of a single tuner (how many pianos per year they can service).\n    *   Step 6: Divide Total Tunings Needed by Tunings per Tuner.\n\n4.  **Identify Key Assumptions (Component 2):**\n    *   Population size (Chicago vs. Metro area).\n    *   Piano ownership rate (is it 1% of households? 0.1%?).\n    *   Institutional count (is it significant or negligible?).\n    *   Tuning frequency (once a year? twice?).\n    *   Tuner efficiency (hours per piano, days worked).\n\n5.  **Drafting the Numbers (Mental Math/",
+        "tokens_per_second": 12.38,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 41365.75,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>\nHere's a thinking process that leads to the suggested response:\n\n1.  **Deconstructing the Core Problem:**\n    *   **Topic:** The Ship of Theseus (Identity vs. Paradox of Identity vs. Material Identity).\n    *   **Task:**\n    **Task:**\n    **Identity,\n        .\n    *   **:**  *\n    *   **Structure:**\n    *   **:**\n *   **\n*   *\n  *  *\n   **\n\n*\n\n**\n    *\n *\n\n  **  *\n    *\n *\n    *   *   *\n    *\n*   *  * *\n *\n*  *\n *   ** *\n   *\n *\n*\n  *  *\n *  *\n  *\n*\n *\n*\n*\n\n * *\n * *\n   *\n   *\n   *\n  *\n  *\n  *\n*\n  *\n*\n  *\n  *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n  *\n  *\n  *\n *\n *\n *\n*\n *\n *\n  *\n *\n *\n *\n *\n  *\n  *\n  *\n *\n *\n *\n  *\n *\n  *\n *\n *\n *\n *\n *\n  *\n  *\n *\n *\n  *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *\n *",
+        "tokens_per_second": 8.59,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 59583.73,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t1_q1_sequential": {
+        "question_id": "t1_q1_sequential",
+        "prompt": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.",
+        "response": "[{\"tool\": \"grep_search\", \"arguments\": {\"pattern\": \"ERROR\", \"path\": \"/var/log/app.log\"}}]",
+        "tokens_per_second": 13.69,
+        "prompt_tokens": null,
+        "completion_tokens": 28,
+        "total_time_ms": 2045.44,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.553333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

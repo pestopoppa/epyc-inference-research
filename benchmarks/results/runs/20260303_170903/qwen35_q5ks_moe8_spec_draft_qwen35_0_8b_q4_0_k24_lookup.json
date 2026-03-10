@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q5ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q5_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T23:27:06.775160",
+  "results": {
+    "math": {
+      "t1_q2_system_equations": {
+        "question_id": "t1_q2_system_equations",
+        "prompt": "Solve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method.",
+        "response": "<think>\n\n</think>\n\nTo solve the system of equations:\n1.  $x^2 + y^2 = 25$\n2.  $xy = 12$\n\nWe will use the algebraic method of symmetric polynomial method of perfect square identity method involving the square of the sum $(x+y)$ and $(x+y) and $(x-y)$.\n\n### Step 1: Use the relationship between $(x+y)^2$ and $(x-y)^2$\nWe know the following identities:\n$(x+y)^2 = x^2 + 2xy + y^2$\n$(x-y)^2 = x^2 - 2xy + y^2$\n\n**Calculate $(x+y)^2$:\nGiven:\n$x^2 + y^2 = 25$ and $xy = 2xy = 2xy = 24:\n2xy = 12$2$ (12$\n$4\nSubstitute$ the values:\n$(x+y)^2 = 25 + 2(12) = 25 + 24 = 49$\nTaking the square root of both sides:\n$x+y = 7$\n**Calculate $(x-y)^2$:**\n$(x-y)^2 = x^2 + y^2 - 2xy + y^2$\n$Substitute the values:\n$(x-y)^2 = 25 - 2(12) = 25 - 24 = 1$\nTaking the square root both sides:\n$x-y = \\pm 1$\nWe now we have two cases:\n1. **Case 1**: $x+y=7$ and $x-y=1$\nCase 2**: $x+y=7$ and $x-y=-1$\nCase 3**: $x+y=-7$ and $x-y=1$\nCase 4**: $x+y=-7$ and $x-y=-1$\n\nLet's solve for the systems.\n\n### Step 2: Solve each Case 4 Linear Systems\n\n**Case 1:**\n$\\begin{cases} x+y=7 \\text{1}7}7}7} \\ x-y= \\text{1} \\end{cases}$\nAdd the two equations:\n$(x",
+        "tokens_per_second": 9.25,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 55373.02,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "coder": {
+      "t3_q1_concurrent_correctness": {
+        "question_id": "t3_q1_concurrent_correctness",
+        "prompt": "Below is a lock-free stack implementation. Identify the ABA problem scenario,\nexplain why it causes incorrect behavior, and fix it without using locks.\n\n```c\nstruct Node { int val; Node* next; };\natomic<Node*> top;\n\nvoid push(int v) {\n  Node* n = new Node{v, top.load()};\n  while (!top.compare_exchange_weak(n->next, n));\n}\n\nint pop() {\n  Node* t = top.load();\n  while (t && !top.compare_exchange_weak(t, t->next));\n  return t ? t->val : -1;\n}\n```\n\nProvide:\n1. A concrete sequence of operations that demonstrates the ABA problem\n2. What incorrect behavior results\n3. A fix using either tagged pointers or hazard pointers (show code)",
+        "response": "<think>\nHere's a thinking process that leads to the suggested solution:\n\n1.  **Analyze the Request:**\n    *   **Input:** A specific lock-free stack code (Lock-free stack implementation is provided.\n    *   **Task:** Identify the ABA problem in the stack.\n    *   **Task 1: ABA problem.\n    *   **Task 3: Identify the ABA problem scenario, explain why it causes incorrect behavior, and fix it without using locks.\n    *   **Output:**\n        1.  A concrete sequence of operations demonstrating the problem.\n    *   **Task 2:** Explain the ABA problem.\n    *   **Task 3 Fix the A problem.\n    *   **Task 4 problem.\n    *   **Task 5: Code.\n    *   **Task 6: Provide code.\n    *   **Task 6: Provide code for the fix.\n\n2.\n    *   **Task 7: Provide code for the fix.\n\n2.\n    *   **Task 8.\n    *   **Task 9.\n    *   **Task 10.\n    *   **Task 11.\n    *   **Task 12.\n\n    *   **Input:**\n\n    *   **Task 13.\n\n    *   **Task 14.\n\n    *   **Task 15.\n\n    *   **Task 16.\n\n    *   **Task 17.\n\n    *   **Task 18.\n\n    *   **Task 19.\n\n    *   **Task 20.\n\n    *   **Task 21.\n\n    *   **Task 22.\n\n    *   **Task 23.\n\n    *   **Task 24.\n\n    *   **Task 25.\n\n    *   **Task 26.\n\n    *   **Task 27.\n\n    *   **Task 28.\n\n    *   **Task 29.\n\n    *   **Task 30.\n\n    *   **Task 31.\n\n    *   **Task 32.\n\n    *   **Task 33.\n\n    *   **Task 34.\n\n    *   **Task",
+        "tokens_per_second": 12.65,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 40481.86,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"phase_id\": \"1,\n      \"agent\": \"researcher_agent\",\n      \"task\":\"Find current_stock_data\": \"task\":\"Fetch AAPL_stock_price\": \"data_fetch_a\"tasks\": [\n        {\n          \"name\": \"Fetch real-time stock price retrieval\",\n          \"description\": \"Search for current AAPL stock price (AAPL stock data\"\n        },\n        {\n          \"name\": \"Historical data retrieval\",\n          \"description\": \"Retrieve 30-day historical stock data for AAPL\"\n        }\n      ],\n      \"duration\": 30s\n    },\n    {\n      \"phase\": 2\",\n      \"agent\": \"coder_agent\",\n      \"tasks\": [\n        {\n          \"name\": \"Calculation\",\n          \"description\": \"Calculate 30-day moving average\"\n        },\n        {\n          \"name\": \"Verification\",\n          \"description\": \"Verify calculation correctness of moving average calculation\"\n        }\n      ],\n      \"duration\": 5s\n    },\n    {\n      \"phase3\",\n      \"agent\": \"reviewer_agent\",\n      \"tasks\": [\n        {\n          \"name\": \"Data Validation\",\n          \"description\": \"Cross-check results against independent data\"\n        },        {\n          \"name\": \"Consistency\",\n          \"description\": \"Ensure data integrity\"\n        }\n      ],\n      \"duration\": 15s\n    }\n  ],\n  \"context_passing\": {\n    \"researcher_to_coder\": {\n      \"key\": \"researcher_agent\",\n      \"\": \"coder_agent\",\n      \"data\": {\n        \"current_stock_price\": \"178767500.0\",\n        \"historical_data\": \"array of 30 days OHLCV\n        \"\n      },\n      \"\n      \"\": {\n        \"key\": \"coder_agent_to_reviewer_agent\",\n        \"from\": \"coder_agent\",\n        \"to\": \"reviewer_agent\",\n        \"data\": {\n        \"\": \"current_stock_price\": 175.7.0.7.7.500000\",\n        \"30-day_moving_average\": 172.",
+        "tokens_per_second": 8.28,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 61832.45,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.06,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

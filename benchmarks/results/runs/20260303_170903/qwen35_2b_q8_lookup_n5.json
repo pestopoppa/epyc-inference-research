@@ -1,0 +1,69 @@
+{
+  "model_role": "qwen35_2b_q8",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q8_0.gguf",
+  "config_name": "lookup_n5",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T03:48:07.206364",
+  "results": {
+    "agentic": {
+      "t1_q1_sequential": {
+        "question_id": "t1_q1_sequential",
+        "prompt": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.",
+        "response": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.\n\n<think>\nThinking\": \"First, I need to read the file /var/log/app.log.\nThe pattern is \"ERROR\", the path is \"/var/log/app.log\"Read the file /var/log/app.log.\"\n\nStep 1: Read the file to find where ERROR is logged.\nStep 2: Show the file.\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\", then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.\nThe user wants to find where ERROR is logged in /var/log/app.log, then show me that file.\n\nStep 1: Read the file /var/log/app.log.\nStep 1\" path is \"/var/log/app.log\" to show me that file\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\": \"/var/log/app.log\"}}]\n</think>\n\n[{\"read_file\": {\"path\":\n\n\n\n\ndecoded  518 tokens in    7.642 seconds, speed:   67.787 t/s\nn_predict    = 518\nt_draft      = 1.90 ms, 4.28 us per token, 233403.58 tokens per second\ntarget:",
+        "tokens_per_second": 65.7272825321499,
+        "prompt_tokens": 605,
+        "completion_tokens": 74,
+        "total_time_ms": 7881.05,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t2_q1_synthesis": {
+        "question_id": "t2_q1_synthesis",
+        "prompt": "Synthesize these three perspectives into a unified recommendation:\n\nEngineering: 'We need 3 months to refactor the auth system properly. Rushing will create tech debt.'\nProduct: 'Customers are churning due to login issues. We need a fix in 2 weeks.'\nFinance: 'Q4 budget is tight. Any solution over $20K needs board approval.'\n\nProvide a concrete recommendation in 3-4 sentences.",
+        "response": "Synthesize these three perspectives into a unified recommendation:\n\nEngineering: 'We need 3 months to refactor the auth system properly. Rushing will create tech debt.'\nProduct: 'Customers are churning due to login issues. We need a fix in 2 weeks.'\nFinance: 'Q4 budget is tight. Any solution over $20K needs board approval.'\n\nProvide a concrete recommendation in 3-4 sentences.\n\n<think>\n\n</think>\n\nGiven the tight Q4 budget and the urgent churn from login issues, the Finance department requires board approval for any solution exceeding $20K, the Engineering team warns that rushing the refactor will create significant technical debt, and the Product team notes that and the Product team notes that customers are churning due to login issues.\n\nA concrete recommendation is to implement a phased approach: the Product team notes that customers are churning due to login issues. A phased implementation strategy: first, deploy a temporary, low-cost utility login module to stabilize the system and halt the churn and secure a critical user experience, but do not commit to a full refactor until the Product team notes that customers are churning due to login issues.\n\nThis recommendation is to implement a temporary, low-cost utility login module to stabilize the system and secure a critical user experience, but do not commit to a full refactor until the Finance requires board approval for anything over $20K needs to Finance requires board approval for any solution over $20K needs board approval for Finance requires board approval for any solution over $20K needs board approval for any solution over $20K needs board approval. over $20K needs board approval for any solution over $20K needs board approval for any solution over $20K needs board approval for any.\n\n**Final Unified Recommendation:**\n\nTo balance the tight Q4 budget with the tight Q4 budget and the Product team notes that customers are churning due to login issues.\n1.  **3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3.\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final-4 sentences.**\n\n**Final Unified recommendation:**\n\n**Final recommendation:**\n\n** recommendation:**\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3-4 sentences.**\n\n**Final Unified Recommendation:**\n\n**3-4\n\n\n\n\ndecoded  516 tokens in    9.488 seconds, speed:   54.386 t/s\nn_predict    = 516\nt_draft      = 2.25 ms, 5.14 us per token, 194666.67 tokens per second\ntarget:",
+        "tokens_per_second": 53.14749563026646,
+        "prompt_tokens": 615,
+        "completion_tokens": 142,
+        "total_time_ms": 9708.83,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.\n\n<think>\n\n</think>\n\n### Analysis of Constraints\n\n**1. Team Sync (60min**\n*Must include Alice, Bob, Carol)*1:1 Alice unavailable 10-11am\n*\n*Dave only available: **9:00\u201311:10:110am, 10:30am, 11am, 2pm, 2:30pm, or 3:30pm.\n\n### Step-by-Step Deduction\n\n**1. Analyzed Constraints:\n- *must include Alice, Bob, Carol).\n- 1:1 Alice only available 10:30am, 1110am, 10am, 11:110:11am, 2pm, 2:30pm, 0am, 10am, 1:30min1:1 Bob:1:1 Bob-Dave (30:11am:30pm, 3pm0min, 10-1 Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\n**9: 10am, 10:11am, 2:30, 2:30pm, 3pm, 10am, 10:11am, 2pm, 2:30pm, 3pm, 30am, 10am, 10:11am, 2pm, 2:30pm, 3pm, 3:30pm, 3:10am, 10am, 110am, 103:30am, 10am, 110am, 10303:10am, 10am10am, 10am, 110am, 10am, 1030am, 10am:30am, 10am, 10am, 10am, 10am, 10am10am, 10am, 10am, 10am, 10am, 10am, 10am, 10am, 10am, 10am, 10am, \n\n\n\n\ndecoded  515 tokens in   10.538 seconds, speed:   48.869 t/s\nn_predict    = 515\nt_draft      = 2.58 ms, 3.96 us per token, 252231.28 tokens per second\ntarget:",
+        "tokens_per_second": 47.47025044013679,
+        "prompt_tokens": 940,
+        "completion_tokens": 72,
+        "total_time_ms": 10848.9,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "4. For which real values of alpha does the integral int_0^infinity f(x) e^{-alpha x} dx converge?\n5. Let g(x) = int_0^x f(t) dt. Prove that g is uniformly continuous on R.\n\n<think>\n\n</think>\n\nHere is the step-by-step solution to the problem regarding the function $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$.\n\n### 1. Differentiability of $f$ on $\\mathbb{R}$\n\n**Claim:** $f$ is differentiable everywhere on $\\mathbb{R}$.\n\n**Proof:**\nConsider the power series $f(x) = \\sum_{n=1}^{\\infty} a_n x^n$ where $a_n = \\frac{\\sin(n)}{n!}$.\nTo determine the radius of convergence $R$, we apply the Ratio Test to the coefficients:\n$$\nL = \\lim_{n \\to \\infty} \\left| \\frac{a_{n+1}}{a_n} \\right| = \\lim_{n \\to \\infty} \\left| \\frac{\\sin(n+1)}{(n+1)!} \\cdot \\frac{n!}{\\sin(n)} \\right|\n$$\nSince $|\\sin(n)| \\le 1$ and $|\\sin(n+1)| \\le 1$, the sine terms are bounded. The factorial terms dominate:\n$$\nL \\le \\lim_{n \\to \\infty} \\frac{1}{n+1} = 0\n$$\nThe radius of convergence is $R = \\frac{1}{L} = \\infty$.\n\nA power series with an infinite radius of convergence defines a function that is **analytic** (infinitely differentiable) on the entire real line $\\mathbb{R}$. The derivative can be computed by term-by-term differentiation:\n$$\nf'(x) = \\sum_{n=1}^{\\infty} \\frac{n x^{n-1}}{n!} \\sin(n) = \\sum_{n=1}^{\\infty} \\frac{x^{n-1}}{(n-1)!} \\sin(n)\n$$\nThis derived series also has a radius of convergence of $\\infty$.\nTherefore, $f$ is different",
+        "tokens_per_second": 12.99,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 39412.4,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 44.833757150638284,
+    "avg_algorithmic_score": null,
+    "questions_tested": 4,
+    "questions_passed": 0
+  }
+}

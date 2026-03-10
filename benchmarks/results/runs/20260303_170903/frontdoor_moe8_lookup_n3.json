@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe8_lookup_n3",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T00:08:55.378704",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "## 1. Analysis of AI Governance Policy Failures\n\n### Failure Mode 1: **Over-reliance on accuracy as a sole metric**\n**Mechanism**: The policy focuses exclusively on accuracy, which can be misleading in domains where model performance varies significantly across subpopulations. For example, a model achieving 95% accuracy might still exhibit severe bias against underrepresented groups, leading to discriminatory outcomes. This is particularly problematic in healthcare, finance, or criminal justice applications where fairness is paramount. Additionally, accuracy can be artificially inflated through data leakage or overfitting to the test set.\n\n### Failure Mode 2: **Inadequate bias audit design and execution**\n**Mechanism**: The policy mandates quarterly bias audits but does not specify what constitutes a meaningful audit. Without clear definitions of bias (e.g., demographic parity, equalized odds), audit methods, or thresholds for acceptable bias, the audits may become superficial compliance exercises. This could result in false confidence in model fairness, especially if the audit process is not rigorous enough to detect subtle biases or if the audit team lacks domain expertise.\n\n### Failure Mode 3: **Explainability score limitations and lack of interpretability context**\n**Mechanism**: The SHAP-based explainability score of 0.8 is a binary threshold that may not align with the actual interpretability needs of the model's stakeholders. For instance, a model with a high SHAP score might still be too complex for end-users to trust, or the SHAP values might not capture all relevant aspects of the model's decision-making process. Furthermore, explainability alone does not guarantee that the model is interpretable or that stakeholders understand the explanations.\n\n## 2. Proposed Amendments to Address Each Failure Mode\n\n### Amendment 1: **Multi-metric Performance Evaluation**\nReplace the single accuracy requirement with a multi-metric framework:\n- Minimum accuracy threshold (e.g., 90%)\n- Per-class accuracy for each demographic group (e.g., 85% minimum for each group)\n- Fairness metrics (e.g., demographic parity, equalized odds)\n- Calibration scores (e.g., ECE < 0.05)\n\n**Rationale**: This approach ensures that models perform well not just overall, but also across different subpopulations and maintain fairness.\n\n### Amendment 2: **Robust Bias Audit Framework**\nDefine a comprehensive bias audit process:\n- Specify audit metrics (e.g., demographic parity, equalized odds, calibration)\n- Establish audit frequency and methodology (e.g",
+        "tokens_per_second": 37.32,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 13719.43,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "<think>\nHere's a thinking process that leads to the suggested response:\n\n1.  **Analyze the Scenario:**\n    *   **System:** Distributed payment system.\n    *   **Problem:** Double-charges (idempotency failure).\n    *   **Mechanism:** Idempotency keys used for \"exactly-once\" delivery.\n    *   **Architecture:** Database with read replicas (eventual consistency, ~100ms lag).\n    *   **Pattern:** Read replica for idempotency check, Primary for write.\n    *   **Trigger:** Replica lag spike to 500ms during a failure event.\n    *   **Task:** Explain the failure mechanism, explain testing gaps, propose architectural fixes, and suggest monitoring.\n\n2.  **Deconstruct Question 1: How did double-charges occur?**\n    *   *Standard Idempotency Flow:* Client sends request + key -> Check DB (Key Exists?) -> If yes, return cached response -> If no, Process Payment -> Write Key + Result to DB.\n    *   *The Flaw:* The check reads from a *replica*, the write goes to the *primary*.\n    *   *The Race Condition:*\n        1.  Request A arrives with Key `X`.\n        2.  System checks replica for `X`. Replica is clean (lag exists).\n        3.  System proceeds to write to Primary (Charge `A` happens, Key `X` written to Primary).\n        4.  Replica still doesn't have Key `X` yet (lag).\n        5.  Request B arrives with Key `X` (maybe a retry by client or network glitch).\n        6.  System checks replica for `X`. Replica is *still* clean (lag is now 500ms).\n        7.  System proceeds to write to Primary (Charge `B` happens, Key `X` written to Primary again).\n    *   *Conclusion:* The lag window allowed the second request to bypass the check because it read stale data.\n\n3.  **Deconstruct Question 2: Why didn't testing catch this?**\n    *   *Test Environment:* Usually single-node DBs or tightly synchronized replicas.\n    *   *Latency:* Tests run on local networks (microseconds latency), not WAN-like replica lag conditions.\n    *",
+        "tokens_per_second": 13.33,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38398.59,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "<think>\n\n</think>\n\nThis is a classic problem involving **DAGs (Directed Acyclic Graphs)**, **confounding**, and **collider bias**. Let's break down the causal structure based on your description:\n\n*   $G$ (Gene) $\\to$ $S$ (Smoking)\n*   $G$ (Gene) $\\to$ $C$ (Cancer)\n*   $S$ (Smoking) $\\to$ $C$ (Cancer)\n*   $S$ (Smoking) $\\to$ $Y$ (Yellow Fingers)\n\nThe goal is to estimate the causal effect of $S$ on $C$.\n\n### 1. What is the minimal sufficient adjustment set?\n\nTo identify the causal effect of $S$ on $C$, we must block all **backdoor paths** (non-causal paths from $S$ to $C$) while not opening any **collider paths**.\n\n*   **Backdoor Path**: The only backdoor path is $S \\leftarrow G \\to C$. This path creates confounding because $G$ causes both Smoking and Cancer.\n*   **Blocking the path**: To block this path, we must condition on the confounder $G$.\n\n**Minimal Sufficient Adjustment Set**: $\\{ \\text{Gene} \\}$\n\n*Note: Conditioning on $S \\to Y$ (Yellow Fingers) is not necessary to block the backdoor path. Conditioning on $Y$ might actually introduce bias if we aren't careful (see below).*\n\n---\n\n### 2. Would conditioning on Yellow Fingers introduce bias? Explain.\n\n**Yes, conditioning on Yellow Fingers ($Y$) can introduce bias.**\n\n**Reasoning:**\n1.  **Structure**: $Y$ is a **child** of the treatment $S$ ($S \\to Y$).\n2.  **M-bias / Collider Bias**: While $Y$ is not a collider in this specific graph (it has only one arrow pointing to it, from $S$), conditioning on a **descendant of the treatment** is generally problematic when the treatment is the *only* cause of that variable in the specific context of the path analysis, or more specifically, it can induce **selection bias** or **M-bias** if there are unmeasured factors.\n3.  **More precise explanation (M-bias/Induced Colliders)**:\n    *",
+        "tokens_per_second": 13.47,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38019.74,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 21.373333333333335,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

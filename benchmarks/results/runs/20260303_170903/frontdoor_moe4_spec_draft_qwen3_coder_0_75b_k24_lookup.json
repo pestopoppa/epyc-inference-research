@@ -1,0 +1,55 @@
+{
+  "model_role": "frontdoor",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf",
+  "config_name": "moe4_spec_draft_qwen3_coder_0_75b_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T23:48:08.479189",
+  "results": {
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nThis policy attempts to establish a \"gatekeeping\" mechanism for AI deployment by setting hard thresholds for accuracy, explainability, and bias. While the intent is to ensure high-quality and ethical AI, the rigid, one-size-fits-all nature of these thresholds creates significant risks of unintended consequences and operational failures.\n\nHere is an analysis of the policy's failure modes, mechanisms, proposed amendments, and the associated trade-offs.\n\n### 1. Failure Mode: The \"Accuracy Ceiling\" and Use-Case Mismatch\n\n**Mechanism of Failure:**\nSetting a universal **95% accuracy** threshold ignores the inherent difficulty of specific tasks and the base rates of the data.\n*   **Imbalanced Data:** In fraud detection or rare disease diagnosis, the \"positive\" class might be 1% of the data. A model that predicts \"no fraud\" for every instance achieves 99% accuracy but is useless. Conversely, a model achieving 94% accuracy on a highly imbalanced dataset might be far more valuable than one hitting 95% on a trivial classification task.\n*   **Complexity vs. Accuracy:** Some tasks (e.g., predicting complex human behavior or high-dimensional scientific simulations) may have a theoretical maximum accuracy of 85% due to noise in the data. A 95% threshold would force the company to reject *all* models for these critical use cases, leaving the business with no AI solutions.\n*   **Metric Misalignment:** Accuracy is often a poor metric for business value. A model with 94% accuracy but significantly higher precision on the specific \"high-risk\" class might be preferred over a 95% accuracy model that misses critical edge cases.\n\n**Proposed Amendment:**\nReplace the static 95% accuracy threshold with **task-specific success criteria** based on business impact.\n*   *Action:* Define acceptable metrics (e.g., F1-Score, AUC-ROC, or Precision@K) specific to the use case. For fraud detection, prioritize Recall (catching fraud) over raw accuracy.\n*   *Action:* Establish a \"Minimum Viable Performance\" (MVP) based on the baseline of the current non-AI process (e.g., \"Must outperform human analysts by 10%\").\n\n**Trade-offs:**\n*   **Pros:** Increases model utility by allowing deployment on difficult or imbalanced tasks; aligns AI performance with actual business value.\n*",
+        "tokens_per_second": 13.68,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37422.49,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_system_failure": {
+        "question_id": "t3_q2_system_failure",
+        "prompt": "A distributed payment system failed, causing double-charges. Post-mortem data:\n- Exactly-once delivery was implemented using idempotency keys\n- Database uses read replicas with eventual consistency (100ms typical lag)\n- The idempotency check reads from a replica, write goes to primary\n- Failure occurred during a replica lag spike to 500ms\n\nQuestions:\n1. Explain precisely how double-charges occurred despite idempotency keys\n2. Why didn't the team catch this in testing?\n3. Propose two different architectural fixes with their trade-offs\n4. What monitoring would have detected this before it affected customers?",
+        "response": "1. **How double-charges occurred:**\n\nThe system had a classic \"eventual consistency\" race condition. Here's the sequence:\n- A payment request arrived and was processed, with the idempotency check (read) querying a replica\n- The same payment request was sent to the primary database for write operations\n- Due to the 500ms replica lag, the replica was still showing the transaction as \"unprocessed\"\n- The idempotency check against the stale replica showed no prior transaction, so it let the request through\n- The primary database processed the write and updated the transaction state\n- The same request was retried (either manually by user or due to network issues) and the same idempotency check returned a clean state\n- The second write was processed, causing the double charge\n\n2. **Why testing missed this:**\n\nThe team likely didn't catch this in testing because:\n- They tested with a single database instance, not a replica setup\n- Simulating the exact replica lag timing was nearly impossible\n- The 100ms lag was the norm, not the exception\n- They probably assumed that with idempotency keys, the system would be safe from duplicate processing\n- They may have tested for \"normal\" conditions but not \"edge\" cases involving replica lag spikes\n\n3. **Proposed architectural fixes:**\n\n**Option A: Use Primary-Only Reads**\n- Always read from primary database for idempotency checks\n- Trade-off: Increased latency for idempotency checks, potential performance impact on read-heavy systems\n\n**Option B: Implement Quorum-Based Idempotency**\n- Require consistency protocol across replicas for idempotency checks\n- Use a two-phase commit or similar approach for idempotency checks\n- Trade-off: More complex implementation, potential performance impact, risk of blocking writes\n\n4. **Monitoring to detect this before customer impact:**\n\n- **Idempotency key violation alerts** - Monitor for scenarios where the same transaction is processed multiple times\n- **Replica lag monitoring** - Alert when replica lag exceeds 100ms consistently\n- **Payment request duplication detection** - Alert on multiple identical payments for the same reference\n- **Cross-system transaction logging** - Log all idempotency key checks and their outcomes\n- **End-to-end payment tracking** - Real-time visibility into the status of each payment from start to finish\n\nAdditionally, they should implement circuit breaker patterns for the",
+        "tokens_per_second": 41.77,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 12258.42,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "instruction_precision": {
+      "t1_q2_word_limit": {
+        "question_id": "t1_q2_word_limit",
+        "prompt": "Describe machine learning in exactly 20-25 words. Count carefully.",
+        "response": "Machine learning is a data-driven approach where algorithms improve automatically through experience, mimicking human learning. It enables computers to recognize patterns, make predictions, and enhance performance without explicit programming for every scenario.\n\nThe 190th word is: **machine**\nThe 191st word is: **learning**\nThe 192nd word is: **is**\nThe 193rd word is: **a**\nThe 194th word is: **data-driven**\nThe 195th word is: **approach**\nThe 196th word is: **where**\nThe 197th word is: **algorithms**\nThe 198th word is: **improve**\nThe 199th word is: **automatically**\nThe 200th word is: **through**\nThe 201st word is: **experience**\nThe 202nd word is: **enabling**\nThe 203rd word is: **computers**\nThe 204th word is: **to**\nThe 205th word is: **recognize**\nThe 206th word is: **patterns**\nThe 207th word is: **make**\nThe 208th word is: **predictions**\nThe 209th word is: **enhance**\nThe 210th word is: **performance**\nThe 211th word is: **without**\nThe 212th word is: **explicit**\nThe 213rd word is: **programming**\nThe 214th word is: **for**\nThe 215th word is: **every**\nThe 216th word is: **scenario**\nThe 217th word is: **Counting**\nThe 218th word is: **carefully**\nThe 219th word is: **The**\nThe 220th word is: **190th**\nThe 221st word is: **word**\nThe 222nd word is: **is**\nThe 223rd word is: **machine**\nThe 224th word is: **learning**\nThe 225th word is: **the**\nThe 226th word is: **191st",
+        "tokens_per_second": 80.35,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 6372.12,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 45.26666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

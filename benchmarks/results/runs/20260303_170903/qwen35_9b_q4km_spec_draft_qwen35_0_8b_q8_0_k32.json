@@ -1,0 +1,53 @@
+{
+  "model_role": "qwen35_9b_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k32",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T07:47:17.419923",
+  "results": {
+    "thinking": {
+      "t3_q1_methodological_critique": {
+        "question_id": "t3_q1_methodological_critique",
+        "prompt": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.",
+        "response": "A psychology paper claims: \"We found that bilingual children score 15 points higher on\nexecutive function tests (p<0.01, n=200). This proves bilingualism enhances cognitive control.\"\n\nIdentify at least 4 methodological issues that could explain these results without\nbilingualism actually causing cognitive enhancement. For each issue, explain how it\ncould produce the observed effect.\n\n<think>\n\n</think>\n\nThe claim that bilingualismple. The groups (orists, or more (2) Selection Bias is. The (i.\n\n### (3.\n\n**Selection Bias.\n\n**Issue 3: Confounding Variables.**\n\n**Issue 4.\n\n**Issue 4.**\n\n.\n\n**Issue 5.**\n\n.\n\n**Issue 6.**\n\n**Issue 7.**\n\n**.**\n\n**Issue 8.**\n\n**Issue 9.**\n\n**Issue 10.**\n\n**Issue 11.**\n\n**Issue 12.**\n\n**Issue 13.**\n\n**Issue 14.**\n\n**Issue 15.**\n\n**Issue 16.**\n\n**Issue 17.**\n\n**Issue 18.**\n\n**Issue 19.**\n\n**Issue 20.**\n\n**Issue 21.**\n\n**Issue 22.**\n\n**Issue 23.**\n\n**Issue 24.**\n\n**Issue 25.**\n\n**Issue 26.**\n\n**Issue 27.**\n\n**Issue 28.**\n\n**Issue 29.**\n\n**Issue 30.**\n\n**Issue 31.**\n\n**Issue 32.**\n\n**Issue 33.**\n\n**Issue 34.**\n\n**Issue 35.**\n\n**Issue \n\n\n\n\ndecoded  286 tokens in   36.338 seconds, speed:    7.870 t/s\nn_predict = 286\ndraft:\ntarget:",
+        "tokens_per_second": 7.476721515128858,
+        "prompt_tokens": 147,
+        "completion_tokens": 992,
+        "total_time_ms": 38252.06,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?\n\n<think>\n\n</think>\n\nHere is the step-by-step logical deduction and analysis of Sufficient Adjustment Set\n\nTo $Smoking on the path.\n    *   **Conclusion:**\n**Answer:** Yes, conditioning on Yellow Fingers would introduce bias.\n\n**Explanation:**\n1.  **Ance\n    **Yellow Fingers.\n\n**Conclusion:** Conditioning on Yellow Fingers blocks the causal effect is:**\n\n**Final Answer:**\n**Correction for the causal effect of Smoking on Cancer.\n    *   **Gene is unmeasured, you can still get an unbiased estimate by controlling for the causal effect of Smoking on Cancer.\n\n**Final Answer:**\n1.  **Minimal Sufficient Adjustment Set:** $\\{Gene is unmeasured, you can still get an unbiased estimate.\n    *   **How:** You can use **instrumental variable analysis of the data, you can still get an unbiased estimate.\n    *   **How:** You can use **Instrumental Variable (IV)** analysis or **Mendelian Randomization) if you can still get an unbiased estimate.\n    *   **How:** You can use **Instrumental Variable (IV)** analysis or **Mendelian Randomization** if you have data on the causal\n\n\n\n\ndecoded  257 tokens in   46.570 seconds, speed:    5.519 t/s\nn_predict = 257\ndraft:\ntarget:",
+        "tokens_per_second": 5.304576611192904,
+        "prompt_tokens": 167,
+        "completion_tokens": 1271,
+        "total_time_ms": 48448.73,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.\n\n<think>\n\n</think>\n\nTo solve this logic that satisfy all the total number of plants is a specific positions for Step  $E \\neq 1$ and $E \\neq 5$\n-1 = D-5 plants before D$.\n6 positions 1, 2, 3, 4, 5.\n</think>\n\nTo be watered before D\n** are positions  sequence: $D \\to C$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$E$ cannot be first or last.\n$\n\n\n\n\ndecoded  282 tokens in   38.052 seconds, speed:    7.411 t/s\nn_predict = 282\ndraft:\ntarget:",
+        "tokens_per_second": 7.06557960302467,
+        "prompt_tokens": 135,
+        "completion_tokens": 1023,
+        "total_time_ms": 39911.8,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 6.6156259097821435,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

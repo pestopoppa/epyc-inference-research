@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q6_K.gguf",
+  "config_name": "moe8_lookup_n5",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T02:02:36.095746",
+  "results": {
+    "thinking": {
+      "t2_q4_metacognition": {
+        "question_id": "t2_q4_metacognition",
+        "prompt": "You're asked to estimate how many piano tuners are in Chicago.\n\n1. Describe your estimation approach step by step\n2. Identify the key assumptions you're making\n3. Estimate upper and lower bounds\n4. What information would most reduce your uncertainty?\n\nThis is about your reasoning process, not the exact number.",
+        "response": "<think>:\n\nTo estimate the number of piano tuners in Chicago, I will use a **Top-down approach that breaks-downward and an approach starting with the population of Chicago, a top-down approach. I will break down the demand and estimate the number of tuners, estimate the number of piano tuning\n\n<think>\n1. **Estimate number of piano tuners in Chicago.\n\nI will start by estimating the number of\n\nTo estimate the number of piano tuners in Chicago, I will use a top-down approach, the population of Chicago to estimate the number of tuners.\n\nTo estimate the number of piano tuners in\n\nTo estimate the number of pianos and use approach the number of pianos the number of tuners in Chicago\n\nTo estimate the number of piano tuners in Chicago, I will use a top-down approach, breaking down the city's population to estimate the number of piano tuners.\n\nTo estimate the number of piano tuners in Chicago, I will use a top-down approach, breaking down the city's population to estimate the number of piano tuners.\n\nTo estimate the\n\nTo estimate the number of piano tuners in Chicago, I will use a top-down approach, breaking down the city's population to estimate the number of piano tuners.\n\n**To estimate the number of pianos and the demand for piano tuning.\n\nTo estimate the number of piano tuners in Chicago, I will use a top-down approach, breaking down the city's population to estimate the number of pianos and the demand for.\n\nTo estimate the number of pianos and demand for tuning.\n\nTo estimate the number of piano tuners in Chicago, I will use a top-down approach, breaking down the city's population to estimate the number of pianos and demand for tuning.\n\nTo the number of pianos and demand for tuning.\n\nTo estimate the number of piano tuners in Chicago, I will use a top-down approach, breaking down the city's population to estimate the number of pianos and demand for tuning.\n\nTo estimate the number of population for and demand for tuning.\n\nTo estimate the number of piano tuners in Chicago, I will use a top-down approach, breaking down the city's population to estimate the number of pianos and demand for tuning.\n\nTo estimate the number of piano tuners in Chicago, I will use a top-down approach, breaking down the city's population to estimate the number of pianos and demand for tuning.\n\nTo estimate the number of piano",
+        "tokens_per_second": 8.83,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 57984.04,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>\n\n</think>\n\nThe Ship of Theseus is one of the oldest and most enduring paradoxes in philosophy, touching upon the nature of identity, persistence over time, and the distinction between material composition and form. The paradox forces us to ask: What makes an object the specific thing it is? Is it the atoms that compose it, the pattern those atoms hold, or the history that object possesses?\n\nHere are arguments for two primary philosophical positions regarding this scenario.\n\n### Position 1: Material Constitution (The \"Old Planks\" Argument)\n\nThis position argues that an object's identity is inextricably tied to its **material continuity**. According to this view, the Ship of Theseus is defined by the physical substance from which it was built.\n\n*   **The Argument:** If identity is based on matter, the original ship ceases to exist the moment its final original plank is removed. As you replace the planks one by one, you are effectively destroying the original ship and creating a succession of slightly different ships. The entity that retains the \"original\" planks (even if assembled later) is the true Ship of Theseus because it possesses the actual historical material of the vessel.\n*   **Supporting Intuition:** Think of a human body. If you replaced every cell in a person's body over 7 years (biological turnover), most people would argue it is still the same person because the *process* is continuous. However, if you took those old cells and built a statue, while the original body continued sailing, most would intuitively say the statue is a copy, and the sailor is the \"real\" person. Similarly, if you build a ship from the original planks, you have recreated the physical essence of the original vessel, regardless of when or how the reconstruction happened.\n*   **The Outcome:** The ship built from the old planks is the original Ship of Theseus. The continuously sailing ship is merely a \"copy\" or a \"replica\" that shares a lineage but lacks the original substance.\n\n### Position 2: Formal Continuity / Structuralism (The \"Sailing Ship\" Argument)\n\nThis position, often associated with Aristotle's concept of **Form (Morph\u00c3\u00a9)**, argues that an object's identity is defined by its **function, structure, and continuity of existence**, not its raw material.\n\n*   **The Argument:** A ship is defined by what it *is* (a vessel designed to sail) and how it functions in",
+        "tokens_per_second": 13.9,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 36831.72,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t1_q1_sequential": {
+        "question_id": "t1_q1_sequential",
+        "prompt": "Tools:\n- read_file: {\"path\": \"string\"}\n- grep_search: {\"pattern\": \"string\", \"path\": \"string\"}\n\nUser asks: \"Find where ERROR is logged in /var/log/app.log, then show me that file\"\n\nGenerate the tool calls in order as a JSON array. Output only the JSON array.",
+        "response": "[\n[{\"tool\": \"grep_search,\"arguments\":{\"pattern\":\"ERROR\",\"path\":\"/var/log/app.log\"}]\n[{\"tool\":read_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":read_file,arguments\":{\"path\":\"/log/app/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":read_filearguments\":{\"path\":\"/var/log/app.log\"}}\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log\"}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":_filearguments\":{\"path\":\"/var/log/app.log\"}}]\n[{\"tool\":filearguments\":{\"path\":\"/var/log/app.log",
+        "tokens_per_second": 13.16,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38916.15,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.963333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

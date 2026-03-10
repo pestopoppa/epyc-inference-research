@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q8",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q8_0.gguf",
+  "config_name": "lookup_n3",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T03:06:16.179975",
+  "results": {
+    "agentic": {
+      "t2_q3_schema_edge": {
+        "question_id": "t2_q3_schema_edge",
+        "prompt": "Tool schema:\n{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"string (required) - must start with /\",\n    \"method\": \"string (required) - GET/POST/PUT/DELETE\",\n    \"body\": \"object (required for POST/PUT, must be null for GET/DELETE)\",\n    \"headers\": \"object (optional)\"\n  }\n}\n\nUser: \"GET the users endpoint with an auth header Bearer token123\"\n\nGenerate the correct tool call. Output only the JSON.",
+        "response": "{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"/users\",\n    \"method\": \"GET\",\n    \"body\": null,\n    \"headers\": {\n      \"Authorization\": \"Bearer token123\"\n    }\n  }\n}\n```\n</think>\n```\n```\n</think>\n{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"/users\",\n    \"method\": \"GET\",\n    \"body\": null,\n    \"headers\": {\n      \"Authorization\": \"Bearer token123\"\n    }\n  }\n}\n```",
+        "tokens_per_second": 17.11,
+        "prompt_tokens": null,
+        "completion_tokens": 144,
+        "total_time_ms": 8413.81,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "math": {
+      "t2_q1_optimization": {
+        "question_id": "t2_q1_optimization",
+        "prompt": "A farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nWhat dimensions maximize the enclosed area? What is the maximum area?\n\nSet up the optimization problem and solve it.",
+        "response": "## Step 2: Identify the optimization problem.\n\nObjective function to maximize:\n\n$\\begin{align\\*}\\text{Area}&=xy\\\\&=x(200-2x)\\\\&=200x-2x^2\\end{align\\*}$\n\nConstraint equation:\n\n$y + 2x = 200$\n\nFind the first derivative of the objective function:\n\n$\\frac{dA}{dx} = \\frac{d}{dx}(200x - 2x^2)$\n\n$\\frac{dA}{dx} = 200 - 4x$\n\nSet the derivative to zero and solve for x:\n\n$200 - 4x = 0$\n\n$x = 50$\n\nUse the second derivative test to confirm maximum:\n\n$\\frac{d^2A}{dx^2} = -4$\n\nSince the second derivative is negative, the function has a maximum at x = 50.\n\nSolve for y using the constraint:\n\n$y + 2(50) = 200$\n\n$y = 100$\n\nThe dimensions that maximize the area are $x = 50$ meters and $y = 100$ meters. The maximum area is $50 \\times 100 = 5000$ square meters.\n\n## 5. Optimization in Economics\n\nEconomics problems involving profit maximization or cost minimization are classic applications of optimization.\n\nProblem 3: A company produces widgets. The cost of producing $x$ widgets is given by $C(x) = 1000 + 50x + 0.1x^2$, and the price per widget is $p(x) = 100 - 0.05x$.\n\nWhat production level maximizes profit? What is the maximum profit?\n\n## Step 1: Identify the objective function.\n\nProfit is revenue minus cost.\n\n$R(x) = p(x) \\cdot x = (100 - 0.05x)x = 100x - 0.05x^2$\n\n$P(x) = R(x) - C(x) = (100x - 0.05x^2) - (1000 + 50x + 0.1x^",
+        "tokens_per_second": 13.32,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38438.64,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q3_probability_theory": {
+        "question_id": "t3_q3_probability_theory",
+        "prompt": "Let X_1, X_2, X_3, ... be iid uniform random variables on [0,1].\nDefine S_n = X_1 + X_2 + ... + X_n.\nLet N = min{n >= 1 : S_n > 1}.\n\nFind E[N] (the expected value of N).\n\nProvide TWO different proofs:\n(a) A direct calculation approach\n(b) An elegant argument that avoids heavy computation\n\nHint for (b): Consider the n-simplex and its relation to order statistics.",
+        "response": "<think>\n\n</think>\n\nHere is the step-by-step solution to find $E[N]$ for the given problem.\n\n### Problem Statement\nLet $X_1, X_2, X_3, \\dots$ be independent and identically distributed (i.i.d.) random variables with $X_i \\sim \\text{Uniform}[0, 1]$.\nLet $S_n = \\sum_{i=1}^n X_i$.\nLet $N = \\min \\{ n \\ge 1 : S_n > 1 \\}$.\nWe need to find $E[N]$.\n\n---\n\n### (a) Direct Calculation Approach\n\nThis method involves finding the probability that $N=k)$.\nTo calculate $P(N > n$).\nThe expected value by sum $N=k$ $E[N]$.\nTo calculate $P(N \\{N \\geqslant k\\}$.\nWe can compute $E[N] = \\sum_{k=1}^{\\infty} P(N \\geq k$.\n\n**Step 1: Understand the Event $N > k$.\nThe event $N = k}\n $N > k$ is equivalent to saying that the sum of the first $k$ variables does not exceed 1.\n$$ N > k \\iff S_k = X_1 + \\dots + X_k \\le 1}.$$\nSince the region of $k!\n\n**Step 2: Compute $P(S_k \\le 1)$\nThe probability that the sum of $k$ i.i.d. Uniform[0,1 variables is $\\le 1$ is a classical geometrically $1/k! = \\frac{1}{k!}$.\nThis is a standard result derived from the volume of the $k$-dimensional simplex defined by $x_1 + \\dots + x_k \\le 1$. The volume of the region is given by the integral:\n$$ P(S_k \\le 1) = \\int_0^1 \\int_0^{1-x_1} \\dots \\int_{0^{1-x_1-x_1 \\dots} dx_1 \\dots dx_k = \\frac{1}{k!} $$\n\n**Step 3: Relate $E[N]$",
+        "tokens_per_second": 9.93,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 51561.29,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 13.453333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

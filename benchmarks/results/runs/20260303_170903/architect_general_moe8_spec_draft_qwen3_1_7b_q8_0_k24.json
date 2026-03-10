@@ -1,0 +1,57 @@
+{
+  "model_role": "architect_general",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-235B-A22B-GGUF/Qwen3-235B-A22B-Q4_K_M-00001-of-00004.gguf",
+  "config_name": "moe8_spec_draft_qwen3_1_7b_q8_0_k24",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T13:11:19.561123",
+  "results": {
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "<think>\nHere's a thinking process that leads to the suggested solution:\n\n1.  **Analyze the Request:**\n    *   Input: A Python function `binary_search` that is claimed to have *two* subtle bugs.\n    *   Task: Identify both bugs, provide test cases that trigger them, explain the failure, and provide the fix.\n    *   Output Format: Structured response for each bug (Trigger, Explanation, Fix).\n\n2.  **Analyze the Code:**\n    ```python\n    def binary_search(arr, target):\n        left, right = 0, len(arr)\n        while left < right:\n            mid = (left + right) // 2\n            if arr[mid] == target:\n                return mid\n            elif arr[mid] < target:\n                left = mid\n            else:\n                right = mid\n        return -1\n    ```\n\n3.  **Identify Potential Issues (Standard Binary Search Patterns):**\n    *   *Range Initialization:* `left = 0`, `right = len(arr)`. This implies a half-open interval `[left, right)`. This is standard.\n    *   *Loop Condition:* `while left",
+        "tokens_per_second": 13.46,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19019.76,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t1_q2_multistep": {
+        "question_id": "t1_q2_multistep",
+        "prompt": "Process this list:\n1. Remove duplicates (case-insensitive)\n2. Sort alphabetically\n3. Number each item\n4. Add a count at the end\n\nItems: banana, Apple, cherry, BANANA, apple, Date, cherry",
+        "response": ", date, Elderberry\nLet's process the list step by step:\n\n**Step 1: Remove duplicates (case-insensitive)**\n\nWe need to remove any duplicates while ignoring case. Let's look at the items:\n\nbanana, Apple, cherry, BANANA, apple, Date, cherry, date, Elderberry\n\nThe unique items (ignoring case) are:\n- banana\n- apple\n- cherry\n- date\n- elderberry\n\n**Step 2: Sort alphabetically**\n\nNow let's sort these items alphabetically:\n- apple\n- banana\n- cherry\n- date\n- elderberry\n\n**Step 3: Number each item**\n\nLet's number each item:\n1. apple\n2. banana\n3. cherry\n4. date\n5. elderberry\n\n**Step 4: Add a count at the end**\n\nThere are 5 items in total.\n\nSo our final list with count is:\n1. apple\n2. banana\n3. cherry\n4. date\n5. elderberry\nTotal: 5 items\n\nThat's the processed list as requested. The instructions were clear and logical, so there was no ambiguity in the task. Each step followed directly from the previous one. Let me know if you",
+        "tokens_per_second": 7.68,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 33345.77,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t2_q1_ambiguous": {
+        "question_id": "t2_q1_ambiguous",
+        "prompt": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.",
+        "response": "<think>\n\n</think>\n\nI need to ask for clarification because \"the team\" is ambiguous (is it the engineering team, marketing, or a specific Slack channel?) and the user hasn't provided the outage details (time, impact, root cause) required to compose the message or ticket.\n\nClarification needed: Please specify which team to notify (e.g., \"engineering\" or \"#ops-slack\") and provide the outage details (time, duration, and impact).",
+        "tokens_per_second": 12.77,
+        "prompt_tokens": null,
+        "completion_tokens": 96,
+        "total_time_ms": 7519.27,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.303333333333333,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

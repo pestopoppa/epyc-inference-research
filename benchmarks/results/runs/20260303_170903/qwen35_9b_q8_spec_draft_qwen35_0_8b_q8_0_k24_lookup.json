@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_9b_q8",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q8_0.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q8_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-07T03:04:45.645772",
+  "results": {
+    "agentic": {
+      "t2_q3_schema_edge": {
+        "question_id": "t2_q3_schema_edge",
+        "prompt": "Tool schema:\n{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"string (required) - must start with /\",\n    \"method\": \"string (required) - GET/POST/PUT/DELETE\",\n    \"body\": \"object (required for POST/PUT, must be null for GET/DELETE)\",\n    \"headers\": \"object (optional)\"\n  }\n}\n\nUser: \"GET the users endpoint with an auth header Bearer token123\"\n\nGenerate the correct tool call. Output only the JSON.",
+        "response": "{\n  \"name\": \"query_api\",\n  \"parameters\": {\n    \"endpoint\": \"/users\",\n    \"method\": \"GET\",\n    \"body\": null,\n    \"headers\": {\n      \"Authorization\": \"Bearer token123\"\n    }\n  }\n}",
+        "tokens_per_second": 13.33,
+        "prompt_tokens": null,
+        "completion_tokens": 66,
+        "total_time_ms": 4949.4,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "math": {
+      "t2_q1_optimization": {
+        "question_id": "t2_q1_optimization",
+        "prompt": "A farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nWhat dimensions maximize the enclosed area? What is the maximum area?\n\nSet up the optimization problem and solve it.",
+        "response": "1. (3. Let the equation to solve for all the problem\n\n2. What are the dimensions of the rectangle that maximize the enclosed area? What is the maximum area?\n\nA farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nLet $Prelate. 1. Set up the optimization problem and solve it.\n\n2. What dimensions of the rectangle maximize the area of that maximize enclosed area?\n\nA farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nWhat dimensions of the rectangle maximize enclosed area?\n\nLet x y, , maximize the area\n\nWhat dimensions that of rectangle the 1.\n\n$200\n\n-1. Set up the optimization problem and solve it.\n\n2. What are the dimensions of the rectangle that maximize the enclosed area? What is the maximum area?\n\n1. Set up the optimization problem and solve it.\n\n2. What are dimensions of the rectangle that maximize the enclosed area? What is the maximum area?\n\nA farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nLet W be the width, L be length, L be length be x and L be length.\n\nL+ 1. Set up the optimization problem and solve it.\n\n2. What are dimensions of the rectangle that maximize the enclosed area? What is the maximum area?\n\n. Set up the optimization problem and solve it.\n\n2. What are the dimensions of the rectangle that maximize the enclosed area? What is the maximum area?\n\nA farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\nLet W be the width L be the length.\n\n1. Set up the optimization problem and solve it.\n\n2. What are the dimensions of the rectangle that maximize the enclosed area? is the maximum area?\n\nA farmer has 200 meters of fencing to enclose a rectangular field that borders a river (no fencing needed on the river side).\n\n1. Set up the optimization problem and solve it.\n\n2. What are the dimensions of the rectangle that maximize the enclosed area? What is the maximum area?\n\nLet W be the width L be the length.\n\n1. Set",
+        "tokens_per_second": 12.4,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 41295.24,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q3_probability_theory": {
+        "question_id": "t3_q3_probability_theory",
+        "prompt": "Let X_1, X_2, X_3, ... be iid uniform random variables on [0,1].\nDefine S_n = X_1 + X_2 + ... + X_n.\nLet N = min{n >= 1 : S_n > 1}.\n\nFind E[N] (the expected value of N).\n\nProvide TWO different proofs:\n(a) A direct calculation approach\n(b) An elegant argument that avoids heavy computation\n\nHint for (b): Consider the n-simplex and its relation to order statistics.",
+        "response": "<think>\nHere's a thinking process that leads to the solution for finding $E[N]$ where $N = \\min\\{n \\ge 1 : S_n > 1\\}$ and $X_i \\sim \\text{Uniform}[0,1]$ are i.i.d.\n\n1.  **Understand the Problem:**\n    *   $X_i \\sim U[0,1]$.\n    *   $S_n = \\sum_{i=1}^n X_i$.\n    *   $N$ is the stopping time: the first $n$ such that the sum exceeds 1.\n    *   Goal: Find $E[N]$.\n    *   Constraint: Two proofs required (Direct calculation and Elegant/Geometric).\n\n2.  **Intuition Check:**\n    *   If $X_i$ were deterministic, say $X_i = c$, then $N \\approx 1/c$. If $c=1$, $N=1$. If $c$ is small, $N$ is large.\n    *   Since $E[X_i] = 1/2$, roughly $E[N] \\cdot (1/2) \\approx 1$, so $E[N]$ should be around 2.\n    *   Wait, $S_{N-1} \\le 1 < S_N$. The sum *crosses* the boundary.\n    *   Common result: $E[N] = e$. Let's verify this.\n    *   Let's check small cases. $P(N=1) = P(X_1 > 1) = 0$. So $N \\ge 2$ almost surely?\n    *   Actually, $S_1 = X_1$. $P(S_1 > 1) = 0$. So $N > 1$ is impossible? No, $S_1$ is strictly less than or equal to 1? No, $X_1$ is in $[0,1]$. So $S_1 \\le 1$. Thus $N > 1$ always.\n    *   Wait, $X_1$ is uniform on $[0,1]$. The condition is $S_n > 1$.\n    *   $P(N=1) = P(X_1 > 1) = 0$.\n    *   $P(N=2) = P(X",
+        "tokens_per_second": 13.19,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38822.27,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 12.973333333333334,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

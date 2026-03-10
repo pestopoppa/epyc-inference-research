@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q8_0",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/jiaojjjjje/Qwen3.5-35B-A3B-abliterated-GGUF/Qwen3.5-35B-A3B-abliterated-Q8_0.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k8_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T05:00:18.011300",
+  "results": {
+    "general": {
+      "t2_q3_schedule": {
+        "question_id": "t2_q3_schedule",
+        "prompt": "Schedule these meetings given constraints:\n- Team sync (60min): Must include Alice, Bob, Carol\n- 1:1 Alice-Dave (30min)\n- 1:1 Bob-Dave (30min)\n- Dave only available 9-11am and 2-4pm\n- Alice unavailable 10-11am\n- No back-to-back meetings for anyone\n\nAvailable slots: 9am, 9:30am, 10am, 10:30am, 11am, 2pm, 2:30pm, 3pm, 3:30pm\n\nOutput a valid schedule or explain why impossible.",
+        "response": "<think>\n\n</think>\n\n### Constraint Analysis\n\nLet's break down the requirements and conflicts:\n\n1.  **Meetings Required:**\n    *   **Team Sync:** 60 mins (Alice, Bob, Carol).\n    *   **1:1 Alice-Dave:** 30 mins.\n    *   **1:1 Bob-Dave:** 30 mins.\n\n2.  **Availability Constraints:**\n    *   **Dave:** Only available 9:00\u00e2\u0080\u009311:00 and 14:00\u00e2\u0080\u009316:00.\n    *   **Alice:** Unavailable 10:00\u00e2\u0080\u009311:00.\n    *   **Carol:** No specific constraints listed other than being in the sync.\n\n3.  **Slot Structure:**\n    The available slots are 30-minute increments:\n    *   9:00, 9:30\n    *   10:00, 10:30\n    *   11:00 (End of morning block)\n    *   14:00, 14:30\n    *   15:00, 15:30\n\n    *Note: A 60-minute meeting requires two consecutive 30-minute slots.*\n\n4.  **No Back-to-Back Rule:**\n    No person can have two meetings immediately following each other. There must be at least one 30-minute gap (or non-meeting time) between any two meetings for a specific individual.\n\n---\n\n### Step-by-Step Deduction\n\n#### Step 1: Scheduling the Team Sync (60 mins)\nThe Team Sync requires Alice, Bob, and Carol for 60 minutes.\n*   **Possible 60-min blocks:**\n    *   Morning: 9:00\u00e2\u0080\u009310:00 or 9:30\u00e2\u0080\u009310:30 or 10:00\u00e2\u0080\u009311:00.\n    *   Afternoon: 14:00\u00e2\u0080\u009315:00 or 14:30\u00e2\u0080\u009315:30 or 15:00\u00e2\u0080\u009316:00.\n\n*   **Apply Alice's Constraint:** Alice is unavailable 10:00\u00e2\u0080\u009311:00.\n    *   10:",
+        "tokens_per_second": 12.48,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 41040.56,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t2_q1_paradox": {
+        "question_id": "t2_q1_paradox",
+        "prompt": "Consider the Ship of Theseus: If you replace every plank of a ship one by one, is it still the same ship? If you then build a new ship from the old planks, which is the \"real\" Ship of Theseus?\n\nPresent arguments for at least two different philosophical positions, then state which you find most convincing and why.",
+        "response": "<think>\nHere's a thinking process that leads to the response:\n\n1. the suggested response:\n\n1.  **Deconstruct the Request Analysis:**\n     The prompt asks for arguments on the Ship of Theseus paradox. This is a classic philosophical problem concerning identity and persistence. I need to present arguments for at least two different philosophical positions and then state which I find most convincing. I find and why.\n    *   *   Position 1: Continuity of Form/1.  **Analyze2.2: The ship remains the ship.\n    *   Position 2: The ship made1. The1.2.2.  *   2.  **Structure:1.\n    *   3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3. 3.",
+        "tokens_per_second": 10.39,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 49279.29,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q2_counterfactual": {
+        "question_id": "t2_q2_counterfactual",
+        "prompt": "Consider this scenario: \"If the internet had never been invented, how would academic research be different today?\"\n\nAnalyze this counterfactual across three dimensions:\n1. Speed of knowledge dissemination\n2. Collaboration patterns\n3. Reproducibility and peer review\n\nBe specific about mechanisms and second-order effects.",
+        "response": "<think>\n\n</think>\n\nIf the internet had never been invented, the landscape of academic research would be fundamentally slower, more exclusive, and significantly more fragmented. The shift would not merely be a matter of \"slower internet\"; it would represent a return to the pre-1990s \"clerical\" model of science, where physical logistics dictated the pace of intellectual progress.\n\nHere is an analysis of this counterfactual across the three specified dimensions:\n\n### 1. Speed of Knowledge Dissemination\nIn a world without the internet, the velocity of scientific discovery is capped by the speed of physical transport and the frequency of print publication cycles.\n\n*   **Mechanisms:**\n    *   **Print Lag:** Research findings would remain confined to physical journals, monographs, and conference proceedings. The timeline from submission to publication would remain measured in **months to years**, not weeks.\n    *   **Archival Scarcity:** Access to historical data would require physical travel to university libraries or inter-library loans, which could take days or weeks to fulfill. The concept of a \"search engine\" would not exist; discovery would rely on manual card catalogs and citation chaining.\n    *   **Pre-print Void:** The concept of arXiv or bioRxiv (immediate, open sharing of results before formal peer review) would be impossible. Researchers would have to wait for formal publication to know if a colleague had solved the same problem.\n\n*   **Second-Order Effects:**\n    *   **The \"Silent\" Duplication:** A significant portion of research effort would be wasted. Scientists in London, Tokyo, and Boston would unknowingly spend years solving problems already solved in a lab in Seattle, simply because the result hadn't traveled the Atlantic fast enough.\n    *   **The \"Slow Science\" Cycle:** Innovation cycles would decelerate. Breakthroughs that today take a decade (e.g., mRNA vaccine development) might take 25\u00e2\u0080\u009330 years, as the feedback loop between hypothesis, data sharing, and validation is throttled by physical mailing.\n    *   **Gatekeeper Dominance:** The speed of dissemination would be entirely controlled by the publication schedules of major commercial publishers (e.g., Elsevier, Springer), giving them absolute power over what knowledge enters the public sphere and when.\n\n### 2. Collaboration Patterns\nWithout digital connectivity, collaboration is constrained by geography, cost, and the logistics of physical correspondence.\n\n*   **Mechanisms:**",
+        "tokens_per_second": 13.45,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 38063.97,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 12.106666666666667,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

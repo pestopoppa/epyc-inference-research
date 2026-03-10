@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q8_0_k16_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T23:12:04.040881",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "<think>\nHere's a thinking process that leads to the solution:\n\n1.  **Understandalone, Analyze the Problem:**\n    The function is given by $f(x) = \\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$.\n\n    *   **Part 2:** Closed form using complex exponentials. Hint: $\\text{Im}(e^{x e^i})\\}.\n    *   **Part 3:** Limit as $x \\to \\infty$ of $f(x)/e^x$.\n\n2.  **Part 1: Differentiability:**\n    *   *Strategy: The series is a power series $\\sum a_n(x^n x^n$ where $a_n = \\frac{\\sin(n)}{n!}$.\n    *   *Convergence:* Use the Ratio Test for Power series. $c(x \\sum_{n=1}^{\\infty} \\frac{a_n x^n$.\n    *   $\\lim_{n \\to \\infty} \\left| \\frac{\\sin(n+1) / (n+1)}{\\}\n* / (n+1) 1) / 1 x^{n+1)}(n+1)^21)^{.\n    *   $ \\sin(n) \\le,n^21.\n    *   *n^2: $a^2.\n    *   *1.\n\n2^2:2.\n    *   **Conclusion:\n    *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *",
+        "tokens_per_second": 9.74,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 52550.79,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "<think>\nHere's a thinking process that leads to the suggested solution:\n\n1.  **Analyze the Constraints:**\n    *   **Plants:** A, B, C, D, E (5 distinct items).\n    *   **Constraint 1 (C1):** A < B (A comes before B).\n    *   **Constraint 2 (C2):** D immediately followed by C (DC block).\n    *   **Constraint 3 (C3):** E is not 1st and E is not 5th. So, E $\\in$ {2, 3, 4}.\n    *   **Constraint 4 (C4):** B < D (B comes before D).\n\n2.  **Combine Constraints to Form Chains:**\n    *   From C1 and C4: A < B < D.\n    *   From C2: The sequence must contain the block [D, C].\n    *   Combining these: Since A < B < D and D is immediately followed by C, the combined chain is **A < B < D < C**.\n    *   So, we have a fixed relative order for four items: **A -> B -> D -> C**.\n    *   This forms a \"super-chain\" or block of 4 specific items: $S = \\{A, B, D, C\\}$.\n    *   The remaining item is E.\n\n3.  **Analyze the Structure:**\n    *   We have 5 positions: 1, 2, 3, 4, 5.\n    *   We need to place the sequence A, B, D, C into these positions such that their relative order is maintained.\n    *   We need to place E into the remaining position.\n\n4.  **Determine Possible Positions for E:**\n    *   Constraint C3 states E cannot be in position 1 or 5.\n    *   So, E must be in position 2, 3, or 4.\n    *   Let's test each case.\n\n    *   **Case 1: E is in position 2.**\n        *   Sequence pattern: `_ E _ _ _`\n        *   Positions remaining: 1, 3, 4, 5.\n        *   Items to place: A, B, D, C (must follow order A->B->",
+        "tokens_per_second": 13.55,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37793.44,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>:\nHere's a thinking process that leads to the suggested analysis:\n\n1.  **Deconstruct the Request:**\n    *   **Policy:** \"All ML models deployed in production must achieve 95% accuracy on a held-out test set, have explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n    *   **Task:** Analyze the policy.\n    *   **Requirements:**\n        1.  Identify at least 3 ways the policy could fail to achieve its goals.\n        2.  For each failure mode, explain the mechanism.\n        3.  Propose specific amendments that address each failure mode.\n        4.  Discuss trade-offs of the amendments.\n\n2.  **Analyze the Policy Statement:**\n    *   *Constraint 1: 95% accuracy on a held-out test set:* High accuracy requirement.\n    *   *Constraint 2: 0.8 (SHAP-based):* Explainability score.\n    *   *Constraint 3: Quarterly bias audits:* Regular monitoring.\n    *   *Implicit Scope: \"All ML models deployed\".\n\n3.  **Brainstorm Failure Modes (Why might fail to 3+3):\n    *   *Accuracy:* 95% might be too high for complex.\n    *   *Explainability:*SHAP 0.8 is good, but what is it might be hard for data-dependent.\n    *   *Bias:*Quarterly might not enough, does not account for.\n    *   *Data Drifts:*\n    *   **Failure:*\n *   *\n    *   *\n\n    *   *   *   *\n    *   **   *   *   *   *   *\n\n    *   **1. 1.\n    *   **Failure 1.\n    *  \n    *\n    *  \n    *  \n    *    *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   *",
+        "tokens_per_second": 10.75,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 47634.18,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 11.346666666666666,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

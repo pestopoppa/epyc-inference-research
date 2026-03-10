@@ -1,0 +1,41 @@
+{
+  "model_role": "architect_coding",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-480B-A35B-Instruct-GGUF/Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008.gguf",
+  "config_name": "baseline",
+  "run_id": "20251220_200933",
+  "timestamp": "2025-12-20T20:15:08.853845",
+  "results": {
+    "general": {
+      "t1_q1_json": {
+        "question_id": "t1_q1_json",
+        "prompt": "Parse this into JSON with fields: name, role, department, start_date\n'Sarah Chen joined as Senior Engineer in the Platform team on 2024-03-15.'\nOutput only the JSON, no explanation.",
+        "response": "Parse this into JSON with fields: name, role, department, start_date\n'Sarah Chen joined as Senior Engineer in the Platform team on 2024-03-15.'\nOutput only the JSON, no explanation. {\n  \"name\": \"Sarah Chen\",\n  \"role\": \"Senior Engineer\",\n  \"department\": \"Platform team\",\n  \"start_date\": \"2024-03-15\"\n} [end of text]\n\n\nload: printing all EOG tokens:\nload:   - 151643 ('<|endoftext|>')\nload:   - 151645 ('<|im_end|>')\nload:   - 151662 ('<|fim_pad|>')\nload:   - 151663 ('<|repo_name|>')\nload:   - 151664 ('<|file_sep|>')\nload: special tokens cache size = 26\nload: token to piece cache size = 0.9311 MB\n....................................................................................................\n\n\n\trepeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000\n\tdry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1\n\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.300\n\tmirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000",
+        "tokens_per_second": 3.8,
+        "prompt_tokens": 48,
+        "completion_tokens": 43,
+        "total_time_ms": 11307.05,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      },
+      "t1_q2_multistep": {
+        "question_id": "t1_q2_multistep",
+        "prompt": "Process this list:\n1. Remove duplicates (case-insensitive)\n2. Sort alphabetically\n3. Number each item\n4. Add a count at the end\n\nItems: banana, Apple, cherry, BANANA, apple, Date, cherry",
+        "response": "Process this list:\n1. Remove duplicates (case-insensitive)\n2. Sort alphabetically\n3. Number each item\n4. Add a count at the end\n\nItems: banana, Apple, cherry, BANANA, apple, Date, cherry, Elderberry\n\nHere's the processed list:\n\n1. Apple\n2. banana\n3. cherry\n4. Date\n5. Elderberry\n\nTotal count: 5 items\n\nNote: I removed \"BANANA\" and \"apple\" as duplicates of \"banana\" and \"Apple\" respectively (case-insensitive), then sorted alphabetically, numbered each item, and added the total count. [end of text]\n\n\nload: printing all EOG tokens:\nload:   - 151643 ('<|endoftext|>')\nload:   - 151645 ('<|im_end|>')\nload:   - 151662 ('<|fim_pad|>')\nload:   - 151663 ('<|repo_name|>')\nload:   - 151664 ('<|file_sep|>')\nload: special tokens cache size = 26\nload: token to piece cache size = 0.9311 MB\n....................................................................................................\n\n\n\trepeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000\n\tdry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1\n\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.300\n\tmirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000",
+        "tokens_per_second": 3.78,
+        "prompt_tokens": 51,
+        "completion_tokens": 82,
+        "total_time_ms": 21710.31,
+        "algorithmic_score": 1,
+        "score_reason": "No scoring patterns defined for this question",
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 3.79,
+    "avg_algorithmic_score": 1.0,
+    "questions_tested": 2,
+    "questions_passed": 0
+  }
+}

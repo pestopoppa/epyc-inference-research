@@ -1,0 +1,55 @@
+{
+  "model_role": "qwen35_q4km",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-35B-A3B-GGUF/Qwen3.5-35B-A3B-UD-Q4_K_M.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k8",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-06T18:07:02.614385",
+  "results": {
+    "agentic": {
+      "t3_q1_competing_constraints": {
+        "question_id": "t3_q1_competing_constraints",
+        "prompt": "You're an AI assistant with these tools:\n- execute_code: {\"code\": \"string\", \"language\": \"string\"} - runs code, returns output\n- search_web: {\"query\": \"string\"} - returns search results\n- read_file: {\"path\": \"string\"} - reads local file\n- write_file: {\"path\": \"string\", \"content\": \"string\"} - writes to file\n- ask_user: {\"question\": \"string\"} - asks user for input\n\nUser request: \"Analyze the CSV file at /data/sales.csv and tell me which product had the highest revenue growth\"\n\nBut you have these constraints:\n1. You cannot see the file contents until you read it\n2. You don't know the CSV structure until you read it\n3. execute_code might fail if you assume wrong column names\n\nGenerate a robust plan that:\n1. Handles unknown schema gracefully\n2. Validates assumptions before heavy computation\n3. Provides meaningful partial results if something fails\n4. Minimizes round-trips while maintaining correctness\n\nOutput a JSON plan with: {\"steps\": [...], \"validation_checks\": [...], \"fallback_strategy\": \"...\"}",
+        "response": "You're an AI assistant with these tools:\n- execute_code: {\"code\": \"string\", \"language\": \"string\"} - runs code, returns output\n- search_web: {\"query\": \"string\"} - returns search results\n- read_file: {\"path\": \"string\"} - reads local file\n- write_file: {\"path\": \"string\", \"content\": \"string\"} - writes to file\n- ask_user: {\"question\": \"string\"} - asks user for input\n\nUser request: \"Analyze the CSV file at /data/sales.csv and tell me which product had the highest revenue growth\"\n\nBut you have these constraints:\n1. You cannot see the file contents until you read it\n2. You don't know the CSV structure until you read it\n3. execute_code might fail if you assume wrong column names\n\nGenerate a robust plan that:\n1. Handles unknown schema gracefully\n2. Validates assumptions before heavy computation\n3. Provides meaningful partial results if something fails\n4. Minimizes round-trips while maintaining correctness\n\nOutput a JSON plan with: {\"steps\": [...], \"validation_checks\": [...], \"fallback_strategy\": \"...\"}<think>\n</think>\n\n```json\n{\n  \"steps\": [\n    {\n      \"action\": \"read_file\": \"/data/sales.csv\",\n      \"purpose\",\n      \"action\": \"execute_code\",\n      \"code\nimport pandas as pd\ndf = pd.read_csv('/data/sales.csv')\nprint(df.head(\n      \"Exists\":\n      \"data/sales.csv\"\n      \"Expected\": \"/data/sales.csv\"\n      \"Exists\":\n      \"data/sales.csv\"\n      \"Expected\": \"/data/sales.csv\"\n      \"Exists\":\n      \"Exists\":\n      \"Expected\": \"/data\":\n      \"Expected\": \"/data\":\n      \"Expected\": \"/data/sales.csv\"\n      \"Expected\": \"/data/sales.csv\"\n      \"Expected\": \"/data\":\":\n      \"Expected\": \"/data\":\n      \"Expected\": \"/data\":\n      \"Expected\": \"/data\":\n      \"Expected\": \"/data/sales.csv\"\n      \"Expected\": \"/data\":\n      \"Expected\": \"/\":\n      \"Expected\": \"/data\":\n      \"Expected\": \"/data\":\n      \"Expected\": \"/data\":\n      \"Expected\": \"/data\":\n      \"Expected\n\n\n\n\ndecoded  260 tokens in   19.516 seconds, speed:   13.322 t/s\nn_predict = 260\ndraft:\ntarget:",
+        "tokens_per_second": 11.689107505171306,
+        "prompt_tokens": 346,
+        "completion_tokens": 364,
+        "total_time_ms": 22242.93,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_ambiguous": {
+        "question_id": "t2_q1_ambiguous",
+        "prompt": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.",
+        "response": "Tools:\n- send_email: {\"to\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nUser: \"Let the team know about the outage\"\n\nThis is ambiguous. Either ask a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.<think>\n</think>\n\nSince\",\n  \"reasoning\",\n  \"channel\": \"  \"\n}\n\n**ing question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.\n\n**explain why in one sentence, then output the JSON.\n\n**tool\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\": \"string\", \"description\": \"string\", \"assignee\": \"string\"}\n\nThe user's request a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.\n\n**Action\n\nThe user's request a clarifying question, OR if you must act, choose the most appropriate tool and explain why in one sentence, then output the JSON.\n\n**JSON.\n\n**Action: send_slack\n\n**Explanation\n\n**JSON**\n```json\": {\n  \"to\": \"team\", \"body\": \"string\", \"subject\": \"string\", \"body\": \"string\"}\n- send_slack: {\"channel\": \"string\", \"message\": \"string\"}\n- create_ticket: {\"title\n\n\n\n\ndecoded  264 tokens in   22.621 seconds, speed:   11.670 t/s\nn_predict = 264\ndraft:\ntarget:",
+        "tokens_per_second": 10.667537310115817,
+        "prompt_tokens": 232,
+        "completion_tokens": 406,
+        "total_time_ms": 24747.98,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "instruction_precision": {
+      "t1_q1_negative_instruction": {
+        "question_id": "t1_q1_negative_instruction",
+        "prompt": "Explain photosynthesis in 2 sentences. Do NOT mention sunlight, sun, or solar.",
+        "response": "Explain photosynthesis in 2 sentences. Do NOT mention sunlight, sun, or solar.<think>\n</think>\n\nPhotosynthesis is the process by which plants use chlorophyll-rich chemical energy stored in glucose.\n\nPhotosynthesis is the process by which plants convert light energy into chemical energy stored in glucose. This process occurs within plant cells.\n\nPhotosynthesis is the process by which plants convert light energy into chemical energy stored in glucose. This process occurs within the process involves the conversion of light energy into chemical energy stored in glucose. This process occurs within the process involves the process involves conversion of light energy into chemical energy stored in glucose. This process occurs within plant cells.\n\nPhotosynthesis is the process by which plants convert light energy into chemical energy stored in glucose. This process occurs within plant cells. the process involves conversion of light energy into chemical energy stored in glucose. This process occurs within plant cells. the process involves conversion of light energy into chemical energy stored in glucose. This process occurs within plant cells. the process involves conversion of light energy into chemical energy stored in glucose. This process occurs within plant cells. the process involves conversion of light energy into chemical energy stored in glucose. This process occurs within plant cells. the process involves conversion of light energy into chemical energy stored in glucose. This process occurs within plant cells. the process involves conversion of light energy into chemical energy stored in glucose.\n\n\n\n\ndecoded  257 tokens in   15.189 seconds, speed:   16.921 t/s\nn_predict = 257\ndraft:\ntarget:",
+        "tokens_per_second": 15.213879320194145,
+        "prompt_tokens": 99,
+        "completion_tokens": 273,
+        "total_time_ms": 16892.47,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 12.52350804516042,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

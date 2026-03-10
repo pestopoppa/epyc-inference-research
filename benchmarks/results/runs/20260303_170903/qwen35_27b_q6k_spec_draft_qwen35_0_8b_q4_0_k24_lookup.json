@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_27b_q6k",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-27B-GGUF/Qwen3.5-27B-Q6_K.gguf",
+  "config_name": "spec_draft_qwen35_0_8b_q4_0_k24_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-09T05:24:16.606284",
+  "results": {
+    "coder": {
+      "t1_q1_algorithm": {
+        "question_id": "t1_q1_algorithm",
+        "prompt": "This binary search implementation has TWO subtle bugs that cause incorrect\nresults on specific inputs. Find both bugs and fix them.\n\ndef binary_search(arr, target):\n    left, right = 0, len(arr)\n    while left < right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid\n        else:\n            right = mid\n    return -1\n\nFor each bug:\n1. Provide a specific input that triggers the bug\n2. Explain what goes wrong\n3. Show the fix",
+        "response": "<think>\nHere's a thinking process that leads to the suggested answer:\n\n1.  **Analyze the Request:**\n    *   **Task:** Identify TWO subtle bugs in the provided binary search implementation.\n    *   **Requirements:** For each bug, provide a specific triggering input, explain the failure, and show the fix.\n    *   **Code:**\n        ```python\n        def binary_search(arr, target):\n            left, right = 0, len(arr)\n            while left < right:\n                mid = (left + right) // 2\n                if arr[mid] == target:\n                    return mid\n                elif arr[mid] < target:\n                    left = mid\n                else:\n                    right = mid\n            return -1\n        ```\n\n2.  **Analyze the Code (Line by Line:**\n    *   `left, right = 0, len(arr)`: Standard half-open interval `[0, n). This is a standard for `right interval.\n    *   `while left < right:` Standard.\n    *   `mid = (left + right) // 2`.\n    *   `if arr[mid] == target: return mid`: Correct.\n    *   `elif arr[mid] < target: left = mid`: **Potential infinite loop issue?\n    *   `else: right = mid`: loop?\n    *   `return -1`: Correct.\n\n3.  **Identify Bug 1: Infinite Loop (left = mid`:\n    *   `elif arr[mid] < target: left = mid`: If `arr[mid] < target`, we know the new `left` becomes `mid`. `mid` is calculated as `(left + right) // 2`. If `left` stays `right` remains `right`.\n    *   If `left` is `0`, `right` is `1`. `mid` is `1`.\n *   (0`.\n    *   If `arr[0] < target`, `left` becomes `0`. `right` is `1`.\n *   `left` is `0`, `right` is `1`. `mid` `0`.\n    *   **Scenario:\n *Result: `left` stays `0`, `right` stays `1`. `mid` `0`.\n    *   **Conclusion: When `right = mid` doesn't",
+        "tokens_per_second": 5.22,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 98064.31,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t3_q2_causal_inference": {
+        "question_id": "t3_q2_causal_inference",
+        "prompt": "Consider a DAG with variables: Smoking -> Cancer, Smoking -> Yellow Fingers,\nGene -> Smoking, Gene -> Cancer.\n\nYou want to estimate the causal effect of Smoking on Cancer from observational data.\n1. What is the minimal sufficient adjustment set?\n2. Would conditioning on Yellow Fingers introduce bias? Explain.\n3. If Gene is unmeasured, can you still get an unbiased estimate? How?",
+        "response": "<think>\n\n</think>\n\nBased on the Directed Acyclic Graph (DAG) you described:\nHere is the step-by-step analysis of the causal effect of Smoking on Cancer.\n\n### 1. What is the minimal sufficient adjustment set?\n\nTo identify the causal effect of $X$ (Smoking) on $Y$ (Cancer), we must block all backdoor paths from $X$ to $Y$.\nThe only non-causal path from $X \\to Y$.\n\nIn this graph structure is $Gene $\\to$ Gene \\to$.\n\nThe backdoor path is:\n1.  **Smoking $\\leftarrow Cancer\n2. $Gene \\to Cancer \\to Smoking \\to$ Cancer\n\n**The path is a backdoor:\npath: $Smoking \\leftarrow Gene \\to Cancer$ Cancer$.\n\nTo block this path, we can condition on $Gene$.\nHowever, we on $Gene$ blocks path.\n\nThe minimal sufficient adjustment set is $\\{Gene\\}$.\n\n*Reasoning:\n- There is only one backdoor path ($Smoking \\leftarrow Gene \\to Cancer$.\n- If we condition on Gene, we open a block the path is blocked.\n- We do not condition on Yellow Fingers, as it is a collider?\n\n### 2. Would conditioning on Yellow Fingers introduce bias? Explain.\n\n**Yes, conditioning on Yellow Fingers introduces bias.**\n\n**Explanation:**\n- $Yellow Fingers is a descendant of $Smoking \\to Yellow Fingers.\n- Conditioning on Yellow Fingers (a collider path opens the path (or more precisely, conditioning on a common effect of the treatment) opens a causes) induces a causes of $Smoking$).\n- This induces a correlation between $Smoking$ and $Gene$.\n- Since $Gene$ is a confounder for the effect of $Smoking$ on $Cancer$ is biased.\n\nMechan d.\n\nThis phenomenon is known as **M-bias.\n\n###  is a $Smoking \\to Yellow Fingers \\leftarrow Gene\nWait no.\nGene \\to Yellow Fingers \\to\n\n path\nCondition on Fingers opens the path $Smoking \\left Gene \\to Cancer$.\n- This creates spurious correlation between $Smoking$ and $Gene$.\n- Since $Gene$ is a cause of $Cancer$, this spurious correlation gets into the estimate of the effect of Smoking on",
+        "tokens_per_second": 3.61,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 141851.22,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "agentic": {
+      "t3_q2_multi_agent_coordination": {
+        "question_id": "t3_q2_multi_agent_coordination",
+        "prompt": "You are the orchestrator in a multi-agent system. You can dispatch tasks to:\n- researcher_agent: Good at web search, summarization. Slow (30s). Can't execute code.\n- coder_agent: Good at writing/running code. Fast (5s). Can't access web.\n- reviewer_agent: Good at critique/verification. Medium (15s). Read-only.\n\nTask: \"Find the current stock price of AAPL, calculate its 30-day moving average from historical data,\nand verify the calculation is correct.\"\n\nConstraints:\n- Agents cannot directly communicate with each other\n- You must pass context between them\n- Total time budget: 60 seconds\n- You want high confidence in the result\n\nDesign the orchestration:\n1. What subtasks go to which agent?\n2. What context must be passed between agents?\n3. How do you parallelize while respecting dependencies?\n4. How do you handle if one agent fails?\n\nOutput as JSON: {\"phases\": [...], \"context_passing\": {...}, \"parallel_groups\": [...], \"failure_handling\": {...}}",
+        "response": "{\n  \"phases\": [\n    {\n      \"phase_id\": 1,\n      \"description\": \"Data Acquisition\",\n      \"agents\": [\"researcher_agent\"],\n      \"tasks\": [\n        {\n          \"task_id\": \"T1\",\n          \"description\": \"Search for current AAPL stock price\",\n          \"output_required\": \"current_price\"\n        },\n        {\n          \"task_id\": \"T2\",\n          \"description\": \"Search for AAPL historical stock prices for the last 30 days (Open, High, Low, Close)\",\n          \"output_required\": \"historical_data_list\"\n        }\n      ]\n    },\n    {\n      \"phase_id\": 2,\n      \"description\": \"Calculation\",\n      \"agents\": [\"coder_agent\"],\n      \"tasks\": [\n        {\n          \"task_id\": \"T3\",\n          \"description\": \"Calculate 30-day moving average using historical data provided in context\",\n          \"input_required\": \"historical_data_list\",\n          \"output_required\": \"ma_30_value\"\n        }\n      ]\n    },\n    {\n      \"phase_id\": 3,\n      \"description\": \"Verification\",\n      \"agents\": [\"reviewer_agent\", \"coder_agent\"],\n      \"tasks\": [\n        {\n          \"task_id\": \"T4\",\n          \"description\": \"Review calculation logic and result against provided data\",\n          \"input_required\": \"historical_data_list, ma_30_value\",\n          \"output_required\": \"verification_status\"\n        },\n        {\n          \"task_id\": \"T5\",\n          \"description\": \"Re-run calculation code to double-check arithmetic\",\n          \"input_required\": \"historical_data_list\",\n          \"output_required\": \"recomputed_ma_30_value\"\n        }\n      ]\n    }\n  ],\n  \"context_passing\": {\n    \"T1_output_to_final\": \"current_price\",\n    \"T2_output_to_T3\": \"historical_data_list\",\n    \"T2_output_to_T4\": \"historical_data_list\",\n    \"T3_output_to_T4\": \"ma_30_value\",\n    \"T3_output_to_T5\": \"historical_data_list\",\n    \"T4_output_to_final\":",
+        "tokens_per_second": 13.48,
+        "prompt_tokens": null,
+        "completion_tokens": 512,
+        "total_time_ms": 37991.19,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 7.4366666666666665,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}

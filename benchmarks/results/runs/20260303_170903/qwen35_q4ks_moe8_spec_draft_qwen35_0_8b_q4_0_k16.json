@@ -1,0 +1,57 @@
+{
+  "model_role": "qwen35_q4ks",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/mradermacher/Huihui-Qwen3.5-35B-A3B-abliterated-i1-GGUF/Huihui-Qwen3.5-35B-A3B-abliterated.i1-Q4_K_S.gguf",
+  "config_name": "moe8_spec_draft_qwen35_0_8b_q4_0_k16",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-08T18:24:53.523710",
+  "results": {
+    "math": {
+      "t3_q1_analysis": {
+        "question_id": "t3_q1_analysis",
+        "prompt": "Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n\n1. Prove or disprove: f is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.",
+        "response": "4. If f(x) is continuous everywhere on [\nA.\n5. Determine the roots of f(x)=0) = 0.\n\n1/f'\n\n<think>\n\nHere's analysis: Consider the function f(x) = sum_{n=1}^{infinity} (x^n / n!) * sin(n).\n.\n\n1. Prove or disprove: f(x) is differentiable everywhere on R.\n2. Can you express f in closed form using complex exponentials? Hint: consider Im(e^{xe^{i}}).\n3. What is lim_{x->infinity} f(x)/e^x ? Justify your answer.\n\n4. If f(x) = e^x (x) * sin(1)).\n\n) + cos(1).\n\n5).\n\nDetermine the roots of f(x) 0 =0.\n0).\n).\n4. Determine the roots of f(x) = 0.\n5.\n\n### **\n\nThe roots of f(x) = 0.\n5.\n5. Determine the roots of f(x) = 0.\n\nHere's roots of f(x) = 0.\n\nThe roots of f",
+        "tokens_per_second": 9.42,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 27171.04,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "thinking": {
+      "t1_q3_planning": {
+        "question_id": "t1_q3_planning",
+        "prompt": "You need to water 5 plants (A, B, C, D, E) with these constraints:\n- A must be watered before B\n- C must be watered immediately after D\n- E cannot be first or last\n- B must be watered before D\n\nList all valid orderings. Show your reasoning process.",
+        "response": "<think>\n\n</think>\n\nTo determine all valid orderings for watering the 5 plants (A, B, C, D, E), let's constraints:\n\n### **based on the given constraints, we will proceed with the following step-by-step logical deduction.\n\n### Step 1: Analyze the Constraints\nLet the five plants be denoted by letters A, B, C, D, E. We have the following constraints:\n1.  **$A <B must be watered before  **B:** $B**: A**: $B$ ($A$**: Order:** $A \\text{A < B < B < B}$.\n2. **$B must be watered immediately after $B (C): $C$D$ immediately$D \\to B \\toC$.3.  $$E$ cannot be first or last: $E \\text{Position(E) \\neq 1$23.4. $ \\q$E \\text{E} \\notin {1, {1, 1.11.2. \\text{E} { E} {1}} \\notin \\{1, 5\\}$\n2.  $C must be",
+        "tokens_per_second": 7.46,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 34307.71,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    },
+    "general": {
+      "t3_q1_policy_analysis": {
+        "question_id": "t3_q1_policy_analysis",
+        "prompt": "A company proposes this AI governance policy:\n\"All ML models deployed in production must achieve 95% accuracy on a held-out test set,\nhave explainability scores above 0.8 (SHAP-based), and undergo quarterly bias audits.\"\n\nAnalyze this policy:\n1. Identify at least 3 ways this policy could fail to achieve its intended goals\n2. For each failure mode, explain the mechanism\n3. Propose specific amendments that address each failure mode\n4. Discuss trade-offs of your amendments",
+        "response": "<think>\n\n</think>\n\nThis policy attempts to establish a rigid \"gatekeeping\" framework for AI deployment. While the intent to ensure quality, transparency, and fairness is sound, the specific metrics and constraints are overly prescriptive and likely to lead to unintended negative consequences, including model stagnation, gaming of metrics, and the exclusion of high-value but complex use cases.\n\nHere is an analysis of the policy's failure modes, mechanisms, proposed amendments, and the associated trade-offs.\n\n---\n\n### 1. Failure Mode: Metric Inflexibility and Context Ignorance\n**The Flaw:** Requiring a universal **95% accuracy** threshold across *all* models ignores the inherent difficulty of different tasks and the base rate of the data.\n\n*   **Mechanism of Failure:**\n    *   **Imbalanced Class Distribution:** In fraud detection or rare disease diagnosis, the negative class might constitute 99% of the data. A model that predicts \"no fraud\" for every single case achieves 99% accuracy but provides zero utility. Conversely, for highly complex tasks (e.g., medical imaging diagnosis or natural language understanding), achieving 95% accuracy might be statistically impossible even for state-of-the-art models, leading to a situation where",
+        "tokens_per_second": 13.36,
+        "prompt_tokens": null,
+        "completion_tokens": 256,
+        "total_time_ms": 19165.79,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 10.08,
+    "avg_algorithmic_score": null,
+    "questions_tested": 3,
+    "questions_passed": 0
+  }
+}
