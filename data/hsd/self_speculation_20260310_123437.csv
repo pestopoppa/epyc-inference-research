@@ -1,0 +1,7 @@
+model,config,exit_depth,tps,tokens_generated,generation_sec,draft_accepted,draft_total,acceptance_rate,n_prompts
+27b,baseline,0,4.51,640,141.805,0,0,0,5
+27b,external_draft,0,3.51,640,182.235,272,0,0,5
+27b,prompt_lookup,0,0,,,0,0,0,0
+27b,self_speculation,16,2.85,640,224.522,454,0,0,5
+27b,self_speculation,21,2.58,640,247.876,412,0,0,5
+27b,self_speculation,32,2.71,640,235.72,439,0,0,5

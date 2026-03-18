@@ -1,0 +1,868 @@
+load_backend: loaded CPU backend from /mnt/raid0/llm/llama.cpp/build/bin/libggml-cpu-zen4.so
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+build: 8214 (7acee0d64) with GNU 13.3.0 for Linux x86_64
+system info: n_threads = 96, n_threads_batch = 96, total_threads = 192
+
+system_info: n_threads = 96 (n_threads_batch = 96) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+
+init: using 191 threads for HTTP server
+start: binding port with default address family
+main: loading model
+srv    load_model: loading model '/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf'
+srv    load_model: tree speculation: n_seq_max auto-sized to 9 for multi-path verification
+common_init_result: fitting params to device memory, for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on
+llama_params_fit_impl: no devices with dedicated memory found
+llama_params_fit: successfully fit params to free device memory
+llama_params_fit: fitting params to free memory took 0.51 seconds
+llama_model_loader: loaded meta data with 46 key-value pairs and 427 tensors from /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen35
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Qwen3.5-9B
+llama_model_loader: - kv   3:                           general.basename str              = Qwen3.5-9B
+llama_model_loader: - kv   4:                       general.quantized_by str              = Unsloth
+llama_model_loader: - kv   5:                         general.size_label str              = 9B
+llama_model_loader: - kv   6:                            general.license str              = apache-2.0
+llama_model_loader: - kv   7:                       general.license.link str              = https://huggingface.co/Qwen/Qwen3.5-9...
+llama_model_loader: - kv   8:                           general.repo_url str              = https://huggingface.co/unsloth
+llama_model_loader: - kv   9:                   general.base_model.count u32              = 1
+llama_model_loader: - kv  10:                  general.base_model.0.name str              = Qwen3.5 9B
+llama_model_loader: - kv  11:          general.base_model.0.organization str              = Qwen
+llama_model_loader: - kv  12:              general.base_model.0.repo_url str              = https://huggingface.co/Qwen/Qwen3.5-9B
+llama_model_loader: - kv  13:                               general.tags arr[str,2]       = ["unsloth", "image-text-to-text"]
+llama_model_loader: - kv  14:                         qwen35.block_count u32              = 32
+llama_model_loader: - kv  15:                      qwen35.context_length u32              = 262144
+llama_model_loader: - kv  16:                    qwen35.embedding_length u32              = 4096
+llama_model_loader: - kv  17:                 qwen35.feed_forward_length u32              = 12288
+llama_model_loader: - kv  18:                qwen35.attention.head_count u32              = 16
+llama_model_loader: - kv  19:             qwen35.attention.head_count_kv u32              = 4
+llama_model_loader: - kv  20:             qwen35.rope.dimension_sections arr[i32,4]       = [11, 11, 10, 0]
+llama_model_loader: - kv  21:                      qwen35.rope.freq_base f32              = 10000000.000000
+llama_model_loader: - kv  22:    qwen35.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  23:                qwen35.attention.key_length u32              = 256
+llama_model_loader: - kv  24:              qwen35.attention.value_length u32              = 256
+llama_model_loader: - kv  25:                     qwen35.ssm.conv_kernel u32              = 4
+llama_model_loader: - kv  26:                      qwen35.ssm.state_size u32              = 128
+llama_model_loader: - kv  27:                     qwen35.ssm.group_count u32              = 16
+llama_model_loader: - kv  28:                  qwen35.ssm.time_step_rank u32              = 32
+llama_model_loader: - kv  29:                      qwen35.ssm.inner_size u32              = 4096
+llama_model_loader: - kv  30:             qwen35.full_attention_interval u32              = 4
+llama_model_loader: - kv  31:                qwen35.rope.dimension_count u32              = 64
+llama_model_loader: - kv  32:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  33:                         tokenizer.ggml.pre str              = qwen35
+llama_model_loader: - kv  34:                      tokenizer.ggml.tokens arr[str,248320]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  35:                  tokenizer.ggml.token_type arr[i32,248320]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  36:                      tokenizer.ggml.merges arr[str,247587]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  37:                tokenizer.ggml.eos_token_id u32              = 248046
+llama_model_loader: - kv  38:            tokenizer.ggml.padding_token_id u32              = 248055
+llama_model_loader: - kv  39:                    tokenizer.chat_template str              = {%- set image_count = namespace(value...
+llama_model_loader: - kv  40:               general.quantization_version u32              = 2
+llama_model_loader: - kv  41:                          general.file_type u32              = 15
+llama_model_loader: - kv  42:                      quantize.imatrix.file str              = Qwen3.5-9B-GGUF/imatrix_unsloth.gguf
+llama_model_loader: - kv  43:                   quantize.imatrix.dataset str              = unsloth_calibration_Qwen3.5-9B.txt
+llama_model_loader: - kv  44:             quantize.imatrix.entries_count u32              = 248
+llama_model_loader: - kv  45:              quantize.imatrix.chunks_count u32              = 80
+llama_model_loader: - type  f32:  177 tensors
+llama_model_loader: - type q8_0:   48 tensors
+llama_model_loader: - type q4_K:  132 tensors
+llama_model_loader: - type q5_K:   48 tensors
+llama_model_loader: - type q6_K:   22 tensors
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = Q4_K - Medium
+print_info: file size   = 5.28 GiB (5.07 BPW) 
+load: 0 unused tokens
+load: printing all EOG tokens:
+load:   - 248044 ('<|endoftext|>')
+load:   - 248046 ('<|im_end|>')
+load:   - 248063 ('<|fim_pad|>')
+load:   - 248064 ('<|repo_name|>')
+load:   - 248065 ('<|file_sep|>')
+load: special tokens cache size = 33
+load: token to piece cache size = 1.7581 MB
+print_info: arch                  = qwen35
+print_info: vocab_only            = 0
+print_info: no_alloc              = 0
+print_info: n_ctx_train           = 262144
+print_info: n_embd                = 4096
+print_info: n_embd_inp            = 4096
+print_info: n_layer               = 32
+print_info: n_head                = 16
+print_info: n_head_kv             = 4
+print_info: n_rot                 = 64
+print_info: n_swa                 = 0
+print_info: is_swa_any            = 0
+print_info: n_embd_head_k         = 256
+print_info: n_embd_head_v         = 256
+print_info: n_gqa                 = 4
+print_info: n_embd_k_gqa          = 1024
+print_info: n_embd_v_gqa          = 1024
+print_info: f_norm_eps            = 0.0e+00
+print_info: f_norm_rms_eps        = 1.0e-06
+print_info: f_clamp_kqv           = 0.0e+00
+print_info: f_max_alibi_bias      = 0.0e+00
+print_info: f_logit_scale         = 0.0e+00
+print_info: f_attn_scale          = 0.0e+00
+print_info: n_ff                  = 12288
+print_info: n_expert              = 0
+print_info: n_expert_used         = 0
+print_info: n_expert_groups       = 0
+print_info: n_group_used          = 0
+print_info: causal attn           = 1
+print_info: pooling type          = 0
+print_info: rope type             = 40
+print_info: rope scaling          = linear
+print_info: freq_base_train       = 10000000.0
+print_info: freq_scale_train      = 1
+print_info: n_ctx_orig_yarn       = 262144
+print_info: rope_yarn_log_mul     = 0.0000
+print_info: rope_finetuned        = unknown
+print_info: mrope sections        = [11, 11, 10, 0]
+print_info: ssm_d_conv            = 4
+print_info: ssm_d_inner           = 4096
+print_info: ssm_d_state           = 128
+print_info: ssm_dt_rank           = 32
+print_info: ssm_n_group           = 16
+print_info: ssm_dt_b_c_rms        = 0
+print_info: model type            = ?B
+print_info: model params          = 8.95 B
+print_info: general.name          = Qwen3.5-9B
+print_info: vocab type            = BPE
+print_info: n_vocab               = 248320
+print_info: n_merges              = 247587
+print_info: BOS token             = 11 ','
+print_info: EOS token             = 248046 '<|im_end|>'
+print_info: EOT token             = 248046 '<|im_end|>'
+print_info: PAD token             = 248055 '<|vision_pad|>'
+print_info: LF token              = 198 'Ċ'
+print_info: FIM PRE token         = 248060 '<|fim_prefix|>'
+print_info: FIM SUF token         = 248062 '<|fim_suffix|>'
+print_info: FIM MID token         = 248061 '<|fim_middle|>'
+print_info: FIM PAD token         = 248063 '<|fim_pad|>'
+print_info: FIM REP token         = 248064 '<|repo_name|>'
+print_info: FIM SEP token         = 248065 '<|file_sep|>'
+print_info: EOG token             = 248044 '<|endoftext|>'
+print_info: EOG token             = 248046 '<|im_end|>'
+print_info: EOG token             = 248063 '<|fim_pad|>'
+print_info: EOG token             = 248064 '<|repo_name|>'
+print_info: EOG token             = 248065 '<|file_sep|>'
+print_info: max token length      = 256
+load_tensors: loading model tensors, this can take a while... (mmap = true, direct_io = false)
+load_tensors:   CPU_Mapped model buffer size =  5406.91 MiB
+load_tensors:   CPU_REPACK model buffer size =  2616.75 MiB
+..............................................................................
+common_init_result: added <|endoftext|> logit bias = -inf
+common_init_result: added <|im_end|> logit bias = -inf
+common_init_result: added <|fim_pad|> logit bias = -inf
+common_init_result: added <|repo_name|> logit bias = -inf
+common_init_result: added <|file_sep|> logit bias = -inf
+llama_context: constructing llama_context
+llama_context: n_ctx is not divisible by n_seq_max - rounding down to 262656
+llama_context: n_seq_max     = 9
+llama_context: n_ctx         = 262656
+llama_context: n_ctx_seq     = 29184
+llama_context: n_batch       = 2048
+llama_context: n_ubatch      = 512
+llama_context: causal_attn   = 1
+llama_context: flash_attn    = auto
+llama_context: kv_unified    = false
+llama_context: freq_base     = 10000000.0
+llama_context: freq_scale    = 1
+llama_context: n_ctx_seq (29184) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+llama_context:        CPU  output buffer size =     8.53 MiB
+llama_kv_cache:        CPU KV buffer size =  8208.00 MiB
+llama_kv_cache: size = 8208.00 MiB ( 29184 cells,   8 layers,  9/9 seqs), K (f16): 4104.00 MiB, V (f16): 4104.00 MiB
+llama_memory_recurrent:        CPU RS buffer size =   452.25 MiB
+llama_memory_recurrent:        CPU RS shadow buffer size =   452.25 MiB
+llama_memory_recurrent: size =  452.25 MiB (     9 cells,  32 layers,  9 seqs), R (f32):   20.25 MiB, S (f32):  432.00 MiB (shadow: same)
+sched_reserve: reserving ...
+sched_reserve: Flash Attention was auto, set to enabled
+sched_reserve:        CPU compute buffer size =   501.98 MiB
+sched_reserve: graph nodes  = 3865 (with bs=512), 2377 (with bs=1)
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 6.10 ms, sched copies = 1
+common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+srv    load_model: loading draft model '/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf'
+llama_model_loader: loaded meta data with 46 key-value pairs and 320 tensors from /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen35
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Qwen3.5-0.8B
+llama_model_loader: - kv   3:                           general.basename str              = Qwen3.5-0.8B
+llama_model_loader: - kv   4:                       general.quantized_by str              = Unsloth
+llama_model_loader: - kv   5:                         general.size_label str              = 0.8B
+llama_model_loader: - kv   6:                            general.license str              = apache-2.0
+llama_model_loader: - kv   7:                       general.license.link str              = https://huggingface.co/Qwen/Qwen3.5-0...
+llama_model_loader: - kv   8:                           general.repo_url str              = https://huggingface.co/unsloth
+llama_model_loader: - kv   9:                   general.base_model.count u32              = 1
+llama_model_loader: - kv  10:                  general.base_model.0.name str              = Qwen3.5 0.8B
+llama_model_loader: - kv  11:          general.base_model.0.organization str              = Qwen
+llama_model_loader: - kv  12:              general.base_model.0.repo_url str              = https://huggingface.co/Qwen/Qwen3.5-0.8B
+llama_model_loader: - kv  13:                               general.tags arr[str,1]       = ["image-text-to-text"]
+llama_model_loader: - kv  14:                         qwen35.block_count u32              = 24
+llama_model_loader: - kv  15:                      qwen35.context_length u32              = 262144
+llama_model_loader: - kv  16:                    qwen35.embedding_length u32              = 1024
+llama_model_loader: - kv  17:                 qwen35.feed_forward_length u32              = 3584
+llama_model_loader: - kv  18:                qwen35.attention.head_count u32              = 8
+llama_model_loader: - kv  19:             qwen35.attention.head_count_kv u32              = 2
+llama_model_loader: - kv  20:             qwen35.rope.dimension_sections arr[i32,4]       = [11, 11, 10, 0]
+llama_model_loader: - kv  21:                      qwen35.rope.freq_base f32              = 10000000.000000
+llama_model_loader: - kv  22:    qwen35.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  23:                qwen35.attention.key_length u32              = 256
+llama_model_loader: - kv  24:              qwen35.attention.value_length u32              = 256
+llama_model_loader: - kv  25:                     qwen35.ssm.conv_kernel u32              = 4
+llama_model_loader: - kv  26:                      qwen35.ssm.state_size u32              = 128
+llama_model_loader: - kv  27:                     qwen35.ssm.group_count u32              = 16
+llama_model_loader: - kv  28:                  qwen35.ssm.time_step_rank u32              = 16
+llama_model_loader: - kv  29:                      qwen35.ssm.inner_size u32              = 2048
+llama_model_loader: - kv  30:             qwen35.full_attention_interval u32              = 4
+llama_model_loader: - kv  31:                qwen35.rope.dimension_count u32              = 64
+llama_model_loader: - kv  32:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  33:                         tokenizer.ggml.pre str              = qwen35
+llama_model_loader: - kv  34:                      tokenizer.ggml.tokens arr[str,248320]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  35:                  tokenizer.ggml.token_type arr[i32,248320]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  36:                      tokenizer.ggml.merges arr[str,247587]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  37:                tokenizer.ggml.eos_token_id u32              = 248046
+llama_model_loader: - kv  38:            tokenizer.ggml.padding_token_id u32              = 248055
+llama_model_loader: - kv  39:                    tokenizer.chat_template str              = {%- set image_count = namespace(value...
+llama_model_loader: - kv  40:               general.quantization_version u32              = 2
+llama_model_loader: - kv  41:                          general.file_type u32              = 7
+llama_model_loader: - kv  42:                      quantize.imatrix.file str              = Qwen3.5-0.8B-GGUF/imatrix_unsloth.gguf
+llama_model_loader: - kv  43:                   quantize.imatrix.dataset str              = unsloth_calibration_Qwen3.5-0.8B.txt
+llama_model_loader: - kv  44:             quantize.imatrix.entries_count u32              = 186
+llama_model_loader: - kv  45:              quantize.imatrix.chunks_count u32              = 80
+llama_model_loader: - type  f32:  133 tensors
+llama_model_loader: - type q8_0:  187 tensors
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = Q8_0
+print_info: file size   = 763.78 MiB (8.52 BPW) 
+load: 0 unused tokens
+load: printing all EOG tokens:
+load:   - 248044 ('<|endoftext|>')
+load:   - 248046 ('<|im_end|>')
+load:   - 248063 ('<|fim_pad|>')
+load:   - 248064 ('<|repo_name|>')
+load:   - 248065 ('<|file_sep|>')
+load: special tokens cache size = 33
+load: token to piece cache size = 1.7581 MB
+print_info: arch                  = qwen35
+print_info: vocab_only            = 0
+print_info: no_alloc              = 0
+print_info: n_ctx_train           = 262144
+print_info: n_embd                = 1024
+print_info: n_embd_inp            = 1024
+print_info: n_layer               = 24
+print_info: n_head                = 8
+print_info: n_head_kv             = 2
+print_info: n_rot                 = 64
+print_info: n_swa                 = 0
+print_info: is_swa_any            = 0
+print_info: n_embd_head_k         = 256
+print_info: n_embd_head_v         = 256
+print_info: n_gqa                 = 4
+print_info: n_embd_k_gqa          = 512
+print_info: n_embd_v_gqa          = 512
+print_info: f_norm_eps            = 0.0e+00
+print_info: f_norm_rms_eps        = 1.0e-06
+print_info: f_clamp_kqv           = 0.0e+00
+print_info: f_max_alibi_bias      = 0.0e+00
+print_info: f_logit_scale         = 0.0e+00
+print_info: f_attn_scale          = 0.0e+00
+print_info: n_ff                  = 3584
+print_info: n_expert              = 0
+print_info: n_expert_used         = 0
+print_info: n_expert_groups       = 0
+print_info: n_group_used          = 0
+print_info: causal attn           = 1
+print_info: pooling type          = 0
+print_info: rope type             = 40
+print_info: rope scaling          = linear
+print_info: freq_base_train       = 10000000.0
+print_info: freq_scale_train      = 1
+print_info: n_ctx_orig_yarn       = 262144
+print_info: rope_yarn_log_mul     = 0.0000
+print_info: rope_finetuned        = unknown
+print_info: mrope sections        = [11, 11, 10, 0]
+print_info: ssm_d_conv            = 4
+print_info: ssm_d_inner           = 2048
+print_info: ssm_d_state           = 128
+print_info: ssm_dt_rank           = 16
+print_info: ssm_n_group           = 16
+print_info: ssm_dt_b_c_rms        = 0
+print_info: model type            = 2B
+print_info: model params          = 752.39 M
+print_info: general.name          = Qwen3.5-0.8B
+print_info: vocab type            = BPE
+print_info: n_vocab               = 248320
+print_info: n_merges              = 247587
+print_info: BOS token             = 11 ','
+print_info: EOS token             = 248046 '<|im_end|>'
+print_info: EOT token             = 248046 '<|im_end|>'
+print_info: PAD token             = 248055 '<|vision_pad|>'
+print_info: LF token              = 198 'Ċ'
+print_info: FIM PRE token         = 248060 '<|fim_prefix|>'
+print_info: FIM SUF token         = 248062 '<|fim_suffix|>'
+print_info: FIM MID token         = 248061 '<|fim_middle|>'
+print_info: FIM PAD token         = 248063 '<|fim_pad|>'
+print_info: FIM REP token         = 248064 '<|repo_name|>'
+print_info: FIM SEP token         = 248065 '<|file_sep|>'
+print_info: EOG token             = 248044 '<|endoftext|>'
+print_info: EOG token             = 248046 '<|im_end|>'
+print_info: EOG token             = 248063 '<|fim_pad|>'
+print_info: EOG token             = 248064 '<|repo_name|>'
+print_info: EOG token             = 248065 '<|file_sep|>'
+print_info: max token length      = 256
+load_tensors: loading model tensors, this can take a while... (mmap = true, direct_io = false)
+load_tensors:   CPU_Mapped model buffer size =   763.78 MiB
+....................................................................
+srv    load_model: initializing slots, n_slots = 1
+llama_context: constructing llama_context
+llama_context: n_seq_max     = 33
+llama_context: n_ctx         = 29184
+llama_context: n_ctx_seq     = 29184
+llama_context: n_batch       = 29184
+llama_context: n_ubatch      = 512
+llama_context: causal_attn   = 1
+llama_context: flash_attn    = auto
+llama_context: kv_unified    = true
+llama_context: freq_base     = 10000000.0
+llama_context: freq_scale    = 1
+llama_context: n_ctx_seq (29184) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+llama_context:        CPU  output buffer size =    31.26 MiB
+llama_kv_cache:        CPU KV buffer size =   342.00 MiB
+llama_kv_cache: size =  342.00 MiB ( 29184 cells,   6 layers, 33/1 seqs), K (f16):  171.00 MiB, V (f16):  171.00 MiB
+llama_memory_recurrent:        CPU RS buffer size =   635.77 MiB
+llama_memory_recurrent:        CPU RS shadow buffer size =   635.77 MiB
+llama_memory_recurrent: size =  635.77 MiB (    33 cells,  24 layers, 33 seqs), R (f32):   41.77 MiB, S (f32):  594.00 MiB (shadow: same)
+sched_reserve: reserving ...
+sched_reserve: Flash Attention was auto, set to enabled
+sched_reserve:        CPU compute buffer size =   504.28 MiB
+sched_reserve: graph nodes  = 2853 (with bs=512), 1737 (with bs=1)
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 5.56 ms, sched copies = 1
+slot   load_model: id  0 | task -1 | speculative decoding context initialized
+slot   load_model: id  0 | task -1 | new slot, n_ctx = 29184
+srv    load_model: prompt cache is enabled, size limit: 8192 MiB
+srv    load_model: use `--cache-ram 0` to disable the prompt cache
+srv    load_model: for more info see https://github.com/ggml-org/llama.cpp/pull/16391
+init: chat template, example_format: '<|im_start|>system
+You are a helpful assistant<|im_end|>
+<|im_start|>user
+Hello<|im_end|>
+<|im_start|>assistant
+Hi there<|im_end|>
+<|im_start|>user
+How are you?<|im_end|>
+<|im_start|>assistant
+<think>
+
+</think>
+
+'
+srv          init: init: chat template, thinking = 0
+main: model loaded
+main: server is listening on http://127.0.0.1:8199
+main: starting the main loop...
+srv  update_slots: all slots are idle
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+slot update_slots: id  0 | task 0 | new prompt, n_ctx_slot = 29184, n_keep = 0, task.n_tokens = 13
+slot update_slots: id  0 | task 0 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 0 | init sampler, took 0.00 ms, tokens: text = 13, total = 13
+slot update_slots: id  0 | task 0 | prompt processing done, n_tokens = 13, batch.n_tokens = 13
+init: the tokens of sequence 0 in the input batch have inconsistent sequence positions:
+ - the last position stored in the memory module of the context (i.e. the KV cache) for sequence 0 is X = 15
+ - the tokens for sequence 0 in the input batch have a starting position of Y = 14
+ for M-RoPE, it is required that the position satisfies: X < Y
+decode: failed to initialize batch
+llama_decode: failed to decode, ret = -1
+slot update_slots: id  0 | task 0 | failed to advance recurrent state after frozen speculation: -1
+find_slot: non-consecutive token position 15 after 14 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 15 after 14 for sequence 0 with 2 new tokens
+find_slot: non-consecutive token position 17 after 17 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 17 after 17 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 20 after 18 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 20 after 18 for sequence 0 with 4 new tokens
+find_slot: non-consecutive token position 18 after 19 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 18 after 19 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 20 after 20 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 20 after 20 for sequence 2 with 3 new tokens
+find_slot: non-consecutive token position 20 after 20 for sequence 3 with 3 new tokens
+find_slot: non-consecutive token position 20 after 20 for sequence 4 with 3 new tokens
+find_slot: non-consecutive token position 20 after 20 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 20 after 20 for sequence 2 with 3 new tokens
+find_slot: non-consecutive token position 20 after 20 for sequence 3 with 3 new tokens
+find_slot: non-consecutive token position 20 after 20 for sequence 4 with 3 new tokens
+slot print_timing: id  0 | task 0 | 
+prompt eval time =     180.90 ms /    13 tokens (   13.92 ms per token,    71.86 tokens per second)
+       eval time =    1667.41 ms /     7 tokens (  238.20 ms per token,     4.20 tokens per second)
+      total time =    1848.31 ms /    20 tokens
+draft acceptance rate = 0.22222 (    2 accepted /     9 generated)
+statistics tree: #calls(b,g,a) = 1 4 1, #gen drafts = 4, #acc drafts = 1, #gen tokens = 9, #acc tokens = 2, dur(b,g,a) = 0.000, 493.697, 0.001 ms
+slot      release: id  0 | task 0 | stop processing: n_tokens = 19, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /v1/chat/completions 127.0.0.1 200
+srv  params_from_: Chat format: peg-constructed
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 2231197677525
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 19, total state size = 50.845 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.158, sim = 0.097
+srv        update:  - cache state: 1 prompts, 50.845 MiB (limits: 8192.000 MiB, 262656 tokens, 262656 est)
+srv        update:    - prompt 0x63dfe2f69530:      19 tokens, checkpoints:  0,    50.845 MiB
+srv  get_availabl: prompt cache update took 13.91 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 6 | processing task, is_child = 0
+slot update_slots: id  0 | task 6 | new prompt, n_ctx_slot = 29184, n_keep = 0, task.n_tokens = 31
+slot update_slots: id  0 | task 6 | n_past = 3, slot.prompt.tokens.size() = 19, seq_id = 0, pos_min = 20, n_swa = 1
+slot update_slots: id  0 | task 6 | forcing full prompt re-processing due to lack of cache data (likely due to SWA or hybrid/recurrent memory, see https://github.com/ggml-org/llama.cpp/pull/13194#issuecomment-2868343055)
+slot update_slots: id  0 | task 6 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 6 | init sampler, took 0.00 ms, tokens: text = 31, total = 31
+slot update_slots: id  0 | task 6 | prompt processing done, n_tokens = 31, batch.n_tokens = 31
+find_slot: non-consecutive token position 30 after 19 for sequence 0 with 28 new tokens
+find_slot: non-consecutive token position 30 after 19 for sequence 0 with 28 new tokens
+init: the tokens of sequence 0 in the input batch have inconsistent sequence positions:
+ - the last position stored in the memory module of the context (i.e. the KV cache) for sequence 0 is X = 34
+ - the tokens for sequence 0 in the input batch have a starting position of Y = 32
+ for M-RoPE, it is required that the position satisfies: X < Y
+decode: failed to initialize batch
+llama_decode: failed to decode, ret = -1
+slot update_slots: id  0 | task 6 | failed to advance recurrent state after frozen speculation: -1
+find_slot: non-consecutive token position 34 after 33 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 34 after 33 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 36 after 44 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 36 after 44 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 38 after 45 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 38 after 45 for sequence 2 with 3 new tokens
+find_slot: non-consecutive token position 38 after 45 for sequence 3 with 3 new tokens
+find_slot: non-consecutive token position 38 after 45 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 38 after 45 for sequence 2 with 3 new tokens
+find_slot: non-consecutive token position 38 after 45 for sequence 3 with 3 new tokens
+find_slot: non-consecutive token position 37 after 37 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 37 after 37 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 42 after 38 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 42 after 38 for sequence 0 with 6 new tokens
+find_slot: non-consecutive token position 38 after 41 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 38 after 41 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 40 after 42 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 40 after 42 for sequence 2 with 3 new tokens
+find_slot: non-consecutive token position 40 after 42 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 40 after 42 for sequence 2 with 3 new tokens
+find_slot: non-consecutive token position 39 after 39 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 39 after 39 for sequence 0 with 1 new tokens
+find_slot: non-consecutive token position 41 after 40 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 41 after 40 for sequence 2 with 3 new tokens
+find_slot: non-consecutive token position 41 after 40 for sequence 3 with 3 new tokens
+find_slot: non-consecutive token position 41 after 40 for sequence 4 with 3 new tokens
+find_slot: non-consecutive token position 41 after 40 for sequence 0 with 3 new tokens
+find_slot: non-consecutive token position 41 after 40 for sequence 2 with 3 new tokens
+find_slot: non-consecutive token position 41 after 40 for sequence 3 with 3 new tokens
+find_slot: non-consecutive token position 41 after 40 for sequence 4 with 3 new tokens
+slot update_slots: id  0 | task 6 | tree: path 2 won with 2 accepted tokens (path 0: 1)
+/mnt/raid0/llm/llama.cpp/src/llama-kv-cache.cpp:440: GGML_ASSERT(is_full && "seq_cp() is only supported for full KV buffers") failed
+[New LWP 720477]
+[New LWP 720476]
+[New LWP 720475]
+[New LWP 720474]
+[New LWP 720473]
+[New LWP 720472]
+[New LWP 720471]
+[New LWP 720470]
+[New LWP 720469]
+[New LWP 720468]
+[New LWP 720467]
+[New LWP 720466]
+[New LWP 720465]
+[New LWP 720464]
+[New LWP 720463]
+[New LWP 720462]
+[New LWP 720461]
+[New LWP 720460]
+[New LWP 720459]
+[New LWP 720458]
+[New LWP 720457]
+[New LWP 720456]
+[New LWP 720455]
+[New LWP 720454]
+[New LWP 720453]
+[New LWP 720452]
+[New LWP 720451]
+[New LWP 720450]
+[New LWP 720449]
+[New LWP 720448]
+[New LWP 720447]
+[New LWP 720446]
+[New LWP 720445]
+[New LWP 720444]
+[New LWP 720443]
+[New LWP 720442]
+[New LWP 720441]
+[New LWP 720440]
+[New LWP 720439]
+[New LWP 720438]
+[New LWP 720437]
+[New LWP 720436]
+[New LWP 720435]
+[New LWP 720434]
+[New LWP 720433]
+[New LWP 720432]
+[New LWP 720431]
+[New LWP 720430]
+[New LWP 720429]
+[New LWP 720428]
+[New LWP 720427]
+[New LWP 720426]
+[New LWP 720425]
+[New LWP 720424]
+[New LWP 720423]
+[New LWP 720422]
+[New LWP 720421]
+[New LWP 720420]
+[New LWP 720419]
+[New LWP 720418]
+[New LWP 720417]
+[New LWP 720416]
+[New LWP 720415]
+[New LWP 720414]
+[New LWP 720413]
+[New LWP 720412]
+[New LWP 720411]
+[New LWP 720410]
+[New LWP 720409]
+[New LWP 720408]
+[New LWP 720407]
+[New LWP 720406]
+[New LWP 720405]
+[New LWP 720404]
+[New LWP 720403]
+[New LWP 720402]
+[New LWP 720401]
+[New LWP 720400]
+[New LWP 720399]
+[New LWP 720398]
+[New LWP 720397]
+[New LWP 720396]
+[New LWP 720395]
+[New LWP 720394]
+[New LWP 720393]
+[New LWP 720392]
+[New LWP 720391]
+[New LWP 720390]
+[New LWP 720389]
+[New LWP 720388]
+[New LWP 720387]
+[New LWP 720386]
+[New LWP 720385]
+[New LWP 720384]
+[New LWP 720383]
+[New LWP 720382]
+[New LWP 720381]
+[New LWP 720380]
+[New LWP 720379]
+[New LWP 720378]
+[New LWP 720377]
+[New LWP 720376]
+[New LWP 720375]
+[New LWP 720374]
+[New LWP 720373]
+[New LWP 720372]
+[New LWP 720371]
+[New LWP 720370]
+[New LWP 720369]
+[New LWP 720368]
+[New LWP 720367]
+[New LWP 720366]
+[New LWP 720365]
+[New LWP 720364]
+[New LWP 720363]
+[New LWP 720362]
+[New LWP 720361]
+[New LWP 720360]
+[New LWP 720359]
+[New LWP 720358]
+[New LWP 720357]
+[New LWP 720356]
+[New LWP 720355]
+[New LWP 720354]
+[New LWP 720353]
+[New LWP 720352]
+[New LWP 720351]
+[New LWP 720350]
+[New LWP 720349]
+[New LWP 720348]
+[New LWP 720347]
+[New LWP 720346]
+[New LWP 720345]
+[New LWP 720344]
+[New LWP 720343]
+[New LWP 720342]
+[New LWP 720341]
+[New LWP 720340]
+[New LWP 720339]
+[New LWP 720338]
+[New LWP 720337]
+[New LWP 720336]
+[New LWP 720335]
+[New LWP 720334]
+[New LWP 720333]
+[New LWP 720332]
+[New LWP 720331]
+[New LWP 720330]
+[New LWP 720329]
+[New LWP 720328]
+[New LWP 720327]
+[New LWP 720326]
+[New LWP 720325]
+[New LWP 720324]
+[New LWP 720323]
+[New LWP 720322]
+[New LWP 720321]
+[New LWP 720320]
+[New LWP 720319]
+[New LWP 720318]
+[New LWP 720317]
+[New LWP 720316]
+[New LWP 720315]
+[New LWP 720314]
+[New LWP 720313]
+[New LWP 720312]
+[New LWP 720311]
+[New LWP 720310]
+[New LWP 720309]
+[New LWP 720308]
+[New LWP 720307]
+[New LWP 720306]
+[New LWP 720305]
+[New LWP 720304]
+[New LWP 720303]
+[New LWP 720302]
+[New LWP 720301]
+[New LWP 720300]
+[New LWP 720299]
+[New LWP 720298]
+[New LWP 720297]
+[New LWP 720296]
+[New LWP 720295]
+[New LWP 720294]
+[New LWP 720293]
+[New LWP 720292]
+[New LWP 720291]
+[New LWP 720290]
+[New LWP 720289]
+[New LWP 720288]
+[New LWP 720287]
+[New LWP 720284]
+[New LWP 720283]
+[New LWP 720282]
+[New LWP 720281]
+[New LWP 720280]
+[New LWP 720279]
+[New LWP 720278]
+[New LWP 720277]
+[New LWP 720276]
+[New LWP 720275]
+[New LWP 720274]
+[New LWP 720273]
+[New LWP 720272]
+[New LWP 720271]
+[New LWP 720270]
+[New LWP 720269]
+[New LWP 720268]
+[New LWP 720267]
+[New LWP 720266]
+[New LWP 720265]
+[New LWP 720264]
+[New LWP 720263]
+[New LWP 720262]
+[New LWP 720261]
+[New LWP 720260]
+[New LWP 720259]
+[New LWP 720258]
+[New LWP 720257]
+[New LWP 720256]
+[New LWP 720255]
+[New LWP 720254]
+[New LWP 720253]
+[New LWP 720252]
+[New LWP 720251]
+[New LWP 720250]
+[New LWP 720249]
+[New LWP 720248]
+[New LWP 720247]
+[New LWP 720246]
+[New LWP 720245]
+[New LWP 720244]
+[New LWP 720243]
+[New LWP 720242]
+[New LWP 720241]
+[New LWP 720240]
+[New LWP 720239]
+[New LWP 720238]
+[New LWP 720237]
+[New LWP 720236]
+[New LWP 720235]
+[New LWP 720234]
+[New LWP 720233]
+[New LWP 720232]
+[New LWP 720231]
+[New LWP 720230]
+[New LWP 720229]
+[New LWP 720228]
+[New LWP 720227]
+[New LWP 720226]
+[New LWP 720225]
+[New LWP 720224]
+[New LWP 720223]
+[New LWP 720222]
+[New LWP 720221]
+[New LWP 720220]
+[New LWP 720219]
+[New LWP 720218]
+[New LWP 720217]
+[New LWP 720216]
+[New LWP 720215]
+[New LWP 720214]
+[New LWP 720213]
+[New LWP 720212]
+[New LWP 720211]
+[New LWP 720210]
+[New LWP 720209]
+[New LWP 720208]
+[New LWP 720207]
+[New LWP 720206]
+[New LWP 720205]
+[New LWP 720204]
+[New LWP 720203]
+[New LWP 720202]
+[New LWP 720201]
+[New LWP 720200]
+[New LWP 720199]
+[New LWP 720198]
+[New LWP 720197]
+[New LWP 720196]
+[New LWP 720195]
+[New LWP 720194]
+[New LWP 720193]
+[New LWP 720192]
+[New LWP 720191]
+[New LWP 720190]
+[New LWP 720189]
+[New LWP 720188]
+[New LWP 720187]
+[New LWP 720186]
+[New LWP 720185]
+[New LWP 720184]
+[New LWP 720183]
+[New LWP 720182]
+[New LWP 720181]
+[New LWP 720180]
+[New LWP 720179]
+[New LWP 720178]
+[New LWP 720177]
+[New LWP 720176]
+[New LWP 720175]
+[New LWP 720174]
+[New LWP 720173]
+[New LWP 720172]
+[New LWP 720171]
+[New LWP 720170]
+[New LWP 720169]
+[New LWP 720168]
+[New LWP 720167]
+[New LWP 720166]
+[New LWP 720165]
+[New LWP 720164]
+[New LWP 720163]
+[New LWP 720162]
+[New LWP 720161]
+[New LWP 720160]
+[New LWP 720159]
+[New LWP 720158]
+[New LWP 720157]
+[New LWP 720156]
+[New LWP 720155]
+[New LWP 720154]
+[New LWP 720153]
+[New LWP 720152]
+[New LWP 720151]
+[New LWP 720150]
+[New LWP 720149]
+[New LWP 720148]
+[New LWP 720147]
+[New LWP 720146]
+[New LWP 720145]
+[New LWP 720144]
+[New LWP 720143]
+[New LWP 720142]
+[New LWP 720141]
+[New LWP 720140]
+[New LWP 720139]
+[New LWP 720138]
+[New LWP 720137]
+[New LWP 720136]
+[New LWP 720135]
+[New LWP 720134]
+[New LWP 720133]
+[New LWP 720132]
+[New LWP 720131]
+[New LWP 720130]
+[New LWP 720129]
+[New LWP 720128]
+[New LWP 720127]
+[New LWP 720126]
+[New LWP 720125]
+[New LWP 720124]
+[New LWP 720123]
+[New LWP 720122]
+[New LWP 720121]
+[New LWP 720120]
+[New LWP 720119]
+[New LWP 720118]
+[New LWP 720117]
+[New LWP 720116]
+[New LWP 720115]
+[New LWP 720114]
+[New LWP 720113]
+[New LWP 720112]
+[New LWP 720111]
+[New LWP 720110]
+[New LWP 720109]
+[New LWP 720108]
+[New LWP 720107]
+[New LWP 720106]
+[New LWP 720105]
+[New LWP 720104]
+[New LWP 720103]
+[New LWP 720102]
+[New LWP 720101]
+[New LWP 720100]
+[New LWP 720099]
+[New LWP 720098]
+[New LWP 720097]
+[New LWP 720096]
+[New LWP 720095]
+[New LWP 720094]
+[New LWP 720093]
+[New LWP 720092]
+
+This GDB supports auto-downloading debuginfo from the following URLs:
+  <https://debuginfod.ubuntu.com>
+Enable debuginfod for this session? (y or [n]) [answered N; input not from terminal]
+Debuginfod has been disabled.
+To make this setting permanent, add 'set debuginfod enabled off' to .gdbinit.
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library "/usr/lib/x86_64-linux-gnu/libthread_db.so.1".
+0x000073d7f2910813 in __GI___wait4 (pid=720540, stat_loc=0x0, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+warning: 30	../sysdeps/unix/sysv/linux/wait4.c: No such file or directory
+#0  0x000073d7f2910813 in __GI___wait4 (pid=720540, stat_loc=0x0, options=0, usage=0x0) at ../sysdeps/unix/sysv/linux/wait4.c:30
+30	in ../sysdeps/unix/sysv/linux/wait4.c
+#1  0x000073d7f335d763 in ggml_print_backtrace () from /mnt/raid0/llm/llama.cpp/build/bin/libggml-base.so.0
+#2  0x000073d7f335d90b in ggml_abort () from /mnt/raid0/llm/llama.cpp/build/bin/libggml-base.so.0
+#3  0x000073d7f3110bcb in llama_kv_cache::seq_cp(int, int, int, int) () from /mnt/raid0/llm/llama.cpp/build/bin/libllama.so.0
+#4  0x000073d7f3126653 in llama_memory_hybrid::seq_cp(int, int, int, int) () from /mnt/raid0/llm/llama.cpp/build/bin/libllama.so.0
+#5  0x000063dfcb1a7607 in server_context_impl::update_slots() ()
+#6  0x000063dfcb1ed4ee in server_queue::start_loop(long) ()
+#7  0x000063dfcb0fb913 in main ()
+[Inferior 1 (process 720087) detached]

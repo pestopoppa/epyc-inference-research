@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Deterministic scorer for debug benchmark suite.
+"""Scorer for debug benchmark suite.
 
 Scores model outputs against ground-truth answers using methods from
 public benchmarks (exact_match, multiple_choice, code_execution,
-programmatic, substring). No heuristics, no Claude-as-Judge needed.
+programmatic, substring, llm_judge).
 
 Usage:
     from scripts.benchmark.debug_scorer import score_answer
@@ -62,6 +62,7 @@ def score_answer(
         "programmatic": _score_programmatic,
         "substring": _score_substring,
         "f1": _score_f1,
+        "llm_judge": _score_llm_judge,
     }
 
     scorer = scorers.get(scoring_method)
@@ -569,6 +570,67 @@ def _normalize_text(text: str) -> str:
     text = " ".join(text.split())
 
     return text
+
+
+def _score_llm_judge(
+    answer: str, expected: str, config: dict[str, Any]
+) -> bool:
+    """Score using a local LLM as semantic equivalence judge.
+
+    Used for: PhysReason — symbolic physics/math answers where substring
+    matching misses equivalent forms (e.g. mg/2 vs \\frac{mg}{2}).
+
+    Calls a local llama-server OpenAI-compatible endpoint to judge whether
+    the model's answer is semantically equivalent to the expected answer.
+
+    Config:
+        judge_port: Port for the judge LLM server (default: 8082, explore worker).
+        judge_host: Host for the judge LLM server (default: "localhost").
+        timeout: HTTP timeout in seconds (default: 30).
+    """
+    port = config.get("judge_port", 8082)
+    host = config.get("judge_host", "localhost")
+    timeout = config.get("timeout", 30)
+
+    # First try substring as a fast path — if the exact string matches, skip the LLM call
+    if expected.strip().lower() in answer.lower():
+        return True
+
+    # Extract answer from \boxed{} if present
+    boxed = re.search(r'\\boxed\{(.+?)\}', answer, re.DOTALL)
+    candidate = boxed.group(1).strip() if boxed else answer.strip().split("\n")[-1].strip()
+
+    judge_prompt = (
+        "You are a physics answer equivalence judge. Determine whether two "
+        "mathematical/physics answers are semantically equivalent.\n\n"
+        "Consider:\n"
+        "- Different but equivalent LaTeX forms (e.g. \\frac{mg}{2} vs mg/2)\n"
+        "- Equivalent symbolic rearrangements\n"
+        "- Same numerical value with different units notation\n"
+        "- Simplified vs expanded forms\n\n"
+        f"Expected answer: {expected}\n\n"
+        f"Student answer: {candidate}\n\n"
+        "Are these answers semantically equivalent? Reply with ONLY "
+        "\"true\" or \"false\", nothing else."
+    )
+
+    try:
+        import httpx
+        resp = httpx.post(
+            f"http://{host}:{port}/v1/chat/completions",
+            json={
+                "messages": [{"role": "user", "content": judge_prompt}],
+                "max_tokens": 8,
+                "temperature": 0.0,
+            },
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        verdict = resp.json()["choices"][0]["message"]["content"].strip().lower()
+        return verdict.startswith("true")
+    except Exception:
+        # If judge is unavailable, fall back to substring match
+        return expected.strip().lower() in candidate.lower()
 
 
 # ── Helpers ────────────────────────────────────────────────────────────

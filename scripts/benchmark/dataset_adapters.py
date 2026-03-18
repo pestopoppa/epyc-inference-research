@@ -15,6 +15,8 @@ Supported suites and their data sources:
   - thinking:             ARC-Challenge (allenai/ai2_arc, 1,172) + HellaSwag (Rowan/hellaswag, 10,042)
   - instruction_precision: IFEval (google/IFEval, 541)
   - vl:                   OCRBench + ChartQA (via extract_vl_debug_suite.py, 3,500)
+  - physics:              PHYBench (Eureka-Lab/PHYBench, 100 with answers)
+  - physreason:           PhysReason (zhibei1204/PhysReason, 1,200 problems, ~3,100 sub-questions)
   - agentic:              No public dataset (stays YAML-based)
   - long_context:         Synthetic (stays YAML-based)
 
@@ -44,6 +46,10 @@ ADAPTER_SUITES = {
     "gpqa", "simpleqa", "hotpotqa", "livecodebench",
     # Phase 2 hard benchmarks
     "debugbench", "usaco",
+    # Phase 3: physics reasoning
+    "physics",
+    # Phase 3: multimodal physics reasoning
+    "physreason",
 }
 
 # Suites that stay YAML-based (no public dataset or intentionally synthetic)
@@ -70,6 +76,9 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         # Phase 2 hard benchmarks
         "debugbench": DebugBenchAdapter,
         "usaco": USACOAdapter,
+        # Phase 3: physics reasoning
+        "physics": PHYBenchAdapter,
+        "physreason": PhysReasonAdapter,
     }
     cls = adapters.get(suite)
     if cls is None:
@@ -1754,3 +1763,266 @@ class USACOAdapter(BaseAdapter):
         rng = random.Random(seed)
         indices = rng.sample(range(len(self._dataset)), min(n, len(self._dataset)))
         return [self._row_to_prompt(i, self._dataset[i]) for i in indices]
+
+
+# ── PHYBench (Physics Reasoning) ─────────────────────────────────────────
+
+
+class PHYBenchAdapter(BaseAdapter):
+    """PHYBench: 500 physics problems, 100 with symbolic LaTeX ground truth.
+
+    Source: Eureka-Lab/PHYBench on HuggingFace.
+    Covers mechanics, electricity, thermodynamics, optics, modern, advanced physics.
+    Best-performing LLM (Gemini 2.5 Pro) scores 36.9% vs human 61.9%.
+
+    Scoring: substring match on LaTeX expressions (model outputs \\boxed{}).
+    Tiers: mapped from physics domain difficulty.
+    Only rows with non-empty answers are included (100 unique problems).
+    """
+
+    suite_name = "physics"
+    has_real_tiers = True
+
+    # Map PHYBench tags to difficulty tiers
+    TAG_TIER_MAP = {
+        "MECHANICS": 1,        # Most common, classical — tier 1
+        "THERMODYNAMICS": 2,   # Intermediate
+        "ELECTRICITY": 2,      # Intermediate
+        "OPTICS": 2,           # Intermediate
+        "MODERN": 3,           # Relativity, QM — hard
+        "ADVANCED": 3,         # Research-level — hard
+    }
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+        try:
+            import datasets as hf
+            raw = hf.load_dataset("Eureka-Lab/PHYBench", split="train")
+            # Filter: only keep rows with non-empty answers, deduplicate by id
+            seen_ids = set()
+            filtered = []
+            for row in raw:
+                answer = row.get("answer", "").strip()
+                row_id = row.get("id")
+                if answer and row_id not in seen_ids:
+                    seen_ids.add(row_id)
+                    filtered.append(dict(row))
+            self._dataset = filtered
+        except Exception as e:
+            print(f"  [adapter] PHYBench load failed: {e}")
+            self._dataset = []
+
+    @staticmethod
+    def _clean_latex(answer: str) -> str:
+        """Strip LaTeX display delimiters from answer, keep inner expression."""
+        a = answer.strip()
+        # Remove \[...\] or $$...$$ wrappers
+        for start, end in [("\\[", "\\]"), ("$$", "$$")]:
+            if a.startswith(start) and a.endswith(end):
+                a = a[len(start):-len(end)].strip()
+                break
+        return a
+
+    def _get_tier_for_index(self, idx: int) -> int:
+        tag = self._dataset[idx].get("tag", "MECHANICS")
+        return self.TAG_TIER_MAP.get(tag, 2)
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        content = row.get("content", "")
+        answer_raw = row.get("answer", "")
+        tag = row.get("tag", "MECHANICS")
+        row_id = row.get("id", idx)
+        tier = self.TAG_TIER_MAP.get(tag, 2)
+        expected = self._clean_latex(answer_raw)
+
+        prompt = (
+            f"{content}\n\n"
+            "Solve this physics problem step by step. "
+            "Put your final answer in \\boxed{}."
+        )
+
+        return {
+            "id": f"phybench_{tag.lower()}_{row_id}",
+            "suite": "physics",
+            "prompt": prompt,
+            "context": "",
+            "expected": expected,
+            "scoring": [],
+            "image_path": "",
+            "tier": tier,
+            "scoring_method": "substring",
+            "scoring_config": {"case_sensitive": False},
+        }
+
+
+# ── PhysReason (Multimodal Physics Reasoning) ────────────────────────
+
+
+class PhysReasonAdapter(BaseAdapter):
+    """PhysReason: 1,200 physics problems with ~3,100 sub-questions.
+
+    Source: zhibei1204/PhysReason on HuggingFace (zip download).
+    1,200 multi-step physics problems across 4 difficulty levels.
+    81% include diagrams (JPG/PNG). Flattened to one entry per sub-question.
+
+    Scoring: llm_judge (semantic equivalence via local worker model).
+    Tiers: knowledge/easy=T1, medium=T2, difficult=T3.
+    """
+
+    suite_name = "physreason"
+    has_real_tiers = True
+
+    DIFFICULTY_TIER_MAP = {
+        "knowledge": 1,
+        "easy": 1,
+        "medium": 2,
+        "difficult": 3,
+    }
+
+    # Cached extracted data directory
+    _extract_dir: str | None = None
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+        try:
+            self._dataset = self._load_from_zip()
+        except Exception as e:
+            print(f"  [adapter] PhysReason load failed: {e}")
+            self._dataset = []
+
+    def _load_from_zip(self) -> list[dict]:
+        """Download zip from HF, extract, flatten to sub-questions."""
+        import json as _json
+        import os
+        import zipfile
+
+        from huggingface_hub import hf_hub_download
+
+        # Try full dataset first, fall back to mini
+        for filename, dirname in [
+            ("PhysReason-full.zip", "PhysReason_full"),
+            ("PhysReason-mini.zip", "PhysReason-mini"),
+        ]:
+            try:
+                zip_path = hf_hub_download(
+                    "zhibei1204/PhysReason", filename, repo_type="dataset"
+                )
+                break
+            except Exception:
+                continue
+        else:
+            print("  [adapter] PhysReason: could not download dataset")
+            return []
+
+        extract_base = "/mnt/raid0/llm/tmp/physreason"
+        data_dir = os.path.join(extract_base, dirname)
+
+        # Extract only if not already present
+        if not os.path.isdir(data_dir):
+            os.makedirs(extract_base, exist_ok=True)
+            with zipfile.ZipFile(zip_path) as z:
+                z.extractall(extract_base)
+
+        self._extract_dir = data_dir
+
+        # Parse all problem.json files and flatten to sub-questions
+        flattened = []
+        for problem_dir in sorted(os.listdir(data_dir)):
+            pjson = os.path.join(data_dir, problem_dir, "problem.json")
+            if not os.path.isfile(pjson):
+                continue
+
+            with open(pjson, "rb") as f:
+                raw = f.read()
+            # Handle BOM encodings
+            if raw[:2] == b"\xff\xfe":
+                text = raw.decode("utf-16-le")
+            elif raw[:3] == b"\xef\xbb\xbf":
+                text = raw[3:].decode("utf-8")
+            else:
+                text = raw.decode("utf-8")
+
+            try:
+                data = _json.loads(text)
+            except _json.JSONDecodeError:
+                continue
+
+            difficulty = data.get("difficulty", "medium")
+            qs = data.get("question_structure", {})
+            context = qs.get("context", "")
+            answers = data.get("answer", [])
+            image_list = data.get("question_image_list", [])
+            image_caption = data.get("image_captions", "")
+
+            # Resolve first image path (if present)
+            image_path = ""
+            if image_list:
+                img_rel = image_list[0]
+                img_abs = os.path.join(data_dir, problem_dir, img_rel)
+                if os.path.isfile(img_abs):
+                    image_path = img_abs
+
+            # Collect sub-questions (keys like sub_question_1, sub_question_2, ...)
+            sub_qs = []
+            for key in sorted(qs.keys()):
+                if key.startswith("sub_question_") and isinstance(qs[key], str):
+                    sub_qs.append((key, qs[key]))
+
+            # Flatten: one entry per sub-question
+            for sq_idx, (sq_key, sq_text) in enumerate(sub_qs):
+                if sq_idx >= len(answers):
+                    continue  # No answer for this sub-question
+
+                flattened.append({
+                    "problem_dir": problem_dir,
+                    "difficulty": difficulty,
+                    "context": context,
+                    "sub_question": sq_text,
+                    "sq_key": sq_key,
+                    "sq_idx": sq_idx,
+                    "expected": answers[sq_idx],
+                    "image_path": image_path,
+                    "image_caption": image_caption,
+                })
+
+        return flattened
+
+    def _get_tier_for_index(self, idx: int) -> int:
+        difficulty = self._dataset[idx].get("difficulty", "medium")
+        return self.DIFFICULTY_TIER_MAP.get(difficulty, 2)
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        context = row.get("context", "")
+        sub_q = row.get("sub_question", "")
+        expected = row.get("expected", "")
+        difficulty = row.get("difficulty", "medium")
+        problem_dir = row.get("problem_dir", f"unknown_{idx}")
+        sq_idx = row.get("sq_idx", 0)
+        image_path = row.get("image_path", "")
+        image_caption = row.get("image_caption", "")
+        tier = self.DIFFICULTY_TIER_MAP.get(difficulty, 2)
+
+        # Build prompt with context + sub-question
+        parts = [context]
+        if image_caption and image_path:
+            parts.append(f"\n[Diagram description: {image_caption}]")
+        parts.append(f"\nQuestion: {sub_q}")
+        parts.append(
+            "\nSolve step by step. Put your final answer in \\boxed{}."
+        )
+        prompt = "\n".join(parts)
+
+        return {
+            "id": f"physreason_{problem_dir}_sq{sq_idx}",
+            "suite": "physreason",
+            "prompt": prompt,
+            "context": "",
+            "expected": expected,
+            "scoring": [],
+            "image_path": image_path,
+            "tier": tier,
+            "scoring_method": "llm_judge",
+            "scoring_config": {"judge_port": 8082},
+        }

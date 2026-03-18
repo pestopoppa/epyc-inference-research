@@ -65,21 +65,26 @@ Testing different expert counts on Qwen3-VL-30B:
 
 ## Critical: SSM Models
 
-Qwen3-Next models (SSM hybrids) can't use speculative decoding or prompt lookup — their recurrent architecture breaks with non-consecutive token positions. Expert reduction is the **only safe optimization** for these models.
+Qwen3-Next models (SSM hybrids) can't use external draft speculation — the recurrent state can't fork for multi-path verification. However, **prompt lookup now works** on hybrid models via auto freeze-recurrent (validated 2026-03-10). The server auto-activates `--freeze-recurrent` for all speculation on hybrid models, freezing SSM state writes during the speculation round. Acceptance drops ~13pp due to stale Mamba state, but the net throughput gain from lookup is significant (+30-42% on Qwen3.5 benchmarks).
+
+Expert reduction remains the primary optimization. Prompt lookup is additive.
 
 <details>
 <summary>SSM usage and override keys</summary>
 
 <details>
-<summary>Code: SSM-safe expert reduction</summary>
+<summary>Code: SSM-safe expert reduction + prompt lookup</summary>
 
 ```bash
-# ⛔ DO NOT use --draft or --lookup with Qwen3-Next!
+# Expert reduction (primary optimization)
 numactl --interleave=all \
   /mnt/raid0/llm/llama.cpp/build/bin/llama-cli \
   -m /mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Q4_K_M.gguf \
   --override-kv qwen3next.expert_used_count=int:3 \
   -t 96 -p "prompt"
+
+# ⛔ DO NOT use --draft (external speculation) with Qwen3-Next!
+# ✅ Prompt lookup (--lookup) works via auto freeze-recurrent
 ```
 
 </details>

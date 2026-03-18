@@ -1,0 +1,2 @@
+model,config,hispec_depth,tps,tokens_generated,generation_sec,draft_accepted,draft_total,acceptance_rate,n_prompts
+qwen35-9b-ssm,baseline,0,0,,,0,0,0,2

@@ -1,0 +1,3 @@
+config,tps,tokens_generated,generation_sec,draft_accepted,draft_total,acceptance_rate,n_prompts
+with_hsd,13.03,5120,392.777,2319,4362,.5316,20
+without_hsd,12.93,5120,395.691,2290,4388,.5218,20

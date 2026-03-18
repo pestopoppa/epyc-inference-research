@@ -42,3 +42,4 @@ benchmarks/prompts/question_pool.jsonl
 # Cache
 .cache/
 cache/
+.gitnexus

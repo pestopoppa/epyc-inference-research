@@ -320,13 +320,16 @@ server_mode:
     shared_with: []
     description: Root LM - generates Python code each turn
     model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
-    draft_model: jukofyork-Qwen3-Coder-0.75B-Instruct-Q8_0.gguf
+    draft_model: jukofyork-Qwen3-Coder-0.75B-Instruct-Q8_0.gguf  # existing AR drafter
+    dflash_draft_model: null  # populated after Phase 1 GGUF conversion
+    dflash_draft_source: Qwen3-Coder-30B-A3B-DFlash  # reference to dflash_drafters entry
     memory_gb: 20
     tier: hot
     acceleration:
       type: moe_expert_reduction
       experts: 6
       override_key: qwen3moe.expert_used_count
+      draft_max: 32  # +19.4% throughput (32.84→39.20 t/s), swept 2026-03-18
       lookup: true
       corpus_retrieval: true  # v3 full corpus: +16% avg speed, +5.6pp acceptance (was -12% with MVP index)
     throughput: 47.11  # t/s (MoE6 + spec + lookup, verified 2026-02-13)
@@ -362,6 +365,7 @@ server_mode:
     acceleration:
       type: speculative_decoding
       draft_max: 24
+      p_split: 0.3  # Tree speculation (+3-4% on 7B f16, +16% on 32B f16, Phase 4 2026-03-15)
       lookup: true  # Prompt n-gram lookup as fallback (--lookup flag)
       corpus_retrieval: false  # 7B saturated (94-100% acceptance baseline). +1% speed = noise.
     throughput: 43.9  # t/s measured with spec decode (2026-01-28)
@@ -386,6 +390,7 @@ server_mode:
     acceleration:
       type: speculative_decoding
       draft_k: 16
+      draft_max: 32  # +17.1% throughput (7.38→8.64 t/s), swept 2026-03-18
     throughput: 6.08  # t/s (full experts + spec, quality over speed, verified 2026-02-13)
 
   architect_coding:
@@ -401,6 +406,7 @@ server_mode:
     acceleration:
       type: speculative_decoding
       draft_k: 16
+      draft_max: 48  # +20.6% throughput (4.72→5.69 t/s), swept 2026-03-18
       lookup: true  # A/B best result: +15.6pp acceptance, +17% speed with corpus
       corpus_retrieval: true  # A/B BEST: +15.6pp acceptance (74.9→90.5%), +17% speed (8.3→9.7 t/s)
     throughput: 9.00  # t/s (full experts + spec, quality over speed, verified 2026-02-13)
@@ -746,10 +752,9 @@ roles:
     constraints:
       forbid:
       - speculative_decoding
-      - prompt_lookup
       - eagle
-      reason: SSM requires consecutive positions - incompatible with ALL speculation
-        methods
+      reason: SSM incompatible with external draft (state can't fork). Prompt lookup
+        works via auto freeze-recurrent (validated 2026-03-10).
     performance:
       baseline_tps: 10.12
       optimized_tps: 6.29  # MoE4 on 10K context (2026-01-26)
@@ -898,10 +903,9 @@ roles:
     constraints:
       forbid:
       - speculative_decoding
-      - prompt_lookup
       - eagle
-      reason: SSM requires consecutive positions - incompatible with ALL speculation
-        methods
+      reason: SSM incompatible with external draft (state can't fork). Prompt lookup
+        works via auto freeze-recurrent (validated 2026-03-10).
     thinking_quirks:
       disable_trick: "<think>\n</think>\n"
       disable_suites:
@@ -974,7 +978,7 @@ roles:
       pinned: false
     benchmark_date: null
     notes: >
-      75% Mamba layers + 25% attention. 40 total layers (30 recurrent, 10 attention).
+      75% Delta Net (gated linear attention) layers + 25% attention. 40 total layers (30 recurrent, 10 attention).
       Frontdoor target: beat 47.11 t/s (Qwen3-Coder-30B-A3B MoE6+spec+lookup).
   qwen35_q4ks:
     tier: B
@@ -4494,3 +4498,29 @@ observations:
       - src/api/admission.py
       - scripts/server/orchestrator_stack.py
       - docs/reference/agent-config/ORCHESTRATION_DEBUG_PLAYBOOK.md
+
+# =============================================================================
+# DFlash Drafters — Block Diffusion Speculative Decoding
+# =============================================================================
+# Pre-downloaded HuggingFace safetensors (pre-GGUF conversion).
+# Phase 1 of dflash-block-diffusion-speculation handoff converts these to GGUF.
+# See: epyc-root/handoffs/active/dflash-block-diffusion-speculation.md
+
+dflash_drafters:
+  Qwen3-8B-DFlash-b16:
+    path: /mnt/raid0/llm/cache/dflash/Qwen3-8B-DFlash-b16
+    source: z-lab/Qwen3-8B-DFlash-b16
+    params: 1B
+    block_size: 16
+    target_model: Qwen3-8B
+    format: safetensors  # pre-GGUF conversion
+    status: downloaded
+
+  Qwen3-Coder-30B-A3B-DFlash:
+    path: /mnt/raid0/llm/cache/dflash/Qwen3-Coder-30B-A3B-DFlash
+    source: z-lab/Qwen3-Coder-30B-A3B-DFlash
+    params: 0.5B
+    block_size: 16
+    target_model: Qwen3-Coder-30B-A3B
+    format: safetensors  # pre-GGUF conversion
+    status: downloaded

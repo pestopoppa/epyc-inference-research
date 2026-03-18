@@ -93,7 +93,7 @@ Prompt lookup stacks beautifully with both MoE reduction and speculative decodin
 |-------------|------------|--------|
 | Lookup + MoE Reduction | ✅ Yes | **47.11 t/s** on Qwen3-Coder-30B (MoE6+spec+lookup) |
 | Lookup + Speculative | ✅ Yes | **39.44 t/s** on Qwen2.5-Coder-32B (spec-first, lookup fallback) |
-| Lookup + SSM | ❌ No | SSM state corruption (consecutive position requirement) |
+| Lookup + SSM | ✅ Yes (via freeze-recurrent) | Auto freeze-recurrent freezes SSM state during speculation. ~13pp acceptance drop but net positive throughput. Validated 2026-03-10. |
 
 <details>
 <summary>Code: optimal draft token selection stack</summary>
@@ -116,9 +116,9 @@ def get_draft_tokens(context, prompt):
 </details>
 </details>
 
-## SSM Warning
+## SSM Compatibility (Updated 2026-03-15)
 
-**CRITICAL**: Do not use prompt lookup with Qwen3-Next (SSM) models. The SSM architecture requires consecutive token positions — draft token rejection corrupts the recurrent state. See [Chapter 02: MoE Optimization](02-moe-optimization.md) for SSM-safe alternatives.
+Prompt lookup now works on SSM hybrid models (Qwen3-Next, Qwen3.5-35B-A3B). The server auto-activates `--freeze-recurrent` for all speculation on hybrid models, which freezes SSM state writes during each speculation round. Acceptance rate drops ~13pp compared to dense models, but net throughput is positive. External draft speculation (separate draft model) remains incompatible because SSM state can't fork for multi-path verification.
 
 ## Implementation Notes
 

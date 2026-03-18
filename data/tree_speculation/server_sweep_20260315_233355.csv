@@ -1,0 +1,4 @@
+pair,model_pair,p_split,prompt_idx,tokens_generated,time_ms,tokens_per_sec,draft_accepted,draft_total,acceptance_rate
+14,Qwen3.5-35B-A3B-Q4KM+0.8B-Q8,0,0,256,25432,10.06,142,304,.4671
+14,Qwen3.5-35B-A3B-Q4KM+0.8B-Q8,0,1,256,20123,12.72,176,326,.5398
+14,Qwen3.5-35B-A3B-Q4KM+0.8B-Q8,0,2,256,23869,10.72,173,432,.4004

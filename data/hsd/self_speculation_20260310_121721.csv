@@ -1,0 +1,4 @@
+model,config,exit_depth,tps,tokens_generated,generation_sec,draft_accepted,draft_total,acceptance_rate,n_prompts
+9b,baseline,0,0,640,0,0,0,0,5
+9b,external_draft,0,0,640,0,0,0,0,5
+9b,prompt_lookup,0,0,0,0,0,0,0,2

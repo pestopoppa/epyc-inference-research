@@ -1,0 +1,5 @@
+model,config,hispec_depth,tps,tokens_generated,generation_sec,draft_accepted,draft_total,acceptance_rate,n_prompts
+qwen35-9b-ssm,baseline,0,15.76,2560,162.365,0,0,0,10
+qwen35-9b-ssm,external_qwen35_08b,0,11.60,2560,220.67,1559,2482,.6281,10
+qwen35-9b-ssm,self_spec_exit8,8,8.27,2560,309.538,1618,2156,.7504,9
+qwen35-9b-ssm,external_coder05b,0,14.58,2344,160.744,1323,2181,.6066,10

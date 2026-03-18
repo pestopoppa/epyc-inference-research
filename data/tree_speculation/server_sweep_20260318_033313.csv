@@ -1,0 +1,5 @@
+pair,model_pair,p_split,prompt_idx,tokens_generated,time_ms,tokens_per_sec,draft_accepted,draft_total,acceptance_rate
+9,Qwen3-Coder-480B-A35B-Q4KM+0.75B-Q4,0,0,256,37188,6.88,206,327,.6299
+9,Qwen3-Coder-480B-A35B-Q4KM+0.75B-Q4,0,1,256,52098,4.91,135,238,.5672
+9,Qwen3-Coder-480B-A35B-Q4KM+0.75B-Q4,0,2,256,50125,5.10,159,275,.5781
+9,Qwen3-Coder-480B-A35B-Q4KM+0.75B-Q4,0,3,256,49971,5.12,143,254,.5629

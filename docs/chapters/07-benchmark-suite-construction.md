@@ -67,14 +67,14 @@ questions:
 | `tier` | int | Difficulty: 1 (basic), 2 (working), 3 (expert) |
 | `prompt` | string | The question text sent to the model |
 | `expected` | string | Ground-truth answer (or empty for code_execution/programmatic) |
-| `scoring_method` | string | One of: `multiple_choice`, `exact_match`, `code_execution`, `substring`, `programmatic` |
+| `scoring_method` | string | One of: `multiple_choice`, `exact_match`, `code_execution`, `substring`, `programmatic`, `f1`, `llm_judge` |
 | `scoring_config` | dict | Method-specific parameters (optional) |
 
 </details>
 
 ## Scoring Methods
 
-All scoring is implemented in `scripts/benchmark/debug_scorer.py`. There are five methods, each targeting a different class of benchmark question. The scorer tries multiple extraction strategies before failing, so model output format is somewhat flexible.
+All scoring is implemented in `scripts/benchmark/debug_scorer.py`. There are six methods, each targeting a different class of benchmark question. The scorer tries multiple extraction strategies before failing, so model output format is somewhat flexible.
 
 <details>
 <summary>Scoring method details and configuration</summary>
@@ -173,6 +173,46 @@ scoring_config:
 </details>
 
 Available verifiers: `word_count_range`, `word_count_max`, `word_count_min`, `contains_keyword`, `no_keyword`, `numbered_list`, `bullet_list`, `json_valid`, `starts_with`, `ends_with`, `all_uppercase`, `all_lowercase`, `comma_separated`, `paragraph_count`, `sentence_count_min`.
+
+</details>
+
+### 6. `f1`
+
+**Source benchmarks:** HotpotQA, SimpleQA, web_research, skill_transfer
+
+Token-level F1 scoring: tokenizes both model output and expected answer, computes precision/recall/F1 over token overlap. Passes if F1 >= threshold.
+
+<details>
+<summary>Code: f1 YAML config</summary>
+
+```yaml
+scoring_method: f1
+scoring_config:
+  threshold: 0.5         # minimum F1 to count as correct
+  normalize: true        # lowercase, remove punctuation/articles
+  extract_pattern: "####\\s*(.+)"  # optional answer extraction
+```
+
+</details>
+
+### 7. `llm_judge` (March 2026)
+
+**Source benchmarks:** PhysReason
+
+Uses a local LLM (worker model on port 8082) to judge semantic equivalence of physics/math answers. Handles equivalent LaTeX forms, symbolic rearrangements, and unit notation differences that substring matching misses.
+
+Fast path: tries substring match first to avoid LLM call when exact text matches. Extracts from `\boxed{}` when present. Falls back to substring if judge server is unavailable.
+
+<details>
+<summary>Code: llm_judge YAML config</summary>
+
+```yaml
+scoring_method: llm_judge
+scoring_config:
+  judge_port: 8082       # explore worker port (default)
+  judge_host: localhost   # default
+  timeout: 30            # HTTP timeout in seconds
+```
 
 </details>
 
@@ -381,12 +421,60 @@ Each of the nine suites draws from different public benchmarks and uses differen
 
 </details>
 
-## Current Pool Statistics
+### HuggingFace-Backed Suites (Phase 3 — March 2026)
 
-Across all eleven suites we have 517 questions total, skewing toward T2 and T3 difficulty since that is where models actually diverge in capability.
+The following suites are sourced entirely from HuggingFace datasets via `dataset_adapters.py`. Unlike the YAML-based suites above, these are extracted into the JSONL question pool via `question_pool.py --build` and sampled at runtime.
 
 <details>
-<summary>Pool statistics by suite</summary>
+<summary>Physics suite — PHYBench (100 questions)</summary>
+
+| Source | HuggingFace ID | Count | Scoring |
+|--------|---------------|-------|---------|
+| PHYBench | `Eureka-Lab/PHYBench` | 100 | substring |
+
+**What it tests:** Symbolic physics problem solving — mechanics, electricity, thermodynamics, optics, modern physics, advanced physics. Best LLM (Gemini 2.5 Pro) scores 36.9% vs human 61.9%.
+
+**Answer format:** LaTeX symbolic expressions (e.g., `\frac{NZ e^3}{2c\varepsilon_0 m^2 n}`). Display delimiters (`\[...\]`, `$$...$$`) stripped during extraction.
+
+**Tier mapping:** MECHANICS=T1, THERMODYNAMICS/ELECTRICITY/OPTICS=T2, MODERN/ADVANCED=T3.
+
+**Data note:** PHYBench has 500 unique problems but only 100 have ground-truth answers (the rest are answer-stripped). We use only the 100 with answers. Scoring via `substring` — will miss algebraically equivalent but differently-formatted answers.
+
+**License:** MIT.
+
+</details>
+
+<details>
+<summary>PhysReason suite — Multimodal Physics (3,117 sub-questions)</summary>
+
+| Source | HuggingFace ID | Problems | Sub-questions | Scoring |
+|--------|---------------|----------|---------------|---------|
+| PhysReason | `zhibei1204/PhysReason` | 1,200 | 3,117 | llm_judge |
+
+**What it tests:** Multi-step physics reasoning across knowledge, easy, medium, and difficult levels. 83% of problems include physics diagrams (force diagrams, circuit diagrams, etc.). Flattened to one question pool entry per sub-question.
+
+**Answer format:** Symbolic LaTeX expressions and numeric values with units (e.g., `$30\mathrm{N}$`, `$k=\sqrt{\frac{(1+\lambda)h}{(1-\lambda)H}}$`).
+
+**Multimodal:** 2,576 entries (83%) have associated images stored locally. The `image_path` field points to the extracted diagram. Image captions included in prompt as fallback for text-only models.
+
+**Tier mapping:** knowledge/easy=T1 (1,344), medium=T2 (758), difficult=T3 (1,015).
+
+**Scoring:** `llm_judge` — calls explore worker (port 8082) for semantic equivalence. Substring fast-path avoids LLM call for exact matches. Falls back to substring if judge unavailable.
+
+**Data note:** Dataset distributed as zip files on HuggingFace (not standard HF `load_dataset`). JSON files use BOM encoding (UTF-16-LE or UTF-8 BOM). Adapter handles extraction and encoding automatically.
+
+**Routing signal:** The 83% multimodal split provides a natural A/B test surface for routing between dedicated VL models and models with native vision capabilities (e.g., Qwen3.5).
+
+**License:** MIT. Citation: arXiv:2502.12054.
+
+</details>
+
+## Current Pool Statistics
+
+Across all 23 suites we have 56,448 questions total in the pre-extracted JSONL pool. The original 11 YAML-based suites provide 517 curated questions; HuggingFace-backed adapters provide 55,931 additional questions for production seeding.
+
+<details>
+<summary>Pool statistics — YAML suites (curated)</summary>
 
 | Suite | Count | T1 | T2 | T3 | Primary Scoring |
 |-------|-------|----|----|----|--------------------|
@@ -399,9 +487,37 @@ Across all eleven suites we have 517 questions total, skewing toward T2 and T3 d
 | instruction_precision | 43 | 13 | 17 | 13 | programmatic |
 | long_context | 44 | 8 | 14 | 22 | substring / exact_match |
 | mode_advantage | 90 | 0 | 45 | 45 | code_execution / exact_match |
+| mode_advantage_hard | 60 | — | — | — | code_execution |
 | web_research | 50 | — | — | — | f1 (0.5 threshold) |
 | skill_transfer | 36 | — | — | — | f1 (0.5 threshold) |
-| **TOTAL** | **517** | 91+ | 168+ | 172+ | — |
+| **Subtotal** | **577** | 91+ | 168+ | 172+ | — |
+
+</details>
+
+<details>
+<summary>Pool statistics — HuggingFace adapter suites (pre-extracted)</summary>
+
+| Suite | Count | Source | Primary Scoring |
+|-------|-------|--------|-----------------|
+| general | 14,042 | MMLU (cais/mmlu) | multiple_choice |
+| thinking | 11,214 | ARC-Challenge + HellaSwag | multiple_choice |
+| hotpotqa | 7,405 | HotpotQA | f1 |
+| simpleqa | 4,326 | SimpleQA | f1 |
+| debugbench | 4,253 | DebugBench | code_execution |
+| physreason | 3,117 | PhysReason (zhibei1204) | llm_judge |
+| vl | 2,575 | OCRBench + ChartQA | exact_match |
+| livecodebench | 2,360 | LeetCode | code_execution |
+| math | 1,819 | GSM8K + MATH-500 | exact_match |
+| cruxeval | 1,600 | CRUXEval | exact_match |
+| bigcodebench | 1,140 | BigCodeBench | code_execution |
+| coder | 664 | HumanEval + MBPP | code_execution |
+| instruction_precision | 541 | IFEval | programmatic |
+| usaco | 520 | USACOBench | code_execution |
+| gpqa | 448 | GPQA | multiple_choice |
+| physics | 100 | PHYBench (Eureka-Lab) | substring |
+| **Subtotal** | **55,871** | | |
+
+**Full pool total: 56,448 questions across 23 suites.**
 
 </details>
 
@@ -562,6 +678,8 @@ The debug suite is the foundation for Phase 3 MemRL validation: seeding speciali
 7. Zhou, J., et al. (2023). *Instruction-Following Evaluation for Large Language Models (IFEval).* https://arxiv.org/abs/2311.07911
 8. Patil, S. G., et al. (2023). *Gorilla: Large Language Model Connected with Massive APIs (BFCL).* https://arxiv.org/abs/2305.15334
 9. Kamradt, G. (2023). *Needle in a Haystack: Pressure Testing LLMs.* https://github.com/gkamradt/LLMTest_NeedleInAHaystack
+10. He, C., et al. (2025). *PHYBench: Holistic Evaluation of Physical Perception and Reasoning in LLMs.* https://arxiv.org/abs/2504.16074
+11. Zhang, X., et al. (2025). *PhysReason: A Comprehensive Benchmark towards Physics-Based Reasoning.* https://arxiv.org/abs/2502.12054
 
 </details>
 

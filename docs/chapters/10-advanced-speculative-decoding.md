@@ -656,6 +656,271 @@ The verification function `common_sampler_sample_and_accept_n()` (`common/sampli
 
 ---
 
+## 11. Empirical Results — HSD, Self-Speculation, and Hybrid SSM (March 2026)
+
+> Hardware: EPYC 9655 (96 cores, 768 GB DDR5-5600). llama.cpp build 8208, branch `feature/ssm-checkpoint-opt`.
+> Full handoff: `epyc-root/handoffs/active/hsd-hierarchical-self-speculation.md`
+
+This section documents experiments with four advanced speculation techniques on two model architectures: **Qwen3.5** (hybrid SSM — Mamba2 + attention every 4th layer) and **Qwen3** (dense — pure attention). The results reveal sharp architectural boundaries for speculation viability.
+
+### 11.1 Self-Speculation on Hybrid SSM (Qwen3.5)
+
+Using `--n-layer-exit-draft` for self-speculation, where the same model serves as both target and draft by exiting early during draft generation.
+
+| Config | 9B t/s | Delta | Accept Rate | 27B t/s | Delta |
+|--------|--------|-------|-------------|---------|-------|
+| baseline | 15.91 | — | — | 4.51 | — |
+| external 0.8B | 10.59 | -33% | 62.5% | 3.51 | -22% |
+| self-spec exit=8 | 8.83 | -44% | 77.1% | — | — |
+| self-spec exit=16 | 7.76 | -51% | 69.9% | 2.85 | -37% |
+| prompt lookup | SEGFAULT | — | — | SEGFAULT | — |
+
+**All speculation configs slower than baseline.** Acceptance rates are high (69-77%) — the early-exit logits are reasonable because Qwen3.5's attention layers (every 4th) carry most of the predictive signal. But SSM checkpoint/restore overhead dominates: each speculation round requires copying ~2 GB of recurrent state (GPU→CPU→GPU roundtrip for save, CPU→GPU for restore), plus a re-advance decode after restoring.
+
+Prompt lookup previously segfaulted because the stateless n-gram cache generates drafts without knowledge of recurrent state — verification decodes on mismatched SSM state. Fixed by auto-activating freeze-recurrent for all speculation on hybrid models (not just lookup). Lookup now works on hybrid models with frozen SSM state, same acceptance trade-off as external draft with freeze-recurrent.
+
+### 11.2 Self-Speculation on Dense (Qwen3-32B)
+
+| Config | 32B t/s | Delta | Accept Rate |
+|--------|---------|-------|-------------|
+| baseline | 7.85 | — | — |
+| self-spec exit=16 | ~7.7 | -2% | 1.5% |
+| self-spec exit=32 | ~7.7 | -2% | 0.5% |
+
+**Near-zero acceptance rates.** Intermediate layer logits don't produce useful next-token predictions without early-exit training (SWIFT/LayerSkip). The ~2% slowdown comes from the overhead of running the draft decode loop with no accepted tokens. Self-speculation is architecturally blocked on dense models without fine-tuning.
+
+### 11.3 HiSpec Intermediate Verification
+
+Hierarchical speculative decoding (`--hierarchical-spec`): two-pass verification where an intermediate decode at partial depth pre-filters draft tokens before full verification.
+
+| Config | Qwen3-32B t/s | vs Baseline | Accept Rate |
+|--------|---------------|-------------|-------------|
+| baseline | 8.44 | — | — |
+| external Qwen2.5-Coder-0.5B | **13.07** | **+54.9%** | 52.5% |
+| external Qwen3-0.6B | **13.06** | **+54.7%** | 50.8% |
+| HiSpec intermediate=16 | 7.57 | -10.3% | 28.0% |
+| HiSpec intermediate=32 | 7.50 | -11.1% | 26.8% |
+
+**HiSpec is a bust on dense models.** The intermediate decode at partial depth rejects good draft tokens — acceptance halves compared to standard verification. Same root cause as self-spec: untrained intermediate layers can't predict next tokens accurately enough to pre-filter. The extra decode pass costs more than the savings from filtering.
+
+### 11.4 SSM Checkpoint Optimization
+
+Double-buffer pointer swap: pre-allocate shadow r_l/s_l tensors, `ggml_backend_tensor_copy()` for checkpoint, `std::swap()` for O(1) restore. Also partial cell metadata save (1-8 active cells vs 1024).
+
+| Config | Pre-opt t/s | Post-opt t/s | Delta | Accept Rate |
+|--------|-------------|--------------|-------|-------------|
+| baseline | 15.91 | 15.76 | -1% | — |
+| external Qwen3.5-0.8B | 10.59 | 11.60 | +9.5% | 62.8% |
+| external Qwen2.5-Coder-0.5B | — | 14.58 | -7.5% vs base | 60.7% |
+| self-spec exit=8 | 8.83 | 8.27 | -6% | 75.0% |
+
+Checkpoint optimization shows measurable improvement (+9.5% on external draft), but still not enough to overcome the fundamental overhead. The Qwen2.5-Coder-0.5B drafter reaches 14.58 t/s — the closest speculation has come to baseline on hybrid, but still 7.5% slower.
+
+### 11.5 Freeze-Recurrent Speculation — BREAKTHROUGH
+
+`--freeze-recurrent-draft`: disable SSM state writes during speculation, eliminating checkpoint/save/restore/re-advance entirely. The SSM state becomes stale during speculation (draft tokens don't update it), but the attention layers still provide useful context.
+
+| Config | t/s | vs Baseline | Accept Rate |
+|--------|-----|-------------|-------------|
+| baseline | 15.14 | — | — |
+| external Qwen2.5-Coder-0.5B | 15.15 | +0.1% | 62.7% |
+| **freeze + ext Qwen2.5-Coder** | **15.96** | **+5.4%** | 47.9% |
+| freeze + ext Qwen3.5-0.8B | 12.06 | -20.3% | 48.6% |
+
+**First time speculation beats baseline on hybrid SSM.** Acceptance drops ~13 percentage points (stale SSM state), but the fast Qwen2.5-Coder-0.5B drafter (185 t/s) compensates. The key insight: freeze-recurrent trades acceptance quality for zero overhead — and on a fast-enough drafter, this trade is net positive.
+
+Note: without freeze-recurrent, external draft barely breaks even (15.15 t/s, +0.1%) — the checkpoint/restore overhead is exactly cancelled by speculation gains. This validates freeze-recurrent as essential for hybrid SSM speculation.
+
+### 11.6 External Draft on Dense (Qwen3-32B) — Production Config
+
+| Config | t/s | vs Baseline | Accept Rate |
+|--------|-----|-------------|-------------|
+| baseline | 8.44 | — | — |
+| **external Qwen2.5-Coder-0.5B** | **13.07** | **+54.9%** | 52.5% |
+| **external Qwen3-0.6B** | **13.06** | **+54.7%** | 50.8% |
+
+External draft with a fast drafter yields the strongest result across all experiments. Both drafters achieve near-identical throughput despite different architectures. This is the validated production configuration for dense models.
+
+### 11.7 HSD Capped Branch Resampling — A/B Validation
+
+A/B benchmark isolating HSD's marginal contribution on dense Qwen3-32B with external draft (Qwen2.5-Coder-0.5B), 20 prompts, `--draft-max 16`, temp=0.7.
+
+| Config | t/s | Draft Accepted | Draft Total | Acceptance Rate |
+|--------|-----|----------------|-------------|-----------------|
+| WITH HSD (default) | 13.03 | 2319 | 4362 | 53.16% |
+| WITHOUT HSD (`--no-hsd`) | 12.93 | 2290 | 4388 | 52.18% |
+
+**HSD adds +29 accepted tokens (+1.3%), +0.98pp acceptance, +0.8% throughput.** The effect is small because the `p_draft > 0.3` threshold is conservative and at most one recovery is allowed per speculation sequence. The improvement is essentially free — no measurable overhead from the probability lookup. Kept enabled by default.
+
+### 11.8 Cross-Architecture Drafting
+
+Dense drafters (Qwen2.5-Coder-0.5B) work for hybrid targets (Qwen3.5-9B): 48-63% acceptance rates across all configs. The drafter doesn't need to match the target architecture — it only needs to produce reasonable candidate tokens. The target model's full forward pass handles quality verification.
+
+### 11.9 Decision Matrix
+
+Which speculation config to use per architecture:
+
+| Target Architecture | Recommended Config | Expected Gain | Notes |
+|----|----|----|-----|
+| Dense (Qwen3, Qwen2.5, Llama) | External draft (Qwen2.5-Coder-0.5B) | **+50-55%** | Production validated. HSD capped branch resampling adds marginal improvement. |
+| Dense f16 (high-quality targets) | External draft + tree speculation (`--draft-p-split 0.1`) | **+4.4%** (measured, 7B) | Near-flat verification makes tree profitable. Overhead ~41ms/round is hard floor — gains are modest, not the +100-200% theoretical. See §12. |
+| Hybrid SSM (Qwen3.5, Qwen3.5-MoE) | Freeze-recurrent + external draft | **+5-10%** | Only viable config. Must use fast drafter (>150 t/s). Slower drafters net negative. |
+| Hybrid SSM (without freeze-recurrent) | No speculation | — | Checkpoint/restore overhead neutralizes all speculation gains. |
+| Any (self-speculation) | Not recommended | Negative | Requires SWIFT/LayerSkip fine-tuning. Without it: near-zero acceptance (dense) or checkpoint-dominated (hybrid). |
+| Any (HiSpec intermediate) | Not recommended | Negative | Intermediate logits untrained for next-token prediction. Rejects good drafts. |
+
+---
+
+## 12. Empirical Results — Tree Speculation (DySpec) on CPU (March 2026)
+
+> Hardware: EPYC 9655 (96 cores, 768 GB DDR5-5600). llama.cpp build on `feature/tree-speculation` branch off `production-consolidated-v2`.
+
+### 12.1 DySpec Implementation Summary
+
+Heap-based dynamic tree construction in `common/speculative.cpp`. Branching factor: 7 at root → 5 (depth ≤ 2) → 3 (depth ≤ 4) → 2 (deeper). Cap 32 seq_ids. Primary child inherits parent seq_id/sampler (zero clone cost); alternatives clone KV via `llama_memory_seq_cp` + `common_sampler_clone`. Multi-path target verification for dense models (`--kv-unified`).
+
+### 12.2 Baseline Results (Phases 1-3)
+
+| Pair | Target + Drafter | Quant | Arch | Linear t/s | Tree Best t/s | +Tokens | Delta | Multi-path |
+|------|------------------|-------|------|-----------|---------------|---------|-------|------------|
+| 1 | Qwen2.5-7B + 0.5B | f16 | Dense | 29.45 | 30.76 | +25 | **+4.4%** | Yes |
+| 8 | Qwen3-235B-A22B + 0.6B | Q4_KM | MoE | 10.97 | 11.19 | +35 | **+2.0%** | Yes |
+| 5 | Qwen2.5-Coder-32B + 0.5B | Q4_KM | Dense | 19.50 | 18.84 | +20 | -3.4% | Yes |
+| 7 | DS-R1-Distill-32B + 0.5B | Q6_K | Dense | 11.57 | 10.60 | +44 | -8.4% | Yes |
+| 6 | Qwen3.5-122B-A10B + 0.8B | Q4_KM | Hybrid | 5.75 | 4.36 | — | -24% | No (SSM) |
+
+Tree wins when target verification latency per round exceeds construction overhead (~41ms). Two regimes: f16 targets (near-flat verification, 1.69x at N=64) and large MoE (slow verification per round). Medium dense Q4/Q6 (32B) verifies too fast — overhead dominates.
+
+### 12.3 Phase 5a — Branching Reduction Experiment (REVERTED)
+
+Hypothesis: Reducing branching factor cuts KV copies proportionally, lowering overhead from ~41ms to ~20-25ms.
+
+Changes tested: MAX_BRANCHES 7→4, branching 4/3/2 (was 7/5/3/2), seq_id cap 32→16.
+
+| Pair | Target | Pre-5a Best Tree | Post-5a Best Tree | Verdict |
+|------|--------|-----------------|-------------------|---------|
+| 1 | Qwen2.5-7B f16 | 33.85 (+2.7% vs 32.97 linear) | was +4.4% | **Regressed** — fewer branches → fewer alt paths accepted |
+| 5 | Qwen2.5-Coder-32B Q4 | 19.37 (-4.1% vs 20.20 linear) | was -5.2% | **Improved 1pp** — but still net negative |
+| 8 | Qwen3-235B MoE | 8.18 (-6.6% vs 8.76 linear) | was +2.0% | **Regressed badly** — MoE benefited from wider branching |
+
+**Key finding**: Branching reduction is a false economy. It cuts both overhead AND acceptance quality. The wider tree was finding genuinely useful alternative paths on targets where verification is cheap (f16) or inherently slow (MoE). The Q4 target improved marginally because its fast verification couldn't exploit alt paths anyway.
+
+All changes reverted. Tree construction overhead (~41ms/round) is a hard floor given llama.cpp's full-range `seq_cp` requirement.
+
+### 12.4 Phase 5 — Overhead Reduction Summary (All Paths Exhausted)
+
+| Approach | Status | Reason |
+|----------|--------|--------|
+| 5a. Reduce branching | ❌ Tested, reverted | Hurts acceptance more than it helps overhead |
+| 5b. Lazy KV copies | ❌ Not viable | `llama_kv_cache.cpp` asserts full-range for cross-stream seq_cp; can't defer (decode needs per-alt seq_id) |
+| 5c. Sampler pooling | ❌ Not viable | Mirostat state prevents revert; clone cost (~1ms) is irreducible; total sampler overhead (~50-73ms) is secondary to KV copies |
+
+**Implication**: The ~41ms/round construction overhead is architectural in llama.cpp. The only viable path is Phase 6 (adaptive tree sizing — bypass overhead entirely on easy/hard prompts where tree adds no value).
+
+### 12.5 Viability Assessment
+
+Tree speculation is production-viable for:
+- **f16 targets** (any size): Near-flat verification cost. +4.4% demonstrated on 7B, likely higher on larger f16 models.
+- **Large MoE Q4 (235B+)**: Slow per-round verification makes extra accepted tokens valuable. +2.0% on 235B.
+
+Tree speculation is NOT viable for:
+- **Medium dense Q4/Q6 (32B)**: Verification too fast (~50ms/round), overhead dominates. Consistently -3% to -8%.
+- **Hybrid/SSM models**: Multi-path verification fundamentally incompatible (recurrent state can't fork). See Section 13 for Delta Net-specific approaches.
+
+Production recommendation: Enable tree (`--draft-p-split 0.1`) only for `architect_general` (235B MoE) and any f16 targets. Keep linear for 32B Q4 workers.
+
+Data: `epyc-inference-research/data/tree_speculation/server_sweep_2026031{1,4,5}_*.csv`
+
+---
+
+## 13. Tree Speculation for Delta Net Hybrid Models — Architecture Analysis (March 2026)
+
+### 13.1 The Architecture Misconception
+
+Our hybrid models (Qwen3.5-35B-A3B, Qwen3-Next-80B-A3B) were labeled "75% Mamba layers" in early documentation. This is **incorrect**. They use **Delta Net** (gated linear attention), implemented in `delta-net-base.cpp`, NOT Mamba2's `ggml_ssm_scan`.
+
+The Delta Net recurrence:
+```
+s_t = exp(g_t) * s_{t-1} + k_t ⊗ (beta_t * (v_t - s_{t-1}^T k_t))
+```
+
+Key differences from Mamba2:
+- **State shape**: Outer-product matrix `{S_v, S_v, H_v, n_seqs}` (not Mamba2's `{d_state, head_dim, n_head}`)
+- **Decay**: `g = softplus(alpha + bias) * ssm_a` — multiplicative, analogous to Mamba2's `exp(dA)`
+- **Nonlinearity**: The `s_old^T k` term in the delta creates a state-dependent update that Mamba2 lacks
+- **Two compute paths**: Autoregressive (single token, lines 291-376) and chunked (multi-token, chunk_size=64, lines 15-289)
+
+True Mamba2 models in llama.cpp (Jamba, Falcon-H1, Granite-Hybrid, PLaMo2/3) use `ggml_ssm_scan` and have the diagonal `A` matrix that enables STree's tree-masked scan. None of these are in our production stack.
+
+### 13.2 Why STree Doesn't Apply to Delta Net
+
+STree ([arXiv:2505.14969](https://arxiv.org/abs/2505.14969)) converts Mamba2's sequential scan into a tree-masked matrix multiply by exploiting the **linear** state recurrence:
+```
+Mamba2: s_new = dA * s_old + B * u    (linear in s — log-space trick works)
+```
+
+Delta Net's recurrence is **nonlinear** in state:
+```
+Delta Net: s_new = exp(g) * s_old + k ⊗ beta * (v - s_old^T k)
+```
+
+The `s_old^T k` term makes the update depend on the current state value, not just a multiplicative decay. This prevents the cumulative log-sum factorization that STree relies on. The tree-masked cumulative sum `dA_tree[s] = dA_tree[parent(s)] + dA[s]` has no analogue for the Delta Net update.
+
+### 13.3 Viable Approaches
+
+#### Approach A: Sequential State Replay (Practical)
+
+Replay Delta Net states sequentially for each tree path:
+1. Snapshot recurrent state before speculation
+2. For each root-to-leaf path: restore snapshot, run autoregressive Delta Net per token
+3. Attention layers batch across paths via `seq_id` (existing Phase 3 infrastructure)
+4. Accept longest matching prefix across all paths
+
+**Cost**: N_paths × path_length autoregressive passes through recurrent layers only. For 8 paths of depth 5: ~40 recurrent-layer passes at ~1ms/token/layer ≈ 40-60ms. Attention layers add ~0ms marginal (already batched).
+
+**Correctness**: Exact — identical to sequential decoding. No approximation.
+
+**Expected throughput**: +20-35% on Qwen3.5-35B vs baseline, recovering the ~13pp acceptance loss from freeze-recurrent.
+
+#### Approach B: Linearized Delta Net (Research)
+
+Freeze the `s_old^T k` product at the base state value:
+```
+s_t ≈ exp(g_t) * s_{t-1} + k_t ⊗ beta_t * (v_t - s_base^T k_t)
+```
+
+This makes the recurrence linear, enabling tree-masked cumulative sum (adapted from STree). The existing `build_delta_net_chunking` code (lines 88-106 in `delta-net-base.cpp`) already computes `g_cs = cumsum(g)` and builds `exp(g_cs_j - g_cs_i)` — a tree version would replace `cumsum` with tree-masked accumulation.
+
+**Trade-off**: Approximation quality degrades with path length. Viability risk ~40%. If KL divergence exceeds 0.5 at depth 3, linearization is too lossy.
+
+**Advantage**: Single forward pass for all tree paths — eliminates per-path replay overhead entirely.
+
+### 13.4 STree Reference (for Mamba2 Models)
+
+STree's approach works directly on true Mamba2 models. Key results (MambaInLlama-8B, 50% hybrid, RTX 3090):
+- Greedy decoding: 1.74x speedup (vs 1.69x vanilla speculative decoding)
+- Temperature=1: 1.36x (vs 1.23x vanilla)
+- Memory: 0.57-0.91x of unrolled baseline
+
+Core algorithm: tree-structured mask `L` on cumulative state transitions:
+```
+dA_tree[0] = dA[0]
+for s in 1..N-1:
+    dA_tree[s] = dA_tree[parent(s)] + dA[s]
+```
+
+**Repository**: [github.com/wyc1997/stree](https://github.com/wyc1997/stree). **Limitation**: Asserts `seqlen < chunk_size` — tree must fit in one chunk.
+
+### 13.5 Research References
+
+1. Wu et al., "STree: Speculative Tree Decoding for Hybrid State-Space Models," NeurIPS 2025. [arXiv:2505.14969](https://arxiv.org/abs/2505.14969)
+2. Yang et al., "Gated Delta Networks: Improving Mamba2 with Delta Rule," NeurIPS 2024. [arXiv:2412.06464](https://arxiv.org/abs/2412.06464) (GDN/Delta Net architecture)
+3. Yang et al., "Parallelizing Linear Transformers with the Delta Rule over Sequence Length," NeurIPS 2024. [arXiv:2406.06484](https://arxiv.org/abs/2406.06484) (Chunked Delta Net algorithm)
+4. Schlag et al., "Linear Transformers Are Secretly Fast Weight Programmers," ICML 2021. [arXiv:2102.11174](https://arxiv.org/abs/2102.11174) (Delta Net foundation)
+5. Chen et al., "RAD: Redundancy-Aware Distillation for Hybrid Models," May 2025. [arXiv:2505.22135](https://arxiv.org/abs/2505.22135)
+
+---
+
 ## References
 
 ### Tree Speculative Decoding
@@ -689,8 +954,19 @@ The verification function `common_sampler_sample_and_accept_n()` (`common/sampli
 ### Speculative Speculative Decoding
 19. Kumar, Dao & May, "Speculative Speculative Decoding," ICLR 2026. [arXiv:2603.03251](https://arxiv.org/abs/2603.03251). [Code](https://github.com/tanishqkumar/ssd)
 
+### SSM / Hybrid Model Speculation
+20. Wu et al., "STree: Speculative Tree Decoding for Hybrid State-Space Models," NeurIPS 2025. [arXiv:2505.14969](https://arxiv.org/abs/2505.14969). [Code](https://github.com/wyc1997/stree)
+21. Yang et al., "SpecMamba: Accelerating Mamba Inference on FPGA with Speculative Decoding," ICCAD 2025. [arXiv:2509.19873](https://arxiv.org/abs/2509.19873)
+22. Chen et al., "RAD: Redundancy-Aware Distillation for Hybrid Models via Self-Speculative Decoding," May 2025. [arXiv:2505.22135](https://arxiv.org/abs/2505.22135)
+23. "The Mamba in the Llama: Distilling and Accelerating Hybrid Models," NeurIPS 2024. [Paper](https://proceedings.neurips.cc/paper_files/paper/2024/file/723933067ad315269b620bc0d2c05cba-Paper-Conference.pdf)
+
+### Delta Net / Gated Linear Attention
+24. Yang et al., "Gated Delta Networks: Improving Mamba2 with Delta Rule," NeurIPS 2024. [arXiv:2412.06464](https://arxiv.org/abs/2412.06464)
+25. Yang et al., "Parallelizing Linear Transformers with the Delta Rule over Sequence Length," NeurIPS 2024. [arXiv:2406.06484](https://arxiv.org/abs/2406.06484)
+26. Schlag et al., "Linear Transformers Are Secretly Fast Weight Programmers," ICML 2021. [arXiv:2102.11174](https://arxiv.org/abs/2102.11174)
+
 ### Related / Background
-20. "CLaSp: In-Context Layer Skip for Self-Speculative Decoding." [arXiv:2505.24196](https://arxiv.org/abs/2505.24196)
-21. Speculative Decoding Papers Collection. [GitHub](https://github.com/hemingkx/SpeculativeDecodingPapers)
-22. llama.cpp LayerSkip Discussion. [#10787](https://github.com/ggml-org/llama.cpp/discussions/10787)
-23. llama.cpp Speculative Decoding Docs. [speculative.md](https://github.com/ggml-org/llama.cpp/blob/master/docs/speculative.md)
+27. "CLaSp: In-Context Layer Skip for Self-Speculative Decoding." [arXiv:2505.24196](https://arxiv.org/abs/2505.24196)
+28. Speculative Decoding Papers Collection. [GitHub](https://github.com/hemingkx/SpeculativeDecodingPapers)
+29. llama.cpp LayerSkip Discussion. [#10787](https://github.com/ggml-org/llama.cpp/discussions/10787)
+30. llama.cpp Speculative Decoding Docs. [speculative.md](https://github.com/ggml-org/llama.cpp/blob/master/docs/speculative.md)

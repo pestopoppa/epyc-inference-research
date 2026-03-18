@@ -1,0 +1,6 @@
+model,config,hispec_depth,tps,tokens_generated,generation_sec,draft_accepted,draft_total,acceptance_rate,n_prompts
+qwen3-32b,baseline,0,8.44,2560,303.298,0,0,0,10
+qwen3-32b,external_coder05b,0,13.07,2560,195.723,1158,2205,.5251,10
+qwen3-32b,external_qwen3_06b,0,13.06,2560,195.999,1180,2322,.5081,10
+qwen3-32b,hispec_external_n4,16,7.57,2560,338.011,658,2346,.2804,10
+qwen3-32b,hispec_external_n2,32,7.50,2560,340.995,635,2365,.2684,10

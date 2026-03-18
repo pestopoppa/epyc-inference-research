@@ -1,0 +1,5 @@
+pair,model_pair,p_split,prompt_idx,tokens_generated,time_ms,tokens_per_sec,draft_accepted,draft_total,acceptance_rate
+2,Qwen2.5-Coder-32B-Q4KM+0.5B-Q8,0,0,256,10421,24.56,230,280,.8214
+2,Qwen2.5-Coder-32B-Q4KM+0.5B-Q8,0,1,256,27605,9.27,142,214,.6635
+2,Qwen2.5-Coder-32B-Q4KM+0.5B-Q8,0,2,256,18150,14.10,178,248,.7177
+2,Qwen2.5-Coder-32B-Q4KM+0.5B-Q8,0,3,256,21436,11.94,155,221,.7013

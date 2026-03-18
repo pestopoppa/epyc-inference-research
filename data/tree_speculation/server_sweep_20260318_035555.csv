@@ -1,0 +1,5 @@
+pair,model_pair,p_split,prompt_idx,tokens_generated,time_ms,tokens_per_sec,draft_accepted,draft_total,acceptance_rate
+15,Qwen3-Coder-30B-A3B-Q4KM+0.75B-Q4,0,0,256,5501,46.53,202,325,.6215
+15,Qwen3-Coder-30B-A3B-Q4KM+0.75B-Q4,0,1,256,7084,36.13,130,257,.5058
+15,Qwen3-Coder-30B-A3B-Q4KM+0.75B-Q4,0,2,256,6415,39.90,173,280,.6178
+15,Qwen3-Coder-30B-A3B-Q4KM+0.75B-Q4,0,3,256,7191,35.60,138,285,.4842

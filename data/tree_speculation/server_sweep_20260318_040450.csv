@@ -1,0 +1,5 @@
+pair,model_pair,p_split,prompt_idx,tokens_generated,time_ms,tokens_per_sec,draft_accepted,draft_total,acceptance_rate
+8,Qwen3-235B-A22B-Q4KM+0.6B-Q8,0,0,256,31485,8.13,154,282,.5460
+8,Qwen3-235B-A22B-Q4KM+0.6B-Q8,0,1,256,29881,8.56,151,265,.5698
+8,Qwen3-235B-A22B-Q4KM+0.6B-Q8,0,2,256,31562,8.11,134,226,.5929
+8,Qwen3-235B-A22B-Q4KM+0.6B-Q8,0,3,256,25559,10.01,166,306,.5424

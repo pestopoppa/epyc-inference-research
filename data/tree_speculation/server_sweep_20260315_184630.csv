@@ -1,0 +1,8 @@
+pair,model_pair,p_split,prompt_idx,tokens_generated,time_ms,tokens_per_sec,draft_accepted,draft_total,acceptance_rate
+4,Qwen3.5-9B-Q4KM+0.8B-Q8,0,0,256,51795,4.94,226,242,.9338
+4,Qwen3.5-9B-Q4KM+0.8B-Q8,0,1,256,35149,7.28,219,238,.9201
+4,Qwen3.5-9B-Q4KM+0.8B-Q8,0,2,256,20025,12.78,212,288,.7361
+4,Qwen3.5-9B-Q4KM+0.8B-Q8,0,3,256,69151,3.70,138,364,.3791
+4,Qwen3.5-9B-Q4KM+0.8B-Q8,0.05,0,256,128552,1.99,149,299,.4983
+4,Qwen3.5-9B-Q4KM+0.8B-Q8,0.05,1,256,78059,3.27,157,356,.4410
+4,Qwen3.5-9B-Q4KM+0.8B-Q8,0.05,2,256,130335,1.96,148,350,.4228

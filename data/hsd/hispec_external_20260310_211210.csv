@@ -1,0 +1,8 @@
+model,config,hispec_depth,tps,tokens_generated,generation_sec,draft_accepted,draft_total,acceptance_rate,n_prompts
+qwen35-9b-ssm,baseline,0,15.14,2560,169.018,0,0,0,10
+qwen35-9b-ssm,external_qwen35_08b,0,10.41,2560,245.811,1385,2439,.5678,10
+qwen35-9b-ssm,self_spec_exit8,8,8.61,2560,296.992,1848,2365,.7813,10
+qwen35-9b-ssm,external_coder05b,0,15.15,2123,140.106,1225,1955,.6265,10
+qwen35-9b-ssm,freeze_ext_qwen35_08b,0,12.06,2075,171.965,1063,2185,.4864,10
+qwen35-9b-ssm,freeze_ext_coder05b,0,15.96,2205,138.107,1127,2351,.4793,10
+qwen35-9b-ssm,freeze_self_spec_exit8,8,7.69,1988,258.451,1145,2164,.5291,10
