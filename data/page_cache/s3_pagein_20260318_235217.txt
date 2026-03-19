@@ -1,0 +1,61 @@
+S3: Page-In Verification Before Serving
+=========================================
+Wed Mar 18 23:52:17 UTC 2026
+
+=== Loading all models ===
+  480B-A35B PID=95152
+  235B-A22B PID=95155
+  30B-A3B PID=95158
+  Waiting for all servers...
+  480B-A35B ready
+  235B-A22B ready
+  30B-A3B ready
+
+=== Residency BEFORE page-in ===
+  480B-A35B (PID 95152): RSS = 366.90 GB
+  235B-A22B (PID 95155): RSS = 242.68 GB
+  30B-A3B (PID 95158): RSS = 83.10 GB
+Mem:           1.1Ti       693Gi        19Gi       262Mi       425Gi       440Gi
+
+=== Page-In Verification ===
+  Paging in 480B-A35B: 36.6 GB...
+    Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00001-of-00008.gguf: 9589043 pages touched
+    Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00002-of-00008.gguf: 9699597 pages touched
+    Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00003-of-00008.gguf: 9700563 pages touched
+    Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00004-of-00008.gguf: 9675021 pages touched
+    Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00005-of-00008.gguf: 9699597 pages touched
+    Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00006-of-00008.gguf: 9542163 pages touched
+    Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00007-of-00008.gguf: 9459243 pages touched
+    Qwen3-Coder-480B-A35B-Instruct-Q4_K_M-00008-of-00008.gguf: 3640374 pages touched
+  480B-A35B: 71005601 total pages in 22s
+  Paging in 235B-A22B: 37.1 GB...
+    Qwen3-235B-A22B-Q4_K_M-00001-of-00004.gguf: 9730550 pages touched
+    Qwen3-235B-A22B-Q4_K_M-00002-of-00004.gguf: 9728327 pages touched
+    Qwen3-235B-A22B-Q4_K_M-00003-of-00004.gguf: 9728327 pages touched
+    Qwen3-235B-A22B-Q4_K_M-00004-of-00004.gguf: 5638698 pages touched
+  235B-A22B: 34825902 total pages in 19s
+  Paging in 30B-A3B: 17.3 GB...
+  30B-A3B: 0 total pages in 0s
+
+=== Residency AFTER page-in ===
+  480B-A35B (PID 95152): RSS = 400.43 GB
+  235B-A22B (PID 95155): RSS = 205.02 GB
+  30B-A3B (PID 95158): RSS = 73.60 GB
+Mem:           1.1Ti       746Gi       4.7Gi       262Mi       387Gi       386Gi
+
+=== First Request After Page-In (should be warm) ===
+  480B-A35B post-pagein-1: 12742 ms
+  235B-A22B post-pagein-1: 11364 ms
+  30B-A3B post-pagein-1: 2756 ms
+
+=== Second Request After Page-In ===
+  480B-A35B post-pagein-2: 3855 ms
+  235B-A22B post-pagein-2: 1761 ms
+  30B-A3B post-pagein-2: 480 ms
+
+=== COMPARISON: S1 (no page-in) vs S3 (with page-in) ===
+S1 cold latencies: 480B=185271ms, 235B=7276ms, 30B=7897ms
+S3 post-page-in latencies: see above
+
+=== Cleanup ===
+Done. Results: /mnt/raid0/llm/epyc-inference-research/data/page_cache/s3_pagein_20260318_235217.txt

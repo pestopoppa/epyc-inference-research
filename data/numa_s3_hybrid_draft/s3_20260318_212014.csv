@@ -1,0 +1,4 @@
+config,instance,threads,cpu_binding,drafter,draft_max,prompt_idx,tokens_generated,time_ms,tokens_per_sec
+S3-F,1,96,node0,q25-0.5B-f16,16,0,0,22,0.00
+S3-F,1,96,node0,q25-0.5B-f16,16,1,0,20,0.00
+S3-F,1,96,node0,q25-0.5B-f16,16,2,256,21363,11.98

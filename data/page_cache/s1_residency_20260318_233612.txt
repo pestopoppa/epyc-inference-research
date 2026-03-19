@@ -1,0 +1,68 @@
+S1: Baseline Page Residency Measurement
+========================================
+Wed Mar 18 23:36:13 UTC 2026
+
+=== Attempting to drop page cache ===
+  WARNING: Cannot drop caches (not root). Measuring with existing cache.
+               total        used        free      shared  buff/cache   available
+Mem:           1.1Ti       390Gi       4.2Gi       262Mi       743Gi       742Gi
+Swap:          8.0Gi       8.0Gi       208Ki
+
+=== Loading Model 1: 480B-A35B (port 8089) ===
+  PID: 92282
+  Ready
+
+--- Residency after 480B-A35B loaded ---
+  480B-A35B (PID 92282): RSS = 311.51 GB
+Mem:           1.1Ti       461Gi       3.2Gi       262Mi       674Gi       671Gi
+
+=== Loading Model 2: 235B-A22B (port 8088) ===
+  PID: 93065
+  Ready
+
+--- Residency after 235B-A22B loaded ---
+  480B-A35B (PID 92282): RSS = 455.15 GB
+  235B-A22B (PID 93065): RSS = 195.72 GB
+Mem:           1.1Ti       801Gi       3.4Gi       262Mi       333Gi       331Gi
+
+=== Loading Model 3: 30B-A3B (port 8080) ===
+  PID: 93917
+  Ready
+
+--- Residency after all models loaded ---
+  480B-A35B (PID 92282): RSS = 417.69 GB
+  235B-A22B (PID 93065): RSS = 195.72 GB
+  30B-A3B (PID 93917): RSS = 83.10 GB
+Mem:           1.1Ti       867Gi       5.4Gi       262Mi       266Gi       266Gi
+
+=== Cold Request Latency (first request after all loaded) ===
+  480B-A35B cold: 185271 ms
+  235B-A22B cold: 7276 ms
+  30B-A3B cold: 7897 ms
+
+=== Warm Request Latency (second request) ===
+  480B-A35B warm: 4299 ms
+  235B-A22B warm: 2667 ms
+  30B-A3B warm: 815 ms
+
+=== Third Request (confirming warm) ===
+  480B-A35B warm2: 8 ms
+  235B-A22B warm2: 1894 ms
+  30B-A3B warm2: 348 ms
+
+=== Page Faults (10-request burst on frontdoor 30B-A3B) ===
+Error:
+No permission to enable page-faults event.
+
+
+
+=== Final Residency ===
+  480B-A35B (PID 92282): RSS = 441.70 GB
+  235B-A22B (PID 93065): RSS = 180.35 GB
+  30B-A3B (PID 93917): RSS = 83.19 GB
+               total        used        free      shared  buff/cache   available
+Mem:           1.1Ti       895Gi       5.8Gi       262Mi       236Gi       237Gi
+Swap:          8.0Gi       8.0Gi       240Ki
+
+=== Cleanup ===
+Done. Results: /mnt/raid0/llm/epyc-inference-research/data/page_cache/s1_residency_20260318_233612.txt

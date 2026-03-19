@@ -1,0 +1,9 @@
+config,instance,threads,cpu_binding,prompt_idx,tokens_generated,time_ms,tokens_per_sec
+A,1,192,all,0,256,36982,6.92
+A,1,192,all,1,256,37556,6.82
+A,1,192,all,2,256,34914,7.33
+A,1,192,all,3,256,32353,7.91
+B,1,96,node0,0,256,19291,13.27
+B,1,96,node0,1,256,19016,13.46
+B,1,96,node0,2,256,19301,13.26
+B,1,96,node0,3,256,18889,13.55

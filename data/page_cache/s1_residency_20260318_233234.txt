@@ -1,0 +1,33 @@
+========================================
+Wed Mar 18 23:32:34 UTC 2026
+
+=== Dropping page cache for clean baseline ===
+  WARNING: Could not drop caches (not root)
+               total        used        free      shared  buff/cache   available
+Mem:           1.1Ti       119Gi        29Gi       263Mi       988Gi       1.0Ti
+Swap:          8.0Gi       8.0Gi        10Mi
+
+=== Sequential Model Loading ===
+Loading 480B on port 8089...
+=== Steady State (all models loaded) ===
+               total        used        free      shared  buff/cache   available
+Mem:           1.1Ti       119Gi        29Gi       263Mi       988Gi       1.0Ti
+Swap:          8.0Gi       8.0Gi        10Mi
+
+--- Page Residency: steady state ---
+=== Cold Request Latency (first request after all loaded) ===
+
+=== Warm Request Latency (second request) ===
+
+=== Third Request (confirming warm baseline) ===
+
+=== Page Fault Rates (10-request burst on frontdoor) ===
+
+=== Final Residency (after all requests served) ===
+--- Page Residency: post-requests ---
+               total        used        free      shared  buff/cache   available
+Mem:           1.1Ti       119Gi        29Gi       263Mi       988Gi       1.0Ti
+Swap:          8.0Gi       8.0Gi        10Mi
+
+=== Cleanup ===
+Done. Results: /mnt/raid0/llm/epyc-inference-research/data/page_cache/s1_residency_20260318_233234.txt

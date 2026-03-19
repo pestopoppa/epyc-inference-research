@@ -1,0 +1,28 @@
+S2: mlock Test for Hot Model
+=============================
+Wed Mar 18 23:58:40 UTC 2026
+
+=== Starting frontdoor WITH --mlock ===
+  PID: 96740
+  Frontdoor ready
+  RSS: 83.11 GB
+  VmLck: 0.00 GB (locked)
+
+=== Loading 480B to create pressure ===
+  480B PID: 97106
+  480B ready
+
+=== Frontdoor RSS after 480B loaded ===
+  RSS: 83.11 GB
+  VmLck: 0.00 GB
+
+=== Frontdoor latency after 480B loaded ===
+  post-480b-1: 1433 ms
+  post-480b-2: 1205 ms
+  post-480b-3: 344 ms
+
+=== COMPARISON ===
+S1 (no mlock): frontdoor cold after 480B = 7897 ms
+S2 (mlock):    frontdoor cold after 480B = see above
+
+Done. Results: /mnt/raid0/llm/epyc-inference-research/data/page_cache/s2_mlock_20260318_235840.txt

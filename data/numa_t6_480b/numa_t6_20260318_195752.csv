@@ -1,0 +1,13 @@
+config,threads,cpu_binding,spec_mode,prompt_idx,tokens_generated,time_ms,tokens_per_sec
+A,192,all,tree_dm48_ps005,0,256,61228,4.18
+A,192,all,tree_dm48_ps005,1,256,96166,2.66
+A,192,all,tree_dm48_ps005,2,256,84141,3.04
+B,96,0-47,96-143,tree_dm48_ps005,0,256,53430,4.79
+B,96,0-47,96-143,tree_dm48_ps005,1,256,81464,3.14
+B,96,0-47,96-143,tree_dm48_ps005,2,256,72681,3.52
+C,192,all,linear_dm48,0,256,71991,3.56
+C,192,all,linear_dm48,1,256,119127,2.15
+C,192,all,linear_dm48,2,256,106023,2.41
+D,96,0-47,96-143,linear_dm48,0,256,57919,4.42
+D,96,0-47,96-143,linear_dm48,1,256,89749,2.85
+D,96,0-47,96-143,linear_dm48,2,256,79220,3.23
