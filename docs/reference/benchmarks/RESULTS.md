@@ -57,7 +57,7 @@ Single-model (192t, all cores) vs NUMA-pinned deployment throughput. All values 
 
 | Role | Model | Size | Accel | dm | ps | 192t t/s | NUMA Config | NUMA t/s (per-inst) |
 |------|-------|------|-------|----|----|----------|-------------|---------------------|
-| frontdoor | Qwen3.5-35B-A3B Q4KM | 20 GB | moe6+lookup | — | — | ~19.6 | 4×48t | ~19.6 |
+| frontdoor | Qwen3.5-35B-A3B Q4KM | 20 GB | moe6 (lookup needs corpus) | — | — | ~12.7 | 4×48t | **12.7** |
 | coder_escalation | **Qwen2.5-Coder-32B Q4KM** | **18.5 GB** | spec+tree+lu | 32 | 0.05 | 12.2 | 4×48t | **10.8** |
 | architect_general | Qwen3.5-122B-A10B Q4KM | 69 GB | moe8+spec+lu | 24 | 0 | 2.5 | 1×96t | 4.3 |
 | architect_coding | Qwen3-Coder-480B Q4KM | 250 GB | spec+lu | 24 | 0 | 7.1 | 1×96t | 7.0 |
