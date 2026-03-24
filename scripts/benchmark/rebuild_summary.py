@@ -234,6 +234,9 @@ def process_all_results() -> list[dict]:
             print(f"Error reading {filepath}: {e}")
             continue
 
+        if not isinstance(data, dict):
+            continue
+
         original_name = Path(filepath).stem
         model_path = data.get("model_path", "")
         model_name = extract_model_name(model_path)

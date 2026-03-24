@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,3.79,2,4 issues identified; selection bias and confounding overlap significantly; publication bias is meta-science not methodology; adequate
+thinking,t3_q2_causal_inference,3.80,1,Q1 correct (adjust for Gene); Q2 WRONG: claims Yellow Fingers is a collider but Cancer does NOT cause Yellow Fingers in this DAG; Q3 partially correct
+thinking,t3_q3_reasoning_trap,3.79,1,Identifies test set distribution mismatch but scenario is SELF-CONTRADICTORY: describes D2 as biased toward test set yet claims Model B gets 78% (should be higher not lower)
+thinking,t2_q1_paradox,3.78,2,Two positions presented (continuity of parts vs original parts); includes odd Python code; no deep philosophical insight but covers basic positions
+thinking,t2_q2_counterfactual,3.79,2,Three dimensions analyzed; adequate but somewhat generic; no surprising insights
+thinking,t2_q3_formal,3.82,3,Correct formal proof using conditional proof/modus ponens; good concrete example
+thinking,t2_q4_metacognition,3.79,3,Good Fermi estimation; 500 tunings/year per tuner is reasonable; estimate of 32 is reasonable; good bounds analysis (9-108)
+thinking,t1_q1_multistep,3.79,3,Correct calculation: 60mi head start 220mi remaining 140mph combined 11/7 hours after 10AM = ~11:34 AM
+thinking,t1_q2_hypothesis,3.82,3,Three specific alternative explanations: SES health/well-being parental involvement; each with concrete mechanisms
+thinking,t1_q3_planning,3.79,0,Lists 4 orderings all invalid; ABDCE has E last (violates constraint); DCAEB/DCABE/ADCBE all have D before B (violates B before D)
+coder,t3_q1_concurrent_correctness,3.77,2,ABA scenario explained but specific scenario somewhat confused; tagged pointer fix is correct approach and code is sound
+coder,t3_q2_distributed_consistency,3.79,2,4 strategies with failure scenarios; merge function for shopping cart is GOOD (better than Q4KM LWW); banking recommends vector clocks which is questionable
+coder,t3_q3_algorithmic_hardness,3.76,1,Q1 lower bound proof confuses sorting and selection arguments; Q2 recurrence relations correct; Q3 expected comparisons claim E(n)=2n-2 is wrong
+coder,t2_q1_design,3.79,3,Correct LRU cache with doubly linked list + hash map; clean implementation with dummy head/tail; O(1) achieved
+coder,t2_q2_debug_complex,3.79,3,Correctly identifies race condition; fix with asyncio.Lock is correct and properly applied
+coder,t2_q3_optimize,29.62,3,Correct O(n) optimization using hash map; clean implementation; good explanation
+coder,t2_q4_system,3.80,3,Clean rate limiter with deque; sliding window approach; handles edge cases well; not truncated like Q4KM
+coder,t1_q1_algorithm,12.78,3,Correctly identifies both bugs (left=mid infinite loop right=len(arr) off-by-one); fixes correct; verified with test cases
+coder,t1_q2_refactor,3.73,1,Speed version correct with set O(n); memory version uses dict which is NOT more memory-efficient; massive repetition loop (8+ repeats)
+coder,t1_q3_test,3.79,3,Comprehensive pytest suite covering normal/edge/error cases including large/small numbers; well-organized
+agentic,t3_q1_competing_constraints,0.00,0,TIMED OUT after 172 chars; no usable response
+agentic,t3_q2_multi_agent_coordination,3.79,2,Good structure with phases and context passing; parallel group incorrectly puts researcher and coder together; failure handling is generic
+agentic,t3_q3_adversarial_robustness,3.78,3,Correctly identifies security concern with /etc/passwd; provides safe handling; comprehensive policy
+agentic,t2_q1_ambiguous,3.80,3,Asks clarifying question then makes reasonable assumption with Slack; good handling
+agentic,t2_q2_error_chain,3.77,2,Gets logs instead of checking DNS first (DNS is more targeted for connection_refused); reasoning is sound but not optimal
+agentic,t2_q3_schema_edge,3.81,2,Correct tool call but duplicated output (JSON appears twice); answer itself is perfect
+agentic,t2_q4_orchestration,3.77,3,Complete deployment plan with proper ordering failure handling rollback to v1.2.2
+agentic,t1_q1_sequential,3.70,3,Correct sequential tool calls: grep for ERROR then read_file; echoes prompt but answer is correct
+agentic,t1_q2_error_handling,3.80,3,Appropriate response asking for alternative info after 404; good handling
+agentic,t1_q3_nested_params,3.80,3,Perfect tool call with correct nested params; wrapped in code block which is fine
+general,t3_q1_policy_analysis,3.78,2,3 failure modes identified; overfitting to test set is good; publication bias is meta-science not methodology; amendments reasonable
+general,t3_q2_system_failure,3.79,3,Correctly explains double-charge via replica lag; good testing gap analysis; two solid architectural fixes
+general,t3_q3_strategic_communication,3.76,1,Massive repetition — writes the speech 4+ times with self-feedback loops; tone adequate but repetition severely degrades quality
+general,t2_q1_synthesis,3.81,2,Good two-phase approach but only 2 sentences; lacks actionable specificity of Q4KM version
+general,t2_q2_transform,3.85,3,Correct YAML transformation with proper nesting; no hallucinated employees (unlike Q4KM)
+general,t2_q3_schedule,3.78,0,INVALID: Alice-Dave 9-9:30 and Bob-Dave 9:30-10 are back-to-back for Dave (violates no back-to-back constraint)
+general,t2_q4_inconsistency,3.81,3,Correctly identifies both key inconsistencies: body format (JSON vs form-encoded) and rate limit (100/min vs 1000/hour)
+general,t1_q1_json,3.81,2,Correct JSON but output is duplicated (appears twice)
+general,t1_q2_multistep,3.82,3,Correct processing: removes duplicates case-insensitive sorts alphabetically numbers items count=4
+general,t1_q3_compare,3.79,2,Accurate 2-sentence comparison; merely restates the given pros/cons without analytical insight
+math,t3_q1_analysis,3.77,3,All 3 parts correct: differentiability via Weierstrass M-test; closed form Im(e^{xe^i}); limit=0 since cos(1)<1
+math,t3_q2_combinatorics,3.80,1,Proof attempt is hand-wavy; sign-reversing involution not properly constructed; fixed point count asserted without justification
+math,t3_q3_probability_theory,3.79,3,CORRECT answer E[N]=e; direct calculation approach is clean and correct
+math,t2_q1_optimization,3.80,3,Correct: dimensions 100x50 maximum area 5000 sq meters
+math,t2_q2_proof,3.79,1,Identifies overlap issue but says n=2 when actual failure is n=1 (step from 1 to 2 where groups have NO overlap)
+math,t2_q3_calculus,3.79,3,Correct: antiderivative x^3+x^2-x F(2)=10 F(0)=0 integral=10
+math,t2_q4_statistics,3.80,1,WRONG sum: claims 205 but actual is 185; mean should be 23.125 not 25.625; std dev wrong; median correct
+math,t1_q1_word_problem,3.80,3,All correct: discount price $120 final price $129.60 86.4% of original
+math,t1_q2_system_equations,3.80,3,All 4 real solutions correctly found: (3 4) (4 3) (-3 -4) (-4 -3)
+math,t1_q3_probability,3.79,3,Both correct: P(both red)=2/9 P(one red one blue)=1/3
+instruction_precision,t3_q1_self_referential,3.83,0,Claims 12 then 15 words; letter count 81 almost certainly wrong; close but fails
+instruction_precision,t3_q2_cascading_constraints,3.79,0,DEGENERATE: Repeats strength/thrift in endless loop 12+ times; chain constraint violated; uniqueness violated
+instruction_precision,t3_q3_meta_instruction,3.67,1,Correctly identifies valid instructions but outputs instruction text instead of executing them
+instruction_precision,t2_q1_resist_elaboration,3.54,3,Outputs 4 with no elaboration
+instruction_precision,t2_q2_maintain_format,3.75,2,Correct format ERROR_TYPE/ROOT_CAUSE/FIX; echoes prompt before answer
+instruction_precision,t2_q3_empty_handling,3.63,3,Outputs exactly NONE
+instruction_precision,t2_q4_conflicting_constraints,3.74,3,All constraints met: 9 words starts with A ends with data no store/storage
+instruction_precision,t1_q1_negative_instruction,3.77,3,2 sentences; avoids sunlight/sun/solar; uses light source and energy; clean
+instruction_precision,t1_q2_word_limit,3.80,1,18 words instead of required 20-25; fails word count constraint
+instruction_precision,t1_q3_structured_format,3.79,1,Correct format but output duplicated; extra text before
+instruction_precision,t1_q4_multiple_constraints,3.80,3,Perfect: 5 European countries alphabetically one per line no extra text

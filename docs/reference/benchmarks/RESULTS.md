@@ -1,6 +1,6 @@
 # Research Results Summary
 
-**Last Updated:** 2026-02-03 (Added hard benchmark suites for MemRL mode-advantage)
+**Last Updated:** 2026-03-24 (Coder quant quality scores: Q4KM confirmed optimal)
 **System:** AMD EPYC 9655 (96 cores, 1.13TB DDR5), llama.cpp
 
 ---
@@ -48,6 +48,55 @@ See [Chapter 24](../../chapters/24-benchmark-suite-construction.md) for suite co
 | **gemma-3-12b + spec (K=16)** | **14.8 t/s** | **1.6x** | 97% | General tasks |
 | **Qwen3-32B + spec (K=8)** | **12.2 t/s** | **7.6x** | 95% | General tasks |
 | MoE Expert Reduction (4-6 experts) | +21-120% | — | — | MoE models |
+
+---
+
+## Production Throughput — NUMA Deployment (verified 2026-03-21)
+
+Single-model (192t, all cores) vs NUMA-pinned deployment throughput. All values verified by comprehensive spec param sweep (`bench_all_spec_sweeps.sh`, 1,290 measurements).
+
+| Role | Model | Size | Accel | dm | ps | 192t t/s | NUMA Config | NUMA t/s (per-inst) |
+|------|-------|------|-------|----|----|----------|-------------|---------------------|
+| frontdoor | Qwen3.5-35B-A3B Q4KM | 20 GB | moe6+lookup | — | — | ~19.6 | 4×48t | ~19.6 |
+| coder_escalation | **Qwen2.5-Coder-32B Q4KM** | **18.5 GB** | spec+tree+lu | 32 | 0.05 | 12.2 | 4×48t | **10.8** |
+| architect_general | Qwen3.5-122B-A10B Q4KM | 69 GB | moe8+spec+lu | 24 | 0 | 2.5 | 1×96t | 4.3 |
+| architect_coding | Qwen3-Coder-480B Q4KM | 250 GB | spec+lu | 24 | 0 | 7.1 | 1×96t | 7.0 |
+| worker | Qwen3-Coder-30B-A3B Q4KM | 16 GB | spec | 8 | 0 | 28.7 | 1×24t Q0A | 39.1 |
+| ingest | Qwen3-Next-80B-A3B Q4KM | 46 GB | none (SSM) | — | — | ~12 | 1×96t | ~12 |
+
+*NUMA aggregate = per-instance × number of instances (e.g. coder Q4KM: 10.8 × 4 = 43.3 t/s).*
+
+**Key corrections from sweep:**
+- 480B: tree spec (ps=0.05) is HARMFUL (-19%). Corrected to dm=24, ps=0 (linear only).
+- 122B: dm=24 optimal (flat across 8-48), tree devastating. Was dm=8.
+- Coder Q4KM: tree (ps=0.05) is BENEFICIAL (+2.7%). Overturns prior "tree negative on quantized" assumption.
+- Worker 7B: 19.2 t/s at 24t, not 43.9 (old number was inflated by warm-cache/short-gen/96t measurement).
+
+### Coder Escalation Quant Comparison (COMPLETE — quality scored 2026-03-24)
+
+| Variant | Size | 4× RAM | dm | ps | Tree? | 48t t/s | 4×48t agg | Quality (raw) | Quality (pass) | Decision |
+|---------|------|--------|----|----|-------|---------|-----------|---------------|----------------|----------|
+| **Q4_K_M** | **18.5 GB** | **74 GB** | 32 | 0.05 | Yes (+2.7%) | **10.8** | **~43.3** | **72.7% (133/183)** | **74% (45/61)** | **WINNER** |
+| Q8_0 | 33 GB | 132 GB | 16 | 0 | No (tree -6%) | 8.2 | ~32.7 | 74.3% (136/183) | 77% (47/61) | +3pp, -24% speed |
+| f16 | 65 GB | 260 GB | 32 | 0.05 | Yes (+17%) | 6.4 | ~25.6 | 72.7% (133/183) | 74% (45/61) | Same quality, -41% speed |
+
+**Decision (2026-03-24):** Q4_K_M confirmed optimal. f16 offers **zero quality improvement** (identical 74% pass, identical 133/183 raw) at half the speed and 3.5x RAM. Quality ceiling is the model architecture, not quantization — all three quants score identically on instruction_precision (20/33).
+
+**Speed findings (sweep 2026-03-21):**
+- Tree spec is NOT universally negative on quantized models — Q4KM benefits from ps=0.05.
+- Q8 is the exception: tree hurts at 48t but helps at 192t (mode-dependent).
+
+**Quality scoring:** Claude-as-Judge, 0-3 per question, 61 questions across 6 suites. Pass = score >= 2. Reviews in `benchmarks/results/reviews/coder_escalation_{q8,f16}_baseline.csv`.
+
+### Spec Decode Candidate: Qwen3-Coder-30B-A3B (freed from frontdoor)
+
+| Config | dm | ps | t/s | Notes |
+|--------|----|----|-----|-------|
+| 192t | 24 | 0 | 28.7 | |
+| **48t** | **8** | **0** | **39.1** | dm nearly irrelevant (38-39 across all values) |
+| 4×48t est. | 8 | 0 | ~156 | Potential worker replacement (vs 7B at 19.2) |
+
+*30B-A3B outperforms 7B f16 worker by 2x at deployment threads with better quality and similar RAM (16 vs 14 GB).*
 
 ---
 
