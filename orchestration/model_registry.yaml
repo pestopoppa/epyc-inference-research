@@ -76,10 +76,10 @@ runtime_defaults:
     default: 600  # Fallback for any unspecified timeout
 
     # Per-role inference timeouts (seconds) — differentiated by model size/speed
-    # Workers (7B @ 44 t/s, 1.5B @ fast) get short timeouts so circuit breaker
-    # opens quickly; architects (235B/480B) keep 600s for complex reasoning.
+    # Workers (30B-A3B @ 39 t/s, 1.5B @ fast) get short timeouts so circuit breaker
+    # opens quickly; architects (122B/480B) keep 600s for complex reasoning.
     roles:
-      worker_explore: 60       # 7B @ 44 t/s — expected <5s, 60s = 12x headroom
+      worker_explore: 60       # 30B-A3B @ 39 t/s — expected <5s, 60s = 12x headroom
       worker_math: 60
       worker_vision: 60
       worker_summarize: 120    # 32B summarization, longer outputs
@@ -88,11 +88,11 @@ runtime_defaults:
       worker_code: 60
       worker_fast: 30          # 1.5B — expected <2s, 30s = 15x headroom
       frontdoor: 180           # 30B MoE @ 18 t/s — raised from 90 to accommodate pipeline stages
-      coder_escalation: 120    # 32B @ 39 t/s — 500 tok ~45s. 120s = 2.5x headroom
+      coder_escalation: 120    # 32B Q4KM @ 10.8 t/s — 500 tok ~46s. 120s = 2.6x headroom
       vision_escalation: 120   # 30B MoE VL, multimodal processing
       ingest_long_context: 300 # 80B SSM, long document ingestion
-      architect_general: 600   # 235B MoE, complex multi-step reasoning
-      architect_coding: 600    # 480B MoE, complex multi-step reasoning
+      architect_general: 600   # 122B MoE hybrid @ 4.3 t/s, complex multi-step reasoning
+      architect_coding: 600    # 480B MoE @ 7.0 t/s, complex multi-step reasoning
 
     # Server/connection timeouts
     server:
@@ -315,24 +315,24 @@ server_mode:
   frontdoor:
     url: http://localhost:8080
     port: 8080
-    slots: 2  # Aligned with admission limit=2 (sweep 2026-02-19: optimal at 2, p95 ok)
-    model_role: frontdoor
+    slots: 1  # NUMA 4-way: 4×48t instances, 1 slot each (round-robin routing)
+    model_role: qwen35_q4km
     shared_with: []
-    description: Root LM - generates Python code each turn
-    model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
-    draft_model: jukofyork-Qwen3-Coder-0.75B-Instruct-Q8_0.gguf  # existing AR drafter
-    dflash_draft_model: null  # populated after Phase 1 GGUF conversion
-    dflash_draft_source: Qwen3-Coder-30B-A3B-DFlash  # reference to dflash_drafters entry
-    memory_gb: 20
+    description: Root LM — Qwen3.5-35B-A3B MoE hybrid (quality 2.48/3, NUMA 4×48t)
+    model: Qwen3.5-35B-A3B-UD-Q4_K_M.gguf
+    # No draft model — spec decode net-negative on Qwen3.5 hybrids (SSM checkpoint overhead)
+    memory_gb: 19
     tier: hot
+    numa_instances: 4  # 4×48t NUMA-quarter instances
+    numa_ports: [8080, 8180, 8280, 8380]
     acceleration:
       type: moe_expert_reduction
-      experts: 6
-      override_key: qwen3moe.expert_used_count
-      draft_max: 32  # +19.4% throughput (32.84→39.20 t/s), swept 2026-03-18
-      lookup: true
-      corpus_retrieval: true  # v3 full corpus: +16% avg speed, +5.6pp acceptance (was -12% with MVP index)
-    throughput: 47.11  # t/s (MoE6 + spec + lookup, verified 2026-02-13)
+      experts: 6  # moe6 only — lookup causes segfault on hybrids (diagnosed 2026-03-24, PR #13194)
+      override_key: qwen35moe.expert_used_count
+      lookup: false  # DISABLED: --lookup segfaults after 1-3 prompts on Qwen3.5 SSM+MoE hybrids
+      corpus_retrieval: true
+    throughput: 12.7  # t/s per instance (moe6, measured 2026-03-24), ~50.8 agg with NUMA 4×48t
+    previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf  # swapped 2026-03-19
 
   coder_escalation:
     url: http://localhost:8081
@@ -346,52 +346,85 @@ server_mode:
     tier: hot
     acceleration:
       type: speculative_decoding
-      draft_max: 24
+      draft_max: 32   # sweep-verified 2026-03-21 (was 24)
+      p_split: 0.05   # tree beneficial on Q4KM (+2.7%), sweep-verified 2026-03-21
       lookup: true  # Prompt n-gram lookup as fallback (--lookup flag, commit 8e35dbc01)
       corpus_retrieval: true  # A/B: +8.7pp acceptance, +6% speed
-    throughput: 39.44  # t/s combined spec+lookup (5.4x), was 33 spec-only (5.2x)
+    throughput: 10.8   # t/s at 48t NUMA deployment (sweep 2026-03-21). 192t ref: 12.2. Old 39.44 was inflated.
 
   worker:
     url: http://localhost:8082
     port: 8082
-    slots: 1  # Sweep 2026-02-19: all concurrent levels (2-4) rejected on p95; serial optimal
+    slots: 1
     model_role: worker_general
     shared_with: [worker_math, toolrunner]
-    description: Parallel workers for file-level tasks
-    model: Qwen2.5-7B-Instruct-f16.gguf
-    draft_model: Qwen2.5-Coder-0.5B-Q8_0.gguf
+    description: Try-cheap-first worker — Qwen3-Coder-30B-A3B MoE (freed from frontdoor 2026-03-19)
+    model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
+    draft_model: Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0.gguf
     memory_gb: 16
     tier: hot
+    previous_model: Qwen2.5-7B-Instruct-f16.gguf  # swapped 2026-03-21 (30B-A3B 2x faster, better quality)
     acceleration:
       type: speculative_decoding
-      draft_max: 24
-      p_split: 0.3  # Tree speculation (+3-4% on 7B f16, +16% on 32B f16, Phase 4 2026-03-15)
-      lookup: true  # Prompt n-gram lookup as fallback (--lookup flag)
-      corpus_retrieval: false  # 7B saturated (94-100% acceptance baseline). +1% speed = noise.
-    throughput: 43.9  # t/s measured with spec decode (2026-01-28)
-    concurrency_benchmark:  # 2026-02-15, 256-token generation, spec+lookup
-      1_concurrent: 103.7  # t/s per-request
-      2_concurrent: 91.0   # t/s per-request, 170.6 aggregate (1.76x, optimal)
-      3_concurrent: 95.7   # t/s per-request, 136.8 aggregate (3rd queues behind 2 slots)
-      4_concurrent: 78.9   # t/s per-request, 139.9 aggregate
-      optimal: 2  # matches -np 2 server config
+      draft_max: 8    # sweep-verified 2026-03-21 (dm nearly irrelevant: 38-39 t/s across all values)
+      p_split: 0      # linear only, tree is net-negative at 48t (sweep-verified)
+      lookup: true
+      corpus_retrieval: false
+    throughput: 39.1   # t/s at 48t NUMA deployment (sweep 2026-03-21). 4×48t agg: ~156 t/s.
+
+  # REAP-25B: Permanently pruned Qwen3-Coder-30B-A3B (25% experts removed by Cerebras REAP)
+  # Pure MoE — speculative decoding IS viable (unlike Qwen3.5 hybrids)
+  # Direct A/B comparison target: worker (same arch unpruned, 39.1 t/s)
+  reap_25b:
+    url: http://localhost:8196  # benchmark port, not production
+    port: 8196
+    slots: 1
+    model_role: reap_25b_frontdoor
+    description: REAP-pruned Qwen3-Coder-25B-A3B — 25% expert removal, pure MoE, spec decode viable
+    model:
+      name: cerebras_Qwen3-Coder-REAP-25B-A3B-Q4_K_M
+      path: bartowski/cerebras_Qwen3-Coder-REAP-25B-A3B-GGUF/cerebras_Qwen3-Coder-REAP-25B-A3B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 15
+      architecture: moe
+    draft_model: Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0.gguf
+    draft_model_path: /mnt/raid0/llm/models/Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0.gguf
+    memory_gb: 15
+    tier: B  # evaluation phase — promote to A if it replaces frontdoor/worker
+    acceleration:
+      type: speculative_decoding
+      draft_max: 24   # Phase 1 optimal (39.6 t/s, matches unpruned worker)
+      p_split: 0      # linear only — tree hurts -22% (same as unpruned MoE at 48t)
+      lookup: true     # pure MoE — lookup safe (no hybrid segfault)
+    throughput: 39.6   # Phase 1 measured 2026-03-24 (dm=24, ps=0, linear only)
+    candidate_roles:
+      - frontdoor
+      - worker
+    comparison_targets:
+      - worker  # same arch unpruned (39.1 t/s) — measures REAP speed impact
+      - frontdoor  # production replacement (12.7 t/s moe6) — measures deployment value
 
   # WARM tier - mmap preloaded, loaded on demand (~430GB total)
   architect_general:
     url: http://localhost:8083
     port: 8083
     slots: 1  # Serial — admission=1, no wasted KV
-    model_role: architect_general
-    description: System architecture decisions - large MoE (full experts for quality)
-    model: Qwen3-235B-A22B-Q4_K_M.gguf
-    draft_model: Qwen_Qwen3-0.6B-Q8_0.gguf
-    memory_gb: 134
-    tier: warm
+    model_role: qwen35_122b_q4km
+    description: System architecture — Qwen3.5-122B-A10B MoE (quality 2.57/3, -64GB vs 235B)
+    model: Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf
+    draft_model: Qwen3.5-0.8B-Q8_0.gguf  # 0.8B Qwen3.5 draft (moe8+spec_q8_k8+lu = 12.6 t/s)
+    memory_gb: 69
+    tier: hot  # promoted from warm — half the RAM, fits NUMA node0
     acceleration:
-      type: speculative_decoding
-      draft_k: 16
-      draft_max: 32  # +17.1% throughput (7.38→8.64 t/s), swept 2026-03-18
-    throughput: 6.08  # t/s (full experts + spec, quality over speed, verified 2026-02-13)
+      type: moe_expert_reduction
+      experts: 8  # full experts for quality (moe8+spec+lu, benchmark 2026-03-09)
+      override_key: qwen35moe.expert_used_count
+      draft_role: draft_qwen35_0_8b_q8_0
+      draft_max: 24   # sweep-verified 2026-03-21 (was 8; dm flat 8-48, 24 marginally best)
+      p_split: 0      # linear only — tree devastating on hybrid (-25% to -40%), sweep-verified
+      lookup: false  # DISABLED: --lookup segfaults on Qwen3.5 hybrids after 1-3 prompts (2026-03-24). Was +25% (9.2→11.5) but crashes.
+    throughput: 4.3    # t/s at 96t NUMA deployment (sweep 2026-03-21). 192t ref: 2.5. Old 12.6 was different config/binary.
+    previous_model: Qwen3-235B-A22B-Q4_K_M.gguf  # swapped 2026-03-19
 
   architect_coding:
     url: http://localhost:8084
@@ -405,11 +438,11 @@ server_mode:
     tier: warm
     acceleration:
       type: speculative_decoding
-      draft_k: 16
-      draft_max: 48  # +20.6% throughput (4.72→5.69 t/s), swept 2026-03-18
+      draft_max: 24   # sweep-verified 2026-03-21 (was 48; dm=24 beats dm=48)
+      p_split: 0      # linear only — tree is HARMFUL (-19%), sweep-verified 2026-03-21 (was 0.05)
       lookup: true  # A/B best result: +15.6pp acceptance, +17% speed with corpus
       corpus_retrieval: true  # A/B BEST: +15.6pp acceptance (74.9→90.5%), +17% speed (8.3→9.7 t/s)
-    throughput: 9.00  # t/s (full experts + spec, quality over speed, verified 2026-02-13)
+    throughput: 7.0    # t/s at 96t NUMA deployment (sweep 2026-03-21). 192t ref: 7.1. Old 9.00 was different config.
 
   ingest_long_context:
     url: http://localhost:8085
@@ -690,6 +723,33 @@ roles:
       Provide clear, user-friendly explanations.
       Elaborate on specialist outputs when presenting to users.
       Be direct — avoid filler, repetition, and unnecessary preamble.
+  reap_25b:
+    tier: B
+    description: REAP-pruned Qwen3-Coder-25B-A3B — 25% expert removal, pure MoE, spec decode viable
+    model:
+      name: cerebras_Qwen3-Coder-REAP-25B-A3B-Q4_K_M
+      path: bartowski/cerebras_Qwen3-Coder-REAP-25B-A3B-GGUF/cerebras_Qwen3-Coder-REAP-25B-A3B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 15
+      architecture: moe
+    candidate_roles:
+    - frontdoor
+    - worker
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen3_coder_0_75b
+      k: 24
+      lookup: true
+    performance:
+      baseline_tps: 33.21
+      spec_dm24_tps: 39.62
+    memory:
+      residency: warm
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.3
+
   coder_escalation:
     tier: B
     description: Coding escalation target - dense coder with spec decode + prompt lookup
@@ -724,6 +784,65 @@ roles:
     - Architecture-level code decisions
     - Complex debugging spanning multiple components
     benchmark_date: 2025-12-16
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.2
+    system_prompt_suffix: |
+      Output code only. No explanations unless requested.
+      Include minimal inline comments. No boilerplate or filler.
+      Handle edge cases explicitly.
+  coder_escalation_f16:
+    tier: B
+    description: Qwen2.5-Coder-32B-Instruct f16 — full precision coder escalation candidate
+    model:
+      name: Qwen2.5-Coder-32B-Instruct-f16
+      path: ../../models/Qwen2.5-Coder-32B-Instruct-GGUF-f16/qwen2.5-coder-32b-instruct-fp16-00001-of-00009.gguf
+      quant: f16
+      size_gb: 65
+      split_count: 9
+      architecture: dense
+    candidate_roles:
+    - coder
+    - general
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen2_5_coder_0_5b
+      k: 32  # sweep-verified 2026-03-21 (was 32, confirmed)
+      p_split: 0.05  # sweep-verified 2026-03-21: tree +17% at 48t, confirmed
+      lookup: true
+    memory:
+      residency: warm
+      pinned: false
+    escalation_from: frontdoor
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.2
+    system_prompt_suffix: |
+      Output code only. No explanations unless requested.
+      Include minimal inline comments. No boilerplate or filler.
+      Handle edge cases explicitly.
+  coder_escalation_q8:
+    tier: B
+    description: Qwen2.5-Coder-32B-Instruct Q8_0 — high quality coder escalation candidate
+    model:
+      name: Qwen2.5-Coder-32B-Instruct-Q8_0
+      path: lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF/Qwen2.5-Coder-32B-Instruct-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 33
+      architecture: dense
+    candidate_roles:
+    - coder
+    - general
+    acceleration:
+      type: speculative_decoding
+      draft_role: draft_qwen2_5_coder_0_5b
+      k: 16  # sweep-verified 2026-03-21 (was 24, dm=16 wins at 48t)
+      p_split: 0  # sweep-verified 2026-03-21: tree -6% at 48t, linear only confirmed
+      lookup: true
+    memory:
+      residency: warm
+      pinned: false
+    escalation_from: frontdoor
     generation_defaults:
       n_tokens: -1
       temperature: 0.2
