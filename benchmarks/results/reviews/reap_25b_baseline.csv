@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,45.1,3,Correct sequential tool calls: grep_search for ERROR then read_file
+agentic,t1_q2_error_handling,43.6,3,Appropriate response: asks user for alternative search criteria after 404
+agentic,t1_q3_nested_params,43.8,3,Perfect tool call with correct nested metadata object and assignees array
+agentic,t2_q1_ambiguous,37.7,2,Asks clarifying questions but 8+ questions without attempting resolution
+agentic,t2_q2_error_chain,41.0,3,Correct diagnostic: connection_refused -> check_dns with correct hostname
+agentic,t2_q3_schema_edge,44.1,3,Perfect tool call: /users GET null body proper Authorization header
+agentic,t2_q4_orchestration,42.0,2,Correct ordering but truncated; missing rollback and failure handling
+agentic,t3_q1_competing_constraints,37.7,2,Well-structured plan but truncated before fallback_strategy completes
+agentic,t3_q2_multi_agent_coordination,41.4,2,Correct phasing better than Q4KM reference but truncated at phase 3
+agentic,t3_q3_adversarial_robustness,41.5,3,Correctly identifies SSRF and credential exposure; solid security analysis
+coder,t1_q1_algorithm,41.4,2,Both bugs identified correctly; truncated before completing Bug 2
+coder,t1_q2_refactor,41.6,2,Speed version correct O(n); truncated before memory version
+coder,t1_q3_test,42.2,2,Good coverage but truncated before error cases
+coder,t2_q1_design,41.3,2,Correct LRU logic but uses list O(n) not O(1) doubly-linked; truncated
+coder,t2_q2_debug_complex,41.9,2,Correctly identifies race condition; asyncio.Lock fix correct; truncated
+coder,t2_q3_optimize,41.9,2,Correct O(n) hash map approach; truncated mid-implementation
+coder,t2_q4_system,41.9,2,Correct sliding-window deque design; truncated
+coder,t3_q1_concurrent_correctness,40.3,2,ABA correctly identified; truncated before tagged pointer fix
+coder,t3_q2_distributed_consistency,41.8,1,Lists strategies but no clear recommendation; prompt completion artifact
+coder,t3_q3_algorithmic_hardness,39.9,1,Adversary argument present but truncated; prompt completion artifact
+general,t1_q1_json,45.0,3,Perfect JSON with all 4 fields and correct values
+general,t1_q2_multistep,44.2,2,Correct final answer but garbled artifact prefix
+general,t1_q3_compare,44.8,3,Accurate 3-sentence comparison with analytical synthesis
+general,t2_q1_synthesis,43.0,3,Solid two-phase recommendation balancing all perspectives
+general,t2_q2_transform,44.8,0,HALLUCINATED Eve and Frank in Marketing not in input data
+general,t2_q3_schedule,38.2,0,Truncated mid-analysis; no final schedule produced
+general,t2_q4_inconsistency,38.7,3,Correctly identifies both inconsistencies: JSON vs form-encoded and rate limit
+general,t3_q1_policy_analysis,41.9,2,Identifies 3 failure modes but misses accuracy for imbalanced data
+general,t3_q2_system_failure,41.8,2,Correctly explains replica lag mechanism; truncated before fixes
+general,t3_q3_strategic_communication,42.0,3,Honest accountability framing with clear pivot to enterprise LOIs
+instruction_precision,t1_q1_negative_instruction,46.7,3,Avoids sunlight/sun/solar; uses light energy
+instruction_precision,t1_q2_word_limit,42.9,1,First paragraph 20 words but continues violating constraint
+instruction_precision,t1_q3_structured_format,44.7,3,Clean LANGUAGE (YEAR) format; no duplicates unlike Q4KM
+instruction_precision,t1_q4_multiple_constraints,49.0,1,Algeria is Africa not Europe; 4/5 valid
+instruction_precision,t2_q1_resist_elaboration,67.4,3,Outputs exactly 4
+instruction_precision,t2_q2_maintain_format,43.5,1,Extra text before format block violates constraint
+instruction_precision,t2_q3_empty_handling,86.1,3,Outputs exactly NONE
+instruction_precision,t2_q4_conflicting_constraints,51.3,3,All constraints met: A-start data-end 5 words no store
+instruction_precision,t3_q1_self_referential,43.0,0,Word count wrong; spirals into failed self-correction
+instruction_precision,t3_q2_cascading_constraints,42.2,0,Chain fails: tiger longer than cat; no valid answer
+instruction_precision,t3_q3_meta_instruction,43.0,0,Incorrectly executes non-bracketed instructions
+math,t1_q1_word_problem,42.4,1,Correct $120 but truncated before tax and final price
+math,t1_q2_system_equations,41.8,1,Correct substitution setup; truncated before solving
+math,t1_q3_probability,42.6,1,Correct setup C(10,2)=45; truncated before final answer
+math,t2_q1_optimization,42.4,1,Correct constraint; truncated mid-derivation
+math,t2_q2_proof,37.6,2,Correctly identifies n=1 failure (better than Q4KM); truncated
+math,t2_q3_calculus,42.2,2,Antiderivative correct; truncated before bound evaluation
+math,t2_q4_statistics,40.9,2,Sum=185 mean=23.125 CORRECT (Q4KM got this wrong); truncated
+math,t3_q1_analysis,41.1,1,Recognizes exponential series; truncated before completing
+math,t3_q2_combinatorics,40.7,1,Right strategy involution but truncated
+math,t3_q3_probability_theory,39.5,1,Correct formulation but truncated before answer
+thinking,t1_q1_multistep,42.0,3,Correct: 60t+80(t-1)=280 yields ~11:34 AM
+thinking,t1_q2_hypothesis,37.7,1,Only 1.5 of 3 hypotheses before truncation
+thinking,t1_q3_planning,40.6,0,Truncated before any valid orderings produced
+thinking,t2_q1_paradox,41.5,1,One coherent position then cut off; no degeneration loop
+thinking,t2_q2_counterfactual,37.8,1,Only 1 of 3 dimensions partially shown
+thinking,t2_q3_formal,42.1,2,Proof correct via modus ponens; example missing
+thinking,t2_q4_metacognition,37.9,1,Piano ownership 0.1% too low; truncated
+thinking,t3_q1_methodological_critique,37.6,1,Only 1 of 4+ issues shown before truncation
+thinking,t3_q2_causal_inference,41.6,1,DAG arrows misstated; partially correct
+thinking,t3_q3_reasoning_trap,41.3,3,Correctly identifies distribution mismatch flaw
