@@ -98,6 +98,22 @@ Single-model (192t, all cores) vs NUMA-pinned deployment throughput. All values 
 
 *30B-A3B outperforms 7B f16 worker by 2x at deployment threads with better quality and similar RAM (16 vs 14 GB).*
 
+### REAP-25B: Cerebras Permanent Expert Pruning (evaluated 2026-03-24)
+
+Qwen3-Coder-30B-A3B with 25% experts permanently removed by Cerebras REAP. Pure MoE — spec decode works, lookup safe (no hybrid segfault).
+
+| Config | dm | ps | t/s | Notes |
+|--------|----|----|-----|-------|
+| baseline (no spec) | — | — | 33.2 | 15% faster than unpruned base (28.7) |
+| **dm=24 linear** | **24** | **0** | **39.6** | **BEST — matches unpruned worker** |
+| dm=48 linear | 48 | 0 | 39.1 | |
+| dm=16 tree ps=0.05 | 16 | 0.05 | 30.8 | Tree hurts -22% |
+| dm=8 lookup | 8 | 0 | 37.9 | Lookup safe but doesn't help on short prompts |
+
+**Quality (256 max_tokens, Claude-as-Judge):** 61% pass (37/61) — vs 74% for Q4KM Coder-32B. Gap is primarily truncation-limited (math/thinking worst-hit). Agentic suite 87% near-identical to references.
+
+**Assessment:** 39.6 t/s at 15 GB with 61% quality. 3.7x faster than Coder-32B at 16% less RAM. Strong try-cheap-first frontdoor candidate — escalate hard tasks to specialists. 4×48t aggregate estimate: ~158 t/s.
+
 ---
 
 ## 🆕 Concurrent Inference Sweep (2026-02-19)
