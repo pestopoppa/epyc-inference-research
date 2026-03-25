@@ -44,8 +44,15 @@ SUITES = ["thinking", "general", "math", "agentic", "coder", "instruction_precis
 
 
 def load_review_scores(review_name: str) -> dict | None:
-    """Load claude_scores from review CSV if it exists."""
-    review_file = os.path.join(REVIEWS_DIR, f"{review_name}.csv")
+    """Load claude_scores from review CSV if it exists.
+
+    Prefers _rescored.csv (Claude-as-Judge) over .csv (algorithmic scorer)
+    when both exist, since algorithmic scores are systematically inflated.
+    """
+    # Prefer rescored (Claude-as-Judge) over original (algorithmic)
+    rescored_file = os.path.join(REVIEWS_DIR, f"{review_name}_rescored.csv")
+    original_file = os.path.join(REVIEWS_DIR, f"{review_name}.csv")
+    review_file = rescored_file if os.path.exists(rescored_file) else original_file
 
     if not os.path.exists(review_file):
         return None
