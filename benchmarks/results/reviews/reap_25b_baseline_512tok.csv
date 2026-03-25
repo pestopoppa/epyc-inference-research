@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,46.8,2,Correct tool sequence but non-standard format (string concatenation not JSON)
+agentic,t1_q2_error_handling,44.5,2,Adds unwanted meta-instruction preamble; search_users with query=123 is marginal
+agentic,t1_q3_nested_params,45.0,3,Perfect tool call with correct nested parameters
+agentic,t2_q1_ambiguous,45.9,2,Skips clarification; jumps to send_slack with generic message
+agentic,t2_q2_error_chain,44.1,3,Correct diagnostic: connection_refused -> check_dns
+agentic,t2_q3_schema_edge,46.1,2,Missing required body field (should be null for GET)
+agentic,t2_q4_orchestration,43.6,3,Complete deployment plan with ordering failure handling rollback
+agentic,t3_q1_competing_constraints,43.4,2,Reasonable plan but truncated
+agentic,t3_q2_multi_agent_coordination,44.0,2,Correct phasing but truncated at phase 3
+agentic,t3_q3_adversarial_robustness,43.1,2,Identifies security risks but truncated before recommendations
+coder,t1_q1_algorithm,39.1,1,Misses initialization bug right=len(arr); only 2 of 3 bugs found
+coder,t1_q2_refactor,40.8,1,Speed version correct; memory version truncated
+coder,t1_q3_test,43.0,3,Comprehensive pytest suite covering all cases
+coder,t2_q1_design,42.5,1,Uses list.remove() O(n) not O(1) doubly-linked list
+coder,t2_q2_debug_complex,43.0,3,Correctly identifies race condition; asyncio.Lock fix correct
+coder,t2_q3_optimize,43.5,3,Correct O(n) hash map solution
+coder,t2_q4_system,43.3,2,Correct sliding-window deque; truncated at is_allowed body
+coder,t3_q1_concurrent_correctness,39.1,2,ABA correctly explained; fix truncated
+coder,t3_q2_distributed_consistency,38.5,2,4 strategies with nuanced LWW failure analysis; correctly suggests CRDTs
+coder,t3_q3_algorithmic_hardness,38.7,1,Adversary argument present but truncated
+general,t1_q1_json,47.3,3,Correct JSON all 4 fields
+general,t1_q2_multistep,45.5,2,Correct answer but prompt-leak prefix artifact
+general,t1_q3_compare,46.2,3,Analytical synthesis beyond restating pros/cons
+general,t2_q1_synthesis,45.6,3,Solid two-phase recommendation
+general,t2_q2_transform,45.8,0,HALLUCINATED Eve in Marketing
+general,t2_q3_schedule,39.2,0,Truncated; no schedule produced
+general,t2_q4_inconsistency,39.7,2,Both inconsistencies found but padded with redundant items
+general,t3_q1_policy_analysis,42.6,1,Only 2 of 3 failure modes; truncated
+general,t3_q2_system_failure,42.9,2,Correct replica lag mechanism; truncated before fixes
+general,t3_q3_strategic_communication,43.4,1,Started well but truncated before completing strategy
+instruction_precision,t1_q1_negative_instruction,43.8,2,Correct constraint adherence but degenerates into self-correction loops
+instruction_precision,t1_q2_word_limit,43.8,1,First sentence exactly 20 words but continues with essay
+instruction_precision,t1_q3_structured_format,47.6,3,Clean LANGUAGE (YEAR) format
+instruction_precision,t1_q4_multiple_constraints,48.5,1,Algeria is Africa not Europe
+instruction_precision,t2_q1_resist_elaboration,67.0,3,Outputs exactly 4
+instruction_precision,t2_q2_maintain_format,44.5,1,Correct format but preceded by stack trace
+instruction_precision,t2_q3_empty_handling,86.1,3,Outputs exactly NONE
+instruction_precision,t2_q4_conflicting_constraints,51.8,3,All constraints met
+instruction_precision,t3_q1_self_referential,43.2,0,Word count wrong (claims 31 has 19)
+instruction_precision,t3_q2_cascading_constraints,43.3,0,Length constraint violated tiger<rabbit
+instruction_precision,t3_q3_meta_instruction,43.4,0,Incorrectly executes non-bracketed instructions; degenerates
+math,t1_q1_word_problem,43.0,3,Correct $120 and $129.60
+math,t1_q2_system_equations,43.0,2,Correct method; truncated before all 4 solutions
+math,t1_q3_probability,43.6,2,P(both red)=2/9 correct; P(one red one blue) truncated
+math,t2_q1_optimization,43.5,2,Correct constraint and area function; truncated before answer
+math,t2_q2_proof,38.1,2,Correctly identifies n=1 failure (better than Q4KM)
+math,t2_q3_calculus,44.0,3,Correct antiderivative F(2)=10 F(0)=0
+math,t2_q4_statistics,41.8,2,Correct sum=185 mean=23.125 (fixes Q4KM error); truncated before std dev
+math,t3_q1_analysis,41.9,2,Correct M-test approach; truncated before closed form
+math,t3_q2_combinatorics,42.5,1,Involution approach but not constructed
+math,t3_q3_probability_theory,41.3,1,Correct setup but truncated before answer
+thinking,t1_q1_multistep,43.0,3,Correct 11:34 AM
+thinking,t1_q2_hypothesis,39.3,2,Two solid alternatives; third truncated
+thinking,t1_q3_planning,40.8,1,Partial order correct but no valid orderings produced
+thinking,t2_q1_paradox,39.6,1,Only Position 1 partially presented
+thinking,t2_q2_counterfactual,39.6,1,Only dimension 1 analyzed
+thinking,t2_q3_formal,44.4,3,Correct conditional proof via modus ponens
+thinking,t2_q4_metacognition,39.0,2,Good Fermi structure; realistic tuner capacity
+thinking,t3_q1_methodological_critique,44.4,1,Only 2 of 4 issues visible
+thinking,t3_q2_causal_inference,41.7,1,Q1 correct; Q2 truncated
+thinking,t3_q3_reasoning_trap,39.3,2,Correctly identifies distribution mismatch
