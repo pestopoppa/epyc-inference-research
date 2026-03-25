@@ -29,25 +29,22 @@ See [Chapter 24](../../chapters/24-benchmark-suite-construction.md) for suite co
 
 ## Best Results
 
-| Configuration | Speed | Speedup | Quality | Use Case |
-|---------------|-------|---------|---------|----------|
+All quality scores are Claude-as-Judge (rescored 2026-03-24). Pass = score ≥ 2 on 0-3 scale.
+Earlier versions of this table used inflated algorithmic scores — those have been corrected.
+
+| Configuration | Speed | Speedup | Quality (CaJ) | Use Case |
+|---------------|-------|---------|----------------|----------|
 | Prompt Lookup (summarization) | 95.18 t/s | 12.7x | — | Document QA with source |
-| **Qwen2.5-7B + spec (K=24)** | **46.6 t/s** | **2.5x** | 90% | Fast general tasks |
-| **Qwen3-Coder-30B-A3B + MoE4 + spec + lookup K=24** | **45.3 t/s** | **1.67x** | 62%† | **Frontdoor accel (2026-03-09)** |
-| **Qwen3-VL-4B Q4_K_M** | **18.0 t/s** | — | **93%†** | Vision tasks (best quality) |
-| Qwen3-VL-30B-A3B + MoE4 | 27.6 t/s | +111% | 92%† | Vision tasks (faster, high quality) |
-| Prompt Lookup (code editing) | 25.82 t/s | 8.6x | — | Refactoring, code review |
-| **Qwen3-4B-Thinking + spec (K=4)** | **24.2 t/s** | **2.1x** | 88% | Fast thinking |
-| Qwen3-Coder-30B-A3B + MoE4 | 22.0 t/s | +83% | 61%† | MoE without spec decode |
-| **Qwen3.5-35B-A3B Q5_K_S** | **12.5 t/s** | — | **89%** | **SSM+MoE hybrid, highest quality variant (2026-03-09)** |
-| Qwen3.5-122B-A10B Q4_K_M | 9.2 t/s | — | **86%** | SSM+MoE hybrid, 69GB, +37% with spec+lookup |
-| **Qwen3-Coder-480B + MoE8 + spec K=24** | **13.6 t/s** | **2.08x** | 80%† | **480B architect (2026-03-09)** |
-| **Qwen3-235B-A22B + MoE8 + spec 1.7B K=24** | **13.7 t/s** | **1.50x** | 64%† | **235B architect (2026-03-09)** |
-| **Qwen2.5-Coder-32B + spec (K=24)** | **21.3 t/s** | **6.3x** | 93% | Code generation |
-| **gemma-3-27B + spec (K=16)** | **19.6 t/s** | **8.9x** | 95% | General tasks |
-| **gemma-3-12b + spec (K=16)** | **14.8 t/s** | **1.6x** | 97% | General tasks |
-| **Qwen3-32B + spec (K=8)** | **12.2 t/s** | **7.6x** | 95% | General tasks |
-| MoE Expert Reduction (4-6 experts) | +21-120% | — | — | MoE models |
+| **Qwen3-Coder-30B-A3B + MoE4** | **22.0 t/s** | **+83%** | **89%** | MoE frontdoor (best quality MoE config) |
+| **REAP-25B + spec (dm=24)** | **39.6 t/s** | — | **66%** | REAP-pruned frontdoor candidate (2026-03-24) |
+| **Qwen3-Coder-480B + MoE8** | **4.4 t/s** | — | **90%** (31q) | 480B architect (partial suite) |
+| **Qwen3-Coder-480B + MoE6** | **5.6 t/s** | — | **83%** | 480B architect (full suite) |
+| **Qwen2.5-Coder-32B + spec (K=24)** | **21.3 t/s** | **6.3x** | **77%** | Code generation |
+| **gemma-3-27B + spec (K=16)** | **19.6 t/s** | **8.9x** | **78%** | General tasks |
+| **gemma-3-12b + spec (K=16)** | **14.8 t/s** | **1.6x** | **79%** | General tasks |
+| **Qwen3-32B + spec (K=8)** | **12.2 t/s** | **7.6x** | **69%** | General tasks |
+| Qwen3.5-122B-A10B Q4_K_M | 9.2 t/s | — | TBD (not yet benchmarked) | SSM+MoE hybrid, 69GB |
+| MoE Expert Reduction (4-6 experts) | +21-120% | — | varies | MoE models |
 
 ---
 
