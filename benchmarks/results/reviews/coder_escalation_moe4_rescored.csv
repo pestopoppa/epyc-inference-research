@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,12.27,0,Echoes prompt; skips Issue 3; degenerates into 100+ repeated Claims A-EM with identical text; severe repetition
+thinking,t3_q2_causal_inference,12.62,0,Echoes prompt; loops redrawing DAG 20+ times without answering any of the 3 questions; severe repetition
+thinking,t3_q3_reasoning_trap,11.89,0,Echoes prompt; shallow flaw identification; repeats satellite imagery paragraph 10+ times verbatim; never completes scenario
+thinking,t2_q1_paradox,12.24,1,Two positions presented at surface level; degenerates into philosophy of religion repeated 300+ times; severe repetition
+thinking,t2_q2_counterfactual,13.39,3,Covers all 3 dimensions with mechanisms and second-order effects; clean structure; minor typos; no repetition
+thinking,t2_q3_formal,15.18,3,Correct formal proof using hypothetical syllogism; valid concrete example; slightly verbose ending
+thinking,t2_q4_metacognition,10.8,0,Initial answer reasonable but restarts estimation 15+ times; severe repetition in lets-nail-step-by-step loop
+thinking,t1_q1_multistep,11.22,2,Correct answer 11:34 AM with shown work; degenerates into repeated $$ at end; core math sound
+thinking,t1_q2_hypothesis,10.96,0,Severe degeneration; MAX_REP=136; satisfaction appeal repeated 100+ times; no useful content extracted
+thinking,t1_q3_planning,12.22,0,Echoes prompt; loops Lets enumerate 20+ times; never produces valid orderings
+coder,t3_q1_concurrent_correctness,12.49,0,Discusses ABA problem superficially; degenerates into and lock-free repeated 33 times
+coder,t3_q2_distributed_consistency,11.98,2,Lists 4+ strategies with scenarios; reasonable content; slight repetition at end; does not fully address banking vs shopping cart distinction
+coder,t3_q3_algorithmic_hardness,11.76,2,Solid adversary argument for lower bound; good quickselect analysis; some content not fully rigorous
+coder,t2_q1_design,11.42,1,Correct LRU cache implementation; degenerates into container registries repetition at end
+coder,t2_q2_debug_complex,12.59,0,Attempts to address async race condition; degenerates into You CANT just do a Lock repeated 19 times
+coder,t2_q3_optimize,12.08,0,Echoes examples; repeats test cases; never provides optimization algorithm
+coder,t2_q4_system,15.51,3,Clean leaky bucket implementation with proper classes docstrings error handling; no repetition
+coder,t1_q1_algorithm,11.62,1,Identifies some bugs but degenerates into mid will always equal mid repetition; incomplete
+coder,t1_q2_refactor,11.51,2,Two refactored versions provided with reasonable code; some trailing repetition
+coder,t1_q3_test,11.0,1,Provides correct pytest cases initially; degenerates into Heyting repetition at end
+agentic,t3_q1_competing_constraints,16.35,2,Valid JSON plan with steps and fallback; concise; but missing explicit handling of conflicting constraints
+agentic,t3_q2_multi_agent_coordination,16.5,2,Structured JSON orchestration plan with phases and error handling; missing some parallelism optimization
+agentic,t3_q3_adversarial_robustness,10.21,0,Begins security reasoning but degenerates into ~-~ repetition 108 times; never clearly refuses or answers 5 questions
+agentic,t2_q1_ambiguous,17.16,1,Produces tool call but does not ask for clarification on ambiguous request; just executes
+agentic,t2_q2_error_chain,16.13,2,Correctly identifies DB connection failure as root cause; suggests appropriate restart action
+agentic,t2_q3_schema_edge,17.75,2,Valid JSON tool call with correct schema; clean output
+agentic,t2_q4_orchestration,17.08,2,Deployment pipeline with rollback and notification; functional
+agentic,t1_q1_sequential,18.01,1,Produces grep+read tool calls but minimal; no explanation of reasoning
+agentic,t1_q2_error_handling,16.42,1,Attempts correct tool call but verbose confused reasoning; eventually gets to right action
+agentic,t1_q3_nested_params,16.97,2,Correct nested JSON parameter structure; duplicated output
+general,t3_q1_policy_analysis,12.3,2,Reasonable policy analysis with trade-offs; structured format; slight truncation at end
+general,t3_q2_system_failure,13.97,3,Correctly identifies replica lag causing idempotency failure; good technical depth; clean ending
+general,t3_q3_strategic_communication,11.49,2,Credible board communication with honest assessment; truncated at end but good strategic content
+general,t2_q1_synthesis,11.1,2,Synthesizes 3 team perspectives with phased approach; reasonable prioritization
+general,t2_q2_transform,16.94,3,Correct YAML transformation with proper nesting; clean output
+general,t2_q3_schedule,11.67,0,Begins constraint analysis; degenerates into So Dave repeated 20+ times
+general,t2_q4_inconsistency,11.01,2,Identifies multiple API doc inconsistencies; some trailing repetition; reasonable coverage
+general,t1_q1_json,17.32,3,Correct JSON extraction with all 4 fields; clean output
+general,t1_q2_multistep,11.48,2,Correct final answer 4 items alphabetical; multiple restarts but gets there
+general,t1_q3_compare,11.15,1,Surface-level comparison of monolith vs microservices; degenerates into repeated comparison lines
+math,t3_q1_analysis,12.94,2,Addresses all 3 parts; correct closed form Im(e^{xe^i}) and limit=0; LaTeX typo; some incomplete rigor
+math,t3_q2_combinatorics,12.88,1,Attempts combinatorial proof with sign-reversing involution; LaTeX typos; proof not fully rigorous
+math,t3_q3_probability_theory,10.77,1,Correct approach P(N>n)=1/n! but final calculation gets confused and trails off
+math,t2_q1_optimization,15.31,3,Correct optimization: 50m width 100m length 5000 sq meter area; clean solution
+math,t2_q2_proof,9.94,3,Correctly identifies induction error at n=1->n=2 step; clear undergraduate-level explanation
+math,t2_q3_calculus,17.01,3,Correct integral evaluation: antiderivative x^3+x^2-x F(2)-F(0)=10; clean
+math,t2_q4_statistics,14.83,0,Sum=205 WRONG (actual=185); mean=25.625 WRONG (should be 23.125); median correct; std dev and outlier analysis based on wrong mean
+math,t1_q1_word_problem,15.57,3,Correct: $120 discount $129.60 final 86.4% of original; clean work shown
+math,t1_q2_system_equations,11.14,2,Correct 4 solutions found; some verbose repetition; work shown
+math,t1_q3_probability,12.81,2,Correct answers 2/9 and 1/3; extremely verbose with repeated boxed answers; core math correct
+instruction_precision,t3_q1_self_referential,16.45,0,Degenerates into grammatically correct commas repetition; no valid self-referential sentence
+instruction_precision,t3_q2_cascading_constraints,15.43,0,Restarts 10+ times; repeats owl; never produces valid 5-animal chain
+instruction_precision,t3_q3_meta_instruction,15.94,0,Degenerates into hi repeated hundreds of times; complete instruction failure
+instruction_precision,t2_q1_resist_elaboration,17.07,0,Gives 4 but then generates fake Q&A loop; repeats 2 many times; fails to stop after single number
+instruction_precision,t2_q2_maintain_format,18.44,3,Correct 3-field error format maintained; concise and accurate
+instruction_precision,t2_q3_empty_handling,16.62,0,Correctly identifies NONE but repeats it 50+ times; should output single NONE
+instruction_precision,t2_q4_conflicting_constraints,16.48,1,Produces database description but repeats paragraph; partial constraint satisfaction
+instruction_precision,t1_q1_negative_instruction,16.92,0,Uses forbidden words: light 5x sun 4x; completely violates negative instruction
+instruction_precision,t1_q2_word_limit,18.36,2,Produces ~25 word description; self-verifies count; adds unnecessary meta-commentary
+instruction_precision,t1_q3_structured_format,17.31,3,Exact format compliance: LANGUAGE (YEAR) one per line no extras
+instruction_precision,t1_q4_multiple_constraints,16.63,1,Correct 5 countries alphabetical but repeats list 10+ times; fails no additional text constraint

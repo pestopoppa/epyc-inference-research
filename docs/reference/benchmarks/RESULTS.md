@@ -1171,8 +1171,8 @@ All models from registry (~70 unique models). Empty cells = not yet benchmarked.
 | DeepSeek-R1-Distill-Qwen-32B (Q6_K) | thinking | 26/30 | - | - | - | 13/18 | - | **81%**‡ | 1.78 | - | - | - | - |
 | Qwen3-32B | general | 28/30 | - | - | - | 30/30 | - | **97%**‡ | 1.64 | 5.87 | Qwen3-0.6B | 8 | - |
 | Qwen3-32B | ingest | 30/30 | 27/30 | 30/30 | 21/30 | 29/30 | 22/33 | **87%** | 1.65 | - | - | - | - |
-| **Qwen3.5-27B (Q4_K_M)** | frontdoor | 21/30 | 28/30 | 24/30 | 27/30 | 22/30 | 23/33 | **79%** | 8.8 | 13.4 | Qwen3.5-0.8B Q4_0 | 32 | - |
-| **Qwen3.5-27B (Q6_K)** | frontdoor | 29/30 | 23/30 | 25/30 | 26/30 | 25/30 | 27/33 | **85%** | 9.4 | 13.6 | Qwen3.5-0.8B Q4_0 | 16 | - |
+| **Qwen3.5-27B (Q4_K_M)** | frontdoor | 21/30 | 28/30 | 24/30 | 27/30 | 22/30 | 23/33 | **79%** | 8.8 | - | ~~hybrid — spec decode not viable~~ | - | - |
+| **Qwen3.5-27B (Q6_K)** | frontdoor | 29/30 | 23/30 | 25/30 | 26/30 | 25/30 | 27/33 | **85%** | 9.4 | - | ~~hybrid — spec decode not viable~~ | - | - |
 | Gemma-3-27B-QAT | general | - | - | - | - | - | - | - | 4.72 | - | - | - | - |
 | Qwen2.5-Coder-32B | coder/summarize | 28/30 | - | - | 8/9 | 30/30 | - | **96%**‡ | 2.99 | 33.0 | Qwen2.5-Coder-0.5B | 24 | - |
 | Qwen2.5-Coder-32B | ingest | 22/30 | 20/30 | 20/30 | 22/30 | 29/30 | 19/33 | **72%** | 3.43 | - | - | - | - |
@@ -1187,9 +1187,9 @@ All models from registry (~70 unique models). Empty cells = not yet benchmarked.
 | DeepSeek-R1-Distill-Qwen-7B | thinking | 29/30 | 19/30 | 30/30 | 24/30 | - | - | 85%* | 7.7 | - | - | - | - |
 | DeepSeek-R1-0528-Qwen3-8B | thinking | 21/30 | 18/30 | 24/30 | 19/30 | 23/30 | 12/33 | **63.9%** ⚠️ | 8.1 | - | - | - | - |
 | Qwen3-4B-Thinking-2507-Q8_0 | thinking | 22/30 | 19/30 | 8/9 | 5/9 | - | - | **69%** | 18.0 | - | - | - | - |
-| **Qwen3.5-9B (Q4_K_M)** | frontdoor | 26/30 | 24/30 | 20/30 | 25/30 | 26/30 | 16/33 | **75%** | 14.5 | 25.1 | (lookup_n5) | - | - |
-| Qwen3.5-9B (Q6_K) | frontdoor | 21/30 | 24/30 | 25/30 | 25/30 | 19/30 | 16/33 | **71%** | 13.4 | 20.7 | (lookup_n5) | - | - |
-| **Qwen3.5-9B (Q8_0)** | frontdoor | 27/30 | 25/30 | 22/30 | 22/30 | 26/30 | 25/33 | **80%** | 12.7 | 17.7 | Qwen3.5-0.8B Q4_0 | 16 | - |
+| **Qwen3.5-9B (Q4_K_M)** | frontdoor | 26/30 | 24/30 | 20/30 | 25/30 | 26/30 | 16/33 | **75%** | 14.5 | - | ~~hybrid — spec decode not viable~~ | - | - |
+| Qwen3.5-9B (Q6_K) | frontdoor | 21/30 | 24/30 | 25/30 | 25/30 | 19/30 | 16/33 | **71%** | 13.4 | - | ~~hybrid — spec decode not viable~~ | - | - |
+| **Qwen3.5-9B (Q8_0)** | frontdoor | 27/30 | 25/30 | 22/30 | 22/30 | 26/30 | 25/33 | **80%** | 12.7 | - | ~~hybrid — spec decode not viable~~ | - | - |
 
 #### Tier C: Workers & General Models
 

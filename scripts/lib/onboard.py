@@ -63,7 +63,7 @@ class ModelInfo:
     relative_path: str  # Relative to model base
     filename: str
     name: str  # Short name (no quant, no extension)
-    architecture: str  # dense, moe, qwen3moe, ssm_moe_hybrid, etc.
+    architecture: str  # dense, moe, qwen3moe, ssm_moe_hybrid, ssm_hybrid, etc.
     family: str  # Qwen2.5, Qwen3, Llama, DeepSeek-R1-Distill, etc.
     quantization: str  # Q4_K_M, Q8_0, etc.
     size_gb: float

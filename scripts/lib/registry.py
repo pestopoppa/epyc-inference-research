@@ -145,7 +145,7 @@ class ModelRegistry:
             role: The role name.
 
         Returns:
-            Architecture string (e.g., 'dense', 'moe', 'qwen3moe', 'ssm_moe_hybrid').
+            Architecture string (e.g., 'dense', 'moe', 'qwen3moe', 'ssm_hybrid', 'ssm_moe_hybrid').
             Returns 'dense' as default if not specified.
         """
         config = self.get_role_config(role)

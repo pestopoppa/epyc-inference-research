@@ -771,7 +771,7 @@ class Executor:
         """Get applicable configs for a model architecture.
 
         Args:
-            architecture: Model architecture ('dense', 'moe', 'qwen3moe', 'ssm_moe_hybrid', etc.)
+            architecture: Model architecture ('dense', 'moe', 'qwen3moe', 'ssm_hybrid', 'ssm_moe_hybrid', etc.)
             role: The model role for checking constraints and drafts.
             registry: Optional registry instance.
 
@@ -849,6 +849,12 @@ class Executor:
                         cfg.speed_test_only = True
                         cfg.inherits_quality_from = quality_ref
                         configs.append(cfg)
+
+        elif architecture == "ssm_hybrid":
+            # SSM hybrid with dense FFN (e.g. Qwen3.5 2B-27B) — baseline only.
+            # Delta Net recurrent layers (75% of model) process tokens sequentially,
+            # making all draft-verify paradigms net-negative. No MoE to reduce either.
+            pass
 
         elif architecture in ("ssm_moe_hybrid", "qwen3next"):
             # SSM models - MoE reduction ONLY, no speculation (SSM incompatible with all spec methods)

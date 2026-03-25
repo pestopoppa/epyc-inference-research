@@ -1279,7 +1279,9 @@ roles:
     notes: Quality ceiling reference. Large (35GB) — may be slower than Q4/Q5 variants.
 
   # =============================================================================
-  # Qwen3.5 Dense Models (2B, 4B, 9B, 27B)
+  # Qwen3.5 Dense-FFN Hybrid Models (2B, 4B, 9B, 27B)
+  # All Qwen3.5 variants (0.8B–397B) are hybrid Delta Net (3:1 recurrent:attention).
+  # "Dense-FFN" = non-MoE feed-forward, NOT pure attention. Spec decode is NOT viable.
   # =============================================================================
   qwen35_2b_q4km:
     tier: C
@@ -1289,7 +1291,7 @@ roles:
       path: unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q4_K_M.gguf
       quant: Q4_K_M
       size_gb: 1.2
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - frontdoor
     - worker
@@ -1298,6 +1300,8 @@ roles:
     constraints:
       forbid:
       - eagle
+      - speculative_decoding
+      - prompt_lookup
     temperature_overrides:
       coder: 0.6
       instruction_precision: 0.6
@@ -1327,7 +1331,7 @@ roles:
       path: unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q6_K.gguf
       quant: Q6_K
       size_gb: 1.5
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - frontdoor
     - worker
@@ -1336,6 +1340,8 @@ roles:
     constraints:
       forbid:
       - eagle
+      - speculative_decoding
+      - prompt_lookup
     temperature_overrides:
       coder: 0.6
       instruction_precision: 0.6
@@ -1365,7 +1371,7 @@ roles:
       path: unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q8_0.gguf
       quant: Q8_0
       size_gb: 1.9
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - frontdoor
     - worker
@@ -1374,6 +1380,8 @@ roles:
     constraints:
       forbid:
       - eagle
+      - speculative_decoding
+      - prompt_lookup
     temperature_overrides:
       coder: 0.6
       instruction_precision: 0.6
@@ -1403,7 +1411,7 @@ roles:
       path: unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q4_K_M.gguf
       quant: Q4_K_M
       size_gb: 2.6
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - frontdoor
     - worker
@@ -1412,6 +1420,8 @@ roles:
     constraints:
       forbid:
       - eagle
+      - speculative_decoding
+      - prompt_lookup
     temperature_overrides:
       coder: 0.6
       instruction_precision: 0.6
@@ -1441,7 +1451,7 @@ roles:
       path: unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q6_K.gguf
       quant: Q6_K
       size_gb: 3.3
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - frontdoor
     - worker
@@ -1450,6 +1460,8 @@ roles:
     constraints:
       forbid:
       - eagle
+      - speculative_decoding
+      - prompt_lookup
     temperature_overrides:
       coder: 0.6
       instruction_precision: 0.6
@@ -1479,7 +1491,7 @@ roles:
       path: unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-Q8_0.gguf
       quant: Q8_0
       size_gb: 4.2
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - frontdoor
     - worker
@@ -1488,6 +1500,8 @@ roles:
     constraints:
       forbid:
       - eagle
+      - speculative_decoding
+      - prompt_lookup
     temperature_overrides:
       coder: 0.6
       instruction_precision: 0.6
@@ -1517,7 +1531,7 @@ roles:
       path: unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf
       quant: Q4_K_M
       size_gb: 5.3
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - frontdoor
     - worker
@@ -1526,6 +1540,8 @@ roles:
     constraints:
       forbid:
       - eagle
+      - speculative_decoding
+      - prompt_lookup
     temperature_overrides:
       coder: 0.6
       instruction_precision: 0.6
@@ -1555,7 +1571,7 @@ roles:
       path: unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q6_K.gguf
       quant: Q6_K
       size_gb: 7.0
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - frontdoor
     - worker
@@ -1564,6 +1580,8 @@ roles:
     constraints:
       forbid:
       - eagle
+      - speculative_decoding
+      - prompt_lookup
     temperature_overrides:
       coder: 0.6
       instruction_precision: 0.6
@@ -1593,7 +1611,7 @@ roles:
       path: unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q8_0.gguf
       quant: Q8_0
       size_gb: 8.9
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - frontdoor
     - worker
@@ -1602,6 +1620,8 @@ roles:
     constraints:
       forbid:
       - eagle
+      - speculative_decoding
+      - prompt_lookup
     temperature_overrides:
       coder: 0.6
       instruction_precision: 0.6
@@ -1625,13 +1645,13 @@ roles:
     benchmark_date: null
   qwen35_27b_q4km:
     tier: B
-    description: Qwen3.5-27B Q4_K_M — frontdoor candidate (dense)
+    description: Qwen3.5-27B Q4_K_M — frontdoor candidate (hybrid Delta Net)
     model:
       name: Qwen3.5-27B
       path: unsloth/Qwen3.5-27B-GGUF/Qwen3.5-27B-Q4_K_M.gguf
       quant: Q4_K_M
       size_gb: 16
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - frontdoor
     - coder
@@ -1640,6 +1660,8 @@ roles:
     constraints:
       forbid:
       - eagle
+      - speculative_decoding
+      - prompt_lookup
     temperature_overrides:
       coder: 0.6
       instruction_precision: 0.6
@@ -1663,13 +1685,13 @@ roles:
     benchmark_date: null
   qwen35_27b_q6k:
     tier: B
-    description: Qwen3.5-27B Q6_K — frontdoor candidate (dense)
+    description: Qwen3.5-27B Q6_K — frontdoor candidate (hybrid Delta Net)
     model:
       name: Qwen3.5-27B
       path: unsloth/Qwen3.5-27B-GGUF/Qwen3.5-27B-Q6_K.gguf
       quant: Q6_K
       size_gb: 21
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - frontdoor
     - coder
@@ -1678,6 +1700,8 @@ roles:
     constraints:
       forbid:
       - eagle
+      - speculative_decoding
+      - prompt_lookup
     temperature_overrides:
       coder: 0.6
       instruction_precision: 0.6
@@ -3554,7 +3578,7 @@ roles:
       path: unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q4_0.gguf
       quant: Q4_0
       size_gb: 0.5
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - draft
     memory:
@@ -3576,7 +3600,7 @@ roles:
       path: unsloth/Qwen3.5-0.8B-GGUF/Qwen3.5-0.8B-Q8_0.gguf
       quant: Q8_0
       size_gb: 0.8
-      architecture: dense
+      architecture: ssm_hybrid
     candidate_roles:
     - draft
     memory:

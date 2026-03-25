@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,10.24,2,Valid JSON plan with read-then-validate approach; validation checks too vague; redundant CSV reads
+agentic,t3_q2_multi_agent_coordination,11.21,2,Valid JSON orchestration; phases logical; context_passing incomplete; failure handling generic
+agentic,t3_q3_adversarial_robustness,8.53,0,Degenerate repetition loop of error JSON blocks; no security analysis provided
+agentic,t2_q1_ambiguous,7.61,0,Degenerate repetition; acted without clarifying; repeated JSON output 100+ times
+agentic,t2_q2_error_chain,11.77,3,Correct reasoning chain; identifies DNS resolution as logical next diagnostic step
+agentic,t2_q3_schema_edge,12.68,3,Correct JSON tool call; endpoint starts with /; GET method; auth header correct; body omitted
+agentic,t2_q4_orchestration,11.74,3,Well-structured deployment pipeline; includes test gates rollback and notifications
+agentic,t1_q1_sequential,12.29,2,Correct tool sequence for log analysis; missing analysis step after reading
+agentic,t1_q2_error_handling,12.2,3,Correct error handling; identifies user not found; asks for clarification
+agentic,t1_q3_nested_params,12.79,3,Correct nested JSON structure; arrays and nested objects properly formed
+coder,t3_q1_concurrent_correctness,6.59,2,Correctly identifies ABA problem; proposes tagged pointer fix; adequate but verbose
+coder,t3_q2_distributed_consistency,6.98,1,Lists 4 strategies but partially degenerate with repeated headers; scenarios incomplete
+coder,t3_q3_algorithmic_hardness,10.05,1,Correct lower bound and median-of-medians; WRONG claim randomized select is Theta(n log n)
+coder,t2_q1_design,8.68,1,Correct data structure choice DLL+hashmap; code has syntax errors; partially degenerate
+coder,t2_q2_debug_complex,8.33,3,Correctly identifies async race condition; provides proper asyncio.Lock fix
+coder,t2_q3_optimize,6.54,2,Correct O(n) hash map approach; code logic sound; bizarre formatting; code truncated
+coder,t2_q4_system,10.39,3,Correct rate limiter implementation; clean code; proper test output
+coder,t1_q1_algorithm,8.54,0,Degenerate repetition of bug template; partially identifies bug but degenerates
+coder,t1_q2_refactor,7.62,2,Correct speed and memory optimized versions; good complexity analysis; degenerates at end
+coder,t1_q3_test,10.97,3,Comprehensive pytest tests; covers positive negative float zero divisor and edge cases
+general,t3_q2_system_failure,8.48,1,Identifies replica lag as cause correctly; then degenerates into repetition
+general,t3_q3_strategic_communication,8.83,2,Well-structured board statement; addresses metrics honestly; slightly verbose
+general,t2_q1_synthesis,12.15,3,Clear synthesis balancing stakeholder needs; phased rollout recommendation
+general,t2_q2_transform,11.77,3,Correct YAML structure grouped by department; includes Python code
+general,t2_q3_schedule,8.14,0,Claims scheduling is impossible which is WRONG; valid schedules exist
+general,t2_q4_inconsistency,11.92,3,Correctly identifies all three inconsistencies in API docs
+general,t1_q1_json,12.63,3,Correct JSON with all fields accurately extracted
+general,t1_q2_multistep,9.08,0,Degenerate repetition; fails to deduplicate sort number list
+general,t1_q3_compare,12.03,2,Good microservices vs monolith comparison; formatting degrades
+general,t3_q1_policy_analysis,8.57,2,Identifies 3 valid failure modes; analysis reasonable but formatting degrades
+instruction_precision,t3_q1_self_referential,11.63,0,Fails self-referential sentence; counts inaccurate; degenerates into commas repetition
+instruction_precision,t3_q2_cascading_constraints,11.57,0,Degenerate repetition; first word banana 6 letters not 8; violates decreasing length
+instruction_precision,t3_q3_meta_instruction,12.24,1,Outputs 42 and hi*7 but also hello and goodbye from invalid instructions
+instruction_precision,t2_q1_resist_elaboration,11.88,0,Should output just 4; instead repeats Reply hundreds of times
+instruction_precision,t2_q2_maintain_format,12.83,3,Exactly matches required format; ERROR_TYPE ROOT_CAUSE FIX all correct
+instruction_precision,t2_q3_empty_handling,12.4,3,Correctly outputs NONE with no explanation
+instruction_precision,t2_q4_conflicting_constraints,11.47,0,First sentence meets constraints but degenerates into endless repetition
+instruction_precision,t1_q1_negative_instruction,12.01,1,Avoids forbidden words but repeats explanation multiple times instead of 2 sentences
+instruction_precision,t1_q2_word_limit,11.97,0,First attempt has 18 words not 20-25; then degenerates
+instruction_precision,t1_q3_structured_format,13.0,3,Exactly matches required format; correct years
+instruction_precision,t1_q4_multiple_constraints,12.66,1,Format correct but Algeria is in Africa not Europe
+math,t3_q1_analysis,9.65,3,All three parts correct: differentiability closed form and limit
+math,t3_q2_combinatorics,10.5,2,Correct identity and approach; proof sketch not fully rigorous
+math,t3_q3_probability_theory,8.63,2,Correct final answer E[N]=e; computation error at n=4 then recovered
+math,t2_q1_optimization,8.88,3,Correct optimization: 50x100m area 5000 sq m
+math,t2_q2_proof,11.13,3,Correctly identifies flaw at n=1 where groups have no overlap
+math,t2_q3_calculus,10.64,3,Correct antiderivative and evaluation F(2)-F(0) = 10
+math,t2_q4_statistics,9.34,3,All calculations correct: sum=185 mean=23.125 median=23.5 SD~7.356
+math,t1_q1_word_problem,8.94,3,All three parts correct: $120 $129.60 86.4%
+math,t1_q2_system_equations,11.34,3,Correct all four solutions; clean algebraic approach
+math,t1_q3_probability,11.86,3,Both probabilities correct: P(both red)=2/9 P(one red one blue)=1/3
+thinking,t3_q1_methodological_critique,8.86,2,Identifies 4+ valid methodological issues; verbose and partially repetitive
+thinking,t3_q2_causal_inference,11.32,3,Correct adjustment set; correct Yellow Fingers analysis; instrumental variables discussed
+thinking,t3_q3_reasoning_trap,9.16,1,Correctly identifies flaw; concrete scenario adequate; then degenerates
+thinking,t2_q1_paradox,7.07,1,Begins adequate analysis; then degenerates into repetition
+thinking,t2_q2_counterfactual,7.43,2,Well-structured counterfactual argument; covers key dimensions; verbose
+thinking,t2_q3_formal,7.1,2,Correct natural deduction proof; concrete examples; degrades toward end
+thinking,t2_q4_metacognition,8.24,2,Reasonable Fermi estimation; plausible range; shows metacognitive awareness
+thinking,t1_q1_multistep,10.95,3,Correct answer trains meet at 11:34 AM
+thinking,t1_q2_hypothesis,11.52,3,Three specific alternative explanations well-reasoned
+thinking,t1_q3_planning,10.56,2,2 of 3 orderings valid; A-B-D-E-C violates D-immediately-before-C
