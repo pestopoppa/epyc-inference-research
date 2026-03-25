@@ -1,4 +1,4 @@
-suite,question_id,score,notes
+suite,question_id,claude_score,score_reason
 agentic,t1_q1_sequential,3,Correct JSON array with grep then read_file in order
 agentic,t1_q2_error_handling,2,Good reasoning but verbose prose instead of tool call JSON
 agentic,t1_q3_nested_params,3,Correct JSON with all required and optional fields

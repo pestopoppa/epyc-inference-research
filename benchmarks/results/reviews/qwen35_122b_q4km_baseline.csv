@@ -1,4 +1,4 @@
-suite,question_id,score,notes
+suite,question_id,claude_score,score_reason
 instruction_precision,t3_q1_self_referential,1,Uses forbidden words (this/sentence); never reaches valid final answer; truncated mid-attempt
 instruction_precision,t3_q2_cascading_constraints,1,Chain rule broken: dreaming(8)->glimmer starts g not g; red is 3 letters not 4 for last word
 instruction_precision,t3_q3_meta_instruction,3,Correctly identifies [Print 42] and [Say 7 times: hi]; outputs 42 then 7 hi

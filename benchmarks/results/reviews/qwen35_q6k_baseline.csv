@@ -1,4 +1,4 @@
-suite,question_id,score,notes
+suite,question_id,claude_score,score_reason
 general,t3_q1_policy_analysis,3,Thorough analysis of 3 failure modes with amendments and tradeoffs
 general,t3_q2_system_failure,3,Precise root cause and race condition explanation with fixes
 general,t3_q3_strategic_communication,3,Well-structured board statement hitting all four requirements

@@ -1,4 +1,4 @@
-suite,question_id,score,notes
+suite,question_id,claude_score,score_reason
 instruction_precision,t3_q1_self_referential,0,Used forbidden words this/sentence; truncated mid-reasoning; no clean answer
 instruction_precision,t3_q2_cascading_constraints,0,puzzle is 6 letters not 8; uzzled/zzled are not real words
 instruction_precision,t2_q2_maintain_format,3,Perfect format; correct analysis of TypeError; concise fix
