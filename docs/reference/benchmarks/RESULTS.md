@@ -111,6 +111,20 @@ Qwen3-Coder-30B-A3B with 25% experts permanently removed by Cerebras REAP. Pure 
 
 **Assessment:** 39.6 t/s at 15 GB with 61% quality. 3.7x faster than Coder-32B at 16% less RAM. Strong try-cheap-first frontdoor candidate — escalate hard tasks to specialists. 4×48t aggregate estimate: ~158 t/s.
 
+### REAP-363B: 25% Pruned Qwen3-Coder-480B (evaluated 2026-03-25)
+
+Qwen3-Coder-480B-A35B with 25% experts permanently removed. 219 GB Q4_K_M (vs 250 GB unpruned). Same 35B active params. Benchmarked at 96t node0.
+
+| Config | dm | ps | t/s | Notes |
+|--------|----|----|-----|-------|
+| baseline (no spec) | — | — | 3.77 | 8% faster than unpruned base (~3.5) |
+| **dm=48 linear** | **48** | **0** | **6.54** | **BEST — 93% of unpruned 480B (7.0)** |
+| dm=24 linear | 24 | 0 | 6.34 | |
+| dm=24 lookup | 24 | 0 | 5.04 | Lookup hurts -21% |
+| dm=16 tree ps=0.05 | 16 | 0.05 | 4.96 | Tree hurts -20% |
+
+**Assessment:** NOT compelling for single-model deployment. 7% slower, 31 GB RAM savings irrelevant at 1.13 TB. REAP on large MoE is primarily a GPU VRAM optimization. Value exists only in concurrent-model RAM budgeting scenarios (dynamic stack assembly). GGUF deleted from disk after benchmarking; data preserved in `data/reap_363b_phase1/`.
+
 ---
 
 ## 🆕 Concurrent Inference Sweep (2026-02-19)
