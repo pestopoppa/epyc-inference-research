@@ -767,7 +767,9 @@ roles:
     acceleration:
       type: speculative_decoding
       draft_role: draft_qwen3_coder_0_75b
-      k: 32   # Phase 1 optimal (8.0 t/s, +14% vs unpruned 480B)
+      k: 32   # Sweep-verified optimal (8.4 t/s, +20% vs 480B). Tree harmful at all ps values.
+      p_split: 0  # Linear only — tree -15% at all ps values (0.01-0.3), sweep-verified 2026-03-26
+      lookup: true  # run_benchmark.py tests lookup combos automatically
     performance:
       baseline_tps: 4.88
       spec_dm32_tps: 8.00
