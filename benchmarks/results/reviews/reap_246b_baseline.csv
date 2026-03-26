@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,7.4,3,Correct sequential tool calls: grep_search then read_file; clean JSON array
+agentic,t1_q2_error_handling,7.9,3,Appropriate 404 handling: explains situation asks for clarification
+agentic,t1_q3_nested_params,8.2,3,Perfect tool call with correct nested parameters assignees metadata
+agentic,t2_q1_ambiguous,8.3,2,Asks clarification but bundles questions; no default assumption
+agentic,t2_q2_error_chain,7.9,3,Correct diagnostic: connection_refused -> check database logs
+agentic,t2_q3_schema_edge,8.3,3,Correct tool call: /users GET null body Authorization header
+agentic,t2_q4_orchestration,7.8,3,Complete plan with ordering failure handling rollback to v1.2.2
+agentic,t3_q1_competing_constraints,7.7,2,Structured plan with validation; generic but adequate
+agentic,t3_q2_multi_agent_coordination,7.8,3,Correct sequential phasing: researcher->coder->reviewer; proper dependencies
+agentic,t3_q3_adversarial_robustness,7.6,2,Identifies security concerns but truncated before explicit refusal
+coder,t1_q1_algorithm,7.8,2,Identifies left=mid bug correctly; second bug framing confused; truncated
+coder,t1_q2_refactor,7.7,2,Speed version correct O(n); memory version truncated
+coder,t1_q3_test,7.6,3,Comprehensive pytest suite covering normal/negative/decimal/edge cases
+coder,t2_q1_design,7.0,2,Correct LRU doubly-linked-list+hashmap; put() truncated before eviction
+coder,t2_q2_debug_complex,7.2,3,Correctly identifies race condition; asyncio.Lock fix properly applied
+coder,t2_q3_optimize,7.8,3,Correct O(n) Counter-based solution; handles same-number pairs
+coder,t2_q4_system,6.4,2,Sliding-window deque rate limiter correct; truncated before tests
+coder,t3_q1_concurrent_correctness,7.7,2,ABA scenario correctly constructed; fix truncated
+coder,t3_q2_distributed_consistency,7.6,1,Strategies described but truncated before recommendation
+coder,t3_q3_algorithmic_hardness,7.4,1,Adversary argument started but truncated; Part 2 not reached
+general,t1_q1_json,8.4,3,Perfect JSON extraction all 4 fields no extra text
+general,t1_q2_multistep,8.2,2,Correct output but prompt bleed artifact at start
+general,t1_q3_compare,8.2,2,Accurate comparison adds analytical guidance; slightly beyond restating
+general,t2_q1_synthesis,8.1,3,Excellent two-phase synthesis addressing all stakeholder perspectives
+general,t2_q2_transform,8.3,3,YAML structure correct all employees grouped by department
+general,t2_q3_schedule,7.7,1,Truncated after first meeting placement; cannot verify constraints
+general,t2_q4_inconsistency,8.0,3,Both inconsistencies correctly identified
+general,t3_q1_policy_analysis,7.7,1,Truncated after 1 of 3 required failure modes
+general,t3_q2_system_failure,7.8,3,Correctly explains double-charge via replica lag
+general,t3_q3_strategic_communication,7.8,2,Direct accountability and enterprise pivot; truncated
+instruction_precision,t1_q1_negative_instruction,8.0,2,Core answer correct but lengthy meta-commentary appended
+instruction_precision,t1_q2_word_limit,8.4,2,Word count 22 within range but leaked prompt fragment prefix
+instruction_precision,t1_q3_structured_format,8.5,3,Perfect LANGUAGE (YEAR) format
+instruction_precision,t1_q4_multiple_constraints,8.0,0,Lists 26 countries with leaked prompt fragments; fails constraint
+instruction_precision,t2_q1_resist_elaboration,12.4,3,Perfect: outputs only 4
+instruction_precision,t2_q2_maintain_format,8.2,3,Perfect ERROR_TYPE/ROOT_CAUSE/FIX format
+instruction_precision,t2_q3_empty_handling,16.0,3,Perfect: outputs NONE
+instruction_precision,t2_q4_conflicting_constraints,8.5,0,Sentence ends with analysis not data; leaked prompt text
+instruction_precision,t3_q1_self_referential,8.0,0,No valid final answer; shows broken attempts
+instruction_precision,t3_q2_cascading_constraints,8.6,1,Chain met but length violated eel(3)->loop(4)
+instruction_precision,t3_q3_meta_instruction,8.5,0,Executes wrong instructions; spurious output
+math,t1_q1_word_problem,7.8,3,Correct $120 and $129.60
+math,t1_q2_system_equations,7.9,3,All 4 solutions correct
+math,t1_q3_probability,7.9,3,P(both red)=2/9 correct; part 2 truncated but setup correct
+math,t2_q1_optimization,8.0,3,Correct dimensions 100x50 area 5000
+math,t2_q2_proof,7.9,3,Correctly identifies n=1 failure
+math,t2_q3_calculus,8.1,3,Correct antiderivative and integral=10
+math,t2_q4_statistics,7.7,2,Correct sum=185 mean=23.125; truncated before std dev
+math,t3_q1_analysis,6.2,2,M-test approach correct; truncated before closed form
+math,t3_q2_combinatorics,7.7,1,Involution approach mentioned but not constructed
+math,t3_q3_probability_theory,6.4,1,Correct setup P(N>n)=1/n! but truncated before E[N]=e
+thinking,t1_q1_multistep,7.7,3,Correct ~11:34 AM
+thinking,t1_q2_hypothesis,6.7,3,Three solid alternatives with mechanisms
+thinking,t1_q3_planning,7.2,2,Correct framework but truncated before complete enumeration
+thinking,t2_q1_paradox,7.9,2,Presents continuity position; truncated after first position
+thinking,t2_q2_counterfactual,7.8,2,Three dimensions addressed; adequate but truncated
+thinking,t2_q3_formal,7.9,3,Correct formal proof of hypothetical syllogism
+thinking,t2_q4_metacognition,7.6,2,Reasonable Fermi; piano ownership 1% too low; truncated
+thinking,t3_q1_methodological_critique,6.7,2,Selection and survivorship bias identified; truncated
+thinking,t3_q2_causal_inference,7.9,2,Q1 correct Gene as adjustment set; Q2-Q3 truncated
+thinking,t3_q3_reasoning_trap,7.8,3,Correctly identifies distribution mismatch flaw

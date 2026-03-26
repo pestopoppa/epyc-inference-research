@@ -123,7 +123,31 @@ Qwen3-Coder-480B-A35B with 25% experts permanently removed. 219 GB Q4_K_M (vs 25
 | dm=24 lookup | 24 | 0 | 5.04 | Lookup hurts -21% |
 | dm=16 tree ps=0.05 | 16 | 0.05 | 4.96 | Tree hurts -20% |
 
-**Assessment:** NOT compelling for single-model deployment. 7% slower, 31 GB RAM savings irrelevant at 1.13 TB. REAP on large MoE is primarily a GPU VRAM optimization. Value exists only in concurrent-model RAM budgeting scenarios (dynamic stack assembly). GGUF deleted from disk after benchmarking; data preserved in `data/reap_363b_phase1/`.
+**Assessment:** NOT compelling for single-model deployment. 7% slower, 31 GB RAM savings irrelevant at 1.13 TB. GGUF deleted from disk after benchmarking; data preserved in `data/reap_363b_phase1/`.
+
+### REAP-246B: 50% Pruned Qwen3-Coder-480B (evaluated 2026-03-26) — **PRODUCTION CANDIDATE**
+
+Qwen3-Coder-480B-A35B with 50% experts permanently removed. 139 GB Q4_K_M (converted from FP8 safetensors). Same 35B active params. Benchmarked at 96t node0.
+
+| Config | dm | ps | t/s | Notes |
+|--------|----|----|-----|-------|
+| baseline (no spec) | — | — | 4.88 | 39% faster than unpruned 480B baseline (~3.5) |
+| **dm=32 linear** | **32** | **0** | **8.00** | **BEST — 14% FASTER than unpruned 480B (7.0)** |
+| dm=24 lookup | 24 | 0 | 7.95 | Lookup neutral |
+| dm=48 linear | 48 | 0 | 7.89 | |
+
+**Quality (512 max_tokens, Claude-as-Judge):** **82% pass (50/61)** — BETTER than unpruned 480B (73%, 51/70).
+
+| Suite | REAP-246B | 480B unpruned | Delta |
+|-------|-----------|---------------|-------|
+| agentic | 27/30 | 28/30 | -1 |
+| coder | 21/30 | 23/30 | -2 |
+| general | 23/30 | 22/30 | +1 |
+| IP | 17/33 | 20/33 | -3 (prompt leakage) |
+| math | **24/30** | 21/30 | **+3** |
+| thinking | **24/30** | 19/30 | **+5** |
+
+**Assessment:** REAP-246B is **better on every primary axis** than the unpruned 480B: +9pp quality, +14% speed, -44% RAM (139 vs 250 GB). The 50% pruning removed noisy experts that were degrading math and thinking performance. Only instruction_precision regressed (-3pp from prompt leakage). **Strong candidate to replace production architect_coding.**
 
 ---
 

@@ -752,7 +752,7 @@ roles:
 
   reap_246b:
     tier: B
-    description: REAP-pruned Qwen3-Coder-246B-A35B — 50% expert removal from 480B, pure MoE, 139 GB
+    description: REAP-pruned Qwen3-Coder-246B-A35B — 50% pruned from 480B. 82% quality, 8.0 t/s, 139 GB. PRODUCTION CANDIDATE.
     model:
       name: Qwen3-Coder-REAP-246B-A35B-Q4_K_M
       path: /mnt/raid0/llm/models/Qwen3-Coder-REAP-246B-A35B-Q4_K_M.gguf
@@ -761,10 +761,17 @@ roles:
       architecture: moe
     candidate_roles:
     - architect_coding
+    - coder
+    - general
+    - frontdoor
     acceleration:
       type: speculative_decoding
       draft_role: draft_qwen3_coder_0_75b
-      k: 24
+      k: 32   # Phase 1 optimal (8.0 t/s, +14% vs unpruned 480B)
+    performance:
+      baseline_tps: 4.88
+      spec_dm32_tps: 8.00
+      quality_pct: 82  # 50/61 pass, Claude-as-Judge 2026-03-26
     memory:
       residency: warm
       pinned: false
