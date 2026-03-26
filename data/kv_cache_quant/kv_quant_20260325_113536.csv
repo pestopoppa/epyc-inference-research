@@ -1,0 +1,6 @@
+model,kv_config,ctk,ctv,context_length,test_type,tokens_generated,prompt_tokens,time_ms,tokens_per_sec,prompt_tps,rss_mb,server_kv_size_mb
+q25-coder-32B,f16_f16,f16,f16,4096,generation,256,61,59752,4.33,56.75,34207.5,1024.00
+q25-coder-32B,f16_f16,f16,f16,4096,prefill,32,2482,44600,4.28,66.21,34486.7,1024.00
+q25-coder-32B,f16_f16,f16,f16,4096,generation_rep2,256,61,69764,3.73,31.63,35115.1,1024.00
+q25-coder-32B,f16_f16,f16,f16,4096,generation_rep3,256,61,63783,4.04,2.57,35115.1,1024.00
+q25-coder-32B,q8_q8,q8_0,q8_0,4096,generation,256,61,68125,3.81,40.98,33724.3,544.00

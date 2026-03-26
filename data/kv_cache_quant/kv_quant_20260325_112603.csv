@@ -1,0 +1,17 @@
+model,kv_config,ctk,ctv,context_length,test_type,tokens_generated,prompt_tokens,time_ms,tokens_per_sec,prompt_tps,rss_mb,server_kv_size_mb
+q35-35B-A3B,f16_f16,f16,f16,4096,generation,256,42,74058,3.50,47.71,36314.9,0
+q35-35B-A3B,f16_f16,f16,f16,4096,prefill,0,0,0,0.00,0.00,0,0
+q35-35B-A3B,f16_f16,f16,f16,4096,generation_rep2,0,0,0,0.00,0.00,0,0
+q35-35B-A3B,f16_f16,f16,f16,4096,generation_rep3,0,0,0,0.00,0.00,0,0
+q35-35B-A3B,q8_q8,q8_0,q8_0,4096,generation,256,42,45774,5.70,50.88,36259.8,0
+q35-35B-A3B,q8_q8,q8_0,q8_0,4096,prefill,0,0,0,0.00,0.00,0,0
+q35-35B-A3B,q8_q8,q8_0,q8_0,4096,generation_rep2,0,0,0,0.00,0.00,0,0
+q35-35B-A3B,q8_q8,q8_0,q8_0,4096,generation_rep3,0,0,0,0.00,0.00,0,0
+q35-35B-A3B,q8_q4,q8_0,q4_0,4096,generation,256,42,51089,5.08,65.02,36248.6,0
+q35-35B-A3B,q8_q4,q8_0,q4_0,4096,prefill,0,0,0,0.00,0.00,0,0
+q35-35B-A3B,q8_q4,q8_0,q4_0,4096,generation_rep2,0,0,0,0.00,0.00,0,0
+q35-35B-A3B,q8_q4,q8_0,q4_0,4096,generation_rep3,0,0,0,0.00,0.00,0,0
+q35-35B-A3B,q4_q4,q4_0,q4_0,4096,generation,256,42,43292,6.03,50.33,36237.5,0
+q35-35B-A3B,q4_q4,q4_0,q4_0,4096,prefill,0,0,0,0.00,0.00,0,0
+q35-35B-A3B,q4_q4,q4_0,q4_0,4096,generation_rep2,0,0,0,0.00,0.00,0,0
+q35-35B-A3B,q4_q4,q4_0,q4_0,4096,generation_rep3,0,0,0,0.00,0.00,0,0

@@ -1,0 +1,4 @@
+model,kv_config,ctk,ctv,context_length,test_type,tokens_generated,prompt_tokens,time_ms,tokens_per_sec,prompt_tps,rss_mb,server_kv_size_mb
+q35-35B-A3B,f16_f16,f16,f16,16384,generation,256,42,33829,7.67,96.36,37853.9,320.00
+q35-35B-A3B,f16_f16,f16,f16,16384,prefill,32,9779,8173,7.82,125.50,37935.5,320.00
+q35-35B-A3B,f16_f16,f16,f16,16384,generation_rep2,256,42,32562,7.94,137.58,38190.1,320.00
