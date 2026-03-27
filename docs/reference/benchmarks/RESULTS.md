@@ -132,22 +132,24 @@ Qwen3-Coder-480B-A35B with 50% experts permanently removed. 139 GB Q4_K_M (conve
 | Config | dm | ps | t/s | Notes |
 |--------|----|----|-----|-------|
 | baseline (no spec) | — | — | 4.88 | 39% faster than unpruned 480B baseline (~3.5) |
-| **dm=32 linear** | **32** | **0** | **8.00** | **BEST — 14% FASTER than unpruned 480B (7.0)** |
-| dm=24 lookup | 24 | 0 | 7.95 | Lookup neutral |
-| dm=48 linear | 48 | 0 | 7.89 | |
+| **dm=32 linear** | **32** | **0** | **8.41** | **BEST — sweep-verified, +20% vs unpruned 480B (7.0)** |
+| dm=16 linear | 16 | 0 | 8.35 | |
+| dm=48 linear | 48 | 0 | 8.28 | |
+| dm=32 tree ps=0.05 | 32 | 0.05 | 7.17 | Tree harmful -15% |
+| dm=24 lookup (run_benchmark) | — | — | 5.9 | Lookup slower via run_benchmark.py (192t) |
 
-**Quality (512 max_tokens, Claude-as-Judge):** **82% pass (50/61)** — BETTER than unpruned 480B (73%, 51/70).
+**Quality (official run_benchmark.py, dm=32 ps=0, 512 max_tokens, Claude-as-Judge):** **77% pass (47/61)** — above unpruned 480B (73%).
 
 | Suite | REAP-246B | 480B unpruned | Delta |
 |-------|-----------|---------------|-------|
-| agentic | 27/30 | 28/30 | -1 |
+| agentic | **27/30** | 28/30 | -1 |
 | coder | 21/30 | 23/30 | -2 |
-| general | 23/30 | 22/30 | +1 |
-| IP | 17/33 | 20/33 | -3 (prompt leakage) |
-| math | **24/30** | 21/30 | **+3** |
-| thinking | **24/30** | 19/30 | **+5** |
+| general | 18/30 | 22/30 | -4 |
+| IP | 20/33 | 20/33 | 0 |
+| math | **25/30** | 21/30 | **+4** |
+| thinking | 21/30 | 19/30 | +2 |
 
-**Assessment:** REAP-246B is **better on every primary axis** than the unpruned 480B: +9pp quality, +14% speed, -44% RAM (139 vs 250 GB). The 50% pruning removed noisy experts that were degrading math and thinking performance. Only instruction_precision regressed (-3pp from prompt leakage). **Strong candidate to replace production architect_coding.**
+**Assessment:** REAP-246B outperforms unpruned 480B: +4pp quality, +20% speed, -44% RAM (139 vs 250 GB). Math is the strongest improvement (+4pp). General suite regressed (-4pp, hallucination + truncation). NUMA 2×96t sweep pending (2 instances fit at 278 GB). **Strong candidate to replace production architect_coding.**
 
 ---
 
