@@ -149,7 +149,15 @@ Qwen3-Coder-480B-A35B with 50% experts permanently removed. 139 GB Q4_K_M (conve
 | math | **25/30** | 21/30 | **+4** |
 | thinking | 21/30 | 19/30 | +2 |
 
-**Assessment:** REAP-246B outperforms unpruned 480B: +4pp quality, +20% speed, -44% RAM (139 vs 250 GB). Math is the strongest improvement (+4pp). General suite regressed (-4pp, hallucination + truncation). NUMA 2×96t sweep pending (2 instances fit at 278 GB). **Strong candidate to replace production architect_coding.**
+**NUMA concurrency (2026-03-28):**
+
+| Config | Per-instance | Aggregate | Scaling |
+|--------|-------------|-----------|---------|
+| 1×96t node0 | 8.57 t/s | 8.57 t/s | baseline |
+| 2×96t sequential | 8.25 t/s | **16.49 t/s** | **1.92x** |
+| 2×96t concurrent | 5.87 t/s | 11.74 t/s | 1.37x |
+
+**Assessment:** REAP-246B outperforms unpruned 480B: +4pp quality, +20% speed, -44% RAM (139 vs 250 GB). 2×96t NUMA gives 1.92x aggregate (16.5 t/s) — impossible with the 480B (500 GB for 2 instances). Math is the strongest improvement (+4pp). **Strong candidate to replace production architect_coding.**
 
 ---
 
