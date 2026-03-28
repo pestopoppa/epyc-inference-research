@@ -1,0 +1,4 @@
+config,instance,threads,prompt_idx,tokens_generated,time_ms,tokens_per_sec
+A_1x96t,node0,96,0,256,22607,11.32
+A_1x96t,node0,96,1,256,38569,6.64
+A_1x96t,node0,96,2,256,33813,7.57

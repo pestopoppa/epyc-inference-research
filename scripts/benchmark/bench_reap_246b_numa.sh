@@ -104,9 +104,11 @@ wait_for_server 8197 || { kill_servers $PID_B1 $PID_B2; exit 1; }
 
 curl -s "http://localhost:8196/v1/chat/completions" -H "Content-Type: application/json" \
     -d '{"model":"t","messages":[{"role":"user","content":"Hi"}],"max_tokens":16,"temperature":0}' > /dev/null 2>&1 &
+W1=$!
 curl -s "http://localhost:8197/v1/chat/completions" -H "Content-Type: application/json" \
     -d '{"model":"t","messages":[{"role":"user","content":"Hi"}],"max_tokens":16,"temperature":0}' > /dev/null 2>&1 &
-wait
+W2=$!
+wait $W1 $W2
 
 echo "  --- sequential ---"
 for i in "${!PROMPTS[@]}"; do
