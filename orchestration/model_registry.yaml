@@ -780,19 +780,15 @@ roles:
       temperature: 0.3
 
   reap_246b:
-    tier: B
-    description: REAP-pruned Qwen3-Coder-246B-A35B — 50% pruned from 480B. 82% quality, 8.0 t/s, 139 GB. PRODUCTION CANDIDATE.
+    tier: A  # DEPLOYED as architect_coding 2026-03-29 (replaces 480B)
+    description: REAP-pruned Qwen3-Coder-246B-A35B — 50% pruned from 480B. 82% quality, 8.0 t/s, 139 GB. DEPLOYED.
     model:
       name: Qwen3-Coder-REAP-246B-A35B-Q4_K_M
       path: /mnt/raid0/llm/models/Qwen3-Coder-REAP-246B-A35B-Q4_K_M.gguf
       quant: Q4_K_M
       size_gb: 139
       architecture: moe
-    candidate_roles:
-    - architect_coding
-    - coder
-    - general
-    - frontdoor
+    deployed_as: architect_coding  # 2026-03-29, replaces 480B
     acceleration:
       type: speculative_decoding
       draft_role: draft_qwen3_coder_0_75b
