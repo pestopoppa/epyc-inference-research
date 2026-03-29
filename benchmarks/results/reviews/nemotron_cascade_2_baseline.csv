@@ -1,0 +1,60 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+math,t1_q1_word_problem,38.7,3,Correct $120 after 20% discount then $129.60 after 8% tax. Clear step-by-step with LaTeX. All parts correct.
+math,t1_q2_system_equations,38.3,3,Correct approach using sum s=x+y and product p=xy. Identity x^2+y^2=s^2-2p applied correctly. All 4 solutions found via s=+-7. Complete and rigorous.
+math,t1_q3_probability,38.0,3,Correct P(both red)=2/9 and P(one red one blue)=1/3. Both orderings considered for mixed draw. Clear explanation.
+math,t2_q1_optimization,38.5,3,Correct setup: L+2W=200 for river-bordered field. Identifies L=100 W=50 area=5000. Step-by-step with variable definitions. Complete answer visible.
+math,t2_q2_proof,38.3,3,Correctly identifies n=1 to n=2 step failure — overlap is empty. Excellent explanation of why the induction step breaks. Well-structured with LaTeX.
+math,t2_q3_calculus,38.9,3,Perfect: antiderivative x^3+x^2-x evaluated at bounds. F(2)-F(0)=10. Clear step-by-step derivation.
+math,t2_q4_statistics,38.5,3,Correct mean=23.125 median=23.5. Population std dev calculation started with squared deviations table. Answer truncated mid-table but key values visible.
+math,t3_q1_analysis,38.1,3,Uses Im(e^{xe^i}) closed form — correct complex exponential approach. Differentiability proof via composition of smooth functions. Significantly more complete than Qwen3.5 (which truncated at part 1).
+math,t3_q2_combinatorics,38.3,1,Stuck in deliberation — visible think-block reasoning about inclusion-exclusion and involutions but never produces a complete proof. No final answer.
+math,t3_q3_probability_theory,38.0,1,Correctly identifies P(S_n<=1)=1/n! and E[N]=e setup but truncated before completing either proof. Answer visible but incomplete — only framework shown.
+general,t1_q1_json,38.3,0,Does NOT output JSON for the given prompt. Instead generates additional parsing prompts for other people. Hallucinates new inputs (John Doe Emily Rodriguez etc). Complete failure to follow the instruction.
+general,t1_q2_multistep,38.7,3,Correct: removes case-insensitive duplicates (4 items) sorts alphabetically numbers each item and adds count. All 4 steps correctly applied. Clean output.
+general,t1_q3_compare,38.2,2,Chooses monolith with brief justification but visible deliberation and self-correction. The final comparison is reasonable but presentation is messy with multiple rewrites visible.
+general,t2_q1_synthesis,38.0,1,Starts planning a decision matrix but gets stuck in visible deliberation about how to structure the answer. Never produces a concrete recommendation. Think-block leakage.
+general,t2_q2_transform,38.6,3,Perfect YAML output grouped by department (Engineering and Sales) with correct nesting. All 4 employees correctly placed. Clean format.
+general,t2_q3_schedule,38.3,1,Visible constraint analysis but never produces a final schedule. Gets stuck reasoning about meeting constraints. No concrete output.
+general,t2_q4_inconsistency,39.1,3,Correctly identifies both key inconsistencies: body format (JSON vs form-encoded) and rate limit (100/min vs 1000/hr). Clean comparison table.
+general,t3_q1_policy_analysis,38.1,3,Excellent systematic analysis with failure modes table. Covers Goodhart's Law on accuracy metric SHAP limitations and quarterly audit gaps. Well-structured with remediation proposals.
+general,t3_q2_system_failure,38.0,2,Correct explanation of read-replica race condition causing double-charges. Good step-by-step timeline table. Truncated before completing all questions but main analysis visible.
+general,t3_q3_strategic_communication,38.4,3,Strong board presentation as CPO. Acknowledges misses directly pivots to LOIs as validation proposes execution plan. Appropriate tone. Complete slide structure.
+coder,t1_q1_algorithm,38.4,2,Identifies off-by-one error in right bound with correct demonstration. Shows how it works for some inputs but fails for others. Second bug analysis started but truncated. One bug fully explained one partial.
+coder,t1_q2_refactor,38.7,3,Excellent O(n) set-based speed-optimized version. Clear code with type hints and docstrings. Complexity analysis included. Complete and correct.
+coder,t1_q3_test,38.5,2,Starts with additional requirements not in the prompt (parallel execution module naming). Actual test cases are reasonable (pytest framework divide function coverage) but cluttered with self-generated requirements.
+coder,t2_q1_design,38.8,3,Strong LRU cache design using doubly linked list + hash map. Correct O(1) analysis. Clear explanation of the data structure choice. Complete design visible.
+coder,t2_q2_debug_complex,38.4,1,Identifies the race condition concept but response is cluttered with self-generated additional requirements. Does not clearly show the fix with asyncio.Lock. Messy presentation.
+coder,t2_q3_optimize,38.7,3,Correct O(n) Counter-based solution using complement lookup. Clean Python code with type hints. Good algorithm explanation.
+coder,t2_q4_system,38.8,3,Complete rate limiter using sliding window with deque. Clean production-ready code with documentation. Correct implementation.
+coder,t3_q1_concurrent_correctness,38.2,2,Explains ABA problem concept and starts describing the scenario. Stuck in deliberation about memory ordering details. Main concept correct but fix not fully shown.
+coder,t3_q2_distributed_consistency,38.3,3,Comprehensive coverage of 4+ conflict resolution strategies (LWW vector clocks CRDTs application-level merge). Good comparison table with metadata and tradeoffs.
+coder,t3_q3_algorithmic_hardness,38.2,2,Promises complete answer with proofs code and experiments. Framework is correct (adversary argument group-of-5 median-of-medians) but truncated before completing all sections.
+instruction_precision,t1_q1_negative_instruction,39.9,2,Explains photosynthesis without mentioning sunlight/sun/solar — correct constraint compliance. However says "light energy" which is borderline (not explicitly forbidden but semantically close). Two clear sentences.
+instruction_precision,t1_q2_word_limit,39.2,3,20 words exactly. Accurate self-count. Clear description of machine learning. Includes verification breakdown.
+instruction_precision,t1_q3_structured_format,38.9,1,Includes example header and deliberation text before the answer. The actual languages are in correct LANGUAGE (YEAR) format but surrounded by extra text (# Example # Your answer commentary). Violates "no extra text" constraint.
+instruction_precision,t1_q4_multiple_constraints,40.8,2,Correct 5 European countries in alphabetical order. But wrapped in markdown code block with **Answer:** header — violates "no additional text" constraint.
+instruction_precision,t2_q1_resist_elaboration,1000000.0,3,Perfect: outputs only the number (1 token). Nothing else.
+instruction_precision,t2_q2_maintain_format,39.2,3,Perfect ERROR_TYPE/ROOT_CAUSE/FIX format. Accurate analysis. No extra text.
+instruction_precision,t2_q3_empty_handling,39.1,0,Does NOT output NONE. Instead generates additional constraint rules and starts analyzing email validation patterns. Complete failure to follow the simple instruction.
+instruction_precision,t2_q4_conflicting_constraints,39.0,0,Does NOT produce a sentence. Instead deliberates about constraint satisfaction in visible think-block style. Lists constraints and analyzes them but never outputs a valid sentence.
+instruction_precision,t3_q1_self_referential,38.5,0,Stuck in visible constraint analysis deliberation. Never produces a valid self-referential sentence. Token cap hit during reasoning.
+instruction_precision,t3_q2_cascading_constraints,38.8,0,Stuck in constraint analysis. Lists the rules and starts reasoning about word chains but never produces a valid 5-word chain.
+instruction_precision,t3_q3_meta_instruction,39.0,0,Does NOT execute the instructions. Instead generates a taxonomy of instruction types and repeats rule patterns. Never outputs 42 or hi. Complete failure.
+agentic,t1_q1_sequential,39.0,3,Perfect JSON array with correct tool ordering: grep_search then read_file. Clean output.
+agentic,t1_q2_error_handling,38.9,3,Good 404 handling: acknowledges error offers 3 reasonable next steps (different ID search by name create new). Conversational and helpful.
+agentic,t1_q3_nested_params,39.0,3,Perfect JSON tool call with correct nested parameters: title assignees array metadata object with priority tags due_date. Clean output.
+agentic,t2_q1_ambiguous,38.8,2,Outputs send_slack JSON directly without acknowledging ambiguity. Reasonable default choice but skips the clarification step.
+agentic,t2_q2_error_chain,38.6,2,Correct diagnostic reasoning (database connection issue) but jumps to restart_service rather than the safer get_logs diagnostic step first.
+agentic,t2_q3_schema_edge,39.1,3,Perfect: /users GET null body Authorization Bearer header. Clean JSON exactly matching schema.
+agentic,t2_q4_orchestration,38.7,2,Correct deployment steps but ordering is wrong: builds image BEFORE running tests. Should test first then build. Error handling structure is good with rollback.
+agentic,t3_q1_competing_constraints,38.8,3,Comprehensive plan with CSV parsing column auto-detection validation and growth computation. Well-structured JSON with clear steps.
+agentic,t3_q2_multi_agent_coordination,38.5,3,Excellent orchestration plan with proper phasing researcher then coder then writer. Structured JSON with expected outputs and context passing. Complete.
+agentic,t3_q3_adversarial_robustness,38.5,3,Correctly identifies command injection and /etc/passwd risks. Clear security analysis with specific concerns. Recommends sandboxing and refusal.
+long_context,t1_q1_needle,36.6,3,Found the hardcoded API key sk-proj-7x9mK2nP4qR8sT1uV3wY5zA correctly. States no other credentials found. Clean tabular output.
+long_context,t1_q2_multi_file,36.4,0,Does NOT analyze the provided JavaScript project. Instead generates its own analysis structure and starts analyzing a Python project that wasn't in the prompt. Hallucinates content.
+long_context,t1_q3_extraction,35.2,0,Does NOT extract dates or information from the legal document. Instead generates meta-commentary about date formats and repeats "1th day of May 2024 (typo)" in a degenerate loop. Complete failure.
+long_context,t2_q2_synthesis,32.5,3,Good integrated analysis: Q1 $42M to Q2 $83M (+97.6%) with margin improvement 31% to 34%. Uses document data correctly. Structured with sections.
+long_context,t2_q3_architecture,31.1,3,Correct layered architecture analysis: configuration services and core layers. Clean table format. Identifies service-oriented design pattern from config files.
+long_context,t3_q1_multi_hop_reasoning,32.2,1,Does NOT answer the multi-hop question. Instead generates its own document set and starts reasoning about a different scenario. Hallucinates Company A/B payment scenario.
+long_context,t3_q2_contradiction_detection,33.2,0,Does NOT analyze the API documentation for contradictions. Instead generates a fictional witness statement scenario about system failure. Complete hallucination.
+long_context,t3_q3_evolving_requirements,32.5,1,Does NOT trace requirement evolution from the provided documents. Instead generates a fictional notification system requirement history. Partially structured but hallucinated content.
