@@ -234,6 +234,41 @@ suites:
     reconstruction_command: |
       python scripts/benchmark/dataset_adapters.py --suite usaco --sample 50
 
+  aime:
+    description: "AIME competition math (2024 + 2025)"
+    count: 60
+    adapter: AIMEAdapter
+    sources:
+      - name: AIME 2024
+        huggingface_id: Maxwell-Jia/AIME_2024
+        split: train
+        license: MIT
+        url: https://huggingface.co/datasets/Maxwell-Jia/AIME_2024
+        count: 30
+      - name: AIME 2025
+        huggingface_id: opencompass/AIME2025
+        config: "AIME2025-I, AIME2025-II"
+        split: test
+        license: MIT
+        url: https://huggingface.co/datasets/opencompass/AIME2025
+        count: 30
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite aime --sample 10
+
+  olympiadbench:
+    description: "Olympiad-level math competition problems"
+    count: 674
+    adapter: OlympiadBenchAdapter
+    sources:
+      - name: OlympiadBench
+        huggingface_id: math-ai/olympiadbench
+        split: test
+        license: CC-BY-NC-SA-4.0
+        url: https://huggingface.co/datasets/math-ai/olympiadbench
+        note: "Filtered to text-only problems with answers"
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite olympiadbench --sample 50
+
 # YAML-only suites (no HuggingFace source)
 yaml_only_suites:
   agentic:

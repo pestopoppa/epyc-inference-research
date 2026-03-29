@@ -1,0 +1,29 @@
+{
+  "model_role": "reap_246b",
+  "model_path": "/mnt/raid0/llm/models/Qwen3-Coder-REAP-246B-A35B-Q4_K_M.gguf",
+  "config_name": "baseline",
+  "run_id": "20260325_224043",
+  "timestamp": "2026-03-25T22:43:24.059575",
+  "results": {
+    "agentic": {
+      "t3_q1_competing_constraints": {
+        "question_id": "t3_q1_competing_constraints",
+        "prompt": "You're an AI assistant with these tools:\n- execute_code: {\"code\": \"string\", \"language\": \"string\"} - runs code, returns output\n- search_web: {\"query\": \"string\"} - returns search results\n- read_file: {\"path\": \"string\"} - reads local file\n- write_file: {\"path\": \"string\", \"content\": \"string\"} - writes to file\n- ask_user: {\"question\": \"string\"} - asks user for input\n\nUser request: \"Analyze the CSV file at /data/sales.csv and tell me which product had the highest revenue growth\"\n\nBut you have these constraints:\n1. You cannot see the file contents until you read it\n2. You don't know the CSV structure until you read it\n3. execute_code might fail if you assume wrong column names\n\nGenerate a robust plan that:\n1. Handles unknown schema gracefully\n2. Validates assumptions before heavy computation\n3. Provides meaningful partial results if something fails\n4. Minimizes round-trips while maintaining correctness\n\nOutput a JSON plan with: {\"steps\": [...], \"validation_checks\": [...], \"fallback_strategy\": \"...\"}",
+        "response": "```json\n{\n  \"steps\": [\n    \"Read the CSV file to understand its structure\",\n    \"Identify key columns (product identifier, revenue, time period)\",\n    \"Calculate revenue growth for each product\",\n    \"Determine which product had the highest growth\",\n    \"Present the result with supporting data\"\n  ],\n  \"validation_checks\": [\n    \"Verify file exists and is readable\",\n    \"Check that required columns (product, revenue, time) exist\",\n    \"Ensure data types are appropriate for calculations\",\n    \"Validate that time periods are consistent and ordered\"\n  ],\n  \"fallback_strategy\": \"If specific column names are not found, ask the user to specify them. If growth calculation fails, show top products by absolute revenue. If file reading fails, report the error clearly.\"\n}\n```",
+        "tokens_per_second": 7.63,
+        "prompt_tokens": null,
+        "completion_tokens": 165,
+        "total_time_ms": 21634.99,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 7.63,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

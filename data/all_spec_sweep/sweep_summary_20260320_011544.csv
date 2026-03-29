@@ -1,0 +1,15 @@
+model,mode,threads,best_dm,best_ps
+worker_7b_f16,192t,192,24,0
+worker_7b_f16,24t,24,16,0.05
+frontdoor_30b_a3b,192t,192,32,0.1
+frontdoor_30b_a3b,48t,48,8,0
+coder_32b_q4km,192t,192,32,0.05
+coder_32b_q4km,48t,48,32,0.05
+coder_32b_q8,192t,192,24,0.3
+coder_32b_q8,48t,48,16,0
+coder_32b_f16,192t,192,16,0.2
+coder_32b_f16,48t,48,32,0.05
+arch_122b_q4km,192t,192,24,0
+arch_122b_q4km,96t,96,24,0
+arch_480b_q4km,192t,192,32,0
+arch_480b_q4km,96t,96,48,0

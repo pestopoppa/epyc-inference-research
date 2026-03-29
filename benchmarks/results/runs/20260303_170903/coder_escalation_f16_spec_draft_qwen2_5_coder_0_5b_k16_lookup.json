@@ -1,0 +1,29 @@
+{
+  "model_role": "coder_escalation_f16",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/../../models/Qwen2.5-Coder-32B-Instruct-GGUF-f16/qwen2.5-coder-32b-instruct-fp16-00001-of-00009.gguf",
+  "config_name": "spec_draft_qwen2_5_coder_0_5b_k16_lookup",
+  "run_id": "20260303_170903",
+  "timestamp": "2026-03-22T13:49:10.665307",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 17.462337984563025,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 17.462337984563025,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

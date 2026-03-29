@@ -1,0 +1,11 @@
+model,mode,threads,draft_max,p_split,request_idx,tokens_generated,time_ms,tokens_per_sec
+coder_q4km,192t,192,4,0,0,128,12465,10.27
+coder_q4km,192t,192,4,0,1,128,21372,5.99
+coder_q4km,192t,192,4,0,2,128,16132,7.93
+coder_q4km,192t,192,4,0,3,128,15026,8.52
+coder_q4km,192t,192,4,0,4,128,15716,8.14
+coder_q4km,192t,192,4,0,5,128,11127,11.50
+coder_q4km,192t,192,4,0,6,128,14799,8.65
+coder_q4km,192t,192,4,0,7,0,5183,0.00
+coder_q4km,192t,192,4,0,8,0,21,0.00
+coder_q4km,192t,192,4,0,9,0,19,0.00

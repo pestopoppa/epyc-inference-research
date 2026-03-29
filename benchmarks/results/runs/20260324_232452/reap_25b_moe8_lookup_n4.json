@@ -1,0 +1,29 @@
+{
+  "model_role": "reap_25b",
+  "model_path": "/mnt/raid0/llm/lmstudio/models/bartowski/cerebras_Qwen3-Coder-REAP-25B-A3B-GGUF/cerebras_Qwen3-Coder-REAP-25B-A3B-Q4_K_M.gguf",
+  "config_name": "moe8_lookup_n4",
+  "run_id": "20260324_232452",
+  "timestamp": "2026-03-24T23:59:40.184499",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 50.77438328842511,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 50.77438328842511,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

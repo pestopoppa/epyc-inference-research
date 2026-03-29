@@ -17,6 +17,8 @@ Supported suites and their data sources:
   - vl:                   OCRBench + ChartQA (via extract_vl_debug_suite.py, 3,500)
   - physics:              PHYBench (Eureka-Lab/PHYBench, 100 with answers)
   - physreason:           PhysReason (zhibei1204/PhysReason, 1,200 problems, ~3,100 sub-questions)
+  - aime:                 AIME 2024 (Maxwell-Jia/AIME_2024, 30) + AIME 2025 (opencompass/AIME2025, 30)
+  - olympiadbench:        OlympiadBench (math-ai/olympiadbench, ~674 text-only math competition)
   - agentic:              No public dataset (stays YAML-based)
   - long_context:         Synthetic (stays YAML-based)
 
@@ -50,6 +52,8 @@ ADAPTER_SUITES = {
     "physics",
     # Phase 3: multimodal physics reasoning
     "physreason",
+    # Phase 4: competition math
+    "aime", "olympiadbench",
 }
 
 # Suites that stay YAML-based (no public dataset or intentionally synthetic)
@@ -79,6 +83,9 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         # Phase 3: physics reasoning
         "physics": PHYBenchAdapter,
         "physreason": PhysReasonAdapter,
+        # Phase 4: competition math
+        "aime": AIMEAdapter,
+        "olympiadbench": OlympiadBenchAdapter,
     }
     cls = adapters.get(suite)
     if cls is None:
@@ -1846,6 +1853,184 @@ class PHYBenchAdapter(BaseAdapter):
             "id": f"phybench_{tag.lower()}_{row_id}",
             "suite": "physics",
             "prompt": prompt,
+            "context": "",
+            "expected": expected,
+            "scoring": [],
+            "image_path": "",
+            "tier": tier,
+            "scoring_method": "substring",
+            "scoring_config": {"case_sensitive": False},
+        }
+
+
+# ── AIME 2024+2025 (Competition Math) ────────────────────────────────
+
+
+class AIMEAdapter(BaseAdapter):
+    """AIME 2024 (30) + AIME 2025 (30) = 60 competition math problems.
+
+    Sources:
+      - Maxwell-Jia/AIME_2024 (30 problems, MIT)
+      - opencompass/AIME2025 (30 problems, MIT, two configs)
+
+    All AIME answers are integers 000-999.
+    Scoring: exact_match with numeric extraction.
+    Tiers: All T3 (olympiad-level).
+    """
+
+    suite_name = "aime"
+    has_real_tiers = False
+    _aime2024 = None
+    _aime2025 = None
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+        try:
+            import datasets as hf
+            # AIME 2024: Maxwell-Jia/AIME_2024 — fields: ID, Problem, Solution, Answer
+            self._aime2024 = hf.load_dataset(
+                "Maxwell-Jia/AIME_2024", split="train",
+            )
+        except Exception as e:
+            print(f"  [adapter] AIME 2024 load failed: {e}")
+            self._aime2024 = []
+
+        try:
+            import datasets as hf
+            # AIME 2025: opencompass/AIME2025 — two configs, fields: question, answer
+            ds_i = hf.load_dataset(
+                "opencompass/AIME2025", "AIME2025-I", split="test",
+            )
+            ds_ii = hf.load_dataset(
+                "opencompass/AIME2025", "AIME2025-II", split="test",
+            )
+            # Combine into a list of dicts with uniform schema
+            combined = []
+            for i, row in enumerate(ds_i):
+                combined.append({
+                    "id": f"2025-I-{i + 1}",
+                    "problem": row["question"],
+                    "answer": str(row["answer"]),
+                })
+            for i, row in enumerate(ds_ii):
+                combined.append({
+                    "id": f"2025-II-{i + 1}",
+                    "problem": row["question"],
+                    "answer": str(row["answer"]),
+                })
+            self._aime2025 = combined
+        except Exception as e:
+            print(f"  [adapter] AIME 2025 load failed: {e}")
+            self._aime2025 = []
+
+        # Unified index list
+        n24 = len(self._aime2024) if self._aime2024 else 0
+        n25 = len(self._aime2025) if self._aime2025 else 0
+        self._dataset = list(range(n24 + n25))
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        n24 = len(self._aime2024) if self._aime2024 else 0
+
+        if idx < n24:
+            r = self._aime2024[idx]
+            problem_id = r.get("ID", f"2024-{idx + 1}")
+            problem = r["Problem"]
+            answer = str(r["Answer"])
+        else:
+            r = self._aime2025[idx - n24]
+            problem_id = r["id"]
+            problem = r["problem"]
+            answer = r["answer"]
+
+        return {
+            "id": f"aime_{problem_id}",
+            "suite": "aime",
+            "prompt": (
+                f"{problem}\n\n"
+                "This is an AIME problem. The answer is an integer from 000 to 999. "
+                "Show your work step by step, then state your final answer as a single integer."
+            ),
+            "context": "",
+            "expected": answer,
+            "scoring": [],
+            "image_path": "",
+            "tier": 3,  # All AIME = olympiad-level
+            "scoring_method": "exact_match",
+            "scoring_config": {"extract_pattern": r"(\d+)\s*$", "normalize_numeric": True},
+        }
+
+
+# ── OlympiadBench (Olympiad-level Math) ──────────────────────────────
+
+
+class OlympiadBenchAdapter(BaseAdapter):
+    """OlympiadBench: 674 olympiad-level math problems (text-only, English).
+
+    Source: math-ai/olympiadbench on HuggingFace.
+    Open-ended math competition problems across Algebra, Combinatorics,
+    Geometry, and Number Theory. Answers are numerical, expressions, or tuples.
+
+    Scoring: substring (answers may be LaTeX expressions).
+    Tiers: All T3 (olympiad-level competition problems).
+    """
+
+    suite_name = "olympiadbench"
+    has_real_tiers = True
+
+    SUBFIELD_TIER_MAP = {
+        "Algebra": 2,
+        "Combinatorics": 3,
+        "Geometry": 3,
+        "Number Theory": 3,
+    }
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+        try:
+            import datasets as hf
+            raw = hf.load_dataset("math-ai/olympiadbench", split="test")
+            # Filter to text-only problems with answers
+            filtered = []
+            for row in raw:
+                answers = row.get("final_answer", [])
+                if not answers or not any(a.strip() for a in answers):
+                    continue
+                filtered.append(dict(row))
+            self._dataset = filtered
+        except Exception as e:
+            print(f"  [adapter] OlympiadBench load failed: {e}")
+            self._dataset = []
+
+    def _get_tier_for_index(self, idx: int) -> int:
+        subfield = self._dataset[idx].get("subfield", "")
+        return self.SUBFIELD_TIER_MAP.get(subfield, 3)
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        question = row.get("question", "")
+        answers = row.get("final_answer", [])
+        # Use first answer; some problems have multiple valid answers
+        expected = answers[0].strip() if answers else ""
+        is_multi = row.get("is_multiple_answer", False)
+        answer_type = row.get("answer_type", "Numerical")
+        subfield = row.get("subfield", "Math")
+        row_id = row.get("id", idx)
+        unit = row.get("unit", "")
+        tier = self.SUBFIELD_TIER_MAP.get(subfield, 3)
+
+        # If multiple answers, join them for expected
+        if is_multi and len(answers) > 1:
+            expected = ", ".join(a.strip() for a in answers if a.strip())
+
+        suffix = "\n\nSolve step by step. Put your final answer in \\boxed{}."
+        if unit:
+            suffix = f"\n\nSolve step by step. Express your answer in {unit}. Put your final answer in \\boxed{{}}."
+
+        return {
+            "id": f"olympiadbench_{subfield.lower().replace(' ', '_')}_{row_id}",
+            "suite": "olympiadbench",
+            "prompt": question + suffix,
             "context": "",
             "expected": expected,
             "scoring": [],

@@ -1,0 +1,773 @@
+load_backend: loaded CPU backend from /mnt/raid0/llm/llama.cpp/build/bin/libggml-cpu-zen4.so
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+build: 8214 (7acee0d64) with GNU 13.3.0 for Linux x86_64
+system info: n_threads = 24, n_threads_batch = 24, total_threads = 192
+
+system_info: n_threads = 24 (n_threads_batch = 24) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+
+init: using 191 threads for HTTP server
+start: binding port with default address family
+main: loading model
+srv    load_model: loading model '/mnt/raid0/llm/models/Qwen2.5-7B-Instruct-f16.gguf'
+common_init_result: fitting params to device memory, for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on
+llama_params_fit_impl: no devices with dedicated memory found
+llama_params_fit: successfully fit params to free device memory
+llama_params_fit: fitting params to free memory took 0.15 seconds
+llama_model_loader: loaded meta data with 37 key-value pairs and 339 tensors from /mnt/raid0/llm/models/Qwen2.5-7B-Instruct-f16.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen2
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                     general.sampling.top_k i32              = 20
+llama_model_loader: - kv   3:                     general.sampling.top_p f32              = 0.800000
+llama_model_loader: - kv   4:                      general.sampling.temp f32              = 0.700000
+llama_model_loader: - kv   5:                               general.name str              = Qwen2.5 7B Instruct
+llama_model_loader: - kv   6:                           general.finetune str              = Instruct
+llama_model_loader: - kv   7:                           general.basename str              = Qwen2.5
+llama_model_loader: - kv   8:                         general.size_label str              = 7B
+llama_model_loader: - kv   9:                            general.license str              = apache-2.0
+llama_model_loader: - kv  10:                       general.license.link str              = https://huggingface.co/Qwen/Qwen2.5-7...
+llama_model_loader: - kv  11:                   general.base_model.count u32              = 1
+llama_model_loader: - kv  12:                  general.base_model.0.name str              = Qwen2.5 7B
+llama_model_loader: - kv  13:          general.base_model.0.organization str              = Qwen
+llama_model_loader: - kv  14:              general.base_model.0.repo_url str              = https://huggingface.co/Qwen/Qwen2.5-7B
+llama_model_loader: - kv  15:                               general.tags arr[str,2]       = ["chat", "text-generation"]
+llama_model_loader: - kv  16:                          general.languages arr[str,1]       = ["en"]
+llama_model_loader: - kv  17:                          qwen2.block_count u32              = 28
+llama_model_loader: - kv  18:                       qwen2.context_length u32              = 32768
+llama_model_loader: - kv  19:                     qwen2.embedding_length u32              = 3584
+llama_model_loader: - kv  20:                  qwen2.feed_forward_length u32              = 18944
+llama_model_loader: - kv  21:                 qwen2.attention.head_count u32              = 28
+llama_model_loader: - kv  22:              qwen2.attention.head_count_kv u32              = 4
+llama_model_loader: - kv  23:                       qwen2.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  24:     qwen2.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  25:                          general.file_type u32              = 1
+llama_model_loader: - kv  26:               general.quantization_version u32              = 2
+llama_model_loader: - kv  27:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  28:                         tokenizer.ggml.pre str              = qwen2
+llama_model_loader: - kv  29:                      tokenizer.ggml.tokens arr[str,152064]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  30:                  tokenizer.ggml.token_type arr[i32,152064]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  31:                      tokenizer.ggml.merges arr[str,151387]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  32:                tokenizer.ggml.eos_token_id u32              = 151645
+llama_model_loader: - kv  33:            tokenizer.ggml.padding_token_id u32              = 151643
+llama_model_loader: - kv  34:                tokenizer.ggml.bos_token_id u32              = 151643
+llama_model_loader: - kv  35:               tokenizer.ggml.add_bos_token bool             = false
+llama_model_loader: - kv  36:                    tokenizer.chat_template str              = {%- if tools %}\n    {{- '<|im_start|>...
+llama_model_loader: - type  f32:  141 tensors
+llama_model_loader: - type  f16:  198 tensors
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = F16
+print_info: file size   = 14.19 GiB (16.00 BPW) 
+load: 0 unused tokens
+load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+load: printing all EOG tokens:
+load:   - 128247 ('</s>')
+load:   - 151643 ('<|endoftext|>')
+load:   - 151645 ('<|im_end|>')
+load:   - 151662 ('<|fim_pad|>')
+load:   - 151663 ('<|repo_name|>')
+load:   - 151664 ('<|file_sep|>')
+load: special tokens cache size = 23
+load: token to piece cache size = 0.9310 MB
+print_info: arch                  = qwen2
+print_info: vocab_only            = 0
+print_info: no_alloc              = 0
+print_info: n_ctx_train           = 32768
+print_info: n_embd                = 3584
+print_info: n_embd_inp            = 3584
+print_info: n_layer               = 28
+print_info: n_head                = 28
+print_info: n_head_kv             = 4
+print_info: n_rot                 = 128
+print_info: n_swa                 = 0
+print_info: is_swa_any            = 0
+print_info: n_embd_head_k         = 128
+print_info: n_embd_head_v         = 128
+print_info: n_gqa                 = 7
+print_info: n_embd_k_gqa          = 512
+print_info: n_embd_v_gqa          = 512
+print_info: f_norm_eps            = 0.0e+00
+print_info: f_norm_rms_eps        = 1.0e-06
+print_info: f_clamp_kqv           = 0.0e+00
+print_info: f_max_alibi_bias      = 0.0e+00
+print_info: f_logit_scale         = 0.0e+00
+print_info: f_attn_scale          = 0.0e+00
+print_info: n_ff                  = 18944
+print_info: n_expert              = 0
+print_info: n_expert_used         = 0
+print_info: n_expert_groups       = 0
+print_info: n_group_used          = 0
+print_info: causal attn           = 1
+print_info: pooling type          = -1
+print_info: rope type             = 2
+print_info: rope scaling          = linear
+print_info: freq_base_train       = 1000000.0
+print_info: freq_scale_train      = 1
+print_info: n_ctx_orig_yarn       = 32768
+print_info: rope_yarn_log_mul     = 0.0000
+print_info: rope_finetuned        = unknown
+print_info: model type            = 7B
+print_info: model params          = 7.62 B
+print_info: general.name          = Qwen2.5 7B Instruct
+print_info: vocab type            = BPE
+print_info: n_vocab               = 152064
+print_info: n_merges              = 151387
+print_info: BOS token             = 151643 '<|endoftext|>'
+print_info: EOS token             = 151645 '<|im_end|>'
+print_info: EOT token             = 151645 '<|im_end|>'
+print_info: PAD token             = 151643 '<|endoftext|>'
+print_info: LF token              = 198 'Ċ'
+print_info: FIM PRE token         = 151659 '<|fim_prefix|>'
+print_info: FIM SUF token         = 151661 '<|fim_suffix|>'
+print_info: FIM MID token         = 151660 '<|fim_middle|>'
+print_info: FIM PAD token         = 151662 '<|fim_pad|>'
+print_info: FIM REP token         = 151663 '<|repo_name|>'
+print_info: FIM SEP token         = 151664 '<|file_sep|>'
+print_info: EOG token             = 128247 '</s>'
+print_info: EOG token             = 151643 '<|endoftext|>'
+print_info: EOG token             = 151645 '<|im_end|>'
+print_info: EOG token             = 151662 '<|fim_pad|>'
+print_info: EOG token             = 151663 '<|repo_name|>'
+print_info: EOG token             = 151664 '<|file_sep|>'
+print_info: max token length      = 256
+load_tensors: loading model tensors, this can take a while... (mmap = true, direct_io = false)
+load_tensors:   CPU_Mapped model buffer size = 14526.27 MiB
+........................................................................................
+common_init_result: added </s> logit bias = -inf
+common_init_result: added <|endoftext|> logit bias = -inf
+common_init_result: added <|im_end|> logit bias = -inf
+common_init_result: added <|fim_pad|> logit bias = -inf
+common_init_result: added <|repo_name|> logit bias = -inf
+common_init_result: added <|file_sep|> logit bias = -inf
+llama_context: constructing llama_context
+llama_context: n_seq_max     = 1
+llama_context: n_ctx         = 32768
+llama_context: n_ctx_seq     = 32768
+llama_context: n_batch       = 2048
+llama_context: n_ubatch      = 512
+llama_context: causal_attn   = 1
+llama_context: flash_attn    = enabled
+llama_context: kv_unified    = false
+llama_context: freq_base     = 1000000.0
+llama_context: freq_scale    = 1
+llama_context:        CPU  output buffer size =     0.58 MiB
+llama_kv_cache:        CPU KV buffer size =  1792.00 MiB
+llama_kv_cache: size = 1792.00 MiB ( 32768 cells,  28 layers,  1/1 seqs), K (f16):  896.00 MiB, V (f16):  896.00 MiB
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   396.01 MiB
+sched_reserve: graph nodes  = 959
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 0.87 ms, sched copies = 1
+common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+srv    load_model: loading draft model '/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q8_0.gguf'
+llama_model_loader: loaded meta data with 33 key-value pairs and 290 tensors from /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q8_0.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen2
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Qwen2.5 Coder 0.5B
+llama_model_loader: - kv   3:                           general.basename str              = Qwen2.5-Coder
+llama_model_loader: - kv   4:                         general.size_label str              = 0.5B
+llama_model_loader: - kv   5:                            general.license str              = apache-2.0
+llama_model_loader: - kv   6:                       general.license.link str              = https://huggingface.co/Qwen/Qwen2.5-C...
+llama_model_loader: - kv   7:                   general.base_model.count u32              = 1
+llama_model_loader: - kv   8:                  general.base_model.0.name str              = Qwen2.5 0.5B
+llama_model_loader: - kv   9:          general.base_model.0.organization str              = Qwen
+llama_model_loader: - kv  10:              general.base_model.0.repo_url str              = https://huggingface.co/Qwen/Qwen2.5-0.5B
+llama_model_loader: - kv  11:                               general.tags arr[str,5]       = ["code", "qwen", "qwen-coder", "codeq...
+llama_model_loader: - kv  12:                          general.languages arr[str,1]       = ["en"]
+llama_model_loader: - kv  13:                          qwen2.block_count u32              = 24
+llama_model_loader: - kv  14:                       qwen2.context_length u32              = 32768
+llama_model_loader: - kv  15:                     qwen2.embedding_length u32              = 896
+llama_model_loader: - kv  16:                  qwen2.feed_forward_length u32              = 4864
+llama_model_loader: - kv  17:                 qwen2.attention.head_count u32              = 14
+llama_model_loader: - kv  18:              qwen2.attention.head_count_kv u32              = 2
+llama_model_loader: - kv  19:                       qwen2.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  20:     qwen2.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  21:                          general.file_type u32              = 7
+llama_model_loader: - kv  22:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  23:                         tokenizer.ggml.pre str              = qwen2
+llama_model_loader: - kv  24:                      tokenizer.ggml.tokens arr[str,151936]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  25:                  tokenizer.ggml.token_type arr[i32,151936]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  26:                      tokenizer.ggml.merges arr[str,151387]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  27:                tokenizer.ggml.eos_token_id u32              = 151645
+llama_model_loader: - kv  28:            tokenizer.ggml.padding_token_id u32              = 151643
+llama_model_loader: - kv  29:                tokenizer.ggml.bos_token_id u32              = 151643
+llama_model_loader: - kv  30:               tokenizer.ggml.add_bos_token bool             = false
+llama_model_loader: - kv  31:                    tokenizer.chat_template str              = {%- if tools %}\n    {{- '<|im_start|>...
+llama_model_loader: - kv  32:               general.quantization_version u32              = 2
+llama_model_loader: - type  f32:  121 tensors
+llama_model_loader: - type q8_0:  169 tensors
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = Q8_0
+print_info: file size   = 500.79 MiB (8.50 BPW) 
+load: 0 unused tokens
+load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+load: printing all EOG tokens:
+load:   - 128247 ('</s>')
+load:   - 151643 ('<|endoftext|>')
+load:   - 151645 ('<|im_end|>')
+load:   - 151662 ('<|fim_pad|>')
+load:   - 151663 ('<|repo_name|>')
+load:   - 151664 ('<|file_sep|>')
+load: special tokens cache size = 23
+load: token to piece cache size = 0.9310 MB
+print_info: arch                  = qwen2
+print_info: vocab_only            = 0
+print_info: no_alloc              = 0
+print_info: n_ctx_train           = 32768
+print_info: n_embd                = 896
+print_info: n_embd_inp            = 896
+print_info: n_layer               = 24
+print_info: n_head                = 14
+print_info: n_head_kv             = 2
+print_info: n_rot                 = 64
+print_info: n_swa                 = 0
+print_info: is_swa_any            = 0
+print_info: n_embd_head_k         = 64
+print_info: n_embd_head_v         = 64
+print_info: n_gqa                 = 7
+print_info: n_embd_k_gqa          = 128
+print_info: n_embd_v_gqa          = 128
+print_info: f_norm_eps            = 0.0e+00
+print_info: f_norm_rms_eps        = 1.0e-06
+print_info: f_clamp_kqv           = 0.0e+00
+print_info: f_max_alibi_bias      = 0.0e+00
+print_info: f_logit_scale         = 0.0e+00
+print_info: f_attn_scale          = 0.0e+00
+print_info: n_ff                  = 4864
+print_info: n_expert              = 0
+print_info: n_expert_used         = 0
+print_info: n_expert_groups       = 0
+print_info: n_group_used          = 0
+print_info: causal attn           = 1
+print_info: pooling type          = -1
+print_info: rope type             = 2
+print_info: rope scaling          = linear
+print_info: freq_base_train       = 1000000.0
+print_info: freq_scale_train      = 1
+print_info: n_ctx_orig_yarn       = 32768
+print_info: rope_yarn_log_mul     = 0.0000
+print_info: rope_finetuned        = unknown
+print_info: model type            = 1B
+print_info: model params          = 494.03 M
+print_info: general.name          = Qwen2.5 Coder 0.5B
+print_info: vocab type            = BPE
+print_info: n_vocab               = 151936
+print_info: n_merges              = 151387
+print_info: BOS token             = 151643 '<|endoftext|>'
+print_info: EOS token             = 151645 '<|im_end|>'
+print_info: EOT token             = 151645 '<|im_end|>'
+print_info: PAD token             = 151643 '<|endoftext|>'
+print_info: LF token              = 198 'Ċ'
+print_info: FIM PRE token         = 151659 '<|fim_prefix|>'
+print_info: FIM SUF token         = 151661 '<|fim_suffix|>'
+print_info: FIM MID token         = 151660 '<|fim_middle|>'
+print_info: FIM PAD token         = 151662 '<|fim_pad|>'
+print_info: FIM REP token         = 151663 '<|repo_name|>'
+print_info: FIM SEP token         = 151664 '<|file_sep|>'
+print_info: EOG token             = 128247 '</s>'
+print_info: EOG token             = 151643 '<|endoftext|>'
+print_info: EOG token             = 151645 '<|im_end|>'
+print_info: EOG token             = 151662 '<|fim_pad|>'
+print_info: EOG token             = 151663 '<|repo_name|>'
+print_info: EOG token             = 151664 '<|file_sep|>'
+print_info: max token length      = 256
+load_tensors: loading model tensors, this can take a while... (mmap = true, direct_io = false)
+load_tensors:   CPU_Mapped model buffer size =   500.79 MiB
+..........................................................................
+srv    load_model: initializing slots, n_slots = 1
+llama_context: constructing llama_context
+llama_context: n_seq_max     = 1
+llama_context: n_ctx         = 32768
+llama_context: n_ctx_seq     = 32768
+llama_context: n_batch       = 32768
+llama_context: n_ubatch      = 512
+llama_context: causal_attn   = 1
+llama_context: flash_attn    = enabled
+llama_context: kv_unified    = false
+llama_context: freq_base     = 1000000.0
+llama_context: freq_scale    = 1
+llama_context:        CPU  output buffer size =     0.58 MiB
+llama_kv_cache:        CPU KV buffer size =   384.00 MiB
+llama_kv_cache: size =  384.00 MiB ( 32768 cells,  24 layers,  1/1 seqs), K (f16):  192.00 MiB, V (f16):  192.00 MiB
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   300.25 MiB
+sched_reserve: graph nodes  = 823
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 1.12 ms, sched copies = 1
+slot   load_model: id  0 | task -1 | speculative decoding context initialized
+slot   load_model: id  0 | task -1 | new slot, n_ctx = 32768
+srv    load_model: prompt cache is enabled, size limit: 8192 MiB
+srv    load_model: use `--cache-ram 0` to disable the prompt cache
+srv    load_model: for more info see https://github.com/ggml-org/llama.cpp/pull/16391
+init: chat template, example_format: '<|im_start|>system
+You are a helpful assistant<|im_end|>
+<|im_start|>user
+Hello<|im_end|>
+<|im_start|>assistant
+Hi there<|im_end|>
+<|im_start|>user
+How are you?<|im_end|>
+<|im_start|>assistant
+'
+srv          init: init: chat template, thinking = 0
+main: model loaded
+main: server is listening on http://127.0.0.1:8180
+main: starting the main loop...
+srv  update_slots: all slots are idle
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+slot update_slots: id  0 | task 0 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 29
+slot update_slots: id  0 | task 0 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 0 | init sampler, took 0.01 ms, tokens: text = 29, total = 29
+slot update_slots: id  0 | task 0 | prompt processing done, n_tokens = 29, batch.n_tokens = 29
+slot update_slots: id  0 | task 0 | prompt lookup: built ngram cache from 29 prompt tokens
+slot update_slots: id  0 | task 0 | draft size 9 exceeds max 1, truncating
+slot print_timing: id  0 | task 0 | 
+prompt eval time =     197.14 ms /    29 tokens (    6.80 ms per token,   147.10 tokens per second)
+       eval time =    6773.70 ms /   256 tokens (   26.46 ms per token,    37.79 tokens per second)
+      total time =    6970.85 ms /   285 tokens
+draft acceptance rate = 0.81884 (  226 accepted /   276 generated)
+statistics draft: #calls(b,g,a) = 1 29 21, #gen drafts = 29, #acc drafts = 21, #gen tokens = 284, #acc tokens = 226, dur(b,g,a) = 0.001, 2028.914, 0.009 ms
+slot      release: id  0 | task 0 | stop processing: n_tokens = 284, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.102
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 284, total state size = 15.535 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.102, sim = 1.000
+srv        update:  - cache state: 1 prompts, 15.535 MiB (limits: 8192.000 MiB, 32768 tokens, 149758 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv  get_availabl: prompt cache update took 3.48 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 31 | processing task, is_child = 0
+slot update_slots: id  0 | task 31 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 29
+slot update_slots: id  0 | task 31 | need to evaluate at least 1 token for each active slot (n_past = 29, task.n_tokens() = 29)
+slot update_slots: id  0 | task 31 | n_past was set to 28
+slot update_slots: id  0 | task 31 | n_tokens = 28, memory_seq_rm [28, end)
+slot init_sampler: id  0 | task 31 | init sampler, took 0.00 ms, tokens: text = 29, total = 29
+slot update_slots: id  0 | task 31 | prompt processing done, n_tokens = 29, batch.n_tokens = 1
+slot update_slots: id  0 | task 31 | prompt lookup: built ngram cache from 29 prompt tokens
+slot update_slots: id  0 | task 31 | draft size 16 exceeds max 9, truncating
+slot print_timing: id  0 | task 31 | 
+prompt eval time =     121.32 ms /     1 tokens (  121.32 ms per token,     8.24 tokens per second)
+       eval time =    1465.99 ms /   256 tokens (    5.73 ms per token,   174.63 tokens per second)
+      total time =    1587.31 ms /   257 tokens
+draft acceptance rate = 1.00000 (  249 accepted /   249 generated)
+statistics draft: #calls(b,g,a) = 2 35 27, #gen drafts = 35, #acc drafts = 27, #gen tokens = 540, #acc tokens = 475, dur(b,g,a) = 0.001, 2028.921, 0.012 ms
+slot      release: id  0 | task 31 | stop processing: n_tokens = 284, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.102
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 284, total state size = 15.535 MiB
+srv         alloc:  - prompt is already in the cache, skipping
+srv          load:  - looking for better prompt, base f_keep = 0.102, sim = 1.000
+srv        update:  - cache state: 1 prompts, 15.535 MiB (limits: 8192.000 MiB, 32768 tokens, 149758 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv  get_availabl: prompt cache update took 0.04 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 39 | processing task, is_child = 0
+slot update_slots: id  0 | task 39 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 29
+slot update_slots: id  0 | task 39 | need to evaluate at least 1 token for each active slot (n_past = 29, task.n_tokens() = 29)
+slot update_slots: id  0 | task 39 | n_past was set to 28
+slot update_slots: id  0 | task 39 | n_tokens = 28, memory_seq_rm [28, end)
+slot init_sampler: id  0 | task 39 | init sampler, took 0.00 ms, tokens: text = 29, total = 29
+slot update_slots: id  0 | task 39 | prompt processing done, n_tokens = 29, batch.n_tokens = 1
+slot update_slots: id  0 | task 39 | prompt lookup: built ngram cache from 29 prompt tokens
+slot update_slots: id  0 | task 39 | draft size 16 exceeds max 9, truncating
+slot print_timing: id  0 | task 39 | 
+prompt eval time =     121.78 ms /     1 tokens (  121.78 ms per token,     8.21 tokens per second)
+       eval time =    1449.85 ms /   256 tokens (    5.66 ms per token,   176.57 tokens per second)
+      total time =    1571.63 ms /   257 tokens
+draft acceptance rate = 1.00000 (  249 accepted /   249 generated)
+statistics draft: #calls(b,g,a) = 3 41 33, #gen drafts = 41, #acc drafts = 33, #gen tokens = 796, #acc tokens = 724, dur(b,g,a) = 0.001, 2028.928, 0.013 ms
+slot      release: id  0 | task 39 | stop processing: n_tokens = 284, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.102
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 284, total state size = 15.535 MiB
+srv         alloc:  - prompt is already in the cache, skipping
+srv          load:  - looking for better prompt, base f_keep = 0.102, sim = 1.000
+srv        update:  - cache state: 1 prompts, 15.535 MiB (limits: 8192.000 MiB, 32768 tokens, 149758 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv  get_availabl: prompt cache update took 0.04 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 47 | processing task, is_child = 0
+slot update_slots: id  0 | task 47 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 29
+slot update_slots: id  0 | task 47 | need to evaluate at least 1 token for each active slot (n_past = 29, task.n_tokens() = 29)
+slot update_slots: id  0 | task 47 | n_past was set to 28
+slot update_slots: id  0 | task 47 | n_tokens = 28, memory_seq_rm [28, end)
+slot init_sampler: id  0 | task 47 | init sampler, took 0.00 ms, tokens: text = 29, total = 29
+slot update_slots: id  0 | task 47 | prompt processing done, n_tokens = 29, batch.n_tokens = 1
+slot update_slots: id  0 | task 47 | prompt lookup: built ngram cache from 29 prompt tokens
+slot update_slots: id  0 | task 47 | draft size 16 exceeds max 9, truncating
+slot print_timing: id  0 | task 47 | 
+prompt eval time =     121.28 ms /     1 tokens (  121.28 ms per token,     8.25 tokens per second)
+       eval time =    1439.86 ms /   256 tokens (    5.62 ms per token,   177.80 tokens per second)
+      total time =    1561.14 ms /   257 tokens
+draft acceptance rate = 1.00000 (  249 accepted /   249 generated)
+statistics draft: #calls(b,g,a) = 4 47 39, #gen drafts = 47, #acc drafts = 39, #gen tokens = 1052, #acc tokens = 973, dur(b,g,a) = 0.001, 2028.937, 0.018 ms
+slot      release: id  0 | task 47 | stop processing: n_tokens = 284, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.102
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 284, total state size = 15.535 MiB
+srv         alloc:  - prompt is already in the cache, skipping
+srv          load:  - looking for better prompt, base f_keep = 0.102, sim = 1.000
+srv        update:  - cache state: 1 prompts, 15.535 MiB (limits: 8192.000 MiB, 32768 tokens, 149758 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv  get_availabl: prompt cache update took 0.04 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 55 | processing task, is_child = 0
+slot update_slots: id  0 | task 55 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 29
+slot update_slots: id  0 | task 55 | need to evaluate at least 1 token for each active slot (n_past = 29, task.n_tokens() = 29)
+slot update_slots: id  0 | task 55 | n_past was set to 28
+slot update_slots: id  0 | task 55 | n_tokens = 28, memory_seq_rm [28, end)
+slot init_sampler: id  0 | task 55 | init sampler, took 0.00 ms, tokens: text = 29, total = 29
+slot update_slots: id  0 | task 55 | prompt processing done, n_tokens = 29, batch.n_tokens = 1
+slot update_slots: id  0 | task 55 | prompt lookup: built ngram cache from 29 prompt tokens
+slot update_slots: id  0 | task 55 | draft size 16 exceeds max 9, truncating
+slot print_timing: id  0 | task 55 | 
+prompt eval time =     121.03 ms /     1 tokens (  121.03 ms per token,     8.26 tokens per second)
+       eval time =    1475.44 ms /   256 tokens (    5.76 ms per token,   173.51 tokens per second)
+      total time =    1596.47 ms /   257 tokens
+draft acceptance rate = 1.00000 (  249 accepted /   249 generated)
+statistics draft: #calls(b,g,a) = 5 53 45, #gen drafts = 53, #acc drafts = 45, #gen tokens = 1308, #acc tokens = 1222, dur(b,g,a) = 0.002, 2028.947, 0.022 ms
+slot      release: id  0 | task 55 | stop processing: n_tokens = 284, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.102
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 284, total state size = 15.535 MiB
+srv         alloc:  - prompt is already in the cache, skipping
+srv          load:  - looking for better prompt, base f_keep = 0.102, sim = 1.000
+srv        update:  - cache state: 1 prompts, 15.535 MiB (limits: 8192.000 MiB, 32768 tokens, 149758 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv  get_availabl: prompt cache update took 0.04 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 63 | processing task, is_child = 0
+slot update_slots: id  0 | task 63 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 29
+slot update_slots: id  0 | task 63 | need to evaluate at least 1 token for each active slot (n_past = 29, task.n_tokens() = 29)
+slot update_slots: id  0 | task 63 | n_past was set to 28
+slot update_slots: id  0 | task 63 | n_tokens = 28, memory_seq_rm [28, end)
+slot init_sampler: id  0 | task 63 | init sampler, took 0.00 ms, tokens: text = 29, total = 29
+slot update_slots: id  0 | task 63 | prompt processing done, n_tokens = 29, batch.n_tokens = 1
+slot update_slots: id  0 | task 63 | prompt lookup: built ngram cache from 29 prompt tokens
+slot update_slots: id  0 | task 63 | draft size 16 exceeds max 9, truncating
+slot print_timing: id  0 | task 63 | 
+prompt eval time =     121.78 ms /     1 tokens (  121.78 ms per token,     8.21 tokens per second)
+       eval time =    1455.87 ms /   256 tokens (    5.69 ms per token,   175.84 tokens per second)
+      total time =    1577.64 ms /   257 tokens
+draft acceptance rate = 1.00000 (  249 accepted /   249 generated)
+statistics draft: #calls(b,g,a) = 6 59 51, #gen drafts = 59, #acc drafts = 51, #gen tokens = 1564, #acc tokens = 1471, dur(b,g,a) = 0.002, 2028.956, 0.026 ms
+slot      release: id  0 | task 63 | stop processing: n_tokens = 284, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.102
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 284, total state size = 15.535 MiB
+srv         alloc:  - prompt is already in the cache, skipping
+srv          load:  - looking for better prompt, base f_keep = 0.102, sim = 1.000
+srv        update:  - cache state: 1 prompts, 15.535 MiB (limits: 8192.000 MiB, 32768 tokens, 149758 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv  get_availabl: prompt cache update took 0.04 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 71 | processing task, is_child = 0
+slot update_slots: id  0 | task 71 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 29
+slot update_slots: id  0 | task 71 | need to evaluate at least 1 token for each active slot (n_past = 29, task.n_tokens() = 29)
+slot update_slots: id  0 | task 71 | n_past was set to 28
+slot update_slots: id  0 | task 71 | n_tokens = 28, memory_seq_rm [28, end)
+slot init_sampler: id  0 | task 71 | init sampler, took 0.00 ms, tokens: text = 29, total = 29
+slot update_slots: id  0 | task 71 | prompt processing done, n_tokens = 29, batch.n_tokens = 1
+slot update_slots: id  0 | task 71 | prompt lookup: built ngram cache from 29 prompt tokens
+slot update_slots: id  0 | task 71 | draft size 16 exceeds max 9, truncating
+slot print_timing: id  0 | task 71 | 
+prompt eval time =     121.39 ms /     1 tokens (  121.39 ms per token,     8.24 tokens per second)
+       eval time =    1455.21 ms /   256 tokens (    5.68 ms per token,   175.92 tokens per second)
+      total time =    1576.60 ms /   257 tokens
+draft acceptance rate = 1.00000 (  249 accepted /   249 generated)
+statistics draft: #calls(b,g,a) = 7 65 57, #gen drafts = 65, #acc drafts = 57, #gen tokens = 1820, #acc tokens = 1720, dur(b,g,a) = 0.002, 2028.964, 0.030 ms
+slot      release: id  0 | task 71 | stop processing: n_tokens = 284, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 0.105 (> 0.100 thold), f_keep = 0.007
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 284, total state size = 15.535 MiB
+srv         alloc:  - prompt is already in the cache, skipping
+srv          load:  - looking for better prompt, base f_keep = 0.007, sim = 0.105
+srv        update:  - cache state: 1 prompts, 15.535 MiB (limits: 8192.000 MiB, 32768 tokens, 149758 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv  get_availabl: prompt cache update took 0.04 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 79 | processing task, is_child = 0
+slot update_slots: id  0 | task 79 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 19
+slot update_slots: id  0 | task 79 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 79 | init sampler, took 0.00 ms, tokens: text = 19, total = 19
+slot update_slots: id  0 | task 79 | prompt processing done, n_tokens = 19, batch.n_tokens = 19
+slot update_slots: id  0 | task 79 | prompt lookup: built ngram cache from 19 prompt tokens
+slot update_slots: id  0 | task 79 | draft size 24 exceeds max 13, truncating
+slot print_timing: id  0 | task 79 | 
+prompt eval time =     158.97 ms /    19 tokens (    8.37 ms per token,   119.52 tokens per second)
+       eval time =    5496.67 ms /   128 tokens (   42.94 ms per token,    23.29 tokens per second)
+      total time =    5655.64 ms /   147 tokens
+draft acceptance rate = 0.85714 (   96 accepted /   112 generated)
+statistics draft: #calls(b,g,a) = 8 96 81, #gen drafts = 96, #acc drafts = 81, #gen tokens = 1943, #acc tokens = 1816, dur(b,g,a) = 0.002, 2951.057, 0.036 ms
+slot      release: id  0 | task 79 | stop processing: n_tokens = 146, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 2613222314961
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 146, total state size = 7.987 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+srv        update:  - cache state: 2 prompts, 23.522 MiB (limits: 8192.000 MiB, 32768 tokens, 149756 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv        update:    - prompt 0x627507769eb0:     146 tokens, checkpoints:  0,     7.987 MiB
+srv  get_availabl: prompt cache update took 2.03 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 112 | processing task, is_child = 0
+slot update_slots: id  0 | task 112 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 23
+slot update_slots: id  0 | task 112 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 112 | init sampler, took 0.00 ms, tokens: text = 23, total = 23
+slot update_slots: id  0 | task 112 | prompt processing done, n_tokens = 23, batch.n_tokens = 23
+slot update_slots: id  0 | task 112 | prompt lookup: built ngram cache from 23 prompt tokens
+slot print_timing: id  0 | task 112 | 
+prompt eval time =     165.66 ms /    23 tokens (    7.20 ms per token,   138.84 tokens per second)
+       eval time =    8367.58 ms /   128 tokens (   65.37 ms per token,    15.30 tokens per second)
+      total time =    8533.24 ms /   151 tokens
+draft acceptance rate = 0.73529 (   75 accepted /   102 generated)
+statistics draft: #calls(b,g,a) = 9 147 120, #gen drafts = 147, #acc drafts = 120, #gen tokens = 2045, #acc tokens = 1891, dur(b,g,a) = 0.003, 3791.452, 0.046 ms
+slot      release: id  0 | task 112 | stop processing: n_tokens = 150, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 2613230892829
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 150, total state size = 8.205 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+srv        update:  - cache state: 3 prompts, 31.727 MiB (limits: 8192.000 MiB, 32768 tokens, 149755 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv        update:    - prompt 0x627507769eb0:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x62750776c210:     150 tokens, checkpoints:  0,     8.205 MiB
+srv  get_availabl: prompt cache update took 2.40 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 166 | processing task, is_child = 0
+slot update_slots: id  0 | task 166 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 19
+slot update_slots: id  0 | task 166 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 166 | init sampler, took 0.00 ms, tokens: text = 19, total = 19
+slot update_slots: id  0 | task 166 | prompt processing done, n_tokens = 19, batch.n_tokens = 19
+slot update_slots: id  0 | task 166 | prompt lookup: built ngram cache from 19 prompt tokens
+slot update_slots: id  0 | task 166 | draft size 5 exceeds max 2, truncating
+slot print_timing: id  0 | task 166 | 
+prompt eval time =     166.04 ms /    19 tokens (    8.74 ms per token,   114.43 tokens per second)
+       eval time =    8347.80 ms /   128 tokens (   65.22 ms per token,    15.33 tokens per second)
+      total time =    8513.84 ms /   147 tokens
+draft acceptance rate = 0.66667 (   76 accepted /   114 generated)
+statistics draft: #calls(b,g,a) = 10 198 154, #gen drafts = 198, #acc drafts = 154, #gen tokens = 2162, #acc tokens = 1967, dur(b,g,a) = 0.004, 4726.592, 0.052 ms
+slot      release: id  0 | task 166 | stop processing: n_tokens = 146, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 2613239450458
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 146, total state size = 7.987 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+srv        update:  - cache state: 4 prompts, 39.714 MiB (limits: 8192.000 MiB, 32768 tokens, 149755 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv        update:    - prompt 0x627507769eb0:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x62750776c210:     150 tokens, checkpoints:  0,     8.205 MiB
+srv        update:    - prompt 0x627507966210:     146 tokens, checkpoints:  0,     7.987 MiB
+srv  get_availabl: prompt cache update took 2.31 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 219 | processing task, is_child = 0
+slot update_slots: id  0 | task 219 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 18
+slot update_slots: id  0 | task 219 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 219 | init sampler, took 0.00 ms, tokens: text = 18, total = 18
+slot update_slots: id  0 | task 219 | prompt processing done, n_tokens = 18, batch.n_tokens = 18
+slot update_slots: id  0 | task 219 | prompt lookup: built ngram cache from 18 prompt tokens
+slot print_timing: id  0 | task 219 | 
+prompt eval time =     160.69 ms /    18 tokens (    8.93 ms per token,   112.02 tokens per second)
+       eval time =    9100.06 ms /   128 tokens (   71.09 ms per token,    14.07 tokens per second)
+      total time =    9260.75 ms /   146 tokens
+draft acceptance rate = 0.72165 (   70 accepted /    97 generated)
+statistics draft: #calls(b,g,a) = 11 255 196, #gen drafts = 255, #acc drafts = 196, #gen tokens = 2259, #acc tokens = 2037, dur(b,g,a) = 0.004, 5584.612, 0.064 ms
+slot      release: id  0 | task 219 | stop processing: n_tokens = 145, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 2613248755381
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 145, total state size = 7.932 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+srv        update:  - cache state: 5 prompts, 47.646 MiB (limits: 8192.000 MiB, 32768 tokens, 149754 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv        update:    - prompt 0x627507769eb0:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x62750776c210:     150 tokens, checkpoints:  0,     8.205 MiB
+srv        update:    - prompt 0x627507966210:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x627507956ff0:     145 tokens, checkpoints:  0,     7.932 MiB
+srv  get_availabl: prompt cache update took 2.34 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 278 | processing task, is_child = 0
+slot update_slots: id  0 | task 278 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 17
+slot update_slots: id  0 | task 278 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 278 | init sampler, took 0.00 ms, tokens: text = 17, total = 17
+slot update_slots: id  0 | task 278 | prompt processing done, n_tokens = 17, batch.n_tokens = 17
+slot update_slots: id  0 | task 278 | prompt lookup: built ngram cache from 17 prompt tokens
+slot update_slots: id  0 | task 278 | draft size 30 exceeds max 12, truncating
+slot print_timing: id  0 | task 278 | 
+prompt eval time =     159.59 ms /    17 tokens (    9.39 ms per token,   106.52 tokens per second)
+       eval time =    7367.73 ms /   128 tokens (   57.56 ms per token,    17.37 tokens per second)
+      total time =    7527.32 ms /   145 tokens
+draft acceptance rate = 0.78302 (   83 accepted /   106 generated)
+statistics draft: #calls(b,g,a) = 12 299 226, #gen drafts = 299, #acc drafts = 226, #gen tokens = 2383, #acc tokens = 2120, dur(b,g,a) = 0.004, 6545.584, 0.069 ms
+slot      release: id  0 | task 278 | stop processing: n_tokens = 144, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 0.105 (> 0.100 thold), f_keep = 0.014
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 144, total state size = 7.877 MiB
+srv          load:  - looking for better prompt, base f_keep = 0.014, sim = 0.105
+srv        update:  - cache state: 6 prompts, 55.523 MiB (limits: 8192.000 MiB, 32768 tokens, 149754 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv        update:    - prompt 0x627507769eb0:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x62750776c210:     150 tokens, checkpoints:  0,     8.205 MiB
+srv        update:    - prompt 0x627507966210:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x627507956ff0:     145 tokens, checkpoints:  0,     7.932 MiB
+srv        update:    - prompt 0x6275079571b0:     144 tokens, checkpoints:  0,     7.877 MiB
+srv  get_availabl: prompt cache update took 2.30 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 324 | processing task, is_child = 0
+slot update_slots: id  0 | task 324 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 19
+slot update_slots: id  0 | task 324 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 324 | init sampler, took 0.00 ms, tokens: text = 19, total = 19
+slot update_slots: id  0 | task 324 | prompt processing done, n_tokens = 19, batch.n_tokens = 19
+slot update_slots: id  0 | task 324 | prompt lookup: built ngram cache from 19 prompt tokens
+slot update_slots: id  0 | task 324 | draft size 24 exceeds max 13, truncating
+slot print_timing: id  0 | task 324 | 
+prompt eval time =     160.44 ms /    19 tokens (    8.44 ms per token,   118.43 tokens per second)
+       eval time =    5486.13 ms /   128 tokens (   42.86 ms per token,    23.33 tokens per second)
+      total time =    5646.57 ms /   147 tokens
+draft acceptance rate = 0.85714 (   96 accepted /   112 generated)
+statistics draft: #calls(b,g,a) = 13 330 250, #gen drafts = 330, #acc drafts = 250, #gen tokens = 2506, #acc tokens = 2216, dur(b,g,a) = 0.004, 7466.595, 0.074 ms
+slot      release: id  0 | task 324 | stop processing: n_tokens = 146, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 2613262017141
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 146, total state size = 7.987 MiB
+srv         alloc:  - prompt is already in the cache, skipping
+srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+srv        update:  - cache state: 6 prompts, 55.523 MiB (limits: 8192.000 MiB, 32768 tokens, 149754 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv        update:    - prompt 0x627507769eb0:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x62750776c210:     150 tokens, checkpoints:  0,     8.205 MiB
+srv        update:    - prompt 0x627507966210:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x627507956ff0:     145 tokens, checkpoints:  0,     7.932 MiB
+srv        update:    - prompt 0x6275079571b0:     144 tokens, checkpoints:  0,     7.877 MiB
+srv  get_availabl: prompt cache update took 0.05 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 357 | processing task, is_child = 0
+slot update_slots: id  0 | task 357 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 23
+slot update_slots: id  0 | task 357 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 357 | init sampler, took 0.00 ms, tokens: text = 23, total = 23
+slot update_slots: id  0 | task 357 | prompt processing done, n_tokens = 23, batch.n_tokens = 23
+slot update_slots: id  0 | task 357 | prompt lookup: built ngram cache from 23 prompt tokens
+slot print_timing: id  0 | task 357 | 
+prompt eval time =     166.10 ms /    23 tokens (    7.22 ms per token,   138.47 tokens per second)
+       eval time =    8357.99 ms /   128 tokens (   65.30 ms per token,    15.31 tokens per second)
+      total time =    8524.09 ms /   151 tokens
+draft acceptance rate = 0.73529 (   75 accepted /   102 generated)
+statistics draft: #calls(b,g,a) = 14 381 289, #gen drafts = 381, #acc drafts = 289, #gen tokens = 2608, #acc tokens = 2291, dur(b,g,a) = 0.004, 8305.651, 0.078 ms
+slot      release: id  0 | task 357 | stop processing: n_tokens = 150, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 2613270584024
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 150, total state size = 8.205 MiB
+srv         alloc:  - prompt is already in the cache, skipping
+srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+srv        update:  - cache state: 6 prompts, 55.523 MiB (limits: 8192.000 MiB, 32768 tokens, 149754 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv        update:    - prompt 0x627507769eb0:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x62750776c210:     150 tokens, checkpoints:  0,     8.205 MiB
+srv        update:    - prompt 0x627507966210:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x627507956ff0:     145 tokens, checkpoints:  0,     7.932 MiB
+srv        update:    - prompt 0x6275079571b0:     144 tokens, checkpoints:  0,     7.877 MiB
+srv  get_availabl: prompt cache update took 0.05 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 411 | processing task, is_child = 0
+slot update_slots: id  0 | task 411 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 19
+slot update_slots: id  0 | task 411 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 411 | init sampler, took 0.00 ms, tokens: text = 19, total = 19
+slot update_slots: id  0 | task 411 | prompt processing done, n_tokens = 19, batch.n_tokens = 19
+slot update_slots: id  0 | task 411 | prompt lookup: built ngram cache from 19 prompt tokens
+slot update_slots: id  0 | task 411 | draft size 5 exceeds max 2, truncating
+slot print_timing: id  0 | task 411 | 
+prompt eval time =     165.67 ms /    19 tokens (    8.72 ms per token,   114.69 tokens per second)
+       eval time =    8398.47 ms /   128 tokens (   65.61 ms per token,    15.24 tokens per second)
+      total time =    8564.14 ms /   147 tokens
+draft acceptance rate = 0.66667 (   76 accepted /   114 generated)
+statistics draft: #calls(b,g,a) = 15 432 323, #gen drafts = 432, #acc drafts = 323, #gen tokens = 2725, #acc tokens = 2367, dur(b,g,a) = 0.004, 9243.251, 0.088 ms
+slot      release: id  0 | task 411 | stop processing: n_tokens = 146, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 2613279189765
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 146, total state size = 7.987 MiB
+srv         alloc:  - prompt is already in the cache, skipping
+srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+srv        update:  - cache state: 6 prompts, 55.523 MiB (limits: 8192.000 MiB, 32768 tokens, 149754 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv        update:    - prompt 0x627507769eb0:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x62750776c210:     150 tokens, checkpoints:  0,     8.205 MiB
+srv        update:    - prompt 0x627507966210:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x627507956ff0:     145 tokens, checkpoints:  0,     7.932 MiB
+srv        update:    - prompt 0x6275079571b0:     144 tokens, checkpoints:  0,     7.877 MiB
+srv  get_availabl: prompt cache update took 0.03 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 464 | processing task, is_child = 0
+slot update_slots: id  0 | task 464 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 18
+slot update_slots: id  0 | task 464 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 464 | init sampler, took 0.00 ms, tokens: text = 18, total = 18
+slot update_slots: id  0 | task 464 | prompt processing done, n_tokens = 18, batch.n_tokens = 18
+slot update_slots: id  0 | task 464 | prompt lookup: built ngram cache from 18 prompt tokens
+slot print_timing: id  0 | task 464 | 
+prompt eval time =     160.81 ms /    18 tokens (    8.93 ms per token,   111.93 tokens per second)
+       eval time =    9151.10 ms /   128 tokens (   71.49 ms per token,    13.99 tokens per second)
+      total time =    9311.91 ms /   146 tokens
+draft acceptance rate = 0.72165 (   70 accepted /    97 generated)
+statistics draft: #calls(b,g,a) = 16 489 365, #gen drafts = 489, #acc drafts = 365, #gen tokens = 2822, #acc tokens = 2437, dur(b,g,a) = 0.005, 10107.093, 0.102 ms
+slot      release: id  0 | task 464 | stop processing: n_tokens = 145, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 2613288543436
+srv  get_availabl: updating prompt cache
+srv   prompt_save:  - saving prompt with length 145, total state size = 7.932 MiB
+srv         alloc:  - prompt is already in the cache, skipping
+srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+srv        update:  - cache state: 6 prompts, 55.523 MiB (limits: 8192.000 MiB, 32768 tokens, 149754 est)
+srv        update:    - prompt 0x62750776d490:     284 tokens, checkpoints:  0,    15.535 MiB
+srv        update:    - prompt 0x627507769eb0:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x62750776c210:     150 tokens, checkpoints:  0,     8.205 MiB
+srv        update:    - prompt 0x627507966210:     146 tokens, checkpoints:  0,     7.987 MiB
+srv        update:    - prompt 0x627507956ff0:     145 tokens, checkpoints:  0,     7.932 MiB
+srv        update:    - prompt 0x6275079571b0:     144 tokens, checkpoints:  0,     7.877 MiB
+srv  get_availabl: prompt cache update took 0.05 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 523 | processing task, is_child = 0
+slot update_slots: id  0 | task 523 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 17
+slot update_slots: id  0 | task 523 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  0 | task 523 | init sampler, took 0.00 ms, tokens: text = 17, total = 17
+slot update_slots: id  0 | task 523 | prompt processing done, n_tokens = 17, batch.n_tokens = 17
+slot update_slots: id  0 | task 523 | prompt lookup: built ngram cache from 17 prompt tokens
+slot update_slots: id  0 | task 523 | draft size 30 exceeds max 12, truncating
+slot print_timing: id  0 | task 523 | 
+prompt eval time =     159.07 ms /    17 tokens (    9.36 ms per token,   106.87 tokens per second)
+       eval time =    7369.65 ms /   128 tokens (   57.58 ms per token,    17.37 tokens per second)
+      total time =    7528.72 ms /   145 tokens
+draft acceptance rate = 0.78302 (   83 accepted /   106 generated)
+statistics draft: #calls(b,g,a) = 17 533 395, #gen drafts = 533, #acc drafts = 395, #gen tokens = 2946, #acc tokens = 2520, dur(b,g,a) = 0.005, 11067.632, 0.107 ms
+slot      release: id  0 | task 523 | stop processing: n_tokens = 144, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200

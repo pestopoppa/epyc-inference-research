@@ -2,7 +2,7 @@
 
 Comprehensive reference for all models used in the orchestration system.
 
-**Last verified:** 2026-02-03 against `orchestration/model_registry.yaml`
+**Last verified:** 2026-03-21 (sweep-verified throughput) against `orchestration/model_registry.yaml`
 
 ## Production Models by Role
 
@@ -10,23 +10,23 @@ Comprehensive reference for all models used in the orchestration system.
 
 | Role | Model | Quant | Port | Speed | Acceleration |
 |------|-------|-------|------|-------|--------------|
-| frontdoor | Qwen3-Coder-30B-A3B | Q4_K_M | 8080 | 18.3 t/s | MoE 6 experts |
+| frontdoor | Qwen3.5-35B-A3B | Q4_K_M | 8080 | ~19.6 t/s | MoE 6 experts + lookup, mlock |
 
 ### Tier B - Specialists
 
 | Role | Model | Quant | Port | Speed | Acceleration |
 |------|-------|-------|------|-------|--------------|
-| coder_escalation | Qwen2.5-Coder-32B | Q4_K_M | 8081 | 39.4 t/s | Spec K=24 + lookup |
-| architect_general | Qwen3-235B-A22B | Q4_K_M | 8083 | 6.75 t/s | MoE 4 experts |
-| architect_coding | Qwen3-Coder-480B-A35B | Q4_K_M | 8084 | 10.3 t/s | MoE 3 experts |
+| coder_escalation | Qwen2.5-Coder-32B | Q4_K_M | 8081 | 10.8 t/s (48t) | Spec dm=32 ps=0.05 + lookup |
+| architect_general | Qwen3.5-122B-A10B | Q4_K_M | 8083 | 4.3 t/s (96t) | MoE 8 + spec dm=24 + lookup |
+| architect_coding | Qwen3-Coder-480B-A35B | Q4_K_M | 8084 | 7.0 t/s (96t) | Spec dm=24 + lookup (NO tree) |
 | ingest_long_context | Qwen3-Next-80B-A3B | Q4_K_M | 8085 | 6.3 t/s | MoE 4 experts (NO SPEC!) |
 
 ### Tier C - Workers
 
 | Role | Model | Quant | Port | Speed | Acceleration |
 |------|-------|-------|------|-------|--------------|
-| worker_general | Qwen2.5-7B-Instruct | f16 | 8082 | 43.9 t/s | Spec K=24 + lookup |
-| worker_math | *(shared with worker_general)* | — | 8082 | 43.9 t/s | Spec K=24 + lookup |
+| worker_general | Qwen2.5-7B-Instruct | f16 | 8082 | 19.2 t/s (24t) | Spec dm=16 ps=0.05 + lookup |
+| worker_math | *(shared with worker_general)* | — | 8082 | 19.2 t/s (24t) | Spec dm=16 ps=0.05 + lookup |
 | worker_vision | Qwen2.5-VL-7B | Q4_K_M | 8086 | ~15 t/s | None (VL model) |
 | vision_escalation | Qwen3-VL-30B-A3B | Q4_K_M | 8087 | ~10 t/s | MoE 4 experts |
 
@@ -41,9 +41,9 @@ Comprehensive reference for all models used in the orchestration system.
 
 | Tier | Components | Memory |
 |------|------------|--------|
-| HOT (always resident) | frontdoor, coder_escalation, worker, embedder | ~55 GB |
-| WARM (load on demand) | architects, ingest, vision | ~450 GB |
-| Total available | All models loaded | ~505 GB |
+| HOT (always resident, mlock) | 4x frontdoor, 4x coder, worker, embedder | ~420 GB |
+| WARM (load on demand) | architects, ingest, vision | ~370 GB |
+| Total available | All models loaded | ~790 GB |
 
 ## Model Compatibility Matrix
 
@@ -51,15 +51,15 @@ Comprehensive reference for all models used in the orchestration system.
 
 | Target Family | Compatible Drafts | K Value | Speedup |
 |---------------|-------------------|---------|---------|
-| Qwen2.5-Coder-32B | Qwen2.5-Coder-0.5B-Instruct | K=24 | 5.4x (w/ lookup) |
-| Qwen2.5-7B-Instruct | Qwen2.5-Coder-0.5B | K=24 | 3.8x (w/ lookup) |
+| Qwen2.5-Coder-32B | Qwen2.5-Coder-0.5B-Instruct | dm=32,ps=0.05 | ~3x (Q4KM, verified) |
+| Qwen2.5-7B-Instruct | Qwen2.5-Coder-0.5B | dm=16,ps=0.05 | ~2.5x (f16, verified) |
 | Qwen3-* (non-coder) | **None** | — | Use MoE reduction |
 
 ### Incompatible Pairs (Do Not Use)
 
 | Target | Draft | Failure Mode |
 |--------|-------|--------------|
-| Qwen3-Coder-480B | Any | BOS token mismatch (`BOS=','`) |
+| Qwen3-Coder-480B | Any general draft | BOS mismatch — use Coder-DRAFT-0.75B only |
 | Qwen3-Next-* | Any | SSM state corruption |
 | Qwen3-VL-* | Any text draft | Vision encoder mismatch |
 | DeepSeek-R1-Distill-* | Any | Vocab size mismatch |

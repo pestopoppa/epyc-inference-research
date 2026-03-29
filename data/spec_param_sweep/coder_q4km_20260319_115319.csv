@@ -1,0 +1,6 @@
+model,mode,threads,draft_max,p_split,request_idx,tokens_generated,time_ms,tokens_per_sec
+coder_q4km,192t,192,4,0,0,0,90,0.00
+coder_q4km,192t,192,4,0,1,0,64,0.00
+coder_q4km,192t,192,4,0,2,0,72,0.00
+coder_q4km,192t,192,4,0,3,0,84,0.00
+coder_q4km,192t,192,4,0,4,0,91,0.00
