@@ -220,12 +220,12 @@ ROLE_SUITE_MAP = {
 
     # Versatile roles - broad testing
     "general": ["general", "agentic", "instruction_precision", "thinking", "coder", "math"],
-    "frontdoor": ["general", "agentic", "instruction_precision", "coder", "math", "long_context"],  # All except vl/thinking
-    "architect": ["thinking", "coder", "agentic", "general", "instruction_precision", "math", "long_context"],
+    "frontdoor": ["general", "agentic", "instruction_precision", "coder", "math", "long_context", "longbench", "needle_parameterized"],
+    "architect": ["thinking", "coder", "agentic", "general", "instruction_precision", "math", "long_context", "longbench", "needle_parameterized"],
 
-    # Context specialists
-    "ingest": ["long_context", "general", "agentic"],
-    "long_context": ["long_context", "general", "agentic"],
+    # Context specialists — full long-context battery
+    "ingest": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized"],
+    "long_context": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized"],
 
     # Workers - general purpose
     "worker": ["general", "thinking", "agentic"],

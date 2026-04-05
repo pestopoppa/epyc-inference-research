@@ -54,10 +54,30 @@ ADAPTER_SUITES = {
     "physreason",
     # Phase 4: competition math
     "aime", "olympiadbench",
+    # Phase 5: long-context evaluation datasets
+    "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized",
 }
 
 # Suites that stay YAML-based (no public dataset or intentionally synthetic)
 YAML_ONLY_SUITES = {"agentic", "long_context", "mode_advantage", "mode_advantage_hard", "skill_transfer", "web_research"}
+
+
+def _get_long_context_adapter(class_name: str):
+    """Lazy-import a long-context adapter class to avoid loading HF datasets at import time."""
+    try:
+        from long_context_adapters import (
+            LongBenchAdapter, ZeroSCROLLSAdapter, LEvalAdapter,
+            RULERAdapter, NeedleAdapter,
+        )
+        return {
+            "LongBenchAdapter": LongBenchAdapter,
+            "ZeroSCROLLSAdapter": ZeroSCROLLSAdapter,
+            "LEvalAdapter": LEvalAdapter,
+            "RULERAdapter": RULERAdapter,
+            "NeedleAdapter": NeedleAdapter,
+        }[class_name]
+    except ImportError:
+        return None
 
 
 def get_adapter(suite: str) -> Optional["BaseAdapter"]:
@@ -86,6 +106,12 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         # Phase 4: competition math
         "aime": AIMEAdapter,
         "olympiadbench": OlympiadBenchAdapter,
+        # Phase 5: long-context evaluation datasets
+        "longbench": _get_long_context_adapter("LongBenchAdapter"),
+        "zeroscrolls": _get_long_context_adapter("ZeroSCROLLSAdapter"),
+        "leval": _get_long_context_adapter("LEvalAdapter"),
+        "ruler": _get_long_context_adapter("RULERAdapter"),
+        "needle_parameterized": _get_long_context_adapter("NeedleAdapter"),
     }
     cls = adapters.get(suite)
     if cls is None:
