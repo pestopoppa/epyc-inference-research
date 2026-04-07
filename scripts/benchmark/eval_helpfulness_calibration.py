@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -76,19 +77,153 @@ def calibrate_helpfulness(
 
 
 def run_calibration(traces: list[Path], weights: dict) -> dict:
-    """Run live calibration on traces with given weights.
+    """Run calibration on traces with given weights.
 
-    Steps per trace:
-    1. Load session log, extract ConsolidatedSegments
-    2. For each segment, compute heuristic helpfulness with given weights
-    3. For each segment, compute ground truth: were its identifiers
-       referenced in subsequent turns?
-    4. Compute Spearman correlation between heuristic and ground truth
+    Pure heuristic — does NOT require model servers. Computes helpfulness
+    scores from trace data and correlates with identifier-overlap ground truth.
     """
-    raise NotImplementedError(
-        "Live calibration requires session traces with full TurnRecord data. "
-        "Use --dry-run for offline testing."
-    )
+    from eval_helpers import parse_session_trace, extract_identifiers
+
+    all_heuristic = []
+    all_ground_truth = []
+    outcome_map = {"ok": 1.0, "final": 1.0, "error": 0.5, "nudge": 0.2}
+
+    for trace in traces:
+        turns = parse_session_trace(trace)
+        if len(turns) < 4:
+            continue
+
+        # Segment into groups of 2-3 consecutive turns
+        seg_size = min(3, max(2, len(turns) // 4))
+        segments = []
+        for i in range(0, len(turns) - seg_size + 1, seg_size):
+            segments.append(turns[i:i + seg_size])
+
+        current_turn = turns[-1].turn_num
+
+        for seg_turns in segments:
+            seg_end = seg_turns[-1].turn_num
+            distance = current_turn - seg_end
+
+            # Recency signal
+            recency = 1.0 / (1.0 + distance * 0.1)
+
+            # Overlap signal: identifiers in segment vs subsequent turns
+            seg_text = " ".join(t.raw_text for t in seg_turns)
+            seg_ids = extract_identifiers(seg_text)
+            subsequent = [t for t in turns if t.turn_num > seg_end]
+            sub_text = " ".join(t.raw_text for t in subsequent)
+            sub_ids = extract_identifiers(sub_text)
+            overlap = len(seg_ids & sub_ids) / max(len(seg_ids), 1)
+
+            # Outcome signal
+            outcomes = [outcome_map.get(t.outcome, 0.5) for t in seg_turns]
+            outcome = sum(outcomes) / len(outcomes)
+
+            # Sensitivity signal
+            has_code = any(t.code_hash for t in seg_turns)
+            has_error = any(t.error for t in seg_turns)
+            sensitivity = 1.0 if (has_code or has_error) else 0.5
+
+            # Weighted combination
+            heuristic = (
+                weights["recency"] * recency
+                + weights["overlap"] * overlap
+                + weights["outcome"] * outcome
+                + weights["sensitivity"] * sensitivity
+            )
+
+            # Ground truth: did ANY identifier from this segment appear later?
+            ground_truth = 1.0 if len(seg_ids & sub_ids) > 0 else 0.0
+
+            all_heuristic.append(heuristic)
+            all_ground_truth.append(ground_truth)
+
+    n = len(all_heuristic)
+    if n < 2:
+        return {
+            "config_idx": 0,
+            "weights": weights,
+            "n_traces": len(traces),
+            "n_segments_scored": n,
+            "spearman_rho": 0.0,
+            "precision_at_3": 0.0,
+            "ndcg": 0.0,
+            "mean_helpfulness_referenced": 0.0,
+            "mean_helpfulness_unreferenced": 0.0,
+            "separation": 0.0,
+            "status": "insufficient_data",
+        }
+
+    rho = _spearman_correlation(all_heuristic, all_ground_truth)
+    p_at_3 = _precision_at_k(all_heuristic, all_ground_truth, k=3)
+    ndcg = _compute_ndcg(all_heuristic, all_ground_truth)
+
+    referenced = [h for h, g in zip(all_heuristic, all_ground_truth) if g > 0]
+    unreferenced = [h for h, g in zip(all_heuristic, all_ground_truth) if g == 0]
+    mean_ref = sum(referenced) / max(len(referenced), 1)
+    mean_unref = sum(unreferenced) / max(len(unreferenced), 1)
+
+    return {
+        "config_idx": 0,
+        "weights": weights,
+        "n_traces": len(traces),
+        "n_segments_scored": n,
+        "spearman_rho": round(rho, 4),
+        "precision_at_3": round(p_at_3, 4),
+        "ndcg": round(ndcg, 4),
+        "mean_helpfulness_referenced": round(mean_ref, 4),
+        "mean_helpfulness_unreferenced": round(mean_unref, 4),
+        "separation": round(mean_ref - mean_unref, 4),
+        "status": "live",
+    }
+
+
+def _rank(values: list[float]) -> list[float]:
+    """Compute ranks with average tie-breaking."""
+    indexed = sorted(enumerate(values), key=lambda x: x[1])
+    ranks = [0.0] * len(values)
+    i = 0
+    while i < len(indexed):
+        j = i
+        while j < len(indexed) and indexed[j][1] == indexed[i][1]:
+            j += 1
+        avg_rank = (i + j + 1) / 2  # 1-based average
+        for k in range(i, j):
+            ranks[indexed[k][0]] = avg_rank
+        i = j
+    return ranks
+
+
+def _spearman_correlation(x: list[float], y: list[float]) -> float:
+    """Spearman rank correlation without scipy."""
+    n = len(x)
+    if n < 2:
+        return 0.0
+    rx = _rank(x)
+    ry = _rank(y)
+    d_sq = sum((a - b) ** 2 for a, b in zip(rx, ry))
+    return 1.0 - 6.0 * d_sq / (n * (n * n - 1))
+
+
+def _precision_at_k(scores: list[float], labels: list[float], k: int = 3) -> float:
+    """Precision of top-k scored items having positive ground truth."""
+    if not scores or k <= 0:
+        return 0.0
+    paired = sorted(zip(scores, labels), key=lambda x: -x[0])
+    top_k = paired[:k]
+    return sum(1 for _, l in top_k if l > 0) / len(top_k)
+
+
+def _compute_ndcg(scores: list[float], labels: list[float]) -> float:
+    """Normalized Discounted Cumulative Gain."""
+    if not scores:
+        return 0.0
+    paired = sorted(zip(scores, labels), key=lambda x: -x[0])
+    dcg = sum(l / math.log2(i + 2) for i, (_, l) in enumerate(paired))
+    ideal = sorted(labels, reverse=True)
+    idcg = sum(l / math.log2(i + 2) for i, l in enumerate(ideal))
+    return dcg / idcg if idcg > 0 else 0.0
 
 
 def main():

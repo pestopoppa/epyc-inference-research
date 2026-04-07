@@ -43,6 +43,8 @@ def sweep_compaction_profiles(
     levels: list[int],
     *,
     dry_run: bool = False,
+    model_port: int = 8071,
+    judge_port: int = 8082,
 ) -> list[dict]:
     """Sweep compression levels across session traces.
 
@@ -69,25 +71,96 @@ def sweep_compaction_profiles(
                 }
             else:
                 # Live eval path — requires model servers
-                result = evaluate_compaction(trace, level, ratio)
+                result = evaluate_compaction(
+                    trace, level, ratio,
+                    model_port=model_port, judge_port=judge_port,
+                )
 
             results.append(result)
 
     return results
 
 
-def evaluate_compaction(trace: Path, level: int, ratio: float) -> dict:
+def evaluate_compaction(
+    trace: Path,
+    level: int,
+    ratio: float,
+    *,
+    model_port: int = 8071,
+    judge_port: int = 8082,
+) -> dict:
     """Run live compaction evaluation on one trace at one level.
 
     Requires model servers to be running. Steps:
     1. Load session trace
-    2. Compact at target ratio using worker_explore
-    3. Present compacted context + probe task
+    2. Compact at target ratio using model server
+    3. Extract probe task from session
     4. Score with Claude-as-Judge
     """
-    raise NotImplementedError(
-        "Live evaluation requires model servers. Use --dry-run for offline testing."
-    )
+    from eval_helpers import parse_session_trace, call_model, judge_quality, estimate_tokens
+
+    try:
+        turns = parse_session_trace(trace)
+        original_text = trace.read_text(errors="replace")
+        original_tokens = estimate_tokens(original_text)
+        target_tokens = int(original_tokens * (1.0 - ratio))
+
+        consolidated, usage = call_model(
+            port=model_port,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        f"Consolidate this session log to approximately {target_tokens} tokens. "
+                        "Preserve key decisions, errors, and outcomes. "
+                        "Remove redundant nudges and repeated content."
+                    ),
+                },
+                {"role": "user", "content": original_text},
+            ],
+            timeout=180.0,
+        )
+
+        # Extract probe: last non-nudge turn content
+        probe = ""
+        for turn in reversed(turns):
+            if turn.outcome != "nudge":
+                probe = turn.output or turn.error or turn.first_line or ""
+                break
+
+        scores = judge_quality(
+            original=original_text,
+            summary=consolidated,
+            probe=probe,
+            port=judge_port,
+        )
+
+        consolidated_tokens = estimate_tokens(consolidated)
+        return {
+            "trace": str(trace.name),
+            "level": level,
+            "ratio": ratio,
+            "faithfulness": scores["faithfulness"],
+            "retention": scores["retention"],
+            "compression_achieved": round(
+                1.0 - (consolidated_tokens / max(original_tokens, 1)), 3
+            ),
+            "tokens_before": original_tokens,
+            "tokens_after": consolidated_tokens,
+            "status": "live",
+        }
+    except Exception as e:
+        return {
+            "trace": str(trace.name),
+            "level": level,
+            "ratio": ratio,
+            "faithfulness": -1,
+            "retention": -1,
+            "compression_achieved": 0.0,
+            "tokens_before": 0,
+            "tokens_after": 0,
+            "status": f"error: {e}",
+        }
 
 
 def main():
@@ -113,6 +186,18 @@ def main():
         help="Output CSV path (default: stdout as JSON)",
     )
     parser.add_argument(
+        "--model-port",
+        type=int,
+        default=8071,
+        help="Model server port for consolidation (default: 8071, worker_explore)",
+    )
+    parser.add_argument(
+        "--judge-port",
+        type=int,
+        default=8082,
+        help="Judge model port for quality scoring (default: 8082)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Generate mock results without model servers",
@@ -134,7 +219,12 @@ def main():
             print(f"No session traces found in {args.traces_dir}", file=sys.stderr)
             sys.exit(1)
 
-    results = sweep_compaction_profiles(traces, levels, dry_run=args.dry_run)
+    results = sweep_compaction_profiles(
+        traces, levels,
+        dry_run=args.dry_run,
+        model_port=args.model_port,
+        judge_port=args.judge_port,
+    )
 
     if args.output:
         # CSV output
