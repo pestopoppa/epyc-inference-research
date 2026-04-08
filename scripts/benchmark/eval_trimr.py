@@ -117,7 +117,7 @@ def generate_response(
             "max_tokens": max_tokens,
             "temperature": temperature,
         },
-        timeout=120.0,
+        timeout=600.0,
     )
     resp.raise_for_status()
     elapsed = time.monotonic() - t0
@@ -330,6 +330,90 @@ def evaluate(
     return results
 
 
+def evaluate_parallel(
+    questions: list[dict[str, Any]],
+    strategy: str,
+    model_ports: list[int],
+    verifier_port: int = 8082,
+) -> list[dict[str, Any]]:
+    """Run evaluation in parallel across multiple NUMA model instances.
+
+    Distributes questions round-robin across ports using a thread pool.
+    """
+    import concurrent.futures
+
+    sys.path.insert(0, str(SCRIPT_DIR))
+    from debug_scorer import score_answer
+
+    n_workers = len(model_ports)
+    results: list[dict | None] = [None] * len(questions)
+
+    def eval_one(idx: int, q: dict, port: int) -> dict:
+        qid = q.get("id", f"q{idx}")
+        suite = q.get("suite", "unknown")
+        prompt = q.get("prompt", "")
+        expected = q.get("expected", "")
+        scoring_method = q.get("scoring_method", "exact_match")
+        scoring_config = q.get("scoring_config")
+
+        log.info("[%d/%d] %s/%s → port %d", idx + 1, len(questions), suite, qid, port)
+
+        try:
+            response, total_tokens, elapsed = generate_response(prompt, port=port)
+        except Exception as e:
+            log.warning("Generation failed for %s on port %d: %s", qid, port, e)
+            return {"id": qid, "suite": suite, "strategy": strategy, "correct": None, "error": str(e)}
+
+        think_blocks = re.findall(r"<think>(.*?)</think>", response, re.DOTALL)
+        think_text = "\n".join(think_blocks)
+        think_tokens = len(think_text) // 4
+
+        if strategy == "full":
+            eval_response = response
+        elif strategy == "think-strip":
+            eval_response = strip_think_blocks(response)
+        elif strategy == "trimr":
+            eval_response = trimr_prune(response, q, verifier_port)
+        else:
+            raise ValueError(f"Unknown strategy: {strategy}")
+
+        answer_for_scoring = strip_think_blocks(eval_response)
+        correct = score_answer(
+            answer=answer_for_scoring,
+            expected=expected,
+            scoring_method=scoring_method,
+            scoring_config=scoring_config,
+        )
+
+        pruned_think = re.findall(r"<think>(.*?)</think>", eval_response, re.DOTALL)
+        pruned_think_tokens = len("\n".join(pruned_think)) // 4
+        answer_tokens = len(answer_for_scoring) // 4
+
+        pruning_ratio = 0.0
+        if think_tokens > 0:
+            pruning_ratio = 1.0 - (pruned_think_tokens / think_tokens)
+
+        return {
+            "id": qid, "suite": suite, "strategy": strategy, "correct": correct,
+            "total_tokens": total_tokens, "think_tokens": think_tokens,
+            "pruned_think_tokens": pruned_think_tokens, "answer_tokens": answer_tokens,
+            "elapsed_s": round(elapsed, 2), "pruning_ratio": round(pruning_ratio, 3),
+        }
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as pool:
+        futures = {}
+        for idx, q in enumerate(questions):
+            port = model_ports[idx % n_workers]
+            fut = pool.submit(eval_one, idx, q, port)
+            futures[fut] = idx
+
+        for fut in concurrent.futures.as_completed(futures):
+            idx = futures[fut]
+            results[idx] = fut.result()
+
+    return [r for r in results if r is not None]
+
+
 def print_summary(results: list[dict[str, Any]], strategy: str) -> None:
     """Print summary table for evaluation results."""
     suites: dict[str, list[dict]] = {}
@@ -376,6 +460,11 @@ def main():
         help="Pruning strategy to evaluate (default: all)",
     )
     parser.add_argument("--model-port", type=int, default=8080, help="Target model port")
+    parser.add_argument(
+        "--model-ports", type=str, default="",
+        help="Comma-separated ports for NUMA-parallel eval (e.g. 8071,8081,8181,8281,8381). "
+             "Overrides --model-port. Questions are distributed round-robin across ports.",
+    )
     parser.add_argument("--verifier-port", type=int, default=8082, help="Verifier model port")
     parser.add_argument("--dry-run", action="store_true", help="Skip inference, test pipeline")
     parser.add_argument(
@@ -384,6 +473,12 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Parse NUMA-parallel ports
+    if args.model_ports:
+        ports = [int(p.strip()) for p in args.model_ports.split(",")]
+    else:
+        ports = [args.model_port]
 
     questions = load_questions(args.suites, args.n_questions)
     if not questions:
@@ -396,13 +491,23 @@ def main():
 
     for strategy in strategies:
         log.info("Running strategy: %s", strategy)
-        results = evaluate(
-            questions,
-            strategy=strategy,
-            model_port=args.model_port,
-            verifier_port=args.verifier_port,
-            dry_run=args.dry_run,
-        )
+
+        if len(ports) > 1 and not args.dry_run:
+            log.info("NUMA-parallel mode: %d instances (%s)", len(ports), ",".join(map(str, ports)))
+            results = evaluate_parallel(
+                questions,
+                strategy=strategy,
+                model_ports=ports,
+                verifier_port=args.verifier_port,
+            )
+        else:
+            results = evaluate(
+                questions,
+                strategy=strategy,
+                model_port=ports[0],
+                verifier_port=args.verifier_port,
+                dry_run=args.dry_run,
+            )
 
         # Save results
         out_path = Path(args.output) if args.output else RESULTS_DIR / f"results_{strategy}.jsonl"
