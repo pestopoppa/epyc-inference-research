@@ -99,7 +99,7 @@ def generate_response(
     prompt: str,
     host: str = "localhost",
     port: int = 8080,
-    max_tokens: int = 4096,
+    max_tokens: int = 8192,
     temperature: float = 0.0,
 ) -> tuple[str, int, float]:
     """Generate a response from a llama-server.
@@ -117,15 +117,22 @@ def generate_response(
             "max_tokens": max_tokens,
             "temperature": temperature,
         },
-        timeout=600.0,
+        timeout=1200.0,
     )
     resp.raise_for_status()
     elapsed = time.monotonic() - t0
 
     data = resp.json()
-    text = data["choices"][0]["message"]["content"]
+    msg = data["choices"][0]["message"]
+    text = msg.get("content", "")
+    reasoning = msg.get("reasoning_content", "")
     usage = data.get("usage", {})
     completion_tokens = usage.get("completion_tokens", len(text) // 4)
+
+    # If server extracted reasoning_content (--jinja with thinking-enabled models),
+    # reconstruct the full response with <think> tags for downstream parsing.
+    if reasoning:
+        text = f"<think>\n{reasoning}\n</think>\n{text}"
 
     return text, completion_tokens, elapsed
 
@@ -509,8 +516,14 @@ def main():
                 dry_run=args.dry_run,
             )
 
-        # Save results
-        out_path = Path(args.output) if args.output else RESULTS_DIR / f"results_{strategy}.jsonl"
+        # Save results — per-strategy files to prevent overwrites
+        if args.output:
+            base = Path(args.output)
+            # Insert strategy before extension: foo.jsonl → foo_full.jsonl
+            out_path = base.with_stem(f"{base.stem}_{strategy}")
+        else:
+            out_path = RESULTS_DIR / f"results_{strategy}.jsonl"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w") as f:
             for r in results:
                 f.write(json.dumps(r) + "\n")

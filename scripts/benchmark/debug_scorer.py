@@ -90,9 +90,14 @@ def _score_exact_match(
     # Try to extract via pattern first
     extracted = _extract_answer(answer, pattern)
     if extracted is None:
-        # Fallback: try to find the expected value anywhere in the last line
-        last_line = answer.strip().split("\n")[-1]
-        extracted = last_line.strip()
+        # Fallback 1: \boxed{} (common in reasoning models like DeepSeek-R1, Qwen3)
+        boxed = re.search(r'\\boxed\{([^{}]+)\}', answer)
+        if boxed:
+            extracted = boxed.group(1).strip()
+        else:
+            # Fallback 2: try to find the expected value anywhere in the last line
+            last_line = answer.strip().split("\n")[-1]
+            extracted = last_line.strip()
 
     if normalize:
         extracted = extracted.strip().lower().rstrip(".")
