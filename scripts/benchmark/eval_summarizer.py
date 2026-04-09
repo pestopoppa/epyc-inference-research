@@ -25,6 +25,8 @@ DEFAULT_PORTS = [8072, 8071, 8070]  # worker_fast, worker_explore, coder_esc
 def find_session_traces(traces_dir: Path, n_traces: int) -> list[Path]:
     """Find session log files, returning up to n_traces."""
     traces = sorted(traces_dir.glob("session_*.md"))
+    # Exclude test/padding traces that don't contain real session data
+    traces = [t for t in traces if not t.name.startswith("session_test_")]
     # Prefer longer traces (more content to summarize)
     traces.sort(key=lambda p: p.stat().st_size, reverse=True)
     return traces[:n_traces]

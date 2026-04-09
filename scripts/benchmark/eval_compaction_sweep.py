@@ -29,13 +29,17 @@ COMPRESSION_LEVELS = {
 }
 
 
-def find_session_traces(traces_dir: Path) -> list[Path]:
-    """Find session log files in the traces directory."""
+def find_session_traces(traces_dir: Path, n_traces: int = 20) -> list[Path]:
+    """Find session log files in the traces directory, returning up to n_traces."""
     patterns = ["session_*.md", "session_*.jsonl"]
     traces = []
     for pat in patterns:
         traces.extend(sorted(traces_dir.glob(pat)))
-    return traces
+    # Exclude test/padding traces that don't contain real session data
+    traces = [t for t in traces if not t.name.startswith("session_test_")]
+    # Prefer longer traces (more content to compact)
+    traces.sort(key=lambda p: p.stat().st_size, reverse=True)
+    return traces[:n_traces]
 
 
 def sweep_compaction_profiles(
@@ -198,6 +202,10 @@ def main():
         help="Judge model port for quality scoring (default: 8082)",
     )
     parser.add_argument(
+        "--n-traces", type=int, default=20,
+        help="Number of traces to evaluate (default: 20)",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Generate mock results without model servers",
@@ -214,7 +222,7 @@ def main():
         # Use synthetic traces for dry-run
         traces = [Path(f"synthetic_session_{i}.md") for i in range(5)]
     else:
-        traces = find_session_traces(args.traces_dir)
+        traces = find_session_traces(args.traces_dir, args.n_traces)
         if not traces:
             print(f"No session traces found in {args.traces_dir}", file=sys.stderr)
             sys.exit(1)
