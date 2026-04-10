@@ -356,8 +356,11 @@ class MathAdapter(BaseAdapter):
 
     @staticmethod
     def _extract_gsm8k_answer(answer_text: str) -> str:
-        """Extract numeric answer from GSM8K solution (after ####)."""
-        match = re.search(r"####\s*(.+)", answer_text)
+        """Extract numeric answer from GSM8K solution (<answer> tags or ####)."""
+        # Try <answer> tag format first, fall back to legacy ####
+        match = re.search(r"<answer>(.*?)</answer>", answer_text, re.DOTALL)
+        if not match:
+            match = re.search(r"####\s*(.+)", answer_text)
         if match:
             return match.group(1).strip().replace(",", "")
         return answer_text.strip()
@@ -370,14 +373,14 @@ class MathAdapter(BaseAdapter):
         return {
             "id": f"gsm8k_{idx:05d}",
             "suite": "math",
-            "prompt": question + "\n\nSolve step by step. Put your final numeric answer after ####.",
+            "prompt": question + "\n\nSolve step by step. Put your final numeric answer inside <answer></answer> tags.",
             "context": "",
             "expected": expected,
             "scoring": [],
             "image_path": "",
             "tier": 1,  # GSM8K is grade-school level
             "scoring_method": "exact_match",
-            "scoring_config": {"extract_pattern": r"####\s*([^\s]+)"},
+            "scoring_config": {"extract_pattern": r"<answer>(.*?)</answer>"},
         }
 
     def _math500_prompt(self, idx: int, row: dict) -> dict:
@@ -879,7 +882,7 @@ class GaiaAdapter(BaseAdapter):
         prompt += (
             "\n\nGive a short, precise answer. "
             "If the answer is a number, give just the number. "
-            "Put your final answer after ####."
+            "Put your final answer inside <answer></answer> tags."
         )
 
         return {
@@ -893,7 +896,7 @@ class GaiaAdapter(BaseAdapter):
             "tier": min(max(int(level), 1), 3),
             "scoring_method": "exact_match",
             "scoring_config": {
-                "extract_pattern": r"####\s*(.+)",
+                "extract_pattern": r"<answer>(.*?)</answer>",
                 "normalize": True,
             },
         }
@@ -947,7 +950,7 @@ class CRUXEvalAdapter(BaseAdapter):
             f"the given input?\n\n"
             f"```python\n{code}\n```\n\n"
             f"Input: `{input_val}`\n\n"
-            f"Give the exact output after ####."
+            f"Give the exact output inside <answer></answer> tags."
         )
 
         return {
@@ -961,7 +964,7 @@ class CRUXEvalAdapter(BaseAdapter):
             "tier": 1,  # Output prediction = just run it
             "scoring_method": "exact_match",
             "scoring_config": {
-                "extract_pattern": r"####\s*(.+)",
+                "extract_pattern": r"<answer>(.*?)</answer>",
                 "normalize": True,
             },
         }
@@ -977,7 +980,7 @@ class CRUXEvalAdapter(BaseAdapter):
             f"input was provided.\n\n"
             f"```python\n{code}\n```\n\n"
             f"Output: `{output_val}`\n\n"
-            f"Give the exact input value after ####."
+            f"Give the exact input value inside <answer></answer> tags."
         )
 
         return {
@@ -991,7 +994,7 @@ class CRUXEvalAdapter(BaseAdapter):
             "tier": 2,  # Input prediction = harder reasoning
             "scoring_method": "exact_match",
             "scoring_config": {
-                "extract_pattern": r"####\s*(.+)",
+                "extract_pattern": r"<answer>(.*?)</answer>",
                 "normalize": True,
             },
         }
@@ -1224,7 +1227,7 @@ class SimpleQAAdapter(BaseAdapter):
         prompt = (
             f"{question}\n\n"
             "Give a short, precise answer. "
-            "Put your final answer after ####."
+            "Put your final answer inside <answer></answer> tags."
         )
 
         tier = self._get_tier_for_index(idx)
@@ -1241,7 +1244,7 @@ class SimpleQAAdapter(BaseAdapter):
             "tier": tier,
             "scoring_method": "f1",
             "scoring_config": {
-                "extract_pattern": r"####\s*(.+)",
+                "extract_pattern": r"<answer>(.*?)</answer>",
                 "threshold": 0.8,
                 "normalize": True,
             },
@@ -1311,7 +1314,7 @@ class HotpotQAAdapter(BaseAdapter):
 
         prompt += (
             "\n\nGive a short, precise answer based on the context. "
-            "Put your final answer after ####."
+            "Put your final answer inside <answer></answer> tags."
         )
 
         tier = self._get_tier_for_index(idx)
@@ -1327,7 +1330,7 @@ class HotpotQAAdapter(BaseAdapter):
             "tier": tier,
             "scoring_method": "f1",
             "scoring_config": {
-                "extract_pattern": r"####\s*(.+)",
+                "extract_pattern": r"<answer>(.*?)</answer>",
                 "threshold": 0.5,  # Minimum F1 to count as correct
             },
         }
