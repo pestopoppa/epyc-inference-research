@@ -1711,16 +1711,19 @@ class USACOAdapter(BaseAdapter):
 
     def _get_tier_for_index(self, idx: int) -> int:
         row = self._dataset[idx]
-        division = row.get("division", row.get("level", "silver")).lower()
+        division = row.get("division", row.get("difficulty", row.get("level", "silver"))).lower()
         return self.DIVISION_MAP.get(division, 2)
 
     def _row_to_prompt(self, idx: int, row: dict) -> dict:
         # Schema varies — try multiple field names
         problem = row.get("problem", row.get("question", row.get("prompt", "")))
         problem_id = row.get("problem_id", row.get("id", f"usaco_{idx:04d}"))
-        division = row.get("division", row.get("level", "silver"))
+        division = row.get("division", row.get("difficulty", row.get("level", "silver")))
         solution = row.get("solution", row.get("code", ""))
+        # Parse test cases — dataset uses "input_output" JSON string with
+        # {"inputs": [...], "outputs": [...]} format (codegenning/usacobench_formatted)
         test_cases = row.get("test_cases", row.get("tests", []))
+        input_output_raw = row.get("input_output", "")
 
         # Build prompt
         prompt_lines = [
@@ -1734,9 +1737,22 @@ class USACOAdapter(BaseAdapter):
 
         tier = self._get_tier_for_index(idx)
 
-        # Build test code if available
+        # Build test code from input_output JSON (primary) or test_cases (fallback)
         test_code = ""
-        if test_cases and isinstance(test_cases, list):
+        if input_output_raw and isinstance(input_output_raw, str):
+            try:
+                import json
+                io = json.loads(input_output_raw)
+                inputs = io.get("inputs", [])
+                outputs = io.get("outputs", [])
+                if inputs and outputs:
+                    pairs = []
+                    for inp, out in zip(inputs[:5], outputs[:5]):
+                        pairs.append(f"({repr(inp)}, {repr(out)})")
+                    test_code = f"TEST_CASES = [{', '.join(pairs)}]"
+            except (json.JSONDecodeError, TypeError):
+                pass
+        if not test_code and test_cases and isinstance(test_cases, list):
             test_cases_str = []
             for tc in test_cases[:5]:
                 if isinstance(tc, dict):
