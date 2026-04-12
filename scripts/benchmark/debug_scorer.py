@@ -673,9 +673,18 @@ def _extract_code_block(text: str, language: str = "python") -> str | None:
         if match:
             return match.group(1).strip()
 
-    # Last resort: return the whole text (might be just code)
-    if text.strip().startswith(("def ", "class ", "import ", "from ")):
-        return text.strip()
+    # Last resort: if text looks like executable Python code, return it
+    # Covers USACO-style stdin solutions (n = int(input()), sys.stdin, etc.)
+    stripped = text.strip()
+    if stripped and any(
+        stripped.startswith(prefix)
+        for prefix in ("def ", "class ", "import ", "from ", "n ", "t ", "for ", "while ", "if ", "#")
+    ):
+        return stripped
+
+    # Also accept if it contains input() — likely a competitive programming solution
+    if "input()" in stripped or "sys.stdin" in stripped:
+        return stripped
 
     return None
 
