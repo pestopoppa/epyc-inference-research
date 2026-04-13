@@ -1,0 +1,10 @@
+{
+  "model": "Qwen2.5-7B-f16",
+  "n_tokens": 210,
+  "n_kept": 100,
+  "compression": 2.1,
+  "baseline_correct": true,
+  "compacted_correct": false,
+  "baseline": "The Dartmouth workshop, where the field of AI research was founded, was held in the summer of 1956.",
+  "compacted": "Hello! How can I assist you today?"
+}

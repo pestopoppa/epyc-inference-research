@@ -1,0 +1,80 @@
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: How many integers from 1 to 100 are coprime to 30?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: The average of 5 numbers is 18. When a 6th number is added, the average becomes 20. What is the 6th number?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: What is the area of a trapezoid with parallel sides 6 and 10, and height 4?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A train travels at 60 mph for 2.5 hours. How far does it go?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the diagonal of a rectangle with sides 8 and 15.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: John is twice as old as Mary. In 5 years, the sum of their ages will be 40. How old is Mary now?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Solve for x: |2x - 5| = 9.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Is 2^31 - 1 prime? (Mersenne prime check.)
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: How many ways can 5 books be arranged on a shelf?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the least common multiple of 12, 18, and 20.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Solve: sqrt(2x + 3) = 5.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A says 'B always lies.' B says 'A always tells the truth.' Who is the liar?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A boat goes 20 km upstream in 4 hours and returns in 2 hours. Find the speed of the current.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: What is the remainder when 2^100 is divided by 7?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the sum of all positive divisors of 28.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A pipe fills a tank in 6 hours, another empties it in 9 hours. Both open: how long to fill?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: In triangle ABC, angle A = 40° and angle B = 75°. Find angle C.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A car depreciates 15% per year. After 3 years, a $20000 car is worth how much?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Five people finish a race. Amy beats Bob. Carol beats Dave. Bob beats Carol. Eve finishes last. Who won?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Solve for x: 2(x - 3) + 5 = 3x - 1.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: All roses are flowers. Some flowers fade quickly. Can we conclude that some roses fade quickly?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Mix 5 liters of 30% acid with 3 liters of 50% acid. What is the resulting concentration?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the 10th term of the geometric sequence 2, 6, 18, 54, ...
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Two trains approach each other at 80 km/h and 120 km/h from 400 km apart. When do they meet?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Solve for x: (x + 2)/(x - 1) = 3.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the area of a triangle with base 12 and height 8.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: What is 7^4 mod 13?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find all integer solutions to 3x ≡ 5 (mod 7).
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: The legs of an isosceles right triangle each measure 10. Find the hypotenuse.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Three coins are tossed. What is the probability of at least 2 heads?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the arc length of a 60° sector in a circle of radius 12.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Simplify: (3a^2b)(2ab^3).
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A ladder 13 feet long leans against a wall. The base is 5 feet from the wall. How high up does the ladder reach?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Simplify: (2x^2 + 3x - 5) - (x^2 - 4x + 2).
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Expand and simplify: (2x - 3)^3.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the greatest common divisor of 48 and 180.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the hypotenuse of a right triangle with legs 5 and 12.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Express 0.363636... as a fraction in lowest terms.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the volume of a cylinder with radius 3 and height 10.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: If f(x) = 2x^2 - 3x + 1, find f(4).
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Solve the system: 2x + y = 7, x - y = 2.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Investment of $1000 at 5% annual compound interest for 3 years yields how much?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: You have a 3-liter jug and a 5-liter jug. How do you measure exactly 4 liters?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the sum of the arithmetic series: 3 + 7 + 11 + ... + 99.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A store offers 20% off a $45 item. What is the sale price?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A circle has radius 7. Find its circumference.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A rectangular garden is 3 meters longer than it is wide. Its area is 108 m^2. Find its dimensions.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A bag has 4 red and 6 blue balls. Two are drawn without replacement. P(both red)?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Solve for x: log_2(x) + log_2(x - 2) = 3.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: What is the digital root of 987654?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Solve for x: 3x + 7 = 22.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: If 8 workers can build a wall in 6 days, how long would 12 workers take?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Three light switches in one room control three bulbs in another. You may enter the bulb room once. How do you determine which switch controls which bulb?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: How many positive divisors does 360 have?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: If the day after tomorrow is two days before Thursday, what day is today?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: You have 12 coins, one counterfeit (lighter). Using a balance scale, what is the minimum weighings needed to find it?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A rectangle has perimeter 30 and width 7. Find its length.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the area of a circle inscribed in a square of side 8.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: How many trailing zeros does 50! have?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: How many primes are there between 50 and 80?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the last two digits of 3^200.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Simplify: (x^3 - 8) / (x - 2).
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A farmer has 17 sheep. All but 9 die. How many are left?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A committee of 3 is chosen from 8 people. How many ways?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: How many diagonals does a convex 10-gon have?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Two parallel lines are cut by a transversal. One angle is 65°. Find its supplementary co-interior angle.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the area of a regular hexagon with side length 6.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: If it rains, the ground is wet. The ground is wet. Did it rain?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: What is the minimum number of moves to transfer 4 disks in the Tower of Hanoi?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Solve for x: x^2 - 9x + 20 = 0.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A fair die is rolled twice. What is the probability both rolls show the same number?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: If the roots of x^2 + bx + 12 = 0 are 3 and 4, find b.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Water flows into a pool at 3 m^3/hr and out at 1.5 m^3/hr. The pool holds 45 m^3. How long to fill from empty?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Solve for x: 5^(x+1) = 125.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Solve the inequality: 3x - 7 > 2x + 5.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: What is the surface area of a sphere with radius 5?
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: A cone has radius 4 and slant height 9. Find its lateral surface area.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Is 91 prime? Explain.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Factor completely: x^2 - 5x + 6.
+Solve this problem. Show every step of your reasoning in full detail, explaining your thought process thoroughly.  Problem: Find the vertex of the parabola y = x^2 - 6x + 5.

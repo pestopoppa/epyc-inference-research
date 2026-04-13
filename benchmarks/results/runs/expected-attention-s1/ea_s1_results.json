@@ -1,0 +1,19 @@
+{
+  "config": {
+    "model_name": "Qwen/Qwen2.5-7B-Instruct",
+    "compression_ratios": [
+      0.25,
+      0.5
+    ],
+    "n_future_positions": 512,
+    "n_sink": 4,
+    "use_covariance": true,
+    "use_vnorm": true,
+    "max_samples": 50,
+    "output_dir": "benchmarks/results/runs/expected-attention-s1"
+  },
+  "dry_run": true,
+  "ruler_task_count": 20,
+  "longbench_sample_count": 50,
+  "status": "scaffold_validated"
+}

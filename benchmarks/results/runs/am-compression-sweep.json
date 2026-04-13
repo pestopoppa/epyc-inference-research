@@ -1,0 +1,174 @@
+[
+  {
+    "name": "history_factual",
+    "ratio": 1,
+    "tokens": 254,
+    "correct": true,
+    "text": "The Dartmouth workshop, where the field of AI research was founded, was held in the summer of 1956."
+  },
+  {
+    "name": "history_factual",
+    "ratio": 2,
+    "actual_ratio": 2.0,
+    "kept": 127,
+    "total": 254,
+    "correct": true,
+    "text": "The Dartmouth workshop, which is considered the founding event of AI as a field of study, was held i"
+  },
+  {
+    "name": "history_factual",
+    "ratio": 3,
+    "actual_ratio": 3.0,
+    "kept": 84,
+    "total": 254,
+    "correct": true,
+    "text": "The Dartmouth workshop, where the field of artificial intelligence was officially founded, was held "
+  },
+  {
+    "name": "history_factual",
+    "ratio": 4,
+    "actual_ratio": 4.0,
+    "kept": 63,
+    "total": 254,
+    "correct": true,
+    "text": "The Dartmouth workshop, which is considered the beginning of the field of artificial intelligence, w"
+  },
+  {
+    "name": "history_factual",
+    "ratio": 5,
+    "actual_ratio": 5.1,
+    "kept": 50,
+    "total": 254,
+    "correct": true,
+    "text": "The Dartmouth workshop, where the field of artificial intelligence was founded, was held in 1956."
+  },
+  {
+    "name": "science_reasoning",
+    "ratio": 1,
+    "tokens": 167,
+    "correct": true,
+    "text": "At sea level, pure water boils at 100\u00b0C (212\u00b0F)."
+  },
+  {
+    "name": "science_reasoning",
+    "ratio": 2,
+    "actual_ratio": 2.0,
+    "kept": 83,
+    "total": 167,
+    "correct": true,
+    "text": "Pure water boils at 100 degrees Celsius (212 degrees Fahrenheit) at sea level."
+  },
+  {
+    "name": "science_reasoning",
+    "ratio": 3,
+    "actual_ratio": 3.0,
+    "kept": 55,
+    "total": 167,
+    "correct": true,
+    "text": "Pure water boils at 100 degrees Celsius (212 degrees Fahrenheit) at sea level."
+  },
+  {
+    "name": "science_reasoning",
+    "ratio": 4,
+    "actual_ratio": 4.1,
+    "kept": 41,
+    "total": 167,
+    "correct": true,
+    "text": "Pure water boils at 100 degrees Celsius (212 degrees Fahrenheit) at sea level."
+  },
+  {
+    "name": "science_reasoning",
+    "ratio": 5,
+    "actual_ratio": 5.1,
+    "kept": 33,
+    "total": 167,
+    "correct": true,
+    "text": "Pure water boils at 100 degrees Celsius (212 degrees Fahrenheit) at sea level."
+  },
+  {
+    "name": "math_word",
+    "ratio": 1,
+    "tokens": 103,
+    "correct": false,
+    "text": "To determine which train arrives at station B first, we need to calculate the total travel time for "
+  },
+  {
+    "name": "math_word",
+    "ratio": 2,
+    "actual_ratio": 2.0,
+    "kept": 51,
+    "total": 103,
+    "correct": false,
+    "text": "To determine which train arrives at station B first, we need to calculate the total travel time for "
+  },
+  {
+    "name": "math_word",
+    "ratio": 3,
+    "actual_ratio": 3.0,
+    "kept": 34,
+    "total": 103,
+    "correct": false,
+    "text": "To determine which train arrives at station B first, we need to calculate the total travel time for "
+  },
+  {
+    "name": "math_word",
+    "ratio": 4,
+    "actual_ratio": 4.1,
+    "kept": 25,
+    "total": 103,
+    "correct": false,
+    "text": "To determine which train arrives at station B first, we need to calculate the travel time for each t"
+  },
+  {
+    "name": "math_word",
+    "ratio": 5,
+    "actual_ratio": 4.5,
+    "kept": 23,
+    "total": 103,
+    "correct": false,
+    "text": "To determine which train arrives at station B first, we need to calculate the travel time for each t"
+  },
+  {
+    "name": "code_comprehension",
+    "ratio": 1,
+    "tokens": 152,
+    "correct": false,
+    "text": "To determine the output of the function `mystery(7)`, let's analyze the function step by step.\n\nThe "
+  },
+  {
+    "name": "code_comprehension",
+    "ratio": 2,
+    "actual_ratio": 2.0,
+    "kept": 76,
+    "total": 152,
+    "correct": false,
+    "text": "To determine the output of the function `mystery(7)`, let's analyze the function step by step.\n\nThe "
+  },
+  {
+    "name": "code_comprehension",
+    "ratio": 3,
+    "actual_ratio": 3.0,
+    "kept": 50,
+    "total": 152,
+    "correct": false,
+    "text": "To determine the output of the function `mystery(7)`, let's analyze the function step by step.\n\nThe "
+  },
+  {
+    "name": "code_comprehension",
+    "ratio": 4,
+    "actual_ratio": 4.0,
+    "kept": 38,
+    "total": 152,
+    "correct": false,
+    "text": "To determine the output of the function `mystery(7)`, we need to understand the logic of the functio"
+  },
+  {
+    "name": "code_comprehension",
+    "ratio": 5,
+    "actual_ratio": 5.1,
+    "kept": 30,
+    "total": 152,
+    "correct": false,
+    "text": "To determine the output of the function `mystery(7)`, let's analyze the function step by step.\n\nThe "
+  }
+]

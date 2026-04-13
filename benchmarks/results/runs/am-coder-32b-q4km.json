@@ -1,0 +1,157 @@
+[
+  {
+    "name": "python_fibonacci",
+    "ratio": 1,
+    "tokens": 40,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "python_fibonacci",
+    "ratio": 2,
+    "tokens": 40,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "python_fibonacci",
+    "ratio": 3,
+    "tokens": 40,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "python_fibonacci",
+    "ratio": 5,
+    "tokens": 40,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "debug_off_by_one",
+    "ratio": 1,
+    "tokens": 115,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "debug_off_by_one",
+    "ratio": 2,
+    "tokens": 115,
+    "kept": 57,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "debug_off_by_one",
+    "ratio": 3,
+    "tokens": 115,
+    "kept": 38,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "debug_off_by_one",
+    "ratio": 5,
+    "tokens": 115,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "sql_query",
+    "ratio": 1,
+    "tokens": 54,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "sql_query",
+    "ratio": 2,
+    "tokens": 54,
+    "kept": 27,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "sql_query",
+    "ratio": 3,
+    "tokens": 54,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "sql_query",
+    "ratio": 5,
+    "tokens": 54,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "architecture_question",
+    "ratio": 1,
+    "tokens": 43,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "architecture_question",
+    "ratio": 2,
+    "tokens": 43,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "architecture_question",
+    "ratio": 3,
+    "tokens": 43,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "architecture_question",
+    "ratio": 5,
+    "tokens": 43,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "regex_extraction",
+    "ratio": 1,
+    "tokens": 46,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "regex_extraction",
+    "ratio": 2,
+    "tokens": 46,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "regex_extraction",
+    "ratio": 3,
+    "tokens": 46,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  },
+  {
+    "name": "regex_extraction",
+    "ratio": 5,
+    "tokens": 46,
+    "kept": 23,
+    "correct": true,
+    "gen_tokens": 200
+  }
+]

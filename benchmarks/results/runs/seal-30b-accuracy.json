@@ -1,0 +1,13 @@
+{
+  "baseline": {
+    "correct": 4,
+    "total": 5,
+    "tokens": 1916
+  },
+  "cvector_0.5": {
+    "correct": 5,
+    "total": 5,
+    "tokens": 1713
+  },
+  "delta_tokens_pct": -10.594989561586639
+}

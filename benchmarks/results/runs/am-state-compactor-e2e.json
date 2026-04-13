@@ -1,0 +1,10 @@
+{
+  "model": "Qwen2.5-0.5B-f32",
+  "original_cells": 196,
+  "compact_cells": 98,
+  "compression": 2.0,
+  "baseline_correct": true,
+  "compacted_correct": true,
+  "baseline": "The Dartmouth workshop was held in 1956.",
+  "compacted": "The Dartmouth workshop was held in 1956."
+}

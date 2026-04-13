@@ -1,0 +1,7 @@
+{
+  "model": "Qwen3-Coder-30B-A3B-Q4KM",
+  "scale": 0.5,
+  "total_baseline": 1191,
+  "total_cvector": 860,
+  "delta_pct": -27.791771620486987
+}

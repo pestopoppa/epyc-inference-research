@@ -1,10 +1,21 @@
 # SEAL Control Vectors for Concise Reasoning — Experiment Design
 
-**Status**: prep-complete (scripts ready, awaiting model servers)
-**Model**: Qwen3-32B (dense attention, `qwen3.cpp` has `build_cvec()`)
+**Status**: COMPLETE -- PARKED (results archived, not deploying)
+**Models tested**: Qwen3-Coder-30B-A3B (MoE), Qwen2.5-Coder-32B (dense), Qwen3.5-35B-A3B (SSM-hybrid)
 **Created**: 2026-04-09
+**Completed**: 2026-04-13
+**Results**: [seal-control-vector-results.md](seal-control-vector-results.md)
 
-## Hypothesis
+## Outcome Summary
+
+Experiment completed across three architectures. Results were mixed:
+- **MoE (30B)**: -7.5% tokens average, up to -28% at scale=0.5, no accuracy loss. Best results.
+- **Dense (32B)**: +2.2% tokens (neutral). Already-concise outputs unaffected.
+- **SSM-hybrid (35B)**: CATASTROPHIC -- cvector collapses generation to 1 token. Gated Delta Net incompatible.
+
+**Decision**: Parked. AM KV compaction (5x, zero degradation) is a larger win without model-specific constraints. See [full results](seal-control-vector-results.md).
+
+## Original Hypothesis
 
 Linear control vectors (SEAL baseline) can reduce reasoning verbosity by 15-50% on Qwen3-32B with <2pp accuracy loss on MATH-500 and GPQA-Diamond benchmarks.
 
@@ -70,13 +81,13 @@ python eval_cvectors.py --model-port 8080 --cvector /tmp/seal-concise-qwen3-32b.
 - **Secondary**: >=30% token reduction with <2pp on GPQA-Diamond
 - **Stretch**: >=40% token reduction maintaining accuracy
 
-## Model Compatibility
+## Model Compatibility (Verified)
 
-| Model | `build_cvec()` | Compatible |
-|-------|----------------|------------|
-| Qwen3-32B (dense) | Yes (qwen3.cpp) | YES |
-| Qwen2.5 | Yes (qwen2.cpp) | YES |
-| Qwen3.5 (hybrid SSM) | No (qwen35.cpp) | NO |
+| Model | Architecture | Compatible | Result |
+|-------|-------------|------------|--------|
+| Qwen3-Coder-30B-A3B (MoE Q4KM) | MoE + standard attention | YES | -7.5% tokens avg, no accuracy loss |
+| Qwen2.5-Coder-32B (Q4KM) | Dense standard attention | YES | +2.2% tokens (neutral) |
+| Qwen3.5-35B-A3B | SSM-hybrid / Gated Delta Net | **NO** | Catastrophic: 1 token output at scale=0.5 |
 
 ## Risks
 

@@ -1,0 +1,94 @@
+[
+  {
+    "ctx": "short_250",
+    "q": "What year was the transistor i",
+    "ratio": 1,
+    "tokens": 356,
+    "correct": true
+  },
+  {
+    "ctx": "short_250",
+    "q": "What year was the transistor i",
+    "ratio": 3,
+    "tokens": 356,
+    "kept": 118,
+    "correct": true
+  },
+  {
+    "ctx": "short_250",
+    "q": "What year was the transistor i",
+    "ratio": 5,
+    "tokens": 356,
+    "kept": 71,
+    "correct": true
+  },
+  {
+    "ctx": "medium_500",
+    "q": "What year was the transistor i",
+    "ratio": 1,
+    "tokens": 694,
+    "correct": true
+  },
+  {
+    "ctx": "medium_500",
+    "q": "What year was the transistor i",
+    "ratio": 3,
+    "tokens": 694,
+    "kept": 231,
+    "correct": true
+  },
+  {
+    "ctx": "medium_500",
+    "q": "What year was the transistor i",
+    "ratio": 5,
+    "tokens": 694,
+    "kept": 138,
+    "correct": true
+  },
+  {
+    "ctx": "long_1000",
+    "q": "What year was the transistor i",
+    "ratio": 1,
+    "tokens": 1370,
+    "correct": true
+  },
+  {
+    "ctx": "long_1000",
+    "q": "What year was the transistor i",
+    "ratio": 3,
+    "tokens": 1370,
+    "kept": 456,
+    "correct": true
+  },
+  {
+    "ctx": "long_1000",
+    "q": "What year was the transistor i",
+    "ratio": 5,
+    "tokens": 1370,
+    "kept": 274,
+    "correct": true
+  },
+  {
+    "ctx": "xlong_2000",
+    "q": "What year was the transistor i",
+    "ratio": 1,
+    "tokens": 2722,
+    "correct": true
+  },
+  {
+    "ctx": "xlong_2000",
+    "q": "What year was the transistor i",
+    "ratio": 3,
+    "tokens": 2722,
+    "kept": 907,
+    "correct": true
+  },
+  {
+    "ctx": "xlong_2000",
+    "q": "What year was the transistor i",
+    "ratio": 5,
+    "tokens": 2722,
+    "kept": 544,
+    "correct": true
+  }
+]
