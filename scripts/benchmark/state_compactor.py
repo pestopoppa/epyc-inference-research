@@ -88,15 +88,21 @@ def read_state(filepath: str) -> SavedState:
                 streams.append(StreamState(0, [], 0, 0, [], []))
                 continue
 
+            # Read stream flags (v2 format with AM compaction support)
+            stream_flags = struct.unpack('<I', f.read(4))[0]
+            has_ext = (stream_flags & 1) != 0
+
             # Read cell metadata
             cells = []
             for i in range(cell_count):
                 pos = struct.unpack('<i', f.read(4))[0]
                 n_seq_id = struct.unpack('<I', f.read(4))[0]
-                # ext: {x: i32, y: i32, beta: f32}
-                ext_x = struct.unpack('<i', f.read(4))[0]
-                ext_y = struct.unpack('<i', f.read(4))[0]
-                ext_beta = struct.unpack('<f', f.read(4))[0]
+                if has_ext:
+                    ext_x = struct.unpack('<i', f.read(4))[0]
+                    ext_y = struct.unpack('<i', f.read(4))[0]
+                    ext_beta = struct.unpack('<f', f.read(4))[0]
+                else:
+                    ext_x, ext_y, ext_beta = 0, 0, 0.0
                 seq_ids = list(struct.unpack(f'<{n_seq_id}i', f.read(4 * n_seq_id)))
                 cells.append(CellMeta(pos, n_seq_id, ext_x, ext_y, ext_beta, seq_ids))
 
@@ -148,13 +154,19 @@ def write_state(state: SavedState, filepath: str):
             if stream.cell_count == 0:
                 continue
 
+            # Write stream flags (always include ext for compacted states)
+            has_ext = any(c.ext_beta != 0.0 or c.ext_x != 0 or c.ext_y != 0 for c in stream.cells)
+            stream_flags = 1 if has_ext else 0
+            f.write(struct.pack('<I', stream_flags))
+
             # Write cell metadata
             for cell in stream.cells:
                 f.write(struct.pack('<i', cell.pos))
                 f.write(struct.pack('<I', cell.n_seq_id))
-                f.write(struct.pack('<i', cell.ext_x))
-                f.write(struct.pack('<i', cell.ext_y))
-                f.write(struct.pack('<f', cell.ext_beta))
+                if has_ext:
+                    f.write(struct.pack('<i', cell.ext_x))
+                    f.write(struct.pack('<i', cell.ext_y))
+                    f.write(struct.pack('<f', cell.ext_beta))
                 f.write(struct.pack(f'<{cell.n_seq_id}i', *cell.seq_ids))
 
             # Write K/V data
