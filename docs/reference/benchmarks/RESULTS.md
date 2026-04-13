@@ -475,6 +475,20 @@ llama-server -m Qwen3-Coder-30B-A3B.gguf -md jukofyork-0.75B-Q8_0.gguf --draft-m
 - Non-zero temperature can improve speculative decoding acceptance rates
 - **Rule:** Try temp=0.5-0.7 if acceptance rate is low
 
+### 5. Draft Time is Never the Bottleneck (verified 2026-03-29)
+
+Measured draft vs target time split from server `t_draft_us` accumulator across all production spec decode pairs. Full analysis: [experiments/draft-vs-target-time-analysis.md](../../experiments/draft-vs-target-time-analysis.md).
+
+| Target Model | Draft % | Target % | Instant-draft limit | Gain |
+|--------------|---------|----------|---------------------|------|
+| Coder-30B-A3B (worker) | 26.6% | 73.4% | 48.3 t/s | +36% |
+| Coder-32B Q4KM (coder) | 15.0% | 85.0% | 23.3 t/s | +18% |
+| 122B-A10B Q4KM (architect) | 17.4% | 82.6% | 7.2 t/s | +21% |
+| 235B-A22B Q4KM | 10.9% | 89.1% | 9.8 t/s | +12% |
+| 480B Q4KM | 5.2% | 94.8% | 5.7 t/s | +6% |
+
+**Rule:** Faster draft models yield diminishing returns. Verification dominates. NUMA parallelism and expert reduction are higher-leverage.
+
 ---
 
 ## Track Status
@@ -1358,3 +1372,51 @@ All models from registry (~70 unique models). Empty cells = not yet benchmarked.
 - Benchmark prompts: `benchmarks/prompts/v1/`
 - Benchmark results: `benchmarks/results/`
 - Claude-as-Judge reviews: `benchmarks/results/reviews/`
+
+---
+
+## v3 Perplexity Baselines (2026-04-13)
+
+wikitext2, 5 chunks, production v3 binary.
+
+| Model | Quant | PPL | Throughput | Notes |
+|-------|-------|-----|-----------|-------|
+| Qwen2.5-Coder-32B | f16 | **6.18** | 484 tok/s | Production coder (f16 reference) |
+| Qwen2.5-Coder-32B | Q4_K_M | 6.80 | — | Production quant (+0.62 vs f16) |
+| Qwen3-Coder-30B-A3B | Q4_K_M | **9.14** | 2196 tok/s | Production worker (MoE) |
+| REAP-246B-A35B | Q4_K_M | **9.62** | 249 tok/s | Production architect |
+| Qwen3.5-35B-A3B | Q4_K_M | BLOCKED | — | SSM-hybrid: `llama-perplexity` can't load SSM tensors |
+
+---
+
+## AM KV Compaction Results (2026-04-13)
+
+Save/compact/restore pipeline. See `docs/experiments/attention-matching-kv-compaction.md` for full details.
+
+### Coder-32B Q4_K_M (5 coding prompts)
+
+| Compression | Correct | Quality |
+|------------|---------|---------|
+| 1x (baseline) | 5/5 | reference |
+| 2x | 5/5 | zero degradation |
+| 3x | 5/5 | zero degradation |
+| 5x | 5/5 | zero degradation |
+
+### Long Context (7B f16, factual retrieval)
+
+| Context | Tokens | 3x | 5x |
+|---------|--------|----|----|
+| ~250 words | 356 | PASS | PASS |
+| ~500 words | 694 | PASS | PASS |
+| ~1K words | 1370 | PASS | PASS |
+| ~2K words | 2722 | PASS | PASS |
+
+### SEAL Control Vector (parked)
+
+| Role | Model | Token Δ | Accuracy | Status |
+|------|-------|---------|----------|--------|
+| Worker | 30B-A3B Q4KM | -7.5% avg (-18% on reasoning) | 7/7 | Works, task-dependent |
+| Coder | 32B Q4KM | +2.2% | 7/7 | Neutral |
+| Frontdoor | 35B SSM | -99.8% (BROKEN) | 0/7 | SSM incompatible |
+
+SEAL parked — gains are modest and architecture-dependent. See `docs/experiments/seal-control-vector-results.md`.
