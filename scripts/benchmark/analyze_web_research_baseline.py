@@ -35,6 +35,7 @@ def analyze_checkpoints(checkpoint_dir: Path) -> None:
     total_calls = 0
     total_pages = 0
     total_domains = 0
+    total_pages_irrelevant = 0
 
     for f in files:
         for line in f.open():
@@ -80,6 +81,7 @@ def analyze_checkpoints(checkpoint_dir: Path) -> None:
             for config_data in wr_telemetry.values():
                 total_pages += config_data.get("total_pages_fetched", 0)
                 total_domains += config_data.get("unique_domains", 0)
+                total_pages_irrelevant += config_data.get("total_pages_irrelevant", 0)
 
     if total_questions == 0:
         print("No questions with web_research_baseline metadata found.")
@@ -102,6 +104,20 @@ def analyze_checkpoints(checkpoint_dir: Path) -> None:
     if total_calls > 0:
         print(f"Avg pages fetched per call: {total_pages / total_calls:.1f}")
         print(f"Avg unique domains per call: {total_domains / total_calls:.1f}")
+    print()
+    # Relevance analysis (ColBERT reranker go/no-go decision)
+    total_synth = total_pages  # pages_fetched ≈ pages attempted for synthesis
+    if total_synth > 0:
+        irr_rate = 100.0 * total_pages_irrelevant / total_synth
+        print(f"=== Relevance Analysis (ColBERT reranker S1 data) ===")
+        print(f"Total pages synthesized: {total_synth}")
+        print(f"Pages classified irrelevant: {total_pages_irrelevant} ({irr_rate:.1f}%)")
+        if irr_rate > 20.0:
+            print(f"  → PROCEED to S3: irrelevant rate {irr_rate:.1f}% > 20% threshold")
+        elif irr_rate > 10.0:
+            print(f"  → MARGINAL: irrelevant rate {irr_rate:.1f}% — consider proceeding")
+        else:
+            print(f"  → SKIP: irrelevant rate {irr_rate:.1f}% < 10% — reranker not justified")
     print()
     if config_usage:
         print("Config breakdown:")
