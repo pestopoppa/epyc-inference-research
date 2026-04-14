@@ -172,13 +172,13 @@ class ZeroSCROLLSAdapter(BaseAdapter):
 
         if task in self._SUMMARIZATION:
             prompt = f"Summarize the following document:\n\n{input_text}"
-            scoring = "claude_judge"
+            scoring = "llm_judge"
         elif task in self._QA:
             prompt = input_text
             scoring = "substring"
         else:
             prompt = input_text
-            scoring = "claude_judge"
+            scoring = "llm_judge"
 
         return {
             "id": f"zeroscrolls_{task}_{idx}",
@@ -279,7 +279,7 @@ class LEvalAdapter(BaseAdapter):
             expected = str(outputs)
 
         prompt = f"{input_text}\n\n{instr_text}" if input_text else instr_text
-        scoring = "exact_match" if cfg in self._CLOSED_ENDED else "claude_judge"
+        scoring = "exact_match" if cfg in self._CLOSED_ENDED else "llm_judge"
 
         return {
             "id": f"leval_{cfg}_{idx}",

@@ -1903,8 +1903,8 @@ class PHYBenchAdapter(BaseAdapter):
             "scoring": [],
             "image_path": "",
             "tier": tier,
-            "scoring_method": "substring",
-            "scoring_config": {"case_sensitive": False},
+            "scoring_method": "llm_judge",
+            "scoring_config": {},  # semantic equivalence — handles LaTeX format variants
         }
 
 
