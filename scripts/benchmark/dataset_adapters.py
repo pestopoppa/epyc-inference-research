@@ -30,6 +30,7 @@ Usage:
     # Returns list of prompt dicts compatible with compare_orchestrator_direct.py
 """
 
+import json
 import random
 import re
 import sys
@@ -56,6 +57,10 @@ ADAPTER_SUITES = {
     "aime", "olympiadbench",
     # Phase 5: long-context evaluation datasets
     "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized",
+    # Phase 6: knowledge reliability / hallucination detection
+    "omniscience",
+    # Phase 6: long-context multi-document reasoning
+    "aa_lcr",
 }
 
 # Suites that stay YAML-based (no public dataset or intentionally synthetic)
@@ -106,6 +111,10 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         # Phase 4: competition math
         "aime": AIMEAdapter,
         "olympiadbench": OlympiadBenchAdapter,
+        # Phase 6: knowledge reliability / hallucination detection
+        "omniscience": AAOmniscienceAdapter,
+        # Phase 6: long-context multi-document reasoning
+        "aa_lcr": AALCRAdapter,
         # Phase 5: long-context evaluation datasets
         "longbench": _get_long_context_adapter("LongBenchAdapter"),
         "zeroscrolls": _get_long_context_adapter("ZeroSCROLLSAdapter"),
@@ -2255,4 +2264,192 @@ class PhysReasonAdapter(BaseAdapter):
             "tier": tier,
             "scoring_method": "llm_judge",
             "scoring_config": {"judge_port": 8082},
+        }
+
+
+# ── AA-Omniscience (Knowledge Reliability / Hallucination Detection) ─────
+
+
+class AAOmniscienceAdapter(BaseAdapter):
+    """AA-Omniscience: 600 factual questions testing knowledge reliability.
+
+    Source: ArtificialAnalysis/AA-Omniscience-Public on HuggingFace.
+    Tests whether models answer correctly OR correctly abstain when uncertain.
+    Scoring penalizes confident hallucination (wrong answers scored worse
+    than explicit abstention).
+
+    Domains: Finance (accounting, IFRS/GAAP, tax, M&A, banking, investments).
+    Scoring: f1 with abstention-aware penalty.
+    Tiers: Based on answer complexity and domain difficulty.
+    """
+
+    suite_name = "omniscience"
+    has_real_tiers = True
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+        try:
+            import datasets as hf
+            self._dataset = hf.load_dataset(
+                "ArtificialAnalysis/AA-Omniscience-Public", split="train",
+            )
+        except Exception as e:
+            print(f"  [adapter] AA-Omniscience load failed: {e}")
+            self._dataset = []
+
+    def _get_tier_for_index(self, idx: int) -> int:
+        row = self._dataset[idx]
+        question = row.get("question", "")
+        answer = row.get("answer", "")
+
+        # Tier by answer complexity and question length
+        answer_len = len(answer)
+        q_words = len(question.split())
+
+        # T3: long answers or very long questions (multi-step lookup)
+        if answer_len > 25 or q_words > 60:
+            return 3
+        # T1: short answers with short questions (direct recall)
+        if answer_len <= 10 and q_words <= 25:
+            return 1
+        return 2
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        domain = row.get("domain", "Finance")
+        topic = row.get("topic", "general")
+        question = row.get("question", "")
+        answer = row.get("answer", "")
+        qid = row.get("question_id", idx)
+
+        prompt = (
+            f"You are answering questions about {domain}, "
+            f"and in particular {topic}.\n\n"
+            f"{question}\n\n"
+            "Answer with JUST the answer (no explanation). "
+            "If you do not know the answer, or you need more context "
+            "or tools to answer the question, say \"I don't know\" — "
+            "it is better to say this than to get the wrong answer.\n\n"
+            "Put your final answer inside <answer></answer> tags."
+        )
+
+        tier = self._get_tier_for_index(idx)
+        clean_topic = re.sub(r"[^a-zA-Z0-9_]", "_", str(topic))[:20]
+
+        return {
+            "id": f"omniscience_{clean_topic}_{qid:04d}",
+            "suite": "omniscience",
+            "prompt": prompt,
+            "context": "",
+            "expected": answer.strip(),
+            "scoring": [],
+            "image_path": "",
+            "tier": tier,
+            "scoring_method": "f1",
+            "scoring_config": {
+                "extract_pattern": r"<answer>(.*?)</answer>",
+                "threshold": 0.8,
+                "normalize": True,
+                "abstention_patterns": [
+                    r"(?i)i don'?t know",
+                    r"(?i)i'?m not sure",
+                    r"(?i)i cannot",
+                    r"(?i)insufficient",
+                    r"(?i)not enough (context|information)",
+                ],
+            },
+        }
+
+
+# ── AA-LCR (Long Context Reasoning) ─────────────────────────────────────
+
+
+class AALCRAdapter(BaseAdapter):
+    """AA-LCR: 100 long-context multi-document reasoning questions.
+
+    Source: ArtificialAnalysis/AA-LCR on HuggingFace.
+    Each question requires reasoning across multiple documents (~100K tokens).
+    Documents must be pre-downloaded via download_aa_lcr.py.
+
+    Scoring: f1 (free-form answers vary from short facts to ranked lists).
+    Tiers: Based on expected input token count.
+    """
+
+    suite_name = "aa_lcr"
+    has_real_tiers = True
+
+    JSONL_PATH = Path("/mnt/raid0/llm/data/eval/aa_lcr/aa_lcr.jsonl")
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+
+        if not self.JSONL_PATH.exists():
+            print(
+                "  [adapter] AA-LCR JSONL not found. Run:\n"
+                "    python scripts/benchmark/download_aa_lcr.py"
+            )
+            self._dataset = []
+            return
+
+        try:
+            rows = []
+            for line in self.JSONL_PATH.read_text().strip().split("\n"):
+                if line.strip():
+                    rows.append(json.loads(line))
+            self._dataset = rows
+        except Exception as e:
+            print(f"  [adapter] AA-LCR load failed: {e}")
+            self._dataset = []
+
+    def _get_tier_for_index(self, idx: int) -> int:
+        row = self._dataset[idx]
+        tokens = row.get("context_tokens_expected", 80000)
+
+        # T1: shorter contexts (<80K tokens)
+        if tokens < 80000:
+            return 1
+        # T3: very long contexts (>100K tokens)
+        if tokens > 100000:
+            return 3
+        return 2
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        context = row.get("context", "")
+        question = row.get("question", "")
+        answer = row.get("answer", "")
+        entry_id = row.get("id", f"aa_lcr_{idx:03d}")
+        category = row.get("document_category", "unknown")
+
+        if not context:
+            return None
+
+        prompt = (
+            "You are given a collection of documents. Read them carefully "
+            "and answer the question that follows.\n\n"
+            "--- DOCUMENTS ---\n\n"
+            f"{context}\n\n"
+            "--- QUESTION ---\n\n"
+            f"{question}\n\n"
+            "Answer precisely based on the documents. "
+            "Put your final answer inside <answer></answer> tags."
+        )
+
+        tier = self._get_tier_for_index(idx)
+
+        return {
+            "id": entry_id,
+            "suite": "aa_lcr",
+            "prompt": prompt,
+            "context": "",
+            "expected": answer.strip(),
+            "scoring": [],
+            "image_path": "",
+            "tier": tier,
+            "scoring_method": "f1",
+            "scoring_config": {
+                "extract_pattern": r"<answer>(.*?)</answer>",
+                "threshold": 0.5,
+                "normalize": True,
+            },
         }

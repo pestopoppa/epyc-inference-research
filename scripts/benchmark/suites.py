@@ -219,13 +219,13 @@ ROLE_SUITE_MAP = {
     "math": ["math", "thinking", "general"],
 
     # Versatile roles - broad testing
-    "general": ["general", "agentic", "instruction_precision", "thinking", "coder", "math"],
-    "frontdoor": ["general", "agentic", "instruction_precision", "coder", "math", "long_context", "longbench", "needle_parameterized"],
-    "architect": ["thinking", "coder", "agentic", "general", "instruction_precision", "math", "long_context", "longbench", "needle_parameterized"],
+    "general": ["general", "agentic", "instruction_precision", "thinking", "coder", "math", "omniscience"],
+    "frontdoor": ["general", "agentic", "instruction_precision", "coder", "math", "long_context", "longbench", "needle_parameterized", "omniscience"],
+    "architect": ["thinking", "coder", "agentic", "general", "instruction_precision", "math", "long_context", "longbench", "needle_parameterized", "omniscience", "aa_lcr"],
 
     # Context specialists — full long-context battery
-    "ingest": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized"],
-    "long_context": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized"],
+    "ingest": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr"],
+    "long_context": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr"],
 
     # Workers - general purpose
     "worker": ["general", "thinking", "agentic"],

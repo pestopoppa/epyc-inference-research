@@ -269,6 +269,34 @@ suites:
     reconstruction_command: |
       python scripts/benchmark/dataset_adapters.py --suite olympiadbench --sample 50
 
+  aa_lcr:
+    description: "Long-context multi-document reasoning (~100K tokens per question)"
+    count: 100
+    adapter: AALCRAdapter
+    sources:
+      - name: AA-LCR
+        huggingface_id: ArtificialAnalysis/AA-LCR
+        split: test
+        license: Apache-2.0
+        url: https://huggingface.co/datasets/ArtificialAnalysis/AA-LCR
+        note: "100 questions across 30 document sets. Requires download_aa_lcr.py to fetch source PDFs first. Context is ~71K-115K tokens per question."
+    reconstruction_command: |
+      python scripts/benchmark/download_aa_lcr.py
+
+  omniscience:
+    description: "Knowledge reliability and hallucination detection"
+    count: 600
+    adapter: AAOmniscienceAdapter
+    sources:
+      - name: AA-Omniscience
+        huggingface_id: ArtificialAnalysis/AA-Omniscience-Public
+        split: train
+        license: Apache-2.0
+        url: https://huggingface.co/datasets/ArtificialAnalysis/AA-Omniscience-Public
+        note: "Public 10% subset (600 of 6000). Domains: Finance (accounting, tax, M&A, banking, investments). Penalizes hallucination — abstention scored better than wrong answers."
+    reconstruction_command: |
+      python scripts/benchmark/dataset_adapters.py --suite omniscience --sample 100
+
 # YAML-only suites (no HuggingFace source)
 yaml_only_suites:
   agentic:
