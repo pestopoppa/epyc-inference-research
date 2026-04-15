@@ -1,81 +1,54 @@
 # epyc-inference-research
 
-AMD EPYC 9655 "Turin" inference optimization research, benchmarks, and model evaluation.
+AMD EPYC 9655 inference optimization research, benchmarks, and model evaluation.
 
-Companion to [epyc-orchestrator](https://github.com/pestopoppa/epyc-orchestrator) — the production multi-model orchestration system. This repository contains the research, experiments, and benchmarking infrastructure that informed the orchestrator's design.
+Companion to [epyc-orchestrator](https://github.com/pestopoppa/epyc-orchestrator). Contains the benchmarking infrastructure, question pool, and evaluation pipeline that powers the orchestrator's AutoPilot optimization loop.
 
-## What's here
+## Documentation
 
-- **Benchmark infrastructure** — automated benchmarking of speculative decoding, MoE reduction, prompt lookup, and SSM inference on AMD EPYC hardware
-- **[9 research chapters](docs/chapters/INDEX.md)** — inference optimization and evaluation methodology
-- **Optimization experiments** — Optuna-based hyperparameter tuning, memory viability studies, graph router training
-- **Model evaluation** — scoring rubrics, Claude-as-Judge reviews, comparative analysis
-- **Model registry** — full catalog of tested models with quantization levels, compatible drafts, and known quirks
+- **[Research Chapters](docs/chapters/INDEX.md)** — 9 chapters on inference optimization and evaluation methodology
+- **[Benchmarking Guide](docs/guides/benchmarking-guide.md)** — full benchmark workflow
+- **[Master Results Table](docs/reference/benchmarks/RESULTS.md)** — all benchmark runs
+- **[Model Quirks](docs/reference/models/QUIRKS.md)** — known model issues and workarounds
 
-## Hardware context
+## Eval Infrastructure
 
-All benchmarks target a single-socket AMD EPYC 9655 "Turin" (96C/192T, Zen 5) with 1.13TB DDR5-5600 ECC across 12 channels (~460 GB/s bandwidth). Results are specific to this memory-bandwidth-rich configuration.
+**57,000+ questions** across 30+ suites with automated deterministic scoring:
 
-## Directory structure
+| Category | Suites | Questions | Scoring |
+|----------|--------|:---------:|---------|
+| General knowledge | MMLU, SimpleQA, HotpotQA | 25K+ | multiple_choice, f1, substring |
+| Math/reasoning | GSM8K, AIME, OlympiadBench, MATH-500 | 3K+ | exact_match, substring |
+| Code | MBPP, BigCodeBench, LiveCodeBench, CRUXEval, USACO | 6K+ | substring, code_execution |
+| Science | GPQA, PHYBench, PhysReason | 3.6K | multiple_choice, llm_judge |
+| Long context | ZeroSCROLLS, LEval, LongBench, RULER, Needle | 1.6K | llm_judge, exact_match |
+| Reasoning | HellaSwag, DebugBench | 15K+ | multiple_choice |
+| Vision | OCRBench (VL) | 2.5K | exact_match |
+| Tool use | Agentic, Web Research, Skill Transfer | 130 | f1, exact_match |
+| Hard | Mode Advantage, Mode Advantage Hard | 150 | substring |
 
-```
-benchmarks/          Prompts, results, baselines, evidence
-  prompts/v1/        Standardized benchmark prompts
-  results/runs/      Timestamped benchmark runs
-  results/reviews/   Claude-as-Judge evaluation scores
-configs/             Memory viability experiment configs
-docs/
-  chapters/          9 research chapters (inference optimization → evaluation)
-  experiments/       Experiment writeups
-  guides/            Model sizing, benchmarking guide
-  reference/
-    benchmarks/      RESULTS.md (master benchmark table), SERVER_MODE.md
-    models/          MODELS.md, QUIRKS.md (known model issues)
-orchestration/
-  model_registry.yaml  Full model catalog (paths, quants, drafts, quirks)
-research/            EAGLE, frspec, specmquant research repos
-scripts/
-  benchmark/         Benchmarking and seeding infrastructure
-  corpus/            Index building for code search
-  experiments/       Memory viability experiments
-  graph_router/      GAT-based routing model training
-  lib/               Shared executor, registry loader, scorer
-  nextplaid/         NextPLAID code search indexing
-  toon/              TOON encoder experiments
-  voice/             Voice pipeline experiments
-```
+## Hardware Context
 
-## Running benchmarks
+Single-socket AMD EPYC 9655 "Turin" (96C/192T, Zen 5) with 1.13TB DDR5-5600 ECC across 12 channels (~460 GB/s bandwidth).
 
-```bash
-# Install core + benchmark deps
-pip install -e ".[benchmark]"
+## Key Results
 
-# Run specialist routing benchmark
-python scripts/benchmark/seed_specialist_routing.py \
-    --3way --suites simpleqa --sample-size 50 --seed 123 --debug
+| Configuration | Speed | Context |
+|---------------|:-----:|---------|
+| Qwen3-Coder-30B-A3B + draft + lookup | 39 t/s | Production worker |
+| Qwen2.5-Coder-32B + 0.5B draft (v3) | 21.7 t/s | +101% from v2 |
+| REAP-246B + 0.75B draft (v3) | 12 t/s | +50% from v2 |
+| Qwen3.5-35B-A3B frontdoor (v3) | 14.3 t/s | +13% from v2 |
+| AM KV compaction (50% eviction) | PPL 1.096 | Zero quality degradation |
 
-# Score benchmark results
-python scripts/score_benchmarks.py
-```
+## Running Benchmarks
 
-See `docs/guides/benchmarking-guide.md` for the full workflow.
+    # 3-way routing evaluation
+    python scripts/benchmark/seed_specialist_routing.py \
+        --3way --suites math coder general --sample-size 20 --tui
 
-## Results tracking
-
-1. Raw runs go in `benchmarks/results/runs/{timestamp}/`
-2. Claude-as-Judge reviews in `benchmarks/results/reviews/`
-3. Master table in `docs/reference/benchmarks/RESULTS.md`
-4. Model quirks in `docs/reference/models/QUIRKS.md`
-
-## Key results
-
-| Configuration | Speed | Speedup | Use Case |
-|---------------|-------|---------|----------|
-| Prompt Lookup (summarization) | 95.18 t/s | 12.7x | Document QA |
-| Qwen3-Coder-30B + MoE6 + spec + lookup | 47.11 t/s | 2.58x | Interactive chat |
-| Qwen2.5-Coder-32B + 0.5B (K=24) + lookup | 39.44 t/s | 5.4x | Code generation |
-| Qwen3-Coder-480B + full experts + spec | 9.00 t/s | 1.38x | Architecture |
+    # Rebuild question pool
+    python scripts/benchmark/question_pool.py --build
 
 ## License
 
