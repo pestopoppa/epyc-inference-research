@@ -194,6 +194,7 @@ class ServerManager:
         draft_max: Optional[int] = None,
         mmproj_path: Optional[str] = None,
         lookup: bool = False,
+        spec_type: Optional[str] = None,
     ) -> None:
         """Start llama-server with model loaded.
 
@@ -248,6 +249,10 @@ class ServerManager:
         if draft_model_path:
             cmd.extend(["-md", draft_model_path])
             if draft_max:
+                cmd.extend(["--draft-max", str(draft_max)])
+        if spec_type:
+            cmd.extend(["--spec-type", spec_type])
+            if not draft_model_path and draft_max:
                 cmd.extend(["--draft-max", str(draft_max)])
         if mmproj_path:
             cmd.extend(["--mmproj", mmproj_path])

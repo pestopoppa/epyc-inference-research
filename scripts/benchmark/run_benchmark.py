@@ -399,12 +399,19 @@ def _ensure_server(
             ss.stop()
 
         if ss.server is None:
-            lookup_str = " +lookup" if with_lookup else ""
-            print(f"    [SERVER] Starting llama-server{lookup_str} (model will stay in RAM)...", flush=True)
+            # Check if this model uses ngram-simple instead of --lookup
+            accel = registry.get_acceleration(role) if with_lookup else {}
+            use_spec_type = accel.get("spec_type") if accel.get("type") == "ngram_lookup" else None
+            use_lookup = with_lookup and not use_spec_type
+            accel_draft_max = accel.get("draft_max") if use_spec_type else None
+
+            accel_str = f" +{use_spec_type}" if use_spec_type else (" +lookup" if use_lookup else "")
+            print(f"    [SERVER] Starting llama-server{accel_str} (model will stay in RAM)...", flush=True)
             ss.server = ServerManager(port=8080)
             ss.server.start(model_path, moe_override=None, registry=registry,
                             no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
-                            lookup=with_lookup)
+                            lookup=use_lookup, spec_type=use_spec_type,
+                            draft_max=accel_draft_max)
             timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
             if not ss.server.wait_ready(timeout=timeout):
                 print(f"    [SERVER] Failed to start, falling back to subprocess mode", flush=True)
@@ -414,7 +421,7 @@ def _ensure_server(
                 ss.experts = None
                 ss.draft_path = None
                 ss.lookup = with_lookup
-                print(f"    [SERVER] Ready, model loaded in RAM{lookup_str}", flush=True)
+                print(f"    [SERVER] Ready, model loaded in RAM{accel_str}", flush=True)
         return
 
     if ss.server is not None and not ss.server.is_running():
@@ -425,10 +432,15 @@ def _ensure_server(
             moe_key = registry.get_moe_override_key(role) or "qwen3moe.expert_used_count"
             moe_override = f"{moe_key}=int:{ss.experts}"
         ss.stop()
+        accel = registry.get_acceleration(role) if with_lookup else {}
+        use_spec_type = accel.get("spec_type") if accel.get("type") == "ngram_lookup" else None
+        use_lookup = with_lookup and not use_spec_type
+        accel_draft_max = accel.get("draft_max") if use_spec_type else None
         ss.server = ServerManager(port=8080)
         ss.server.start(model_path, moe_override=moe_override, registry=registry,
                         no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
-                        lookup=with_lookup)
+                        lookup=use_lookup, spec_type=use_spec_type,
+                        draft_max=accel_draft_max)
         timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
         if not ss.server.wait_ready(timeout=timeout):
             print(f"      [SERVER] Failed to restart after crash, falling back to subprocess", flush=True)
@@ -898,6 +910,7 @@ def run_benchmark(
     baseline_run: Optional[str] = None,
     with_lookup: bool = False,
     skip_moe_reduction: bool = False,
+    all_suites: bool = False,
 ) -> dict:
     """Run the benchmark with nested progress bars.
 
@@ -964,7 +977,12 @@ def run_benchmark(
             baseline_experts = registry.get_baseline_experts(role)
             configs = [c for c in configs if c.moe_experts is None or c.moe_experts == baseline_experts]
 
-        suite_names = get_suites_for_role(role, registry)
+        if all_suites:
+            suite_names = [s for s in get_all_suite_names() if load_suite(s) and load_suite(s).questions]
+            if not mmproj_path:
+                suite_names = [s for s in suite_names if s != "vl"]
+        else:
+            suite_names = get_suites_for_role(role, registry)
         if suite_filter:
             suite_names = [s for s in suite_names if s == suite_filter]
         if skip_long_context:
@@ -1279,6 +1297,7 @@ Examples:
     parser.add_argument("--speed-questions", type=int, default=0, help="Run speed configs on N slowest baseline questions (0=fixed prompt)")
     parser.add_argument("--baseline-run", type=str, default=None, help="Pull slowest questions from this run ID (for models with existing baselines)")
     parser.add_argument("--with-lookup", action="store_true", help="Enable --lookup on server for all configs (accelerates baseline quality runs)")
+    parser.add_argument("--all-suites", action="store_true", help="Run all quality suites regardless of role mapping (VL excluded for non-VL models)")
 
     args = parser.parse_args()
 
@@ -1362,6 +1381,7 @@ Examples:
             baseline_run=args.baseline_run,
             with_lookup=args.with_lookup,
             skip_moe_reduction=args.skip_moe_reduction,
+            all_suites=args.all_suites,
         )
     finally:
         if lock_fd is not None:

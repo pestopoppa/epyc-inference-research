@@ -1992,7 +1992,7 @@ roles:
     description: MiniMax-M2.7 Q8_0 — architect replacement candidate, MoE 230B-A10B, 256 experts
     model:
       name: MiniMax-M2.7
-      path: MiniMax-M2.7-GGUF/Q8_0/MiniMax-M2.7-Q8_0-00001-of-00006.gguf
+      path: /mnt/raid0/llm/models/MiniMax-M2.7-GGUF/Q8_0/MiniMax-M2.7-Q8_0-00001-of-00006.gguf
       quant: Q8_0
       size_gb: 227
       architecture: minimax-m2
@@ -2047,7 +2047,7 @@ roles:
     description: Qwen3.6-35B-A3B Q8_0 — MoE successor to Qwen3.5, thinking model
     model:
       name: Qwen3.6-35B-A3B
-      path: Qwen3.6-35B-A3B-Q8_0.gguf
+      path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-Q8_0.gguf
       quant: Q8_0
       size_gb: 37
       architecture: qwen3
@@ -2092,7 +2092,7 @@ roles:
     description: SuperGemma4-31b-abliterated Q4_K_M — dense 31B, abliterated
     model:
       name: SuperGemma4-31b-abliterated
-      path: SuperGemma4-31b-abliterated.Q4_K_M.gguf
+      path: /mnt/raid0/llm/models/SuperGemma4-31b-abliterated.Q4_K_M.gguf
       quant: Q4_K_M
       size_gb: 18.7
       architecture: gemma4
@@ -2114,7 +2114,7 @@ roles:
     description: SuperGemma4-26b-uncensored Q4_K_M — MoE 26B-A3.8B, fast, abliterated
     model:
       name: SuperGemma4-26b-uncensored-fast-v2
-      path: supergemma4-26b-uncensored-fast-v2-Q4_K_M.gguf
+      path: /mnt/raid0/llm/models/supergemma4-26b-uncensored-fast-v2-Q4_K_M.gguf
       quant: Q4_K_M
       size_gb: 16.8
       architecture: gemma4
@@ -2139,13 +2139,13 @@ roles:
     description: SuperGemma4-26b-abliterated-multimodal Q8_0 — MoE, multimodal, abliterated
     model:
       name: SuperGemma4-26b-abliterated-multimodal
-      path: supergemma4-26b-abliterated-multimodal-8bit/supergemma4-26b-abliterated-multimodal-Q8_0.gguf
+      path: /mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/supergemma4-26b-abliterated-multimodal-Q8_0.gguf
       quant: Q8_0
       size_gb: 26
       architecture: gemma4
       active_params: 3.8B
       total_params: 26B
-      mmproj: supergemma4-26b-abliterated-multimodal-8bit/mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf
+      mmproj_path: /mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf
     candidate_roles:
     - vision
     acceleration:
