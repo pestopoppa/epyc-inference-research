@@ -173,6 +173,7 @@ class ServerManager:
         self.model_path: Optional[str] = None
         self.draft_model_path: Optional[str] = None
         self.mmproj_path: Optional[str] = None
+        self.use_chat_api: bool = False
         # Reusable HTTP session for connection pooling (health checks, inference)
         self._http_session: Optional[requests.Session] = None
 
@@ -195,6 +196,7 @@ class ServerManager:
         mmproj_path: Optional[str] = None,
         lookup: bool = False,
         spec_type: Optional[str] = None,
+        use_chat_api: bool = False,
     ) -> None:
         """Start llama-server with model loaded.
 
@@ -208,6 +210,7 @@ class ServerManager:
             draft_model_path: Optional path to draft model for speculative decoding.
             draft_max: Optional default K value for speculation (can be overridden per-request).
             mmproj_path: Optional path to multimodal projector for VL models.
+            use_chat_api: If True, use /v1/chat/completions instead of /completion (for models requiring chat template).
         """
         if self.process is not None:
             self.stop()
@@ -215,6 +218,7 @@ class ServerManager:
         self.model_path = model_path
         self.draft_model_path = draft_model_path
         self.mmproj_path = mmproj_path
+        self.use_chat_api = use_chat_api
         binary = get_binary("server", registry)
 
         # Determine context length: explicit > role-based > default
@@ -395,8 +399,8 @@ class ServerManager:
             InferenceResult with response content and timing.
             On timeout, returns partial output collected so far.
         """
-        # VL mode: use /v1/chat/completions with OpenAI multimodal format
-        if self.mmproj_path is not None:
+        # VL mode or chat-template-required: use /v1/chat/completions
+        if self.mmproj_path is not None or self.use_chat_api:
             return self._run_vl_inference(
                 prompt=prompt,
                 max_tokens=max_tokens,

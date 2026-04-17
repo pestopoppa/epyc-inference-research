@@ -2096,6 +2096,7 @@ roles:
       quant: Q4_K_M
       size_gb: 18.7
       architecture: gemma4
+      use_chat_api: true  # gemma4 instruction-tuned requires chat template
     candidate_roles:
     - general
     acceleration:
@@ -2118,6 +2119,7 @@ roles:
       quant: Q4_K_M
       size_gb: 16.8
       architecture: gemma4
+      use_chat_api: true  # gemma4 instruction-tuned requires chat template
       active_params: 3.8B
       total_params: 26B
     candidate_roles:
@@ -2143,6 +2145,7 @@ roles:
       quant: Q8_0
       size_gb: 26
       architecture: gemma4
+      use_chat_api: true  # gemma4 instruction-tuned requires chat template
       active_params: 3.8B
       total_params: 26B
       mmproj_path: /mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf

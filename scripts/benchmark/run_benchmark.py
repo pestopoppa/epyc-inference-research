@@ -404,14 +404,18 @@ def _ensure_server(
             use_spec_type = accel.get("spec_type") if accel.get("type") == "ngram_lookup" else None
             use_lookup = with_lookup and not use_spec_type
             accel_draft_max = accel.get("draft_max") if use_spec_type else None
+            # Check if model requires chat template (e.g. gemma4)
+            role_config = registry.get_role_config(role) if registry else None
+            use_chat = role_config.get("model", {}).get("use_chat_api", False) if role_config else False
 
             accel_str = f" +{use_spec_type}" if use_spec_type else (" +lookup" if use_lookup else "")
-            print(f"    [SERVER] Starting llama-server{accel_str} (model will stay in RAM)...", flush=True)
+            chat_str = " +chat" if use_chat else ""
+            print(f"    [SERVER] Starting llama-server{accel_str}{chat_str} (model will stay in RAM)...", flush=True)
             ss.server = ServerManager(port=8080)
             ss.server.start(model_path, moe_override=None, registry=registry,
                             no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
                             lookup=use_lookup, spec_type=use_spec_type,
-                            draft_max=accel_draft_max)
+                            draft_max=accel_draft_max, use_chat_api=use_chat)
             timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
             if not ss.server.wait_ready(timeout=timeout):
                 print(f"    [SERVER] Failed to start, falling back to subprocess mode", flush=True)
@@ -436,11 +440,13 @@ def _ensure_server(
         use_spec_type = accel.get("spec_type") if accel.get("type") == "ngram_lookup" else None
         use_lookup = with_lookup and not use_spec_type
         accel_draft_max = accel.get("draft_max") if use_spec_type else None
+        role_config = registry.get_role_config(role) if registry else None
+        use_chat = role_config.get("model", {}).get("use_chat_api", False) if role_config else False
         ss.server = ServerManager(port=8080)
         ss.server.start(model_path, moe_override=moe_override, registry=registry,
                         no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
                         lookup=use_lookup, spec_type=use_spec_type,
-                        draft_max=accel_draft_max)
+                        draft_max=accel_draft_max, use_chat_api=use_chat)
         timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
         if not ss.server.wait_ready(timeout=timeout):
             print(f"      [SERVER] Failed to restart after crash, falling back to subprocess", flush=True)
