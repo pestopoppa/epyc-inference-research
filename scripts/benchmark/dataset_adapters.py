@@ -61,6 +61,8 @@ ADAPTER_SUITES = {
     "omniscience",
     # Phase 6: long-context multi-document reasoning
     "aa_lcr",
+    # Phase 7: document extraction quality
+    "document_extraction",
 }
 
 # Suites that stay YAML-based (no public dataset or intentionally synthetic)
