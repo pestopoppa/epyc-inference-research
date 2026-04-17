@@ -449,6 +449,7 @@ def draft_max_sweep(model_name, model_path, n_predict, results, log_dir,
 
     best_dm = 0
     best_tps = 0.0
+    consecutive_below_best = 0
 
     for dm in DRAFT_MAX_SWEEP:
         if dm == 0:
@@ -487,15 +488,24 @@ def draft_max_sweep(model_name, model_path, n_predict, results, log_dir,
         if avg_tps > best_tps:
             best_tps = avg_tps
             best_dm = dm
+            consecutive_below_best = 0
+        else:
+            consecutive_below_best += 1
 
         s.kill()
+
+        # Early stopping: 2 consecutive values below best means diminishing returns
+        if dm > 0 and consecutive_below_best >= 2:
+            print(f"    early stop: 2 consecutive values below best ({best_tps:.2f} at dm={best_dm})")
+            break
+
         print()
 
     print("=" * 64)
     print(f"  Phase 1 result: best draft-max={best_dm} ({best_tps:.2f} t/s)")
     print("=" * 64)
     print()
-    return best_dm
+    return best_dm, best_tps
 
 
 # ============================================================
@@ -588,9 +598,10 @@ def main():
     # Phase 1: draft-max sweep (if not fixed)
     dm = args.draft_max
     phase1_ran = False
+    phase1_best_tps = 0.0
     if dm is None:
-        dm = draft_max_sweep(model_name, args.model_path, args.n_predict,
-                             results, log_dir, args.draft_model, args.extra_args)
+        dm, phase1_best_tps = draft_max_sweep(model_name, args.model_path, args.n_predict,
+                                               results, log_dir, args.draft_model, args.extra_args)
         phase1_ran = True
 
     # Build spec args
@@ -614,12 +625,70 @@ def main():
         draft_model=args.draft_model, extra_args=args.extra_args,
     )
 
+    # Track single-instance TPS for NUMA scaling gate
+    config_a_tps = phase1_best_tps if phase1_ran else None
+    config_d_scales = None  # gate E based on D, not C
+
     for c in configs:
         if c == "A" and phase1_ran:
             print("  --- Config A: 1×96t interleave — already measured in Phase 1 ---")
             print()
             continue
+
+        # Scaling gate: skip E only if D failed (aggregate < 0.9 × A × 4)
+        # C failing does NOT gate D — different contention patterns
+        if c == "E" and config_a_tps and config_d_scales is not None:
+            if not config_d_scales:
+                print(f"  --- Config E: SKIPPED (Config D failed scaling gate: "
+                      f"aggregate < 90% of 4× single-instance) ---")
+                print()
+                continue
+
         CONFIG_FUNCS[c](**common)
+
+        # After Config A, capture single-instance TPS from results
+        if c == "A" and config_a_tps is None:
+            import csv as csv_mod
+            with open(str(results_path)) as f:
+                rows = list(csv_mod.DictReader(f))
+            a_rows = [r for r in rows if r["config"] == "A_1x96t_interleave"
+                      and float(r["tokens_per_sec"]) > 0]
+            if a_rows:
+                config_a_tps = sum(float(r["tokens_per_sec"]) for r in a_rows) / len(a_rows)
+                print(f"    Config A avg: {config_a_tps:.2f} t/s (used for scaling gate)")
+
+        # After Config C, report scaling but don't gate
+        if c == "C" and config_a_tps:
+            import csv as csv_mod
+            with open(str(results_path)) as f:
+                rows = list(csv_mod.DictReader(f))
+            c_rows = [r for r in rows if r["config"] == "C_2x96t"
+                      and float(r["tokens_per_sec"]) > 0]
+            if c_rows:
+                c_agg = sum(float(r["tokens_per_sec"]) for r in c_rows) / (len(c_rows) / 2)
+                threshold = config_a_tps * 2 * 0.9
+                if c_agg >= threshold:
+                    print(f"    Config C scaling: GOOD — aggregate {c_agg:.1f} >= {threshold:.1f}")
+                else:
+                    print(f"    Config C scaling: POOR — aggregate {c_agg:.1f} < {threshold:.1f} (proceeding to D anyway)")
+
+        # After Config D, check scaling — gate E on this
+        if c == "D" and config_a_tps:
+            import csv as csv_mod
+            with open(str(results_path)) as f:
+                rows = list(csv_mod.DictReader(f))
+            d_rows = [r for r in rows if r["config"] == "D_4x48t"
+                      and float(r["tokens_per_sec"]) > 0]
+            if d_rows:
+                d_agg = sum(float(r["tokens_per_sec"]) for r in d_rows) / (len(d_rows) / 4)
+                threshold = config_a_tps * 4 * 0.9
+                config_d_scales = d_agg >= threshold
+                if config_d_scales:
+                    print(f"    Scaling gate PASSED: D aggregate {d_agg:.1f} >= {threshold:.1f} (90% of 4×{config_a_tps:.1f})")
+                else:
+                    print(f"    Scaling gate FAILED: D aggregate {d_agg:.1f} < {threshold:.1f} (90% of 4×{config_a_tps:.1f})")
+                    print(f"    Config E will be skipped")
+
         print()
 
     # Summary
