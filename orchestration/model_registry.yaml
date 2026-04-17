@@ -1985,6 +1985,210 @@ roles:
       Think step by step. Show your reasoning process.
       For complex problems, break down into sub-problems.
       Reason carefully but stop once the conclusion is reached — no restating.
+
+  # --- MiniMax M2.7 (2026-04-17) ---
+  minimax_m27_q8:
+    tier: A
+    description: MiniMax-M2.7 Q8_0 — architect replacement candidate, MoE 230B-A10B, 256 experts
+    model:
+      name: MiniMax-M2.7
+      path: MiniMax-M2.7-GGUF/Q8_0/MiniMax-M2.7-Q8_0-00001-of-00006.gguf
+      quant: Q8_0
+      size_gb: 227
+      architecture: minimax-m2
+      baseline_experts: 8
+      total_experts: 256
+      active_params: 10B
+      total_params: 230B
+      vocab_size: 200064
+      max_context: 196608
+    candidate_roles:
+    - architect_general
+    - architect_coding
+    acceleration:
+      type: none  # ngram zero effect (sweep-verified 2026-04-17)
+      ngram_tested: true
+    constraints:
+      forbid:
+      - speculative_decoding
+      reason: 200K vocab — no compatible draft model exists
+    performance:
+      baseline_tps: 11.1
+      optimized_tps: 11.1
+      dual_per_inst_tps: 5.3
+      dual_aggregate_tps: 9.5  # worse than single
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_date: 2026-04-17
+    notes: >
+      Architect replacement candidate: 11.1 tps vs architect_general 9.14 (1.2x), architect_coding 3.79 (2.9x).
+      Q4_K_XL deleted — Q8 preferred for quality. Multi-instance not viable at 227GB.
+      M2.7 scored 56.22% SWE-Pro. Quality eval (G9) pending.
+
+  minimax_m27_q4_kxl:
+    tier: X
+    deprecated: true
+    deprecated_date: 2026-04-17
+    deprecated_reason: Q8 preferred for quality on bandwidth-rich hardware
+    description: DEPRECATED — deleted from system
+    model:
+      name: MiniMax-M2.7
+      path: DELETED
+      quant: UD-Q4_K_XL
+      size_gb: 132
+    performance:
+      baseline_tps: 14.0
+    benchmark_date: 2026-04-17
+
+  # --- Qwen3.6 (2026-04-17) ---
+  qwen36_q8_0:
+    tier: B
+    description: Qwen3.6-35B-A3B Q8_0 — MoE successor to Qwen3.5, thinking model
+    model:
+      name: Qwen3.6-35B-A3B
+      path: Qwen3.6-35B-A3B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 37
+      architecture: qwen3
+    candidate_roles:
+    - frontdoor
+    - coder
+    - general
+    acceleration:
+      type: ngram_lookup
+      spec_type: ngram-simple
+      draft_max: 64  # sweep-verified +10.1%
+    performance:
+      baseline_tps: 25.6
+      optimized_tps: 27.4  # interleave + ngram dm=64
+      quad_aggregate_tps: 57.4
+      eight_aggregate_tps: 76.8
+      prompt_processing_tps: 219.2  # 22K context
+      long_context_gen_tps: 21.3
+    benchmark_date: 2026-04-17
+    notes: >
+      Q8 faster than Q4 (25.6 vs 24.4) — simpler dequant on bandwidth-rich EPYC.
+      Ngram +10%. Thinking model. 4×48t = 57 tps, 8×24t = 77 tps aggregate.
+
+  qwen36_q4km:
+    tier: X
+    deprecated: true
+    deprecated_date: 2026-04-17
+    deprecated_reason: Q8 faster due to simpler dequant
+    description: DEPRECATED — deleted from system
+    model:
+      name: Qwen3.6-35B-A3B
+      path: DELETED
+      quant: Q4_K_M
+      size_gb: 22
+    performance:
+      baseline_tps: 24.4
+    benchmark_date: 2026-04-17
+
+  # --- SuperGemma4 (2026-04-17) ---
+  supergemma4_31b_q4km:
+    tier: C
+    description: SuperGemma4-31b-abliterated Q4_K_M — dense 31B, abliterated
+    model:
+      name: SuperGemma4-31b-abliterated
+      path: SuperGemma4-31b-abliterated.Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 18.7
+      architecture: gemma4
+    candidate_roles:
+    - general
+    acceleration:
+      type: ngram_lookup
+      spec_type: ngram-simple
+      draft_max: 128  # +6%
+    performance:
+      baseline_tps: 8.47
+      optimized_tps: 9.00
+      dual_aggregate_tps: 4.6  # severe degradation
+    benchmark_date: 2026-04-17
+    notes: Dense 31B, slow for size (9 tps). No NUMA scaling. Limited utility.
+
+  supergemma4_26b_q4km:
+    tier: B
+    description: SuperGemma4-26b-uncensored Q4_K_M — MoE 26B-A3.8B, fast, abliterated
+    model:
+      name: SuperGemma4-26b-uncensored-fast-v2
+      path: supergemma4-26b-uncensored-fast-v2-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 16.8
+      architecture: gemma4
+      active_params: 3.8B
+      total_params: 26B
+    candidate_roles:
+    - frontdoor
+    - worker
+    acceleration:
+      type: none  # ngram zero effect
+      ngram_tested: true
+    performance:
+      baseline_tps: 42.0
+      optimized_tps: 42.0
+      quad_aggregate_tps: 71.4
+      eight_aggregate_tps: 96.9
+    benchmark_date: 2026-04-17
+    notes: Fastest model tested (42 tps). Abliterated. 4×48t=71, 8×24t=97 aggregate.
+
+  supergemma4_26b_mm_q8:
+    tier: C
+    description: SuperGemma4-26b-abliterated-multimodal Q8_0 — MoE, multimodal, abliterated
+    model:
+      name: SuperGemma4-26b-abliterated-multimodal
+      path: supergemma4-26b-abliterated-multimodal-8bit/supergemma4-26b-abliterated-multimodal-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 26
+      architecture: gemma4
+      active_params: 3.8B
+      total_params: 26B
+      mmproj: supergemma4-26b-abliterated-multimodal-8bit/mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf
+    candidate_roles:
+    - vision
+    acceleration:
+      type: none
+      ngram_tested: true
+    performance:
+      baseline_tps: 21.1
+      optimized_tps: 21.1
+      quad_aggregate_tps: 35.3
+    benchmark_date: 2026-04-17
+    notes: Half speed of Q4 text-only (21 vs 42 tps). Vision candidate, needs multimodal quality eval.
+
+  # --- Gemma 4 (2026-04-17, both deprecated) ---
+  gemma4_e2b_q8:
+    tier: X
+    deprecated: true
+    deprecated_date: 2026-04-17
+    deprecated_reason: Too small, no NUMA scaling
+    description: DEPRECATED — deleted
+    model:
+      name: Gemma-4-E2B-it
+      path: DELETED
+      quant: Q8_0
+      size_gb: 5.3
+    performance:
+      baseline_tps: 34.0
+    benchmark_date: 2026-04-17
+
+  gemma4_e4b_q8:
+    tier: X
+    deprecated: true
+    deprecated_date: 2026-04-17
+    deprecated_reason: Slow, no NUMA scaling
+    description: DEPRECATED — deleted
+    model:
+      name: Gemma-4-E4B-it
+      path: DELETED
+      quant: Q8_0
+      size_gb: 7.7
+    performance:
+      baseline_tps: 15.5
+    benchmark_date: 2026-04-17
+
   glm_47_flash:
     tier: B
     description: GLM-4.7-Flash Q4_K_M - 30B MoE (64 experts, 4 active) with deepseek2 MLA architecture
