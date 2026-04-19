@@ -406,16 +406,26 @@ def _ensure_server(
             accel_draft_max = accel.get("draft_max") if use_spec_type else None
             # Check if model requires chat template (e.g. gemma4)
             role_config = registry.get_role_config(role) if registry else None
-            use_chat = role_config.get("model", {}).get("use_chat_api", False) if role_config else False
+            model_cfg = role_config.get("model", {}) if role_config else {}
+            use_chat = model_cfg.get("use_chat_api", False)
+            # KV cache type overrides (e.g. Qwen3.6 needs bf16/q8_0, not default f16)
+            kv_cfg = model_cfg.get("kv_cache", {})
+            ctk = kv_cfg.get("type_k")
+            ctv = kv_cfg.get("type_v")
+            # Reasoning mode (off/on/auto — "off" disables think blocks for M2.7, Qwen3.6)
+            reasoning = model_cfg.get("reasoning")
 
             accel_str = f" +{use_spec_type}" if use_spec_type else (" +lookup" if use_lookup else "")
             chat_str = " +chat" if use_chat else ""
-            print(f"    [SERVER] Starting llama-server{accel_str}{chat_str} (model will stay in RAM)...", flush=True)
+            kv_str = f" kv={ctk}/{ctv}" if ctk else ""
+            reason_str = f" reason={reasoning}" if reasoning else ""
+            print(f"    [SERVER] Starting llama-server{accel_str}{chat_str}{kv_str}{reason_str} (model will stay in RAM)...", flush=True)
             ss.server = ServerManager(port=8080)
             ss.server.start(model_path, moe_override=None, registry=registry,
                             no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
                             lookup=use_lookup, spec_type=use_spec_type,
-                            draft_max=accel_draft_max, use_chat_api=use_chat)
+                            draft_max=accel_draft_max, use_chat_api=use_chat,
+                            cache_type_k=ctk, cache_type_v=ctv, reasoning=reasoning)
             timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
             if not ss.server.wait_ready(timeout=timeout):
                 print(f"    [SERVER] Failed to start, falling back to subprocess mode", flush=True)
@@ -441,12 +451,18 @@ def _ensure_server(
         use_lookup = with_lookup and not use_spec_type
         accel_draft_max = accel.get("draft_max") if use_spec_type else None
         role_config = registry.get_role_config(role) if registry else None
-        use_chat = role_config.get("model", {}).get("use_chat_api", False) if role_config else False
+        model_cfg = role_config.get("model", {}) if role_config else {}
+        use_chat = model_cfg.get("use_chat_api", False)
+        kv_cfg = model_cfg.get("kv_cache", {})
+        ctk = kv_cfg.get("type_k")
+        ctv = kv_cfg.get("type_v")
+        reasoning = model_cfg.get("reasoning")
         ss.server = ServerManager(port=8080)
         ss.server.start(model_path, moe_override=moe_override, registry=registry,
                         no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
                         lookup=use_lookup, spec_type=use_spec_type,
-                        draft_max=accel_draft_max, use_chat_api=use_chat)
+                        draft_max=accel_draft_max, use_chat_api=use_chat,
+                        cache_type_k=ctk, cache_type_v=ctv, reasoning=reasoning)
         timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
         if not ss.server.wait_ready(timeout=timeout):
             print(f"      [SERVER] Failed to restart after crash, falling back to subprocess", flush=True)
@@ -637,6 +653,143 @@ def _run_speed_test(
     stats["passed"] += 1
 
 
+def _sweep_lookup_ngram(
+    executor: Executor,
+    results_manager: ResultsManager,
+    ss,
+    config_template,
+    model_path: str,
+    size_gb: float,
+    mmproj_path: Optional[str],
+    role: str,
+    run_id: str,
+    stats: dict,
+    force: bool,
+    registry,
+    speed_questions: int,
+    suite_names: list,
+    baseline_run: Optional[str],
+) -> None:
+    """Binary peak search for optimal lookup ngram value.
+
+    Divide-and-conquer from n=128 down. At each step, test the midpoint
+    of the current range and narrow toward the peak. Converges in ~7 steps
+    covering the full [2, 128] range.
+    """
+    is_moe = config_template.config_type == "moe_lookup"
+    quality_ref = config_template.inherits_quality_from or "baseline"
+
+    def _make_config(n: int):
+        if is_moe:
+            cfg = Config.compound_moe_lookup(
+                config_template.moe_experts, config_template.moe_override_key, n
+            )
+        else:
+            cfg = Config.lookup(n)
+        cfg.speed_test_only = True
+        cfg.inherits_quality_from = quality_ref
+        return cfg
+
+    def _test_ngram(n: int) -> Optional[float]:
+        """Run speed test for ngram=n, return TPS or None on failure."""
+        cfg = _make_config(n)
+        stats["total"] += 1
+
+        is_lookup = True
+        speed_prompt = LOOKUP_SPEED_TEST_PROMPT
+        speed_max_tokens = _LOOKUP_MAX_TOKENS
+        speed_timeout = _compute_timeout(size_gb, base=300)
+
+        # Use server if available
+        if ss.server is not None and ss.server.is_running():
+            result = ss.server.run_inference(
+                prompt=speed_prompt,
+                max_tokens=speed_max_tokens,
+                temperature=_DEFAULT_TEMPERATURE,
+                timeout=speed_timeout,
+            )
+        else:
+            result = executor.run_inference(
+                model_path=model_path,
+                config=cfg,
+                prompt=speed_prompt,
+                max_tokens=speed_max_tokens,
+                temperature=_DEFAULT_TEMPERATURE,
+                timeout=speed_timeout,
+                mmproj_path=mmproj_path,
+                role=role,
+            )
+
+        if result.timed_out or not result.success:
+            stats["errors"] += 1
+            print(f"      ⚡ {cfg.name}: FAILED", flush=True)
+            return None
+
+        parsed = parse_output(result.raw_output)
+        tps = parsed.tokens_per_second or 0
+
+        # Store result
+        results_manager.add_speed_result(
+            run_id=run_id,
+            model_role=role,
+            config_name=cfg.name,
+            model_path=model_path,
+            tokens_per_second=tps,
+            inherits_quality_from=quality_ref,
+            acceptance_rate=parsed.acceptance_rate,
+        )
+
+        print(f"      ⚡ {cfg.name}: {tps:.1f}t/s", flush=True)
+        stats["passed"] += 1
+        return tps if tps > 0 else None
+
+    # Binary peak search over [lo, hi]
+    lo, hi = 2, 128
+    tested = {}
+    print(f"      [LOOKUP SWEEP] Binary search for optimal ngram in [{lo}, {hi}]", flush=True)
+
+    # Test boundaries first
+    tps_lo = _test_ngram(lo)
+    tps_hi = _test_ngram(hi)
+    if tps_lo is not None:
+        tested[lo] = tps_lo
+    if tps_hi is not None:
+        tested[hi] = tps_hi
+
+    # Binary search: narrow toward peak
+    while hi - lo > 2:
+        mid = (lo + hi) // 2
+        tps_mid = _test_ngram(mid)
+        if tps_mid is not None:
+            tested[mid] = tps_mid
+
+        # Decide which half contains the peak
+        tps_l = tested.get(lo, 0)
+        tps_h = tested.get(hi, 0)
+
+        if tps_l >= tps_h:
+            hi = mid  # Peak is in lower half
+        else:
+            lo = mid  # Peak is in upper half
+
+    # Final: test remaining midpoint if range is small
+    if hi - lo == 2:
+        mid = lo + 1
+        tps_mid = _test_ngram(mid)
+        if tps_mid is not None:
+            tested[mid] = tps_mid
+
+    # Report
+    if tested:
+        best_n = max(tested, key=tested.get)
+        best_tps = tested[best_n]
+        sorted_results = sorted(tested.items())
+        curve = " | ".join(f"n={n}:{tps:.1f}" for n, tps in sorted_results)
+        print(f"      [LOOKUP SWEEP] Best: ngram={best_n} @ {best_tps:.1f}t/s  [{curve}]", flush=True)
+    else:
+        print(f"      [LOOKUP SWEEP] No valid results", flush=True)
+
+
 def _run_speed_question(
     executor: Executor,
     results_manager: ResultsManager,
@@ -812,6 +965,16 @@ def _run_quality_question(
         if think_trick:
             effective_prompt = effective_prompt + think_trick
 
+    # Read model-specific sampling params (e.g., repeat_penalty for Gemma4/M2.7)
+    model_repeat_penalty = None
+    model_disable_thinking = False
+    if registry:
+        role_config = registry.get_role_config(role)
+        if role_config:
+            model_cfg = role_config.get("model", {})
+            model_repeat_penalty = model_cfg.get("sampling", {}).get("repeat_penalty")
+            model_disable_thinking = model_cfg.get("disable_thinking", False)
+
     try:
         use_server = (
             ss.server is not None
@@ -828,6 +991,8 @@ def _run_quality_question(
                 timeout=effective_params["timeout"],
                 speculative_n_max=spec_k,
                 image_path=question.image_path,
+                repeat_penalty=model_repeat_penalty,
+                disable_thinking=model_disable_thinking,
             )
         else:
             result = executor.run_inference(
@@ -1149,6 +1314,18 @@ def run_benchmark(
 
             # Speed-test-only configs
             if config.speed_test_only:
+                # Lookup sweep sentinel: ngram=0 triggers binary peak search
+                if config.config_type in ("lookup", "moe_lookup") and config.lookup_ngram == 0:
+                    if dry_run:
+                        print(f"      [SPEED] {config.config_type} sweep (binary search n=2..128)", flush=True)
+                    else:
+                        _sweep_lookup_ngram(
+                            executor, results_manager, ss, config, model_path,
+                            size_gb, mmproj_path, role, run_id, stats, force,
+                            registry, speed_questions, suite_names, baseline_run,
+                        )
+                    continue
+
                 if speed_questions > 0:
                     # Run on N slowest baseline questions instead of fixed prompt
                     source_run = baseline_run or run_id

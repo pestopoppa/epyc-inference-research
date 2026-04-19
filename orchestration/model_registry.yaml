@@ -1996,6 +1996,11 @@ roles:
       quant: Q8_0
       size_gb: 227
       architecture: minimax-m2
+      use_chat_api: true  # instruction-tuned, needs chat template + --jinja for proper formatting
+      reasoning: off  # M2.7 burns all tokens in <think> blocks; disable for direct answers
+      kv_cache:
+        type_k: q8_0  # recommended by unsloth (default f16 degrades MoE quality)
+        type_v: q8_0  # q6_0 not supported in our build; q8_0 is next best
       baseline_experts: 8
       total_experts: 256
       active_params: 10B
@@ -2051,6 +2056,11 @@ roles:
       quant: Q8_0
       size_gb: 37
       architecture: qwen3
+      use_chat_api: true  # thinking model needs chat template
+      reasoning: off  # Qwen3.6 thinking model: disable for benchmarking (ggml-org/llama.cpp#13189)
+      kv_cache:
+        type_k: q8_0  # Qwen trained in bf16; f16 KV clips dynamic range (ggml-org/llama.cpp#20035)
+        type_v: q8_0
     candidate_roles:
     - frontdoor
     - coder
@@ -2088,8 +2098,8 @@ roles:
 
   # --- SuperGemma4 (2026-04-17) ---
   supergemma4_31b_q4km:
-    tier: C
-    description: SuperGemma4-31b-abliterated Q4_K_M — dense 31B, abliterated
+    tier: B
+    description: SuperGemma4-31b-abliterated Q4_K_M — dense 31B, abliterated, 60.5% quality
     model:
       name: SuperGemma4-31b-abliterated
       path: /mnt/raid0/llm/models/SuperGemma4-31b-abliterated.Q4_K_M.gguf
@@ -2097,6 +2107,12 @@ roles:
       size_gb: 18.7
       architecture: gemma4
       use_chat_api: true  # gemma4 instruction-tuned requires chat template
+      reasoning: off  # disable <|turn>thought leakage that costs 1pt per answer
+      kv_cache:
+        type_k: q8_0  # gemma4 recommended (avenchat.com/blog/run-gemma-4-with-llama-cpp)
+        type_v: q8_0
+      sampling:
+        repeat_penalty: 1.05  # gemma4 repetition collapse workaround (google-deepmind/gemma#622)
     candidate_roles:
     - general
     acceleration:
@@ -2107,38 +2123,48 @@ roles:
       baseline_tps: 8.47
       optimized_tps: 9.00
       dual_aggregate_tps: 4.6  # severe degradation
-    benchmark_date: 2026-04-17
-    notes: Dense 31B, slow for size (9 tps). No NUMA scaling. Limited utility.
+      quality_score: 60.5  # 118/195 raw score, Claude-as-Judge 0-3 scale
+      quality_pass_rate: 67.7  # 44/65 scored >= 2
+      quality_by_suite:  # pass rates (score >= 2)
+        general: 100.0  # 9/9
+        thinking: 89.0  # 8/9
+        math: 88.0  # 7/8
+        coder: 78.0  # 7/9
+        agentic: 70.0  # 7/10
+        tool_compliance: 44.0  # 4/9
+        instruction_precision: 18.0  # 2/11
+    benchmark_date: 2026-04-18
+    notes: >
+      Dense 31B, slow for size (9 tps). No NUMA scaling. Quality 60.5% with repeat_penalty=1.05.
+      Strong general/math/thinking. Think-block leakage (<|turn>thought) costs 1pt on many answers.
+      Instruction_precision weak (24.2%). Known upstream repetition bug (google-deepmind/gemma#622).
 
   supergemma4_26b_q4km:
-    tier: B
-    description: SuperGemma4-26b-uncensored Q4_K_M — MoE 26B-A3.8B, fast, abliterated
+    tier: X
+    deprecated: true
+    deprecated_date: 2026-04-18
+    deprecated_reason: >
+      Q4_K_M quantization causes irrecoverable degenerate repetition (70% of responses).
+      repeat_penalty=1.05 insufficient. Known upstream bug (google-deepmind/gemma#622).
+      Q8 multimodal variant of same architecture scores 61.6% — quant issue, not architecture.
+    description: DEPRECATED — deleted from system
     model:
       name: SuperGemma4-26b-uncensored-fast-v2
-      path: /mnt/raid0/llm/models/supergemma4-26b-uncensored-fast-v2-Q4_K_M.gguf
+      path: DELETED
       quant: Q4_K_M
       size_gb: 16.8
       architecture: gemma4
-      use_chat_api: true  # gemma4 instruction-tuned requires chat template
       active_params: 3.8B
       total_params: 26B
-    candidate_roles:
-    - frontdoor
-    - worker
-    acceleration:
-      type: none  # ngram zero effect
-      ngram_tested: true
     performance:
       baseline_tps: 42.0
-      optimized_tps: 42.0
-      quad_aggregate_tps: 71.4
-      eight_aggregate_tps: 96.9
-    benchmark_date: 2026-04-17
-    notes: Fastest model tested (42 tps). Abliterated. 4×48t=71, 8×24t=97 aggregate.
+      quality_score: 16.2  # 33/204, irrecoverable degeneration at Q4_K_M
+      quality_pass_rate: 16.2
+    benchmark_date: 2026-04-18
 
   supergemma4_26b_mm_q8:
-    tier: C
-    description: SuperGemma4-26b-abliterated-multimodal Q8_0 — MoE, multimodal, abliterated
+    tier: B
+    description: SuperGemma4-26b-abliterated-multimodal Q8_0 — MoE, multimodal, 65.4% quality
     model:
       name: SuperGemma4-26b-abliterated-multimodal
       path: /mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/supergemma4-26b-abliterated-multimodal-Q8_0.gguf
@@ -2146,6 +2172,12 @@ roles:
       size_gb: 26
       architecture: gemma4
       use_chat_api: true  # gemma4 instruction-tuned requires chat template
+      reasoning: off  # disable <|turn>thought leakage
+      kv_cache:
+        type_k: q8_0
+        type_v: q8_0
+      sampling:
+        repeat_penalty: 1.05  # gemma4 repetition collapse workaround (google-deepmind/gemma#622)
       active_params: 3.8B
       total_params: 26B
       mmproj_path: /mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf
@@ -2158,8 +2190,22 @@ roles:
       baseline_tps: 21.1
       optimized_tps: 21.1
       quad_aggregate_tps: 35.3
-    benchmark_date: 2026-04-17
-    notes: Half speed of Q4 text-only (21 vs 42 tps). Vision candidate, needs multimodal quality eval.
+      quality_score: 65.4  # 159/243 raw score, Claude-as-Judge 0-3 scale
+      quality_pass_rate: 67.9  # 55/81 scored >= 2
+      quality_by_suite:  # pass rates (score >= 2)
+        agentic: 100.0  # 10/10
+        general: 90.0  # 9/10
+        coder: 70.0  # 7/10
+        instruction_precision: 70.0  # 7/10
+        math: 70.0  # 7/10
+        thinking: 60.0  # 6/10
+        tool_compliance: 44.0  # 4/9
+        vl: 42.0  # 5/12
+    benchmark_date: 2026-04-18
+    notes: >
+      Quality 65.4% with repeat_penalty=1.05. Strongest all-rounder: 100% agentic, 90% general.
+      Known upstream repetition bug on tier 3 long-form (google-deepmind/gemma#622).
+      Half speed of Q4 text-only (21 vs 42 tps). VL suite run text-only (42% — needs multimodal eval).
 
   # --- Gemma 4 (2026-04-17, both deprecated) ---
   gemma4_e2b_q8:

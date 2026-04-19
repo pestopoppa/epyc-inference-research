@@ -197,6 +197,9 @@ class ServerManager:
         lookup: bool = False,
         spec_type: Optional[str] = None,
         use_chat_api: bool = False,
+        cache_type_k: Optional[str] = None,
+        cache_type_v: Optional[str] = None,
+        reasoning: Optional[str] = None,
     ) -> None:
         """Start llama-server with model loaded.
 
@@ -211,6 +214,8 @@ class ServerManager:
             draft_max: Optional default K value for speculation (can be overridden per-request).
             mmproj_path: Optional path to multimodal projector for VL models.
             use_chat_api: If True, use /v1/chat/completions instead of /completion (for models requiring chat template).
+            cache_type_k: KV cache data type for K (e.g., "q8_0", "bf16"). None uses server default (f16).
+            cache_type_v: KV cache data type for V (e.g., "q8_0", "bf16"). None uses server default (f16).
         """
         if self.process is not None:
             self.stop()
@@ -262,6 +267,14 @@ class ServerManager:
             cmd.extend(["--mmproj", mmproj_path])
         if lookup:
             cmd.append("--lookup")  # Custom flag in our llama.cpp fork
+        if cache_type_k:
+            cmd.extend(["-ctk", cache_type_k])
+        if cache_type_v:
+            cmd.extend(["-ctv", cache_type_v])
+        if use_chat_api:
+            cmd.append("--jinja")  # Enable Jinja template engine for models not in built-in list
+        if reasoning:
+            cmd.extend(["--reasoning", reasoning])  # off/on/auto — disables think blocks when "off"
 
         # Start server in background
         # Capture stderr to temp file for debugging if server fails
@@ -384,6 +397,8 @@ class ServerManager:
         timeout: int = DEFAULT_TIMEOUT,
         speculative_n_max: Optional[int] = None,
         image_path: Optional[str] = None,
+        repeat_penalty: Optional[float] = None,
+        disable_thinking: bool = False,
     ) -> "InferenceResult":
         """Run inference via HTTP API with streaming to capture partial output.
 
@@ -407,6 +422,8 @@ class ServerManager:
                 temperature=temperature,
                 timeout=timeout,
                 image_path=image_path,
+                repeat_penalty=repeat_penalty,
+                disable_thinking=disable_thinking,
             )
 
         url = f"http://127.0.0.1:{self.port}/completion"
@@ -422,6 +439,8 @@ class ServerManager:
             "cache_prompt": False,  # Fresh context for each question
             "stream": True,  # Enable streaming for incremental collection
         }
+        if repeat_penalty is not None:
+            payload["repeat_penalty"] = repeat_penalty
         if speculative_n_max is not None:
             payload["speculative.n_max"] = speculative_n_max
 
@@ -509,6 +528,8 @@ class ServerManager:
         temperature: float = DEFAULT_TEMPERATURE,
         timeout: int = DEFAULT_TIMEOUT,
         image_path: Optional[str] = None,
+        repeat_penalty: Optional[float] = None,
+        disable_thinking: bool = False,
     ) -> "InferenceResult":
         """Run VL inference via /v1/chat/completions with multimodal payload.
 
@@ -519,9 +540,7 @@ class ServerManager:
 
         url = f"http://127.0.0.1:{self.port}/v1/chat/completions"
 
-        # Build message content
-        content_parts = [{"type": "text", "text": prompt}]
-
+        # Build message content — use plain string for text-only, multimodal format for images
         if image_path and os.path.exists(image_path):
             with open(image_path, "rb") as img_file:
                 img_data = b64mod.b64encode(img_file.read()).decode("utf-8")
@@ -534,17 +553,23 @@ class ServerManager:
             }
             mime_type = mime_map.get(ext, "image/png")
 
-            content_parts.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:{mime_type};base64,{img_data}"}
-            })
+            message_content = [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{img_data}"}}
+            ]
+        else:
+            message_content = prompt  # Plain string for text-only chat
 
         payload = {
-            "messages": [{"role": "user", "content": content_parts}],
+            "messages": [{"role": "user", "content": message_content}],
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": False,
         }
+        if repeat_penalty is not None:
+            payload["repeat_penalty"] = repeat_penalty
+        if disable_thinking:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
 
         start_time = time.time()
         try:
@@ -851,13 +876,12 @@ class Executor:
                             cfg.inherits_quality_from = quality_ref
                             configs.append(cfg)
 
-                # MoE + lookup (lookup only — reuses draft+lookup server)
+                # MoE + lookup: sentinel for dynamic sweep (see _sweep_lookup_ngram)
                 if has_lookup:
-                    for ngram in [3, 4, 5]:
-                        cfg = Config.compound_moe_lookup(exp, override_key, ngram)
-                        cfg.speed_test_only = True
-                        cfg.inherits_quality_from = quality_ref
-                        configs.append(cfg)
+                    cfg = Config.compound_moe_lookup(exp, override_key, 0)  # ngram=0 = sweep sentinel
+                    cfg.speed_test_only = True
+                    cfg.inherits_quality_from = quality_ref
+                    configs.append(cfg)
 
         elif architecture == "ssm_hybrid":
             # SSM hybrid with dense FFN (e.g. Qwen3.5 2B-27B) — baseline only.
@@ -922,12 +946,13 @@ class Executor:
             # Skip for large models (>40GB) - lookup times out, spec decode is faster
             # Ordered AFTER spec_lookup: a draft+lookup server can serve these too
             # (draft loaded but idle when speculative.n_max is not sent).
+            # Standalone lookup configs: generated dynamically via binary sweep in run_benchmark.py
+            # (see _sweep_lookup_ngram). Only mark that lookup is applicable.
             if "prompt_lookup" not in forbidden and not is_draft and size_gb < LOOKUP_MAX_MODEL_SIZE_GB:
-                for ngram in [3, 4, 5]:
-                    cfg = Config.lookup(ngram)
-                    cfg.speed_test_only = True
-                    cfg.inherits_quality_from = "baseline"
-                    configs.append(cfg)
+                cfg = Config.lookup(0)  # Sentinel: ngram=0 triggers dynamic sweep
+                cfg.speed_test_only = True
+                cfg.inherits_quality_from = "baseline"
+                configs.append(cfg)
 
         return configs
 
