@@ -1,22 +1,17 @@
 #!/usr/bin/env python3
-"""Expected Attention KV Cache Compression — Evaluation Scaffold.
+"""Expected Attention KV Cache Compression — RULER NIAH Evaluation.
 
-Benchmark scaffold for NVIDIA KVPress Expected Attention scoring.
-Tests KV cache compression quality at various retention levels on
-RULER and LongBench-v2 benchmarks.
-
-This scaffold defines the complete evaluation pipeline with stubbed
-model-loading. Once a model server or HF model is available, fill in
-the TODO sections to run end-to-end.
+Evaluates NVIDIA KVPress Expected Attention compression quality on
+synthetic Needle-In-A-Haystack retrieval tasks at various retention levels.
 
 Gate criterion (from triattention-kv-selection.md S1):
     >= 90% RULER accuracy at 50% compression
 
 Usage:
-    # Dry run (validates scaffold without model):
+    # Dry run (validates pipeline without model):
     python eval_expected_attention.py --dry-run
 
-    # Full run (requires HF model):
+    # Full run (requires HF model on CPU):
     python eval_expected_attention.py --model Qwen/Qwen2.5-7B-Instruct \\
         --compression-ratios 0.25 0.50 --output-dir results/ea-s1/
 
@@ -39,34 +34,6 @@ import torch
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
-
-LONGBENCH_PATH = "/mnt/raid0/llm/data/eval/longbench/longbench_v2.jsonl"
-RULER_REPO = "/mnt/raid0/llm/data/eval/ruler/repo"
-
-
-def load_longbench_v2(path: str = LONGBENCH_PATH, max_samples: int = 50) -> list[dict]:
-    """Load LongBench-v2 multiple-choice QA samples."""
-    samples = []
-    with open(path) as f:
-        for line in f:
-            d = json.loads(line)
-            samples.append({
-                'id': d['_id'],
-                'question': d['question'],
-                'choices': {
-                    'A': d.get('choice_A', ''),
-                    'B': d.get('choice_B', ''),
-                    'C': d.get('choice_C', ''),
-                    'D': d.get('choice_D', ''),
-                },
-                'domain': d.get('domain', ''),
-                'difficulty': d.get('difficulty', ''),
-                'length': d.get('length', ''),
-            })
-            if len(samples) >= max_samples:
-                break
-    return samples
-
 
 def generate_ruler_niah_tasks(
     n_tasks: int = 20,
@@ -165,10 +132,8 @@ class EAResult:
     # KV cache metrics
     original_kv_entries: int = 0
     compressed_kv_entries: int = 0
-    # Timing
-    prefill_time_s: float = 0.0
-    compress_time_s: float = 0.0
-    generate_time_s: float = 0.0
+    # Timing (prefill + compress + generate are inseparable via KVPress API)
+    inference_time_s: float = 0.0
 
 
 def evaluate_with_expected_attention(
@@ -185,7 +150,7 @@ def evaluate_with_expected_attention(
 
     Returns
     -------
-    dict with 'config', 'ruler_results', 'longbench_results', 'summary'
+    dict with 'config', 'ruler_results', 'summary'
     """
     print(f"Expected Attention S1 Evaluation")
     print(f"  Model: {config.model_name}")
@@ -196,9 +161,7 @@ def evaluate_with_expected_attention(
     # Load datasets
     print("Loading datasets...")
     ruler_tasks = generate_ruler_niah_tasks(n_tasks=min(20, config.max_samples))
-    longbench_samples = load_longbench_v2(max_samples=config.max_samples)
     print(f"  RULER NIAH tasks: {len(ruler_tasks)}")
-    print(f"  LongBench-v2 samples: {len(longbench_samples)}")
 
     if dry_run:
         print("\n[DRY RUN] Pipeline validated. Skipping model loading.")
@@ -206,74 +169,135 @@ def evaluate_with_expected_attention(
             'config': asdict(config),
             'dry_run': True,
             'ruler_task_count': len(ruler_tasks),
-            'longbench_sample_count': len(longbench_samples),
-            'status': 'scaffold_validated',
+            'status': 'pipeline_validated',
         }
 
-    # --- Below requires a running model ---
-    # TODO: Load model and tokenizer
-    # from transformers import AutoModelForCausalLM, AutoTokenizer
-    # model = AutoModelForCausalLM.from_pretrained(
-    #     config.model_name,
-    #     torch_dtype=torch.float32,  # CPU inference
-    #     device_map="cpu",
-    # )
-    # tokenizer = AutoTokenizer.from_pretrained(config.model_name)
+    # --- Load model and tokenizer ---
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    # TODO: Set up KVPress Expected Attention hook
-    # sys.path.insert(0, "/mnt/raid0/llm/epyc-inference-research/data/external/kvpress")
-    # from kvpress.presses.expected_attention_press import ExpectedAttentionPress
-    #
-    # For each compression_ratio:
-    #   press = ExpectedAttentionPress(
-    #       compression_ratio=ratio,
-    #       n_future_positions=config.n_future_positions,
-    #       n_sink=config.n_sink,
-    #       use_covariance=config.use_covariance,
-    #       use_vnorm=config.use_vnorm,
-    #   )
-    #
-    #   with press(model) as compressed_model:
-    #       # Run prefill + generate for each sample
-    #       inputs = tokenizer(prompt, return_tensors="pt")
-    #       outputs = compressed_model.generate(**inputs, max_new_tokens=128)
-    #       generated = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    #
-    #       # Score: exact match for RULER NIAH, choice match for LongBench
-
-    # TODO: RULER NIAH evaluation
-    # ruler_results = []
-    # for task in ruler_tasks:
-    #     for ratio in config.compression_ratios:
-    #         result = EAResult(
-    #             sample_id=task['id'],
-    #             compression_ratio=ratio,
-    #             reference_answer=task['answer'],
-    #         )
-    #         # Run inference with EA compression at this ratio
-    #         # Check if answer appears in generation
-    #         # result.correct = task['answer'].lower() in generated.lower()
-    #         ruler_results.append(result)
-
-    # TODO: LongBench-v2 evaluation
-    # longbench_results = []
-    # for sample in longbench_samples:
-    #     for ratio in config.compression_ratios:
-    #         result = EAResult(...)
-    #         longbench_results.append(result)
-
-    # TODO: Compute summary
-    # summary = {}
-    # for ratio in config.compression_ratios:
-    #     ruler_at_ratio = [r for r in ruler_results if r.compression_ratio == ratio]
-    #     ruler_acc = sum(r.correct for r in ruler_at_ratio) / len(ruler_at_ratio)
-    #     summary[f'ruler_{ratio}'] = ruler_acc
-    #     # Gate: ruler_acc >= 0.90 at ratio=0.50 → PASS
-
-    raise NotImplementedError(
-        "Full evaluation requires model loading. Run with --dry-run to validate scaffold, "
-        "or implement the TODO sections above with a HuggingFace model."
+    print(f"Loading model {config.model_name} ...")
+    t0 = time.time()
+    model = AutoModelForCausalLM.from_pretrained(
+        config.model_name,
+        torch_dtype=torch.bfloat16,
+        device_map="cpu",
+        attn_implementation="eager",  # KVPress hooks require eager attention
     )
+    model.eval()
+    tokenizer = AutoTokenizer.from_pretrained(config.model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    print(f"  Model loaded in {time.time() - t0:.1f}s")
+
+    # Set up KVPress Expected Attention
+    sys.path.insert(0, "/mnt/raid0/llm/epyc-inference-research/data/external/kvpress")
+    from kvpress.presses.expected_attention_press import ExpectedAttentionPress
+
+    def run_with_compression(prompt: str, ratio: float, max_new_tokens: int = 64) -> tuple[str, float]:
+        """Run inference with EA compression. Returns (generated_text, inference_time)."""
+        press = ExpectedAttentionPress(
+            compression_ratio=ratio,
+            n_future_positions=config.n_future_positions,
+            n_sink=config.n_sink,
+            use_covariance=config.use_covariance,
+            use_vnorm=config.use_vnorm,
+        )
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=16384)
+        n_input = inputs["input_ids"].shape[1]
+
+        with torch.no_grad():
+            t0 = time.time()
+            with press(model):
+                outputs = model.generate(
+                    **inputs,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    temperature=None,
+                    top_p=None,
+                )
+            inference_time = time.time() - t0
+
+        generated = tokenizer.decode(outputs[0][n_input:], skip_special_tokens=True)
+        return generated, inference_time
+
+    def run_baseline(prompt: str, max_new_tokens: int = 64) -> str:
+        """Run inference without compression (baseline)."""
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=16384)
+        n_input = inputs["input_ids"].shape[1]
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                temperature=None,
+                top_p=None,
+            )
+        return tokenizer.decode(outputs[0][n_input:], skip_special_tokens=True)
+
+    # --- RULER NIAH evaluation ---
+    print("\n=== RULER NIAH Evaluation ===")
+    ruler_results = []
+
+    # First run baseline on all RULER tasks
+    print("  Running baseline (no compression)...")
+    ruler_baseline = {}
+    for task in ruler_tasks:
+        prompt = f"{task['context']}\n\nQuestion: {task['question']}\nAnswer:"
+        baseline_text = run_baseline(prompt)
+        correct = task['answer'].lower() in baseline_text.lower()
+        ruler_baseline[task['id']] = correct
+        print(f"    {task['id']}: baseline={'correct' if correct else 'WRONG'} ({baseline_text[:60]}...)")
+
+    baseline_acc = sum(ruler_baseline.values()) / len(ruler_baseline)
+    print(f"  Baseline accuracy: {baseline_acc:.1%} ({sum(ruler_baseline.values())}/{len(ruler_baseline)})")
+
+    # Then run with each compression ratio
+    for ratio in config.compression_ratios:
+        print(f"\n  Running EA compression_ratio={ratio} ...")
+        for task in ruler_tasks:
+            prompt = f"{task['context']}\n\nQuestion: {task['question']}\nAnswer:"
+            generated, inference_time = run_with_compression(prompt, ratio)
+            correct = task['answer'].lower() in generated.lower()
+
+            result = EAResult(
+                sample_id=task['id'],
+                compression_ratio=ratio,
+                correct=correct,
+                generated_text=generated[:200],
+                reference_answer=task['answer'],
+                inference_time_s=inference_time,
+            )
+            ruler_results.append(result)
+            status = "correct" if correct else "WRONG"
+            print(f"    {task['id']}: ratio={ratio}, {status} ({generated[:60]}...)")
+
+    # --- Compute summary ---
+    print("\n=== Summary ===")
+    summary = {'baseline_ruler_acc': baseline_acc}
+    gate_passed = False
+
+    for ratio in config.compression_ratios:
+        ratio_results = [r for r in ruler_results if r.compression_ratio == ratio]
+        acc = sum(1 for r in ratio_results if r.correct) / len(ratio_results) if ratio_results else 0
+        avg_time = sum(r.inference_time_s for r in ratio_results) / len(ratio_results) if ratio_results else 0
+        summary[f'ruler_acc_{ratio}'] = acc
+        summary[f'ruler_avg_time_{ratio}'] = avg_time
+
+        passed = "PASS" if acc >= 0.90 else "FAIL"
+        if ratio == 0.50 and acc >= 0.90:
+            gate_passed = True
+        print(f"  ratio={ratio}: accuracy={acc:.1%} ({sum(1 for r in ratio_results if r.correct)}/{len(ratio_results)}), "
+              f"avg_time={avg_time:.2f}s — {passed}")
+
+    summary['gate_passed'] = gate_passed
+    gate_str = "GATE PASSED" if gate_passed else "GATE FAILED"
+    print(f"\n  S1 Gate (>= 90% RULER at 50% compression): {gate_str}")
+
+    return {
+        'config': asdict(config),
+        'ruler_results': [asdict(r) for r in ruler_results],
+        'summary': summary,
+    }
 
 
 # ---------------------------------------------------------------------------
