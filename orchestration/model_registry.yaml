@@ -1997,7 +1997,8 @@ roles:
       size_gb: 227
       architecture: minimax-m2
       use_chat_api: true  # instruction-tuned, needs chat template + --jinja for proper formatting
-      reasoning: off  # M2.7 burns all tokens in <think> blocks; disable for direct answers
+      reasoning: auto  # upstream handles thinking properly; was "off" on our fork
+      max_tokens_multiplier: 4  # thinking model: needs 4x token budget for reasoning + answer
       kv_cache:
         type_k: q8_0  # recommended by unsloth (default f16 degrades MoE quality)
         type_v: q8_0  # q6_0 not supported in our build; q8_0 is next best
@@ -2057,7 +2058,8 @@ roles:
       size_gb: 37
       architecture: qwen3
       use_chat_api: true  # thinking model needs chat template
-      reasoning: off  # Qwen3.6 thinking model: disable for benchmarking (ggml-org/llama.cpp#13189)
+      reasoning: auto  # upstream handles thinking properly; was "off" on our fork
+      max_tokens_multiplier: 4  # thinking model: needs 4x token budget for reasoning + answer
       kv_cache:
         type_k: q8_0  # Qwen trained in bf16; f16 KV clips dynamic range (ggml-org/llama.cpp#20035)
         type_v: q8_0
@@ -2076,10 +2078,23 @@ roles:
       eight_aggregate_tps: 76.8
       prompt_processing_tps: 219.2  # 22K context
       long_context_gen_tps: 21.3
-    benchmark_date: 2026-04-17
+      quality_score: 73.8  # 155/210 raw, on upstream llama.cpp (our fork broken — see llama-cpp-fork-rebase.md)
+      quality_pass_rate: 77.1  # 54/70 scored >= 2
+      quality_non_degenerate: 95.7  # quality on the 54 non-degenerate responses
+      quality_by_suite:  # pass rates (score >= 2)
+        agentic: 100.0  # 10/10
+        thinking: 90.0  # 9/10
+        general: 90.0  # 9/10
+        tool_compliance: 78.0  # 7/9
+        instruction_precision: 64.0  # 7/11
+        coder: 60.0  # 6/10 (4 degenerate think-loops)
+        math: 60.0  # 6/10 (all T3 degenerate)
+    benchmark_date: 2026-04-20
     notes: >
-      Q8 faster than Q4 (25.6 vs 24.4) — simpler dequant on bandwidth-rich EPYC.
-      Ngram +10%. Thinking model. 4×48t = 57 tps, 8×24t = 77 tps aggregate.
+      Best model tested at 95.7% quality when not in think-loop. 73.8% overall due to 23% degenerate
+      responses (</think> tag loops — llama.cpp Qwen3.6 template bug, not model issue).
+      Requires upstream llama.cpp (our fork produces 0%). See llama-cpp-fork-rebase.md.
+      Q8 faster than Q4 (25.6 vs 24.4). Ngram +10%. 4×48t=57, 8×24t=77 tps aggregate.
 
   qwen36_q4km:
     tier: X
@@ -2123,7 +2138,7 @@ roles:
       baseline_tps: 8.47
       optimized_tps: 9.00
       dual_aggregate_tps: 4.6  # severe degradation
-      quality_score: 60.5  # 118/195 raw score, Claude-as-Judge 0-3 scale
+      quality_score: {pct: 60.5, raw: "118/195"}  # Claude-as-Judge 0-3 scale
       quality_pass_rate: 67.7  # 44/65 scored >= 2
       quality_by_suite:  # pass rates (score >= 2)
         general: 100.0  # 9/9
@@ -2158,7 +2173,7 @@ roles:
       total_params: 26B
     performance:
       baseline_tps: 42.0
-      quality_score: 16.2  # 33/204, irrecoverable degeneration at Q4_K_M
+      quality_score: {pct: 16.2, raw: "33/204"}  # irrecoverable degeneration at Q4_K_M
       quality_pass_rate: 16.2
     benchmark_date: 2026-04-18
 
@@ -2190,7 +2205,7 @@ roles:
       baseline_tps: 21.1
       optimized_tps: 21.1
       quad_aggregate_tps: 35.3
-      quality_score: 65.4  # 159/243 raw score, Claude-as-Judge 0-3 scale
+      quality_score: {pct: 65.4, raw: "159/243"}  # Claude-as-Judge 0-3 scale
       quality_pass_rate: 67.9  # 55/81 scored >= 2
       quality_by_suite:  # pass rates (score >= 2)
         agentic: 100.0  # 10/10
@@ -2419,7 +2434,7 @@ roles:
       baseline_tps: 15.28
       optimized_tps: 20.0
       speedup: 1.3x
-      vl_score: "11/12 (92%)"  # rescored 2026-03-04 (was 29/36=81%)
+      vl_score: {pct: 92.0, raw: "11/12"}  # rescored 2026-03-04 (was 29/36=81%)
       benchmark_date: 2026-03-04
     memory:
       residency: hot
@@ -2453,7 +2468,7 @@ roles:
       baseline_tps: 19.0
       optimized_tps: 27.6
       speedup: 1.45x
-      vl_score: "11/12 (92%)"  # rescored 2026-03-04 (was 27/36=75%)
+      vl_score: {pct: 92.0, raw: "11/12"}  # rescored 2026-03-04 (was 27/36=75%)
       benchmark_date: 2026-03-04
     memory:
       residency: hot
@@ -2508,7 +2523,7 @@ roles:
       baseline_tps: 3.1
       optimized_tps: 172.4
       speedup: 55.9x
-      quality_score: 66/69 (96%)
+      quality_score: {pct: 96.0, raw: "66/69"}
       lookup_tps: 95.18
       lookup_speedup: 12.7x
     memory:
@@ -2660,7 +2675,7 @@ roles:
       baseline_tps: 2.1
       optimized_tps: 84.3
       speedup: 40.1x
-      quality_score: 165/183 (90%)
+      quality_score: {pct: 90.0, raw: "165/183"}
     memory:
       residency: cold
       pinned: false
@@ -2720,7 +2735,7 @@ roles:
       baseline_tps: 1.9
       optimized_tps: 147.8
       speedup: 76.2x
-      quality_score: 173/198 (87%)
+      quality_score: {pct: 87.0, raw: "173/198"}
     memory:
       residency: cold
       pinned: false
@@ -2819,7 +2834,7 @@ roles:
       baseline_tps: 2.0
       optimized_tps: 158.8
       speedup: 80.6x
-      quality_score: 141/183 (77%)
+      quality_score: {pct: 77.0, raw: "141/183"}
     memory:
       residency: cold
       pinned: false
@@ -2922,7 +2937,7 @@ roles:
       baseline_tps: 2.0
       optimized_tps: 72.2
       speedup: 35.9x
-      quality_score: 39/48 (81%)
+      quality_score: {pct: 81.0, raw: "39/48"}
     memory:
       residency: cold
       pinned: false
@@ -3392,7 +3407,7 @@ roles:
       reason: VL model - no compatible text-only drafts
     performance:
       baseline_tps: 18.0
-      vl_score: "14/14 (100%)"  # rescored 2026-03-04 (was 34/36=94%); 14/14 VL + 0/1 general harness bug
+      vl_score: {pct: 100.0, raw: "14/14"}  # rescored 2026-03-04 (was 34/36=94%); 14/14 VL + 0/1 general harness bug
       benchmark_date: 2026-03-04
     memory:
       residency: warm  # Small enough for WARM tier (2.3GB)
@@ -3422,7 +3437,7 @@ roles:
       reason: VL model - no compatible text-only drafts
     performance:
       baseline_tps: 15.4
-      vl_score: "11/12 (92%)"  # rescored 2026-03-04 (was 31/36=86%)
+      vl_score: {pct: 92.0, raw: "11/12"}  # rescored 2026-03-04 (was 31/36=86%)
       benchmark_date: 2026-03-04
     memory:
       residency: cold
@@ -4059,7 +4074,7 @@ roles:
       baseline_tps: 3.4
       optimized_tps: 174.6
       speedup: 50.9x
-      quality_score: 132/183 (72%)
+      quality_score: {pct: 72.0, raw: "132/183"}
     memory:
       residency: cold
       pinned: false
@@ -4115,7 +4130,7 @@ roles:
       baseline_tps: 2.1
       optimized_tps: 85.8
       speedup: 40.9x
-      quality_score: 149/183 (81%)
+      quality_score: {pct: 81.0, raw: "149/183"}
     memory:
       residency: cold
       pinned: false
@@ -4734,70 +4749,70 @@ deprecated_models:
   - model: Meta-Llama-3-70B-Instruct-Q4_K_M
     path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-70B-Instruct-GGUF/
     size_gb: 40
-    blind_score: "36%"
+    blind_score: {pct: 36.0}
     reason: "Very poor quality, superseded by Llama 3.1-70B (86.3%)"
     deleted: 2026-01-18
 
   - model: Hermes-4-70B-Q4_K_M
     path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Hermes-4-70B-GGUF/
     size_gb: 40
-    blind_score: "85.2%"
+    blind_score: {pct: 85.2}
     reason: "Superseded by Llama 3.1-70B (86.3%), marginal quality difference"
     deleted: 2026-01-18
 
   - model: DeepSeek-R1-Distill-Llama-70B-Q4_K_M
     path_was: /mnt/raid0/llm/lmstudio/models/unsloth/DeepSeek-R1-Distill-Llama-70B-GGUF/
     size_gb: 40
-    blind_score: "67%"
+    blind_score: {pct: 67.0}
     reason: "Severe truncation issues, 1.0 t/s - too slow and low quality"
     deleted: 2026-01-18
 
   - model: Qwen2.5-72B.Q4_K_M
     path_was: /mnt/raid0/llm/lmstudio/models/mradermacher/Qwen2.5-72B-GGUF/
     size_gb: 45
-    blind_score: "n/a"
+    blind_score: {pct: null, note: "not scored"}
     reason: "Base model (not instruct) - keep Qwen2.5-72B-Instruct instead"
     deleted: 2026-01-18
 
   - model: Qwen2.5-Math-72B-Instruct-Q6_K
     path_was: /mnt/raid0/llm/lmstudio/models/tensorblock/Qwen2.5-Math-72B-Instruct-GGUF/
     size_gb: 61
-    blind_score: "77%"
+    blind_score: {pct: 77.0}
     reason: "Q6_K duplicate, Q4_K_M version exists and performs better"
     deleted: 2026-01-18
 
   - model: gemma-3-27B-it-QAT-Q4_0
     path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/gemma-3-27B-it-qat-GGUF/
     size_gb: 15
-    blind_score: "77%"
+    blind_score: {pct: 77.0}
     reason: "SWA (Sliding Window Attention) breaks speculative decoding"
     deleted: 2026-01-18
 
   - model: Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2
     path_was: /mnt/raid0/llm/lmstudio/models/mradermacher/Qwen3-Coder-53B-A3B-Instruct-TOTAL-RECALL-v2-MASTER-CODER-L-i1-GGUF/
     size_gb: 30
-    blind_score: "baseline 22%, moe6 97%"
+    blind_score: {pct: null, note: "baseline 22%, moe6 97%"}
     reason: "Inverted quality curve - community finetune broke default expert routing. Must use MoE6 to work, not production-ready."
     deleted: 2026-01-18
 
   - model: Qwen3-Coder-30B-A3B-Instruct-GGUF (lmstudio-community duplicate)
     path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/
     size_gb: 18
-    blind_score: "n/a"
+    blind_score: {pct: null, note: "not scored"}
     reason: "Duplicate - unsloth version retained for production"
     deleted: 2026-01-18
 
   - model: Qwen3-Next-80B-A3B-Instruct-Q2_K
     path_was: /mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct-Q2_K.gguf
     size_gb: 28
-    blind_score: "n/a"
+    blind_score: {pct: null, note: "not scored"}
     reason: "Lower quality Q2_K quant - Q4_K_M version retained"
     deleted: 2026-01-18
 
   - model: DeepSeek-R1-Distill-Qwen-32B (duplicates in models/)
     path_was: /mnt/raid0/llm/models/DeepSeek-R1-Distill-Qwen-32B-*.gguf
     size_gb: 31
-    blind_score: "85%"
+    blind_score: {pct: 85.0}
     reason: "Duplicate - lmstudio version retained"
     deleted: 2026-01-18
 
