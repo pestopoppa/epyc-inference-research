@@ -408,15 +408,17 @@ def _ensure_server(
             role_config = registry.get_role_config(role) if registry else None
             model_cfg = role_config.get("model", {}) if role_config else {}
             use_chat = model_cfg.get("use_chat_api", False)
+            chat_tmpl = model_cfg.get("chat_template")  # Override template (e.g., "chatml" for Qwen3.6)
             # KV cache type overrides (e.g. Qwen3.6 needs bf16/q8_0, not default f16)
             kv_cfg = model_cfg.get("kv_cache", {})
             ctk = kv_cfg.get("type_k")
             ctv = kv_cfg.get("type_v")
             # Reasoning mode (off/on/auto — "off" disables think blocks for M2.7, Qwen3.6)
             reasoning = model_cfg.get("reasoning")
+            reasoning_budget = model_cfg.get("reasoning_budget")  # Force </think> after N tokens
 
             accel_str = f" +{use_spec_type}" if use_spec_type else (" +lookup" if use_lookup else "")
-            chat_str = " +chat" if use_chat else ""
+            chat_str = f" +{chat_tmpl}" if chat_tmpl else (" +chat" if use_chat else "")
             kv_str = f" kv={ctk}/{ctv}" if ctk else ""
             reason_str = f" reason={reasoning}" if reasoning else ""
             print(f"    [SERVER] Starting llama-server{accel_str}{chat_str}{kv_str}{reason_str} (model will stay in RAM)...", flush=True)
@@ -425,7 +427,9 @@ def _ensure_server(
                             no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
                             lookup=use_lookup, spec_type=use_spec_type,
                             draft_max=accel_draft_max, use_chat_api=use_chat,
-                            cache_type_k=ctk, cache_type_v=ctv, reasoning=reasoning)
+                            chat_template=chat_tmpl,
+                            cache_type_k=ctk, cache_type_v=ctv, reasoning=reasoning,
+                            reasoning_budget=reasoning_budget)
             timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
             if not ss.server.wait_ready(timeout=timeout):
                 print(f"    [SERVER] Failed to start, falling back to subprocess mode", flush=True)
@@ -453,6 +457,7 @@ def _ensure_server(
         role_config = registry.get_role_config(role) if registry else None
         model_cfg = role_config.get("model", {}) if role_config else {}
         use_chat = model_cfg.get("use_chat_api", False)
+        chat_tmpl = model_cfg.get("chat_template")
         kv_cfg = model_cfg.get("kv_cache", {})
         ctk = kv_cfg.get("type_k")
         ctv = kv_cfg.get("type_v")
@@ -462,6 +467,7 @@ def _ensure_server(
                         no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
                         lookup=use_lookup, spec_type=use_spec_type,
                         draft_max=accel_draft_max, use_chat_api=use_chat,
+                        chat_template=chat_tmpl,
                         cache_type_k=ctk, cache_type_v=ctv, reasoning=reasoning)
         timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
         if not ss.server.wait_ready(timeout=timeout):
@@ -968,12 +974,19 @@ def _run_quality_question(
     # Read model-specific sampling params (e.g., repeat_penalty for Gemma4/M2.7)
     model_repeat_penalty = None
     model_disable_thinking = False
+    max_tokens_mult = 1
     if registry:
         role_config = registry.get_role_config(role)
         if role_config:
             model_cfg = role_config.get("model", {})
             model_repeat_penalty = model_cfg.get("sampling", {}).get("repeat_penalty")
             model_disable_thinking = model_cfg.get("disable_thinking", False)
+            max_tokens_mult = model_cfg.get("max_tokens_multiplier", 1)
+
+    # Apply max_tokens multiplier for thinking models (need budget for reasoning + answer)
+    if max_tokens_mult > 1:
+        effective_params = dict(effective_params)
+        effective_params["max_tokens"] = int(effective_params["max_tokens"] * max_tokens_mult)
 
     try:
         use_server = (

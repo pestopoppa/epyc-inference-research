@@ -2002,6 +2002,17 @@ roles:
       kv_cache:
         type_k: q8_0  # recommended by unsloth (default f16 degrades MoE quality)
         type_v: q8_0  # q6_0 not supported in our build; q8_0 is next best
+      sampling:  # HuggingFace model card recommended (2026-04-23)
+        temperature: 1.0
+        top_p: 0.95
+        top_k: 40
+        min_p: 0.01  # from Unsloth llama-server example
+      thinking_caveat: >
+        MiniMax officially states thinking CANNOT be disabled. Our executor forces
+        enable_thinking=false via chat_template_kwargs — this works for benchmarking
+        but may degrade quality. Chat parser crashes on mixed-language reasoning output
+        when thinking is enabled (v4 regression). Interleaved thinking model: thinks
+        between tool calls, not just at start.
       baseline_experts: 8
       total_experts: 256
       active_params: 10B
@@ -2031,6 +2042,9 @@ roles:
       Architect replacement candidate: 11.1 tps vs architect_general 9.14 (1.2x), architect_coding 3.79 (2.9x).
       Q4_K_XL deleted — Q8 preferred for quality. Multi-instance not viable at 227GB.
       M2.7 scored 56.22% SWE-Pro. Quality eval (G9) pending.
+      HuggingFace sampling: temp=1.0, top_p=0.95, top_k=40, min_p=0.01.
+      MUST preserve <think> blocks in conversation history. Interleaved thinking model.
+      v4 chat parser crashes on thinking=ON (mixed Chinese/English reasoning) — benchmark with thinking OFF.
 
   minimax_m27_q4_kxl:
     tier: X
@@ -2056,13 +2070,28 @@ roles:
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-Q8_0.gguf
       quant: Q8_0
       size_gb: 37
-      architecture: qwen3
+      architecture: qwen35moe  # MoE variant, arch=qwen35moe in GGUF metadata
       use_chat_api: true  # thinking model needs chat template
-      reasoning: auto  # upstream handles thinking properly; was "off" on our fork
-      max_tokens_multiplier: 4  # thinking model: needs 4x token budget for reasoning + answer
+      chat_template: chatml  # MUST override embedded jinja (multimodal VL template corrupts text-only output)
+      reasoning: auto  # Fixed: use --reasoning-budget 4096 to force </think> if model doesn't close naturally
+      reasoning_budget: 4096  # Force </think> after 4K thinking tokens (safety net; model usually closes at 200-1200)
+      max_tokens_multiplier: 4  # thinking model: needs 4x token budget when reasoning enabled
       kv_cache:
         type_k: q8_0  # Qwen trained in bf16; f16 KV clips dynamic range (ggml-org/llama.cpp#20035)
         type_v: q8_0
+      sampling:  # HuggingFace model card recommended (2026-04-23)
+        thinking:  # when enable_thinking=true (default)
+          temperature: 1.0  # 0.6 for precise coding tasks
+          top_p: 0.95
+          top_k: 20
+          presence_penalty: 0.0
+        non_thinking:  # when enable_thinking=false (benchmark mode)
+          temperature: 0.7
+          top_p: 0.80
+          top_k: 20
+          presence_penalty: 1.5
+      max_context: 262144  # native; YaRN extends to 1,010,000
+      max_output_tokens: 32768  # 81920 for complex tasks
     candidate_roles:
     - frontdoor
     - coder
@@ -2078,7 +2107,7 @@ roles:
       eight_aggregate_tps: 76.8
       prompt_processing_tps: 219.2  # 22K context
       long_context_gen_tps: 21.3
-      quality_score: 73.8  # 155/210 raw, on upstream llama.cpp (our fork broken — see llama-cpp-fork-rebase.md)
+      quality_score: 73.8  # 155/210 raw, on upstream llama.cpp. Fork fix applied 2026-04-20 — re-benchmark pending
       quality_pass_rate: 77.1  # 54/70 scored >= 2
       quality_non_degenerate: 95.7  # quality on the 54 non-degenerate responses
       quality_by_suite:  # pass rates (score >= 2)
@@ -2093,8 +2122,10 @@ roles:
     notes: >
       Best model tested at 95.7% quality when not in think-loop. 73.8% overall due to 23% degenerate
       responses (</think> tag loops — llama.cpp Qwen3.6 template bug, not model issue).
-      Requires upstream llama.cpp (our fork produces 0%). See llama-cpp-fork-rebase.md.
+      Fork fix applied 2026-04-20: cherry-picked 56666fa60 (reasoning budget sampler skip) — CLI test confirmed no more think-loops. Quality benchmark pending.
       Q8 faster than Q4 (25.6 vs 24.4). Ngram +10%. 4×48t=57, 8×24t=77 tps aggregate.
+      HuggingFace sampling: thinking temp=1.0/top_p=0.95, non-thinking temp=0.7/top_p=0.80/presence=1.5.
+      No /think /nothink soft switch (unlike Qwen3). Min recommended context: 128K for thinking.
 
   qwen36_q4km:
     tier: X
@@ -2111,6 +2142,322 @@ roles:
       baseline_tps: 24.4
     benchmark_date: 2026-04-17
 
+  # --- Qwen3.6-27B Dense Hybrid (2026-04-23) ---
+  qwen36_27b_q8:
+    tier: B
+    description: Qwen3.6-27B Q8_0 — dense hybrid SSM (Delta Net + attention), 64 layers, 5120 embd
+    model:
+      name: Qwen3.6-27B
+      path: /mnt/raid0/llm/models/Qwen3.6-27B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 27
+      architecture: qwen35  # hybrid SSM-Dense, arch=qwen35 in GGUF metadata
+      use_chat_api: true
+      chat_template: chatml  # MUST override embedded jinja (multimodal VL template corrupts text-only output)
+      reasoning: auto
+      reasoning_budget: 4096
+      max_tokens_multiplier: 4
+      kv_cache:
+        type_k: q8_0
+        type_v: q8_0
+      sampling:  # HuggingFace model card recommended (2026-04-23)
+        thinking:
+          temperature: 1.0
+          top_p: 0.95
+          top_k: 20
+          presence_penalty: 0.0
+        non_thinking:
+          temperature: 0.7
+          top_p: 0.80
+          top_k: 20
+          presence_penalty: 1.5
+      n_layer: 64
+      n_embd: 5120
+      max_context: 262144
+      max_output_tokens: 32768
+      ssm:
+        type: gated_delta_net  # alternating attention + Delta Net (linear attention)
+        full_attention_interval: 4  # every 4th layer is full attention
+    candidate_roles:
+    - general
+    - thinking
+    acceleration:
+      type: none  # ngram zero effect (sweep-verified 2026-04-23, SSM hybrid)
+      ngram_tested: true
+    performance:
+      baseline_tps: 4.9  # numactl --interleave=all -t 96
+      quality_score: null  # benchmark pending
+    benchmark_date: 2026-04-23
+    notes: >
+      Dense hybrid 27B — significantly slower than 35B-A3B MoE (4.9 vs 26.5 tps) because all
+      27B params are active per token. Ngram sweep (dm=0/64/128/256): 8.93-8.99 t/s on Q4 — zero
+      effect, SSM hybrid confirmed. Same sampling params as 35B-A3B (shared Qwen3.6 model card).
+
+  qwen36_27b_q4km:
+    tier: B
+    description: Qwen3.6-27B Q4_K_M — dense hybrid SSM, 2x faster than Q8, quality TBD
+    model:
+      name: Qwen3.6-27B
+      path: /mnt/raid0/llm/models/Qwen3.6-27B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 16
+      architecture: qwen35
+      use_chat_api: true
+      chat_template: chatml
+      reasoning: auto
+      reasoning_budget: 4096
+      max_tokens_multiplier: 4
+      kv_cache:
+        type_k: q8_0
+        type_v: q8_0
+      n_layer: 64
+      n_embd: 5120
+    candidate_roles:
+    - general
+    acceleration:
+      type: none  # ngram zero effect (sweep-verified on Q4 2026-04-23, SSM hybrid)
+      ngram_tested: true
+    performance:
+      baseline_tps: 9.2  # nearly 2x Q8 as expected (bandwidth-bound)
+      quality_score: null  # benchmark pending
+    benchmark_date: 2026-04-23
+    notes: >
+      Q4_K_M variant — 9.2 tps vs 4.9 for Q8. Ngram sweep results same as Q8 entry (zero effect).
+      Dense 27B follows expected pattern where Q4 is faster (less memory bandwidth).
+
+  # --- Qwen3-4B-Instruct-2507 (registered 2026-04-23, downloaded 2026-04-21) ---
+  # Non-thinking instruct variant (distinct from Qwen3-4B-Thinking-2507). Pure dense transformer.
+  qwen3_4b_2507_q8:
+    tier: C
+    description: Qwen3-4B-Instruct-2507 Q8_0 — dense transformer, non-thinking instruct variant
+    model:
+      name: Qwen3-4B-Instruct-2507
+      path: /mnt/raid0/llm/models/Qwen3-4B-Instruct-2507-GGUF/Qwen_Qwen3-4B-Instruct-2507-Q8_0.gguf
+      huggingface_id: bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF
+      quant: Q8_0
+      size_gb: 4.0
+      architecture: dense
+      use_chat_api: true
+      chat_template: chatml  # standard Qwen3 im_start/im_end; verify at sanity check
+      reasoning: off  # -2507 instruct variant does not produce <think> output
+      max_tokens_multiplier: 1
+      kv_cache:
+        type_k: q8_0  # Qwen trained in bf16; f16 KV clips dynamic range (same rationale as Qwen3.6)
+        type_v: q8_0
+      sampling:  # Qwen HF model card recommended (2026-04-23)
+        non_thinking:
+          temperature: 0.7
+          top_p: 0.80
+          top_k: 20
+          min_p: 0.0
+          presence_penalty: 0.0  # Qwen advises 0-2 but notes high values cause language mixing
+      max_context: 262144  # native 262K
+      max_output_tokens: 16384  # HF recommended
+      tokenizer: qwen3  # shared with Qwen3-family drafts
+    candidate_roles:
+    - worker
+    - toolrunner
+    - try_cheap_first
+    acceleration:
+      type: none  # ngram zero effect (sweep-verified 2026-04-23, compute-bound at 32 t/s)
+      ngram_tested: true
+      notes: |
+        Could itself serve as a draft for larger Qwen3 family models (shared tokenizer).
+    memory:
+      residency: cold
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.7
+    performance:
+      baseline_tps: 31.7  # sweep-measured 2026-04-23
+      optimized_tps: 31.7  # no ngram benefit (compute-bound)
+      quality_score: null
+    benchmark_date: null
+    notes: >
+      Non-thinking instruct variant — no reasoning_budget needed, no <think> emission.
+      Launch quirks: use --chat-template chatml if embedded jinja misbehaves.
+      presence_penalty > 1.0 may cause language mixing (Qwen guidance).
+      Candidate uses: try-cheap-first worker, tool-runner, or speculative-decoding
+      draft for larger Qwen3 family models.
+
+  qwen3_4b_2507_bf16:
+    tier: C
+    description: Qwen3-4B-Instruct-2507 BF16 — full-precision reference for the -2507 non-thinking variant
+    model:
+      name: Qwen3-4B-Instruct-2507
+      path: /mnt/raid0/llm/models/Qwen3-4B-Instruct-2507-GGUF/Qwen_Qwen3-4B-Instruct-2507-bf16.gguf
+      huggingface_id: bartowski/Qwen_Qwen3-4B-Instruct-2507-GGUF
+      quant: BF16
+      size_gb: 7.5
+      architecture: dense
+      use_chat_api: true
+      chat_template: chatml
+      reasoning: off
+      max_tokens_multiplier: 1
+      kv_cache:
+        type_k: q8_0
+        type_v: q8_0
+      sampling:
+        non_thinking:
+          temperature: 0.7
+          top_p: 0.80
+          top_k: 20
+          min_p: 0.0
+          presence_penalty: 0.0
+      max_context: 262144
+      max_output_tokens: 16384
+      tokenizer: qwen3
+    candidate_roles:
+    - worker
+    - toolrunner
+    - try_cheap_first
+    acceleration:
+      type: none
+    memory:
+      residency: cold
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.7
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      quality_score: null
+    benchmark_date: null
+    notes: >
+      Full-precision BF16 reference for quality ceiling vs Q8_0.
+      Same launch notes as qwen3_4b_2507_q8.
+
+  # --- Nemotron-Nano-9B-v2 (registered 2026-04-23, downloaded 2026-04-21) ---
+  # Hybrid Mamba2-Transformer: only 4 attention layers use KV cache; rest are Mamba2/MLP (no KV cost).
+  # Distinct from nemotron_cascade_2 (MoE hybrid) — NEW architecture tag: nemotron_h.
+  nemotron_nano_9b_q8:
+    tier: C
+    description: Nemotron-Nano-9B-v2 Q8_0 — Mamba2-Transformer hybrid, 9B dense (4 attn layers, rest SSM+MLP)
+    model:
+      name: NVIDIA-Nemotron-Nano-9B-v2
+      path: /mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf
+      huggingface_id: bartowski/nvidia_NVIDIA-Nemotron-Nano-9B-v2-GGUF
+      quant: Q8_0
+      size_gb: 8.9
+      architecture: nemotron_h  # NEW tag: dense Mamba2-Transformer hybrid (non-MoE)
+      use_chat_api: true
+      chat_template: null  # bartowski GGUF may not embed chat template — verify at sanity check, supply via --chat-template if needed
+      reasoning: auto  # default ON; toggle via system prompt (see notes)
+      reasoning_budget: 4096
+      max_tokens_multiplier: 4
+      kv_cache:
+        type_k: q8_0  # applies only to 4 attention layers
+        type_v: q8_0
+      sampling:  # NVIDIA HF model card recommended (2026-04-23)
+        thinking:
+          temperature: 0.6
+          top_p: 0.95
+          top_k: 20
+          presence_penalty: 0.0
+        non_thinking:
+          temperature: 0.6
+          top_p: 0.95
+          top_k: 20
+          presence_penalty: 0.0
+      max_context: 131072  # 128K native
+      max_output_tokens: 32768
+      tokenizer: nemotron  # verify at sanity check; impacts draft compat
+      ssm:
+        type: mamba2
+        attention_layers: 4  # only these layers use KV cache
+        ssm_cache_dtype_recommended: float32  # NVIDIA guidance; llama.cpp flag: --mamba-ssm-dtype float32
+    candidate_roles:
+    - worker
+    - toolrunner
+    - try_cheap_first
+    acceleration:
+      type: none  # ngram zero effect (sweep-verified 2026-04-23, Mamba2 SSM hybrid)
+      ngram_tested: true
+      notes: |
+        Draft compat for the 4 attention layers TBD (depends on tokenizer).
+    memory:
+      residency: cold
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.6
+    performance:
+      baseline_tps: 8.91  # sweep-measured 2026-04-23
+      optimized_tps: 8.91  # no ngram benefit (SSM hybrid)
+      quality_score: null
+    benchmark_date: 2026-04-23
+    notes: |
+      Reasoning-mode toggle (default AUTO/ON per user preference):
+      - ON (default): system message contains "/think" → model emits <think>...</think> block
+      - OFF: prepend "/no_think" to system message
+      - Alternate: --chat-template-kwargs '{"enable_thinking": false}' if template supports
+      - Budget: reasoning_budget caps thinking tokens; model ends abruptly at budget+500 if no newline
+      - To bypass at runtime: pass empty <think></think> in the assistant prefix, or use --no-reasoning flag if supported by fork
+
+      Launch quirks:
+      - Verify llama.cpp-experimental fork supports --mamba-ssm-dtype float32 (NVIDIA accuracy guidance)
+      - bartowski GGUF may lack embedded chat template — may need explicit --chat-template
+        (NVIDIA template uses conditional thinking markers with SPECIAL_10/11/12 tokens)
+      - Only 4 attention layers use KV — CPU-friendly at long context
+
+  nemotron_nano_9b_bf16:
+    tier: C
+    description: Nemotron-Nano-9B-v2 BF16 — full-precision reference for quality ceiling
+    model:
+      name: NVIDIA-Nemotron-Nano-9B-v2
+      path: /mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-bf16.gguf
+      huggingface_id: bartowski/nvidia_NVIDIA-Nemotron-Nano-9B-v2-GGUF
+      quant: BF16
+      size_gb: 17.0
+      architecture: nemotron_h
+      use_chat_api: true
+      chat_template: null
+      reasoning: auto
+      reasoning_budget: 4096
+      max_tokens_multiplier: 4
+      kv_cache:
+        type_k: q8_0
+        type_v: q8_0
+      sampling:
+        thinking:
+          temperature: 0.6
+          top_p: 0.95
+          top_k: 20
+          presence_penalty: 0.0
+        non_thinking:
+          temperature: 0.6
+          top_p: 0.95
+          top_k: 20
+          presence_penalty: 0.0
+      max_context: 131072
+      max_output_tokens: 32768
+      tokenizer: nemotron
+      ssm:
+        type: mamba2
+        attention_layers: 4
+        ssm_cache_dtype_recommended: float32
+    candidate_roles:
+    - worker
+    - toolrunner
+    - try_cheap_first
+    acceleration:
+      type: none
+    memory:
+      residency: cold
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.6
+    performance:
+      baseline_tps: null
+      optimized_tps: null
+      quality_score: null
+    benchmark_date: null
+    notes: >
+      Full-precision BF16 reference. Same launch notes as nemotron_nano_9b_q8.
+
   # --- SuperGemma4 (2026-04-17) ---
   supergemma4_31b_q4km:
     tier: B
@@ -2126,8 +2473,12 @@ roles:
       kv_cache:
         type_k: q8_0  # gemma4 recommended (avenchat.com/blog/run-gemma-4-with-llama-cpp)
         type_v: q8_0
-      sampling:
+      sampling:  # HuggingFace model card + community workarounds (2026-04-23)
+        temperature: 1.0
+        top_p: 0.95
+        top_k: 64  # Gemma4 model card default (higher than Qwen's 20)
         repeat_penalty: 1.05  # gemma4 repetition collapse workaround (google-deepmind/gemma#622)
+      max_context: 256000  # sliding_window: 1024, p-RoPE
     candidate_roles:
     - general
     acceleration:
@@ -2153,6 +2504,7 @@ roles:
       Dense 31B, slow for size (9 tps). No NUMA scaling. Quality 60.5% with repeat_penalty=1.05.
       Strong general/math/thinking. Think-block leakage (<|turn>thought) costs 1pt on many answers.
       Instruction_precision weak (24.2%). Known upstream repetition bug (google-deepmind/gemma#622).
+      HuggingFace: top_k=64, temp=1.0, top_p=0.95. Images/audio must go BEFORE text in prompts.
 
   supergemma4_26b_q4km:
     tier: X

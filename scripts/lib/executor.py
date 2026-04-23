@@ -94,7 +94,7 @@ def get_binary(name: str, registry: Optional["ModelRegistry"] = None) -> str:
         Full absolute path to the binary
     """
     paths = get_binary_paths(registry)
-    base_dir = paths.get("base_dir", "/mnt/raid0/llm/llama.cpp/build/bin")
+    base_dir = os.environ.get("LLAMA_BIN_DIR", paths.get("base_dir", "/mnt/raid0/llm/llama.cpp/build/bin"))
     binary_name = paths.get(name, name)
     return os.path.join(base_dir, binary_name)
 
@@ -118,12 +118,17 @@ def validate_binaries(registry: Optional["ModelRegistry"] = None) -> dict[str, s
         if not os.path.exists(path):
             missing.append(f"  {name}: {path}")
 
-    if missing:
+    # Server binary is sufficient when using --server-mode (subprocess binaries optional)
+    server_path = get_binary("server", registry)
+    if missing and not os.path.exists(server_path):
         raise FileNotFoundError(
             f"Missing llama.cpp binaries (check registry runtime_defaults.binaries):\n"
             + "\n".join(missing)
             + f"\n\nRegistry location: /mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml"
         )
+    elif missing:
+        import sys
+        print(f"  [WARN] Missing subprocess binaries (server-mode still works): {', '.join(m.strip().split(':')[0] for m in missing)}", file=sys.stderr)
 
     return paths
 
@@ -197,9 +202,11 @@ class ServerManager:
         lookup: bool = False,
         spec_type: Optional[str] = None,
         use_chat_api: bool = False,
+        chat_template: Optional[str] = None,
         cache_type_k: Optional[str] = None,
         cache_type_v: Optional[str] = None,
         reasoning: Optional[str] = None,
+        reasoning_budget: Optional[int] = None,
     ) -> None:
         """Start llama-server with model loaded.
 
@@ -214,6 +221,7 @@ class ServerManager:
             draft_max: Optional default K value for speculation (can be overridden per-request).
             mmproj_path: Optional path to multimodal projector for VL models.
             use_chat_api: If True, use /v1/chat/completions instead of /completion (for models requiring chat template).
+            chat_template: Override chat template (e.g., "chatml"). When set, uses --chat-template instead of --jinja.
             cache_type_k: KV cache data type for K (e.g., "q8_0", "bf16"). None uses server default (f16).
             cache_type_v: KV cache data type for V (e.g., "q8_0", "bf16"). None uses server default (f16).
         """
@@ -266,15 +274,19 @@ class ServerManager:
         if mmproj_path:
             cmd.extend(["--mmproj", mmproj_path])
         if lookup:
-            cmd.append("--lookup")  # Custom flag in our llama.cpp fork
+            cmd.append("--lookup")  # DEPRECATED: upstream --spec-type ngram-simple supersedes this
         if cache_type_k:
             cmd.extend(["-ctk", cache_type_k])
         if cache_type_v:
             cmd.extend(["-ctv", cache_type_v])
-        if use_chat_api:
+        if chat_template:
+            cmd.extend(["--chat-template", chat_template])  # Override embedded template (e.g., chatml for Qwen3.6 text-only)
+        elif use_chat_api:
             cmd.append("--jinja")  # Enable Jinja template engine for models not in built-in list
         if reasoning:
             cmd.extend(["--reasoning", reasoning])  # off/on/auto — disables think blocks when "off"
+        if reasoning_budget is not None:
+            cmd.extend(["--reasoning-budget", str(reasoning_budget)])  # Force </think> after N tokens
 
         # Start server in background
         # Capture stderr to temp file for debugging if server fails
