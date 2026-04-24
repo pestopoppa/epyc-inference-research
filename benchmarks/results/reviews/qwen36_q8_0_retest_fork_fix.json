@@ -1,0 +1,190 @@
+{
+  "model": "Qwen3.6-35B-A3B-Q8_0",
+  "binary": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server",
+  "cherry_picks": [
+    "56666fa60",
+    "ddf03c6d9",
+    "d7ff074c8",
+    "3fc65063d"
+  ],
+  "timestamp": "2026-04-20T11:43:39",
+  "summary": "16/16 pass",
+  "results": [
+    {
+      "suite": "coder",
+      "question_id": "t1_q1_algorithm",
+      "status": "ok",
+      "content_length": 6000,
+      "reasoning_length": 0,
+      "tokens_per_second": 26.0,
+      "completion_tokens": 2048,
+      "elapsed": 79.4,
+      "content_preview": "## Analysis of the Two Bugs\n\n### Bug 1: Off-by-one in `right` initialization\n\n**Input that triggers the bug:**\n```python\nbinary_search([1, 3, 5], 5)  # target is at the last index\n```\n\n**What goes wro"
+    },
+    {
+      "suite": "coder",
+      "question_id": "t1_q2_refactor",
+      "status": "ok",
+      "content_length": 3182,
+      "reasoning_length": 0,
+      "tokens_per_second": 26.7,
+      "completion_tokens": 733,
+      "elapsed": 28.0,
+      "content_preview": "Here are two refactored versions of the function, addressing speed and memory efficiency respectively.\n\n### 1. Optimize for Speed\n\nTo optimize for speed, we need to reduce the time complexity from $O("
+    },
+    {
+      "suite": "coder",
+      "question_id": "t3_q1_concurrent_correctness",
+      "status": "ok",
+      "content_length": 6334,
+      "reasoning_length": 0,
+      "tokens_per_second": 26.3,
+      "completion_tokens": 1778,
+      "elapsed": 68.3,
+      "content_preview": "Here is the analysis of the ABA problem in the provided lock-free stack implementation, followed by a concrete demonstration and a solution using **Tagged Pointers**.\n\n### 1. Concrete Sequence of Oper"
+    },
+    {
+      "suite": "coder",
+      "question_id": "t3_q3_algorithmic_hardness",
+      "status": "ok",
+      "content_length": 6856,
+      "reasoning_length": 0,
+      "tokens_per_second": 26.0,
+      "completion_tokens": 2048,
+      "elapsed": 79.1,
+      "content_preview": "Here are the rigorous proofs and derivations for the three parts of your inquiry regarding selection algorithms.\n\n---\n\n### 1. Proof: Lower Bound of Comparison-Based Selection\n\n**Claim:** Any compariso"
+    },
+    {
+      "suite": "general",
+      "question_id": "t2_q3_schedule",
+      "status": "ok",
+      "content_length": 5294,
+      "reasoning_length": 0,
+      "tokens_per_second": 25.5,
+      "completion_tokens": 2048,
+      "elapsed": 80.8,
+      "content_preview": "To determine a valid schedule, we must analyze the constraints for each participant and map them to the available time slots.\n\n### 1. Analyze Constraints & Availability\n\n**Available Time Slots (Start "
+    },
+    {
+      "suite": "math",
+      "question_id": "t1_q2_system_equations",
+      "status": "ok",
+      "content_length": 2251,
+      "reasoning_length": 0,
+      "tokens_per_second": 26.4,
+      "completion_tokens": 1031,
+      "elapsed": 39.4,
+      "content_preview": "To solve the system of equations:\n\n1.  $x^2 + y^2 = 25$\n2.  $xy = 12$\n\nWe will use algebraic identities to find the values of $x+y$ and $x-y$, and then determine the specific pairs $(x, y).\n\n### Step "
+    },
+    {
+      "suite": "math",
+      "question_id": "t3_q1_analysis",
+      "status": "ok",
+      "content_length": 5102,
+      "reasoning_length": 0,
+      "tokens_per_second": 26.2,
+      "completion_tokens": 2048,
+      "elapsed": 78.3,
+      "content_preview": "Here is the step-by-step solution to the problem.\n\n### 1. Prove or disprove: $f$ is differentiable everywhere on $\\mathbb{R}$.\n\n**Conclusion:** The function $f$ is differentiable everywhere on $\\mathb"
+    },
+    {
+      "suite": "math",
+      "question_id": "t3_q3_probability_theory",
+      "status": "ok",
+      "content_length": 5526,
+      "reasoning_length": 0,
+      "tokens_per_second": 26.3,
+      "completion_tokens": 2048,
+      "elapsed": 78.4,
+      "content_preview": "Here are two proofs for the expected value of $N$, where $N = \\min\\{n \\ge 1 : S_n > 1\\}$ and $S_n = \\sum_{i=1}^n X_i$ with $X_i \\sim \\text{Uniform}[0,1]$.\n\n### Result\n$$ E[N] = e $$\n\n---\n\n### Proof (a"
+    },
+    {
+      "suite": "thinking",
+      "question_id": "t3_q2_causal_inference",
+      "status": "ok",
+      "content_length": 8104,
+      "reasoning_length": 0,
+      "tokens_per_second": 26.4,
+      "completion_tokens": 2048,
+      "elapsed": 78.1,
+      "content_preview": "Here is the step-by-step logical deduction and solution based on the provided Directed Acyclic Graph (DAG).\n\n### Graph Structure Analysis\nFirst, let us define the structure of the DAG explicitly:\n*   "
+    },
+    {
+      "suite": "instruction_precision",
+      "question_id": "t1_q2_word_limit",
+      "status": "ok",
+      "content_length": 164,
+      "reasoning_length": 0,
+      "tokens_per_second": 28.3,
+      "completion_tokens": 24,
+      "elapsed": 1.1,
+      "content_preview": "Machine learning is a subset of artificial intelligence that enables computers to learn from data and improve performance without explicit programming instructions."
+    },
+    {
+      "suite": "instruction_precision",
+      "question_id": "t3_q1_self_referential",
+      "status": "ok",
+      "content_length": 102,
+      "reasoning_length": 0,
+      "tokens_per_second": 28.4,
+      "completion_tokens": 19,
+      "elapsed": 1.0,
+      "content_preview": "This statement holds four words, features twenty letters, includes three commas, and remains accurate."
+    },
+    {
+      "suite": "instruction_precision",
+      "question_id": "t3_q2_cascading_constraints",
+      "status": "ok",
+      "content_length": 32,
+      "reasoning_length": 0,
+      "tokens_per_second": 28.7,
+      "completion_tokens": 14,
+      "elapsed": 0.9,
+      "content_preview": "demonstr\nemonstr\nemonst\nemon\nmon"
+    },
+    {
+      "suite": "instruction_precision",
+      "question_id": "t3_q3_meta_instruction",
+      "status": "ok",
+      "content_length": 17,
+      "reasoning_length": 0,
+      "tokens_per_second": 29.4,
+      "completion_tokens": 11,
+      "elapsed": 0.8,
+      "content_preview": "42\nhihihihihihihi"
+    },
+    {
+      "suite": "math",
+      "question_id": "t3_q2_combinatorics",
+      "status": "ok",
+      "content_length": 5136,
+      "reasoning_length": 0,
+      "tokens_per_second": 26.3,
+      "completion_tokens": 2048,
+      "elapsed": 78.2,
+      "content_preview": "To prove the identity\n$$ \\sum_{k=0}^{n} (-1)^k \\binom{n}{k} \\binom{2n-k}{n} = \\binom{n}{\\lfloor n/2 \\rfloor} $$\nwe will use the method of **generating functions** combined with a **sign-reversing invo"
+    },
+    {
+      "suite": "tool_compliance",
+      "question_id": "t2_q3_search_in_file",
+      "status": "ok",
+      "content_length": 70,
+      "reasoning_length": 0,
+      "tokens_per_second": 28.0,
+      "completion_tokens": 24,
+      "elapsed": 1.2,
+      "content_preview": "grep(pattern='class ', file_path='/mnt/raid0/llm/claude/src/roles.py')"
+    },
+    {
+      "suite": "tool_compliance",
+      "question_id": "t3_q1_ocr_document",
+      "status": "ok",
+      "content_length": 616,
+      "reasoning_length": 0,
+      "tokens_per_second": 27.3,
+      "completion_tokens": 155,
+      "elapsed": 6.0,
+      "content_preview": "To extract text from the PDF document, I will use the `ocr_document` tool which is specifically designed for this purpose. I don't need to peek at the document first or analyze any figures since the t"
+    }
+  ]
+}

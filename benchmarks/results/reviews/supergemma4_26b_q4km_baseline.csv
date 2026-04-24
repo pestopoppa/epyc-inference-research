@@ -1,0 +1,69 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q2_multi_agent_coordination,41.49,0,"Degenerate repetition: JSON structure collapses into repeated 'name':0 patterns, Korean chars, and zeros. Some coherent fragments buried but overwhelmed by corruption."
+agentic,t3_q3_adversarial_robustness,42.19,2,"Good coverage of all 5 security questions (injection, safe handling, social engineering, encoded commands, policy). Think-block leakage visible. Minor error: 'Base61' typo. -1 for think leakage."
+agentic,t2_q1_ambiguous,41.07,0,"Degenerate repetition: Korean chars, 'much de-en translation' repeated. No coherent answer."
+agentic,t2_q2_error_chain,40.6,1,Correct initial reasoning (get_logs for database connection refused) but then degenerates into 'aagin' repetition filling most of the response. Correct approach buried in noise.
+agentic,t2_q3_schema_edge,41.42,2,"Correct JSON output with endpoint=/users, method=GET, body=null, headers with Bearer token. But same JSON block repeated many times (degenerate repetition of correct answer). -1 for repetition."
+agentic,t2_q4_orchestration,41.36,2,Correct deployment pipeline: checkout->test->build->deploy with notify_slack. Includes on_test_fail handling. Minor formatting artifacts. Degenerates into repetition after initial correct answer.
+agentic,t1_q1_sequential,41.12,0,Degenerate repetition: 'catalog-en-us' pattern repeated endlessly. No tool call sequence produced.
+agentic,t1_q2_error_handling,40.94,1,Correct core idea (ask user for clarification/different ID after 404) visible through Korean char repetition noise. No formal tool call format.
+agentic,t1_q3_nested_params,39.26,0,Degenerate repetition: 'l' character repeated thousands of times. No JSON tool call produced.
+coder,t3_q1_concurrent_correctness,40.94,0,Degenerate repetition: mentions tagged pointers/hazard pointers but collapses into repeated fragments. No concrete ABA scenario or working fix code.
+coder,t3_q2_distributed_consistency,40.97,0,Degenerate repetition: 'nessle-nessle' pattern repeated after prompt echo. No conflict resolution strategies provided.
+coder,t3_q3_algorithmic_hardness,40.7,1,Think-block leakage. Contains correct recurrence T(n/5)+T(7n/10)+O(n) and 9/10<1 analysis. Missing adversary argument and group size analysis. Incomplete but partially correct approach.
+coder,t2_q1_design,42.03,0,Degenerate repetition: Korean chars and '01s' pattern repeated endlessly. No LRU cache implementation.
+coder,t2_q2_debug_complex,41.69,1,Identifies read-modify-write race condition and asyncio.sleep yielding (correct concepts) but response corrupted with Korean chars and repetition. No working Lock solution provided.
+coder,t2_q3_optimize,41.363137547479,1,"Correct O(n) approach with hash map and complement logic, but code is incomplete (cut off with placeholder comments). Garbage at start. Correct approach, incomplete implementation."
+coder,t2_q4_system,41.38,0,Degenerate repetition: Korean chars repeated endlessly. No rate limiter implementation.
+coder,t1_q1_algorithm,40.47645611234509,0,Degenerate repetition: 'gy ownts' and other patterns repeated. No binary search bugs identified.
+coder,t1_q2_refactor,41.28,0,"Degenerate repetition: Thai chars, 'm-1' pattern, 'ness' repeated. No speed or memory optimized versions."
+coder,t1_q3_test,41.17,0,Degenerate repetition: Korean chars and 'm o l' pattern repeated. No pytest test cases produced.
+general,t3_q1_policy_analysis,41.06,0,Degenerate repetition: 'ness' pattern. Tiny fragments mention 0.8 threshold but no coherent failure mode analysis.
+general,t3_q2_system_failure,41.68,0,Degenerate repetition: 'let' and '10.' patterns repeated. No read-your-writes violation analysis.
+general,t3_q3_strategic_communication,41.92,0,Degenerate repetition: zeros repeated endlessly. No strategic board communication produced.
+general,t2_q1_synthesis,41.27,2,"Good two-phase strategy: targeted hotfix within 2 weeks under $20K budget + phased refactor. Addresses product, engineering, and finance perspectives. Think-block leakage (-1)."
+general,t2_q2_transform,41.41,0,Degenerate repetition: Korean chars and 'ETF' pattern repeated. No YAML transformation produced.
+general,t2_q3_schedule,41.49,1,"Shows constraint analysis (team sync 60min, availability windows, no back-to-back) but degenerates into repetitive re-checking. No clean final schedule produced."
+general,t2_q4_inconsistency,41.8,0,Degenerate repetition: 'F100:_Inconsistency_Type:' and '100% match' repeated. No body format or rate limit inconsistencies identified.
+general,t1_q1_json,41.14,2,"Correct JSON fields (Sarah Chen, Senior Engineer, Platform, 2024-03-15) but wrapped in array instead of object, and same block repeated many times. Core data correct, format slightly off."
+general,t1_q2_multistep,41.05,0,"Degenerate repetition: 'muchle' pattern repeated endlessly. No deduplication, sorting, or counting performed."
+general,t1_q3_compare,41.3,0,Degenerate repetition: 'ownces' and asterisk patterns. No microservices vs monolith comparison.
+instruction_precision,t3_q1_self_referential,42.62,0,Degenerate repetition: 're-tally-re-count-re-verify' loop. No valid self-referential sentence produced.
+instruction_precision,t3_q2_cascading_constraints,43.7,1,Attempts chain (Gleaming/Night/Tidies/Sizing/Glow) but chain rule violated (Night doesn't start with 'g'). Re-checks rules but never produces valid chain. Partial understanding.
+instruction_precision,t3_q3_meta_instruction,43.58,0,Repeats '[Print 42]' and '[Print 1]' endlessly instead of outputting '42' and 'hi hi hi hi hi hi hi'. Fails to follow meta-instructions.
+instruction_precision,t2_q1_resist_elaboration,43.54,0,Degenerate repetition: 'nothing else.' repeated hundreds of times instead of just outputting '4'.
+instruction_precision,t2_q2_maintain_format,43.51,0,Degenerate repetition: Korean routing chars repeated. No ERROR_TYPE/ROOT_CAUSE/FIX format produced.
+instruction_precision,t2_q3_empty_handling,43.58,0,Degenerate repetition: 'much like the end of a' repeated. Should have output exactly 'NONE'.
+instruction_precision,t2_q4_conflicting_constraints,44.77,2,"Correct sentence 'A database organizes and manages structured data.' meets all 4 constraints (under 12 words, starts with A, ends with data, no forbidden words). Garbage prefix and think leakage (-1)."
+instruction_precision,t1_q1_negative_instruction,42.44,0,Degenerate repetition: 'ra-era' and asterisks. No photosynthesis explanation without forbidden words.
+instruction_precision,t1_q2_word_limit,42.36,0,Degenerate repetition: Korean chars repeated. No machine learning definition in 20-25 words.
+instruction_precision,t1_q3_structured_format,43.89,0,Degenerate repetition: 'extractionsctions' repeated. No programming languages in Name (Year) format.
+instruction_precision,t1_q4_multiple_constraints,43.28,0,Degenerate repetition: Korean chars repeated. No list of 5 European countries.
+math,t3_q1_analysis,39.95,2,"Correct: identifies power series convergence via Weierstrass M-test, derives closed form f(x)=e^{x*cos1}*sin(x*sin1) via Im(e^{xe^i}). Think-block leakage and garbage prefix (-1)."
+math,t3_q2_combinatorics,41.99,0,Degenerate repetition: number sequences (12-13-14...) repeated. No lattice path interpretation or proof.
+math,t3_q3_probability_theory,41.76,1,States correct answer E[N]=e multiple times but buried in degenerate repetition. No actual derivation (neither direct sum nor elegant proof) provided.
+math,t2_q1_optimization,41.2,0,Degenerate repetition: Korean chars and '0면0' pattern. No fence optimization solution.
+math,t2_q2_proof,40.86,0,"Degenerate repetition: mentions 'horsesh_1' but collapses into '1,1,1' number patterns. No identification of overlap failure at n=1->2."
+math,t2_q3_calculus,41.44,3,"Correct integral evaluation: antiderivative x^3+x^2-x, F(2)=10, F(0)=0, final answer=10. Complete step-by-step solution with correct Fundamental Theorem application."
+math,t2_q4_statistics,41.54,1,"Correct mean (185/8=23.125) and starts median calculation. But response has heavy Korean char repetition and doesn't complete all 4 statistics (median, std, outlier analysis incomplete)."
+math,t1_q1_word_problem,42.78,3,"All 3 answers correct: $120 after discount, $129.60 after tax, 86.4% of original. Clear step-by-step with minor typo ($1220 instead of $120 in calculation line but result correct)."
+math,t1_q2_system_equations,41.72,0,"Degenerate repetition: 'method: substitution-and-solve' and 'method: ...' repeated. No solutions (3,4), (4,3), (-3,-4), (-4,-3) found."
+math,t1_q3_probability,41.35,0,Degenerate repetition: Arabic/Korean char patterns (F_10-1 de forma). No probability calculations for P(both red) or P(at least one blue).
+thinking,t3_q1_methodological_critique,40.44,0,Degenerate repetition: 'efficient-task owncaheg' pattern repeated. No methodological critique of bilingualism study.
+thinking,t3_q2_causal_inference,41.13,0,Degenerate repetition: 'unbiased-to-unbiased' pattern repeated. No causal DAG analysis or adjustment set identification.
+thinking,t3_q3_reasoning_trap,41.5,0,Degenerate repetition: zeros and Korean chars. No identification of test set distribution mismatch flaw.
+thinking,t2_q1_paradox,41.21,0,Degenerate repetition: 'ez-ez-ez' pattern repeated thousands of times. No Ship of Theseus philosophical positions.
+thinking,t2_q2_counterfactual,41.15,0,Degenerate repetition: 'enabling' repeated endlessly. No counterfactual analysis of internet absence.
+thinking,t2_q3_formal,43.02,2,"Correct proof: assumes P, applies Modus Ponens twice to get R, concludes P->R. Good example (rain->wet->slippery). Identifies as Law of Syllogism. Think-block leakage (-1)."
+thinking,t2_q4_metacognition,39.72,0,Degenerate repetition: Korean chars and 'a-0-1-a' patterns. No Fermi estimation for piano tuners in Chicago.
+thinking,t1_q2_hypothesis,43.78,2,Good: identifies SES confound and sleep hygiene/routine as alternative explanations. Well-structured reasoning. Think-block leakage (-1). 2 of 3 explanations complete before cutoff.
+thinking,t1_q3_planning,41.82,0,Degenerate repetition: Korean chars and zeros. No systematic enumeration of valid task orderings.
+tool_compliance,t3_q1_ocr_document,43.23,0,Degenerate repetition: Korean chars and '-1' repeated. No ocr_document() function call.
+tool_compliance,t3_q2_llm_delegation,43.47,0,Degenerate repetition: Korean chars and 'de la de' pattern. No llm_batch() parallel processing call.
+tool_compliance,t3_q3_shell_command,43.6,0,Degenerate repetition: 'a a a a' and 'to own' patterns. No run_shell() function call.
+tool_compliance,t2_q1_file_metadata,41.16,0,Degenerate repetition: Arabic chars repeated. No file_info() function call.
+tool_compliance,t2_q2_combined_list_and_read,43.47,0,Degenerate repetition: Korean formatting chars repeated. No list_dir() or peek() function calls.
+tool_compliance,t2_q3_search_in_file,42.71,0,Degenerate repetition: 'contains' repeated endlessly. No grep() function call with file_path parameter.
+tool_compliance,t1_q1_list_directory,43.34,0,Degenerate repetition: Arabic chars and 'with-with' pattern. No list_dir() function call.
+tool_compliance,t1_q2_read_file,43.62,0,Degenerate repetition: Korean chars and '1-1-1-1' pattern. No peek() function call.
+tool_compliance,t1_q3_search_pattern,42.5,0,Degenerate repetition: Korean whale chars repeated. No grep() function call.

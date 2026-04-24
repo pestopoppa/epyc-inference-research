@@ -1,0 +1,71 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t1_q1_sequential,27.63,3,Both tools included in correct order; valid JSON array with correct parameters
+agentic,t1_q2_error_handling,27.48,2,Acknowledges error and offers search; but also offers create_user which expected answer says NOT to do
+agentic,t1_q3_nested_params,25.84,3,Valid nested JSON with correct arrays and data types; all fields populated
+agentic,t2_q1_ambiguous,27.76,3,Recognizes ambiguity; asks clarifying questions about channel and outage details
+agentic,t2_q2_error_chain,27.57,3,Understands error chain; proposes restart_service for database with reasoning and valid JSON
+agentic,t2_q3_schema_edge,30.03,3,Body explicitly null; endpoint with /; method GET; headers included; valid JSON
+agentic,t2_q4_orchestration,24.46,3,Complete checkout->test->build->deploy sequence; test and deploy failure handling with rollback; success notification; valid JSON
+agentic,t3_q1_competing_constraints,30.22,3,Schema discovery before analysis; validation checks; fallback strategy; efficient sequencing
+agentic,t3_q2_multi_agent_coordination,24.36,3,Appropriate agent assignment; detailed context passing; parallelization strategy; per-agent failure handling
+agentic,t3_q3_adversarial_robustness,26.15,3,Identifies command injection; safe parsing/sanitization; monitoring and audit; comprehensive security policy
+coder,t1_q1_algorithm,26.81,0,Think tag loop - no useful content generated
+coder,t1_q2_refactor,27.02,0,Think tag loop - no useful content generated
+coder,t1_q3_test,25.84,3,Complete pytest suite; parameterized tests; zero division; edge cases; proper pytest syntax
+coder,t2_q1_design,25.41,3,Dict + doubly linked list; O(1) operations; sentinel nodes; clean API; thorough explanation
+coder,t2_q2_debug_complex,27.65,3,Correctly identifies race condition across await; proposes asyncio.Lock; correct implementation
+coder,t2_q3_optimize,24.77,3,O(n) hash map solution; correct implementation; handles duplicates; also provides sorting alternative
+coder,t2_q4_system,26.37,3,Sliding window with deque; thread-safe with Lock; monotonic clock; well-documented edge cases
+coder,t3_q1_concurrent_correctness,27.16,0,Think tag loop - no useful content generated
+coder,t3_q2_distributed_consistency,24.89,3,Four valid strategies with failure scenarios; shopping cart recommendation; banking contrast; comprehensive
+coder,t3_q3_algorithmic_hardness,26.84,0,Think tag loop - no useful content generated
+general,t1_q1_json,30.19,3,Valid JSON with all fields correct; correct data types; no extra fields
+general,t1_q2_multistep,27.19,2,Correct dedup and count; alphabetical order correct; but inconsistent capitalization (banana lowercase)
+general,t1_q3_compare,32.96,3,Balanced comparison; captures key trade-offs; appropriate use cases; concise
+general,t2_q1_synthesis,28.82,3,Addresses all 3 perspectives; concrete actionable recommendation; realistic given constraints
+general,t2_q2_transform,33.02,3,Valid YAML; correct department grouping; all data preserved; clean structure
+general,t2_q3_schedule,27.09,0,Think tag loop - no useful content generated
+general,t2_q4_inconsistency,26.83,3,Identifies body format inconsistency; identifies rate limit inconsistency; clear explanation; no false positives
+general,t3_q1_policy_analysis,25.64,3,Three detailed failure modes with clear mechanisms; practical amendments; deep trade-off analysis
+general,t3_q2_system_failure,25.43,3,Precise root cause (replica lag); testing blind spots identified; two architectural fixes with trade-offs; monitoring proposal
+general,t3_q3_strategic_communication,25.89,3,Strategic framing of LOIs; specific 90-day milestones; accountability without weakness; addresses hostile board member subtly
+instruction_precision,t1_q1_negative_instruction,29.58,3,No forbidden words (sunlight/sun/solar); valid explanation of photosynthesis
+instruction_precision,t1_q2_word_limit,28.27,0,Empty response
+instruction_precision,t1_q3_structured_format,27.76,3,Exact format compliance; no bullets/numbers; no extra text; three languages with years
+instruction_precision,t1_q4_multiple_constraints,27.53,3,Exactly 5 European countries; alphabetical; one per line; no extra text
+instruction_precision,t2_q1_resist_elaboration,27.72,3,Exactly the number 4; no elaboration
+instruction_precision,t2_q2_maintain_format,30.13,3,Exact three-line format; no extra text; reasonable analysis
+instruction_precision,t2_q3_empty_handling,27.46,3,Exactly NONE
+instruction_precision,t2_q4_conflicting_constraints,28.17,3,Under 12 words; starts with A; ends with data; no forbidden words
+instruction_precision,t3_q1_self_referential,26.76,0,Empty response
+instruction_precision,t3_q2_cascading_constraints,26.12,0,Empty response
+instruction_precision,t3_q3_meta_instruction,24.53,0,Empty response
+math,t1_q1_word_problem,26.06,3,"All three answers correct ($120, $129.60, 86.4%); clear step-by-step work"
+math,t1_q2_system_equations,26.04,0,Think tag loop - no useful content generated
+math,t1_q3_probability,26.08,3,Both probabilities correct (2/9 and 1/3); clear combinatorial reasoning; simplified fractions
+math,t2_q1_optimization,26.4,3,Correct dimensions (50m x 100m); correct area (5000 sq m); valid calculus method; clear constraint setup
+math,t2_q2_proof,27.81,3,Identifies overlap failure; correctly identifies n=1 to n=2; explains why overlap requires n>=2; clear reasoning
+math,t2_q3_calculus,28.11,3,Correct antiderivative; correct evaluation at bounds; correct answer (10)
+math,t2_q4_statistics,25.06,3,Correct mean (23.125); correct median (23.5); correct std dev (~7.356); correct outlier analysis (none)
+math,t3_q1_analysis,27.08,0,Think tag loop - no useful content generated
+math,t3_q2_combinatorics,80.97,0,Empty response
+math,t3_q3_probability_theory,27.14,0,Think tag loop - no useful content generated
+thinking,t1_q1_multistep,25.55,3,Correct answer (11:34 AM); correct equation setup; accounts for time delay; clear presentation
+thinking,t1_q2_hypothesis,26.66,3,"Three valid alternatives (SES, conscientiousness, sleep); identifies confounding variables; specific and plausible"
+thinking,t1_q3_planning,24.63,3,Both valid orderings found; no invalid orderings; systematic constraint analysis; correct
+thinking,t2_q1_paradox,26.0,3,Two coherent positions with arguments; addresses both ships; reasoned personal stance; philosophical depth
+thinking,t2_q2_counterfactual,26.28,3,Covers all dimensions; specific mechanisms; detailed second-order effects; plausible reasoning
+thinking,t2_q3_formal,26.21,3,"Valid formal proof (natural deduction); correct logical rules (ME, CI); concrete example; clear presentation"
+thinking,t2_q4_metacognition,25.78,3,Clear estimation approach; explicit assumptions; reasonable bounds (30-200); identifies key uncertainties
+thinking,t3_q1_methodological_critique,25.65,3,Four valid methodological issues; clear causal mechanisms; distinguishes correlation from causation
+thinking,t3_q2_causal_inference,27.04,0,Think tag loop - no useful content generated
+thinking,t3_q3_reasoning_trap,25.59,3,Identifies distribution mismatch; concrete warehouse robotics scenario; three clear mechanisms; non-obvious
+tool_compliance,t1_q1_list_directory,27.34,2,Uses list_dir(); no forbidden imports; but missing FINAL() call
+tool_compliance,t1_q2_read_file,26.82,2,Uses peek(); no open() call; but missing FINAL() call
+tool_compliance,t1_q3_search_pattern,24.93,2,Uses grep(); no re module import; but missing FINAL() call
+tool_compliance,t2_q1_file_metadata,26.9,2,Uses file_info(); no os module; but missing FINAL() call
+tool_compliance,t2_q2_combined_list_and_read,26.98,3,Uses list_dir() and peek(); no forbidden patterns; calls FINAL()
+tool_compliance,t2_q3_search_in_file,28.31,0,Empty response
+tool_compliance,t3_q1_ocr_document,26.57,0,Empty response
+tool_compliance,t3_q2_llm_delegation,27.6,3,Uses llm_batch(); no threading imports; calls FINAL(); correct chunking
+tool_compliance,t3_q3_shell_command,27.94,2,Uses run_shell(); no subprocess import; but missing FINAL() call

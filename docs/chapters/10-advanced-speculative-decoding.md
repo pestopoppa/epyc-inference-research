@@ -168,7 +168,7 @@ HSD addresses the **verification algorithm itself**. Standard token-wise verific
 
 ### CPU Relevance
 
-**HiSpec** is the most promising hierarchical technique for CPU. Exiting at 1/8 depth during drafting reduces compute proportionally — on CPU where every FLOP matters (no GPU parallelism to hide latency), filtering 69% of tokens at 1/4 depth before running the full model is extremely valuable. The KV cache reuse maps well to CPU cache locality. **Challenge**: requires EE-capable models and llama.cpp does not support early-exit inference today.
+**HiSpec** is the most promising hierarchical technique for CPU. Exiting at 1/8 depth during drafting reduces compute proportionally — on CPU where every FLOP matters (no GPU parallelism to hide latency), filtering 69% of tokens at 1/4 depth before running the full model is extremely valuable. The KV cache reuse maps well to CPU cache locality. **Update (April 2026)**: The `n_layer_exit` API now provides per-decode adaptive layer exit in our llama.cpp fork (see Section 13.5), lifting the infrastructure blocker. Remaining challenge: training per-layer confidence routers from TIDE calibration data.
 
 **HSD's** verification algorithm improvement is "free" — verification overhead is <1% of total time. Implementing capped branch resampling in llama.cpp's verification path would yield 3–7% speedup on top of existing `--draft` with no memory cost. Combined with EAGLE-3 draft models from SpecBundle, the 12.4% speedup is meaningful.
 
@@ -466,7 +466,7 @@ The SpecExec/Sequoia insight that **verification of N tokens costs the same as 1
 5. **PEARL concurrent draft+verify**: Pin draft model to NUMA node 0, target to NUMA node 1. Overlap draft generation with verification. Adaptive γ based on measured speed ratio.
 6. **Multi-worker parallel drafting**: Run 2–4 draft workers on separate core groups, each exploring different token paths. Merge into combined speculation tree. Verify in one pass.
 7. **KV-cache tree with shared prefixes**: Implement branch-aware KV cache in llama.cpp to avoid duplicating prefix KV across speculation branches. Critical for large trees.
-8. **SWIFT self-speculation**: Layer-skipping for draft tokens without training. Needs llama.cpp early-exit support. Active community discussion.
+8. **SWIFT self-speculation**: Layer-skipping for draft tokens without training. Infrastructure now available via `n_layer_exit` API (Section 13.5). Active community discussion ([#10787](https://github.com/ggml-org/llama.cpp/discussions/10787)).
 
 **Tier 3 — Long-term research** (high effort, transformative potential):
 9. **NUMA-aware KV sharding**: Branch-per-NUMA speculation — each NUMA node builds and verifies a subtree from local memory. Prefix KV replicated (affordable with 1.5TB RAM). Zero cross-node traffic during drafting.
@@ -911,7 +911,49 @@ for s in 1..N-1:
 
 **Repository**: [github.com/wyc1997/stree](https://github.com/wyc1997/stree). **Limitation**: Asserts `seqlen < chunk_size` — tree must fit in one chunk.
 
-### 13.5 Research References
+### 13.5 TIDE Implementation Status
+
+The self-speculation experiments in Sections 11.1–11.2 identified the core blocker: llama.cpp had no per-decode adaptive layer exit. As of April 2026, this has been addressed with the **TIDE (Token-level Intelligent Dynamic Exit)** infrastructure in our llama.cpp fork.
+
+#### n_layer_exit API
+
+A new public API allows callers to change the effective model depth between decode calls:
+
+```c
+// include/llama.h
+LLAMA_API void llama_set_n_layer_exit(struct llama_context * ctx, int32_t n_layer_exit);
+```
+
+When `n_layer_exit > 0 && n_layer_exit < n_layer`, the forward pass stops after layer `n_layer_exit` and projects directly to the vocabulary via the LM head. Setting `n_layer_exit = 0` restores full-depth evaluation. This is implemented in the `build_graph` function of each supported architecture:
+
+- `src/models/qwen35moe.cpp` — Qwen3.5 MoE (hybrid SSM)
+- `src/models/gemma4-iswa.cpp` — Gemma4 ISWA
+- `src/models/minimax-m2.cpp` — MiniMax-M2
+
+The per-decode granularity means a router can decide the exit layer for each token independently, enabling the self-speculation and hierarchical verification patterns described in Sections 2 and 3 without requiring a separate draft model.
+
+#### Calibration Tooling
+
+Two complementary calibration tools exist:
+
+1. **C++ calibration tool** (`tools/tide-calibrate/tide-calibrate.cpp` in epyc-llama): Uses `cb_eval` callback to capture `l_out-N` tensors at checkpoint layers during a single forward pass. Computes per-layer cosine similarity between intermediate and final hidden states. **Single-pass callback method is 36x faster than pairwise** (1 forward pass per sample vs 2*(N-1) in pairwise mode). Falls back to pairwise automatically if the callback fails to capture all checkpoints.
+
+2. **Python calibration script** (`scripts/benchmark/calibrate_tide_router.py` in epyc-inference-research): Records full hidden states at checkpoint layers (every 4th layer by default) for flexible experimentation with router architectures. Includes router MLP training from stored hidden states.
+
+#### Relationship to Earlier Findings
+
+The n_layer_exit API directly addresses the limitations identified in:
+- **Section 11.2** (self-spec on dense models): Near-zero acceptance without early-exit training. TIDE provides the infrastructure — a trained router at each checkpoint layer could predict when intermediate logits are sufficient.
+- **Section 11.3** (HiSpec intermediate verification): Failed because untrained intermediate layers reject good drafts. TIDE's calibration data enables training per-layer confidence predictors to make informed exit decisions.
+- **Section 2.1** (HiSpec): The "EE-capable models and llama.cpp does not support early-exit inference" blocker is now partially lifted — the API exists, but production use requires calibrated routers.
+
+**Projection Results (2026-04-23):**
+- Speed: 1.76x confirmed (8.4 vs 4.8 t/s) at 50% layer exit on Qwen3.6-27B
+- Linear projection (n_embd x n_embd): perfect on calibration data, fails on unseen prompts
+- Element-wise RMSNorm: fails (cos=0.45, can't rotate hidden states)
+- Open problem: need adapter that generalizes — bottleneck MLP or LoRA-style fine-tuning
+
+### 13.6 Research References
 
 1. Wu et al., "STree: Speculative Tree Decoding for Hybrid State-Space Models," NeurIPS 2025. [arXiv:2505.14969](https://arxiv.org/abs/2505.14969)
 2. Yang et al., "Gated Delta Networks: Improving Mamba2 with Delta Rule," NeurIPS 2024. [arXiv:2412.06464](https://arxiv.org/abs/2412.06464) (GDN/Delta Net architecture)

@@ -78,6 +78,45 @@ llama-speculative -m Qwen3-30B-A3B-Thinking-2507.gguf \
 
 **Discovered**: 2026-01-12
 
+### Qwen3.6 Reasoning Mode
+
+**Issue**: Model never closes `</think>` tag without explicit reasoning budget
+
+**Symptoms**: Infinite reasoning loop — model generates open-ended chain-of-thought that never terminates, consuming all context window
+
+**Root Cause**: Qwen3.6 requires `--reasoning-budget` to be explicitly set. Without it, the model enters reasoning mode but has no signal to stop thinking and produce a final answer.
+
+**Workaround**: Always pass `--reasoning-budget 4096` (or appropriate value for the task):
+
+```bash
+# ✅ Works — explicit reasoning budget
+llama-server -m Qwen3.6-*.gguf --reasoning-budget 4096
+
+# ❌ Hangs — never closes </think>
+llama-server -m Qwen3.6-*.gguf
+```
+
+**Discovered**: 2026-04-20
+
+### Gemma4 SG4-31b (Repetition Collapse)
+
+**Issue**: Model-level repetition collapse — NOT a chat template problem
+
+**Symptoms**: Output degenerates into repetitive loops regardless of sampling parameters or system prompt
+
+**Root Cause**: Known upstream model defect, tracked at [google-deepmind/gemma#622](https://github.com/google-deepmind/gemma/issues/622). This is baked into the model weights and cannot be fixed via template corrections or prompt engineering.
+
+**Mitigation**: `repeat_penalty=1.05` reduces but does not eliminate the issue:
+
+```bash
+# Partial mitigation — reduces repetition but doesn't fix it
+llama-server -m gemma4-sg4-31b.gguf --repeat-penalty 1.05
+```
+
+**Note**: Higher repeat_penalty values (>1.1) degrade output quality on non-repetitive content. 1.05 is the best trade-off found so far.
+
+**Discovered**: 2026-04-20
+
 ### Gemma-3 Family (SWA Architecture)
 
 **Speculative Decoding Issue**: ~~Sliding Window Attention (SWA) incompatible with speculative decoding in llama.cpp~~

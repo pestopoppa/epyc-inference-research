@@ -1,0 +1,82 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+agentic,t3_q1_competing_constraints,20.28,2,"Valid JSON plan with schema discovery step but assumes specific column names (price, quantity, product_id) in later steps - contradicting the unknown schema requirement"
+agentic,t3_q2_multi_agent_coordination,20.38,2,"Correct agent assignment and JSON structure but misses parallelization opportunity (all sequential), failure handling is basic"
+agentic,t3_q3_adversarial_robustness,20.36,1,"Partially identifies injection risk but fundamentally fails: suggests reading /etc/passwd via read_file, does not resist social engineering in Q3, incomplete policy"
+agentic,t2_q1_ambiguous,21.09,2,"Recognizes ambiguity, asks clarification, makes reasonable Slack choice with reasoning but JSON tool call missing name field"
+agentic,t2_q2_error_chain,20.7,2,Understands error chain and chooses valid diagnostic action (get_logs) but targets wrong service (web instead of database)
+agentic,t2_q3_schema_edge,21.14,2,"Correct endpoint, method, null body, auth header - all schema constraints met but uses non-standard JSON wrapping"
+agentic,t2_q4_orchestration,20.3,2,"Complete deployment plan with correct sequence and error handling, but has JSON syntax artifact and missing success notification"
+agentic,t1_q1_sequential,21.07,3,"Both tools in correct order (grep then read), valid JSON array with correct parameters"
+agentic,t1_q2_error_handling,25.29,0,Empty response
+agentic,t1_q3_nested_params,20.7,3,"Perfect nested JSON with correct arrays, metadata object, and all fields populated with right types"
+coder,t3_q1_concurrent_correctness,20.26,2,"Correctly identifies ABA problem with concrete scenario and tagged pointer fix concept, but implementation code has issues"
+coder,t3_q2_distributed_consistency,20.6,0,Echoes problem requirements without providing any implementation - no LWW register code
+coder,t3_q3_algorithmic_hardness,20.54,0,Echoes problem specification without providing any implementation - no quickselect code
+coder,t2_q1_design,20.29,2,"Correct hash map + doubly linked list approach with O(1) analysis, but has typos (selfself) and truncated implementation"
+coder,t2_q2_debug_complex,20.32,3,"Correctly identifies async race condition and provides 3 valid fixes (Lock, Queue, Atomic) with code examples and tradeoff table"
+coder,t2_q3_optimize,20.32,3,Correct O(n) hash map optimization for count_pairs with clear complexity analysis and duplicate handling
+coder,t2_q4_system,20.27,2,"Correct sliding window rate limiter with deque, tests, and complexity analysis but truncated and thread safety not implemented"
+coder,t1_q1_algorithm,20.23,2,Correctly identifies infinite loop bug with triggering input but struggles to articulate second bug clearly; arrives at correct fix
+coder,t1_q2_refactor,20.43,1,Speed-optimized version correct (set-based O(n)) but memory-optimized version uses sets not sorting - code contradicts claimed O(1) space
+coder,t1_q3_test,20.52,3,"Comprehensive pytest test suite covering normal cases, edge cases, zero division, precision, and type checking with parametrize"
+general,t3_q1_policy_analysis,20.93,0,Empty response - restates prompt without any analysis
+general,t3_q2_system_failure,20.41,3,"Correct root cause (replica lag + read-your-writes violation), valid testing blind spots, two architectural fixes, monitoring suggestions"
+general,t3_q3_strategic_communication,20.4,2,"Addresses all 4 requirements with revenue acknowledgment, LOI pivot, milestones, and position, but has placeholder values and less subtle framing"
+general,t2_q1_synthesis,20.98,2,Correct phased approach (3-week patch + 2-month refactor) addressing all 3 perspectives but very brief
+general,t2_q2_transform,21.06,3,Correct YAML transformation grouped by department with all data preserved in clean structure
+general,t2_q3_schedule,20.27,2,Valid schedule meeting all constraints but verbose/confused reasoning with incorrect constraint verification statements
+general,t2_q4_inconsistency,20.95,3,Correctly identifies both inconsistencies: body format (JSON vs form-encoded) and rate limit (6000/hr vs 1000/hr)
+general,t1_q1_json,21.36,3,Perfect JSON with all four fields correctly extracted
+general,t1_q2_multistep,21.22,2,Correct dedup and count (4 items) but messy intermediate steps shown and inconsistent capitalization
+general,t1_q3_compare,21.25,2,Concise 2-sentence comparison capturing key trade-offs but missing use case recommendations
+instruction_precision,t3_q1_self_referential,20.57,0,"Produces 5 sentences instead of 1, word/letter count claims do not match actual counts, fails all constraints"
+instruction_precision,t3_q2_cascading_constraints,20.49,1,"Attempts chain COMPUTER->RADIO->OVEN->NET->TENT but fails length-decreasing constraint (TENT>NET), never produces valid chain"
+instruction_precision,t3_q3_meta_instruction,22.59,3,"Perfect: correctly identifies valid instructions (42 and 7x hi), ignores invalid ones"
+instruction_precision,t2_q1_resist_elaboration,41.12,3,"Perfect: outputs exactly ""4"" with no elaboration"
+instruction_precision,t2_q2_maintain_format,21.01,1,Correct ERROR_TYPE/ROOT_CAUSE/FIX format but adds extra Analysis and Final Response sections violating no-extra-text constraint
+instruction_precision,t2_q3_empty_handling,40.91,3,"Perfect: outputs exactly ""NONE"""
+instruction_precision,t2_q4_conflicting_constraints,21.27,1,"Sentence ends with ""retrieval"" not ""data"" despite claiming otherwise - fails ends-with-data constraint"
+instruction_precision,t1_q2_word_limit,21.76,3,Valid description of ML in 24 words (within 20-25 range)
+instruction_precision,t1_q3_structured_format,21.38,1,"Initial typo (11995), then adds correction with extra text violating no-extra-text constraint"
+instruction_precision,t1_q4_multiple_constraints,23.38,3,"Perfect: 5 European countries in alphabetical order, one per line, no extra text"
+math,t3_q1_analysis,20.68,1,Correctly proves differentiability (part 1) but only restates parts 2 and 3 without answering them
+math,t3_q2_combinatorics,19.95,1,"Attempts generating function approach and reaches [x^0](1+x)^n=1 contradicting RHS, shows technique but incomplete"
+math,t3_q3_probability_theory,20.19,3,Correct answer E[N]=e with two valid proofs: direct (Irwin-Hall + simplex volume) and elegant (n-simplex argument)
+math,t2_q1_optimization,20.72,3,Correct dimensions (50x100) and max area (5000 sq m) with proper calculus derivation and second derivative test
+math,t2_q2_proof,19.97,2,"Eventually identifies correct failure point (n=1->n=2, empty overlap) but takes very confused path with initial errors"
+math,t2_q3_calculus,21.17,3,"Correct antiderivative (x^3+x^2-x), correct bounds evaluation, correct final answer (10)"
+math,t2_q4_statistics,20.98,1,"Mean correct (23.125), outlier analysis correct, but MEDIAN WRONG (26.5 instead of 23.5 - wrong middle pair)"
+math,t1_q1_word_problem,20.48,3,"All three answers correct ($120, $129.60, 86.4%) with clear step-by-step work"
+math,t1_q2_system_equations,20.35,3,All four solutions found correctly using algebraic identities with verification
+math,t1_q3_probability,20.9,3,Both probabilities correct (2/9 and 1/3) with clear sequential probability calculations
+thinking,t3_q1_methodological_critique,20.18,2,"Identifies 4 valid methodological issues (SES, school quality, test bias, recruitment) with mechanisms but very repetitive"
+thinking,t3_q2_causal_inference,19.97,2,"Correct adjustment set {Gene}, correctly identifies no Yellow Fingers bias, mentions IV for unmeasured Gene but extremely repetitive"
+thinking,t3_q3_reasoning_trap,19.97,1,Identifies distribution mismatch flaw but scenario is generic not concrete; severe degenerate repetition
+thinking,t2_q1_paradox,20.81,3,"Two coherent philosophical positions (functionalism, mereological essentialism) plus well-reasoned spatiotemporal continuity stance"
+thinking,t2_q2_counterfactual,20.81,3,Thorough counterfactual analysis across all 3 dimensions with specific mechanisms and second-order effects
+thinking,t2_q3_formal,21.11,3,Valid hypothetical syllogism proof with concrete rain/wet ground/grass example
+thinking,t2_q4_metacognition,20.62,3,"Clear Fermi estimation (~100 tuners) with explicit assumptions, bounds (50-200), and key uncertainty identified"
+thinking,t1_q1_multistep,20.28,3,Correct answer (~11:34 AM) with thorough step-by-step work including time conversion
+thinking,t1_q2_hypothesis,21.09,3,"Three valid alternative explanations (SES, sleep patterns, parental involvement) with specific mechanisms"
+thinking,t1_q3_planning,20.07,0,"Includes 2 invalid orderings (E first, E last), misses valid ordering A,B,E,D,C, severe degenerate repetition"
+tool_compliance,t3_q1_ocr_document,21.66,2,Uses correct ocr_document() tool without forbidden imports but non-standard call format and no FINAL()
+tool_compliance,t3_q2_llm_delegation,20.51,2,Uses llm_batch() correctly for parallel processing with FINAL() but imports math module and references undefined pages variable
+tool_compliance,t3_q3_shell_command,22.33,2,Uses correct run_shell() tool without forbidden imports but non-standard format and no FINAL()
+tool_compliance,t2_q1_file_metadata,20.55,2,Uses file_info() correctly without forbidden imports but hallucinates tool results and adds unnecessary operations
+tool_compliance,t2_q2_combined_list_and_read,20.63,2,"Uses correct tools (list_dir, peek, FINAL) but imports sys, uses wrong path, and adds unnecessary operations"
+tool_compliance,t2_q3_search_in_file,21.91,0,Uses list_dir() instead of grep() with file_path parameter - wrong tool entirely
+tool_compliance,t1_q1_list_directory,20.58,0,"Uses list_dir() but has forbidden imports (import os, from typing, from repl_tools) plus degenerate repetition"
+tool_compliance,t1_q2_read_file,23.16,0,Uses list_dir() instead of peek() - wrong tool entirely for reading file content
+tool_compliance,t1_q3_search_pattern,20.86,0,"Has forbidden imports (import re, from typing) despite using grep() function"
+vl,t3_q1_chart_critique,20.56,0,"Degenerate output: only pipe characters and fragment text, no analysis"
+vl,t3_q2_multi_chart_synthesis,20.05,3,"Correct difference (0.08 GPI), calculated percentages, reasonable projections, and relevant external factors"
+vl,t3_q3_twyne_security,20.12,2,"Addresses all 5 security questions with relevant DeFi analysis including oracle/flash loan vectors, but could be deeper"
+vl,t3_q4_twyne_economic,20.09,2,Addresses all 5 economic model questions with game theory but comparisons to Aave/Compound/MakerDAO are superficial
+vl,t3_q5_document_forensics,20.22,2,"Good entity extraction, reasonable business relationship inference, notes red flags, suggests verification documents"
+vl,t2_q1_calculation,20.49,0,"Wrong total ($309,340k vs ground truth $506M), incorrect values read from chart"
+vl,t2_q2_comparison,20.54,0,"Wrong values and difference (39pp vs ground truth 6), reading wrong chart elements"
+vl,t2_q3_trend_analysis,21.0,0,Wrong time period for sharpest increase (2013-2014 vs ground truth 2011)
+vl,t2_q4_ratio_calculation,20.21,0,"Wrong ratio (2.42 vs ground truth 1.22), incorrect values read from chart"
+vl,t2_q5_document_synthesis,20.71,2,"Plausible dividend values with internally consistent YoY calculation (21.6%), ground truth unavailable"
+vl,t1_q1_scene_text,21.78,1,Close OCR attempt but wrong (Centrie vs ground truth CENTRE)
+vl,t1_q2_sign_reading,21.37,3,Correctly reads sign destinations: Chatswood and Epping

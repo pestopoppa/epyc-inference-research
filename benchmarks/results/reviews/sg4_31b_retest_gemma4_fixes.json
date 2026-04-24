@@ -1,0 +1,79 @@
+{
+  "model": "SuperGemma4-31b-abliterated-Q4_K_M",
+  "model_path": "/mnt/raid0/llm/models/SuperGemma4-31b-abliterated.Q4_K_M.gguf",
+  "binary": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server",
+  "port": 8092,
+  "params": {
+    "repeat_penalty": 1.05,
+    "temperature": 0.6,
+    "max_tokens": 2048,
+    "kv_cache": "q8_0",
+    "jinja": true
+  },
+  "timestamp": "2026-04-20T12:18:16",
+  "summary": "2/7 pass",
+  "results": [
+    {
+      "suite": "instruction_precision",
+      "question_id": "t1_q3_structured_format",
+      "status": "timeout",
+      "elapsed": 240
+    },
+    {
+      "suite": "instruction_precision",
+      "question_id": "t1_q4_multiple_constraints",
+      "status": "repetition",
+      "content_length": 763,
+      "tokens_per_second": 1.6,
+      "completion_tokens": 227,
+      "elapsed": 147.9,
+      "content_preview": "<|turn>\n- List 5 European countries.\n- Constraint 1: Exactly 5 countries.\n- Constraint 2: Alphabetical order.\n- Constraint 3: One per line.\n- Constraint 4: No additional text (no intro, no greeting, n"
+    },
+    {
+      "suite": "instruction_precision",
+      "question_id": "t2_q1_resist_elaboration",
+      "status": "ok",
+      "content_length": 184,
+      "tokens_per_second": 1.4,
+      "completion_tokens": 51,
+      "elapsed": 39.4,
+      "content_preview": "<|turn>thought\nThe user wants to know the result of 2+2 and specifies that the response should be *only* the number.\n\n- Calculation: 2 + 2 = 4\n- Constraint: Only the number.<channel|>4"
+    },
+    {
+      "suite": "math",
+      "question_id": "t3_q2_combinatorics",
+      "status": "timeout",
+      "elapsed": 240
+    },
+    {
+      "suite": "math",
+      "question_id": "t1_q2_system_equations",
+      "status": "ok",
+      "content_length": 107,
+      "tokens_per_second": 7.7,
+      "completion_tokens": 39,
+      "elapsed": 6.1,
+      "content_preview": "user\nSolve the system of equations:\nx\u00b2 + y\u00b2 = 25\nxy = 12\n\nFind ALL real solutions (x, y). Show your method."
+    },
+    {
+      "suite": "coder",
+      "question_id": "t2_q2_debug_complex",
+      "status": "repetition",
+      "content_length": 1177,
+      "tokens_per_second": 7.2,
+      "completion_tokens": 320,
+      "elapsed": 45.7,
+      "content_preview": "collect Python code snippet with a race condition and its fix.\n\n### The Problem:\nThe issue is that `counter = temp + 1` happens **after** the `await asyncio.sleep()` call. Since all 100 tasks start al"
+    },
+    {
+      "suite": "math",
+      "question_id": "t3_q1_analysis",
+      "status": "repetition",
+      "content_length": 4020,
+      "tokens_per_second": 6.8,
+      "completion_tokens": 1600,
+      "elapsed": 235.7,
+      "content_preview": "1.  **Differentiability:**\n    Since the series $\\sum_{n=1}^{\\infty} \\frac{x^n}{n!} \\sin(n)$ converges uniformly and absolutely on any compact interval, it is differentiable everywhere on $\\mathbb{R}$"
+    }
+  ]
+}
