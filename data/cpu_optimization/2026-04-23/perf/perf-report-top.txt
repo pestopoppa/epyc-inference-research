@@ -1,0 +1,60 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 55K of event 'cycles:P'
+# Event count (approx.): 2300753561790
+#
+# Overhead  Symbol                                                                                                                                                                                                   IPC   [IPC Coverage]
+# ........  .......................................................................................................................................................................................................  ....................
+#
+    45.04%  [.] 0x0000000000026580                                                                                                                                                                                   -      -            
+            |          
+             --45.04%--0x70e395980580
+                       |          
+                       |--33.52%--ggml_graph_compute_thread.isra.0
+                       |          |          
+                       |           --33.25%--0x70e39597d41e
+                       |                     0x70e3950c6d63
+                       |                     0x70e39515a3fb
+                       |          
+                       |--5.28%--ggml::cpu::repack::tensor_traits<block_q4_K, 8l, 8l, (ggml_type)15>::compute_forward(ggml_compute_params*, ggml_tensor*)
+                       |          ggml_cpu_extra_compute_forward
+                       |          ggml_graph_compute_thread.isra.0
+                       |          |          
+                       |           --5.28%--0x70e39597d41e
+                       |                     0x70e3950c6d63
+                       |                     0x70e39515a3fb
+                       |          
+                       |--4.18%--ggml_compute_forward_mul_mat
+                       |          ggml_graph_compute_thread.isra.0
+                       |          |          
+                       |           --4.07%--0x70e39597d41e
+                       |                     0x70e3950c6d63
+                       |                     0x70e39515a3fb
+                       |          
+                        --2.02%--0x70e39597d42b
+                                  0x70e3950c6d63
+                                  0x70e39515a3fb
+
+    24.72%  [.] ggml_gemv_q4_K_8x8_q8_K                                                                                                                                                                              -      -            
+            |
+            ---ggml_gemv_q4_K_8x8_q8_K
+               |          
+                --23.75%--ggml::cpu::repack::tensor_traits<block_q4_K, 8l, 8l, (ggml_type)15>::compute_forward(ggml_compute_params*, ggml_tensor*)
+                          ggml_cpu_extra_compute_forward
+                          ggml_graph_compute_thread.isra.0
+                          |          
+                           --23.50%--0x70e39597d41e
+                                     0x70e3950c6d63
+                                     0x70e39515a3fb
+
+     9.24%  [.] ggml_vec_dot_q6_K_q8_K                                                                                                                                                                               -      -            
+            |
+            ---ggml_vec_dot_q6_K_q8_K
+               |          
+               |--4.58%--ggml_graph_compute_thread.isra.0
+               |          |          
+               |           --4.53%--0x70e39597d41e
+               |                     0x70e3950c6d63

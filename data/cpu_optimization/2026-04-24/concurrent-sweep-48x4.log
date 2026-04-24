@@ -1,0 +1,15 @@
+==========================================
+MODEL: qwen36-27b-q8 (/mnt/raid0/llm/models/Qwen3.6-27B-Q8_0.gguf)
+==========================================
+--- 48x4t concurrent ---
+  AGGREGATE (48x4t): 15.388376 t/s
+==========================================
+MODEL: qwen36-35b-a3b-q8 (/mnt/raid0/llm/models/Qwen3.6-35B-A3B-Q8_0.gguf)
+==========================================
+--- 48x4t concurrent ---
+  AGGREGATE (48x4t): 135.077589 t/s
+==========================================
+MODEL: coder32b-q4 (/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf)
+==========================================
+--- 48x4t concurrent ---
+  AGGREGATE (48x4t): 17.340717 t/s

@@ -1,0 +1,21 @@
+WARNING: Kernel address maps (/proc/{kallsyms,modules}) are restricted,
+check /proc/sys/kernel/kptr_restrict and /proc/sys/kernel/perf_event_paranoid.
+
+Samples in kernel functions may not be resolved if a suitable vmlinux
+file is not found in the buildid cache or in the vmlinux path.
+
+Samples in kernel modules won't be resolved at all.
+
+If some relocation was applied (e.g. kexec) symbols may be misresolved
+even with a suitable vmlinux or kallsyms file.
+
+Couldn't record kernel reference relocation symbol
+Symbol resolution may be skewed if relocation was used (e.g. kexec).
+Check /proc/kallsyms permission or run as root.
+| model                          |       size |     params | backend    | threads |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | ------: | --------------: | -------------------: |
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |           tg256 |         48.13 ± 0.00 |
+
+build: 9e048fbc1 (8893)
+[ perf record: Woken up 1623 times to write data ]
+[ perf record: Captured and wrote 452.883 MB /mnt/raid0/llm/epyc-inference-research/data/cpu_optimization/2026-04-23/perf/perf-30ba3b-96t.data (55683 samples) ]

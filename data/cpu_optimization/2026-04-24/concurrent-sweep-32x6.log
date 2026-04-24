@@ -1,0 +1,111 @@
+==========================================
+MODEL: qwen36-27b-q8 (/mnt/raid0/llm/models/Qwen3.6-27B-Q8_0.gguf)
+==========================================
+--- 32x6t concurrent ---
+  inst00: 0.352882 t/s
+  inst01: 0.356453 t/s
+  inst02: 0.353826 t/s
+  inst03: 0.348592 t/s
+  inst04: 0.348196 t/s
+  inst05: 0.410936 t/s
+  inst06: 0.420869 t/s
+  inst07: 0.406749 t/s
+  inst08: 0.372328 t/s
+  inst09: 0.384044 t/s
+  inst10: 0.400796 t/s
+  inst11: 0.279903 t/s
+  inst12: 0.280065 t/s
+  inst13: 0.304693 t/s
+  inst14: 0.297134 t/s
+  inst15: 0.298406 t/s
+  inst16: 0.277379 t/s
+  inst17: 0.281515 t/s
+  inst18: 0.301070 t/s
+  inst19: 0.376273 t/s
+  inst20: 0.376023 t/s
+  inst21: 0.396446 t/s
+  inst22: 0.360937 t/s
+  inst23: 0.362067 t/s
+  inst24: 0.262277 t/s
+  inst25: 0.261878 t/s
+  inst26: 0.271408 t/s
+  inst27: 0.266851 t/s
+  inst28: 0.267305 t/s
+  inst29: 0.263314 t/s
+  inst30: 0.264489 t/s
+  inst31: 0.261349 t/s
+  AGGREGATE (32x6t): 10.466453 t/s
+==========================================
+MODEL: qwen36-35b-a3b-q8 (/mnt/raid0/llm/models/Qwen3.6-35B-A3B-Q8_0.gguf)
+==========================================
+--- 32x6t concurrent ---
+  inst00: 2.596313 t/s
+  inst01: 2.653981 t/s
+  inst02: 2.741581 t/s
+  inst03: 2.868181 t/s
+  inst04: 2.870465 t/s
+  inst05: 2.693726 t/s
+  inst06: 2.659685 t/s
+  inst07: 2.662633 t/s
+  inst08: 2.841107 t/s
+  inst09: 2.843287 t/s
+  inst10: 2.777249 t/s
+  inst11: 2.823725 t/s
+  inst12: 2.869612 t/s
+  inst13: 2.950052 t/s
+  inst14: 2.820127 t/s
+  inst15: 2.821134 t/s
+  inst16: 3.005774 t/s
+  inst17: 3.043922 t/s
+  inst18: 2.913088 t/s
+  inst19: 3.015753 t/s
+  inst20: 2.947158 t/s
+  inst21: 2.949031 t/s
+  inst22: 3.132633 t/s
+  inst23: 3.033899 t/s
+  inst24: 3.783738 t/s
+  inst25: 3.783741 t/s
+  inst26: 2.984620 t/s
+  inst27: 2.675408 t/s
+  inst28: 2.741158 t/s
+  inst29: 2.755469 t/s
+  inst30: 2.745486 t/s
+  inst31: 2.748554 t/s
+  AGGREGATE (32x6t): 92.752290 t/s
+==========================================
+MODEL: coder32b-q4 (/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf)
+==========================================
+--- 32x6t concurrent ---
+  inst00: 0.512882 t/s
+  inst01: 0.521065 t/s
+  inst02: 0.546253 t/s
+  inst03: 1.144931 t/s
+  inst04: 0.599086 t/s
+  inst05: 0.542703 t/s
+  inst06: 0.519018 t/s
+  inst07: 0.536351 t/s
+  inst08: 0.481519 t/s
+  inst09: 0.460804 t/s
+  inst10: 0.501375 t/s
+  inst11: 1.180909 t/s
+  inst12: 0.522605 t/s
+  inst13: 0.502766 t/s
+  inst14: 0.471975 t/s
+  inst15: 0.474460 t/s
+  inst16: 0.538529 t/s
+  inst17: 0.545362 t/s
+  inst18: 0.555987 t/s
+  inst19: 0.528551 t/s
+  inst20: 0.527574 t/s
+  inst21: 0.618580 t/s
+  inst22: 0.683398 t/s
+  inst23: 1.170877 t/s
+  inst24: 0.519129 t/s
+  inst25: 0.511678 t/s
+  inst26: 0.570609 t/s
+  inst27: 0.533919 t/s
+  inst28: 0.550528 t/s
+  inst29: 1.489130 t/s
+  inst30: 0.582907 t/s
+  inst31: 0.587071 t/s
+  AGGREGATE (32x6t): 20.032531 t/s
