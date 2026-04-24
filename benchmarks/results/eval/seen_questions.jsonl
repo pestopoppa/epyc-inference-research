@@ -553,3 +553,1265 @@
 {"prompt_id": "simpleqa_general_01253", "suite": "simpleqa", "session": "3way_20260309_213147", "timestamp": "2026-03-09T20:47:26.080070+00:00"}
 {"prompt_id": "simpleqa_general_00458", "suite": "simpleqa", "session": "3way_20260309_213147", "timestamp": "2026-03-09T20:52:43.910661+00:00"}
 {"prompt_id": "simpleqa_general_03359", "suite": "simpleqa", "session": "3way_20260309_213147", "timestamp": "2026-03-09T20:55:04.361155+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0441", "suite": "gpqa", "session": "3way_20260329_181746", "timestamp": "2026-03-29T16:23:12.098410+00:00"}
+{"prompt_id": "simpleqa_general_03434", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T16:27:54.926803+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0090", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T16:32:58.340034+00:00"}
+{"prompt_id": "hotpot_comparison_5a78b209554299148911f93e", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T16:38:58.625800+00:00"}
+{"prompt_id": "mbpp_0122", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T16:43:43.255420+00:00"}
+{"prompt_id": "math500_Algebra_00112", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T16:47:23.224177+00:00"}
+{"prompt_id": "hellaswag_20600", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T16:50:16.878541+00:00"}
+{"prompt_id": "mmlu_professional_law_10912", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T16:53:30.899471+00:00"}
+{"prompt_id": "simpleqa_general_02378", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T16:59:41.466592+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0348", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:05:44.781865+00:00"}
+{"prompt_id": "hotpot_bridge_5ae0d9c555429924de1b719a", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:10:48.409674+00:00"}
+{"prompt_id": "mbpp_0014", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:12:54.531261+00:00"}
+{"prompt_id": "math500_Intermediate Algebra_00359", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:21:30.298506+00:00"}
+{"prompt_id": "hellaswag_39747", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:25:05.408166+00:00"}
+{"prompt_id": "mmlu_world_religions_13872", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:28:33.905029+00:00"}
+{"prompt_id": "simpleqa_general_04320", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:35:02.856948+00:00"}
+{"prompt_id": "gpqa_Analytical Chemistry_0431", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:37:42.115877+00:00"}
+{"prompt_id": "hotpot_comparison_5ab7ff1d5542990e739ec7b9", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:41:46.383631+00:00"}
+{"prompt_id": "humaneval_HumanEval_103", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:49:46.729200+00:00"}
+{"prompt_id": "gsm8k_00789", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:53:52.229896+00:00"}
+{"prompt_id": "hellaswag_15065", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:57:27.528286+00:00"}
+{"prompt_id": "mmlu_professional_psychology_12495", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T17:59:39.085599+00:00"}
+{"prompt_id": "simpleqa_general_02170", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:05:01.619786+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0200", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:09:43.166721+00:00"}
+{"prompt_id": "hotpot_bridge_5a83b01c5542996488c2e489", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:13:37.586097+00:00"}
+{"prompt_id": "mbpp_0181", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:17:11.506863+00:00"}
+{"prompt_id": "math500_Prealgebra_00398", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:21:21.439785+00:00"}
+{"prompt_id": "hellaswag_46221", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:26:16.531274+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_09123", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:27:25.562474+00:00"}
+{"prompt_id": "simpleqa_general_00935", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:34:18.620387+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0179", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:38:47.145286+00:00"}
+{"prompt_id": "hotpot_comparison_5ab29624554299545a2cf9b5", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:43:42.624894+00:00"}
+{"prompt_id": "mbpp_0358", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:46:30.139903+00:00"}
+{"prompt_id": "math500_Prealgebra_00337", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:47:57.178415+00:00"}
+{"prompt_id": "hellaswag_17219", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:51:07.167029+00:00"}
+{"prompt_id": "mmlu_nutrition_09617", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:52:34.139960+00:00"}
+{"prompt_id": "simpleqa_general_02154", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T18:58:48.271224+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0278", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:03:43.867198+00:00"}
+{"prompt_id": "hotpot_comparison_5ab392ec55429969a97a817d", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:07:42.788124+00:00"}
+{"prompt_id": "mbpp_0218", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:21:09.048234+00:00"}
+{"prompt_id": "gsm8k_00252", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:24:21.887411+00:00"}
+{"prompt_id": "hellaswag_41981", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:26:37.458925+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_08683", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:30:02.432202+00:00"}
+{"prompt_id": "simpleqa_general_03454", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:37:45.191288+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0243", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:42:24.464753+00:00"}
+{"prompt_id": "hotpot_bridge_5a73626b55429901807db01e", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:46:00.489063+00:00"}
+{"prompt_id": "mbpp_0293", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:51:15.779855+00:00"}
+{"prompt_id": "gsm8k_00604", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:54:08.165154+00:00"}
+{"prompt_id": "arc_Mercury_411071", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:55:12.522602+00:00"}
+{"prompt_id": "mmlu_management_06974", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T19:56:43.078506+00:00"}
+{"prompt_id": "simpleqa_general_01124", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:03:00.646959+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0111", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:08:17.682403+00:00"}
+{"prompt_id": "hotpot_comparison_5a8393665542990548d0b1ea", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:14:52.658163+00:00"}
+{"prompt_id": "mbpp_0464", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:18:15.132873+00:00"}
+{"prompt_id": "gsm8k_00489", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:19:49.480401+00:00"}
+{"prompt_id": "hellaswag_29593", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:21:47.507741+00:00"}
+{"prompt_id": "mmlu_anatomy_00124", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:25:23.122484+00:00"}
+{"prompt_id": "simpleqa_general_02774", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:29:56.724369+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0244", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:32:39.813602+00:00"}
+{"prompt_id": "hotpot_bridge_5a7f5f655542994857a7670b", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:37:02.542180+00:00"}
+{"prompt_id": "mbpp_0093", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:39:49.040166+00:00"}
+{"prompt_id": "math500_Prealgebra_00040", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:41:41.192457+00:00"}
+{"prompt_id": "hellaswag_29459", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:43:31.963316+00:00"}
+{"prompt_id": "mmlu_high_school_psychology_04904", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:46:41.942000+00:00"}
+{"prompt_id": "simpleqa_general_02739", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:53:15.458216+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0304", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T20:57:23.335179+00:00"}
+{"prompt_id": "hotpot_bridge_5abe7c515542993f32c2a128", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:02:59.862933+00:00"}
+{"prompt_id": "mbpp_0268", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:05:14.832745+00:00"}
+{"prompt_id": "math500_Geometry_00257", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:09:53.649846+00:00"}
+{"prompt_id": "hellaswag_18769", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:12:31.072119+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_08571", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:14:13.032136+00:00"}
+{"prompt_id": "simpleqa_general_00364", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:21:01.722194+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0120", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:25:17.304499+00:00"}
+{"prompt_id": "hotpot_bridge_5ac54ca45542993e66e822d5", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:25:58.397787+00:00"}
+{"prompt_id": "mbpp_0062", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:32:35.396062+00:00"}
+{"prompt_id": "gsm8k_00802", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:36:06.669792+00:00"}
+{"prompt_id": "hellaswag_10136", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:38:43.156115+00:00"}
+{"prompt_id": "mmlu_professional_law_12038", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:40:48.425845+00:00"}
+{"prompt_id": "simpleqa_general_03402", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:47:20.050294+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0279", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:51:43.201583+00:00"}
+{"prompt_id": "hotpot_bridge_5ab26b60554299449642c898", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:54:47.606308+00:00"}
+{"prompt_id": "mbpp_0497", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T21:58:02.261788+00:00"}
+{"prompt_id": "math500_Counting & Probability_00254", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:05:21.956612+00:00"}
+{"prompt_id": "hellaswag_11650", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:09:55.652874+00:00"}
+{"prompt_id": "mmlu_high_school_psychology_05289", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:10:55.947718+00:00"}
+{"prompt_id": "simpleqa_general_02042", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:16:03.187803+00:00"}
+{"prompt_id": "gpqa_Electromagnetism and Photonics_0097", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:20:14.937822+00:00"}
+{"prompt_id": "hotpot_bridge_5abc219655429959677d6a1d", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:27:20.760132+00:00"}
+{"prompt_id": "mbpp_0346", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:31:46.521443+00:00"}
+{"prompt_id": "gsm8k_00180", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:35:50.451308+00:00"}
+{"prompt_id": "hellaswag_18269", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:37:40.256110+00:00"}
+{"prompt_id": "mmlu_medical_genetics_07380", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:39:15.835058+00:00"}
+{"prompt_id": "simpleqa_general_02033", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:46:25.644596+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0058", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:54:14.974772+00:00"}
+{"prompt_id": "hotpot_bridge_5adf39ce5542995534e8c76d", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:55:00.479274+00:00"}
+{"prompt_id": "humaneval_HumanEval_101", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T22:59:32.950890+00:00"}
+{"prompt_id": "gsm8k_00486", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T23:02:18.860033+00:00"}
+{"prompt_id": "hellaswag_10450", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T23:04:20.889331+00:00"}
+{"prompt_id": "mmlu_security_studies_13294", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T23:27:50.490669+00:00"}
+{"prompt_id": "simpleqa_general_04029", "suite": "simpleqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T23:33:56.713853+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0387", "suite": "gpqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T23:39:30.746072+00:00"}
+{"prompt_id": "hotpot_bridge_5a83bfc8554299123d8c21a1", "suite": "hotpotqa", "session": "3way_20260329_182428", "timestamp": "2026-03-29T23:44:42.471415+00:00"}
+{"prompt_id": "mbpp_0280", "suite": "coder", "session": "3way_20260329_182428", "timestamp": "2026-03-29T23:48:17.025704+00:00"}
+{"prompt_id": "math500_Algebra_00196", "suite": "math", "session": "3way_20260329_182428", "timestamp": "2026-03-29T23:50:05.389896+00:00"}
+{"prompt_id": "hellaswag_11181", "suite": "thinking", "session": "3way_20260329_182428", "timestamp": "2026-03-29T23:52:19.024511+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_09396", "suite": "general", "session": "3way_20260329_182428", "timestamp": "2026-03-29T23:54:01.214392+00:00"}
+{"prompt_id": "simpleqa_general_02012", "suite": "simpleqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T01:21:09.306593+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0027", "suite": "gpqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T01:25:53.971154+00:00"}
+{"prompt_id": "hotpot_bridge_5ae22f4e5542996483e6492f", "suite": "hotpotqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T01:31:38.144752+00:00"}
+{"prompt_id": "humaneval_HumanEval_63", "suite": "coder", "session": "3way_20260330_031353", "timestamp": "2026-03-30T01:36:53.780686+00:00"}
+{"prompt_id": "gsm8k_00251", "suite": "math", "session": "3way_20260330_031353", "timestamp": "2026-03-30T01:39:18.920947+00:00"}
+{"prompt_id": "arc_Mercury_412774", "suite": "thinking", "session": "3way_20260330_031353", "timestamp": "2026-03-30T01:41:47.363803+00:00"}
+{"prompt_id": "mmlu_professional_medicine_12277", "suite": "general", "session": "3way_20260330_031353", "timestamp": "2026-03-30T01:44:19.451256+00:00"}
+{"prompt_id": "simpleqa_general_01255", "suite": "simpleqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T01:52:20.520031+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0388", "suite": "gpqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T01:54:38.805167+00:00"}
+{"prompt_id": "hotpot_bridge_5ab6ff3a5542991d3222372a", "suite": "hotpotqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T01:58:46.718539+00:00"}
+{"prompt_id": "humaneval_HumanEval_70", "suite": "coder", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:02:07.398289+00:00"}
+{"prompt_id": "math500_Counting & Probability_00404", "suite": "math", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:04:09.103716+00:00"}
+{"prompt_id": "hellaswag_43165", "suite": "thinking", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:06:55.853011+00:00"}
+{"prompt_id": "mmlu_sociology_13482", "suite": "general", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:08:55.872519+00:00"}
+{"prompt_id": "simpleqa_general_04006", "suite": "simpleqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:12:24.099929+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0362", "suite": "gpqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:15:59.246257+00:00"}
+{"prompt_id": "hotpot_bridge_5add65355542995b365fab27", "suite": "hotpotqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:19:40.893718+00:00"}
+{"prompt_id": "mbpp_0142", "suite": "coder", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:32:40.379200+00:00"}
+{"prompt_id": "math500_Intermediate Algebra_00496", "suite": "math", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:38:49.607966+00:00"}
+{"prompt_id": "hellaswag_10733", "suite": "thinking", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:40:53.958744+00:00"}
+{"prompt_id": "mmlu_public_relations_13102", "suite": "general", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:42:26.443651+00:00"}
+{"prompt_id": "simpleqa_general_00231", "suite": "simpleqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:48:05.819149+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0402", "suite": "gpqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:51:46.468013+00:00"}
+{"prompt_id": "hotpot_bridge_5a775e095542994aec3b72b4", "suite": "hotpotqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T02:56:42.766009+00:00"}
+{"prompt_id": "mbpp_0084", "suite": "coder", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:00:04.506409+00:00"}
+{"prompt_id": "gsm8k_00702", "suite": "math", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:04:00.203959+00:00"}
+{"prompt_id": "hellaswag_08367", "suite": "thinking", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:05:31.698774+00:00"}
+{"prompt_id": "mmlu_professional_psychology_12929", "suite": "general", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:09:30.750528+00:00"}
+{"prompt_id": "simpleqa_general_01359", "suite": "simpleqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:15:45.199648+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0430", "suite": "gpqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:18:48.545160+00:00"}
+{"prompt_id": "hotpot_bridge_5a7af08655429931da12c989", "suite": "hotpotqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:23:22.753207+00:00"}
+{"prompt_id": "mbpp_0139", "suite": "coder", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:26:45.864077+00:00"}
+{"prompt_id": "gsm8k_01164", "suite": "math", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:29:23.327154+00:00"}
+{"prompt_id": "hellaswag_07786", "suite": "thinking", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:31:49.798250+00:00"}
+{"prompt_id": "mmlu_astronomy_00310", "suite": "general", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:36:04.871740+00:00"}
+{"prompt_id": "simpleqa_general_01675", "suite": "simpleqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:41:41.620684+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0162", "suite": "gpqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:45:11.720224+00:00"}
+{"prompt_id": "hotpot_comparison_5a8638945542994775f6072d", "suite": "hotpotqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:49:16.404898+00:00"}
+{"prompt_id": "mbpp_0317", "suite": "coder", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:54:21.127391+00:00"}
+{"prompt_id": "gsm8k_00611", "suite": "math", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:55:42.537257+00:00"}
+{"prompt_id": "hellaswag_36029", "suite": "thinking", "session": "3way_20260330_031353", "timestamp": "2026-03-30T03:57:27.180164+00:00"}
+{"prompt_id": "mmlu_high_school_statistics_05629", "suite": "general", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:01:59.400970+00:00"}
+{"prompt_id": "simpleqa_general_02583", "suite": "simpleqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:08:10.776234+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0363", "suite": "gpqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:12:06.854212+00:00"}
+{"prompt_id": "hotpot_bridge_5a7271525542997f827839d0", "suite": "hotpotqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:18:57.871792+00:00"}
+{"prompt_id": "humaneval_HumanEval_123", "suite": "coder", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:23:23.250142+00:00"}
+{"prompt_id": "gsm8k_00650", "suite": "math", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:29:34.763963+00:00"}
+{"prompt_id": "hellaswag_10274", "suite": "thinking", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:31:46.392701+00:00"}
+{"prompt_id": "mmlu_high_school_government_and_politics_03777", "suite": "general", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:34:19.782171+00:00"}
+{"prompt_id": "simpleqa_general_02467", "suite": "simpleqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:41:49.290420+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0334", "suite": "gpqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:45:22.127392+00:00"}
+{"prompt_id": "hotpot_bridge_5ac38c0755429939154137bb", "suite": "hotpotqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:50:45.207624+00:00"}
+{"prompt_id": "mbpp_0144", "suite": "coder", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:53:57.311598+00:00"}
+{"prompt_id": "gsm8k_00436", "suite": "math", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:57:08.793181+00:00"}
+{"prompt_id": "hellaswag_44945", "suite": "thinking", "session": "3way_20260330_031353", "timestamp": "2026-03-30T04:58:28.615179+00:00"}
+{"prompt_id": "mmlu_marketing_07245", "suite": "general", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:00:34.372943+00:00"}
+{"prompt_id": "simpleqa_general_02280", "suite": "simpleqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:04:03.413384+00:00"}
+{"prompt_id": "gpqa_Electromagnetism and Photonics_0353", "suite": "gpqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:06:43.158445+00:00"}
+{"prompt_id": "hotpot_bridge_5adf35935542993344016c36", "suite": "hotpotqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:10:47.718188+00:00"}
+{"prompt_id": "mbpp_0225", "suite": "coder", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:17:19.158161+00:00"}
+{"prompt_id": "math500_Prealgebra_00235", "suite": "math", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:23:02.566909+00:00"}
+{"prompt_id": "hellaswag_24282", "suite": "thinking", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:26:32.227751+00:00"}
+{"prompt_id": "mmlu_miscellaneous_07777", "suite": "general", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:27:41.403229+00:00"}
+{"prompt_id": "simpleqa_general_03165", "suite": "simpleqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:34:13.820475+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0328", "suite": "gpqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:37:53.185874+00:00"}
+{"prompt_id": "hotpot_comparison_5ab4da5b55429942dd415f96", "suite": "hotpotqa", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:41:38.454841+00:00"}
+{"prompt_id": "mbpp_0073", "suite": "coder", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:47:06.580381+00:00"}
+{"prompt_id": "gsm8k_01195", "suite": "math", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:51:46.509895+00:00"}
+{"prompt_id": "hellaswag_08906", "suite": "thinking", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:53:26.374063+00:00"}
+{"prompt_id": "mmlu_high_school_mathematics_04440", "suite": "general", "session": "3way_20260330_031353", "timestamp": "2026-03-30T05:54:35.124327+00:00"}
+{"prompt_id": "simpleqa_general_01419", "suite": "simpleqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:11:02.246905+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0314", "suite": "gpqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:13:26.567969+00:00"}
+{"prompt_id": "hotpot_bridge_5abea05f5542991f661061b6", "suite": "hotpotqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:18:20.205817+00:00"}
+{"prompt_id": "humaneval_HumanEval_69", "suite": "coder", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:23:14.266256+00:00"}
+{"prompt_id": "math500_Counting & Probability_00075", "suite": "math", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:26:20.851808+00:00"}
+{"prompt_id": "hellaswag_44101", "suite": "thinking", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:28:46.256112+00:00"}
+{"prompt_id": "mmlu_virology_13806", "suite": "general", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:32:15.692119+00:00"}
+{"prompt_id": "simpleqa_general_00199", "suite": "simpleqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:35:55.045837+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0340", "suite": "gpqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:40:16.740558+00:00"}
+{"prompt_id": "hotpot_bridge_5ae471fa55429970de88d965", "suite": "hotpotqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:50:14.383501+00:00"}
+{"prompt_id": "mbpp_0482", "suite": "coder", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:52:21.522133+00:00"}
+{"prompt_id": "gsm8k_00178", "suite": "math", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:54:46.213507+00:00"}
+{"prompt_id": "hellaswag_46262", "suite": "thinking", "session": "3way_20260331_030747", "timestamp": "2026-03-31T01:58:47.968401+00:00"}
+{"prompt_id": "mmlu_security_studies_13382", "suite": "general", "session": "3way_20260331_030747", "timestamp": "2026-03-31T02:03:47.654336+00:00"}
+{"prompt_id": "simpleqa_general_02829", "suite": "simpleqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T02:11:04.077837+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0261", "suite": "gpqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T02:14:11.744435+00:00"}
+{"prompt_id": "hotpot_bridge_5ae37ec25542990afbd1e178", "suite": "hotpotqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T02:31:35.050591+00:00"}
+{"prompt_id": "mbpp_0064", "suite": "coder", "session": "3way_20260331_030747", "timestamp": "2026-03-31T02:34:58.387046+00:00"}
+{"prompt_id": "gsm8k_00945", "suite": "math", "session": "3way_20260331_030747", "timestamp": "2026-03-31T02:39:21.969518+00:00"}
+{"prompt_id": "hellaswag_10483", "suite": "thinking", "session": "3way_20260331_030747", "timestamp": "2026-03-31T02:42:22.914404+00:00"}
+{"prompt_id": "mmlu_college_medicine_01200", "suite": "general", "session": "3way_20260331_030747", "timestamp": "2026-03-31T02:44:59.955970+00:00"}
+{"prompt_id": "simpleqa_general_02234", "suite": "simpleqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T02:50:37.785796+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0053", "suite": "gpqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T02:53:28.100934+00:00"}
+{"prompt_id": "hotpot_bridge_5a85d4395542996432c570f5", "suite": "hotpotqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T02:59:17.495668+00:00"}
+{"prompt_id": "mbpp_0463", "suite": "coder", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:07:11.136980+00:00"}
+{"prompt_id": "gsm8k_00182", "suite": "math", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:10:21.074217+00:00"}
+{"prompt_id": "arc_MCAS_2005_8_6", "suite": "thinking", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:12:30.460554+00:00"}
+{"prompt_id": "mmlu_marketing_07176", "suite": "general", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:16:21.770971+00:00"}
+{"prompt_id": "simpleqa_general_01354", "suite": "simpleqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:24:01.265039+00:00"}
+{"prompt_id": "gpqa_Electromagnetism and Photonics_0008", "suite": "gpqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:27:48.889898+00:00"}
+{"prompt_id": "hotpot_bridge_5ab4314955429942dd415ecd", "suite": "hotpotqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:32:41.211031+00:00"}
+{"prompt_id": "humaneval_HumanEval_139", "suite": "coder", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:36:22.266708+00:00"}
+{"prompt_id": "gsm8k_01011", "suite": "math", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:40:03.025020+00:00"}
+{"prompt_id": "hellaswag_12994", "suite": "thinking", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:42:33.573001+00:00"}
+{"prompt_id": "mmlu_professional_psychology_12725", "suite": "general", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:44:19.101773+00:00"}
+{"prompt_id": "simpleqa_general_02912", "suite": "simpleqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:50:57.817165+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0400", "suite": "gpqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T03:56:26.633784+00:00"}
+{"prompt_id": "hotpot_bridge_5ab6238e554299710c8d1e6d", "suite": "hotpotqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:01:10.385534+00:00"}
+{"prompt_id": "mbpp_0462", "suite": "coder", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:10:01.722071+00:00"}
+{"prompt_id": "gsm8k_00500", "suite": "math", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:14:10.445500+00:00"}
+{"prompt_id": "hellaswag_11492", "suite": "thinking", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:17:52.433725+00:00"}
+{"prompt_id": "mmlu_professional_law_12039", "suite": "general", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:22:07.658012+00:00"}
+{"prompt_id": "simpleqa_general_01040", "suite": "simpleqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:29:36.121083+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0211", "suite": "gpqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:33:14.462669+00:00"}
+{"prompt_id": "hotpot_bridge_5a760ab65542994ccc918697", "suite": "hotpotqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:41:31.483890+00:00"}
+{"prompt_id": "mbpp_0375", "suite": "coder", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:44:30.515976+00:00"}
+{"prompt_id": "math500_Prealgebra_00105", "suite": "math", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:47:35.496815+00:00"}
+{"prompt_id": "hellaswag_05790", "suite": "thinking", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:52:29.369177+00:00"}
+{"prompt_id": "mmlu_high_school_macroeconomics_04209", "suite": "general", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:53:30.529525+00:00"}
+{"prompt_id": "simpleqa_general_03495", "suite": "simpleqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T04:59:23.782982+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0125", "suite": "gpqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:03:52.242173+00:00"}
+{"prompt_id": "hotpot_bridge_5a866fed554299211dda2b2e", "suite": "hotpotqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:08:22.682972+00:00"}
+{"prompt_id": "mbpp_0306", "suite": "coder", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:18:21.124499+00:00"}
+{"prompt_id": "math500_Algebra_00305", "suite": "math", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:23:13.916012+00:00"}
+{"prompt_id": "arc_Mercury_7218505", "suite": "thinking", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:28:21.796798+00:00"}
+{"prompt_id": "mmlu_nutrition_09461", "suite": "general", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:30:48.070319+00:00"}
+{"prompt_id": "simpleqa_general_02343", "suite": "simpleqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:37:18.139323+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0405", "suite": "gpqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:39:38.226240+00:00"}
+{"prompt_id": "hotpot_bridge_5adfd0d455429942ec259b4d", "suite": "hotpotqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:46:07.969346+00:00"}
+{"prompt_id": "mbpp_0274", "suite": "coder", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:50:30.686547+00:00"}
+{"prompt_id": "gsm8k_00393", "suite": "math", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:53:44.161330+00:00"}
+{"prompt_id": "arc_Mercury_SC_402638", "suite": "thinking", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:57:11.502490+00:00"}
+{"prompt_id": "mmlu_professional_law_11303", "suite": "general", "session": "3way_20260331_030747", "timestamp": "2026-03-31T05:59:23.163737+00:00"}
+{"prompt_id": "simpleqa_general_01570", "suite": "simpleqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T06:04:38.927678+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0086", "suite": "gpqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T06:07:13.364297+00:00"}
+{"prompt_id": "hotpot_bridge_5a71474b5542994082a3e74f", "suite": "hotpotqa", "session": "3way_20260331_030747", "timestamp": "2026-03-31T06:10:22.398531+00:00"}
+{"prompt_id": "humaneval_HumanEval_160", "suite": "coder", "session": "3way_20260331_030747", "timestamp": "2026-03-31T06:16:39.757676+00:00"}
+{"prompt_id": "math500_Number Theory_00089", "suite": "math", "session": "3way_20260331_030747", "timestamp": "2026-03-31T06:23:22.291896+00:00"}
+{"prompt_id": "hellaswag_04091", "suite": "thinking", "session": "3way_20260331_030747", "timestamp": "2026-03-31T06:25:25.582081+00:00"}
+{"prompt_id": "mmlu_philosophy_09952", "suite": "general", "session": "3way_20260331_030747", "timestamp": "2026-03-31T06:29:31.806092+00:00"}
+{"prompt_id": "math500_Algebra_00131", "suite": "math", "session": "3way_20260405_113330", "timestamp": "2026-04-05T09:35:13.185696+00:00"}
+{"prompt_id": "simpleqa_general_01802", "suite": "simpleqa", "session": "3way_20260405_113330", "timestamp": "2026-04-05T09:39:10.115027+00:00"}
+{"prompt_id": "hotpot_bridge_5ab7268b5542992aa3b8c7b1", "suite": "hotpotqa", "session": "3way_20260405_113330", "timestamp": "2026-04-05T09:53:59.317308+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0221", "suite": "gpqa", "session": "3way_20260405_113330", "timestamp": "2026-04-05T09:57:57.798334+00:00"}
+{"prompt_id": "mbpp_0326", "suite": "coder", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:01:34.883218+00:00"}
+{"prompt_id": "hellaswag_14902", "suite": "thinking", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:04:52.049149+00:00"}
+{"prompt_id": "mmlu_econometrics_01857", "suite": "general", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:06:16.126570+00:00"}
+{"prompt_id": "bfcl_001", "suite": "agentic", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:10:55.335586+00:00"}
+{"prompt_id": "ifeval_2801", "suite": "instruction_precision", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:12:44.342019+00:00"}
+{"prompt_id": "ma_hard_synth_009", "suite": "mode_advantage_hard", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:17:31.338638+00:00"}
+{"prompt_id": "gsm8k_00973", "suite": "math", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:23:37.676710+00:00"}
+{"prompt_id": "simpleqa_general_00296", "suite": "simpleqa", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:26:45.111344+00:00"}
+{"prompt_id": "hotpot_comparison_5a85d4ad5542997175ce2050", "suite": "hotpotqa", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:32:27.622449+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0070", "suite": "gpqa", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:35:40.081036+00:00"}
+{"prompt_id": "humaneval_HumanEval_115", "suite": "coder", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:39:35.714226+00:00"}
+{"prompt_id": "arc_Mercury_400887", "suite": "thinking", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:41:55.478408+00:00"}
+{"prompt_id": "mmlu_medical_genetics_07307", "suite": "general", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:43:38.790302+00:00"}
+{"prompt_id": "bfcl_011", "suite": "agentic", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:47:51.669849+00:00"}
+{"prompt_id": "ifeval_2143", "suite": "instruction_precision", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:50:42.939726+00:00"}
+{"prompt_id": "ma_hard_code_006", "suite": "mode_advantage_hard", "session": "3way_20260405_113330", "timestamp": "2026-04-05T10:55:43.963923+00:00"}
+{"prompt_id": "gsm8k_00315", "suite": "math", "session": "3way_20260405_113330", "timestamp": "2026-04-05T11:00:51.494690+00:00"}
+{"prompt_id": "gsm8k_00822", "suite": "math", "session": "3way_20260405_142710", "timestamp": "2026-04-05T12:30:24.307659+00:00"}
+{"prompt_id": "simpleqa_general_03628", "suite": "simpleqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T12:33:40.001411+00:00"}
+{"prompt_id": "hotpot_comparison_5a84a4e35542992a431d1a81", "suite": "hotpotqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T12:39:29.813989+00:00"}
+{"prompt_id": "gpqa_Electromagnetism and Photonics_0208", "suite": "gpqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T12:42:08.089318+00:00"}
+{"prompt_id": "mbpp_0469", "suite": "coder", "session": "3way_20260405_142710", "timestamp": "2026-04-05T12:48:52.924912+00:00"}
+{"prompt_id": "hellaswag_01055", "suite": "thinking", "session": "3way_20260405_142710", "timestamp": "2026-04-05T12:52:12.113672+00:00"}
+{"prompt_id": "mmlu_professional_accounting_10363", "suite": "general", "session": "3way_20260405_142710", "timestamp": "2026-04-05T12:54:26.212952+00:00"}
+{"prompt_id": "bfcl_002", "suite": "agentic", "session": "3way_20260405_142710", "timestamp": "2026-04-05T12:57:06.290856+00:00"}
+{"prompt_id": "ifeval_2716", "suite": "instruction_precision", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:03:06.903295+00:00"}
+{"prompt_id": "ma_hard_comp_004", "suite": "mode_advantage_hard", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:08:37.852667+00:00"}
+{"prompt_id": "gsm8k_01269", "suite": "math", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:12:09.721382+00:00"}
+{"prompt_id": "simpleqa_general_02565", "suite": "simpleqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:16:05.931224+00:00"}
+{"prompt_id": "hotpot_bridge_5ac43ddf5542995c82c4ad08", "suite": "hotpotqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:20:36.625942+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0046", "suite": "gpqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:25:11.644219+00:00"}
+{"prompt_id": "mbpp_0231", "suite": "coder", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:33:32.829909+00:00"}
+{"prompt_id": "hellaswag_27352", "suite": "thinking", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:36:15.602391+00:00"}
+{"prompt_id": "mmlu_miscellaneous_07776", "suite": "general", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:37:17.087072+00:00"}
+{"prompt_id": "bfcl_023", "suite": "agentic", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:44:56.439702+00:00"}
+{"prompt_id": "ifeval_2383", "suite": "instruction_precision", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:48:11.310615+00:00"}
+{"prompt_id": "ma_hard_synth_006", "suite": "mode_advantage_hard", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:54:10.651758+00:00"}
+{"prompt_id": "math500_Number Theory_00137", "suite": "math", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:58:03.410629+00:00"}
+{"prompt_id": "simpleqa_general_03336", "suite": "simpleqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T13:59:59.369577+00:00"}
+{"prompt_id": "hotpot_bridge_5ab5895f554299637185c5c2", "suite": "hotpotqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:06:06.792504+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0277", "suite": "gpqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:10:02.319330+00:00"}
+{"prompt_id": "mbpp_0235", "suite": "coder", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:12:41.940375+00:00"}
+{"prompt_id": "hellaswag_45662", "suite": "thinking", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:14:19.194172+00:00"}
+{"prompt_id": "mmlu_clinical_knowledge_00729", "suite": "general", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:16:36.198225+00:00"}
+{"prompt_id": "bfcl_029", "suite": "agentic", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:20:03.660255+00:00"}
+{"prompt_id": "ifeval_2912", "suite": "instruction_precision", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:26:38.729731+00:00"}
+{"prompt_id": "ma_hard_synth_004", "suite": "mode_advantage_hard", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:31:53.114266+00:00"}
+{"prompt_id": "gsm8k_00089", "suite": "math", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:34:59.992707+00:00"}
+{"prompt_id": "simpleqa_general_00611", "suite": "simpleqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:38:45.086698+00:00"}
+{"prompt_id": "hotpot_bridge_5ab1f13e554299449642c81c", "suite": "hotpotqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:45:30.357156+00:00"}
+{"prompt_id": "gpqa_Relativistic Mechanics_0326", "suite": "gpqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:49:59.309091+00:00"}
+{"prompt_id": "humaneval_HumanEval_44", "suite": "coder", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:52:59.798338+00:00"}
+{"prompt_id": "hellaswag_16637", "suite": "thinking", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:55:39.456381+00:00"}
+{"prompt_id": "mmlu_high_school_mathematics_04258", "suite": "general", "session": "3way_20260405_142710", "timestamp": "2026-04-05T14:57:32.694012+00:00"}
+{"prompt_id": "bfcl_022", "suite": "agentic", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:00:35.624280+00:00"}
+{"prompt_id": "ifeval_3035", "suite": "instruction_precision", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:05:16.925066+00:00"}
+{"prompt_id": "ma_hard_code_005", "suite": "mode_advantage_hard", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:13:25.695477+00:00"}
+{"prompt_id": "math500_Intermediate Algebra_00490", "suite": "math", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:21:48.828560+00:00"}
+{"prompt_id": "simpleqa_general_02689", "suite": "simpleqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:25:09.774832+00:00"}
+{"prompt_id": "hotpot_bridge_5adc3aff5542996e685252eb", "suite": "hotpotqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:27:40.250398+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0222", "suite": "gpqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:32:24.740246+00:00"}
+{"prompt_id": "mbpp_0241", "suite": "coder", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:38:57.971222+00:00"}
+{"prompt_id": "hellaswag_01443", "suite": "thinking", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:41:42.025899+00:00"}
+{"prompt_id": "mmlu_professional_medicine_12432", "suite": "general", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:43:26.868002+00:00"}
+{"prompt_id": "bfcl_016", "suite": "agentic", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:46:15.417724+00:00"}
+{"prompt_id": "ifeval_1670", "suite": "instruction_precision", "session": "3way_20260405_142710", "timestamp": "2026-04-05T15:54:10.800346+00:00"}
+{"prompt_id": "ma_hard_synth_014", "suite": "mode_advantage_hard", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:01:41.355246+00:00"}
+{"prompt_id": "gsm8k_00548", "suite": "math", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:03:34.918220+00:00"}
+{"prompt_id": "simpleqa_general_00861", "suite": "simpleqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:06:56.834236+00:00"}
+{"prompt_id": "hotpot_comparison_5a75f0bf5542994ccc91866b", "suite": "hotpotqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:11:26.247493+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0021", "suite": "gpqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:14:31.958536+00:00"}
+{"prompt_id": "humaneval_HumanEval_133", "suite": "coder", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:20:05.310898+00:00"}
+{"prompt_id": "hellaswag_11312", "suite": "thinking", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:25:13.401002+00:00"}
+{"prompt_id": "mmlu_professional_accounting_10515", "suite": "general", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:26:51.910698+00:00"}
+{"prompt_id": "agentic_ma_001", "suite": "agentic", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:31:20.437800+00:00"}
+{"prompt_id": "ifeval_1262", "suite": "instruction_precision", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:34:05.913934+00:00"}
+{"prompt_id": "ma_hard_synth_012", "suite": "mode_advantage_hard", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:41:49.926159+00:00"}
+{"prompt_id": "gsm8k_00923", "suite": "math", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:45:39.884646+00:00"}
+{"prompt_id": "simpleqa_general_00667", "suite": "simpleqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:49:08.849560+00:00"}
+{"prompt_id": "hotpot_comparison_5a801e845542992097ad2fd9", "suite": "hotpotqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:54:04.185680+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0003", "suite": "gpqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T16:59:31.039449+00:00"}
+{"prompt_id": "mbpp_0239", "suite": "coder", "session": "3way_20260405_142710", "timestamp": "2026-04-05T17:16:47.062200+00:00"}
+{"prompt_id": "hellaswag_38736", "suite": "thinking", "session": "3way_20260405_142710", "timestamp": "2026-04-05T17:18:56.962192+00:00"}
+{"prompt_id": "mmlu_professional_psychology_12680", "suite": "general", "session": "3way_20260405_142710", "timestamp": "2026-04-05T17:20:12.635961+00:00"}
+{"prompt_id": "bfcl_026", "suite": "agentic", "session": "3way_20260405_142710", "timestamp": "2026-04-05T17:25:11.754708+00:00"}
+{"prompt_id": "ifeval_2736", "suite": "instruction_precision", "session": "3way_20260405_142710", "timestamp": "2026-04-05T17:31:07.511702+00:00"}
+{"prompt_id": "ma_hard_code_015", "suite": "mode_advantage_hard", "session": "3way_20260405_142710", "timestamp": "2026-04-05T17:38:38.336153+00:00"}
+{"prompt_id": "gsm8k_00273", "suite": "math", "session": "3way_20260405_142710", "timestamp": "2026-04-05T17:44:44.517829+00:00"}
+{"prompt_id": "simpleqa_general_01597", "suite": "simpleqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T17:48:06.984263+00:00"}
+{"prompt_id": "hotpot_bridge_5a7291c35542991f9a20c4f4", "suite": "hotpotqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T17:54:53.423997+00:00"}
+{"prompt_id": "gpqa_Inorganic Chemistry_0161", "suite": "gpqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:02:45.790650+00:00"}
+{"prompt_id": "mbpp_0430", "suite": "coder", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:06:00.220222+00:00"}
+{"prompt_id": "hellaswag_11933", "suite": "thinking", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:08:38.289237+00:00"}
+{"prompt_id": "mmlu_professional_law_11152", "suite": "general", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:12:06.588229+00:00"}
+{"prompt_id": "bfcl_020", "suite": "agentic", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:14:10.466493+00:00"}
+{"prompt_id": "ifeval_2071", "suite": "instruction_precision", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:18:39.349600+00:00"}
+{"prompt_id": "ma_hard_reason_010", "suite": "mode_advantage_hard", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:23:38.469448+00:00"}
+{"prompt_id": "gsm8k_01178", "suite": "math", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:25:30.058588+00:00"}
+{"prompt_id": "simpleqa_general_01952", "suite": "simpleqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:28:57.868734+00:00"}
+{"prompt_id": "hotpot_bridge_5aba7a22554299232ef4a2e7", "suite": "hotpotqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:31:17.205937+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0317", "suite": "gpqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:33:18.831761+00:00"}
+{"prompt_id": "mbpp_0422", "suite": "coder", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:39:14.674849+00:00"}
+{"prompt_id": "hellaswag_08781", "suite": "thinking", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:43:58.051830+00:00"}
+{"prompt_id": "mmlu_formal_logic_02563", "suite": "general", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:47:08.408913+00:00"}
+{"prompt_id": "agentic_ma_004", "suite": "agentic", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:52:54.336896+00:00"}
+{"prompt_id": "ifeval_2929", "suite": "instruction_precision", "session": "3way_20260405_142710", "timestamp": "2026-04-05T18:58:24.223820+00:00"}
+{"prompt_id": "ma_hard_code_007", "suite": "mode_advantage_hard", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:04:20.025415+00:00"}
+{"prompt_id": "gsm8k_00188", "suite": "math", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:08:54.285222+00:00"}
+{"prompt_id": "simpleqa_general_02177", "suite": "simpleqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:12:28.854396+00:00"}
+{"prompt_id": "hotpot_bridge_5a7724715542994aec3b71fd", "suite": "hotpotqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:17:29.741229+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0117", "suite": "gpqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:21:53.224962+00:00"}
+{"prompt_id": "mbpp_0055", "suite": "coder", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:28:13.105955+00:00"}
+{"prompt_id": "hellaswag_14848", "suite": "thinking", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:29:42.735506+00:00"}
+{"prompt_id": "mmlu_high_school_us_history_05677", "suite": "general", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:33:11.877577+00:00"}
+{"prompt_id": "bfcl_033", "suite": "agentic", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:38:15.000670+00:00"}
+{"prompt_id": "ifeval_2324", "suite": "instruction_precision", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:43:11.224472+00:00"}
+{"prompt_id": "ma_hard_synth_011", "suite": "mode_advantage_hard", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:52:24.608706+00:00"}
+{"prompt_id": "math500_Prealgebra_00476", "suite": "math", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:54:31.834681+00:00"}
+{"prompt_id": "simpleqa_general_01390", "suite": "simpleqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T19:58:23.481496+00:00"}
+{"prompt_id": "hotpot_bridge_5a8e00515542995a26add454", "suite": "hotpotqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T20:02:01.766767+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0437", "suite": "gpqa", "session": "3way_20260405_142710", "timestamp": "2026-04-05T20:03:33.916748+00:00"}
+{"prompt_id": "mbpp_0052", "suite": "coder", "session": "3way_20260405_142710", "timestamp": "2026-04-05T20:05:59.165596+00:00"}
+{"prompt_id": "hellaswag_36789", "suite": "thinking", "session": "3way_20260405_142710", "timestamp": "2026-04-05T20:07:51.404970+00:00"}
+{"prompt_id": "mmlu_high_school_government_and_politics_03685", "suite": "general", "session": "3way_20260405_142710", "timestamp": "2026-04-05T20:08:56.263716+00:00"}
+{"prompt_id": "bfcl_013", "suite": "agentic", "session": "3way_20260405_142710", "timestamp": "2026-04-05T20:11:08.055594+00:00"}
+{"prompt_id": "gsm8k_00785", "suite": "math", "session": "3way_20260406_093702", "timestamp": "2026-04-06T07:41:29.606725+00:00"}
+{"prompt_id": "simpleqa_general_02695", "suite": "simpleqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T07:45:05.176983+00:00"}
+{"prompt_id": "hotpot_comparison_5a7363465542991f29ee2dd5", "suite": "hotpotqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T07:47:30.055041+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0031", "suite": "gpqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T07:50:32.111298+00:00"}
+{"prompt_id": "mbpp_0321", "suite": "coder", "session": "3way_20260406_093702", "timestamp": "2026-04-06T07:54:32.863728+00:00"}
+{"prompt_id": "hellaswag_01146", "suite": "thinking", "session": "3way_20260406_093702", "timestamp": "2026-04-06T07:56:37.318427+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_08913", "suite": "general", "session": "3way_20260406_093702", "timestamp": "2026-04-06T07:58:38.362507+00:00"}
+{"prompt_id": "bfcl_041", "suite": "agentic", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:02:59.775297+00:00"}
+{"prompt_id": "ifeval_3754", "suite": "instruction_precision", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:04:16.801563+00:00"}
+{"prompt_id": "ma_hard_code_008", "suite": "mode_advantage_hard", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:08:43.286472+00:00"}
+{"prompt_id": "gsm8k_00693", "suite": "math", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:11:17.076034+00:00"}
+{"prompt_id": "simpleqa_general_00475", "suite": "simpleqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:15:10.566176+00:00"}
+{"prompt_id": "hotpot_bridge_5a7a69365542996c55b2dd9b", "suite": "hotpotqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:21:33.171020+00:00"}
+{"prompt_id": "gpqa_Genetics_0014", "suite": "gpqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:24:55.585359+00:00"}
+{"prompt_id": "humaneval_HumanEval_105", "suite": "coder", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:31:40.707972+00:00"}
+{"prompt_id": "hellaswag_01122", "suite": "thinking", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:34:32.356827+00:00"}
+{"prompt_id": "mmlu_miscellaneous_07758", "suite": "general", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:35:45.386459+00:00"}
+{"prompt_id": "bfcl_012", "suite": "agentic", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:41:30.087231+00:00"}
+{"prompt_id": "ifeval_3380", "suite": "instruction_precision", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:49:45.714535+00:00"}
+{"prompt_id": "ma_hard_reason_005", "suite": "mode_advantage_hard", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:53:54.851806+00:00"}
+{"prompt_id": "gsm8k_00763", "suite": "math", "session": "3way_20260406_093702", "timestamp": "2026-04-06T08:58:48.177110+00:00"}
+{"prompt_id": "simpleqa_general_00177", "suite": "simpleqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:02:44.933180+00:00"}
+{"prompt_id": "hotpot_bridge_5ab91b6c55429934fafe6e5f", "suite": "hotpotqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:08:21.888492+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0426", "suite": "gpqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:12:31.794895+00:00"}
+{"prompt_id": "mbpp_0468", "suite": "coder", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:26:03.661863+00:00"}
+{"prompt_id": "hellaswag_28415", "suite": "thinking", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:28:02.706161+00:00"}
+{"prompt_id": "mmlu_human_sexuality_06417", "suite": "general", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:31:59.159204+00:00"}
+{"prompt_id": "bfcl_006", "suite": "agentic", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:34:20.328488+00:00"}
+{"prompt_id": "ifeval_321", "suite": "instruction_precision", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:39:40.784855+00:00"}
+{"prompt_id": "ma_hard_comp_015", "suite": "mode_advantage_hard", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:45:29.463526+00:00"}
+{"prompt_id": "gsm8k_00651", "suite": "math", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:50:39.182439+00:00"}
+{"prompt_id": "simpleqa_general_00743", "suite": "simpleqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:54:30.599898+00:00"}
+{"prompt_id": "hotpot_comparison_5ac3adc35542995ef918c1e2", "suite": "hotpotqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T09:59:06.403511+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0033", "suite": "gpqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:00:58.769728+00:00"}
+{"prompt_id": "humaneval_HumanEval_112", "suite": "coder", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:05:09.701066+00:00"}
+{"prompt_id": "hellaswag_05484", "suite": "thinking", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:07:52.181317+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_09065", "suite": "general", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:09:28.651564+00:00"}
+{"prompt_id": "bfcl_004", "suite": "agentic", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:15:34.668914+00:00"}
+{"prompt_id": "ifeval_19", "suite": "instruction_precision", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:19:07.388236+00:00"}
+{"prompt_id": "ma_hard_comp_010", "suite": "mode_advantage_hard", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:23:57.972572+00:00"}
+{"prompt_id": "gsm8k_00040", "suite": "math", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:27:12.981550+00:00"}
+{"prompt_id": "simpleqa_general_03841", "suite": "simpleqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:30:38.478901+00:00"}
+{"prompt_id": "hotpot_bridge_5a7ba8fc5542995eb53be986", "suite": "hotpotqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:34:29.808945+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0380", "suite": "gpqa", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:39:07.995359+00:00"}
+{"prompt_id": "mbpp_0273", "suite": "coder", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:45:49.474691+00:00"}
+{"prompt_id": "hellaswag_10489", "suite": "thinking", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:48:39.740067+00:00"}
+{"prompt_id": "mmlu_moral_disputes_08337", "suite": "general", "session": "3way_20260406_093702", "timestamp": "2026-04-06T10:51:21.373317+00:00"}
+{"prompt_id": "bfcl_015", "suite": "agentic", "session": "3way_20260406_093702", "timestamp": "2026-04-06T11:00:37.768408+00:00"}
+{"prompt_id": "ifeval_1127", "suite": "instruction_precision", "session": "3way_20260406_093702", "timestamp": "2026-04-06T11:03:51.957820+00:00"}
+{"prompt_id": "ma_hard_code_009", "suite": "mode_advantage_hard", "session": "3way_20260406_093702", "timestamp": "2026-04-06T11:12:29.482626+00:00"}
+{"prompt_id": "math500_Intermediate Algebra_00470", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T13:45:18.809204+00:00"}
+{"prompt_id": "simpleqa_general_00154", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T13:48:46.735508+00:00"}
+{"prompt_id": "hotpot_bridge_5a8dbc8b554299441c6ba077", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T13:51:52.958414+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0356", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T13:55:55.514743+00:00"}
+{"prompt_id": "humaneval_HumanEval_109", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:00:50.270415+00:00"}
+{"prompt_id": "hellaswag_46425", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:02:14.260625+00:00"}
+{"prompt_id": "mmlu_marketing_07224", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:04:08.780961+00:00"}
+{"prompt_id": "agentic_ma_002", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:09:11.893661+00:00"}
+{"prompt_id": "ifeval_1593", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:13:49.931804+00:00"}
+{"prompt_id": "ma_hard_synth_001", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:18:41.251623+00:00"}
+{"prompt_id": "math500_Algebra_00418", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:21:05.471564+00:00"}
+{"prompt_id": "simpleqa_general_00024", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:25:00.576444+00:00"}
+{"prompt_id": "hotpot_bridge_5a80735b554299485f5985f3", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:30:03.266520+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0016", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:33:51.207672+00:00"}
+{"prompt_id": "mbpp_0048", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:36:25.990945+00:00"}
+{"prompt_id": "hellaswag_13348", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:38:48.258181+00:00"}
+{"prompt_id": "mmlu_high_school_world_history_05949", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:43:25.993600+00:00"}
+{"prompt_id": "bfcl_031", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:45:59.499822+00:00"}
+{"prompt_id": "ifeval_1307", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:52:19.202667+00:00"}
+{"prompt_id": "ma_hard_reason_012", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T14:53:43.231790+00:00"}
+{"prompt_id": "math500_Number Theory_00223", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:00:21.427628+00:00"}
+{"prompt_id": "simpleqa_general_00969", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:04:23.117849+00:00"}
+{"prompt_id": "hotpot_comparison_5ab8b02d5542991b5579efdb", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:10:59.774035+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0007", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:14:18.288530+00:00"}
+{"prompt_id": "mbpp_0102", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:20:30.176431+00:00"}
+{"prompt_id": "hellaswag_09255", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:24:56.483941+00:00"}
+{"prompt_id": "mmlu_medical_genetics_07316", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:27:34.037098+00:00"}
+{"prompt_id": "bfcl_018", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:33:54.440521+00:00"}
+{"prompt_id": "ifeval_2247", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:44:41.066423+00:00"}
+{"prompt_id": "ma_hard_code_010", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:51:43.703362+00:00"}
+{"prompt_id": "gsm8k_00875", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:53:46.520879+00:00"}
+{"prompt_id": "simpleqa_general_00146", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T15:58:04.414278+00:00"}
+{"prompt_id": "hotpot_bridge_5abc0dfe55429959677d6a05", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:02:06.844915+00:00"}
+{"prompt_id": "gpqa_Condensed Matter Physics_0315", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:10:03.948650+00:00"}
+{"prompt_id": "mbpp_0278", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:14:22.995137+00:00"}
+{"prompt_id": "hellaswag_28168", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:20:53.688192+00:00"}
+{"prompt_id": "mmlu_clinical_knowledge_00488", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:22:13.070596+00:00"}
+{"prompt_id": "bfcl_019", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:25:16.730844+00:00"}
+{"prompt_id": "ifeval_3606", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:30:49.325024+00:00"}
+{"prompt_id": "ma_hard_code_011", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:39:53.221964+00:00"}
+{"prompt_id": "gsm8k_01043", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:42:06.555785+00:00"}
+{"prompt_id": "simpleqa_general_02866", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:46:39.022437+00:00"}
+{"prompt_id": "hotpot_bridge_5a8c6ebd5542996e8ac88aa9", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:52:29.485712+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0287", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T16:58:50.281029+00:00"}
+{"prompt_id": "mbpp_0112", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:04:01.813583+00:00"}
+{"prompt_id": "hellaswag_05311", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:06:43.870237+00:00"}
+{"prompt_id": "mmlu_high_school_macroeconomics_03955", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:08:12.193762+00:00"}
+{"prompt_id": "bfcl_008", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:10:51.800197+00:00"}
+{"prompt_id": "ifeval_240", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:15:25.857775+00:00"}
+{"prompt_id": "ma_hard_comp_001", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:20:18.133021+00:00"}
+{"prompt_id": "gsm8k_00867", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:22:51.280369+00:00"}
+{"prompt_id": "simpleqa_general_04059", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:26:24.064318+00:00"}
+{"prompt_id": "hotpot_bridge_5a889d18554299206df2b310", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:32:20.727995+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0087", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:35:31.835532+00:00"}
+{"prompt_id": "humaneval_HumanEval_48", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:38:10.841192+00:00"}
+{"prompt_id": "hellaswag_23296", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:41:23.209555+00:00"}
+{"prompt_id": "mmlu_high_school_physics_04806", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:45:02.487440+00:00"}
+{"prompt_id": "bfcl_035", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:50:15.957388+00:00"}
+{"prompt_id": "ifeval_1591", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T17:58:44.274441+00:00"}
+{"prompt_id": "ma_hard_comp_012", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T18:02:07.796060+00:00"}
+{"prompt_id": "gsm8k_01050", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T18:03:42.368376+00:00"}
+{"prompt_id": "simpleqa_general_00418", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T18:07:47.765929+00:00"}
+{"prompt_id": "hotpot_bridge_5ae1b2b9554299422ee99684", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T18:24:52.516232+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0024", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T18:29:36.163239+00:00"}
+{"prompt_id": "humaneval_HumanEval_75", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T18:33:46.664473+00:00"}
+{"prompt_id": "hellaswag_24010", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T18:36:35.485948+00:00"}
+{"prompt_id": "mmlu_high_school_government_and_politics_03822", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T18:37:37.958444+00:00"}
+{"prompt_id": "bfcl_034", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T18:43:07.674065+00:00"}
+{"prompt_id": "ifeval_2195", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T18:48:32.203132+00:00"}
+{"prompt_id": "ma_hard_synth_005", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:14:26.957998+00:00"}
+{"prompt_id": "gsm8k_00734", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:18:21.330554+00:00"}
+{"prompt_id": "simpleqa_general_02062", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:21:38.671731+00:00"}
+{"prompt_id": "hotpot_bridge_5a8841a35542994846c1ce69", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:27:55.474613+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0443", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:33:24.395717+00:00"}
+{"prompt_id": "mbpp_0398", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:41:49.465181+00:00"}
+{"prompt_id": "hellaswag_02668", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:45:55.829116+00:00"}
+{"prompt_id": "mmlu_professional_accounting_10597", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:47:10.575887+00:00"}
+{"prompt_id": "bfcl_037", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:51:29.790520+00:00"}
+{"prompt_id": "ifeval_286", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:55:18.735091+00:00"}
+{"prompt_id": "ma_hard_reason_014", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:56:33.597442+00:00"}
+{"prompt_id": "gsm8k_00708", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T19:57:48.697319+00:00"}
+{"prompt_id": "simpleqa_general_03997", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:01:08.314951+00:00"}
+{"prompt_id": "hotpot_bridge_5ae8242455429952e35eaa54", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:05:10.369781+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0273", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:07:54.379645+00:00"}
+{"prompt_id": "mbpp_0028", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:14:14.900249+00:00"}
+{"prompt_id": "hellaswag_14682", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:18:20.164091+00:00"}
+{"prompt_id": "mmlu_miscellaneous_07456", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:19:21.652603+00:00"}
+{"prompt_id": "bfcl_027", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:24:34.154103+00:00"}
+{"prompt_id": "ifeval_168", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:32:26.822641+00:00"}
+{"prompt_id": "ma_hard_comp_011", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:34:16.792195+00:00"}
+{"prompt_id": "gsm8k_01208", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:35:33.245169+00:00"}
+{"prompt_id": "simpleqa_general_03845", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:38:55.679183+00:00"}
+{"prompt_id": "hotpot_bridge_5a88a1e55542997e5c09a64d", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:42:05.374165+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0432", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:45:31.646610+00:00"}
+{"prompt_id": "mbpp_0319", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:50:55.854326+00:00"}
+{"prompt_id": "hellaswag_48878", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:53:35.637559+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_08903", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T20:56:13.509395+00:00"}
+{"prompt_id": "bfcl_003", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:01:04.703692+00:00"}
+{"prompt_id": "ifeval_2870", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:07:18.766791+00:00"}
+{"prompt_id": "ma_hard_comp_009", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:11:37.154402+00:00"}
+{"prompt_id": "gsm8k_00145", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:13:43.443033+00:00"}
+{"prompt_id": "simpleqa_general_01175", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:17:08.517181+00:00"}
+{"prompt_id": "hotpot_bridge_5a84f7255542991dd0999e33", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:21:30.380243+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0417", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:27:17.962821+00:00"}
+{"prompt_id": "mbpp_0493", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:36:24.687811+00:00"}
+{"prompt_id": "arc_Mercury_191625", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:37:26.570877+00:00"}
+{"prompt_id": "mmlu_high_school_biology_02976", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:39:07.656768+00:00"}
+{"prompt_id": "bfcl_036", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:41:29.655457+00:00"}
+{"prompt_id": "ifeval_2107", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:46:47.849231+00:00"}
+{"prompt_id": "ma_hard_comp_003", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T21:54:15.442183+00:00"}
+{"prompt_id": "gsm8k_00144", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:00:34.101580+00:00"}
+{"prompt_id": "simpleqa_general_03865", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:04:28.589113+00:00"}
+{"prompt_id": "hotpot_bridge_5a8bd9c95542997f31a41de2", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:07:18.869438+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0092", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:10:23.665277+00:00"}
+{"prompt_id": "mbpp_0041", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:12:37.708149+00:00"}
+{"prompt_id": "hellaswag_01685", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:16:17.105178+00:00"}
+{"prompt_id": "mmlu_high_school_european_history_03435", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:18:28.942089+00:00"}
+{"prompt_id": "bfcl_040", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:21:18.433423+00:00"}
+{"prompt_id": "ifeval_1516", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:27:10.286093+00:00"}
+{"prompt_id": "ma_hard_reason_008", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:28:56.677035+00:00"}
+{"prompt_id": "gsm8k_00630", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:40:08.640737+00:00"}
+{"prompt_id": "simpleqa_general_00482", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:44:26.768892+00:00"}
+{"prompt_id": "hotpot_comparison_5a8da0b85542994ba4e3dcd3", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:49:04.946609+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0391", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:53:07.112092+00:00"}
+{"prompt_id": "mbpp_0040", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T22:57:02.828765+00:00"}
+{"prompt_id": "hellaswag_11346", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:01:03.592525+00:00"}
+{"prompt_id": "mmlu_professional_law_11472", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:03:11.258217+00:00"}
+{"prompt_id": "bfcl_028", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:05:33.102367+00:00"}
+{"prompt_id": "ifeval_3188", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:08:41.564315+00:00"}
+{"prompt_id": "ma_hard_synth_003", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:16:39.188151+00:00"}
+{"prompt_id": "math500_Intermediate Algebra_00106", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:20:17.366423+00:00"}
+{"prompt_id": "simpleqa_general_01831", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:23:33.518710+00:00"}
+{"prompt_id": "hotpot_bridge_5a7776b955429967ab10519e", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:29:21.707467+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0383", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:30:51.820011+00:00"}
+{"prompt_id": "mbpp_0091", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:33:58.903069+00:00"}
+{"prompt_id": "hellaswag_46887", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:36:56.620460+00:00"}
+{"prompt_id": "mmlu_professional_law_10693", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:39:14.431519+00:00"}
+{"prompt_id": "bfcl_009", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:42:45.352346+00:00"}
+{"prompt_id": "ifeval_30", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:47:07.041309+00:00"}
+{"prompt_id": "ma_hard_code_004", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-06T23:57:50.164886+00:00"}
+{"prompt_id": "math500_Precalculus_00074", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:01:53.806200+00:00"}
+{"prompt_id": "simpleqa_general_00211", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:12:57.141644+00:00"}
+{"prompt_id": "hotpot_bridge_5a7af8fa55429927d897bf25", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:16:31.193765+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0194", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:18:44.850168+00:00"}
+{"prompt_id": "mbpp_0308", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:22:49.351450+00:00"}
+{"prompt_id": "hellaswag_17732", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:25:11.184536+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_08770", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:29:02.071672+00:00"}
+{"prompt_id": "bfcl_039", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:31:16.210773+00:00"}
+{"prompt_id": "ifeval_3256", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:35:43.009091+00:00"}
+{"prompt_id": "ma_hard_comp_007", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:43:13.006511+00:00"}
+{"prompt_id": "gsm8k_00373", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:45:50.976363+00:00"}
+{"prompt_id": "simpleqa_general_03449", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:51:00.777535+00:00"}
+{"prompt_id": "hotpot_bridge_5adebc51554299728e26c799", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T00:57:51.377206+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0150", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:01:33.303418+00:00"}
+{"prompt_id": "mbpp_0203", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:04:54.275088+00:00"}
+{"prompt_id": "hellaswag_25105", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:07:36.337894+00:00"}
+{"prompt_id": "mmlu_high_school_macroeconomics_04146", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:10:41.151319+00:00"}
+{"prompt_id": "bfcl_017", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:15:17.567979+00:00"}
+{"prompt_id": "ifeval_1148", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:19:11.566002+00:00"}
+{"prompt_id": "ma_hard_reason_006", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:20:34.925765+00:00"}
+{"prompt_id": "math500_Counting & Probability_00155", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:26:03.327777+00:00"}
+{"prompt_id": "simpleqa_general_00614", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:28:49.772876+00:00"}
+{"prompt_id": "hotpot_bridge_5a845e9055429933447460ec", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:30:57.100116+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0038", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:35:17.156827+00:00"}
+{"prompt_id": "mbpp_0125", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:42:14.467487+00:00"}
+{"prompt_id": "hellaswag_49284", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:46:16.398427+00:00"}
+{"prompt_id": "mmlu_college_biology_00870", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:48:07.108589+00:00"}
+{"prompt_id": "bfcl_032", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:52:45.740685+00:00"}
+{"prompt_id": "ifeval_3025", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T01:57:24.152573+00:00"}
+{"prompt_id": "ma_hard_code_001", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:06:28.136701+00:00"}
+{"prompt_id": "gsm8k_00124", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:09:52.437662+00:00"}
+{"prompt_id": "simpleqa_general_02977", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:14:02.581788+00:00"}
+{"prompt_id": "hotpot_bridge_5ae33a3b5542992f92d8224a", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:19:13.856200+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0098", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:25:47.958490+00:00"}
+{"prompt_id": "mbpp_0484", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:28:38.661727+00:00"}
+{"prompt_id": "hellaswag_18173", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:30:11.924525+00:00"}
+{"prompt_id": "mmlu_high_school_us_history_05704", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:32:28.206118+00:00"}
+{"prompt_id": "bfcl_005", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:36:54.275941+00:00"}
+{"prompt_id": "ifeval_209", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:41:12.492584+00:00"}
+{"prompt_id": "ma_hard_synth_010", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:49:54.979140+00:00"}
+{"prompt_id": "gsm8k_00841", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:51:59.393655+00:00"}
+{"prompt_id": "simpleqa_general_02809", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T02:55:30.346984+00:00"}
+{"prompt_id": "hotpot_bridge_5ab2421555429970612095cc", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:00:37.899539+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0119", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:07:38.975258+00:00"}
+{"prompt_id": "humaneval_HumanEval_126", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:12:07.500280+00:00"}
+{"prompt_id": "hellaswag_48102", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:14:50.213730+00:00"}
+{"prompt_id": "mmlu_high_school_us_history_05746", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:16:29.395151+00:00"}
+{"prompt_id": "bfcl_021", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:20:03.758697+00:00"}
+{"prompt_id": "ifeval_1108", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:23:34.614903+00:00"}
+{"prompt_id": "ma_hard_synth_015", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:29:16.972626+00:00"}
+{"prompt_id": "gsm8k_00109", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:32:38.514436+00:00"}
+{"prompt_id": "simpleqa_general_01834", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:36:37.014262+00:00"}
+{"prompt_id": "hotpot_bridge_5a7ccb3655429909bec7680b", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:42:43.541290+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0010", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:45:18.609401+00:00"}
+{"prompt_id": "humaneval_HumanEval_95", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:48:37.255826+00:00"}
+{"prompt_id": "hellaswag_34922", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:52:09.300500+00:00"}
+{"prompt_id": "mmlu_machine_learning_06868", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T03:54:09.618463+00:00"}
+{"prompt_id": "bfcl_025", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:16:08.534988+00:00"}
+{"prompt_id": "ifeval_2084", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:19:56.338398+00:00"}
+{"prompt_id": "ma_hard_comp_008", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:24:53.610136+00:00"}
+{"prompt_id": "math500_Algebra_00443", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:28:17.379572+00:00"}
+{"prompt_id": "simpleqa_general_00419", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:31:41.123741+00:00"}
+{"prompt_id": "hotpot_bridge_5a85441f5542997175ce1faa", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:34:51.287465+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0198", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:38:07.883211+00:00"}
+{"prompt_id": "mbpp_0491", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:40:16.314681+00:00"}
+{"prompt_id": "hellaswag_15508", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:42:58.203637+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_09136", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:45:33.544728+00:00"}
+{"prompt_id": "bfcl_038", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:47:08.835920+00:00"}
+{"prompt_id": "ifeval_2381", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:52:09.826003+00:00"}
+{"prompt_id": "ma_hard_reason_004", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T04:55:55.371136+00:00"}
+{"prompt_id": "gsm8k_00425", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:01:05.531333+00:00"}
+{"prompt_id": "simpleqa_general_01221", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:02:52.282163+00:00"}
+{"prompt_id": "hotpot_bridge_5a7716ee55429937353601cc", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:05:47.679546+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0182", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:10:10.769407+00:00"}
+{"prompt_id": "mbpp_0115", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:13:18.822945+00:00"}
+{"prompt_id": "hellaswag_45203", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:18:11.562113+00:00"}
+{"prompt_id": "mmlu_human_sexuality_06399", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:19:13.203264+00:00"}
+{"prompt_id": "bfcl_030", "suite": "agentic", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:21:25.038804+00:00"}
+{"prompt_id": "ifeval_3350", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:23:47.531436+00:00"}
+{"prompt_id": "ma_hard_reason_002", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:25:42.218537+00:00"}
+{"prompt_id": "gsm8k_01077", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:30:33.171348+00:00"}
+{"prompt_id": "simpleqa_general_03441", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:33:57.217340+00:00"}
+{"prompt_id": "hotpot_bridge_5abdc74755429965af743e36", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:38:47.982197+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0205", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:48:24.849809+00:00"}
+{"prompt_id": "mbpp_0271", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:52:04.367878+00:00"}
+{"prompt_id": "arc_Mercury_7004953", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:54:03.668782+00:00"}
+{"prompt_id": "mmlu_high_school_world_history_05946", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T05:56:09.740549+00:00"}
+{"prompt_id": "ifeval_2292", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:01:53.221668+00:00"}
+{"prompt_id": "ma_hard_code_003", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:11:17.026324+00:00"}
+{"prompt_id": "gsm8k_00884", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:13:23.427107+00:00"}
+{"prompt_id": "simpleqa_general_03337", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:17:01.215661+00:00"}
+{"prompt_id": "hotpot_bridge_5ab6e8e6554299710c8d1faf", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:22:14.581015+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0301", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:25:40.462451+00:00"}
+{"prompt_id": "humaneval_HumanEval_89", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:28:49.528327+00:00"}
+{"prompt_id": "hellaswag_46135", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:30:59.718799+00:00"}
+{"prompt_id": "mmlu_college_biology_00810", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:32:40.215358+00:00"}
+{"prompt_id": "ifeval_2977", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:35:50.914708+00:00"}
+{"prompt_id": "ma_hard_synth_007", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:40:16.176011+00:00"}
+{"prompt_id": "math500_Algebra_00225", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:41:56.331236+00:00"}
+{"prompt_id": "simpleqa_general_03135", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:46:12.909622+00:00"}
+{"prompt_id": "hotpot_bridge_5ae0b68e55429906c02daafb", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:49:51.627453+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0358", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:52:20.026030+00:00"}
+{"prompt_id": "mbpp_0327", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:58:14.637066+00:00"}
+{"prompt_id": "hellaswag_13455", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T06:59:59.859453+00:00"}
+{"prompt_id": "mmlu_high_school_world_history_06050", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:02:05.316987+00:00"}
+{"prompt_id": "ifeval_3672", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:05:56.248766+00:00"}
+{"prompt_id": "ma_hard_synth_008", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:10:57.398885+00:00"}
+{"prompt_id": "gsm8k_00817", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:12:46.539064+00:00"}
+{"prompt_id": "simpleqa_general_03719", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:16:06.717299+00:00"}
+{"prompt_id": "hotpot_bridge_5a7b22f8554299042af8f6ff", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:21:25.554970+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0366", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:24:23.153336+00:00"}
+{"prompt_id": "mbpp_0270", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:28:40.182776+00:00"}
+{"prompt_id": "hellaswag_33914", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:31:52.996261+00:00"}
+{"prompt_id": "mmlu_elementary_mathematics_02234", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:33:46.938709+00:00"}
+{"prompt_id": "ifeval_3513", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:41:23.746938+00:00"}
+{"prompt_id": "ma_hard_comp_002", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:49:38.043267+00:00"}
+{"prompt_id": "gsm8k_00628", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:52:30.399374+00:00"}
+{"prompt_id": "simpleqa_general_02545", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:54:53.584664+00:00"}
+{"prompt_id": "hotpot_comparison_5ab2f88755429976abd1bbe0", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T07:59:04.790458+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0403", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:04:19.739656+00:00"}
+{"prompt_id": "mbpp_0445", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:15:34.415141+00:00"}
+{"prompt_id": "arc_NYSEDREGENTS_2013_8_10", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:17:19.263741+00:00"}
+{"prompt_id": "mmlu_college_mathematics_01177", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:21:45.198958+00:00"}
+{"prompt_id": "ifeval_2596", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:28:36.978163+00:00"}
+{"prompt_id": "ma_hard_reason_015", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:30:19.991383+00:00"}
+{"prompt_id": "math500_Counting & Probability_00343", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:32:32.661077+00:00"}
+{"prompt_id": "simpleqa_general_03063", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:35:57.121696+00:00"}
+{"prompt_id": "hotpot_comparison_5a8e068b5542995085b37384", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:41:10.730002+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0423", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:45:09.968590+00:00"}
+{"prompt_id": "mbpp_0448", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:49:08.975300+00:00"}
+{"prompt_id": "hellaswag_08523", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:52:11.652213+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_08906", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T08:55:35.210889+00:00"}
+{"prompt_id": "ifeval_3724", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:00:44.650036+00:00"}
+{"prompt_id": "ma_hard_reason_013", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:04:12.739081+00:00"}
+{"prompt_id": "math500_Counting & Probability_00190", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:09:13.741116+00:00"}
+{"prompt_id": "simpleqa_general_03720", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:12:08.466206+00:00"}
+{"prompt_id": "hotpot_bridge_5ab1d6545542997061209588", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:15:03.125674+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0214", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:17:12.748488+00:00"}
+{"prompt_id": "mbpp_0439", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:21:07.101385+00:00"}
+{"prompt_id": "hellaswag_39356", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:23:15.121661+00:00"}
+{"prompt_id": "mmlu_business_ethics_00460", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:24:16.522728+00:00"}
+{"prompt_id": "ifeval_1535", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:28:18.139193+00:00"}
+{"prompt_id": "ma_hard_comp_006", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:33:08.150522+00:00"}
+{"prompt_id": "gsm8k_00576", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:37:08.492645+00:00"}
+{"prompt_id": "simpleqa_general_02126", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:40:33.507807+00:00"}
+{"prompt_id": "hotpot_bridge_5abbd3b4554299642a094b4f", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:44:59.190290+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0055", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:47:56.410440+00:00"}
+{"prompt_id": "humaneval_HumanEval_84", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:52:05.355297+00:00"}
+{"prompt_id": "hellaswag_15226", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:55:20.907157+00:00"}
+{"prompt_id": "mmlu_us_foreign_policy_13676", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T09:56:23.084427+00:00"}
+{"prompt_id": "ifeval_2357", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:01:58.808438+00:00"}
+{"prompt_id": "ma_hard_code_002", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:10:13.642861+00:00"}
+{"prompt_id": "gsm8k_00959", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:14:45.687444+00:00"}
+{"prompt_id": "simpleqa_general_03281", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:18:09.403462+00:00"}
+{"prompt_id": "hotpot_bridge_5a75140b5542996c70cfae87", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:23:18.651377+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0213", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:26:15.694487+00:00"}
+{"prompt_id": "mbpp_0021", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:29:50.255790+00:00"}
+{"prompt_id": "hellaswag_28038", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:31:43.178475+00:00"}
+{"prompt_id": "mmlu_prehistory_10278", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:33:40.998316+00:00"}
+{"prompt_id": "ifeval_2180", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:40:21.562105+00:00"}
+{"prompt_id": "ma_hard_reason_001", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:43:04.592385+00:00"}
+{"prompt_id": "gsm8k_01277", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:45:07.795061+00:00"}
+{"prompt_id": "simpleqa_general_03406", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:49:03.635603+00:00"}
+{"prompt_id": "hotpot_comparison_5a70f0e75542994082a3e408", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:52:51.260145+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0268", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T10:55:50.917221+00:00"}
+{"prompt_id": "mbpp_0013", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:06:18.236707+00:00"}
+{"prompt_id": "hellaswag_16527", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:08:56.181698+00:00"}
+{"prompt_id": "mmlu_high_school_world_history_06072", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:12:03.917592+00:00"}
+{"prompt_id": "ifeval_2585", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:17:48.533314+00:00"}
+{"prompt_id": "ma_hard_comp_005", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:24:13.280560+00:00"}
+{"prompt_id": "gsm8k_01214", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:26:00.606364+00:00"}
+{"prompt_id": "simpleqa_general_03822", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:29:21.304237+00:00"}
+{"prompt_id": "hotpot_bridge_5a716c415542994082a3e827", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:34:30.792858+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0357", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:36:40.246875+00:00"}
+{"prompt_id": "mbpp_0336", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:42:44.730476+00:00"}
+{"prompt_id": "arc_MCAS_1999_4_26", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:44:17.312397+00:00"}
+{"prompt_id": "mmlu_high_school_chemistry_03158", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:48:30.189917+00:00"}
+{"prompt_id": "ifeval_218", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:54:48.469256+00:00"}
+{"prompt_id": "ma_hard_reason_009", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T11:57:38.568901+00:00"}
+{"prompt_id": "math500_Intermediate Algebra_00069", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:01:10.068434+00:00"}
+{"prompt_id": "simpleqa_general_00223", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:04:59.094514+00:00"}
+{"prompt_id": "hotpot_comparison_5a877dd65542993e715abf79", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:10:42.331714+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0435", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:13:12.221026+00:00"}
+{"prompt_id": "mbpp_0119", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:18:21.655741+00:00"}
+{"prompt_id": "hellaswag_34066", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:19:47.106638+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_08576", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:24:30.962897+00:00"}
+{"prompt_id": "ifeval_374", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:29:25.415568+00:00"}
+{"prompt_id": "ma_hard_reason_011", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:34:37.264816+00:00"}
+{"prompt_id": "math500_Geometry_00400", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:42:05.893486+00:00"}
+{"prompt_id": "simpleqa_general_03912", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:45:27.479743+00:00"}
+{"prompt_id": "hotpot_bridge_5a8a647b55429930ff3c0dc1", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:50:26.950837+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0384", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:55:17.767384+00:00"}
+{"prompt_id": "humaneval_HumanEval_25", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T12:58:39.147484+00:00"}
+{"prompt_id": "hellaswag_06542", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:02:40.934509+00:00"}
+{"prompt_id": "mmlu_computer_security_01492", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:04:47.458782+00:00"}
+{"prompt_id": "ifeval_288", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:06:35.978420+00:00"}
+{"prompt_id": "ma_hard_code_013", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:14:09.674501+00:00"}
+{"prompt_id": "gsm8k_00445", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:18:30.773630+00:00"}
+{"prompt_id": "simpleqa_general_04043", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:21:54.799896+00:00"}
+{"prompt_id": "hotpot_comparison_5a7dec305542995ed0d16679", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:26:44.996167+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0375", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:30:02.517571+00:00"}
+{"prompt_id": "humaneval_HumanEval_158", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:32:42.918987+00:00"}
+{"prompt_id": "hellaswag_19320", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:34:14.564575+00:00"}
+{"prompt_id": "mmlu_human_aging_06232", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:36:48.850304+00:00"}
+{"prompt_id": "ifeval_3001", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:41:13.729245+00:00"}
+{"prompt_id": "ma_hard_reason_007", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:43:09.854995+00:00"}
+{"prompt_id": "gsm8k_00467", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:46:20.866948+00:00"}
+{"prompt_id": "simpleqa_general_03613", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:49:46.902933+00:00"}
+{"prompt_id": "hotpot_bridge_5a8f68795542992414482ab5", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:54:30.043480+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0049", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T13:57:58.109001+00:00"}
+{"prompt_id": "mbpp_0111", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:10:54.289896+00:00"}
+{"prompt_id": "hellaswag_20201", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:12:31.701729+00:00"}
+{"prompt_id": "mmlu_high_school_mathematics_04477", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:18:43.066208+00:00"}
+{"prompt_id": "ifeval_2889", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:23:21.547637+00:00"}
+{"prompt_id": "ma_hard_code_014", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:29:51.457988+00:00"}
+{"prompt_id": "math500_Algebra_00116", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:31:56.047154+00:00"}
+{"prompt_id": "simpleqa_general_01424", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:35:31.482873+00:00"}
+{"prompt_id": "hotpot_bridge_5a88940055429938390d3f7b", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:38:34.598992+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0020", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:40:56.584830+00:00"}
+{"prompt_id": "humaneval_HumanEval_92", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:45:34.282148+00:00"}
+{"prompt_id": "hellaswag_45677", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:49:38.465657+00:00"}
+{"prompt_id": "mmlu_management_06959", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:50:40.207825+00:00"}
+{"prompt_id": "ifeval_1480", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:55:54.059275+00:00"}
+{"prompt_id": "ma_hard_comp_013", "suite": "mode_advantage_hard", "session": "3way_20260406_154147", "timestamp": "2026-04-07T14:59:19.653324+00:00"}
+{"prompt_id": "math500_Intermediate Algebra_00016", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:01:53.202248+00:00"}
+{"prompt_id": "simpleqa_general_03703", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:05:14.979549+00:00"}
+{"prompt_id": "hotpot_bridge_5ac497025542997ea680ca8d", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:09:13.366107+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0424", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:13:50.376404+00:00"}
+{"prompt_id": "mbpp_0213", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:21:27.743633+00:00"}
+{"prompt_id": "hellaswag_18895", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:23:24.274206+00:00"}
+{"prompt_id": "mmlu_high_school_chemistry_03181", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:24:35.848644+00:00"}
+{"prompt_id": "ifeval_2628", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:29:16.145985+00:00"}
+{"prompt_id": "math500_Algebra_00395", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:34:06.173912+00:00"}
+{"prompt_id": "simpleqa_general_00491", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:41:28.150964+00:00"}
+{"prompt_id": "hotpot_comparison_5a7ddfc55542995f4f4022e9", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:46:38.455768+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0371", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:50:57.461375+00:00"}
+{"prompt_id": "mbpp_0080", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:55:58.034458+00:00"}
+{"prompt_id": "hellaswag_27671", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T15:59:26.998849+00:00"}
+{"prompt_id": "mmlu_clinical_knowledge_00527", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:00:50.415367+00:00"}
+{"prompt_id": "ifeval_3434", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:05:01.959737+00:00"}
+{"prompt_id": "gsm8k_01253", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:07:32.402656+00:00"}
+{"prompt_id": "simpleqa_general_01001", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:10:58.372034+00:00"}
+{"prompt_id": "hotpot_bridge_5ae446fc5542995ad6573d24", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:15:22.621570+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0043", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:17:46.894157+00:00"}
+{"prompt_id": "humaneval_HumanEval_83", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:24:39.598517+00:00"}
+{"prompt_id": "hellaswag_43938", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:27:57.331560+00:00"}
+{"prompt_id": "mmlu_virology_13763", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:29:03.890919+00:00"}
+{"prompt_id": "ifeval_3429", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:38:13.491243+00:00"}
+{"prompt_id": "math500_Algebra_00185", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:40:45.986540+00:00"}
+{"prompt_id": "simpleqa_general_00852", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:44:20.769697+00:00"}
+{"prompt_id": "hotpot_bridge_5ab6266555429953192ad277", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:48:09.514205+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0202", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:52:24.866988+00:00"}
+{"prompt_id": "mbpp_0474", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:56:11.441887+00:00"}
+{"prompt_id": "hellaswag_29963", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T16:58:59.606728+00:00"}
+{"prompt_id": "mmlu_security_studies_13335", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:02:55.686644+00:00"}
+{"prompt_id": "ifeval_1537", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:08:46.981063+00:00"}
+{"prompt_id": "math500_Algebra_00124", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:18:02.280847+00:00"}
+{"prompt_id": "simpleqa_general_03408", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:20:54.486990+00:00"}
+{"prompt_id": "hotpot_bridge_5ab3acc5554299233954ff7e", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:24:48.990012+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0169", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:27:03.506396+00:00"}
+{"prompt_id": "mbpp_0423", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:31:30.732809+00:00"}
+{"prompt_id": "hellaswag_26136", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:34:45.508323+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_08910", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:36:05.403274+00:00"}
+{"prompt_id": "ifeval_2341", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:39:36.681593+00:00"}
+{"prompt_id": "math500_Algebra_00066", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:45:09.880967+00:00"}
+{"prompt_id": "simpleqa_general_01514", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:48:37.128554+00:00"}
+{"prompt_id": "hotpot_bridge_5ab514c05542991779162d72", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T17:55:20.781822+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0404", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:05:19.691260+00:00"}
+{"prompt_id": "mbpp_0134", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:11:58.952264+00:00"}
+{"prompt_id": "hellaswag_21618", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:14:24.760981+00:00"}
+{"prompt_id": "mmlu_professional_law_11561", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:16:37.026101+00:00"}
+{"prompt_id": "ifeval_1237", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:21:53.784232+00:00"}
+{"prompt_id": "gsm8k_01064", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:25:55.272860+00:00"}
+{"prompt_id": "simpleqa_general_02515", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:29:51.442175+00:00"}
+{"prompt_id": "hotpot_bridge_5a8f6a025542992414482ab8", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:32:19.103438+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0143", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:35:28.500513+00:00"}
+{"prompt_id": "mbpp_0220", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:39:01.581100+00:00"}
+{"prompt_id": "hellaswag_25180", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:40:57.759738+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_09364", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:42:41.596790+00:00"}
+{"prompt_id": "ifeval_2832", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:46:31.095703+00:00"}
+{"prompt_id": "gsm8k_00428", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:51:36.751259+00:00"}
+{"prompt_id": "simpleqa_general_03715", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:54:58.146323+00:00"}
+{"prompt_id": "hotpot_bridge_5a8ed30655429917b4a5bdcd", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:58:14.683250+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0302", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T18:59:44.479510+00:00"}
+{"prompt_id": "mbpp_0298", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:05:12.608213+00:00"}
+{"prompt_id": "hellaswag_28370", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:08:26.960456+00:00"}
+{"prompt_id": "mmlu_professional_law_11281", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:11:21.172026+00:00"}
+{"prompt_id": "ifeval_2765", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:18:17.469330+00:00"}
+{"prompt_id": "gsm8k_01010", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:20:50.049314+00:00"}
+{"prompt_id": "simpleqa_general_04179", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:24:14.927337+00:00"}
+{"prompt_id": "hotpot_comparison_5ab5f372554299488d4d9a60", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:28:50.080877+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0365", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:33:47.877728+00:00"}
+{"prompt_id": "mbpp_0228", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:37:46.135837+00:00"}
+{"prompt_id": "hellaswag_50329", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:40:22.740689+00:00"}
+{"prompt_id": "mmlu_machine_learning_06939", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:43:33.393839+00:00"}
+{"prompt_id": "ifeval_1813", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:47:40.276412+00:00"}
+{"prompt_id": "gsm8k_00358", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:52:27.198373+00:00"}
+{"prompt_id": "simpleqa_general_04163", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:55:58.757829+00:00"}
+{"prompt_id": "hotpot_bridge_5a8c7623554299653c1aa07a", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T19:59:52.608912+00:00"}
+{"prompt_id": "gpqa_Condensed Matter Physics_0428", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:07:34.365192+00:00"}
+{"prompt_id": "mbpp_0453", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:11:22.711489+00:00"}
+{"prompt_id": "arc_Mercury_SC_401278", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:13:07.764656+00:00"}
+{"prompt_id": "mmlu_anatomy_00178", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:14:46.683757+00:00"}
+{"prompt_id": "ifeval_2471", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:22:36.071011+00:00"}
+{"prompt_id": "gsm8k_00256", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:28:05.651395+00:00"}
+{"prompt_id": "simpleqa_general_02115", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:31:33.193730+00:00"}
+{"prompt_id": "hotpot_bridge_5a7a36e65542990198eaf0ea", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:35:27.627921+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0068", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:38:41.131991+00:00"}
+{"prompt_id": "mbpp_0051", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:44:35.146279+00:00"}
+{"prompt_id": "hellaswag_11889", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:48:36.340886+00:00"}
+{"prompt_id": "mmlu_elementary_mathematics_02301", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:49:41.434113+00:00"}
+{"prompt_id": "ifeval_2567", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:54:57.656851+00:00"}
+{"prompt_id": "gsm8k_00081", "suite": "math", "session": "3way_20260406_154147", "timestamp": "2026-04-07T20:57:17.975748+00:00"}
+{"prompt_id": "simpleqa_general_02782", "suite": "simpleqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T21:00:36.241708+00:00"}
+{"prompt_id": "hotpot_comparison_5ab1d7ac554299449642c7e6", "suite": "hotpotqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T21:04:34.471158+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0440", "suite": "gpqa", "session": "3way_20260406_154147", "timestamp": "2026-04-07T21:07:00.647588+00:00"}
+{"prompt_id": "mbpp_0344", "suite": "coder", "session": "3way_20260406_154147", "timestamp": "2026-04-07T21:10:26.305254+00:00"}
+{"prompt_id": "hellaswag_21040", "suite": "thinking", "session": "3way_20260406_154147", "timestamp": "2026-04-07T21:13:34.889097+00:00"}
+{"prompt_id": "mmlu_high_school_chemistry_03062", "suite": "general", "session": "3way_20260406_154147", "timestamp": "2026-04-07T21:15:19.854929+00:00"}
+{"prompt_id": "ifeval_3371", "suite": "instruction_precision", "session": "3way_20260406_154147", "timestamp": "2026-04-07T21:23:56.151392+00:00"}
+{"prompt_id": "gsm8k_00320", "suite": "math", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:20:28.533724+00:00"}
+{"prompt_id": "simpleqa_general_03999", "suite": "simpleqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:23:46.343052+00:00"}
+{"prompt_id": "hotpot_bridge_5ae274dd5542996483e649ad", "suite": "hotpotqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:28:19.594597+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0434", "suite": "gpqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:31:21.686014+00:00"}
+{"prompt_id": "humaneval_HumanEval_128", "suite": "coder", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:34:46.304322+00:00"}
+{"prompt_id": "hellaswag_26203", "suite": "thinking", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:36:13.736572+00:00"}
+{"prompt_id": "mmlu_high_school_geography_03467", "suite": "general", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:36:57.045180+00:00"}
+{"prompt_id": "ifeval_3156", "suite": "instruction_precision", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:41:38.780932+00:00"}
+{"prompt_id": "gsm8k_00838", "suite": "math", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:43:09.423344+00:00"}
+{"prompt_id": "simpleqa_general_00751", "suite": "simpleqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:46:27.480264+00:00"}
+{"prompt_id": "hotpot_comparison_5a87c0945542996e4f30890b", "suite": "hotpotqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:50:45.797167+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0399", "suite": "gpqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:54:02.353294+00:00"}
+{"prompt_id": "mbpp_0337", "suite": "coder", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:56:21.494210+00:00"}
+{"prompt_id": "hellaswag_48981", "suite": "thinking", "session": "3way_20260409_081746", "timestamp": "2026-04-09T06:59:22.527011+00:00"}
+{"prompt_id": "mmlu_high_school_biology_02669", "suite": "general", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:00:24.436539+00:00"}
+{"prompt_id": "ifeval_2404", "suite": "instruction_precision", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:03:52.191723+00:00"}
+{"prompt_id": "gsm8k_01243", "suite": "math", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:06:55.084164+00:00"}
+{"prompt_id": "simpleqa_general_03271", "suite": "simpleqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:10:12.163790+00:00"}
+{"prompt_id": "hotpot_comparison_5ab57022554299637185c59e", "suite": "hotpotqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:13:35.271674+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0217", "suite": "gpqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:17:40.213318+00:00"}
+{"prompt_id": "mbpp_0137", "suite": "coder", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:19:55.545107+00:00"}
+{"prompt_id": "hellaswag_26933", "suite": "thinking", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:21:27.527482+00:00"}
+{"prompt_id": "mmlu_world_religions_13996", "suite": "general", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:23:24.705482+00:00"}
+{"prompt_id": "ifeval_3351", "suite": "instruction_precision", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:27:31.237951+00:00"}
+{"prompt_id": "gsm8k_00990", "suite": "math", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:30:41.606731+00:00"}
+{"prompt_id": "simpleqa_general_02337", "suite": "simpleqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:33:52.416288+00:00"}
+{"prompt_id": "hotpot_bridge_5ab678f455429954757d32d3", "suite": "hotpotqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:37:36.699965+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0138", "suite": "gpqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:42:25.590062+00:00"}
+{"prompt_id": "humaneval_HumanEval_131", "suite": "coder", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:47:08.627869+00:00"}
+{"prompt_id": "hellaswag_22067", "suite": "thinking", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:49:47.075273+00:00"}
+{"prompt_id": "mmlu_professional_law_11912", "suite": "general", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:51:08.523258+00:00"}
+{"prompt_id": "ifeval_1823", "suite": "instruction_precision", "session": "3way_20260409_081746", "timestamp": "2026-04-09T07:59:11.814890+00:00"}
+{"prompt_id": "gsm8k_00078", "suite": "math", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:02:34.640591+00:00"}
+{"prompt_id": "simpleqa_general_03108", "suite": "simpleqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:05:53.354585+00:00"}
+{"prompt_id": "hotpot_bridge_5a81a7f75542995ce29dcc25", "suite": "hotpotqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:11:19.701341+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0282", "suite": "gpqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:14:12.825442+00:00"}
+{"prompt_id": "mbpp_0367", "suite": "coder", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:16:55.793627+00:00"}
+{"prompt_id": "hellaswag_08909", "suite": "thinking", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:18:50.925619+00:00"}
+{"prompt_id": "mmlu_high_school_physics_04746", "suite": "general", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:22:08.121556+00:00"}
+{"prompt_id": "ifeval_1996", "suite": "instruction_precision", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:28:35.398322+00:00"}
+{"prompt_id": "math500_Intermediate Algebra_00380", "suite": "math", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:33:02.433821+00:00"}
+{"prompt_id": "simpleqa_general_00472", "suite": "simpleqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:36:12.846072+00:00"}
+{"prompt_id": "hotpot_bridge_5ac0d732554299294b219030", "suite": "hotpotqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:43:12.204656+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0113", "suite": "gpqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:45:25.128114+00:00"}
+{"prompt_id": "mbpp_0150", "suite": "coder", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:51:27.047553+00:00"}
+{"prompt_id": "hellaswag_25013", "suite": "thinking", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:55:25.951103+00:00"}
+{"prompt_id": "mmlu_college_computer_science_01085", "suite": "general", "session": "3way_20260409_081746", "timestamp": "2026-04-09T08:57:28.963636+00:00"}
+{"prompt_id": "ifeval_122", "suite": "instruction_precision", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:02:44.093891+00:00"}
+{"prompt_id": "gsm8k_00836", "suite": "math", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:05:08.249985+00:00"}
+{"prompt_id": "simpleqa_general_02164", "suite": "simpleqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:08:24.839957+00:00"}
+{"prompt_id": "hotpot_bridge_5a711c535542994082a3e59b", "suite": "hotpotqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:10:23.336688+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0329", "suite": "gpqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:12:34.197359+00:00"}
+{"prompt_id": "mbpp_0161", "suite": "coder", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:16:39.148156+00:00"}
+{"prompt_id": "hellaswag_24054", "suite": "thinking", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:19:00.918530+00:00"}
+{"prompt_id": "mmlu_high_school_us_history_05700", "suite": "general", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:20:29.275462+00:00"}
+{"prompt_id": "ifeval_2515", "suite": "instruction_precision", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:23:11.700740+00:00"}
+{"prompt_id": "gsm8k_00896", "suite": "math", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:25:19.860334+00:00"}
+{"prompt_id": "simpleqa_general_01801", "suite": "simpleqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:29:05.242523+00:00"}
+{"prompt_id": "hotpot_bridge_5ab2e84855429929539468a6", "suite": "hotpotqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:33:20.463302+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0040", "suite": "gpqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:36:41.080193+00:00"}
+{"prompt_id": "humaneval_HumanEval_80", "suite": "coder", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:40:19.703406+00:00"}
+{"prompt_id": "hellaswag_28455", "suite": "thinking", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:43:00.007497+00:00"}
+{"prompt_id": "mmlu_prehistory_10258", "suite": "general", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:43:56.188749+00:00"}
+{"prompt_id": "ifeval_3294", "suite": "instruction_precision", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:47:11.804862+00:00"}
+{"prompt_id": "math500_Algebra_00387", "suite": "math", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:48:42.188644+00:00"}
+{"prompt_id": "simpleqa_general_03664", "suite": "simpleqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:51:57.697721+00:00"}
+{"prompt_id": "hotpot_bridge_5a8a573355429970aeb7029a", "suite": "hotpotqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:55:47.436884+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0369", "suite": "gpqa", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:57:45.392294+00:00"}
+{"prompt_id": "mbpp_0461", "suite": "coder", "session": "3way_20260409_081746", "timestamp": "2026-04-09T09:59:15.621701+00:00"}
+{"prompt_id": "arc_Mercury_7056525", "suite": "thinking", "session": "3way_20260409_081746", "timestamp": "2026-04-09T10:00:18.791154+00:00"}
+{"prompt_id": "mmlu_professional_medicine_12207", "suite": "general", "session": "3way_20260409_081746", "timestamp": "2026-04-09T10:02:40.751409+00:00"}
+{"prompt_id": "ifeval_3428", "suite": "instruction_precision", "session": "3way_20260409_081746", "timestamp": "2026-04-09T10:08:20.344255+00:00"}
+{"prompt_id": "gsm8k_00278", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:17:06.234278+00:00"}
+{"prompt_id": "simpleqa_general_01035", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:20:26.231742+00:00"}
+{"prompt_id": "hotpot_bridge_5ab31fea554299194fa9356a", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:24:46.362320+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0421", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:29:52.369874+00:00"}
+{"prompt_id": "mbpp_0047", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:31:35.602019+00:00"}
+{"prompt_id": "hellaswag_35240", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:32:46.453145+00:00"}
+{"prompt_id": "mmlu_conceptual_physics_01624", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:33:28.871983+00:00"}
+{"prompt_id": "ifeval_2667", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:34:52.884529+00:00"}
+{"prompt_id": "gsm8k_00622", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:39:00.683737+00:00"}
+{"prompt_id": "simpleqa_general_00783", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:42:13.827321+00:00"}
+{"prompt_id": "hotpot_bridge_5ae4cb2f55429960a22e01e8", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:45:04.018488+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0250", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:47:49.970098+00:00"}
+{"prompt_id": "mbpp_0451", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:50:53.677074+00:00"}
+{"prompt_id": "hellaswag_21071", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:54:30.790349+00:00"}
+{"prompt_id": "mmlu_high_school_geography_03540", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T10:55:14.181191+00:00"}
+{"prompt_id": "ifeval_2532", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:00:23.625986+00:00"}
+{"prompt_id": "gsm8k_01295", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:03:47.415381+00:00"}
+{"prompt_id": "simpleqa_general_02808", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:07:07.310001+00:00"}
+{"prompt_id": "hotpot_bridge_5adfc97255429906c02daa41", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:11:20.761139+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0076", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:15:23.522177+00:00"}
+{"prompt_id": "humaneval_HumanEval_22", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:16:57.421742+00:00"}
+{"prompt_id": "arc_Mercury_405462", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:18:18.278707+00:00"}
+{"prompt_id": "mmlu_high_school_geography_03628", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:19:53.856435+00:00"}
+{"prompt_id": "ifeval_2436", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:23:46.130684+00:00"}
+{"prompt_id": "gsm8k_00843", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:25:25.468320+00:00"}
+{"prompt_id": "simpleqa_general_01315", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:28:20.763700+00:00"}
+{"prompt_id": "hotpot_comparison_5adc0f8d55429947ff1738ef", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:34:55.442587+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0407", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:38:25.400892+00:00"}
+{"prompt_id": "humaneval_HumanEval_21", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:42:43.830974+00:00"}
+{"prompt_id": "hellaswag_15640", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:45:26.102596+00:00"}
+{"prompt_id": "mmlu_high_school_statistics_05645", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:48:28.788026+00:00"}
+{"prompt_id": "ifeval_3221", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:52:26.108262+00:00"}
+{"prompt_id": "gsm8k_00230", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T11:57:59.138267+00:00"}
+{"prompt_id": "simpleqa_general_00261", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:01:16.124491+00:00"}
+{"prompt_id": "hotpot_bridge_5a79a26d554299029c4b5f63", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:06:08.241981+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0079", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:08:17.258547+00:00"}
+{"prompt_id": "mbpp_0029", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:11:17.597617+00:00"}
+{"prompt_id": "hellaswag_18605", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:15:04.347726+00:00"}
+{"prompt_id": "mmlu_philosophy_09841", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:16:28.259193+00:00"}
+{"prompt_id": "ifeval_1265", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:23:07.169677+00:00"}
+{"prompt_id": "gsm8k_00631", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:25:57.966448+00:00"}
+{"prompt_id": "simpleqa_general_02862", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:29:18.311481+00:00"}
+{"prompt_id": "hotpot_bridge_5ac25fa955429951e9e6858c", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:35:57.336082+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0137", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:44:58.831669+00:00"}
+{"prompt_id": "mbpp_0194", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:47:18.719267+00:00"}
+{"prompt_id": "hellaswag_15532", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:49:58.204234+00:00"}
+{"prompt_id": "mmlu_high_school_microeconomics_04680", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:51:35.842041+00:00"}
+{"prompt_id": "ifeval_2583", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:54:45.509759+00:00"}
+{"prompt_id": "gsm8k_00414", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T12:57:13.490612+00:00"}
+{"prompt_id": "simpleqa_general_02183", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:01:48.329515+00:00"}
+{"prompt_id": "hotpot_bridge_5add18345542994ed6169c7e", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:05:22.111824+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0233", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:07:28.789121+00:00"}
+{"prompt_id": "mbpp_0198", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:11:05.405058+00:00"}
+{"prompt_id": "hellaswag_06514", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:13:06.779613+00:00"}
+{"prompt_id": "mmlu_elementary_mathematics_02154", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:14:15.688937+00:00"}
+{"prompt_id": "ifeval_1322", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:19:08.943434+00:00"}
+{"prompt_id": "gsm8k_00669", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:21:55.486710+00:00"}
+{"prompt_id": "simpleqa_general_03758", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:25:24.663633+00:00"}
+{"prompt_id": "hotpot_bridge_5ab5cedf554299488d4d9a34", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:28:33.061145+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0394", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:38:07.723865+00:00"}
+{"prompt_id": "mbpp_0222", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:39:22.576448+00:00"}
+{"prompt_id": "arc_Mercury_7201775", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:40:17.675866+00:00"}
+{"prompt_id": "mmlu_anatomy_00205", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:41:13.463550+00:00"}
+{"prompt_id": "ifeval_1477", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:47:08.321650+00:00"}
+{"prompt_id": "gsm8k_01249", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:51:52.178847+00:00"}
+{"prompt_id": "simpleqa_general_00171", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:55:06.092153+00:00"}
+{"prompt_id": "hotpot_bridge_5a7e4414554299495941995c", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T13:58:24.754753+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0218", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:01:37.742851+00:00"}
+{"prompt_id": "mbpp_0057", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:05:30.976194+00:00"}
+{"prompt_id": "hellaswag_22201", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:07:42.422234+00:00"}
+{"prompt_id": "mmlu_jurisprudence_06667", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:09:37.820653+00:00"}
+{"prompt_id": "ifeval_3534", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:17:11.604721+00:00"}
+{"prompt_id": "gsm8k_00509", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:19:28.643757+00:00"}
+{"prompt_id": "simpleqa_general_02920", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:22:53.727650+00:00"}
+{"prompt_id": "hotpot_bridge_5ab8420555429919ba4e2290", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:28:38.908670+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0392", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:30:27.380195+00:00"}
+{"prompt_id": "mbpp_0117", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:40:34.871420+00:00"}
+{"prompt_id": "hellaswag_46603", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:41:35.967738+00:00"}
+{"prompt_id": "mmlu_philosophy_09796", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:42:24.985966+00:00"}
+{"prompt_id": "ifeval_371", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:46:03.603090+00:00"}
+{"prompt_id": "gsm8k_00909", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:47:39.817016+00:00"}
+{"prompt_id": "simpleqa_general_03475", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:50:16.894089+00:00"}
+{"prompt_id": "hotpot_bridge_5a80274e5542992e7d278dfb", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:54:56.661441+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0130", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T14:57:28.339354+00:00"}
+{"prompt_id": "mbpp_0188", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:07:28.703955+00:00"}
+{"prompt_id": "hellaswag_11711", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:10:35.304904+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_09075", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:14:29.015753+00:00"}
+{"prompt_id": "ifeval_1939", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:17:17.312413+00:00"}
+{"prompt_id": "math500_Algebra_00238", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:22:00.173043+00:00"}
+{"prompt_id": "simpleqa_general_02460", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:25:27.911894+00:00"}
+{"prompt_id": "hotpot_bridge_5add98985542990dbb2f7e82", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:31:40.517340+00:00"}
+{"prompt_id": "gpqa_Physical Chemistry_0266", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:33:51.352118+00:00"}
+{"prompt_id": "mbpp_0244", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:38:59.900207+00:00"}
+{"prompt_id": "hellaswag_30054", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:41:00.991318+00:00"}
+{"prompt_id": "mmlu_professional_psychology_12848", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:42:27.161392+00:00"}
+{"prompt_id": "ifeval_3195", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:47:22.330962+00:00"}
+{"prompt_id": "gsm8k_00382", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:52:35.064757+00:00"}
+{"prompt_id": "simpleqa_general_03131", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:55:58.314216+00:00"}
+{"prompt_id": "hotpot_bridge_5a823fc055429940e5e1a810", "suite": "hotpotqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T15:59:38.114813+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0195", "suite": "gpqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T16:08:54.509006+00:00"}
+{"prompt_id": "mbpp_0077", "suite": "coder", "session": "3way_20260409_121416", "timestamp": "2026-04-09T16:15:36.612451+00:00"}
+{"prompt_id": "hellaswag_02513", "suite": "thinking", "session": "3way_20260409_121416", "timestamp": "2026-04-09T16:16:59.041795+00:00"}
+{"prompt_id": "mmlu_conceptual_physics_01705", "suite": "general", "session": "3way_20260409_121416", "timestamp": "2026-04-09T16:19:44.337301+00:00"}
+{"prompt_id": "ifeval_1746", "suite": "instruction_precision", "session": "3way_20260409_121416", "timestamp": "2026-04-09T16:24:32.733620+00:00"}
+{"prompt_id": "gsm8k_00705", "suite": "math", "session": "3way_20260409_121416", "timestamp": "2026-04-09T16:28:59.388203+00:00"}
+{"prompt_id": "simpleqa_general_00893", "suite": "simpleqa", "session": "3way_20260409_121416", "timestamp": "2026-04-09T16:32:13.796989+00:00"}
+{"prompt_id": "hotpot_bridge_5a8cefc155429941ae14df55", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T16:39:25.989695+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0290", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T16:41:39.179403+00:00"}
+{"prompt_id": "mbpp_0081", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T16:47:16.327833+00:00"}
+{"prompt_id": "gsm8k_00689", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T16:49:43.582068+00:00"}
+{"prompt_id": "mmlu_high_school_physics_04801", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T16:51:32.987781+00:00"}
+{"prompt_id": "hotpot_bridge_5a86481b5542996432c571b5", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T16:54:23.928989+00:00"}
+{"prompt_id": "gpqa_Genetics_0066", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T16:58:28.406347+00:00"}
+{"prompt_id": "mbpp_0234", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T16:59:39.223622+00:00"}
+{"prompt_id": "gsm8k_00967", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:02:26.578147+00:00"}
+{"prompt_id": "mmlu_professional_accounting_10498", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:03:44.490779+00:00"}
+{"prompt_id": "hotpot_comparison_5a8d93bf554299068b959d46", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:13:06.614131+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0106", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:25:01.542019+00:00"}
+{"prompt_id": "humaneval_HumanEval_102", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:30:37.574631+00:00"}
+{"prompt_id": "gsm8k_00384", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:31:45.168383+00:00"}
+{"prompt_id": "mmlu_nutrition_09686", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:33:23.673419+00:00"}
+{"prompt_id": "hotpot_bridge_5add7ce55542992ae4cec585", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:37:16.776168+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0023", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:44:11.062590+00:00"}
+{"prompt_id": "mbpp_0443", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:46:32.518095+00:00"}
+{"prompt_id": "math500_Counting & Probability_00142", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:53:57.541698+00:00"}
+{"prompt_id": "mmlu_anatomy_00195", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T17:55:43.575638+00:00"}
+{"prompt_id": "hotpot_bridge_5ae68a065542991bbc97611e", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:00:06.457342+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0082", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:14:50.430382+00:00"}
+{"prompt_id": "mbpp_0501", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:17:54.311041+00:00"}
+{"prompt_id": "gsm8k_01098", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:19:50.150573+00:00"}
+{"prompt_id": "mmlu_high_school_european_history_03379", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:23:41.112377+00:00"}
+{"prompt_id": "hotpot_bridge_5ab931475542991b5579f12f", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:29:18.789086+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0313", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:31:08.165252+00:00"}
+{"prompt_id": "humaneval_HumanEval_30", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:32:30.142984+00:00"}
+{"prompt_id": "gsm8k_00870", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:36:04.938180+00:00"}
+{"prompt_id": "mmlu_high_school_macroeconomics_04070", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:37:25.491725+00:00"}
+{"prompt_id": "hotpot_comparison_5a8cc602554299653c1aa11a", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:41:50.203493+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0001", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:44:57.273007+00:00"}
+{"prompt_id": "mbpp_0419", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:48:35.052960+00:00"}
+{"prompt_id": "gsm8k_00077", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:50:54.622261+00:00"}
+{"prompt_id": "mmlu_high_school_physics_04885", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:53:34.562854+00:00"}
+{"prompt_id": "hotpot_bridge_5ae291bb5542996483e649f6", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T18:57:11.294352+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0232", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:01:57.853246+00:00"}
+{"prompt_id": "mbpp_0082", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:03:12.509809+00:00"}
+{"prompt_id": "gsm8k_00891", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:06:26.925624+00:00"}
+{"prompt_id": "mmlu_high_school_geography_03480", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:08:18.350299+00:00"}
+{"prompt_id": "hotpot_bridge_5abcfc365542993a06baf9d6", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:13:20.908441+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0438", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:22:00.773853+00:00"}
+{"prompt_id": "mbpp_0011", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:25:40.024514+00:00"}
+{"prompt_id": "gsm8k_00746", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:29:11.962835+00:00"}
+{"prompt_id": "mmlu_professional_law_11977", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:32:35.952851+00:00"}
+{"prompt_id": "hotpot_bridge_5a78d01d55429974737f78b3", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:41:44.966193+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0074", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:45:08.338618+00:00"}
+{"prompt_id": "mbpp_0092", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:48:00.264737+00:00"}
+{"prompt_id": "gsm8k_00613", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:52:26.950996+00:00"}
+{"prompt_id": "mmlu_human_aging_06211", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:54:13.457309+00:00"}
+{"prompt_id": "hotpot_comparison_5add5f925542997545bbbd48", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:56:40.167951+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0170", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T19:58:10.417693+00:00"}
+{"prompt_id": "mbpp_0037", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:06:55.433214+00:00"}
+{"prompt_id": "gsm8k_01276", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:09:07.410406+00:00"}
+{"prompt_id": "mmlu_high_school_psychology_05351", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:10:13.425418+00:00"}
+{"prompt_id": "hotpot_bridge_5ae0d52e554299603e418469", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:12:37.286870+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0166", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:16:36.427373+00:00"}
+{"prompt_id": "humaneval_HumanEval_29", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:17:59.099996+00:00"}
+{"prompt_id": "gsm8k_00301", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:23:23.500077+00:00"}
+{"prompt_id": "mmlu_moral_scenarios_09363", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:24:39.789589+00:00"}
+{"prompt_id": "hotpot_comparison_5abfde655542997719eab6f2", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:28:29.463924+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0201", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:31:47.217591+00:00"}
+{"prompt_id": "mbpp_0427", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:35:05.836932+00:00"}
+{"prompt_id": "gsm8k_01270", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:38:57.203440+00:00"}
+{"prompt_id": "mmlu_professional_law_10768", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:42:35.037500+00:00"}
+{"prompt_id": "hotpot_bridge_5a77b1a75542992a6e59df8d", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:48:43.777786+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0012", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:56:24.287087+00:00"}
+{"prompt_id": "mbpp_0246", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T20:59:11.427487+00:00"}
+{"prompt_id": "gsm8k_00680", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:01:40.392131+00:00"}
+{"prompt_id": "mmlu_high_school_mathematics_04424", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:05:59.644526+00:00"}
+{"prompt_id": "hotpot_bridge_5a790d8f554299029c4b5eec", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:08:55.680824+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0206", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:15:35.873215+00:00"}
+{"prompt_id": "mbpp_0260", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:18:54.905387+00:00"}
+{"prompt_id": "gsm8k_00029", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:23:15.165357+00:00"}
+{"prompt_id": "mmlu_professional_law_11052", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:27:14.938294+00:00"}
+{"prompt_id": "hotpot_bridge_5a8fc0065542997ba9cb3318", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:33:34.526363+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0019", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:36:42.426548+00:00"}
+{"prompt_id": "mbpp_0323", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:50:47.150848+00:00"}
+{"prompt_id": "gsm8k_01260", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:53:05.521692+00:00"}
+{"prompt_id": "mmlu_human_aging_06309", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T21:54:47.976821+00:00"}
+{"prompt_id": "hotpot_bridge_5add1d575542992c1e3a2540", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:00:06.332829+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0439", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:06:59.257579+00:00"}
+{"prompt_id": "mbpp_0335", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:08:06.654527+00:00"}
+{"prompt_id": "gsm8k_00099", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:11:47.058654+00:00"}
+{"prompt_id": "mmlu_clinical_knowledge_00616", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:17:14.269088+00:00"}
+{"prompt_id": "hotpot_bridge_5abf8cc35542990832d3a14e", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:19:39.245176+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0354", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:24:57.868663+00:00"}
+{"prompt_id": "mbpp_0227", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:28:14.032874+00:00"}
+{"prompt_id": "gsm8k_00851", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:31:42.360393+00:00"}
+{"prompt_id": "mmlu_astronomy_00349", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:35:35.533440+00:00"}
+{"prompt_id": "hotpot_bridge_5ac29a835542990b17b1542f", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:41:34.122320+00:00"}
+{"prompt_id": "gpqa_Relativistic Mechanics_0108", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:50:17.918228+00:00"}
+{"prompt_id": "mbpp_0338", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T22:56:10.854336+00:00"}
+{"prompt_id": "gsm8k_01017", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T23:01:25.350735+00:00"}
+{"prompt_id": "mmlu_world_religions_13957", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T23:02:56.397368+00:00"}
+{"prompt_id": "hotpot_comparison_5a8da97c554299068b959d84", "suite": "hotpotqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T23:08:00.861436+00:00"}
+{"prompt_id": "gpqa_Condensed Matter Physics_0215", "suite": "gpqa", "session": "3way_20260409_183618", "timestamp": "2026-04-09T23:11:40.790790+00:00"}
+{"prompt_id": "mbpp_0169", "suite": "coder", "session": "3way_20260409_183618", "timestamp": "2026-04-09T23:17:58.797390+00:00"}
+{"prompt_id": "math500_Geometry_00368", "suite": "math", "session": "3way_20260409_183618", "timestamp": "2026-04-09T23:20:22.956695+00:00"}
+{"prompt_id": "mmlu_human_sexuality_06433", "suite": "general", "session": "3way_20260409_183618", "timestamp": "2026-04-09T23:21:44.081783+00:00"}
+{"prompt_id": "hotpot_comparison_5ac282875542996773102546", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T06:11:14.365588+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0377", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T06:13:09.426167+00:00"}
+{"prompt_id": "mbpp_0379", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T06:16:14.527233+00:00"}
+{"prompt_id": "math500_Precalculus_00416", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T06:20:55.557783+00:00"}
+{"prompt_id": "mmlu_elementary_mathematics_02412", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T06:22:12.605185+00:00"}
+{"prompt_id": "hotpot_bridge_5ae6dd745542996d980e7ca0", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T06:27:10.997970+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0413", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T06:43:14.704330+00:00"}
+{"prompt_id": "mbpp_0026", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T06:47:34.326055+00:00"}
+{"prompt_id": "math500_Algebra_00461", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T06:50:09.487592+00:00"}
+{"prompt_id": "mmlu_business_ethics_00481", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T06:52:04.751348+00:00"}
+{"prompt_id": "hotpot_bridge_5a83938c5542993344746049", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T06:56:52.388536+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0112", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:01:07.454833+00:00"}
+{"prompt_id": "mbpp_0395", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:04:52.315614+00:00"}
+{"prompt_id": "gsm8k_00161", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:08:53.461635+00:00"}
+{"prompt_id": "mmlu_professional_accounting_10566", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:11:00.965473+00:00"}
+{"prompt_id": "hotpot_bridge_5addffff5542992200553bdd", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:15:09.883076+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0251", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:18:32.428408+00:00"}
+{"prompt_id": "humaneval_HumanEval_19", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:23:47.753043+00:00"}
+{"prompt_id": "gsm8k_00767", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:28:05.278676+00:00"}
+{"prompt_id": "mmlu_high_school_mathematics_04414", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:29:42.392207+00:00"}
+{"prompt_id": "hotpot_bridge_5abffa095542990832d3a1de", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:32:55.737183+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0444", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:42:53.382927+00:00"}
+{"prompt_id": "humaneval_HumanEval_7", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:46:21.609885+00:00"}
+{"prompt_id": "gsm8k_00633", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:47:47.720721+00:00"}
+{"prompt_id": "mmlu_electrical_engineering_02019", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:49:16.679265+00:00"}
+{"prompt_id": "hotpot_bridge_5a7326cd5542991f29ee2d11", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T07:59:23.713523+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0299", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:01:47.565134+00:00"}
+{"prompt_id": "mbpp_0069", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:05:46.273042+00:00"}
+{"prompt_id": "gsm8k_00204", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:09:48.736830+00:00"}
+{"prompt_id": "mmlu_nutrition_09579", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:11:31.483330+00:00"}
+{"prompt_id": "hotpot_bridge_5ae0f5fc554299422ee9957c", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:17:26.422907+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0355", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:24:47.185648+00:00"}
+{"prompt_id": "mbpp_0487", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:28:11.078091+00:00"}
+{"prompt_id": "gsm8k_00214", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:33:56.926309+00:00"}
+{"prompt_id": "mmlu_high_school_government_and_politics_03690", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:34:57.329595+00:00"}
+{"prompt_id": "hotpot_bridge_5ae4aba25542995ad6573e12", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:40:46.611301+00:00"}
+{"prompt_id": "gpqa_Physics (general)_0236", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:44:34.371955+00:00"}
+{"prompt_id": "mbpp_0022", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:48:24.013064+00:00"}
+{"prompt_id": "gsm8k_00100", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:53:56.554353+00:00"}
+{"prompt_id": "mmlu_high_school_microeconomics_04661", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:55:23.153461+00:00"}
+{"prompt_id": "hotpot_bridge_5a76a2b55542993569682c6c", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T08:59:29.170147+00:00"}
+{"prompt_id": "gpqa_Statistical Mechanics_0101", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:04:04.042360+00:00"}
+{"prompt_id": "mbpp_0042", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:10:04.230115+00:00"}
+{"prompt_id": "gsm8k_00397", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:11:15.147744+00:00"}
+{"prompt_id": "mmlu_elementary_mathematics_02187", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:12:40.439829+00:00"}
+{"prompt_id": "hotpot_bridge_5a7353b35542994cef4bc54f", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:18:09.876158+00:00"}
+{"prompt_id": "gpqa_High-energy particle physics_0164", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:22:56.767263+00:00"}
+{"prompt_id": "mbpp_0258", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:26:40.026943+00:00"}
+{"prompt_id": "gsm8k_00471", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:31:11.825259+00:00"}
+{"prompt_id": "mmlu_professional_law_11847", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:47:39.668103+00:00"}
+{"prompt_id": "hotpot_bridge_5a8268aa55429940e5e1a8aa", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:51:45.095385+00:00"}
+{"prompt_id": "gpqa_Relativistic Mechanics_0187", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:54:54.315486+00:00"}
+{"prompt_id": "mbpp_0267", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:58:24.286265+00:00"}
+{"prompt_id": "math500_Algebra_00077", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T09:59:57.128365+00:00"}
+{"prompt_id": "mmlu_professional_law_11928", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:02:13.646522+00:00"}
+{"prompt_id": "hotpot_bridge_5a808f3f5542992097ad2ffd", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:07:56.006155+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0316", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:12:57.620806+00:00"}
+{"prompt_id": "mbpp_0294", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:16:26.803927+00:00"}
+{"prompt_id": "gsm8k_00794", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:18:21.462878+00:00"}
+{"prompt_id": "mmlu_clinical_knowledge_00550", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:20:58.040376+00:00"}
+{"prompt_id": "hotpot_bridge_5a8d7a8d55429941ae14dfc2", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:27:08.966112+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0252", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:32:00.456330+00:00"}
+{"prompt_id": "mbpp_0432", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:35:52.227717+00:00"}
+{"prompt_id": "gsm8k_00842", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:37:46.726128+00:00"}
+{"prompt_id": "mmlu_miscellaneous_07607", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:38:52.332943+00:00"}
+{"prompt_id": "hotpot_bridge_5a8b6d885542997f31a41d25", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:44:07.554043+00:00"}
+{"prompt_id": "gpqa_Organic Chemistry_0351", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T10:59:49.168065+00:00"}
+{"prompt_id": "mbpp_0072", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:04:44.314868+00:00"}
+{"prompt_id": "gsm8k_01015", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:07:54.086096+00:00"}
+{"prompt_id": "mmlu_professional_law_11891", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:09:47.417274+00:00"}
+{"prompt_id": "hotpot_bridge_5a84b2995542994c784dda11", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:16:10.554517+00:00"}
+{"prompt_id": "gpqa_Molecular Biology_0196", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:26:14.495383+00:00"}
+{"prompt_id": "humaneval_HumanEval_33", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:33:10.308785+00:00"}
+{"prompt_id": "gsm8k_00595", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:36:09.040571+00:00"}
+{"prompt_id": "mmlu_nutrition_09469", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:40:31.939418+00:00"}
+{"prompt_id": "hotpot_bridge_5a84e21d5542997b5ce3ff7c", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:43:47.333317+00:00"}
+{"prompt_id": "gpqa_Electromagnetism and Photonics_0052", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:45:38.261043+00:00"}
+{"prompt_id": "humaneval_HumanEval_97", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:49:57.506405+00:00"}
+{"prompt_id": "math500_Prealgebra_00098", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:53:57.321336+00:00"}
+{"prompt_id": "mmlu_high_school_microeconomics_04545", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:55:39.608903+00:00"}
+{"prompt_id": "hotpot_bridge_5adf99065542992d7e9f93b0", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T11:59:34.535778+00:00"}
+{"prompt_id": "gpqa_Astrophysics_0283", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T12:05:58.323358+00:00"}
+{"prompt_id": "mbpp_0147", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T12:16:11.477882+00:00"}
+{"prompt_id": "gsm8k_00712", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T12:18:44.221250+00:00"}
+{"prompt_id": "mmlu_prehistory_10218", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T12:20:13.274885+00:00"}
+{"prompt_id": "hotpot_bridge_5ae1e9fd5542997f29b3c1a1", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T12:24:12.278497+00:00"}
+{"prompt_id": "gpqa_Chemistry (general)_0148", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T12:39:48.305745+00:00"}
+{"prompt_id": "humaneval_HumanEval_14", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T12:43:32.249206+00:00"}
+{"prompt_id": "math500_Algebra_00004", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T12:47:01.607037+00:00"}
+{"prompt_id": "mmlu_high_school_microeconomics_04592", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T12:49:02.096523+00:00"}
+{"prompt_id": "hotpot_bridge_5ab56e085542992aa134a315", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T12:53:18.053598+00:00"}
+{"prompt_id": "gpqa_Inorganic Chemistry_0191", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T13:07:49.679927+00:00"}
+{"prompt_id": "mbpp_0498", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T13:10:27.132332+00:00"}
+{"prompt_id": "gsm8k_00474", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T13:13:27.635099+00:00"}
+{"prompt_id": "mmlu_professional_law_11321", "suite": "general", "session": "3way_20260410_080518", "timestamp": "2026-04-10T13:17:33.579828+00:00"}
+{"prompt_id": "hotpot_bridge_5ab43b755542991779162c21", "suite": "hotpotqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T13:25:59.619873+00:00"}
+{"prompt_id": "gpqa_Quantum Mechanics_0189", "suite": "gpqa", "session": "3way_20260410_080518", "timestamp": "2026-04-10T13:35:36.026059+00:00"}
+{"prompt_id": "mbpp_0311", "suite": "coder", "session": "3way_20260410_080518", "timestamp": "2026-04-10T13:40:15.266305+00:00"}
+{"prompt_id": "gsm8k_00888", "suite": "math", "session": "3way_20260410_080518", "timestamp": "2026-04-10T13:43:41.439836+00:00"}
