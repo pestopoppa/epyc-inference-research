@@ -51,3 +51,12 @@ perf-*.data
 
 # Nested external repos (cloned checkout, not a submodule)
 data/external/
+
+# Perf captures (binary; extracted reports live in research/deep-dives/)
+data/cpu_optimization/**/*.data
+perf.data
+perf.data.*
+perf-*.data
+
+# Nested external repos (cloned checkout, not a submodule)
+data/external/
