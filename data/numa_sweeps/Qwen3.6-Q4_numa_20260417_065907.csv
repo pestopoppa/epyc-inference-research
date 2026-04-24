@@ -1,0 +1,13 @@
+model,config,instance,threads,cpu_binding,spec,prompt_idx,tokens_generated,time_ms,tokens_per_sec
+Qwen3.6-Q4,D_4x48t,n0a,48,n0a,baseline,0,256,10916,23.45
+Qwen3.6-Q4,D_4x48t,n0b,48,n0b,baseline,0,256,10616,24.11
+Qwen3.6-Q4,D_4x48t,n1a,48,n1a,baseline,0,256,11282,22.69
+Qwen3.6-Q4,D_4x48t,n1b,48,n1b,baseline,0,256,10631,24.08
+Qwen3.6-Q4,D_4x48t,n0a,48,n0a,baseline,1,256,11470,22.32
+Qwen3.6-Q4,D_4x48t,n0b,48,n0b,baseline,1,256,10598,24.16
+Qwen3.6-Q4,D_4x48t,n1a,48,n1a,baseline,1,256,10757,23.8
+Qwen3.6-Q4,D_4x48t,n1b,48,n1b,baseline,1,256,10784,23.74
+Qwen3.6-Q4,D_4x48t,n0a,48,n0a,baseline,2,256,10910,23.46
+Qwen3.6-Q4,D_4x48t,n0b,48,n0b,baseline,2,256,10573,24.21
+Qwen3.6-Q4,D_4x48t,n1a,48,n1a,baseline,2,256,10462,24.47
+Qwen3.6-Q4,D_4x48t,n1b,48,n1b,baseline,2,256,10707,23.91

@@ -1,0 +1,5 @@
+{
+  "baseline_accuracy": 0.6,
+  "baseline_n": 5,
+  "model": "Qwen2.5-7B-Instruct"
+}

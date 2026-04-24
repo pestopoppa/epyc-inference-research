@@ -1,0 +1,4 @@
+model,config,instance,threads,cpu_binding,spec,prompt_idx,tokens_generated,time_ms,tokens_per_sec
+M2.7-Q8,dm16_192t,1,192,all,ngram_dm16,0,0,600029,0.00
+M2.7-Q8,dm16_192t,1,192,all,ngram_dm16,1,0,600058,0.00
+M2.7-Q8,dm16_192t,1,192,all,ngram_dm16,2,0,420052,0.00

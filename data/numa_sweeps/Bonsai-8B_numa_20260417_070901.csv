@@ -1,0 +1,4 @@
+model,config,instance,threads,cpu_binding,spec,prompt_idx,tokens_generated,time_ms,tokens_per_sec
+Bonsai-8B,A_1x96t_interleave,1,96,interleave,baseline,0,256,33460,7.65
+Bonsai-8B,A_1x96t_interleave,1,96,interleave,baseline,1,256,34941,7.33
+Bonsai-8B,A_1x96t_interleave,1,96,interleave,baseline,2,0,24980,0.0

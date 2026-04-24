@@ -1,0 +1,29 @@
+{
+  "model_role": "minimax_m27_q8",
+  "model_path": "/mnt/raid0/llm/models/MiniMax-M2.7-GGUF/Q8_0/MiniMax-M2.7-Q8_0-00001-of-00006.gguf",
+  "config_name": "lookup_n72",
+  "run_id": "am-layer-adaptive",
+  "timestamp": "2026-04-19T20:03:38.296967",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 4.2333667975225175,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 4.2333667975225175,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

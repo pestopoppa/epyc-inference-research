@@ -1,0 +1,29 @@
+{
+  "model_role": "supergemma4_31b_q4km",
+  "model_path": "/mnt/raid0/llm/models/SuperGemma4-31b-abliterated.Q4_K_M.gguf",
+  "config_name": "lookup_n66",
+  "run_id": "am-layer-adaptive",
+  "timestamp": "2026-04-18T15:25:49.812127",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 15.6,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 15.6,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "model_role": "qwen36_q8_0",
+  "model_path": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-Q8_0.gguf",
+  "config_name": "lookup_n16",
+  "run_id": "am-layer-adaptive",
+  "timestamp": "2026-04-20T14:28:15.940764",
+  "results": {
+    "speed_test": {
+      "speed_measurement": {
+        "question_id": "speed_measurement",
+        "prompt": "[speed test prompt]",
+        "response": "[speed test only - quality inherited]",
+        "tokens_per_second": 26.16,
+        "prompt_tokens": null,
+        "completion_tokens": null,
+        "total_time_ms": null,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
+    }
+  },
+  "summary": {
+    "avg_tokens_per_second": 26.16,
+    "avg_algorithmic_score": null,
+    "questions_tested": 1,
+    "questions_passed": 0
+  }
+}
