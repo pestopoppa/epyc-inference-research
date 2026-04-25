@@ -16,12 +16,12 @@ prompts:
       You have access to these REPL tools: list_dir(path), peek(n), grep(pattern), FINAL(answer)
       NO IMPORTS ALLOWED - import/from statements are BLOCKED.
 
-      Task: List all files in /mnt/raid0/llm/claude/tmp
+      Task: List all files in /tmp
       Write Python code that uses the available tools.
     expected: "Uses list_dir() not os.listdir or pathlib"
     auto_score: "contains_pattern:list_dir\\s*\\(;forbidden_pattern:import |os\\.listdir|pathlib\\."
     reference_answer: |
-      result = list_dir('/mnt/raid0/llm/claude/tmp')
+      result = list_dir('/tmp')
       FINAL(result)
 
       **Key requirements:**
@@ -49,12 +49,12 @@ prompts:
       You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern), FINAL(answer)
       NO IMPORTS ALLOWED - import/from statements are BLOCKED.
 
-      Task: Show the first 100 characters of /mnt/raid0/llm/claude/README.md
+      Task: Show the first 100 characters of /mnt/raid0/llm/epyc-inference-research/README.md
       Write Python code that uses the available tools.
     expected: "Uses peek() not open()"
     auto_score: "contains_pattern:peek\\s*\\(;forbidden_pattern:import |open\\s*\\("
     reference_answer: |
-      content = peek(100, file_path='/mnt/raid0/llm/claude/README.md')
+      content = peek(100, file_path='/mnt/raid0/llm/epyc-inference-research/README.md')
       FINAL(content)
 
       **Key requirements:**
@@ -112,12 +112,12 @@ prompts:
       You have access to these REPL tools: list_dir(path), peek(n), grep(pattern), file_info(path), FINAL(answer)
       NO IMPORTS ALLOWED - import/from statements are BLOCKED.
 
-      Task: Get the file size and modification date of /mnt/raid0/llm/claude/CLAUDE.md
+      Task: Get the file size and modification date of /mnt/raid0/llm/epyc-root/CLAUDE.md
       Write Python code that uses the available tools.
     expected: "Uses file_info() not os.stat"
     auto_score: "contains_pattern:file_info\\s*\\(;forbidden_pattern:import |os\\.stat|os\\.path"
     reference_answer: |
-      info = file_info('/mnt/raid0/llm/claude/CLAUDE.md')
+      info = file_info('/mnt/raid0/llm/epyc-root/CLAUDE.md')
       FINAL(info)
 
       **Key requirements:**
@@ -143,7 +143,7 @@ prompts:
       You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern), FINAL(answer)
       NO IMPORTS ALLOWED - import/from statements are BLOCKED.
 
-      Task: List files in /mnt/raid0/llm/claude/logs/, then read the first 200 chars of the first file found.
+      Task: List files in /mnt/raid0/llm/epyc-root/logs/, then read the first 200 chars of the first file found.
       Write Python code that uses the available tools.
     expected: "Uses list_dir() then peek() with file_path"
     auto_score: "contains_pattern:list_dir\\s*\\(.*\\);contains_pattern:peek\\s*\\(;forbidden_pattern:import |os\\."
@@ -151,7 +151,7 @@ prompts:
       import json
 
       # Get directory listing
-      dir_result = list_dir('/mnt/raid0/llm/claude/logs/')
+      dir_result = list_dir('/mnt/raid0/llm/epyc-root/logs/')
       files = json.loads(dir_result)
 
       # Get first file (filter for type=file)
@@ -190,12 +190,12 @@ prompts:
       You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern, file_path=None), FINAL(answer)
       NO IMPORTS ALLOWED - import/from statements are BLOCKED.
 
-      Task: Find all lines containing 'class ' in /mnt/raid0/llm/claude/src/roles.py
+      Task: Find all lines containing 'class ' in /mnt/raid0/llm/epyc-orchestrator/src/roles.py
       Write Python code that uses the available tools.
     expected: "Uses grep() with file_path parameter"
     auto_score: "contains_pattern:grep\\s*\\([^)]*file_path;forbidden_pattern:import |open\\s*\\("
     reference_answer: |
-      matches = grep(r'class ', file_path='/mnt/raid0/llm/claude/src/roles.py')
+      matches = grep(r'class ', file_path='/mnt/raid0/llm/epyc-orchestrator/src/roles.py')
       FINAL(matches)
 
       **Key requirements:**

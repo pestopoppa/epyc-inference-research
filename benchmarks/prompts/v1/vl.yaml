@@ -10,7 +10,7 @@ prompts:
   t1_q1_scene_text:
     tier: 1
     name: "Scene Text OCR"
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/sample_000.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/sample_000.png"
     prompt: "What is written in the image?"
     expected: "Accurate transcription of visible text"
     reference_answer: |
@@ -26,7 +26,7 @@ prompts:
   t1_q2_sign_reading:
     tier: 1
     name: "Sign Text Extraction"
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/sample_300.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/sample_300.png"
     prompt: "What is the Mosman Manly exit going to? Read all text on the sign."
     expected: "Complete sign text extraction"
     reference_answer: |
@@ -46,7 +46,7 @@ prompts:
   t2_q1_calculation:
     tier: 2
     name: "Financial Calculation"
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench_hard/sample_500.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench_hard/sample_500.png"
     prompt: "What is the total intrinsic value of options exercised in 2008? Show your work by listing each value you read."
     expected: "Correct total with itemized values"
     reference_answer: |
@@ -67,7 +67,7 @@ prompts:
   t2_q2_comparison:
     tier: 2
     name: "Chart Value Comparison"
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa_hard/sample_0005.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa_hard/sample_0005.png"
     prompt: "What is the difference between the highest and lowest green bar? State both values and compute the difference."
     expected: "Both values identified, difference calculated"
     reference_answer: |
@@ -88,7 +88,7 @@ prompts:
   t2_q3_trend_analysis:
     tier: 2
     name: "Trend Identification"
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa_hard/sample_0017.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa_hard/sample_0017.png"
     prompt: "When does the line have the sharpest increase? Identify the time period and estimate the rate of change."
     expected: "Time period identified with rate estimate"
     reference_answer: |
@@ -109,7 +109,7 @@ prompts:
   t2_q4_ratio_calculation:
     tier: 2
     name: "Ratio Calculation"
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa_hard/sample_0023.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa_hard/sample_0023.png"
     prompt: "What's the ratio of the lowest value of green bars to the lowest value of blue bars? Show the values and calculation."
     expected: "Both lowest values and correct ratio"
     reference_answer: |
@@ -130,7 +130,7 @@ prompts:
   t2_q5_document_synthesis:
     tier: 2
     name: "Document Multi-field Extraction"
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/docvqa/sample_000.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/docvqa/sample_000.png"
     prompt: "What is the dividend payout in 2012? Also find the 2011 value and calculate the year-over-year change."
     expected: "Both years' values and calculated change"
     reference_answer: |
@@ -157,7 +157,7 @@ prompts:
   t3_q1_chart_critique:
     tier: 3
     name: "Statistical Visualization Critique"
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa_hard/sample_0001.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa_hard/sample_0001.png"
     prompt: |
       Analyze this chart critically:
       1. What is the difference in value between Lamb and Corn?
@@ -205,7 +205,7 @@ prompts:
   t3_q2_multi_chart_synthesis:
     tier: 3
     name: "Multi-Element Chart Synthesis"
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa_hard/sample_0011.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa_hard/sample_0011.png"
     prompt: |
       Perform a comprehensive analysis:
       1. Calculate the difference between Green and Orange bars
@@ -246,7 +246,7 @@ prompts:
   t3_q3_twyne_security:
     tier: 3
     name: "DeFi Protocol Security Analysis"
-    image_path: "/mnt/raid0/llm/claude/tmp/twyne_pages/page_003.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/twyne_pages/page_003.png"
     prompt: |
       Analyze this DeFi protocol architecture as a security auditor:
       1. Identify all trust assumptions in the design
@@ -298,7 +298,7 @@ prompts:
   t3_q4_twyne_economic:
     tier: 3
     name: "DeFi Economic Model Analysis"
-    image_path: "/mnt/raid0/llm/claude/tmp/twyne_pages/page_006.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/twyne_pages/page_006.png"
     prompt: |
       Analyze the economic model and incentive structure:
       1. What are the participant roles and their incentives?
@@ -348,7 +348,7 @@ prompts:
   t3_q5_document_forensics:
     tier: 3
     name: "Document Forensic Analysis"
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/docvqa/sample_300.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/docvqa/sample_300.png"
     prompt: |
       Analyze this business document forensically:
       1. Extract all named entities (people, companies, locations, dates)

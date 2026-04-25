@@ -17,7 +17,7 @@ questions:
 
   - id: vl_ocr_0001
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0001.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0001.png"
     source_dataset: ocrbench
     source_index: 1
     prompt: "what is written in the image?"
@@ -28,7 +28,7 @@ questions:
 
   - id: vl_ocr_0002
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0002.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0002.png"
     source_dataset: ocrbench
     source_index: 2
     prompt: "what is written in the image?"
@@ -39,7 +39,7 @@ questions:
 
   - id: vl_ocr_0093
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0093.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0093.png"
     source_dataset: ocrbench
     source_index: 93
     prompt: "what is written in the image?"
@@ -50,7 +50,7 @@ questions:
 
   - id: vl_ocr_0097
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0097.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0097.png"
     source_dataset: ocrbench
     source_index: 97
     prompt: "what is written in the image?"
@@ -61,7 +61,7 @@ questions:
 
   - id: vl_ocr_0107
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0107.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0107.png"
     source_dataset: ocrbench
     source_index: 107
     prompt: "what is written in the image?"
@@ -72,7 +72,7 @@ questions:
 
   - id: vl_ocr_0140
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0140.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0140.png"
     source_dataset: ocrbench
     source_index: 140
     prompt: "what is written in the image?"
@@ -83,7 +83,7 @@ questions:
 
   - id: vl_ocr_0201
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0201.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0201.png"
     source_dataset: ocrbench
     source_index: 201
     prompt: "what is the number in the image?"
@@ -92,7 +92,7 @@ questions:
 
   - id: vl_ocr_0247
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0247.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0247.png"
     source_dataset: ocrbench
     source_index: 247
     prompt: "what is the number in the image?"
@@ -101,7 +101,7 @@ questions:
 
   - id: vl_ocr_0248
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0248.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0248.png"
     source_dataset: ocrbench
     source_index: 248
     prompt: "what is the number in the image?"
@@ -110,7 +110,7 @@ questions:
 
   - id: vl_ocr_0158
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0158.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0158.png"
     source_dataset: ocrbench
     source_index: 158
     prompt: "what is written in the image?"
@@ -121,7 +121,7 @@ questions:
 
   - id: vl_ocr_0164
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0164.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0164.png"
     source_dataset: ocrbench
     source_index: 164
     prompt: "what is written in the image?"
@@ -132,7 +132,7 @@ questions:
 
   - id: vl_ocr_0277
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0277.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0277.png"
     source_dataset: ocrbench
     source_index: 277
     prompt: "what is written in the image?"
@@ -143,7 +143,7 @@ questions:
 
   - id: vl_ocr_0287
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0287.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0287.png"
     source_dataset: ocrbench
     source_index: 287
     prompt: "what is written in the image?"
@@ -154,7 +154,7 @@ questions:
 
   - id: vl_ocr_0323
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0323.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0323.png"
     source_dataset: ocrbench
     source_index: 323
     prompt: "What is the headline of the poster (first line)?"
@@ -165,7 +165,7 @@ questions:
 
   - id: vl_ocr_0355
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0355.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0355.png"
     source_dataset: ocrbench
     source_index: 355
     prompt: "what is in large white font at the top?"
@@ -176,7 +176,7 @@ questions:
 
   - id: vl_ocr_0722
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0722.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0722.png"
     source_dataset: ocrbench
     source_index: 722
     prompt: "where was this receipt issued? Answer this question using the text in the image directly."
@@ -187,7 +187,7 @@ questions:
 
   - id: vl_ocr_0839
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0839.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0839.png"
     source_dataset: ocrbench
     source_index: 839
     prompt: "what is the value for Total carbohydrate of per 100g/ml? Answer this question using the text in the image directly."
@@ -200,7 +200,7 @@ questions:
 
   - id: vl_ocr_0913
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0913.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0913.png"
     source_dataset: ocrbench
     source_index: 913
     prompt: "Please write out the expression of the formula in the image using LaTeX format."
@@ -211,7 +211,7 @@ questions:
 
   - id: vl_ocr_0994
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0994.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0994.png"
     source_dataset: ocrbench
     source_index: 994
     prompt: "Please write out the expression of the formula in the image using LaTeX format."
@@ -222,7 +222,7 @@ questions:
 
   - id: vl_ocr_0531
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0531.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0531.png"
     source_dataset: ocrbench
     source_index: 531
     prompt: "Which country postal stamp is given?"
@@ -233,7 +233,7 @@ questions:
 
   - id: vl_ocr_0562
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0562.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0562.png"
     source_dataset: ocrbench
     source_index: 562
     prompt: "How many patients came from the neighboring state of Mexico?"
@@ -247,7 +247,7 @@ questions:
 
   - id: vl_ocr_0570
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0570.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0570.png"
     source_dataset: ocrbench
     source_index: 570
     prompt: "What was the estimated annual loss caused by earthquakes in the United States as of 2015?"
@@ -258,7 +258,7 @@ questions:
 
   - id: vl_ocr_0632
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/ocrbench/ocr_0632.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/ocrbench/ocr_0632.png"
     source_dataset: ocrbench
     source_index: 632
     prompt: "what is the average of all No confidence data?"
@@ -272,7 +272,7 @@ questions:
 
   - id: vl_chart_test_1311
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_1311.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_1311.png"
     source_dataset: chartqa
     source_index: 1311
     prompt: "What percentage of parents base the amount of pocket money on their child's age?"
@@ -283,7 +283,7 @@ questions:
 
   - id: vl_chart_test_1315
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_1315.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_1315.png"
     source_dataset: chartqa
     source_index: 1315
     prompt: "How many metric tons of CO2 were emitted from coal combustion in 1971?"
@@ -294,7 +294,7 @@ questions:
 
   - id: vl_chart_test_1441
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_1441.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_1441.png"
     source_dataset: chartqa
     source_index: 1441
     prompt: "What was the main source of petroleum products for the UK in 2019?"
@@ -305,7 +305,7 @@ questions:
 
   - id: vl_chart_test_1697
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_1697.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_1697.png"
     source_dataset: chartqa
     source_index: 1697
     prompt: "Which country was a party in its own right to the Treaty of Versailles?"
@@ -316,7 +316,7 @@ questions:
 
   - id: vl_chart_test_1726
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_1726.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_1726.png"
     source_dataset: chartqa
     source_index: 1726
     prompt: "What was the number of registered cars in Britain in 2000?"
@@ -327,7 +327,7 @@ questions:
 
   - id: vl_chart_test_2114
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_2114.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_2114.png"
     source_dataset: chartqa
     source_index: 2114
     prompt: "How many new scooters were registered in April 2020?"
@@ -338,7 +338,7 @@ questions:
 
   - id: vl_chart_test_2459
     tier: 1
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_2459.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_2459.png"
     source_dataset: chartqa
     source_index: 2459
     prompt: "What was the total amount of pharmaceutical industry penalties in the United States in 2009?"
@@ -349,7 +349,7 @@ questions:
 
   - id: vl_chart_test_0051
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_0051.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0051.png"
     source_dataset: chartqa
     source_index: 51
     prompt: "How many games in the chart have over 40 ratings?"
@@ -360,7 +360,7 @@ questions:
 
   - id: vl_chart_test_0228
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_0228.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0228.png"
     source_dataset: chartqa
     source_index: 228
     prompt: "Which country has longest bar?"
@@ -371,7 +371,7 @@ questions:
 
   - id: vl_chart_test_2284
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_2284.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_2284.png"
     source_dataset: chartqa
     source_index: 2284
     prompt: "How many enterprises were in the manufacture of electronic components industry in Sweden in 2013?"
@@ -382,7 +382,7 @@ questions:
 
   - id: vl_chart_test_2482
     tier: 2
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_2482.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_2482.png"
     source_dataset: chartqa
     source_index: 2482
     prompt: "Who was the highest paid actress between June 2017 and June 2018?"
@@ -393,7 +393,7 @@ questions:
 
   - id: vl_chart_test_0109
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_0109.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0109.png"
     source_dataset: chartqa
     source_index: 109
     prompt: "What's the median value of light blue bar?"
@@ -404,7 +404,7 @@ questions:
 
   - id: vl_chart_test_0178
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_0178.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0178.png"
     source_dataset: chartqa
     source_index: 178
     prompt: "What does Orange portion indicates?"
@@ -415,7 +415,7 @@ questions:
 
   - id: vl_chart_test_0209
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_0209.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0209.png"
     source_dataset: chartqa
     source_index: 209
     prompt: "What is the difference in the value of High blood sugar and High Blood pressure?"
@@ -426,7 +426,7 @@ questions:
 
   - id: vl_chart_test_0285
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_0285.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0285.png"
     source_dataset: chartqa
     source_index: 285
     prompt: "What's the average of two smallest bar??"
@@ -437,7 +437,7 @@ questions:
 
   - id: vl_chart_test_0457
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_0457.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0457.png"
     source_dataset: chartqa
     source_index: 457
     prompt: "How many Fairly well bars repeat themselves?"
@@ -448,7 +448,7 @@ questions:
 
   - id: vl_chart_test_0501
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_0501.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0501.png"
     source_dataset: chartqa
     source_index: 501
     prompt: "What's the total percentage of people who like and love math?"
@@ -459,7 +459,7 @@ questions:
 
   - id: vl_chart_test_0563
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_0563.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_0563.png"
     source_dataset: chartqa
     source_index: 563
     prompt: "What is the difference between maximum values of International flight and Domestic flight?"
@@ -470,7 +470,7 @@ questions:
 
   - id: vl_chart_test_1116
     tier: 3
-    image_path: "/mnt/raid0/llm/claude/benchmarks/images/vl/chartqa/chart_test_1116.png"
+    image_path: "/mnt/raid0/llm/epyc-inference-research/benchmarks/images/vl/chartqa/chart_test_1116.png"
     source_dataset: chartqa
     source_index: 1116
     prompt: "How many units are owned?"
