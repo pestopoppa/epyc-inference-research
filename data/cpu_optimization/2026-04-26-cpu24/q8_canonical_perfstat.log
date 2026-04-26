@@ -1,0 +1,25 @@
+| model                          |       size |     params | backend    | threads | fa |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | ------: | -: | --------------: | -------------------: |
+| qwen35moe 35B.A3B Q8_0         |  34.36 GiB |    34.66 B | CPU        |      96 |  1 |            tg64 |         21.40 ± 0.00 |
+
+build: 8cb04da9d (8931)
+
+ Performance counter stats for 'numactl --interleave=all --physcpubind=0-95 /mnt/raid0/llm/llama.cpp-experimental/build/bin/llama-bench -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-Q8_0.gguf -t 96 -fa 1 -p 0 -n 64 -r 1':
+
+     1291418740655      cycles                                                                  (50.00%)
+      251008326679      instructions                     #    0.19  insn per cycle              (50.02%)
+       36993726309      branches                                                                (50.02%)
+         142355443      branch-misses                    #    0.38% of all branches             (50.01%)
+       10701067112      cache-references                                                        (50.01%)
+        1071770829      cache-misses                     #   10.02% of all cache refs           (50.00%)
+         226212983      ls_dmnd_fills_from_sys.dram_io_far                                        (49.98%)
+          74867976      ls_dmnd_fills_from_sys.dram_io_near                                        (49.98%)
+         136619045      ls_dmnd_fills_from_sys.remote_cache                                        (49.99%)
+         953443493      ls_dmnd_fills_from_sys.local_all                                        (49.99%)
+
+       9.239202629 seconds time elapsed
+
+     292.783626000 seconds user
+       5.987421000 seconds sys
+
+
