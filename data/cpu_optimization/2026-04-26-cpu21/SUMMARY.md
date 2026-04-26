@@ -83,13 +83,15 @@ Follow-up sweep on REAP-246B Q4_K_M (sync-bound large MoE), Qwen3.6-35B Q8_0 (BW
 
 Combined ≈ spread alone (+6.2%) + active alone (+0.5%) = +6.7% sum vs +7.4% measured → near-additive (slightly super-additive within noise). Confirms the levers compose.
 
-### Cross-class summary
+### Cross-class summary (FULL 5-model picture, 2026-04-26 evening)
 
-| Model | Class | Baseline | Combined stack | Δ |
-|-------|-------|----------|----------------|---|
-| Qwen3-Coder-30B-A3B Q4_K_M | sync-small | 43.82 | 47.08 | **+7.4%** |
-| Qwen3.6-35B-A3B Q8_0 | BW-bound | 21.36 | 23.04 | **+7.9%** |
-| Qwen3-Coder-REAP-246B-A35B Q4_K_M | sync-large | 6.14 | 6.33 | **+3.1%** |
+| Model | Class | Baseline (no OMP) | Combined stack | Δ |
+|-------|-------|-------------------|----------------|---|
+| Qwen3-Coder-30B-A3B Q4_K_M | sync-small | 43.82 | **47.08** | **+7.4%** |
+| Qwen3.6-35B-A3B Q8_0 | BW-bound | 21.36 | **23.04** | **+7.9%** |
+| Qwen3-Next-80B-A3B Q4_K_M | sync-small/hybrid | 21.37 | **22.15** | **+3.7%** |
+| Qwen3-Coder-REAP-246B-A35B Q4_K_M | sync-large | 6.14 | **6.33** | **+3.1%** |
+| gemma-4-26B-A4B-it Q4_K_M | sync-small/mixed | 36.45 | **38.59** | **+5.9%** |
 
 Affinity tuning is **the first universal-positive lever** identified in the 2026-04 CPU optimization work. Every prior "win" had asymmetric/regressive cases on some model. CPU21 combined stack is positive on every class — modest on REAP (+3%, capped by structural sync), strong on BW-bound and small sync-bound (+7-8%).
 
