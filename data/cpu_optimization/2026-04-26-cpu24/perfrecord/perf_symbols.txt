@@ -1,0 +1,80 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 160K of event 'cycles:P'
+# Event count (approx.): 7010329143462
+#
+# Overhead  Command      Shared Object           Symbol                                                                                                                                 
+# ........  ...........  ......................  .......................................................................................................................................
+#
+    64.37%  llama-bench  libggml-cpu.so.0.9.11   [.] ggml_gemv_q4_K_8x8_q8_K
+            |          
+            |--64.07%--ggml_gemv_q4_K_8x8_q8_K
+            |          |          
+            |           --64.06%--ggml::cpu::repack::tensor_traits<block_q4_K, 8l, 8l, (ggml_type)15>::compute_forward(ggml_compute_params*, ggml_tensor*)
+            |                     |          
+            |                      --0.16%--0
+            |          
+             --0.20%--ggml::cpu::repack::tensor_traits<block_q4_K, 8l, 8l, (ggml_type)15>::compute_forward(ggml_compute_params*, ggml_tensor*)
+
+    15.64%  llama-bench  libggml-cpu.so.0.9.11   [.] ggml_vec_dot_q6_K_q8_K
+            |          
+            |--15.46%--ggml_vec_dot_q6_K_q8_K
+            |          |          
+            |          |--11.82%--ggml_graph_compute_thread.isra.0
+            |          |          |          
+            |          |          |--11.68%--0x70a94936041f
+            |          |          |          0x70a949dffd64
+            |          |          |          0x70a949e933fc
+            |          |          |          
+            |          |           --0.13%--GOMP_parallel
+            |          |                     ggml_graph_compute
+            |          |          
+            |           --3.64%--ggml_compute_forward_mul_mat
+            |                     |          
+            |                      --0.17%--0
+            |          
+             --0.14%--ggml_graph_compute_thread.isra.0
+                       |          
+                        --0.14%--0x70a94936041f
+                                  0x70a949dffd64
+                                  0x70a949e933fc
+
+    15.50%  llama-bench  libgomp.so.1.0.0        [.] 0x0000000000026580
+            |          
+            |--14.96%--0x70a949363582
+            |          |          
+            |          |--13.55%--ggml_graph_compute_thread.isra.0
+            |          |          |          
+            |          |           --13.48%--0x70a94936041f
+            |          |                     0x70a949dffd64
+            |          |                     0x70a949e933fc
+            |          |          
+            |          |--1.22%--ggml::cpu::repack::tensor_traits<block_q4_K, 8l, 8l, (ggml_type)15>::compute_forward(ggml_compute_params*, ggml_tensor*)
+            |          |          
+            |           --0.11%--ggml_compute_forward_mul_mat
+            |          
+             --0.52%--0x70a94936358d
+                       |          
+                        --0.45%--ggml_graph_compute_thread.isra.0
+                                  |          
+                                   --0.45%--0x70a94936041f
+                                             0x70a949dffd64
+                                             0x70a949e933fc
+
+     0.73%  llama-bench  libggml-cpu.so.0.9.11   [.] ggml_compute_forward_flash_attn_ext
+            |          
+            |--0.46%--ggml_compute_forward_flash_attn_ext
+            |          ggml_graph_compute_thread.isra.0
+            |          |          
+            |           --0.46%--0x70a94936041f
+            |                     0x70a949dffd64
+            |                     0x70a949e933fc
+            |          
+             --0.20%--ggml_vec_dot_f16
+                       ggml_graph_compute_thread.isra.0
+                       |          
+                        --0.20%--0x70a94936041f
+                                  0x70a949dffd64
