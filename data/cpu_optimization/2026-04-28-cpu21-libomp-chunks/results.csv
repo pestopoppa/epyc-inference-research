@@ -1,0 +1,15 @@
+model,quant,class,test_mode,reps,omp_schedule,t_per_s_mean,t_per_s_std,delta_pct_vs_baseline,statistically_significant,notes
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE / Hybrid SSM-Dense-ish,tg32,3,(unset baseline),48.28,0.11,reference,n/a,CPU21-best stack (spread+cores+active)
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE / Hybrid SSM-Dense-ish,tg32,3,static_8,48.07,0.22,-0.4,no,
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE / Hybrid SSM-Dense-ish,tg32,3,static_16,47.45,0.21,-1.7,marginally negative,
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE / Hybrid SSM-Dense-ish,tg32,3,dynamic_8,46.89,0.34,-2.9,marginally negative,
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE / Hybrid SSM-Dense-ish,tg32,3,dynamic_16,47.88,0.06,-0.8,no,
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE / Hybrid SSM-Dense-ish,tg32,3,guided_8,48.34,0.09,+0.1,no,within noise
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE / Hybrid SSM-Dense-ish,tg32,3,guided_16,49.53,0.16,+2.6,yes,
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE / Hybrid SSM-Dense-ish,tg32,5,guided_16_verify,50.01,0.38,+3.6,yes (3.5σ),verified at higher rep count; small std growth at 5-rep but gap holds
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,tg32,3,(unset baseline),23.69,0.09,reference,n/a,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,tg32,3,guided_16,23.54,0.02,-0.6,no,within noise
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,DRAM-bound large MoE,tg32,3,(unset baseline),6.29,0.12,reference,n/a,
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,DRAM-bound large MoE,tg32,3,guided_16,6.30,0.07,+0.16,no,within noise
+NOT_RUN,libomp_runtime_comparison,,,,,,,,,sandbox blocked apt install clang-20; surfacing for user authorization
+NOT_RUN,Qwen3.5_3.6-27B,Q8_0,dense/hybrid,tg32,,,,,,,Phase 2.6 covers dense throughput-delta
