@@ -1,0 +1,14 @@
+model,quant,class,reps,env_GGML_EP_WORK_STEALING,t_per_s_mean,t_per_s_std,delta_pct,gate_threshold_10pct,verdict,notes
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE / hybrid SSM-Dense-ish,5,0,53.12,0.10,reference,n/a,baseline,proper canonical
+Qwen3-Coder-30B-A3B,Q4_K_M,,5,1,51.89,0.07,-2.3,FAILED,regression,atomic contention overhead exceeds imbalance gain
+Qwen3-Next-80B-A3B,Q4_K_M,sync-bound MoE,3,0,21.31,0.02,reference,n/a,(initial 3-rep — measurement artifact),
+Qwen3-Next-80B-A3B,Q4_K_M,,3,1,22.65,0.02,+6.3,(initial),(initial 3-rep — measurement artifact),3-rep insufficient for tight gates on this hardware
+Qwen3-Next-80B-A3B,Q4_K_M,,5,0,23.36,0.03,reference,n/a,baseline,5-rep converged
+Qwen3-Next-80B-A3B,Q4_K_M,,5,1,23.29,0.07,-0.3,FAILED,within noise,
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,DRAM-bound large MoE,3,0,6.49,0.02,reference,n/a,initial,
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,,3,1,6.56,0.01,+1.1,(within noise),initial,
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,,5,0,6.64,0.01,reference,n/a,baseline,5-rep
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,,5,1,6.59,0.02,-0.8,FAILED,within noise,
+PPL_check,Coder-30B-A3B-Q4_K_M,wiki_chunks_1-12,1,0,11.1146,0.62405,reference,n/a,bit-exact,
+PPL_check,Coder-30B-A3B-Q4_K_M,wiki_chunks_1-12,1,1,11.1146,0.62405,bit-exact,n/a,PASSED,byte-identical to env=0
+gate_summary,3-of-3-models-FAILED,,,,,gate-threshold-10pct=FAILED,closure_via_test=NEG,track CLOSED honestly via test (replaces prior closure-by-inference)
