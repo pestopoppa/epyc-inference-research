@@ -1,0 +1,1320 @@
+build_info: b8936-b9920cc44
+system_info: n_threads = 96 (n_threads_batch = 96) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+Running without SSL
+init: using 191 threads for HTTP server
+start: binding port with default address family
+main: loading model
+srv    load_model: loading model '/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf'
+common_init_result: fitting params to device memory, for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on
+llama_params_fit_impl: projected to use 10711 MiB of host memory vs. 1160617 MiB of total host memory
+llama_params_fit_impl: will leave 1149906 >= 1024 MiB of system memory, no changes needed
+llama_params_fit: successfully fit params to free device memory
+llama_params_fit: fitting params to free memory took 0.15 seconds
+llama_model_loader: loaded meta data with 44 key-value pairs and 579 tensors from /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen3moe
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Qwen3-Coder-30B-A3B-Instruct
+llama_model_loader: - kv   3:                           general.finetune str              = Instruct
+llama_model_loader: - kv   4:                           general.basename str              = Qwen3-Coder-30B-A3B-Instruct
+llama_model_loader: - kv   5:                       general.quantized_by str              = Unsloth
+llama_model_loader: - kv   6:                         general.size_label str              = 30B-A3B
+llama_model_loader: - kv   7:                            general.license str              = apache-2.0
+llama_model_loader: - kv   8:                       general.license.link str              = https://huggingface.co/Qwen/Qwen3-Cod...
+llama_model_loader: - kv   9:                           general.repo_url str              = https://huggingface.co/unsloth
+llama_model_loader: - kv  10:                   general.base_model.count u32              = 1
+llama_model_loader: - kv  11:                  general.base_model.0.name str              = Qwen3 Coder 30B A3B Instruct
+llama_model_loader: - kv  12:          general.base_model.0.organization str              = Qwen
+llama_model_loader: - kv  13:              general.base_model.0.repo_url str              = https://huggingface.co/Qwen/Qwen3-Cod...
+llama_model_loader: - kv  14:                               general.tags arr[str,2]       = ["unsloth", "text-generation"]
+llama_model_loader: - kv  15:                       qwen3moe.block_count u32              = 48
+llama_model_loader: - kv  16:                    qwen3moe.context_length u32              = 262144
+llama_model_loader: - kv  17:                  qwen3moe.embedding_length u32              = 2048
+llama_model_loader: - kv  18:               qwen3moe.feed_forward_length u32              = 5472
+llama_model_loader: - kv  19:              qwen3moe.attention.head_count u32              = 32
+llama_model_loader: - kv  20:           qwen3moe.attention.head_count_kv u32              = 4
+llama_model_loader: - kv  21:                    qwen3moe.rope.freq_base f32              = 10000000.000000
+llama_model_loader: - kv  22:  qwen3moe.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  23:                 qwen3moe.expert_used_count u32              = 8
+llama_model_loader: - kv  24:              qwen3moe.attention.key_length u32              = 128
+llama_model_loader: - kv  25:            qwen3moe.attention.value_length u32              = 128
+llama_model_loader: - kv  26:                      qwen3moe.expert_count u32              = 128
+llama_model_loader: - kv  27:        qwen3moe.expert_feed_forward_length u32              = 768
+llama_model_loader: - kv  28: qwen3moe.expert_shared_feed_forward_length u32              = 0
+llama_model_loader: - kv  29:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  30:                         tokenizer.ggml.pre str              = qwen2
+llama_model_loader: - kv  31:                      tokenizer.ggml.tokens arr[str,151936]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  32:                  tokenizer.ggml.token_type arr[i32,151936]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  33:                      tokenizer.ggml.merges arr[str,151387]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  34:                tokenizer.ggml.eos_token_id u32              = 151645
+llama_model_loader: - kv  35:            tokenizer.ggml.padding_token_id u32              = 151654
+llama_model_loader: - kv  36:               tokenizer.ggml.add_bos_token bool             = false
+llama_model_loader: - kv  37:                    tokenizer.chat_template str              = {# Copyright 2025-present Unsloth. Ap...
+llama_model_loader: - kv  38:               general.quantization_version u32              = 2
+llama_model_loader: - kv  39:                          general.file_type u32              = 15
+llama_model_loader: - kv  40:                      quantize.imatrix.file str              = Qwen3-Coder-30B-A3B-Instruct-GGUF/ima...
+llama_model_loader: - kv  41:                   quantize.imatrix.dataset str              = unsloth_calibration_Qwen3-Coder-30B-A...
+llama_model_loader: - kv  42:             quantize.imatrix.entries_count u32              = 384
+llama_model_loader: - kv  43:              quantize.imatrix.chunks_count u32              = 154
+llama_model_loader: - type  f32:  241 tensors
+llama_model_loader: - type q4_K:  289 tensors
+llama_model_loader: - type q6_K:   49 tensors
+print_info: file format = GGUF V3 (latest)
+print_info: file type   = Q4_K - Medium
+print_info: file size   = 17.28 GiB (4.86 BPW) 
+load: 0 unused tokens
+load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+load: printing all EOG tokens:
+load:   - 128247 ('</s>')
+load:   - 151643 ('<|endoftext|>')
+load:   - 151645 ('<|im_end|>')
+load:   - 151662 ('<|fim_pad|>')
+load:   - 151663 ('<|repo_name|>')
+load:   - 151664 ('<|file_sep|>')
+load: special tokens cache size = 27
+load: token to piece cache size = 0.9311 MB
+print_info: arch                  = qwen3moe
+print_info: vocab_only            = 0
+print_info: no_alloc              = 0
+print_info: n_ctx_train           = 262144
+print_info: n_embd                = 2048
+print_info: n_embd_inp            = 2048
+print_info: n_layer               = 48
+print_info: n_head                = 32
+print_info: n_head_kv             = 4
+print_info: n_rot                 = 128
+print_info: n_swa                 = 0
+print_info: is_swa_any            = 0
+print_info: n_embd_head_k         = 128
+print_info: n_embd_head_v         = 128
+print_info: n_gqa                 = 8
+print_info: n_embd_k_gqa          = 512
+print_info: n_embd_v_gqa          = 512
+print_info: f_norm_eps            = 0.0e+00
+print_info: f_norm_rms_eps        = 1.0e-06
+print_info: f_clamp_kqv           = 0.0e+00
+print_info: f_max_alibi_bias      = 0.0e+00
+print_info: f_logit_scale         = 0.0e+00
+print_info: f_attn_scale          = 0.0e+00
+print_info: n_ff                  = 5472
+print_info: n_expert              = 128
+print_info: n_expert_used         = 8
+print_info: n_expert_groups       = 0
+print_info: n_group_used          = 0
+print_info: causal attn           = 1
+print_info: pooling type          = -1
+print_info: rope type             = 2
+print_info: rope scaling          = linear
+print_info: freq_base_train       = 10000000.0
+print_info: freq_scale_train      = 1
+print_info: n_ctx_orig_yarn       = 262144
+print_info: rope_yarn_log_mul     = 0.0000
+print_info: rope_finetuned        = unknown
+print_info: model type            = 30B.A3B
+print_info: model params          = 30.53 B
+print_info: general.name          = Qwen3-Coder-30B-A3B-Instruct
+print_info: n_ff_exp              = 768
+print_info: vocab type            = BPE
+print_info: n_vocab               = 151936
+print_info: n_merges              = 151387
+print_info: BOS token             = 11 ','
+print_info: EOS token             = 151645 '<|im_end|>'
+print_info: EOT token             = 151645 '<|im_end|>'
+print_info: PAD token             = 151654 '<|vision_pad|>'
+print_info: LF token              = 198 'Ċ'
+print_info: FIM PRE token         = 151659 '<|fim_prefix|>'
+print_info: FIM SUF token         = 151661 '<|fim_suffix|>'
+print_info: FIM MID token         = 151660 '<|fim_middle|>'
+print_info: FIM PAD token         = 151662 '<|fim_pad|>'
+print_info: FIM REP token         = 151663 '<|repo_name|>'
+print_info: FIM SEP token         = 151664 '<|file_sep|>'
+print_info: EOG token             = 128247 '</s>'
+print_info: EOG token             = 151643 '<|endoftext|>'
+print_info: EOG token             = 151645 '<|im_end|>'
+print_info: EOG token             = 151662 '<|fim_pad|>'
+print_info: EOG token             = 151663 '<|repo_name|>'
+print_info: EOG token             = 151664 '<|file_sep|>'
+print_info: max token length      = 256
+load_tensors: loading model tensors, this can take a while... (mmap = false, direct_io = false)
+load_tensors:          CPU model buffer size =  4258.84 MiB
+load_tensors:   CPU_REPACK model buffer size = 13432.50 MiB
+...................................................................................................
+common_init_result: added </s> logit bias = -inf
+common_init_result: added <|endoftext|> logit bias = -inf
+common_init_result: added <|im_end|> logit bias = -inf
+common_init_result: added <|fim_pad|> logit bias = -inf
+common_init_result: added <|repo_name|> logit bias = -inf
+common_init_result: added <|file_sep|> logit bias = -inf
+llama_context: constructing llama_context
+llama_context: n_seq_max     = 2
+llama_context: n_ctx         = 65536
+llama_context: n_ctx_seq     = 32768
+llama_context: n_batch       = 2048
+llama_context: n_ubatch      = 512
+llama_context: causal_attn   = 1
+llama_context: flash_attn    = enabled
+llama_context: kv_unified    = false
+llama_context: freq_base     = 10000000.0
+llama_context: freq_scale    = 1
+llama_context: n_ctx_seq (32768) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+llama_context:        CPU  output buffer size =     1.16 MiB
+llama_kv_cache:        CPU KV buffer size =  6144.00 MiB
+llama_kv_cache: size = 6144.00 MiB ( 32768 cells,  48 layers,  2/2 seqs), K (f16): 3072.00 MiB, V (f16): 3072.00 MiB
+llama_kv_cache: attn_rot_k = 0, n_embd_head_k_all = 128
+llama_kv_cache: attn_rot_v = 0, n_embd_head_k_all = 128
+sched_reserve: reserving ...
+sched_reserve: resolving fused Gated Delta Net support:
+sched_reserve: fused Gated Delta Net (autoregressive) enabled
+sched_reserve: fused Gated Delta Net (chunked) enabled
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 3.35 ms, sched copies = 1
+common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+srv    load_model: initializing slots, n_slots = 2
+no implementations specified for speculative decoding
+slot   load_model: id  0 | task -1 | new slot, n_ctx = 32768
+no implementations specified for speculative decoding
+slot   load_model: id  1 | task -1 | new slot, n_ctx = 32768
+srv    load_model: prompt cache is enabled, size limit: 8192 MiB
+srv    load_model: use `--cache-ram 0` to disable the prompt cache
+srv    load_model: for more info see https://github.com/ggml-org/llama.cpp/pull/16391
+srv          init: init: --cache-idle-slots requires --kv-unified, disabling
+init: chat template, example_format: '<|im_start|>system
+You are a helpful assistant<|im_end|>
+<|im_start|>user
+Hello<|im_end|>
+<|im_start|>assistant
+Hi there<|im_end|>
+<|im_start|>user
+How are you?<|im_end|>
+<|im_start|>assistant
+'
+srv          init: init: chat template, thinking = 0
+main: model loaded
+main: server is listening on http://127.0.0.1:18080
+main: starting the main loop...
+srv  update_slots: all slots are idle
+slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = -1
+srv  get_availabl: updating prompt cache
+srv          load:  - looking for better prompt, base f_keep = -1.000, sim = 0.000
+srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 65536 tokens, 8589934592 est)
+srv  get_availabl: prompt cache update took 0.01 ms
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 0 | processing task, is_child = 0
+slot update_slots: id  1 | task 0 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 0 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 0 | init sampler, took 0.02 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 0 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.65 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.86 ms, sched copies = 1
+slot print_timing: id  1 | task 0 | 
+prompt eval time =     256.09 ms /   101 tokens (    2.54 ms per token,   394.39 tokens per second)
+       eval time =     663.31 ms /    32 tokens (   20.73 ms per token,    48.24 tokens per second)
+      total time =     919.40 ms /   133 tokens
+slot      release: id  1 | task 0 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 33 | processing task, is_child = 0
+slot update_slots: id  1 | task 33 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 33 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 33 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 33 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.76 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.69 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.89 ms, sched copies = 1
+slot print_timing: id  1 | task 33 | 
+prompt eval time =     259.47 ms /   101 tokens (    2.57 ms per token,   389.26 tokens per second)
+       eval time =     666.12 ms /    32 tokens (   20.82 ms per token,    48.04 tokens per second)
+      total time =     925.59 ms /   133 tokens
+slot      release: id  1 | task 33 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 66 | processing task, is_child = 0
+slot update_slots: id  1 | task 66 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 66 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 66 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 66 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.65 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.29 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.90 ms, sched copies = 1
+slot print_timing: id  1 | task 66 | 
+prompt eval time =     259.27 ms /   101 tokens (    2.57 ms per token,   389.55 tokens per second)
+       eval time =     664.00 ms /    32 tokens (   20.75 ms per token,    48.19 tokens per second)
+      total time =     923.27 ms /   133 tokens
+slot      release: id  1 | task 66 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 99 | processing task, is_child = 0
+slot update_slots: id  1 | task 99 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 99 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 99 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 99 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.79 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.25 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.84 ms, sched copies = 1
+slot print_timing: id  1 | task 99 | 
+prompt eval time =     261.80 ms /   101 tokens (    2.59 ms per token,   385.80 tokens per second)
+       eval time =     667.28 ms /    32 tokens (   20.85 ms per token,    47.96 tokens per second)
+      total time =     929.07 ms /   133 tokens
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot      release: id  1 | task 99 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 132 | processing task, is_child = 0
+slot update_slots: id  1 | task 132 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 132 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 132 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 132 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.56 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.45 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.89 ms, sched copies = 1
+slot print_timing: id  1 | task 132 | 
+prompt eval time =     258.34 ms /   101 tokens (    2.56 ms per token,   390.96 tokens per second)
+       eval time =     667.65 ms /    32 tokens (   20.86 ms per token,    47.93 tokens per second)
+      total time =     925.99 ms /   133 tokens
+slot      release: id  1 | task 132 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 165 | processing task, is_child = 0
+slot update_slots: id  1 | task 165 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 165 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 165 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 165 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 3.04 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.56 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.19 ms, sched copies = 1
+slot print_timing: id  1 | task 165 | 
+prompt eval time =     262.20 ms /   101 tokens (    2.60 ms per token,   385.21 tokens per second)
+       eval time =     668.30 ms /    32 tokens (   20.88 ms per token,    47.88 tokens per second)
+      total time =     930.50 ms /   133 tokens
+slot      release: id  1 | task 165 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 198 | processing task, is_child = 0
+slot update_slots: id  1 | task 198 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 198 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 198 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 198 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.70 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.61 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.91 ms, sched copies = 1
+slot print_timing: id  1 | task 198 | 
+prompt eval time =     262.65 ms /   101 tokens (    2.60 ms per token,   384.55 tokens per second)
+       eval time =     660.62 ms /    32 tokens (   20.64 ms per token,    48.44 tokens per second)
+      total time =     923.27 ms /   133 tokens
+slot      release: id  1 | task 198 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 231 | processing task, is_child = 0
+slot update_slots: id  1 | task 231 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 231 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 231 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 231 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.64 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.76 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.92 ms, sched copies = 1
+slot print_timing: id  1 | task 231 | 
+prompt eval time =     257.15 ms /   101 tokens (    2.55 ms per token,   392.76 tokens per second)
+       eval time =     671.45 ms /    32 tokens (   20.98 ms per token,    47.66 tokens per second)
+      total time =     928.60 ms /   133 tokens
+slot      release: id  1 | task 231 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 264 | processing task, is_child = 0
+slot update_slots: id  1 | task 264 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 264 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 264 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 264 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.65 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.65 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.95 ms, sched copies = 1
+slot print_timing: id  1 | task 264 | 
+prompt eval time =     258.86 ms /   101 tokens (    2.56 ms per token,   390.18 tokens per second)
+       eval time =     671.46 ms /    32 tokens (   20.98 ms per token,    47.66 tokens per second)
+      total time =     930.31 ms /   133 tokens
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot      release: id  1 | task 264 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 297 | processing task, is_child = 0
+slot update_slots: id  1 | task 297 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 297 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 297 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 297 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 3.94 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.69 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.83 ms, sched copies = 1
+slot print_timing: id  1 | task 297 | 
+prompt eval time =     262.10 ms /   101 tokens (    2.60 ms per token,   385.34 tokens per second)
+       eval time =     662.05 ms /    32 tokens (   20.69 ms per token,    48.33 tokens per second)
+      total time =     924.16 ms /   133 tokens
+slot      release: id  1 | task 297 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+srv    operator(): got exception: {"error":{"code":500,"message":"[json.exception.parse_error.101] parse error at line 1, column 1: attempting to parse an empty input; check that your input string or stream contains the expected JSON","type":"server_error"}}
+srv  log_server_r: done request: POST /completion 127.0.0.1 500
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 330 | processing task, is_child = 0
+slot update_slots: id  1 | task 330 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 330 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 330 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 330 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.46 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.76 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.88 ms, sched copies = 1
+slot print_timing: id  1 | task 330 | 
+prompt eval time =     264.38 ms /   101 tokens (    2.62 ms per token,   382.02 tokens per second)
+       eval time =     664.94 ms /    32 tokens (   20.78 ms per token,    48.12 tokens per second)
+      total time =     929.32 ms /   133 tokens
+slot      release: id  1 | task 330 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 363 | processing task, is_child = 0
+slot update_slots: id  1 | task 363 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 363 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 363 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 363 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.71 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.71 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.88 ms, sched copies = 1
+slot print_timing: id  1 | task 363 | 
+prompt eval time =     262.20 ms /   101 tokens (    2.60 ms per token,   385.20 tokens per second)
+       eval time =     668.15 ms /    32 tokens (   20.88 ms per token,    47.89 tokens per second)
+      total time =     930.35 ms /   133 tokens
+slot      release: id  1 | task 363 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 396 | processing task, is_child = 0
+slot update_slots: id  1 | task 396 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 396 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 396 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 396 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.66 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.64 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.97 ms, sched copies = 1
+slot print_timing: id  1 | task 396 | 
+prompt eval time =     259.77 ms /   101 tokens (    2.57 ms per token,   388.81 tokens per second)
+       eval time =     664.79 ms /    32 tokens (   20.77 ms per token,    48.14 tokens per second)
+      total time =     924.56 ms /   133 tokens
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot      release: id  1 | task 396 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 429 | processing task, is_child = 0
+slot update_slots: id  1 | task 429 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 429 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 429 | init sampler, took 0.02 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 429 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.50 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.80 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.86 ms, sched copies = 1
+slot print_timing: id  1 | task 429 | 
+prompt eval time =     259.59 ms /   101 tokens (    2.57 ms per token,   389.08 tokens per second)
+       eval time =     668.94 ms /    32 tokens (   20.90 ms per token,    47.84 tokens per second)
+      total time =     928.53 ms /   133 tokens
+slot      release: id  1 | task 429 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 462 | processing task, is_child = 0
+slot update_slots: id  1 | task 462 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 462 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 462 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 462 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.73 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.71 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.86 ms, sched copies = 1
+slot print_timing: id  1 | task 462 | 
+prompt eval time =     261.46 ms /   101 tokens (    2.59 ms per token,   386.30 tokens per second)
+       eval time =     665.47 ms /    32 tokens (   20.80 ms per token,    48.09 tokens per second)
+      total time =     926.92 ms /   133 tokens
+slot      release: id  1 | task 462 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+srv  get_availabl: updating prompt cache
+srv          load:  - looking for better prompt, base f_keep = -1.000, sim = 0.000
+srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 65536 tokens, 8589934592 est)
+srv  get_availabl: prompt cache update took 0.01 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 495 | processing task, is_child = 0
+slot update_slots: id  0 | task 495 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 37127
+srv    send_error: task id = 495, error: request (37127 tokens) exceeds the available context size (32768 tokens), try increasing it
+slot      release: id  0 | task 495 | stop processing: n_tokens = 0, truncated = 0
+srv  update_slots: no tokens to decode
+srv          stop: cancel task, id_task = 495
+srv  log_server_r: done request: POST /completion 127.0.0.1 400
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: GET /slots 127.0.0.1 200
+srv  update_slots: all slots are idle
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 499 | processing task, is_child = 0
+slot update_slots: id  1 | task 499 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 499 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 499 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 499 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.54 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.15 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.90 ms, sched copies = 1
+slot print_timing: id  1 | task 499 | 
+prompt eval time =     261.75 ms /   101 tokens (    2.59 ms per token,   385.87 tokens per second)
+       eval time =     660.70 ms /    32 tokens (   20.65 ms per token,    48.43 tokens per second)
+      total time =     922.44 ms /   133 tokens
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot      release: id  1 | task 499 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 532 | processing task, is_child = 0
+slot update_slots: id  1 | task 532 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 532 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 532 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 532 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.56 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.38 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.88 ms, sched copies = 1
+slot print_timing: id  1 | task 532 | 
+prompt eval time =     262.48 ms /   101 tokens (    2.60 ms per token,   384.79 tokens per second)
+       eval time =     665.46 ms /    32 tokens (   20.80 ms per token,    48.09 tokens per second)
+      total time =     927.94 ms /   133 tokens
+slot      release: id  1 | task 532 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 565 | processing task, is_child = 0
+slot update_slots: id  1 | task 565 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 565 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 565 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 565 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.69 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.62 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.93 ms, sched copies = 1
+slot print_timing: id  1 | task 565 | 
+prompt eval time =     265.12 ms /   101 tokens (    2.62 ms per token,   380.96 tokens per second)
+       eval time =     671.85 ms /    32 tokens (   21.00 ms per token,    47.63 tokens per second)
+      total time =     936.98 ms /   133 tokens
+slot      release: id  1 | task 565 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 598 | processing task, is_child = 0
+slot update_slots: id  1 | task 598 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 598 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 598 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 598 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.62 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.42 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.97 ms, sched copies = 1
+slot print_timing: id  1 | task 598 | 
+prompt eval time =     262.29 ms /   101 tokens (    2.60 ms per token,   385.07 tokens per second)
+       eval time =     670.07 ms /    32 tokens (   20.94 ms per token,    47.76 tokens per second)
+      total time =     932.36 ms /   133 tokens
+slot      release: id  1 | task 598 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 631 | processing task, is_child = 0
+slot update_slots: id  1 | task 631 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 631 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 631 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 631 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.61 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.40 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.79 ms, sched copies = 1
+slot print_timing: id  1 | task 631 | 
+prompt eval time =     263.98 ms /   101 tokens (    2.61 ms per token,   382.61 tokens per second)
+       eval time =     670.06 ms /    32 tokens (   20.94 ms per token,    47.76 tokens per second)
+      total time =     934.03 ms /   133 tokens
+slot      release: id  1 | task 631 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 63594920764
+srv  get_availabl: updating prompt cache
+srv          load:  - looking for better prompt, base f_keep = -1.000, sim = 0.000
+srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 65536 tokens, 8589934592 est)
+srv  get_availabl: prompt cache update took 0.01 ms
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 664 | processing task, is_child = 0
+slot update_slots: id  0 | task 664 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 29205
+slot update_slots: id  0 | task 664 | n_tokens = 0, memory_seq_rm [0, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 2048, batch.n_tokens = 2048, progress = 0.070125
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.50 ms, sched copies = 1
+slot update_slots: id  0 | task 664 | n_tokens = 2048, memory_seq_rm [2048, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 4096, batch.n_tokens = 2048, progress = 0.140250
+srv  log_server_r: done request: GET /slots 127.0.0.1 200
+slot update_slots: id  0 | task 664 | n_tokens = 4096, memory_seq_rm [4096, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 6144, batch.n_tokens = 2048, progress = 0.210375
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 669 | processing task, is_child = 0
+slot update_slots: id  0 | task 664 | n_tokens = 6144, memory_seq_rm [6144, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 8192, batch.n_tokens = 2048, progress = 0.280500
+slot update_slots: id  0 | task 664 | n_tokens = 8192, memory_seq_rm [8192, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 10240, batch.n_tokens = 2048, progress = 0.350625
+slot update_slots: id  0 | task 664 | n_tokens = 10240, memory_seq_rm [10240, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 12288, batch.n_tokens = 2048, progress = 0.420750
+slot update_slots: id  0 | task 664 | n_tokens = 12288, memory_seq_rm [12288, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 14336, batch.n_tokens = 2048, progress = 0.490875
+slot update_slots: id  0 | task 664 | n_tokens = 14336, memory_seq_rm [14336, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 16384, batch.n_tokens = 2048, progress = 0.561000
+slot update_slots: id  0 | task 664 | n_tokens = 16384, memory_seq_rm [16384, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 18432, batch.n_tokens = 2048, progress = 0.631125
+slot update_slots: id  0 | task 664 | n_tokens = 18432, memory_seq_rm [18432, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 20480, batch.n_tokens = 2048, progress = 0.701250
+slot update_slots: id  0 | task 664 | n_tokens = 20480, memory_seq_rm [20480, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 22528, batch.n_tokens = 2048, progress = 0.771375
+slot update_slots: id  0 | task 664 | n_tokens = 22528, memory_seq_rm [22528, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 24576, batch.n_tokens = 2048, progress = 0.841500
+slot update_slots: id  0 | task 664 | n_tokens = 24576, memory_seq_rm [24576, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 26624, batch.n_tokens = 2048, progress = 0.911625
+slot update_slots: id  0 | task 664 | n_tokens = 26624, memory_seq_rm [26624, end)
+slot update_slots: id  0 | task 664 | prompt processing progress, n_tokens = 28672, batch.n_tokens = 2048, progress = 0.981750
+slot update_slots: id  0 | task 664 | n_tokens = 28672, memory_seq_rm [28672, end)
+slot init_sampler: id  0 | task 664 | init sampler, took 4.23 ms, tokens: text = 29205, total = 29205
+slot update_slots: id  0 | task 664 | prompt processing done, n_tokens = 29205, batch.n_tokens = 533
+slot update_slots: id  1 | task 669 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 669 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 669 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 669 | prompt processing done, n_tokens = 101, batch.n_tokens = 634
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 9.98 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.97 ms, sched copies = 1
+slot print_timing: id  0 | task 664 | 
+prompt eval time =  212745.46 ms / 29205 tokens (    7.28 ms per token,   137.28 tokens per second)
+       eval time =    6741.45 ms /    32 tokens (  210.67 ms per token,     4.75 tokens per second)
+      total time =  219486.90 ms / 29237 tokens
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot      release: id  0 | task 664 | stop processing: n_tokens = 29236, truncated = 0
+slot print_timing: id  1 | task 669 | 
+prompt eval time =    9211.50 ms /   101 tokens (   91.20 ms per token,    10.96 tokens per second)
+       eval time =    6742.40 ms /    32 tokens (  210.70 ms per token,     4.75 tokens per second)
+      total time =   15953.90 ms /   133 tokens
+slot      release: id  1 | task 669 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 713 | processing task, is_child = 0
+slot update_slots: id  1 | task 713 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 713 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 713 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 713 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.82 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 5.19 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.93 ms, sched copies = 1
+slot print_timing: id  1 | task 713 | 
+prompt eval time =     263.43 ms /   101 tokens (    2.61 ms per token,   383.40 tokens per second)
+       eval time =     674.77 ms /    32 tokens (   21.09 ms per token,    47.42 tokens per second)
+      total time =     938.20 ms /   133 tokens
+slot      release: id  1 | task 713 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 746 | processing task, is_child = 0
+slot update_slots: id  1 | task 746 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 746 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 746 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 746 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.56 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 5.25 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.83 ms, sched copies = 1
+slot print_timing: id  1 | task 746 | 
+prompt eval time =     257.68 ms /   101 tokens (    2.55 ms per token,   391.96 tokens per second)
+       eval time =     670.96 ms /    32 tokens (   20.97 ms per token,    47.69 tokens per second)
+      total time =     928.64 ms /   133 tokens
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot      release: id  1 | task 746 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 779 | processing task, is_child = 0
+slot update_slots: id  1 | task 779 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 779 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 779 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 779 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.53 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.84 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.81 ms, sched copies = 1
+slot print_timing: id  1 | task 779 | 
+prompt eval time =     260.71 ms /   101 tokens (    2.58 ms per token,   387.41 tokens per second)
+       eval time =     671.12 ms /    32 tokens (   20.97 ms per token,    47.68 tokens per second)
+      total time =     931.83 ms /   133 tokens
+slot      release: id  1 | task 779 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 812 | processing task, is_child = 0
+slot update_slots: id  1 | task 812 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 812 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 812 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 812 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.64 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.57 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 3.07 ms, sched copies = 1
+slot print_timing: id  1 | task 812 | 
+prompt eval time =     262.30 ms /   101 tokens (    2.60 ms per token,   385.05 tokens per second)
+       eval time =     671.76 ms /    32 tokens (   20.99 ms per token,    47.64 tokens per second)
+      total time =     934.06 ms /   133 tokens
+slot      release: id  1 | task 812 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.999
+slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  0 | task 845 | processing task, is_child = 0
+slot update_slots: id  0 | task 845 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 29205
+slot update_slots: id  0 | task 845 | n_tokens = 0, memory_seq_rm [0, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 2048, batch.n_tokens = 2048, progress = 0.070125
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.53 ms, sched copies = 1
+slot update_slots: id  0 | task 845 | n_tokens = 2048, memory_seq_rm [2048, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 4096, batch.n_tokens = 2048, progress = 0.140250
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 848 | processing task, is_child = 0
+slot update_slots: id  0 | task 845 | n_tokens = 4096, memory_seq_rm [4096, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 6144, batch.n_tokens = 2048, progress = 0.210375
+slot update_slots: id  0 | task 845 | n_tokens = 6144, memory_seq_rm [6144, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 8192, batch.n_tokens = 2048, progress = 0.280500
+slot update_slots: id  0 | task 845 | n_tokens = 8192, memory_seq_rm [8192, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 10240, batch.n_tokens = 2048, progress = 0.350625
+slot update_slots: id  0 | task 845 | n_tokens = 10240, memory_seq_rm [10240, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 12288, batch.n_tokens = 2048, progress = 0.420750
+slot update_slots: id  0 | task 845 | n_tokens = 12288, memory_seq_rm [12288, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 14336, batch.n_tokens = 2048, progress = 0.490875
+slot update_slots: id  0 | task 845 | n_tokens = 14336, memory_seq_rm [14336, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 16384, batch.n_tokens = 2048, progress = 0.561000
+slot update_slots: id  0 | task 845 | n_tokens = 16384, memory_seq_rm [16384, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 18432, batch.n_tokens = 2048, progress = 0.631125
+slot update_slots: id  0 | task 845 | n_tokens = 18432, memory_seq_rm [18432, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 20480, batch.n_tokens = 2048, progress = 0.701250
+slot update_slots: id  0 | task 845 | n_tokens = 20480, memory_seq_rm [20480, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 22528, batch.n_tokens = 2048, progress = 0.771375
+slot update_slots: id  0 | task 845 | n_tokens = 22528, memory_seq_rm [22528, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 24576, batch.n_tokens = 2048, progress = 0.841500
+slot update_slots: id  0 | task 845 | n_tokens = 24576, memory_seq_rm [24576, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 26624, batch.n_tokens = 2048, progress = 0.911625
+slot update_slots: id  0 | task 845 | n_tokens = 26624, memory_seq_rm [26624, end)
+slot update_slots: id  0 | task 845 | prompt processing progress, n_tokens = 28672, batch.n_tokens = 2048, progress = 0.981750
+slot update_slots: id  0 | task 845 | n_tokens = 28672, memory_seq_rm [28672, end)
+slot init_sampler: id  0 | task 845 | init sampler, took 4.15 ms, tokens: text = 29205, total = 29205
+slot update_slots: id  0 | task 845 | prompt processing done, n_tokens = 29205, batch.n_tokens = 533
+slot update_slots: id  1 | task 848 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 848 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 848 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 848 | prompt processing done, n_tokens = 101, batch.n_tokens = 634
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 10.01 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.91 ms, sched copies = 1
+slot print_timing: id  0 | task 845 | 
+prompt eval time =  212958.98 ms / 29205 tokens (    7.29 ms per token,   137.14 tokens per second)
+       eval time =    6707.52 ms /    32 tokens (  209.61 ms per token,     4.77 tokens per second)
+      total time =  219666.50 ms / 29237 tokens
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot      release: id  0 | task 845 | stop processing: n_tokens = 29236, truncated = 0
+slot print_timing: id  1 | task 848 | 
+prompt eval time =    9184.90 ms /   101 tokens (   90.94 ms per token,    11.00 tokens per second)
+       eval time =    6708.62 ms /    32 tokens (  209.64 ms per token,     4.77 tokens per second)
+      total time =   15893.51 ms /   133 tokens
+slot      release: id  1 | task 848 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 893 | processing task, is_child = 0
+slot update_slots: id  1 | task 893 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 893 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 893 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 893 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.63 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.71 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.87 ms, sched copies = 1
+slot print_timing: id  1 | task 893 | 
+prompt eval time =     259.37 ms /   101 tokens (    2.57 ms per token,   389.40 tokens per second)
+       eval time =     662.86 ms /    32 tokens (   20.71 ms per token,    48.28 tokens per second)
+      total time =     922.23 ms /   133 tokens
+slot      release: id  1 | task 893 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 926 | processing task, is_child = 0
+slot update_slots: id  1 | task 926 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 926 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 926 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 926 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 3.97 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 5.05 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.87 ms, sched copies = 1
+slot print_timing: id  1 | task 926 | 
+prompt eval time =     260.44 ms /   101 tokens (    2.58 ms per token,   387.80 tokens per second)
+       eval time =     660.26 ms /    32 tokens (   20.63 ms per token,    48.47 tokens per second)
+      total time =     920.70 ms /   133 tokens
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot      release: id  1 | task 926 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 959 | processing task, is_child = 0
+slot update_slots: id  1 | task 959 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 959 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 959 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 959 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.66 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.88 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.89 ms, sched copies = 1
+slot print_timing: id  1 | task 959 | 
+prompt eval time =     261.21 ms /   101 tokens (    2.59 ms per token,   386.67 tokens per second)
+       eval time =     660.48 ms /    32 tokens (   20.64 ms per token,    48.45 tokens per second)
+      total time =     921.68 ms /   133 tokens
+slot      release: id  1 | task 959 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 992 | processing task, is_child = 0
+slot update_slots: id  1 | task 992 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 992 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 992 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 992 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.71 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.74 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.90 ms, sched copies = 1
+slot print_timing: id  1 | task 992 | 
+prompt eval time =     260.99 ms /   101 tokens (    2.58 ms per token,   386.99 tokens per second)
+       eval time =     666.91 ms /    32 tokens (   20.84 ms per token,    47.98 tokens per second)
+      total time =     927.90 ms /   133 tokens
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot      release: id  1 | task 992 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 1025 | processing task, is_child = 0
+slot update_slots: id  1 | task 1025 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 1025 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 1025 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 1025 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.73 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 6.53 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.69 ms, sched copies = 1
+slot print_timing: id  1 | task 1025 | 
+prompt eval time =     259.11 ms /   101 tokens (    2.57 ms per token,   389.79 tokens per second)
+       eval time =     663.91 ms /    32 tokens (   20.75 ms per token,    48.20 tokens per second)
+      total time =     923.02 ms /   133 tokens
+slot      release: id  1 | task 1025 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 1058 | processing task, is_child = 0
+slot update_slots: id  1 | task 1058 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 1058 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 1058 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 1058 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.86 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.83 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.81 ms, sched copies = 1
+slot print_timing: id  1 | task 1058 | 
+prompt eval time =     260.42 ms /   101 tokens (    2.58 ms per token,   387.84 tokens per second)
+       eval time =     658.45 ms /    32 tokens (   20.58 ms per token,    48.60 tokens per second)
+      total time =     918.87 ms /   133 tokens
+slot      release: id  1 | task 1058 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 1091 | processing task, is_child = 0
+slot update_slots: id  1 | task 1091 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 1091 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 1091 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 1091 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.69 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 5.10 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.87 ms, sched copies = 1
+slot print_timing: id  1 | task 1091 | 
+prompt eval time =     256.84 ms /   101 tokens (    2.54 ms per token,   393.24 tokens per second)
+       eval time =     661.14 ms /    32 tokens (   20.66 ms per token,    48.40 tokens per second)
+      total time =     917.98 ms /   133 tokens
+slot      release: id  1 | task 1091 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 1124 | processing task, is_child = 0
+slot update_slots: id  1 | task 1124 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 1124 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 1124 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 1124 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.67 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.83 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.90 ms, sched copies = 1
+slot print_timing: id  1 | task 1124 | 
+prompt eval time =     262.01 ms /   101 tokens (    2.59 ms per token,   385.48 tokens per second)
+       eval time =     662.68 ms /    32 tokens (   20.71 ms per token,    48.29 tokens per second)
+      total time =     924.69 ms /   133 tokens
+slot      release: id  1 | task 1124 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.765
+slot launch_slot_: id  1 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist 
+slot launch_slot_: id  1 | task 1157 | processing task, is_child = 0
+slot update_slots: id  1 | task 1157 | new prompt, n_ctx_slot = 32768, n_keep = 0, task.n_tokens = 101
+slot update_slots: id  1 | task 1157 | n_tokens = 0, memory_seq_rm [0, end)
+slot init_sampler: id  1 | task 1157 | init sampler, took 0.01 ms, tokens: text = 101, total = 101
+slot update_slots: id  1 | task 1157 | prompt processing done, n_tokens = 101, batch.n_tokens = 101
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.54 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 4.75 ms, sched copies = 1
+sched_reserve: reserving ...
+sched_reserve:        CPU compute buffer size =   308.75 MiB
+sched_reserve: graph nodes  = 3127
+sched_reserve: graph splits = 1
+sched_reserve: reserve took 2.86 ms, sched copies = 1
+slot print_timing: id  1 | task 1157 | 
+prompt eval time =     261.72 ms /   101 tokens (    2.59 ms per token,   385.91 tokens per second)
+       eval time =     662.76 ms /    32 tokens (   20.71 ms per token,    48.28 tokens per second)
+      total time =     924.48 ms /   133 tokens
+slot      release: id  1 | task 1157 | stop processing: n_tokens = 132, truncated = 0
+srv  update_slots: all slots are idle
+srv  log_server_r: done request: POST /completion 127.0.0.1 200
+srv    operator(): operator(): cleaning up before exit...
+llama_memory_breakdown_print: | memory breakdown [MiB] | total   free     self   model   context   compute    unaccounted |
+llama_memory_breakdown_print: |   - Host               |                 10711 =  4258 +    6144 +     308                |
+llama_memory_breakdown_print: |   - CPU_REPACK         |                 13432 = 13432 +       0 +       0                |

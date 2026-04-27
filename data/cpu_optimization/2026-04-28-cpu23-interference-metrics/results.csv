@@ -1,0 +1,44 @@
+model,quant,class,measurement,value,std_or_unit,notes
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,TTFT_2K_ms,4182.7,ms,prefill 2048 tokens at 489.6 t/s
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,TTFT_8K_ms,24565.9,ms,prefill 8192 tokens at 333.5 t/s
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,TTFT_32K_ms,262407.9,ms,prefill 32768 tokens at 124.9 t/s
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,decode_d0_t/s_5rep_mean,50.64,std=0.291 cv=0.57%,
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,decode_d2K_t/s_5rep_mean,40.12,std=0.095 cv=0.24%,
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,decode_d8K_t/s_5rep_mean,31.83,std=0.162 cv=0.51%,
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,baseline_decode32_5rep_mean,47.99,std=0.30,llama-server short prompt no interference
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,interfered_rep1_t/s,4.77,n=2 reps over 2 trials avg=4.77,FIRST decode under 30K prefill on other slot
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,interfered_reps2-10_mean_t/s,48.33,std=0.20,steady-state continuous batching efficient
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,interfered_all-10_mean_t/s,43.83,,(4.77 + 9*48.33)/10
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,first_decode_TTFT_amplification,9.6x,,baseline 47.99 / interfered rep1 4.77
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,steady_state_decode_stall_pct,+0.7,within noise,positive = slightly faster (cache warmth from concurrent prefill)
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,TTFT_2K_ms,5175.2,ms,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,TTFT_8K_ms,22045.3,ms,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,TTFT_32K_ms,146752.7,ms,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,decode_d0_t/s_5rep_mean,24.01,std=0.063 cv=0.26%,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,decode_d2K_t/s_5rep_mean,23.55,std=0.116 cv=0.49%,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,decode_d8K_t/s_5rep_mean,22.95,std=0.066 cv=0.29%,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,baseline_decode32_5rep_mean,29.95,std=0.13,llama-server
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,interfered_rep1_t/s,26.11,,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,interfered_reps2-10_mean_t/s,30.10,std=0.10,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,interfered_all-10_mean_t/s,29.70,,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,first_decode_TTFT_amplification,1.15x,,29.95/26.11
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,steady_state_decode_stall_pct,+0.5,within noise,
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,TTFT_2K_ms,18799.9,ms,3-4x slower than MoE classes
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,TTFT_8K_ms,77981.1,ms,
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,TTFT_32K_ms,403599.5,ms,6.7 minute TTFT at 32K context
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,decode_d0_t/s_5rep_mean,5.08,std=0.013 cv=0.25%,
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,decode_d2K_t/s_5rep_mean,5.05,std=0.025 cv=0.50%,
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,decode_d8K_t/s_5rep_mean,4.96,std=0.012 cv=0.24%,
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,baseline_decode32_5rep_mean,6.652,std=0.010,llama-server
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,interfered_rep1_t/s,6.137,,
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,interfered_reps2-10_mean_t/s,6.582,std=0.034,
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,interfered_all-10_mean_t/s,6.538,,
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,first_decode_TTFT_amplification,1.08x,,6.652/6.137; least interference-sensitive class
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,steady_state_decode_stall_pct,-1.1,within noise,
+PROXY_class_summary,sync-bound_MoE,Coder-30B Q4_K_M,first_decode_TTFT_amp_max,9.6x,,prefill batches consume 14.9s each at 137 t/s
+PROXY_class_summary,BW-bound_MoE,Qwen3.6-35B Q8_0,first_decode_TTFT_amp_max,1.15x,,prefill batches faster at 250 t/s
+PROXY_class_summary,dense_hybrid,Qwen3.6-27B Q8,first_decode_TTFT_amp_max,1.08x,,uniform compute aligns better with continuous batching
+NOT_RUN,Qwen3-Next-80B-A3B,Q4_K_M,full_4regime_4metric,,,Phase 2.2 deferred 5-model coverage
+NOT_RUN,Qwen3-Coder-REAP-246B-A35B,Q4_K_M,full_4regime_4metric,,,Phase 2.2 deferred 5-model coverage
+NOT_RUN,gemma-4-26B-A4B,Q4_K_M,full_4regime_4metric,,,Phase 2.2 deferred 5-model coverage
+NOT_RUN,Qwen3.6-27B,Q8_0,32K_pp_tg32_throughput,,,~10 min/rep would be 30 min for 3-rep run; deferred
