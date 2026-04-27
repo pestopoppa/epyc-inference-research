@@ -1,0 +1,6 @@
+model,quant,env_GGML_Q6_K_8X8_AVX,chunks_count,final_ppl,final_ppl_std,bit_exact_vs_env0,notes
+Qwen3-Coder-30B-A3B,Q4_K_M,0,32,8.2622,0.27495,reference,generic Q6_K vec-dot
+Qwen3-Coder-30B-A3B,Q4_K_M,1,32,8.2622,0.27495,YES,AVX-512BW 8x8 SIMD kernel; chunks 1-32 byte-identical to env=0
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,0,32,8.1396,0.24168,reference,generic Q6_K vec-dot
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,1,32,8.1396,0.24168,YES,AVX-512BW 8x8 SIMD kernel; chunks 1-32 byte-identical to env=0
+gate_threshold,bit_exact_PPL,both_models,32,,,PASSED,Q6_K SIMD kernel produces byte-identical PPL to generic on the full 32-chunk gate

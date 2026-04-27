@@ -1,0 +1,2 @@
+# pgrep filter at 2026-04-27T11:01:24+00:00 — post-Q6K-full-PPL
+# (no matching processes)
