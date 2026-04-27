@@ -1,0 +1,2 @@
+# pgrep filter at 2026-04-27T14:04:23+00:00 — post-CPU24-2.3
+# (no matching processes; pgrep matches in this filter pattern are shell-wrapper command-line text)

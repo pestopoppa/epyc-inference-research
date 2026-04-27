@@ -1,0 +1,18 @@
+model,quant,class,rep,t_per_s,ipc,cache_miss_pct,dram_io_far_e9,dram_io_near_e9,remote_cache_e9,local_all_e9,cross_numa_pct,wall_seconds,notes
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,sync-bound MoE,1,6.34,0.24,7.90,1.008,0.333,0.383,4.811,21.3,38.59,
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,sync-bound MoE,2,6.34,0.24,7.84,0.992,0.321,0.381,4.810,21.1,38.41,stable across reps
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,sync-bound MoE,mean,6.34,0.24,7.87,1.000,0.327,0.382,4.810,21.2,38.50,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,1,23.77,0.18,10.85,0.400,0.133,0.100,1.276,26.2,11.89,
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,2,23.57,0.18,10.10,0.353,0.118,0.098,1.289,24.3,11.64,stable IPC
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,mean,23.67,0.18,10.48,0.376,0.126,0.099,1.282,25.3,11.77,
+MiniMax-M2.7,Q8_0,giant MoE 230B/A10B,1,11.07,0.28,9.20,1.665,0.559,0.054,4.383,25.8,89.59,cold-load: 26s of model load from disk inflates cycles+IPC
+MiniMax-M2.7,Q8_0,giant MoE 230B/A10B,2,10.98,0.21,9.49,1.753,0.588,0.054,4.098,27.8,63.38,cache-warm: representative steady-state
+MiniMax-M2.7,Q8_0,giant MoE 230B/A10B,mean,11.03,0.21_steady,9.34,1.709,0.574,0.054,4.241,26.8,76.49,
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,1,4.39,0.17,2.56,0.391,0.228,0.170,5.562,8.8,24.73,
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,2,4.41,0.18,2.61,0.392,0.212,0.179,5.590,8.9,23.11,stable across reps
+Qwen3.6-27B,Q8_0,dense/hybrid SSM-Dense,mean,4.40,0.175,2.59,0.392,0.220,0.175,5.576,8.9,23.92,
+attribution_class,sync-bound MoE,REAP-246B,,IPC=0.24 4.8% Zen5 peak,memory-stalled,,,,,21% cross-NUMA at numactl interleave,,,bottleneck=compute_kernel_memory_stalled
+attribution_class,BW-bound frontdoor MoE,Qwen3.6-35B Q8,,IPC=0.18,memory-stalled,,,,,25% cross-NUMA,,,bottleneck=compute_kernel_memory_stalled
+attribution_class,giant MoE,MiniMax-M2.7,,IPC=0.21 cache-warm,memory-stalled,,,,,27% cross-NUMA,,,bottleneck=compute_kernel_memory_stalled
+attribution_class,dense/hybrid,Qwen3.6-27B Q8,,IPC=0.175 LOWEST,memory-stalled,,,,,9% cross-NUMA (3x LOWER than MoE),,,bottleneck=compute_kernel_memory_stalled (universal)
+universal_finding,all_4_classes,IPC_range_0.17_to_0.28,Zen5_peak~5_so_under_5_pct,,,,,,memory-stalled INSIDE compute kernels (not sync not fabric not abnormal cross-NUMA),,,corrected CPU24-narrow finding now confirmed across 4 architectural classes

@@ -1,0 +1,25 @@
+| model                          |       size |     params | backend    | threads | fa | mmap |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | ------: | -: | ---: | --------------: | -------------------: |
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |            tg64 |          4.39 ± 0.00 |
+
+build: b9920cc44 (8936)
+
+ Performance counter stats for 'bash -c LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build/bin OMP_PROC_BIND=spread OMP_PLACES=cores OMP_WAIT_POLICY=active taskset -c 0-95 numactl --interleave=all --physcpubind=0-95 /mnt/raid0/llm/llama.cpp-experimental/build/bin/llama-bench -m /mnt/raid0/llm/models/Qwen3.6-27B-Q8_0.gguf -t 96 -fa 1 -p 0 -n 64 -mmp 0 -r 1 2>&1':
+
+     6899335687383      cycles                                                                  (50.01%)
+     1197357734504      instructions                     #    0.17  insn per cycle              (50.01%)
+      129276538845      branches                                                                (50.00%)
+         393604671      branch-misses                    #    0.30% of all branches             (50.00%)
+       77156100640      cache-references                                                        (49.99%)
+        1971790310      cache-misses                     #    2.56% of all cache refs           (49.99%)
+         391383689      ls_dmnd_fills_from_sys.dram_io_far                                        (49.99%)
+         227537283      ls_dmnd_fills_from_sys.dram_io_near                                        (50.00%)
+         169634251      ls_dmnd_fills_from_sys.remote_cache                                        (50.00%)
+        5562337450      ls_dmnd_fills_from_sys.local_all                                        (50.01%)
+
+      24.726180730 seconds time elapsed
+
+    1591.124642000 seconds user
+       9.912578000 seconds sys
+
+

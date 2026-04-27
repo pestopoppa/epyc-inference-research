@@ -1,0 +1,25 @@
+| model                          |       size |     params | backend    | threads | fa | mmap |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | ------: | -: | ---: | --------------: | -------------------: |
+| minimax-m2 230B.A10B Q8_0      | 226.43 GiB |   228.69 B | CPU        |      96 |  1 |    0 |            tg64 |         10.98 ± 0.00 |
+
+build: b9920cc44 (8936)
+
+ Performance counter stats for 'bash -c LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build/bin OMP_PROC_BIND=spread OMP_PLACES=cores OMP_WAIT_POLICY=active taskset -c 0-95 numactl --interleave=all --physcpubind=0-95 /mnt/raid0/llm/llama.cpp-experimental/build/bin/llama-bench -m /mnt/raid0/llm/models/MiniMax-M2.7-GGUF/Q8_0/MiniMax-M2.7-Q8_0-00001-of-00006.gguf -t 96 -fa 1 -p 0 -n 64 -mmp 0 -r 1 2>&1':
+
+     5463079054061      cycles                                                                  (50.00%)
+     1159022812311      instructions                     #    0.21  insn per cycle              (50.01%)
+      194406707905      branches                                                                (50.01%)
+         484779223      branch-misses                    #    0.25% of all branches             (50.01%)
+       42530720113      cache-references                                                        (50.00%)
+        4035548763      cache-misses                     #    9.49% of all cache refs           (50.00%)
+        1753002441      ls_dmnd_fills_from_sys.dram_io_far                                        (49.99%)
+         588202527      ls_dmnd_fills_from_sys.dram_io_near                                        (49.99%)
+          54253231      ls_dmnd_fills_from_sys.remote_cache                                        (49.99%)
+        4097701610      ls_dmnd_fills_from_sys.local_all                                        (50.00%)
+
+      63.376154624 seconds time elapsed
+
+    1206.699579000 seconds user
+      57.605078000 seconds sys
+
+

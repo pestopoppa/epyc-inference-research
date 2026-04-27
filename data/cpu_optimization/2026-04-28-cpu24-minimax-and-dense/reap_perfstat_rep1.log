@@ -1,0 +1,25 @@
+| model                          |       size |     params | backend    | threads | fa | mmap |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | ------: | -: | ---: | --------------: | -------------------: |
+| qwen3moe ?B Q4_K - Medium      | 138.35 GiB |   246.08 B | CPU        |      96 |  1 |    0 |            tg64 |          6.34 ± 0.00 |
+
+build: b9920cc44 (8936)
+
+ Performance counter stats for 'bash -c LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build/bin OMP_PROC_BIND=spread OMP_PLACES=cores OMP_WAIT_POLICY=active taskset -c 0-95 numactl --interleave=all --physcpubind=0-95 /mnt/raid0/llm/llama.cpp-experimental/build/bin/llama-bench -m /mnt/raid0/llm/models/Qwen3-Coder-REAP-246B-A35B-Q4_K_M.gguf -t 96 -fa 1 -p 0 -n 64 -mmp 0 -r 1 2>&1':
+
+    13263482390000      cycles                                                                  (50.00%)
+     3225286824959      instructions                     #    0.24  insn per cycle              (50.00%)
+      531655004534      branches                                                                (50.00%)
+         516110818      branch-misses                    #    0.10% of all branches             (50.00%)
+       72284728048      cache-references                                                        (50.00%)
+        5710453906      cache-misses                     #    7.90% of all cache refs           (50.00%)
+        1007674743      ls_dmnd_fills_from_sys.dram_io_far                                        (50.00%)
+         333427204      ls_dmnd_fills_from_sys.dram_io_near                                        (50.00%)
+         382790198      ls_dmnd_fills_from_sys.remote_cache                                        (50.00%)
+        4811258296      ls_dmnd_fills_from_sys.local_all                                        (50.00%)
+
+      38.585868914 seconds time elapsed
+
+    2621.345407000 seconds user
+     455.976192000 seconds sys
+
+
