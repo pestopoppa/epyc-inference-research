@@ -1,0 +1,13 @@
+model,quant,threads,t_per_s,cycles,instructions,ipc,cache_refs,cache_misses,cache_miss_pct,dram_io_far,dram_io_near,remote_cache,local_all,total_fills,cross_numa_fraction_pct,wall_seconds,notes
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,96,6.01,6.84e12,2.69e12,0.39,65.0e9,4.98e9,7.68,482e6,152e6,422e6,3580e6,4636e6,19.50,41.22,proper canonical numactl --interleave=all --physcpubind=0-95
+Qwen3.6-35B-A3B,Q8_0,96,21.40,1.29e12,2.51e11,0.19,11.5e9,1.15e9,10.0,87e6,46e6,230e6,1028e6,1391e6,26.10,9.24,proper canonical (comparison; NOT the MiniMax target)
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,1,1.41,,,,,,,,,,,,,,single-thread baseline; scaling efficiency at 96t = 4.27x vs ideal 96x
+hot_function_breakdown,REAP-246B-96t,,,,,,,,,,,,,,,,perf-record 25s decode phase 160k samples
+hot_function,gemv_q4_K_8x8_q8_K,,,,,,,,,,,,,,,,64.37 percent of samples
+hot_function,vec_dot_q6_K_q8_K,,,,,,,,,,,,,,,,15.64 percent of samples
+hot_function,libgomp_internal_sync_offset_0x26580,,,,,,,,,,,,,,,,15.50 percent of samples
+hot_function,compute_forward_flash_attn_ext,,,,,,,,,,,,,,,,0.73 percent of samples
+attribution_class,compute_kernel_memory_stalled,,,,,,,,,,,,,,,,80 percent compute / 15 percent sync; corrected from earlier sync-imbalance hypothesis
+NOT_RUN,MiniMax-M2.7,Q8_0,,,,,,,,,,,,,,,,Phase 2.3 remediation TODO (handoff primary target line 28-29)
+NOT_RUN,Qwen3.5_3.6-27B,Q8_0,,,,,,,,,,,,,,,,Phase 2.3 remediation TODO (finding 11 dense/hybrid coverage)
+NOT_RUN,2-rep_stability_pass,,,,,,,,,,,,,,,,Phase 2.3 remediation TODO (handoff line 38)

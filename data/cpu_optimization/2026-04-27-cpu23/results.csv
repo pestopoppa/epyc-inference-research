@@ -1,0 +1,19 @@
+model,quant,context,test_mode,metric,value,std,delta_vs_2K_pct,notes
+Coder-30B-A3B,Q4_K_M,2K,pp+tg32,t_per_s,429.42,2.60,reference,
+Coder-30B-A3B,Q4_K_M,8K,pp+tg32,t_per_s,340.49,,-21,
+Coder-30B-A3B,Q4_K_M,32K,pp+tg32,t_per_s,126.75,,-70,steep degradation; attention quadratic
+Coder-30B-A3B,Q4_K_M,2K,tg128,t_per_s,45.86,0.07,n/a,plain decode mode
+Qwen3.6-35B-A3B,Q8_0,2K,pp+tg32,t_per_s,344.04,,reference,
+Qwen3.6-35B-A3B,Q8_0,8K,pp+tg32,t_per_s,353.49,,+3,within noise
+Qwen3.6-35B-A3B,Q8_0,32K,pp+tg32,t_per_s,219.69,,-36,better than Coder; different attention layout
+NOT_RUN,interference_scenario,2K_decode_concurrent_32K_prefill,,,,,Phase 2.2 remediation TODO (handoff regime 4)
+NOT_RUN,Coder-30B,Q4_K_M,2K_8K_32K,TTFT,,,,,Phase 2.2 remediation TODO
+NOT_RUN,Coder-30B,Q4_K_M,2K_8K_32K,decode_stall_fraction,,,,,Phase 2.2 remediation TODO
+NOT_RUN,Coder-30B,Q4_K_M,2K_8K_32K,per_iter_latency_variance,,,,,Phase 2.2 remediation TODO
+NOT_RUN,Qwen3.6-35B,Q8_0,2K_8K_32K,TTFT,,,,,Phase 2.2 remediation TODO
+NOT_RUN,Qwen3.6-35B,Q8_0,2K_8K_32K,decode_stall_fraction,,,,,Phase 2.2 remediation TODO
+NOT_RUN,Qwen3.6-35B,Q8_0,2K_8K_32K,per_iter_latency_variance,,,,,Phase 2.2 remediation TODO
+NOT_RUN,Qwen3-Next-80B,Q4_K_M,all_regimes_metrics,,,,,handoff target; deferred from Phase 2.2 (5-model coverage to a future session)
+NOT_RUN,Qwen3-Coder-REAP-246B,Q4_K_M,all_regimes_metrics,,,,,handoff target; deferred
+NOT_RUN,gemma-4-26B-A4B,Q4_K_M,all_regimes_metrics,,,,,handoff target; deferred
+NOT_RUN,Qwen3.5_3.6-27B,Q8_0,all_regimes_metrics,,,,,Phase 2.2 remediation TODO (closes finding 11 dense/hybrid)

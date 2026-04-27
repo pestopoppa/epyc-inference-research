@@ -1,0 +1,31 @@
+phase,run,t_per_s_mean,t_per_s_std,delta_pct_vs_baseline,notes
+A,baseline_no_omp,43.82,0.04,reference,default OpenMP behavior (no env vars)
+A,proc_close_cores,45.91,0.19,+4.8%,
+A,proc_close_threads,46.15,0.05,+5.3%,
+A,proc_spread_cores,46.52,0.12,+6.2%,best in Phase A
+A,proc_spread_threads,45.98,0.06,+4.9%,
+A,proc_master_cores,HUNG,,n/a,killed after 6 min — pathological
+A,proc_false,43.90,0.11,+0.2%,equivalent to baseline
+B,static_chunk1,43.78,0.03,-0.1%,
+B,static_chunk4,44.11,0.04,+0.7%,
+B,dynamic_chunk1,43.84,0.11,0.0%,
+B,dynamic_chunk4,43.83,0.07,0.0%,
+B,guided_chunk1,43.81,0.08,0.0%,
+B,guided_chunk4,43.96,0.04,+0.3%,
+C,active,44.03,0.01,+0.5%,
+C,passive,8.04,0.05,-81.6%,deployment trap
+combined_best,coder30b_q4km_proper_canonical,46.52,0.12,+6.2%,spread+cores+active stack
+followup,reap_baseline,6.14,0.01,reference,REAP-246B Q4_K_M
+followup,reap_spread_cores,6.33,0.01,+3.1%,
+followup,reap_close_threads,6.34,0.00,+3.3%,
+followup,reap_combined_stack,6.33,0.00,+3.1%,
+phaseB_NOTRUN,static_chunk8,,,n/a,Phase 2.1 remediation TODO
+phaseB_NOTRUN,static_chunk16,,,n/a,Phase 2.1 remediation TODO
+phaseB_NOTRUN,dynamic_chunk8,,,n/a,Phase 2.1 remediation TODO
+phaseB_NOTRUN,dynamic_chunk16,,,n/a,Phase 2.1 remediation TODO
+phaseB_NOTRUN,guided_chunk8,,,n/a,Phase 2.1 remediation TODO
+phaseB_NOTRUN,guided_chunk16,,,n/a,Phase 2.1 remediation TODO
+runtime_NOTRUN,libomp_phase_A,,,n/a,Phase 2.1 remediation TODO (libomp not installed)
+runtime_NOTRUN,libomp_phase_B,,,n/a,Phase 2.1 remediation TODO
+runtime_NOTRUN,libomp_phase_C,,,n/a,Phase 2.1 remediation TODO
+arch_NOTRUN,qwen3.5_3.6_27b_dense,,,n/a,Phase 2.6 remediation TODO (closes finding #11 MoE-only test gap)

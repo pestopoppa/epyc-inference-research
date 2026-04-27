@@ -1,0 +1,2 @@
+# pgrep filter: 'llama-(bench|cli|server|perplexity|tokenize|tts)' at 2026-04-27T10:34:37+00:00 — post-LD_DEBUG-smoke
+# (no matching processes; ld_debug smoke runs ran to completion and exited)

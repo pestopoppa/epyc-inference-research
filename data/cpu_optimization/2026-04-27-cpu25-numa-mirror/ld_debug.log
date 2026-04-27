@@ -1,0 +1,60 @@
+    397610:	find library=libc.so.6 [0]; searching
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v4:/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v3:/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v2:/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin		(LD_LIBRARY_PATH)
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v4/libc.so.6
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v3/libc.so.6
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v2/libc.so.6
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/libc.so.6
+    397610:	  trying file=/lib/x86_64-linux-gnu/libc.so.6
+    397610:	calling init: /lib64/ld-linux-x86-64.so.2
+    397610:	calling init: /lib/x86_64-linux-gnu/libc.so.6
+    397610:	find library=libnuma.so.1 [0]; searching
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v4:/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v3:/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v2:/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin		(LD_LIBRARY_PATH)
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v4/libnuma.so.1
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v3/libnuma.so.1
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v2/libnuma.so.1
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/libnuma.so.1
+    397610:	  trying file=/lib/x86_64-linux-gnu/libnuma.so.1
+    397610:	find library=libc.so.6 [0]; searching
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin		(LD_LIBRARY_PATH)
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/libc.so.6
+    397610:	  trying file=/lib/x86_64-linux-gnu/libc.so.6
+    397610:	calling init: /lib64/ld-linux-x86-64.so.2
+    397610:	calling init: /lib/x86_64-linux-gnu/libc.so.6
+    397610:	calling init: /lib/x86_64-linux-gnu/libnuma.so.1
+    397610:	find library=libllama-common.so.0 [0]; searching
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v4:/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v3:/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v2:/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin		(RUNPATH from file ./bin/llama-bench)
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v4/libllama-common.so.0
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v3/libllama-common.so.0
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/glibc-hwcaps/x86-64-v2/libllama-common.so.0
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/libllama-common.so.0
+    397610:	find library=libllama.so.0 [0]; searching
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin		(RUNPATH from file ./bin/llama-bench)
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/libllama.so.0
+    397610:	find library=libggml.so.0 [0]; searching
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin		(RUNPATH from file ./bin/llama-bench)
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/libggml.so.0
+    397610:	find library=libggml-base.so.0 [0]; searching
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin		(RUNPATH from file ./bin/llama-bench)
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/libggml-base.so.0
+    397610:	find library=libstdc++.so.6 [0]; searching
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin		(RUNPATH from file ./bin/llama-bench)
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/libstdc++.so.6
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin:glibc-hwcaps/x86-64-v4:glibc-hwcaps/x86-64-v3:glibc-hwcaps/x86-64-v2:		(RUNPATH from file ./bin/llama-bench)
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/libstdc++.so.6
+    397610:	  trying file=glibc-hwcaps/x86-64-v4/libstdc++.so.6
+    397610:	  trying file=glibc-hwcaps/x86-64-v3/libstdc++.so.6
+    397610:	  trying file=glibc-hwcaps/x86-64-v2/libstdc++.so.6
+    397610:	  trying file=libstdc++.so.6
+    397610:	  trying file=/lib/x86_64-linux-gnu/libstdc++.so.6
+    397610:	find library=libm.so.6 [0]; searching
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin		(RUNPATH from file ./bin/llama-bench)
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/libm.so.6
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin:glibc-hwcaps/x86-64-v4:glibc-hwcaps/x86-64-v3:glibc-hwcaps/x86-64-v2:		(RUNPATH from file ./bin/llama-bench)
+    397610:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin/libm.so.6
+    397610:	  trying file=glibc-hwcaps/x86-64-v4/libm.so.6
+    397610:	  trying file=glibc-hwcaps/x86-64-v3/libm.so.6
+    397610:	  trying file=glibc-hwcaps/x86-64-v2/libm.so.6
+    397610:	  trying file=libm.so.6
+    397610:	  trying file=/lib/x86_64-linux-gnu/libm.so.6
+    397610:	find library=libgcc_s.so.1 [0]; searching
+    397610:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_mirror/bin		(RUNPATH from file ./bin/llama-bench)

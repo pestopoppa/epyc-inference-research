@@ -1,0 +1,9 @@
+model,quant,test_mode,baseline_t_per_s,baseline_std,mirror4_t_per_s,mirror4_std,delta_pct,run_date,notes
+Coder-30B-A3B,Q4_K_M,tg128,48.16,0.15,47.66,0.04,-1.0,2026-04-27,original Phase 2 measurement; within noise
+Qwen3.6-35B-A3B,Q8_0,tg64,23.30,0.02,23.45,0.02,+0.6,2026-04-27,original Phase 2 measurement; within noise
+Coder-30B-A3B,Q4_K_M,tg64,47.26,0.06,46.97,0.15,-0.6,2026-04-27 evening,backfill smoke re-confirmation
+PPL_check,Coder-30B-A3B-Q4_K_M,wiki_chunks_1-12,11.1215,0.62430,11.1215,0.62430,bit-exact,2026-04-27,byte-identical PPL between baseline and mirror=4
+mirror_log_evidence,Coder-30B-A3B-Q4_K_M,,,,,,,2026-04-27,"cpu-repack-mirror: 13.1 GiB primary on node 0 + 3 node replicas (mirror=4)"
+thread_distribution_evidence,GGML_NUMA_MIRROR_DEBUG=1,,,,,,,2026-04-27,cores 0-23 -> node 0; 24-47 -> node 1; 48-71 -> node 2; 72-95 -> node 3 (96 threads each correctly mapped via getcpu(2))
+NOT_RUN,Qwen3.5_3.6-27B,Q8_0,,,,,,,Phase 2.6 remediation TODO (closes finding 11 cross-architecture coverage gap)
+gate_threshold,Coder-30B-A3B,Q4_K_M,>=+25%,,,,FAILED,2026-04-27,Phase 2 throughput gate: needed +25% over 47.98 baseline; got -1.0% / -0.6%
