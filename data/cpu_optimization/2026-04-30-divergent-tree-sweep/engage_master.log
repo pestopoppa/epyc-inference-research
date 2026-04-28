@@ -1,0 +1,82 @@
+=== boot K=4 --verbose ===
+Tue Apr 28 18:56:50 UTC 2026
+  pid=1936438
+  ready after 6s
+  --- p005_t0 / binary at 18:57:26 ---
+  --- p005_t0 / lru at 18:57:31 ---
+  --- p005_t0 / moving at 18:57:41 ---
+  --- p005_t0 / haiku at 18:57:50 ---
+  --- p005_t0 / conscious at 18:58:01 ---
+  --- p001_t0 / binary at 18:58:09 ---
+  --- p001_t0 / lru at 18:58:17 ---
+  --- p001_t0 / moving at 18:58:28 ---
+  --- p001_t0 / haiku at 18:58:37 ---
+  --- p001_t0 / conscious at 18:58:48 ---
+  --- p005_t7 / binary at 18:58:55 ---
+  --- p005_t7 / lru at 18:59:03 ---
+  --- p005_t7 / moving at 18:59:08 ---
+  --- p005_t7 / haiku at 18:59:19 ---
+  --- p005_t7 / conscious at 18:59:31 ---
+  --- p001_t7 / binary at 18:59:42 ---
+  --- p001_t7 / lru at 18:59:50 ---
+  --- p001_t7 / moving at 19:00:01 ---
+  --- p001_t7 / haiku at 19:00:07 ---
+  --- p001_t7 / conscious at 19:00:17 ---
+
+=== alt_paths engagement summary ===
+(rows with alt > 0 = K-parallel verify actually triggered)
+slot update_batch: id  3 | task 0 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=3 paths
+slot update_batch: id  3 | task 0 | numa_select_top_k_alt_paths: K=4, greedy=5 tokens, alt=0 paths
+slot update_batch: id  3 | task 0 | numa_select_top_k_alt_paths: K=4, greedy=5 tokens, alt=2 paths
+slot update_batch: id  3 | task 0 | numa_select_top_k_alt_paths: K=4, greedy=10 tokens, alt=3 paths
+slot update_batch: id  3 | task 0 | numa_select_top_k_alt_paths: K=4, greedy=16 tokens, alt=0 paths
+slot update_batch: id  2 | task 13 | numa_select_top_k_alt_paths: K=4, greedy=6 tokens, alt=3 paths
+slot update_batch: id  2 | task 13 | numa_select_top_k_alt_paths: K=4, greedy=13 tokens, alt=2 paths
+slot update_batch: id  2 | task 13 | numa_select_top_k_alt_paths: K=4, greedy=24 tokens, alt=0 paths
+slot update_batch: id  2 | task 13 | numa_select_top_k_alt_paths: K=4, greedy=17 tokens, alt=0 paths
+slot update_batch: id  2 | task 13 | numa_select_top_k_alt_paths: K=4, greedy=9 tokens, alt=0 paths
+slot update_batch: id  2 | task 13 | numa_select_top_k_alt_paths: K=4, greedy=6 tokens, alt=2 paths
+slot update_batch: id  1 | task 33 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=3 paths
+slot update_batch: id  1 | task 33 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=3 paths
+slot update_batch: id  1 | task 33 | numa_select_top_k_alt_paths: K=4, greedy=5 tokens, alt=0 paths
+slot update_batch: id  1 | task 63 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=0 paths
+slot update_batch: id  1 | task 63 | numa_select_top_k_alt_paths: K=4, greedy=8 tokens, alt=3 paths
+slot update_batch: id  1 | task 63 | numa_select_top_k_alt_paths: K=4, greedy=5 tokens, alt=2 paths
+slot update_batch: id  1 | task 63 | numa_select_top_k_alt_paths: K=4, greedy=7 tokens, alt=2 paths
+slot update_batch: id  1 | task 63 | numa_select_top_k_alt_paths: K=4, greedy=5 tokens, alt=0 paths
+slot update_batch: id  1 | task 63 | numa_select_top_k_alt_paths: K=4, greedy=9 tokens, alt=3 paths
+slot update_batch: id  0 | task 95 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=0 paths
+slot update_batch: id  0 | task 95 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=0 paths
+slot update_batch: id  0 | task 95 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=2 paths
+slot update_batch: id  0 | task 95 | numa_select_top_k_alt_paths: K=4, greedy=9 tokens, alt=3 paths
+slot update_batch: id  0 | task 95 | numa_select_top_k_alt_paths: K=4, greedy=7 tokens, alt=0 paths
+slot update_batch: id  0 | task 95 | numa_select_top_k_alt_paths: K=4, greedy=6 tokens, alt=0 paths
+slot update_batch: id  3 | task 115 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=3 paths
+slot update_batch: id  3 | task 115 | numa_select_top_k_alt_paths: K=4, greedy=5 tokens, alt=0 paths
+slot update_batch: id  3 | task 115 | numa_select_top_k_alt_paths: K=4, greedy=5 tokens, alt=2 paths
+slot update_batch: id  3 | task 115 | numa_select_top_k_alt_paths: K=4, greedy=10 tokens, alt=3 paths
+slot update_batch: id  3 | task 115 | numa_select_top_k_alt_paths: K=4, greedy=16 tokens, alt=0 paths
+slot update_batch: id  2 | task 128 | numa_select_top_k_alt_paths: K=4, greedy=6 tokens, alt=3 paths
+slot update_batch: id  2 | task 128 | numa_select_top_k_alt_paths: K=4, greedy=13 tokens, alt=2 paths
+slot update_batch: id  2 | task 128 | numa_select_top_k_alt_paths: K=4, greedy=24 tokens, alt=0 paths
+slot update_batch: id  2 | task 128 | numa_select_top_k_alt_paths: K=4, greedy=17 tokens, alt=0 paths
+slot update_batch: id  2 | task 128 | numa_select_top_k_alt_paths: K=4, greedy=9 tokens, alt=0 paths
+slot update_batch: id  2 | task 128 | numa_select_top_k_alt_paths: K=4, greedy=6 tokens, alt=2 paths
+slot update_batch: id  1 | task 148 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=3 paths
+slot update_batch: id  1 | task 148 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=3 paths
+slot update_batch: id  1 | task 148 | numa_select_top_k_alt_paths: K=4, greedy=5 tokens, alt=0 paths
+slot update_batch: id  1 | task 178 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=0 paths
+slot update_batch: id  1 | task 178 | numa_select_top_k_alt_paths: K=4, greedy=8 tokens, alt=3 paths
+slot update_batch: id  1 | task 178 | numa_select_top_k_alt_paths: K=4, greedy=5 tokens, alt=2 paths
+slot update_batch: id  1 | task 178 | numa_select_top_k_alt_paths: K=4, greedy=7 tokens, alt=2 paths
+slot update_batch: id  1 | task 178 | numa_select_top_k_alt_paths: K=4, greedy=5 tokens, alt=0 paths
+slot update_batch: id  1 | task 178 | numa_select_top_k_alt_paths: K=4, greedy=9 tokens, alt=3 paths
+slot update_batch: id  0 | task 210 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=0 paths
+slot update_batch: id  0 | task 210 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=0 paths
+slot update_batch: id  0 | task 210 | numa_select_top_k_alt_paths: K=4, greedy=4 tokens, alt=2 paths
+slot update_batch: id  0 | task 210 | numa_select_top_k_alt_paths: K=4, greedy=9 tokens, alt=3 paths
+
+=== K-parallel verify hit count ===
+62
+
+=== completed at Tue Apr 28 19:00:29 UTC 2026 ===
