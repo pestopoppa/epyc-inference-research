@@ -1,0 +1,8 @@
+config,threads,numa,t/s,std,note
+single,96,interleave-all,68.22,29.07,baseline (over-threaded)
+quarter-solo,24,node-0,113.93,15.81,1 NUMA quarter alone
+quarter-parallel-Q0,24,node-0,114.95,1.35,4 quarters launched in parallel
+quarter-parallel-Q1,24,node-1,101.43,2.42,
+quarter-parallel-Q2,24,node-2,98.16,3.51,
+quarter-parallel-Q3,24,node-3,101.94,1.79,
+aggregate,96,4-NUMA,416.48,,sum of 4 parallel quarters; 6.10× single
