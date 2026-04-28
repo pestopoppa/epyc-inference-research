@@ -1,0 +1,20 @@
+=== boot server K=4 ===
+Tue Apr 28 15:55:15 UTC 2026
+  server pid=1878630
+  server ready after 6s
+--- request p0_r0 at 15:55:50 ---
+--- request p1_r0 at 15:55:55 ---
+--- request p2_r0 at 15:56:01 ---
+--- request p0_r1 at 15:56:07 ---
+--- request p1_r1 at 15:56:12 ---
+--- request p2_r1 at 15:56:18 ---
+=== kill server ===
+  done at Tue Apr 28 15:56:27 UTC 2026
+
+=== state-sync timing summary ===
+slot update_slots: id  3 | task 0 | numa one-shot state sync: K=4, 62.81 MiB/ctx, total 17.25 ms across 3 aux ctxs
+slot update_slots: id  2 | task 13 | numa one-shot state sync: K=4, 62.81 MiB/ctx, total 17.67 ms across 3 aux ctxs
+slot update_slots: id  1 | task 33 | numa one-shot state sync: K=4, 62.81 MiB/ctx, total 17.47 ms across 3 aux ctxs
+slot update_slots: id  1 | task 63 | numa one-shot state sync: K=4, 62.81 MiB/ctx, total 18.05 ms across 3 aux ctxs
+slot update_slots: id  0 | task 76 | numa one-shot state sync: K=4, 62.81 MiB/ctx, total 18.12 ms across 3 aux ctxs
+slot update_slots: id  3 | task 96 | numa one-shot state sync: K=4, 62.81 MiB/ctx, total 17.56 ms across 3 aux ctxs

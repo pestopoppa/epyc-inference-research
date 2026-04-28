@@ -1,0 +1,40 @@
+=== Config: k1 (numa-q=1, psplit=0.05) ===
+Tue Apr 28 16:29:22 UTC 2026
+  ready after 5s
+  --- p0_r0 at 16:29:56 ---
+  --- p1_r0 at 16:30:01 ---
+  --- p2_r0 at 16:30:13 ---
+  --- p0_r1 at 16:30:22 ---
+  --- p1_r1 at 16:30:27 ---
+  --- p2_r1 at 16:30:39 ---
+  done at Tue Apr 28 16:30:51 UTC 2026
+=== Config: k4 (numa-q=4, psplit=0.05) ===
+Tue Apr 28 16:30:51 UTC 2026
+  ready after 6s
+  --- p0_r0 at 16:31:27 ---
+  --- p1_r0 at 16:31:32 ---
+  --- p2_r0 at 16:31:50 ---
+  --- p0_r1 at 16:32:02 ---
+  --- p1_r1 at 16:32:10 ---
+  --- p2_r1 at 16:32:28 ---
+  done at Tue Apr 28 16:32:45 UTC 2026
+
+=== Aggregate results ===
+--- k1 ---
+  comp_final_k1_p0_r0.json: 20.084146296687404 t/s, accept=55/55
+  comp_final_k1_p0_r1.json: 20.343881529948895 t/s, accept=55/55
+  comp_final_k1_p1_r0.json: 5.941133026052983 t/s, accept=33/33
+  comp_final_k1_p1_r1.json: 5.980280585420879 t/s, accept=33/33
+  comp_final_k1_p2_r0.json: 7.984291903715928 t/s, accept=14/14
+  comp_final_k1_p2_r1.json: 8.08459211906381 t/s, accept=14/14
+--- k4 ---
+  comp_final_k4_p0_r0.json: 15.180895791452444 t/s, accept=55/55
+  comp_final_k4_p0_r1.json: 10.1227718237075 t/s, accept=55/55
+  comp_final_k4_p1_r0.json: 3.8608918261964043 t/s, accept=32/32
+  comp_final_k4_p1_r1.json: 3.8343383693373707 t/s, accept=32/32
+  comp_final_k4_p2_r0.json: 6.221838282951512 t/s, accept=12/12
+  comp_final_k4_p2_r1.json: 5.2906037719690255 t/s, accept=12/12
+
+=== K-parallel verify hit count (k4 only) ===
+0
+0
