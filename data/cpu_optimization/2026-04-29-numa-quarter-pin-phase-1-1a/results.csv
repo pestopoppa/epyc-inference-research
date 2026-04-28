@@ -1,8 +1,19 @@
-config,model,attempt,outcome,notes
-foundation_v1_K4,Qwen2.5-0.5B-Instruct,smoke,OK,4 NUMA-pinned target ctxs created
-foundation_v1_K4,Qwen3.6-35B-A3B-Q8,bench,SEGFAULT,affinity mask EINVAL during slot init
-foundation_v2_K4,Qwen2.5-0.5B-Instruct,smoke,OK,primary ctx pinned to quarter 0
-foundation_v2_K4,Qwen3.6-35B-A3B-Q8,bench,SEGFAULT,same affinity mask EINVAL
-foundation_v3_K4,Qwen2.5-0.5B-Instruct,smoke,OK,K=4 parses+inactive (rolled-back)
-foundation_v3_K1,Qwen3.6-35B-A3B-Q8,bench,ASSERT,speculative.cpp:1066 GGML_ASSERT(n_chars<0) — pre-existing bug
-foundation_v3_K4,Qwen3.6-35B-A3B-Q8,bench,ASSERT,same — K=4 inactive equivalent to K=1 path
+config,prompt,rep,t_per_s,draft_n,draft_n_accepted
+k4,p0,r0,null,null,null
+k4,p0,r1,20.4198,null,null
+k4,p0,r2,6.0257,null,null
+k4,p1,r0,17.9299,55,55
+k4,p1,r1,20.3680,55,55
+k4,p1,r2,20.6429,55,55
+k4,p2,r0,6.0257,33,33
+k4,p2,r1,6.1324,33,33
+k4,p2,r2,6.1586,33,33
+k1,p0,r0,null,null,null
+k1,p0,r1,null,null,null
+k1,p0,r2,5.9487,null,null
+k1,p1,r0,19.8474,55,55
+k1,p1,r1,20.2762,55,55
+k1,p1,r2,20.2278,55,55
+k1,p2,r0,5.9488,33,33
+k1,p2,r1,5.8938,33,33
+k1,p2,r2,5.9605,33,33
