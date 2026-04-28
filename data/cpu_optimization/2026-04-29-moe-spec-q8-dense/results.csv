@@ -1,0 +1,11 @@
+model,quant,phase,B,B_pct,t/s_mean,t/s_std,delta_pct,note
+Qwen3.6-35B-A3B,Q8_0,pp32,0,off,126.68,3.41,reference,baseline
+Qwen3.6-35B-A3B,Q8_0,pp32,192,75,97.67,14.66,-22.9,light budget
+Qwen3.6-35B-A3B,Q8_0,pp32,128,50,53.42,7.48,-57.8,mid budget
+Qwen3.6-35B-A3B,Q8_0,pp32,64,25,60.50,6.18,-52.2,aggressive
+Qwen3.6-35B-A3B,Q8_0,pp32,32,12.5,56.26,9.87,-55.6,very aggressive
+Qwen3.6-35B-A3B,Q8_0,pp64,0,off,132.40,29.37,reference,baseline pp64
+Qwen3.6-35B-A3B,Q8_0,pp64,192,75,92.80,22.06,-29.9,
+Qwen3.6-35B-A3B,Q8_0,pp64,128,50,135.65,9.71,+2.5,outlier; high baseline std on pp64
+Qwen3.6-35B-A3B,Q8_0,pp64,64,25,86.77,12.89,-34.5,
+Qwen3.6-27B,Q8_0,n/a,n/a,n/a,n/a,n/a,n/a,No MoE layers (hybrid SSM-Dense); MoE-Spec does not fire
