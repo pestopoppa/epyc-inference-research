@@ -1,0 +1,19 @@
+model,quant,prompt_size,B,n_expert,reps,mean_tps,std_tps,delta_vs_B0_pct,ppl_chunk1,ppl_chunk2,ppl_chunk3,notes
+Coder-30B-A3B,Q4_K_M,32,0,128,5,319.68,11.33,reference,7.5697,10.3951,9.8567,run1
+Coder-30B-A3B,Q4_K_M,32,0,128,5,323.01,9.38,reference,,,,run2
+Coder-30B-A3B,Q4_K_M,32,128,128,3,,,bit-exact,7.5697,10.3951,9.8567,gate-disabled (B>=n_expert) confirms baseline equivalence
+Coder-30B-A3B,Q4_K_M,32,96,128,5,315.20,10.80,-1.4 (noise),7.3453,10.3498,9.7467,run1
+Coder-30B-A3B,Q4_K_M,32,96,128,5,319.98,9.40,-1.0 (noise),,,,run2
+Coder-30B-A3B,Q4_K_M,32,64,128,5,346.65,5.11,+8.4,8.2957,10.8662,10.5189,run1
+Coder-30B-A3B,Q4_K_M,32,64,128,5,342.74,7.54,+6.7,,,,run2
+Coder-30B-A3B,Q4_K_M,32,32,128,5,393.17,2.72,+21.7,,,,quality cost likely high
+Coder-30B-A3B,Q4_K_M,64,0,128,5,402.28,8.04,reference,,,,
+Coder-30B-A3B,Q4_K_M,64,96,128,5,407.03,7.12,+1.2 (noise),,,,
+Coder-30B-A3B,Q4_K_M,64,64,128,5,429.25,2.69,+6.7,,,,
+Coder-30B-A3B,Q4_K_M,64,32,128,5,461.13,2.80,+14.6,,,,quality cost likely high
+REAP-246B,Q4_K_M,32,0,80,5,35.64,5.77,reference,6.2675,8.7866,9.3042,run1 (high std; noisy baseline)
+REAP-246B,Q4_K_M,32,0,80,5,45.23,0.99,reference,,,,run2 (corrected baseline)
+REAP-246B,Q4_K_M,32,80,80,5,44.89,1.06,bit-exact,,,,gate-disabled (B>=n_expert) confirms baseline equivalence
+REAP-246B,Q4_K_M,32,60,80,5,42.19,2.02,-6.7 (likely noise vs run2 baseline),6.3077,8.8511,9.3639,minimal PPL drift but throughput unclear
+REAP-246B,Q4_K_M,32,40,80,5,52.11,0.58,+15.2,7.4159,10.2422,11.4412,+23% PPL drift
+REAP-246B,Q4_K_M,32,20,80,5,62.49,0.07,+38.2,9.6891,12.7861,15.7923,+70% PPL drift
