@@ -1,0 +1,10 @@
+target,drafter,shape,p_split,rep,t/s,accept_n,draft_n,accept_pct,note
+Qwen3.6-35B-A3B-Q8,n/a,pp32,n/a,1-5,104.21,,,,baseline forward-pass (no spec-dec)
+Qwen3.6-35B-A3B-Q8,Qwen3-1.7B-Q8,linear,0,0,,,,,EMPTY (server warmup race)
+Qwen3.6-35B-A3B-Q8,Qwen3-1.7B-Q8,linear,0,1,6.95,19,19,100.0,binary search prompt
+Qwen3.6-35B-A3B-Q8,Qwen3-1.7B-Q8,linear,0,2,6.66,43,43,100.0,LRU cache prompt
+Qwen3.6-35B-A3B-Q8,Qwen3-1.7B-Q8,tree,0.05,0,,,,,EMPTY (server warmup race)
+Qwen3.6-35B-A3B-Q8,Qwen3-1.7B-Q8,tree,0.05,1,7.09,19,19,100.0,binary search prompt
+Qwen3.6-35B-A3B-Q8,Qwen3-1.7B-Q8,tree,0.05,2,6.67,43,43,100.0,LRU cache prompt
+Qwen3.6-35B-A3B-Q8,Qwen3-1.7B-Q8,linear,0,avg,6.80±0.20,,,100.0,gate ref
+Qwen3.6-35B-A3B-Q8,Qwen3-1.7B-Q8,tree,0.05,avg,6.88±0.30,,,100.0,+1.2% within noise
