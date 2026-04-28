@@ -1,0 +1,45 @@
+=== Config: k1 (numa-q=1) ===
+Tue Apr 28 22:47:38 UTC 2026
+  ready after 5s
+  --- p0_r0 at 22:48:12 ---
+  --- p1_r0 at 22:48:34 ---
+  --- p2_r0 at 22:48:56 ---
+  --- p0_r1 at 22:49:15 ---
+  --- p1_r1 at 22:49:38 ---
+  --- p2_r1 at 22:49:59 ---
+  done at Tue Apr 28 22:50:21 UTC 2026
+=== Config: k4 (numa-q=4) ===
+Tue Apr 28 22:50:21 UTC 2026
+  ready after 5s
+  --- p0_r0 at 22:50:55 ---
+  --- p1_r0 at 22:51:39 ---
+  --- p2_r0 at 22:52:18 ---
+  --- p0_r1 at 22:52:52 ---
+  --- p1_r1 at 22:53:39 ---
+  --- p2_r1 at 22:54:18 ---
+  done at Tue Apr 28 22:54:55 UTC 2026
+
+=== aggregate ===
+--- k1 ---
+  comp_dense_k1_p0_r0.json: 3.1496354395404835 t/s, accept=48/48
+  comp_dense_k1_p0_r1.json: 3.137836478417887 t/s, accept=48/48
+  comp_dense_k1_p1_r0.json: 3.3511229089254853 t/s, accept=47/47
+  comp_dense_k1_p1_r1.json: 3.3544808893651323 t/s, accept=47/47
+  comp_dense_k1_p2_r0.json: 3.824369191216428 t/s, accept=49/49
+  comp_dense_k1_p2_r1.json: 3.830852995685143 t/s, accept=49/49
+--- k4 ---
+  comp_dense_k4_p0_r0.json: 1.5554856181136494 t/s, accept=48/48
+  comp_dense_k4_p0_r1.json: 1.4525994005258456 t/s, accept=48/48
+  comp_dense_k4_p1_r0.json: 1.7225094820782711 t/s, accept=47/47
+  comp_dense_k4_p1_r1.json: 1.7413156913385162 t/s, accept=47/47
+  comp_dense_k4_p2_r0.json: 2.011983499471823 t/s, accept=49/49
+  comp_dense_k4_p2_r1.json: 1.9696799774767095 t/s, accept=49/49
+
+=== K-parallel verify hits + winner_ctx (k4 only) ===
+40
+
+     40 winner_ctx=0,
+
+=== aux-win rounds (winner_ctx != 0): did aux deliver MORE accepted than greedy? ===
+
+completed at Tue Apr 28 22:54:56 UTC 2026

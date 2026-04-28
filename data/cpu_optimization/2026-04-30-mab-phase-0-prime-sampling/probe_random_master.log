@@ -1,0 +1,61 @@
+=== coder / linear (temp=0.7, p_split=0, seed=random) ===
+Tue Apr 28 23:03:30 UTC 2026
+  ready after 5s
+  --- coder/linear/rand p0_r0 at 23:04:04 ---
+  --- coder/linear/rand p1_r0 at 23:04:06 ---
+  --- coder/linear/rand p2_r0 at 23:04:09 ---
+  --- coder/linear/rand p0_r1 at 23:04:12 ---
+  --- coder/linear/rand p1_r1 at 23:04:15 ---
+  --- coder/linear/rand p2_r1 at 23:04:17 ---
+  --- coder/linear/rand p0_r2 at 23:04:20 ---
+  --- coder/linear/rand p1_r2 at 23:04:23 ---
+  --- coder/linear/rand p2_r2 at 23:04:26 ---
+  done at Tue Apr 28 23:04:32 UTC 2026
+=== coder / tree (temp=0.7, p_split=0.05, seed=random) ===
+Tue Apr 28 23:04:32 UTC 2026
+  ready after 5s
+  --- coder/tree/rand p0_r0 at 23:05:06 ---
+  --- coder/tree/rand p1_r0 at 23:05:09 ---
+  --- coder/tree/rand p2_r0 at 23:05:11 ---
+  --- coder/tree/rand p0_r1 at 23:05:14 ---
+  --- coder/tree/rand p1_r1 at 23:05:17 ---
+  --- coder/tree/rand p2_r1 at 23:05:20 ---
+  --- coder/tree/rand p0_r2 at 23:05:23 ---
+  --- coder/tree/rand p1_r2 at 23:05:25 ---
+  --- coder/tree/rand p2_r2 at 23:05:27 ---
+  done at Tue Apr 28 23:05:33 UTC 2026
+
+=== aggregate (random-seed, temp=0.7) ===
+--- coder / linear ---
+  comp_rand_coder_linear_p0_r0.json: 36.58658587128953 t/s, accept=38/73 | head:  You must use the binary search algorithm.  def binary_searc
+  comp_rand_coder_linear_p0_r1.json: 36.896603609986755 t/s, accept=38/75 | head:  The list must be sorted in ascending order. ```python def b
+  comp_rand_coder_linear_p0_r2.json: 42.85706632666727 t/s, accept=43/63 | head:    def binary_search(arr, x):      # Your code here      ret
+  comp_rand_coder_linear_p1_r0.json: 50.03897567089366 t/s, accept=50/76 | head:   ```python from collections import OrderedDict  class LRUCa
+  comp_rand_coder_linear_p1_r1.json: 39.786495717356736 t/s, accept=40/62 | head:  The cache should support the following operations:  1. `get
+  comp_rand_coder_linear_p1_r2.json: 33.26320341280467 t/s, accept=41/101 | head:  The cache should have a fixed maximum size and automaticall
+  comp_rand_coder_linear_p2_r0.json: 34.22802173265455 t/s, accept=34/69 | head:  The function should take a filename, column name, and windo
+  comp_rand_coder_linear_p2_r1.json: 34.52885911254358 t/s, accept=35/76 | head:  The function should handle missing values appropriately and
+  comp_rand_coder_linear_p2_r2.json: 32.6584931983585 t/s, accept=32/73 | head:  The function should accept a CSV file path, column name, an
+--- coder / tree ---
+  comp_rand_coder_tree_p0_r0.json: 45.03404644276771 t/s, accept=45/62 | head:  The function should be recursive. def binary_search_recursi
+  comp_rand_coder_tree_p0_r1.json: 38.82694104371671 t/s, accept=39/69 | head:   def binary_search(arr, target):     """     Performs binar
+  comp_rand_coder_tree_p0_r2.json: 53.595370029971534 t/s, accept=51/70 | head:  Do not use built-in binary search functions. ```python def 
+  comp_rand_coder_tree_p1_r0.json: 37.27296975880895 t/s, accept=36/66 | head:  You are not allowed to use any external libraries or module
+  comp_rand_coder_tree_p1_r1.json: 45.254180001329345 t/s, accept=44/66 | head:  The LRU cache should have a fixed capacity and evict the le
+  comp_rand_coder_tree_p1_r2.json: 50.753692331117094 t/s, accept=49/76 | head:   ```python from collections import OrderedDict  class LRUCa
+  comp_rand_coder_tree_p2_r0.json: 32.24701211278392 t/s, accept=33/78 | head:  The function should take a CSV file path, column name, and 
+  comp_rand_coder_tree_p2_r1.json: 34.54421605679933 t/s, accept=33/74 | head:  The function should handle edge cases, such as when N is la
+  comp_rand_coder_tree_p2_r2.json: 35.87918581157597 t/s, accept=35/72 | head:  The function should: 1. Load the CSV file into a pandas Dat
+
+=== content diff: linear vs tree (random seeds — should DIFFER) ===
+  p0_r0: DIFFER
+  p0_r1: DIFFER
+  p0_r2: DIFFER
+  p1_r0: DIFFER
+  p1_r1: DIFFER
+  p1_r2: DIFFER
+  p2_r0: DIFFER
+  p2_r1: DIFFER
+  p2_r2: DIFFER
+
+completed at Tue Apr 28 23:05:33 UTC 2026

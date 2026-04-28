@@ -1,0 +1,96 @@
+=== coder / linear (temp=0.7, p_split=0) ===
+Tue Apr 28 22:55:52 UTC 2026
+  ready after 5s
+  --- coder/linear p0_r0 at 22:56:26 ---
+  --- coder/linear p1_r0 at 22:56:28 ---
+  --- coder/linear p2_r0 at 22:56:31 ---
+  --- coder/linear p0_r1 at 22:56:34 ---
+  --- coder/linear p1_r1 at 22:56:36 ---
+  --- coder/linear p2_r1 at 22:56:38 ---
+  --- coder/linear p0_r2 at 22:56:41 ---
+  --- coder/linear p1_r2 at 22:56:44 ---
+  --- coder/linear p2_r2 at 22:56:45 ---
+  done at Tue Apr 28 22:56:51 UTC 2026
+=== coder / tree (temp=0.7, p_split=0.05) ===
+Tue Apr 28 22:56:51 UTC 2026
+  ready after 5s
+  --- coder/tree p0_r0 at 22:57:25 ---
+  --- coder/tree p1_r0 at 22:57:27 ---
+  --- coder/tree p2_r0 at 22:57:30 ---
+  --- coder/tree p0_r1 at 22:57:33 ---
+  --- coder/tree p1_r1 at 22:57:35 ---
+  --- coder/tree p2_r1 at 22:57:37 ---
+  --- coder/tree p0_r2 at 22:57:40 ---
+  --- coder/tree p1_r2 at 22:57:42 ---
+  --- coder/tree p2_r2 at 22:57:44 ---
+  done at Tue Apr 28 22:57:50 UTC 2026
+=== reap / linear (temp=0.7, p_split=0) ===
+Tue Apr 28 22:57:50 UTC 2026
+  ready after 14s
+  --- reap/linear p0_r0 at 22:58:35 ---
+  --- reap/linear p1_r0 at 22:58:47 ---
+  --- reap/linear p2_r0 at 22:58:55 ---
+  --- reap/linear p0_r1 at 22:59:09 ---
+  --- reap/linear p1_r1 at 22:59:18 ---
+  --- reap/linear p2_r1 at 22:59:26 ---
+  --- reap/linear p0_r2 at 22:59:40 ---
+  --- reap/linear p1_r2 at 22:59:49 ---
+  --- reap/linear p2_r2 at 22:59:57 ---
+  done at Tue Apr 28 23:00:15 UTC 2026
+=== reap / tree (temp=0.7, p_split=0.05) ===
+Tue Apr 28 23:00:15 UTC 2026
+  ready after 15s
+  --- reap/tree p0_r0 at 23:01:01 ---
+  --- reap/tree p1_r0 at 23:01:13 ---
+  --- reap/tree p2_r0 at 23:01:22 ---
+  --- reap/tree p0_r1 at 23:01:35 ---
+  --- reap/tree p1_r1 at 23:01:44 ---
+  --- reap/tree p2_r1 at 23:01:53 ---
+  --- reap/tree p0_r2 at 23:02:06 ---
+  --- reap/tree p1_r2 at 23:02:15 ---
+  --- reap/tree p2_r2 at 23:02:23 ---
+  done at Tue Apr 28 23:02:41 UTC 2026
+
+=== aggregate ===
+--- coder / linear (temp=0.7) ---
+  comp_coder_linear_p0_r0.json: 55.1013994894511 t/s, accept=52/62, content head:  def binary_search(arr, target):     left, right = 0, len(ar
+  comp_coder_linear_p0_r1.json: 61.14478320352806 t/s, accept=52/61, content head:  def binary_search(arr, target):     left = 0     right = le
+  comp_coder_linear_p0_r2.json: 61.050119286209636 t/s, accept=52/61, content head:  def binary_search(arr, target):     left = 0     right = le
+  comp_coder_linear_p1_r0.json: 48.80247123513716 t/s, accept=49/76, content head:   ```python from collections import OrderedDict  class LRUCa
+  comp_coder_linear_p1_r1.json: 49.04958760026426 t/s, accept=49/76, content head:   ```python from collections import OrderedDict  class LRUCa
+  comp_coder_linear_p1_r2.json: 142.11453098873963 t/s, accept=58/58, content head:   ```python from collections import OrderedDict  class LRUCa
+  comp_coder_linear_p2_r0.json: 33.69116154490821 t/s, accept=33/74, content head:  The function should read the CSV file, compute the moving a
+  comp_coder_linear_p2_r1.json: 33.879122467204745 t/s, accept=33/74, content head:  The function should read the CSV file, compute the moving a
+  comp_coder_linear_p2_r2.json: 33.95443421036576 t/s, accept=33/74, content head:  The function should read the CSV file, compute the moving a
+--- coder / tree (temp=0.7) ---
+  comp_coder_tree_p0_r0.json: 55.29329637898026 t/s, accept=52/62, content head:  def binary_search(arr, target):     left, right = 0, len(ar
+  comp_coder_tree_p0_r1.json: 61.58192416570925 t/s, accept=52/61, content head:  def binary_search(arr, target):     left = 0     right = le
+  comp_coder_tree_p0_r2.json: 62.6753563436764 t/s, accept=52/61, content head:  def binary_search(arr, target):     left = 0     right = le
+  comp_coder_tree_p1_r0.json: 48.787627457676734 t/s, accept=49/76, content head:   ```python from collections import OrderedDict  class LRUCa
+  comp_coder_tree_p1_r1.json: 49.208928037324974 t/s, accept=49/76, content head:   ```python from collections import OrderedDict  class LRUCa
+  comp_coder_tree_p1_r2.json: 141.2145777573801 t/s, accept=58/58, content head:   ```python from collections import OrderedDict  class LRUCa
+  comp_coder_tree_p2_r0.json: 33.65866537080805 t/s, accept=33/74, content head:  The function should read the CSV file, compute the moving a
+  comp_coder_tree_p2_r1.json: 34.722730855974994 t/s, accept=33/74, content head:  The function should read the CSV file, compute the moving a
+  comp_coder_tree_p2_r2.json: 34.62791226152731 t/s, accept=33/74, content head:  The function should read the CSV file, compute the moving a
+--- reap / linear (temp=0.7) ---
+  comp_reap_linear_p0_r0.json: 6.71302429506427 t/s, accept=38/74, content head:  Can you also explain how the binary search algorithm works?
+  comp_reap_linear_p0_r1.json: 8.096722434107544 t/s, accept=43/70, content head:  Here's an example of how it works: ``` >>> binary_search([1
+  comp_reap_linear_p0_r2.json: 8.145333105942784 t/s, accept=43/70, content head:  Here's an example of how it works: ``` >>> binary_search([1
+  comp_reap_linear_p1_r0.json: 9.372953785333289 t/s, accept=48/73, content head:    from collections import OrderedDict  class LRUCache:     
+  comp_reap_linear_p1_r1.json: 9.295528226379808 t/s, accept=48/73, content head:    from collections import OrderedDict  class LRUCache:     
+  comp_reap_linear_p1_r2.json: 9.37280553698487 t/s, accept=48/73, content head:    from collections import OrderedDict  class LRUCache:     
+  comp_reap_linear_p2_r0.json: 5.636926448238703 t/s, accept=38/111, content head:  Also, explain how the function works and provide an example
+  comp_reap_linear_p2_r1.json: 5.640573491208285 t/s, accept=38/111, content head:  Also, explain how the function works and provide an example
+  comp_reap_linear_p2_r2.json: 5.6272319338378205 t/s, accept=38/111, content head:  Also, explain how the function works and provide an example
+--- reap / tree (temp=0.7) ---
+  comp_reap_tree_p0_r0.json: 6.719234880724132 t/s, accept=38/74, content head:  Can you also explain how the binary search algorithm works?
+  comp_reap_tree_p0_r1.json: 8.216261239107196 t/s, accept=43/70, content head:  Here's an example of how it works: ``` >>> binary_search([1
+  comp_reap_tree_p0_r2.json: 8.17605290315031 t/s, accept=43/70, content head:  Here's an example of how it works: ``` >>> binary_search([1
+  comp_reap_tree_p1_r0.json: 9.37395183839307 t/s, accept=48/73, content head:    from collections import OrderedDict  class LRUCache:     
+  comp_reap_tree_p1_r1.json: 9.213466517830792 t/s, accept=48/73, content head:    from collections import OrderedDict  class LRUCache:     
+  comp_reap_tree_p1_r2.json: 9.416888601150626 t/s, accept=48/73, content head:    from collections import OrderedDict  class LRUCache:     
+  comp_reap_tree_p2_r0.json: 5.656088102763344 t/s, accept=38/111, content head:  Also, explain how the function works and provide an example
+  comp_reap_tree_p2_r1.json: 5.616319550329376 t/s, accept=38/111, content head:  Also, explain how the function works and provide an example
+  comp_reap_tree_p2_r2.json: 5.636243369818322 t/s, accept=38/111, content head:  Also, explain how the function works and provide an example
+
+completed at Tue Apr 28 23:02:41 UTC 2026
