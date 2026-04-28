@@ -1,0 +1,1 @@
+# placeholder — research-only Phase 0, no LD_DEBUG capture

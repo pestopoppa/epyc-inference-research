@@ -1,0 +1,17 @@
+model,shape,mode,rep,t/s,accept_n,draft_n,accept_pct,predicted_ms,note
+Coder-30B,linear,pp32,1,201.14,,,,,5-rep mean (no spec-dec; baseline forward-pass)
+Coder-30B,linear,pp32,2,201.14,,,,,(same; std 5.99)
+REAP-246B,linear,pp32,1,46.57,,,,,5-rep mean (no spec-dec; baseline forward-pass)
+REAP-246B,linear,pp32,2,46.57,,,,,(same; std 1.14)
+Coder-30B,linear,e2e,0,,,,,,,rep0 lost to server warmup race
+Coder-30B,linear,e2e,1,29.94,158,230,68.7,8550,binary search prompt
+Coder-30B,linear,e2e,2,36.33,168,282,59.6,7045,LRU cache prompt
+Coder-30B,tree,e2e,0,,,,,,,rep0 lost
+Coder-30B,tree,e2e,1,18.14,158,230,68.7,14116,IDENTICAL output to linear rep1; +65% wall-clock waste
+Coder-30B,tree,e2e,2,36.20,168,282,59.6,7071,parity (warm cache)
+REAP-246B,linear,e2e,0,,,,,,,rep0 lost
+REAP-246B,linear,e2e,1,7.43,164,274,59.9,34439,binary search prompt
+REAP-246B,linear,e2e,2,7.95,177,315,56.2,32198,LRU cache prompt
+REAP-246B,tree,e2e,0,,,,,,,rep0 lost
+REAP-246B,tree,e2e,1,7.61,164,274,59.9,33626,within noise vs linear rep1
+REAP-246B,tree,e2e,2,7.99,177,315,56.2,32048,within noise vs linear rep2
