@@ -58,5 +58,10 @@ perf.data
 perf.data.*
 perf-*.data
 
+# BOLT/libomp binaries (large reproduction artifacts; rebuild from openmp-20.x.src + fdata in repo)
+data/cpu_optimization/**/*.so
+data/cpu_optimization/**/*.so.original
+data/cpu_optimization/**/*.so.bolted
+
 # Nested external repos (cloned checkout, not a submodule)
 data/external/

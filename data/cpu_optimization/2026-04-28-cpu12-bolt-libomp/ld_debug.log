@@ -1,0 +1,11 @@
+## Smoke run with LD_DEBUG=libs
+    810973:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin/glibc-hwcaps/x86-64-v4:/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin/glibc-hwcaps/x86-64-v3:/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin/glibc-hwcaps/x86-64-v2:/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin		(RUNPATH from file build_libomp_pgo_use/bin/llama-bench)
+    810973:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin/glibc-hwcaps/x86-64-v4/libllama-common.so.0
+    810973:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin/glibc-hwcaps/x86-64-v3/libllama-common.so.0
+    810973:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin/glibc-hwcaps/x86-64-v2/libllama-common.so.0
+    810973:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin/libllama-common.so.0
+    810973:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin		(RUNPATH from file build_libomp_pgo_use/bin/llama-bench)
+    810973:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin/libllama.so.0
+    810973:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin		(RUNPATH from file build_libomp_pgo_use/bin/llama-bench)
+    810973:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin/libggml.so.0
+    810973:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_use/bin		(RUNPATH from file build_libomp_pgo_use/bin/llama-bench)

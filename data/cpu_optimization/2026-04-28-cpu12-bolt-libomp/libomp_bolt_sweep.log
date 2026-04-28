@@ -1,0 +1,23 @@
+## CPU12 BOLT-libomp sweep — Coder-30B Q4_K_M tg32 (5-rep -pp 64 warmup)
+
+### LD_PRELOAD method (high std, position-confounded)
+## Warmup (discard) — PGO + system libomp
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |  1 |    0 |            tg32 |         30.75 ± 0.12 |
+## PGO + SYSTEM libomp baseline (pos 2)
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |  1 |    0 |            tg32 |         27.77 ± 0.06 |
+## PGO + CUSTOM libomp (no-BOLT) (pos 3)
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |  1 |    0 |            tg32 |         16.88 ± 6.11 |
+## PGO + BOLTED libomp (pos 4)
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |  1 |    0 |            tg32 |         20.39 ± 6.62 |
+
+### Symlink+RUNPATH method (cleaner, low std)
+## warmup-discard (pos 1)
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |  1 |    0 |            tg32 |         24.71 ± 6.39 |
+## libomp.so.5 → BOLTed via symlink (pos 2)
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |  1 |    0 |            tg32 |         29.58 ± 0.04 |  (BOLTed libomp test)
+## libomp.so.5 → CUSTOM (no-BOLT) via symlink (pos 3)
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |  1 |    0 |            tg32 |         19.59 ± 7.89 |  (high std — INCONCLUSIVE)
+## libomp.so.5 → SYSTEM (delete symlink, fall through to RUNPATH) (pos 4)
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |  1 |    0 |            tg32 |         31.95 ± 0.09 |  (system libomp control)
+
+VERDICT: BOLT-libomp at 29.58 ± 0.04 is at parity OR slightly worse than system libomp at 31.95 ± 0.09. Position effect dominates the absolute comparison. No positive signal for BOLT-libomp under measurable conditions. PPL bit-exact (BOLT does not regress quality).
