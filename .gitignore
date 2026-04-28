@@ -62,6 +62,10 @@ perf-*.data
 data/cpu_optimization/**/*.so
 data/cpu_optimization/**/*.so.original
 data/cpu_optimization/**/*.so.bolted
+# Versioned variants (libggml-cpu.so.0.bolted, libggml-cpu.so.0.original, etc.)
+data/cpu_optimization/**/*.so.[0-9]
+data/cpu_optimization/**/*.so.[0-9].original
+data/cpu_optimization/**/*.so.[0-9].bolted
 
 # Nested external repos (cloned checkout, not a submodule)
 data/external/
