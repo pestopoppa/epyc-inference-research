@@ -1,0 +1,30 @@
+   1837662:	
+   1837662:	file=libllama-common.so.0 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-server [0]
+   1837662:	file=libllama-common.so.0 [0];  generating link map
+   1837662:	  dynamic: 0x00007ce78925bfa0  base: 0x00007ce788e00000   size: 0x0000000000462658
+   1837662:	    entry: 0x00007ce788e00000  phdr: 0x00007ce788e00040  phnum:                 12
+   1837662:	
+   1837662:	
+   1837662:	file=libmtmd.so.0 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-server [0]
+   1837662:	file=libmtmd.so.0 [0];  generating link map
+   1837662:	  dynamic: 0x00007ce788dfdac8  base: 0x00007ce788cf8000   size: 0x00000000001076b0
+   1837662:	    entry: 0x00007ce788cf8000  phdr: 0x00007ce788cf8040  phnum:                 12
+   1837662:	
+   1837662:	
+   1837662:	file=libllama.so.0 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-server [0]
+   1837662:	file=libllama.so.0 [0];  generating link map
+   1837662:	  dynamic: 0x00007ce788ad70d0  base: 0x00007ce788800000   size: 0x00000000002fbcb8
+   1837662:	    entry: 0x00007ce788800000  phdr: 0x00007ce788800040  phnum:                 11
+   1837662:	
+   1837662:	
+   1837662:	file=libggml.so.0 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-server [0]
+   1837662:	file=libggml.so.0 [0];  generating link map
+   1837662:	  dynamic: 0x00007ce7892f8d98  base: 0x00007ce7892ed000   size: 0x000000000000c2b0
+   1837662:	    entry: 0x00007ce7892ed000  phdr: 0x00007ce7892ed040  phnum:                 11
+   1837662:	
+   1837662:	
+   1837662:	file=libggml-cpu.so.0 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-server [0]
+   1837662:	file=libggml-cpu.so.0 [0];  generating link map
+   1837662:	  dynamic: 0x00007ce788c71c68  base: 0x00007ce788b39000   size: 0x00000000001be4c0
+   1837662:	    entry: 0x00007ce788b39000  phdr: 0x00007ce788b39040  phnum:                 11
+   1837662:	

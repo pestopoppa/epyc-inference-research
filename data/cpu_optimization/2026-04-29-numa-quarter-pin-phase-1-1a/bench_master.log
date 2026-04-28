@@ -1,0 +1,3 @@
+=== Config: k4_linear (numa-q=4, threads=96, psplit=0) ===
+Tue Apr 28 13:47:12 UTC 2026
+/mnt/raid0/llm/epyc-inference-research/data/cpu_optimization/2026-04-29-numa-quarter-pin-phase-1-1a/run_phase11a.sh: line 40: 1833950 Segmentation fault      $BIN/llama-server -m $TGT -md $DFT -t $THREADS -c 4096 -fa 1 --spec-numa-quarters $NUMA_Q --draft-max 24 --draft-min 4 --port 18099 > srv_${TAG}.log 2>&1

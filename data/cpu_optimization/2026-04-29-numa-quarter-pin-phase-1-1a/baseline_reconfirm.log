@@ -1,0 +1,8 @@
+=== Config: k1_baseline (numa-q=1, threads=96) ===
+Tue Apr 28 13:50:15 UTC 2026
+  server ready after 5s
+/mnt/raid0/llm/epyc-inference-research/data/cpu_optimization/2026-04-29-numa-quarter-pin-phase-1-1a/run_baseline_reconfirm.sh: line 42: 1835653 Aborted                 $BIN/llama-server -m $TGT -md $DFT -t $THREADS -c 4096 -fa 1 --spec-numa-quarters $NUMA_Q --draft-max 24 --draft-min 4 --port 18099 > srv_${TAG}.log 2>&1
+  done at Tue Apr 28 13:51:45 UTC 2026
+=== Config: k4_inactive_ctrl (numa-q=4, threads=96) ===
+Tue Apr 28 13:51:45 UTC 2026
+  server ready after 5s
