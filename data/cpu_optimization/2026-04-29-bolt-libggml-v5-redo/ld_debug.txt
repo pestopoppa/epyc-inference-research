@@ -1,0 +1,209 @@
+# LD_DEBUG=files smoke
+   1783736:	
+   1783736:	file=libllama-common.so.0 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench [0]
+   1783736:	file=libllama-common.so.0 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1ed97d140  base: 0x00007ea1ed600000   size: 0x00000000003862f0
+   1783736:	    entry: 0x00007ea1ed600000  phdr: 0x00007ea1ed600040  phnum:                 10
+   1783736:	
+   1783736:	
+   1783736:	file=libllama.so.0 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench [0]
+   1783736:	file=libllama.so.0 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1ed481190  base: 0x00007ea1ed200000   size: 0x000000000033b6b0
+   1783736:	    entry: 0x00007ea1ed200000  phdr: 0x00007ea1ed200040  phnum:                  9
+   1783736:	
+   1783736:	
+   1783736:	file=libggml.so.0 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench [0]
+   1783736:	file=libggml.so.0 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1edb1cd78  base: 0x00007ea1edb13000   size: 0x000000000000a360
+   1783736:	    entry: 0x00007ea1edb13000  phdr: 0x00007ea1edb13040  phnum:                  9
+   1783736:	
+   1783736:	
+   1783736:	file=libggml-cpu.so.0 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench [0]
+   1783736:	file=libggml-cpu.so.0 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1ecf32d00  base: 0x00007ea1ece00000   size: 0x0000000000238730
+   1783736:	    entry: 0x00007ea1ece00000  phdr: 0x00007ea1ece00040  phnum:                 10
+   1783736:	
+   1783736:	
+   1783736:	file=libggml-base.so.0 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench [0]
+   1783736:	file=libggml-base.so.0 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1edb10d38  base: 0x00007ea1eda64000   size: 0x00000000000ae730
+   1783736:	    entry: 0x00007ea1eda64000  phdr: 0x00007ea1eda64040  phnum:                  9
+   1783736:	
+   1783736:	
+   1783736:	file=libstdc++.so.6 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench [0]
+   1783736:	file=libstdc++.so.6 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1ecdf7d78  base: 0x00007ea1ecb73000   size: 0x000000000028c148
+   1783736:	    entry: 0x00007ea1ecb73000  phdr: 0x00007ea1ecb73040  phnum:                 13
+   1783736:	
+   1783736:	
+   1783736:	file=libm.so.6 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench [0]
+   1783736:	file=libm.so.6 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1ed1febc8  base: 0x00007ea1ed0f3000   size: 0x000000000010c018
+   1783736:	    entry: 0x00007ea1ed0f3000  phdr: 0x00007ea1ed0f3040  phnum:                 13
+   1783736:	
+   1783736:	
+   1783736:	file=libomp.so.5 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench [0]
+   1783736:	file=libomp.so.5 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1ecb62bf0  base: 0x00007ea1eca40000   size: 0x0000000000132f48
+   1783736:	    entry: 0x00007ea1eca40000  phdr: 0x00007ea1eca40040  phnum:                  9
+   1783736:	
+   1783736:	
+   1783736:	file=libgcc_s.so.1 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench [0]
+   1783736:	file=libgcc_s.so.1 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1eda5cdb0  base: 0x00007ea1eda31000   size: 0x000000000002c3a8
+   1783736:	    entry: 0x00007ea1eda31000  phdr: 0x00007ea1eda31040  phnum:                 13
+   1783736:	
+   1783736:	
+   1783736:	file=libc.so.6 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench [0]
+   1783736:	file=libc.so.6 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1eca30940  base: 0x00007ea1ec7fd000   size: 0x0000000000242e50
+   1783736:	    entry: 0x00007ea1ec827730  phdr: 0x00007ea1ec7fd040  phnum:                 16
+   1783736:	
+   1783736:	
+   1783736:	file=libssl.so.3 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libllama-common.so.0 [0]
+   1783736:	file=libssl.so.3 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1ec7f7b30  base: 0x00007ea1ec6ef000   size: 0x000000000010d7e8
+   1783736:	    entry: 0x00007ea1ec6ef000  phdr: 0x00007ea1ec6ef040  phnum:                 12
+   1783736:	
+   1783736:	
+   1783736:	file=libcrypto.so.3 [0];  needed by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libllama-common.so.0 [0]
+   1783736:	file=libcrypto.so.3 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1ec6e86e0  base: 0x00007ea1ec0dc000   size: 0x0000000000612c28
+   1783736:	    entry: 0x00007ea1ec0dc000  phdr: 0x00007ea1ec0dc040  phnum:                 13
+   1783736:	
+   1783736:	
+   1783736:	file=libz.so.1 [0];  needed by /lib/x86_64-linux-gnu/libcrypto.so.3 [0]
+   1783736:	file=libz.so.1 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1eda2ddc0  base: 0x00007ea1eda0f000   size: 0x000000000001f098
+   1783736:	    entry: 0x00007ea1eda0f000  phdr: 0x00007ea1eda0f040  phnum:                 13
+   1783736:	
+   1783736:	
+   1783736:	file=libzstd.so.1 [0];  needed by /lib/x86_64-linux-gnu/libcrypto.so.3 [0]
+   1783736:	file=libzstd.so.1 [0];  generating link map
+   1783736:	  dynamic: 0x00007ea1ec0dacb8  base: 0x00007ea1ec013000   size: 0x00000000000c8030
+   1783736:	    entry: 0x00007ea1ec013000  phdr: 0x00007ea1ec013040  phnum:                 13
+   1783736:	
+   1783736:	
+   1783736:	calling init: /lib64/ld-linux-x86-64.so.2
+   1783736:	
+   1783736:	
+   1783736:	calling init: /lib/x86_64-linux-gnu/libc.so.6
+   1783736:	
+   1783736:	
+   1783736:	calling init: /lib/x86_64-linux-gnu/libzstd.so.1
+   1783736:	
+   1783736:	
+   1783736:	calling init: /lib/x86_64-linux-gnu/libz.so.1
+   1783736:	
+   1783736:	
+   1783736:	calling init: /lib/x86_64-linux-gnu/libcrypto.so.3
+   1783736:	
+   1783736:	
+   1783736:	calling init: /lib/x86_64-linux-gnu/libssl.so.3
+   1783736:	
+   1783736:	
+   1783736:	calling init: /lib/x86_64-linux-gnu/libgcc_s.so.1
+   1783736:	
+   1783736:	
+   1783736:	calling init: /lib/x86_64-linux-gnu/libomp.so.5
+   1783736:	
+   1783736:	
+   1783736:	calling init: /lib/x86_64-linux-gnu/libm.so.6
+   1783736:	
+   1783736:	
+   1783736:	calling init: /lib/x86_64-linux-gnu/libstdc++.so.6
+   1783736:	
+   1783736:	
+   1783736:	calling init: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml-base.so.0
+   1783736:	
+   1783736:	
+   1783736:	calling init: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml-cpu.so.0
+   1783736:	
+   1783736:	
+   1783736:	calling init: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml.so.0
+   1783736:	
+   1783736:	
+   1783736:	calling init: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libllama.so.0
+   1783736:	
+   1783736:	
+   1783736:	calling init: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libllama-common.so.0
+   1783736:	
+   1783736:	
+   1783736:	initialize program: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench
+   1783736:	
+   1783736:	
+   1783736:	transferring control: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench
+   1783736:	
+   1783736:	
+   1783736:	file=/mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml-cpu.so [0];  dynamically loaded by /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml.so.0 [0]
+   1783736:	activating NODELETE for /lib/x86_64-linux-gnu/libomp.so.5 [0]
+   1783736:	activating NODELETE for /lib/x86_64-linux-gnu/libssl.so.3 [0]
+   1783736:	activating NODELETE for /lib/x86_64-linux-gnu/libcrypto.so.3 [0]
+   1783736:	opening file=/mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml-cpu.so.0 [0]; direct_opencount=1
+   1783736:	
+   1783736:	/mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml-cpu.so.0: error: symbol lookup error: undefined symbol: ggml_backend_score (fatal)
+   1783736:	/mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml-cpu.so.0: error: symbol lookup error: undefined symbol: ggml_backend_init (fatal)
+   1783736:	
+   1783736:	closing file=/mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml-cpu.so.0; direct_opencount=0
+   1783736:	/lib/x86_64-linux-gnu/libomp.so.5: error: symbol lookup error: undefined symbol: ompt_start_tool (fatal)
+   1783736:	
+   1783736:	file=libarcher.so [0];  dynamically loaded by /lib/x86_64-linux-gnu/libomp.so.5 [0]
+   1783736:	/lib/x86_64-linux-gnu/libomp.so.5: error: symbol lookup error: undefined symbol: __tgt_target_nowait_query (fatal)
+   1783736:	
+   1783736:	file=libmemkind.so [0];  dynamically loaded by /lib/x86_64-linux-gnu/libomp.so.5 [0]
+   1783736:	/lib/x86_64-linux-gnu/libomp.so.5: error: symbol lookup error: undefined symbol: llvm_omp_target_alloc_host (fatal)
+   1783736:	/lib/x86_64-linux-gnu/libomp.so.5: error: symbol lookup error: undefined symbol: llvm_omp_target_alloc_shared (fatal)
+   1783736:	/lib/x86_64-linux-gnu/libomp.so.5: error: symbol lookup error: undefined symbol: llvm_omp_target_alloc_device (fatal)
+   1783736:	/lib/x86_64-linux-gnu/libomp.so.5: error: symbol lookup error: undefined symbol: llvm_omp_target_free_host (fatal)
+   1783736:	/lib/x86_64-linux-gnu/libomp.so.5: error: symbol lookup error: undefined symbol: llvm_omp_target_free_shared (fatal)
+   1783736:	/lib/x86_64-linux-gnu/libomp.so.5: error: symbol lookup error: undefined symbol: llvm_omp_target_free_device (fatal)
+   1783736:	/lib/x86_64-linux-gnu/libomp.so.5: error: symbol lookup error: undefined symbol: llvm_omp_target_lock_mem (fatal)
+   1783736:	/lib/x86_64-linux-gnu/libomp.so.5: error: symbol lookup error: undefined symbol: llvm_omp_target_unlock_mem (fatal)
+   1783736:	
+   1783736:	calling fini:  [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libllama-common.so.0 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libllama.so.0 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml.so.0 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml-cpu.so.0 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/libggml-base.so.0 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /lib/x86_64-linux-gnu/libstdc++.so.6 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /lib/x86_64-linux-gnu/libm.so.6 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /lib/x86_64-linux-gnu/libomp.so.5 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /lib/x86_64-linux-gnu/libgcc_s.so.1 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /lib/x86_64-linux-gnu/libssl.so.3 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /lib/x86_64-linux-gnu/libcrypto.so.3 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /lib/x86_64-linux-gnu/libz.so.1 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /lib/x86_64-linux-gnu/libzstd.so.1 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /lib/x86_64-linux-gnu/libc.so.6 [0]
+   1783736:	
+   1783736:	
+   1783736:	calling fini: /lib64/ld-linux-x86-64.so.2 [0]
+   1783736:	

@@ -1,0 +1,13 @@
+model,build,phase,trial,rep,t/s_mean,t/s_std,note
+Coder-30B,v5_PGO,pp32,1,5,213.46,6.96,trial 1 PGO baseline (alternated pair 1)
+Coder-30B,v5_PGO_BOLT,pp32,1,5,390.15,10.32,trial 1 BOLT (paired with PGO trial 1; +82.8%)
+Coder-30B,v5_PGO,pp32,2,5,152.53,5.80,trial 2 PGO (system slower)
+Coder-30B,v5_PGO_BOLT,pp32,2,5,172.21,3.36,trial 2 BOLT (paired; +12.9%)
+Coder-30B,v5_PGO,pp64,1,5,283.48,8.93,trial 1 PGO baseline (3-trial alternated)
+Coder-30B,v5_PGO_BOLT,pp64,1,5,245.67,20.85,trial 1 BOLT (-13.3%)
+Coder-30B,v5_PGO,pp64,2,5,263.54,17.51,trial 2 PGO
+Coder-30B,v5_PGO_BOLT,pp64,2,5,238.16,22.47,trial 2 BOLT (-9.6%)
+Coder-30B,v5_PGO,pp64,3,5,225.09,15.27,trial 3 PGO (lowest baseline)
+Coder-30B,v5_PGO_BOLT,pp64,3,5,285.33,5.78,trial 3 BOLT (+26.8%; baseline jumped)
+REAP-246B,v5_PGO,pp32,1,5,53.19,1.13,REAP PGO baseline
+REAP-246B,v5_PGO_BOLT,pp32,1,5,53.29,1.15,REAP BOLT (+0.2% parity)
