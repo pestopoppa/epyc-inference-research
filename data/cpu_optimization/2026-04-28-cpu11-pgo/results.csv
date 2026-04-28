@@ -1,0 +1,10 @@
+model,quant,class,build,compiler,runtime,pgo,test_mode,reps,t_per_s_mean,t_per_s_std,delta_pct_vs_libomp,statistically_significant,notes
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,build_libomp,clang-20,libomp,no,tg32,5,56.84,0.19,reference,n/a,libomp baseline (re-measured this session)
+Qwen3-Coder-30B-A3B,Q4_K_M,sync-bound MoE,build_libomp_pgo_use,clang-20,libomp,instr-use,tg32,5,58.65,0.24,+3.2,yes (>5σ),PGO win on Coder MoE
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,build_libomp,clang-20,libomp,no,tg32,5,25.40,0.05,reference,n/a,libomp baseline
+Qwen3.6-35B-A3B,Q8_0,BW-bound frontdoor MoE,build_libomp_pgo_use,clang-20,libomp,instr-use,tg32,5,27.08,0.03,+6.6,yes (>20σ),PGO biggest absolute win — frontdoor Q8
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,DRAM-bound large MoE,build_libomp,clang-20,libomp,no,tg32,5,6.82,0.03,reference,n/a,libomp baseline
+Qwen3-Coder-REAP-246B-A35B,Q4_K_M,DRAM-bound large MoE,build_libomp_pgo_use,clang-20,libomp,instr-use,tg32,5,6.91,0.02,+1.3,yes (>3σ),PGO smallest delta — DRAM-bound class
+Qwen3.5-27B,Q8_0,dense/hybrid SSM-Dense,build_libomp,clang-20,libomp,no,tg32,5,5.49,0.01,reference,n/a,libomp baseline
+Qwen3.5-27B,Q8_0,dense/hybrid SSM-Dense,build_libomp_pgo_use,clang-20,libomp,instr-use,tg32,5,5.62,0.01,+2.4,yes (>10σ),PGO win on dense — confirms architecture-independence
+PPL_check,Coder-30B-A3B,Q4_K_M,build_libomp_pgo_use,clang-20,libomp,instr-use,wiki_chunks_1-12,1,11.1146,0.62405,bit-exact vs libomp baseline,no quality regression,PGO preserves PPL byte-for-byte

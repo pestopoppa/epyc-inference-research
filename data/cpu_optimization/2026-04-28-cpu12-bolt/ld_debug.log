@@ -1,0 +1,41 @@
+## Smoke run with LD_DEBUG=libs (PGO+BOLT merged build)
+    743490:	find library=libggml.so.0 [0]; searching
+    743490:	  trying file=/opt/AMD/aocc-compiler-5.0.0/lib/libggml.so.0
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp/build/bin/libggml.so.0
+    743490:	find library=libggml-cpu.so.0 [0]; searching
+    743490:	  trying file=/opt/AMD/aocc-compiler-5.0.0/lib/libggml-cpu.so.0
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp/build/bin/libggml-cpu.so.0
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-dflash/build/bin/glibc-hwcaps/x86-64-v4/libggml-cpu.so.0
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-dflash/build/bin/glibc-hwcaps/x86-64-v3/libggml-cpu.so.0
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-dflash/build/bin/glibc-hwcaps/x86-64-v2/libggml-cpu.so.0
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-dflash/build/bin/libggml-cpu.so.0
+    743490:	find library=libggml-base.so.0 [0]; searching
+    743490:	  trying file=/opt/AMD/aocc-compiler-5.0.0/lib/libggml-base.so.0
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp/build/bin/libggml-base.so.0
+    743490:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/glibc-hwcaps/x86-64-v4:/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/glibc-hwcaps/x86-64-v3:/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/glibc-hwcaps/x86-64-v2:/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin:glibc-hwcaps/x86-64-v4:glibc-hwcaps/x86-64-v3:glibc-hwcaps/x86-64-v2:		(RUNPATH from file /mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/llama-bench)
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/glibc-hwcaps/x86-64-v4/libstdc++.so.6
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/glibc-hwcaps/x86-64-v3/libstdc++.so.6
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/glibc-hwcaps/x86-64-v2/libstdc++.so.6
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/libstdc++.so.6
+    743490:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin:glibc-hwcaps/x86-64-v4:glibc-hwcaps/x86-64-v3:glibc-hwcaps/x86-64-v2:		(RUNPATH from file /mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/llama-bench)
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/libm.so.6
+    743490:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin:glibc-hwcaps/x86-64-v4:glibc-hwcaps/x86-64-v3:glibc-hwcaps/x86-64-v2:		(RUNPATH from file /mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/llama-bench)
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/libgcc_s.so.1
+    743490:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin:glibc-hwcaps/x86-64-v4:glibc-hwcaps/x86-64-v3:glibc-hwcaps/x86-64-v2:		(RUNPATH from file /mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/llama-bench)
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/libc.so.6
+    743490:	 search path=glibc-hwcaps/x86-64-v4:glibc-hwcaps/x86-64-v3:glibc-hwcaps/x86-64-v2:		(RUNPATH from file /mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/llama-bench)
+    743490:	 search path=glibc-hwcaps/x86-64-v4:glibc-hwcaps/x86-64-v3:glibc-hwcaps/x86-64-v2:		(RUNPATH from file /mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/llama-bench)
+    743490:	 search path=glibc-hwcaps/x86-64-v4:glibc-hwcaps/x86-64-v3:glibc-hwcaps/x86-64-v2:		(RUNPATH from file /mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/llama-bench)
+    743490:	calling init: /mnt/raid0/llm/llama.cpp/build/bin/libggml-base.so.0
+    743490:	calling init: /mnt/raid0/llm/llama.cpp-dflash/build/bin/libggml-cpu.so.0
+    743490:	calling init: /mnt/raid0/llm/llama.cpp/build/bin/libggml.so.0
+    743490:	initialize program: /mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/llama-bench
+    743490:	transferring control: /mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/llama-bench
+    743490:	find library=libomp.so.5 [0]; searching
+    743490:	  trying file=/opt/AMD/aocc-compiler-5.0.0/lib/libomp.so.5
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp/build/bin/libomp.so.5
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-dflash/build/bin/libomp.so.5
+    743490:	 search path=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin:/usr/lib/llvm-20/lib/glibc-hwcaps/x86-64-v4:/usr/lib/llvm-20/lib/glibc-hwcaps/x86-64-v3:/usr/lib/llvm-20/lib/glibc-hwcaps/x86-64-v2:/usr/lib/llvm-20/lib:glibc-hwcaps/x86-64-v4:glibc-hwcaps/x86-64-v3:glibc-hwcaps/x86-64-v2:		(RUNPATH from file /mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/llama-bench)
+    743490:	  trying file=/mnt/raid0/llm/llama.cpp-experimental/build_libomp_pgo_bolt/bin/libomp.so.5
+    743490:	  trying file=/usr/lib/llvm-20/lib/glibc-hwcaps/x86-64-v4/libomp.so.5
+    743490:	  trying file=/usr/lib/llvm-20/lib/glibc-hwcaps/x86-64-v3/libomp.so.5
