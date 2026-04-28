@@ -1,0 +1,7 @@
+# Dynamic Expert Selection Phase 0 system state
+Date: 2026-04-29
+Method: analytical proxy from existing PPL drift data (no benchmark run)
+
+## Source data
+Coder-30B PPL: data/cpu_optimization/2026-04-28-moe-spec-phase-1/coder30b_ppl32_B*.log
+REAP-246B PPL: data/cpu_optimization/2026-04-28-moe-spec-phase-1/reap246b_ppl32_B*.log

@@ -1,0 +1,9 @@
+model,n_expert,B,B_pct,ppl,drift_pct,note
+Coder-30B,128,128,100,9.86,0,gate-skip = bit-exact baseline
+Coder-30B,128,96,75,9.75,-1.1,within noise (essentially preserved)
+Coder-30B,128,64,50,10.52,+6.7,first material drift
+Coder-30B,128,32,25,n/a,catastrophic,severe quality drop
+REAP-246B,80,80,100,9.30,0,gate-skip = bit-exact baseline
+REAP-246B,80,60,75,9.36,+0.6,within noise (essentially preserved)
+REAP-246B,80,40,50,11.44,+23,first material drift
+REAP-246B,80,20,25,15.79,+70,catastrophic
