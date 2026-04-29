@@ -1,9 +1,11 @@
 # Multi-Arch Coverage Probe — CPU1 + CPU2 mbind on Dense / Hybrid SSM / Dense Q4
 
+> **⚠️ DATA INTEGRITY WARNING (added 2026-04-29 post-hoc)**: this bundle's measurements (both first-pass n=5 and n=30 replication) were taken while **3 other claude sessions were active on the host** (independent agents that may have run llama-bench/server concurrently). The 21% baseline drift on gemma-31B between first-pass and replication is the smoking gun. **Treat all numbers in this bundle as PROVISIONAL only**. The clean re-run with per-cell pgrep guards lives in `../2026-04-29-multi-arch-coverage-rerun/` — use that bundle's numbers for any decision.
+
 **Date**: 2026-04-29
 **Build**: v5 PGO at `/mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/` after CPU4 Phase 1 patch (commit `9f6191581`).
 **Source**: User direction "Multi-arch coverage — test the existing v5 PGO + CPU1 stack + CPU2 mbind on dense, hybrid SSM, attention-only models" 2026-04-29.
-**Coverage gap (per `cpu-kernel-env-flags-inventory.md`)**: CPU1 stack tested only on Coder-30B Q4_K_M (+1.8%) and Qwen3.6-35B Q8_0 (parity); CPU2 mbind tested only on Q8_0 MoE (+6%) and Q4_K_M MoE (-0.9%). Dense Q8, hybrid SSM, dense Q4 untested.
+**Coverage gap (per cpu-kernel-env-flags-inventory (in epyc-root handoffs/active/))**: CPU1 stack tested only on Coder-30B Q4_K_M (+1.8%) and Qwen3.6-35B Q8_0 (parity); CPU2 mbind tested only on Q8_0 MoE (+6%) and Q4_K_M MoE (-0.9%). Dense Q8, hybrid SSM, dense Q4 untested.
 
 ## Method
 
@@ -89,4 +91,4 @@ If +13.43% on Nemotron and -12% on gemma are confirmed at n=30:
 - `probe_master.log` / `replicate_master.log` — master logs with timing + aggregates
 - `bench_*.log` — llama-bench logs for each cell
 - `rep30_*.log` — replication logs at n=30
-- `decision.md` — final verdict + closure scope (after replication)
+- decision (markdown, pending) — final verdict + closure scope (after replication)
