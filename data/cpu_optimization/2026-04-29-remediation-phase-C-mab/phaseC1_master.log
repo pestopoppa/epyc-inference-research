@@ -1,0 +1,47 @@
+=== Renaming original Phase C files for Coder ===
+=== coder / linear (extension reps 30-59) ===
+Wed Apr 29 14:45:37 UTC 2026
+  ready after 4s
+  coder/linear reps up to 34 done at 14:46:33
+  coder/linear reps up to 39 done at 14:46:56
+  coder/linear reps up to 44 done at 14:47:20
+  coder/linear reps up to 49 done at 14:47:41
+  coder/linear reps up to 54 done at 14:48:04
+  coder/linear reps up to 59 done at 14:48:26
+  done at Wed Apr 29 14:48:29 UTC 2026
+=== coder / tree (extension reps 30-59) ===
+Wed Apr 29 14:48:29 UTC 2026
+  ready after 4s
+  coder/tree reps up to 34 done at 14:49:25
+  coder/tree reps up to 39 done at 14:49:50
+  coder/tree reps up to 44 done at 14:50:14
+  coder/tree reps up to 49 done at 14:50:37
+  coder/tree reps up to 54 done at 14:51:01
+  coder/tree reps up to 59 done at 14:51:24
+  done at Wed Apr 29 14:51:27 UTC 2026
+=== reap / linear (extension reps 0-29) ===
+Wed Apr 29 14:51:27 UTC 2026
+  ready after 32s
+  reap/linear reps up to 4 done at 14:54:45
+  reap/linear reps up to 9 done at 14:56:52
+  reap/linear reps up to 14 done at 14:58:56
+  reap/linear reps up to 19 done at 15:01:13
+  reap/linear reps up to 24 done at 15:03:15
+  reap/linear reps up to 29 done at 15:05:30
+  done at Wed Apr 29 15:05:34 UTC 2026
+=== reap / tree (extension reps 0-29) ===
+Wed Apr 29 15:05:34 UTC 2026
+  ready after 12s
+  reap/tree reps up to 4 done at 15:08:28
+  reap/tree reps up to 9 done at 15:10:38
+  reap/tree reps up to 14 done at 15:13:08
+  reap/tree reps up to 19 done at 15:15:36
+  reap/tree reps up to 24 done at 15:17:58
+  reap/tree reps up to 29 done at 15:20:35
+  done at Wed Apr 29 15:20:39 UTC 2026
+
+=== Phase C.1 cumulative analysis ===
+coder: n=180  linear=45.732  tree=45.122  Δ=-0.611 (-1.34%)  SD=9.001  t=-0.911  p≈0.3625
+reap: n=90  linear=8.273  tree=7.595  Δ=-0.679 (-8.20%)  SD=1.793  t=-3.591  p≈0.0003
+
+completed at Wed Apr 29 15:20:39 UTC 2026

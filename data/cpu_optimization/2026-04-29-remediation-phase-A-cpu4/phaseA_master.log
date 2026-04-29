@@ -1,0 +1,25 @@
+=== Phase A — CPU4 coalesce re-test (Coder-30B Q4_K_M tg64, n=5) ===
+Date: 2026-04-29T14:27:43+00:00
+Build: /mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/bin/llama-bench
+Lib md5: 68adda9abb666a80cd0e79dc7195806b
+
+--- bench: coder (COALESCE=0) at Wed Apr 29 14:27:43 UTC 2026 ---
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |  1 |    0 |            tg64 |         47.00 ± 0.09 |
+
+--- bench: coder (COALESCE=1) at Wed Apr 29 14:27:54 UTC 2026 ---
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |  1 |    0 |            tg64 |         47.05 ± 0.16 |
+
+--- bench: coder_recheck (COALESCE=0) at Wed Apr 29 14:28:05 UTC 2026 ---
+| qwen3moe 30B.A3B Q4_K - Medium |  17.28 GiB |    30.53 B | CPU        |      96 |  1 |    0 |            tg64 |         46.96 ± 0.16 |
+
+
+=== summary ===
+coder_c0                           46.96 ± 0.16 
+coder_c1                           47.05 ± 0.16 
+
+coder_c0: 46.96 ± 0.16
+coder_c1: 47.05 ± 0.16
+
+Δ c1 vs c0:        +0.19%
+
+completed at Wed Apr 29 14:28:15 UTC 2026
