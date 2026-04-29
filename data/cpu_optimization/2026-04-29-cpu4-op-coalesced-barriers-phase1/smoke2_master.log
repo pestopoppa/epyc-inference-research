@@ -1,0 +1,21 @@
+=== smoke: off (GGML_BARRIER_COALESCE=0) ===
+Wed Apr 29 07:19:21 UTC 2026
+  ready after 5s
+  done at Wed Apr 29 07:20:00 UTC 2026
+=== smoke: on (GGML_BARRIER_COALESCE=1) ===
+Wed Apr 29 07:20:00 UTC 2026
+  ready after 4s
+  done at Wed Apr 29 07:20:38 UTC 2026
+
+=== smoke results ===
+--- COALESCE=off ---
+  TPS: 36.96304677153776
+  HEAD:  The function should have O(log n) time complexity.  def binary_search(arr, targ
+--- COALESCE=on ---
+  TPS: 36.78061569601281
+  HEAD:  The function should have O(log n) time complexity.  def binary_search(arr, targ
+
+=== content identity (deterministic seed: should be IDENTICAL) ===
+  ✅ IDENTICAL — coalesce path produces bit-exact output as off
+
+completed at Wed Apr 29 07:20:38 UTC 2026

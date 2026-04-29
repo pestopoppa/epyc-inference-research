@@ -1,0 +1,31 @@
+=== trial 1 / coder tg64 -r 5 (COALESCE=0) ===
+Wed Apr 29 07:29:37 UTC 2026
+  done at Wed Apr 29 07:29:51 UTC 2026
+=== trial 1 / coder tg64 -r 5 (COALESCE=1) ===
+Wed Apr 29 07:29:51 UTC 2026
+  done at Wed Apr 29 07:30:10 UTC 2026
+=== trial 2 / coder tg64 -r 5 (COALESCE=0) ===
+Wed Apr 29 07:30:10 UTC 2026
+  done at Wed Apr 29 07:30:31 UTC 2026
+=== trial 2 / coder tg64 -r 5 (COALESCE=1) ===
+Wed Apr 29 07:30:31 UTC 2026
+  done at Wed Apr 29 07:30:57 UTC 2026
+=== trial 3 / coder tg64 -r 5 (COALESCE=0) ===
+Wed Apr 29 07:30:57 UTC 2026
+  done at Wed Apr 29 07:31:13 UTC 2026
+=== trial 3 / coder tg64 -r 5 (COALESCE=1) ===
+Wed Apr 29 07:31:13 UTC 2026
+  done at Wed Apr 29 07:31:34 UTC 2026
+
+=== aggregated over 3 alternated trials ===
+  trial 1 c0: 27.93 ± 6.45
+  trial 1 c1: 22.95 ± 8.46
+  trial 2 c0: 20.61 ± 7.09
+  trial 2 c1: 15.02 ± 4.62
+  trial 3 c0: 24.11 ± 5.64
+  trial 3 c1: 20.34 ± 7.01
+  COALESCE=0 aggregate over trials: mean=24.22, sd=3.66
+  COALESCE=1 aggregate over trials: mean=19.44, sd=4.04
+  Δ tg64 (c1 vs c0): -19.74%
+
+completed at Wed Apr 29 07:31:34 UTC 2026

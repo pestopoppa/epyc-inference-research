@@ -1,0 +1,49 @@
+=== PPL: coder (COALESCE=0) ===
+Wed Apr 29 07:21:37 UTC 2026
+  done at Wed Apr 29 07:21:44 UTC 2026
+=== PPL: reap (COALESCE=0) ===
+Wed Apr 29 07:21:44 UTC 2026
+  done at Wed Apr 29 07:22:25 UTC 2026
+=== PPL: coder (COALESCE=1) ===
+Wed Apr 29 07:22:25 UTC 2026
+  done at Wed Apr 29 07:22:32 UTC 2026
+=== PPL: reap (COALESCE=1) ===
+Wed Apr 29 07:22:32 UTC 2026
+  done at Wed Apr 29 07:23:14 UTC 2026
+
+=== PPL chunk-3 comparison (must be BIT-EXACT for Phase 1 to ship) ===
+  coder: chunk-3 PPL=  ✅ BIT-EXACT
+  reap: chunk-3 PPL=  ✅ BIT-EXACT
+=== bench: coder tg64 -r 5 (COALESCE=0) ===
+Wed Apr 29 07:23:15 UTC 2026
+  done at Wed Apr 29 07:23:36 UTC 2026
+=== bench: next80 tg64 -r 5 (COALESCE=0) ===
+Wed Apr 29 07:23:36 UTC 2026
+  done at Wed Apr 29 07:24:11 UTC 2026
+=== bench: reap tg64 -r 5 (COALESCE=0) ===
+Wed Apr 29 07:24:11 UTC 2026
+  done at Wed Apr 29 07:25:37 UTC 2026
+=== bench: coder tg64 -r 5 (COALESCE=1) ===
+Wed Apr 29 07:25:37 UTC 2026
+  done at Wed Apr 29 07:25:55 UTC 2026
+=== bench: next80 tg64 -r 5 (COALESCE=1) ===
+Wed Apr 29 07:25:55 UTC 2026
+  done at Wed Apr 29 07:26:24 UTC 2026
+=== bench: reap tg64 -r 5 (COALESCE=1) ===
+Wed Apr 29 07:26:24 UTC 2026
+  done at Wed Apr 29 07:27:52 UTC 2026
+
+=== tg64 5-rep results (mean ± std) ===
+  coder c0: 1
+  coder c1: 1
+  next80 c0: 1
+  next80 c1: 1
+  reap c0: 1
+  reap c1: 1
+
+=== Δ tg64 (c1 vs c0) per model ===
+  coder: c0=18.83±6.32  c1=22.69±6.90  Δ=+20.50%
+  next80: c0=14.76±5.21  c1=13.85±4.40  Δ=-6.17%
+  reap: c0=4.29±0.05  c1=4.19±0.02  Δ=-2.33%
+
+completed at Wed Apr 29 07:27:52 UTC 2026

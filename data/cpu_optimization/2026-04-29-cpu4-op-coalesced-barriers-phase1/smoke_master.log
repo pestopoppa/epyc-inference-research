@@ -1,0 +1,27 @@
+=== smoke: off (GGML_BARRIER_COALESCE=0) ===
+Wed Apr 29 07:16:30 UTC 2026
+  ready after 4s
+  done at Wed Apr 29 07:17:07 UTC 2026
+=== smoke: on (GGML_BARRIER_COALESCE=1) ===
+Wed Apr 29 07:17:07 UTC 2026
+  ready after 4s
+  done at Wed Apr 29 07:17:45 UTC 2026
+
+=== smoke results ===
+--- COALESCE=off ---
+  TPS: 36.81561073934375
+  HEAD:  The function should have O(log n) time complexity.  def binary_search(arr, targ
+--- COALESCE=on ---
+  TPS: n/a
+  HEAD: (empty) 
+
+=== content identity (deterministic seed: should be IDENTICAL) ===
+  ❌ DIFFER — coalesce path BROKE OUTPUT (likely race condition)
+  off:  The function should have O(log n) time complexity.
+
+def binary_search(arr, target):
+    """
+    Performs binary search 
+  on : null
+
+completed at Wed Apr 29 07:17:45 UTC 2026
