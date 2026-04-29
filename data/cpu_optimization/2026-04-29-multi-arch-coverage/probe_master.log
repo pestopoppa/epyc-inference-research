@@ -1,0 +1,57 @@
+=== qwen36_27b / c0 (env: default) ===
+Wed Apr 29 08:57:25 UTC 2026
+  done at Wed Apr 29 09:00:37 UTC 2026
+=== qwen36_27b / c1 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1) ===
+Wed Apr 29 09:00:37 UTC 2026
+  done at Wed Apr 29 09:03:48 UTC 2026
+=== qwen36_27b / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 09:03:48 UTC 2026
+  done at Wed Apr 29 09:07:02 UTC 2026
+=== qwen36_27b / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 09:07:02 UTC 2026
+  done at Wed Apr 29 09:10:14 UTC 2026
+=== nemotron_9b / c0 (env: default) ===
+Wed Apr 29 09:10:14 UTC 2026
+  done at Wed Apr 29 09:11:06 UTC 2026
+=== nemotron_9b / c1 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1) ===
+Wed Apr 29 09:11:06 UTC 2026
+  done at Wed Apr 29 09:11:56 UTC 2026
+=== nemotron_9b / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 09:11:56 UTC 2026
+  done at Wed Apr 29 09:12:47 UTC 2026
+=== nemotron_9b / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 09:12:47 UTC 2026
+  done at Wed Apr 29 09:13:32 UTC 2026
+=== gemma_31b / c0 (env: default) ===
+Wed Apr 29 09:13:32 UTC 2026
+  done at Wed Apr 29 09:14:49 UTC 2026
+=== gemma_31b / c1 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1) ===
+Wed Apr 29 09:14:49 UTC 2026
+  done at Wed Apr 29 09:16:17 UTC 2026
+=== gemma_31b / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 09:16:17 UTC 2026
+  done at Wed Apr 29 09:17:43 UTC 2026
+=== gemma_31b / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 09:17:43 UTC 2026
+  done at Wed Apr 29 09:19:09 UTC 2026
+
+=== aggregate results ===
+Model          Config         tg64 t/s             Δ vs baseline  
+----------------------------------------------------------------------
+  qwen36_27b     baseline       1.68 ± 0.03     (baseline)
+  qwen36_27b     CPU1           1.71 ± 0.03     +1.79%
+  qwen36_27b     CPU2-off       1.68 ± 0.05     +0.00%
+  qwen36_27b     CPU1+CPU2off   1.70 ± 0.04     +1.19%
+
+  nemotron_9b    baseline       6.48 ± 0.64     (baseline)
+  nemotron_9b    CPU1           6.67 ± 0.71     +2.93%
+  nemotron_9b    CPU2-off       6.44 ± 0.90     -0.62%
+  nemotron_9b    CPU1+CPU2off   7.35 ± 0.15     +13.43%
+
+  gemma_31b      baseline       4.45 ± 0.29     (baseline)
+  gemma_31b      CPU1           3.90 ± 0.66     -12.36%
+  gemma_31b      CPU2-off       3.96 ± 0.31     -11.01%
+  gemma_31b      CPU1+CPU2off   3.93 ± 0.10     -11.69%
+
+
+completed at Wed Apr 29 09:19:09 UTC 2026
