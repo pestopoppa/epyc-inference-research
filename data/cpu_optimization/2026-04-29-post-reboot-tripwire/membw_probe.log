@@ -1,0 +1,6 @@
+NUMA TP microbench  K=5120  N=400000  iter=5  W=7.63 GB
+NUMA nodes configured: 4
+WA first page on node 0 (expected 0)
+WB first page on node 1 (expected 1)
+[A] flat 96t (no NUMA affinity): 0.570 s  114.01 ms/iter  66.92 GB/s
+[B] NUMA-TP 2x48t (node-local mbind'd halves): 0.560 s  111.94 ms/iter  68.15 GB/s
