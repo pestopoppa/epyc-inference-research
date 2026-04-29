@@ -1,0 +1,80 @@
+=== coder / linear (temp=0.7, p_split=0, seed=random, n_reps=30) ===
+Wed Apr 29 06:29:09 UTC 2026
+  ready after 5s
+  coder/linear reps 0-4 done at 06:30:09
+  coder/linear reps 0-9 done at 06:30:34
+  coder/linear reps 0-14 done at 06:30:59
+  coder/linear reps 0-19 done at 06:31:25
+  coder/linear reps 0-24 done at 06:31:50
+  coder/linear reps 0-29 done at 06:32:16
+  done at Wed Apr 29 06:32:19 UTC 2026
+=== coder / tree (temp=0.7, p_split=0.05, seed=random, n_reps=30) ===
+Wed Apr 29 06:32:19 UTC 2026
+  ready after 5s
+  coder/tree reps 0-4 done at 06:33:19
+  coder/tree reps 0-9 done at 06:33:46
+  coder/tree reps 0-14 done at 06:34:12
+  coder/tree reps 0-19 done at 06:34:39
+  coder/tree reps 0-24 done at 06:35:06
+  coder/tree reps 0-29 done at 06:35:32
+  done at Wed Apr 29 06:35:35 UTC 2026
+=== reap / linear (temp=0.7, p_split=0, seed=random, n_reps=30) ===
+Wed Apr 29 06:35:35 UTC 2026
+  ready after 14s
+  reap/linear reps 0-4 done at 06:38:47
+  reap/linear reps 0-9 done at 06:41:08
+  reap/linear reps 0-14 done at 06:43:28
+  reap/linear reps 0-19 done at 06:45:47
+  reap/linear reps 0-24 done at 06:48:08
+  reap/linear reps 0-29 done at 06:50:23
+  done at Wed Apr 29 06:50:27 UTC 2026
+=== reap / tree (temp=0.7, p_split=0.05, seed=random, n_reps=30) ===
+Wed Apr 29 06:50:27 UTC 2026
+  ready after 14s
+  reap/tree reps 0-4 done at 06:53:30
+  reap/tree reps 0-9 done at 06:55:53
+  reap/tree reps 0-14 done at 06:58:06
+  reap/tree reps 0-19 done at 07:00:28
+  reap/tree reps 0-24 done at 07:02:52
+  reap/tree reps 0-29 done at 07:05:16
+  done at Wed Apr 29 07:05:21 UTC 2026
+
+=== aggregate (n=30 per cell) ===
+--- coder / linear ---
+  {
+  "n": 90,
+  "mean": 40.58375428929998,
+  "std": 6.568511016702326
+}
+--- coder / tree ---
+  {
+  "n": 90,
+  "mean": 38.97079543910717,
+  "std": 6.049870215047554
+}
+--- reap / linear ---
+  {
+  "n": 90,
+  "mean": 7.636757972420293,
+  "std": 1.4933392459010146
+}
+--- reap / tree ---
+  {
+  "n": 90,
+  "mean": 7.662884617269056,
+  "std": 1.6303710220291603
+}
+
+=== per-prompt × shape breakdown ===
+  coder / p0: linear=40.53557501415205  tree=38.07372089033377  Δ=-6.0700%
+  coder / p1: linear=45.78862114666872  tree=44.1241880125347  Δ=-3.6300%
+  coder / p2: linear=35.42706670707911  tree=34.71447741445307  Δ=-2.0100%
+  reap / p0: linear=7.475792807803506  tree=7.663706138002757  Δ=2.5100%
+  reap / p1: linear=9.167142118010283  tree=9.130775017026329  Δ=-.3900%
+  reap / p2: linear=6.2673389914471045  tree=6.1941726967780815  Δ=-1.1600%
+
+=== paired t-test (per-prompt-per-rep linear vs tree) ===
+  coder: n=90 paired,  Δ_mean=-1.613 t/s (-3.97%), SD=6.126, t=-2.498, p≈0.0125
+  reap: n=90 paired,  Δ_mean=0.026 t/s (+0.34%), SD=1.497, t=0.166, p≈0.8685
+
+completed at Wed Apr 29 07:05:21 UTC 2026
