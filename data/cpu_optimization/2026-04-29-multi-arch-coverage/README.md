@@ -1,6 +1,12 @@
 # Multi-Arch Coverage Probe — CPU1 + CPU2 mbind on Dense / Hybrid SSM / Dense Q4
 
-> **⚠️ DATA INTEGRITY WARNING (added 2026-04-29 post-hoc)**: this bundle's measurements (both first-pass n=5 and n=30 replication) were taken while **3 other claude sessions were active on the host** (independent agents that may have run llama-bench/server concurrently). The 21% baseline drift on gemma-31B between first-pass and replication is the smoking gun. **Treat all numbers in this bundle as PROVISIONAL only**. The clean re-run with per-cell pgrep guards lives in `../2026-04-29-multi-arch-coverage-rerun/` — use that bundle's numbers for any decision.
+> **⚠️ DATA INTEGRITY WARNING (added 2026-04-29 post-hoc, REVISED)**: this bundle's measurements (both first-pass n=5 and n=30 replication) are unreliable due to TWO compounding causes discovered post-hoc:
+>
+> 1. **Concurrent-agent contention**: 3 other claude sessions active during measurement window may have run llama-bench concurrently. The 21% baseline drift on gemma-31B between first-pass and replication is consistent with intermittent CPU contention.
+>
+> 2. **Host-level throttle (ROOT CAUSE)**: the EPYC 9655 was in a degraded power state (38 of 96 cores stuck at 1998 MHz under load instead of expected 2800-3000 MHz all-core boost). Coder-30B Q4_K_M tg32 reproduced at **11-20 t/s vs production canonical 58.65 t/s** — 3-5× regression. This is hardware-level, not just contention. User rebooted the host to restore.
+>
+> **All absolute numbers in this bundle are unreliable.** Relative comparisons (CPU1 vs no-CPU1, mbind on vs off) may still be approximately correct since both arms ran under the same throttle. The clean re-run with per-cell pgrep guards (`../2026-04-29-multi-arch-coverage-rerun/`) is also affected by the host throttle and should be re-run from scratch on the post-reboot host.
 
 **Date**: 2026-04-29
 **Build**: v5 PGO at `/mnt/raid0/llm/llama.cpp-experimental/build_v5_pgo_use/` after CPU4 Phase 1 patch (commit `9f6191581`).

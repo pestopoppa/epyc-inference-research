@@ -1,0 +1,36 @@
+=== START Wed Apr 29 09:56:46 UTC 2026 ===
+Other claude sessions active: 12
+ 09:56:46 up 2 days, 14:21,  0 users,  load average: 1.55, 10.45, 43.53
+=== nemotron_9b / c0 (n=15, env: default) ===
+Wed Apr 29 09:56:46 UTC 2026
+  done at Wed Apr 29 09:59:10 UTC 2026
+=== nemotron_9b / c1 (n=15, env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1) ===
+Wed Apr 29 09:59:15 UTC 2026
+  done at Wed Apr 29 10:01:29 UTC 2026
+=== nemotron_9b / c2 (n=15, env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 10:01:34 UTC 2026
+  done at Wed Apr 29 10:03:53 UTC 2026
+=== nemotron_9b / c3 (n=15, env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 10:03:59 UTC 2026
+  done at Wed Apr 29 10:06:12 UTC 2026
+=== qwen36_27b / c0 (n=15, env: default) ===
+Wed Apr 29 10:06:17 UTC 2026
+  done at Wed Apr 29 10:15:52 UTC 2026
+=== qwen36_27b / c1 (n=15, env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1) ===
+Wed Apr 29 10:15:57 UTC 2026
+  done at Wed Apr 29 10:25:45 UTC 2026
+=== qwen36_27b / c2 (n=15, env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 10:25:50 UTC 2026
+  done at Wed Apr 29 10:35:27 UTC 2026
+=== qwen36_27b / c3 (n=15, env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 10:35:32 UTC 2026
+  done at Wed Apr 29 10:45:14 UTC 2026
+=== gemma_31b / c0 (n=15, env: default) ===
+Wed Apr 29 10:45:19 UTC 2026
+  done at Wed Apr 29 10:49:02 UTC 2026
+=== gemma_31b / c1 (n=15, env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1) ===
+Wed Apr 29 10:49:07 UTC 2026
+/mnt/raid0/llm/epyc-inference-research/data/cpu_optimization/2026-04-29-multi-arch-coverage-rerun/run_clean.sh: line 39: 2390978 Killed                  env $ENV_PREFIX taskset -c 0-95 $BIN/llama-bench -m "$MODEL" -t 96 -fa 1 -p 0 -n 64 -r $N_REPS > clean_${TAG}_${CONFIG}.log 2>&1
+  done at Wed Apr 29 10:49:28 UTC 2026
+=== gemma_31b / c2 (n=15, env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 10:49:33 UTC 2026
