@@ -1,0 +1,73 @@
+=== START Wed Apr 29 16:38:00 UTC 2026 ===
+Lib md5: 68adda9abb666a80cd0e79dc7195806b
+Build hash: 343466937d74fbd6a7c533d3d506b488e14d3d18
+
+=== nemotron_9b / c0 (n=15, env: default) ===
+Wed Apr 29 16:38:00 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |            tg64 |         12.94 ± 0.04 |
+  done at Wed Apr 29 16:39:18 UTC 2026
+=== nemotron_9b / c1 (n=15, env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1) ===
+Wed Apr 29 16:39:21 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |            tg64 |         13.07 ± 0.03 |
+  done at Wed Apr 29 16:40:37 UTC 2026
+=== nemotron_9b / c2 (n=15, env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 16:40:40 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |            tg64 |         13.17 ± 0.02 |
+  done at Wed Apr 29 16:41:56 UTC 2026
+=== nemotron_9b / c3 (n=15, env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 16:41:59 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |            tg64 |         13.09 ± 0.03 |
+  done at Wed Apr 29 16:43:15 UTC 2026
+=== qwen36_27b / c0 (n=15, env: default) ===
+Wed Apr 29 16:43:18 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |            tg64 |          4.28 ± 0.06 |
+  done at Wed Apr 29 16:47:13 UTC 2026
+=== qwen36_27b / c1 (n=15, env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1) ===
+Wed Apr 29 16:47:16 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |            tg64 |          4.08 ± 0.19 |
+  done at Wed Apr 29 16:51:19 UTC 2026
+=== qwen36_27b / c2 (n=15, env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 16:51:22 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |            tg64 |          4.14 ± 0.20 |
+  done at Wed Apr 29 16:55:21 UTC 2026
+=== qwen36_27b / c3 (n=15, env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 16:55:24 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |            tg64 |          4.21 ± 0.10 |
+  done at Wed Apr 29 16:59:19 UTC 2026
+=== gemma_31b / c0 (n=15, env: default) ===
+Wed Apr 29 16:59:23 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |            tg64 |          6.40 ± 0.41 |
+  done at Wed Apr 29 17:02:00 UTC 2026
+=== gemma_31b / c1 (n=15, env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1) ===
+Wed Apr 29 17:02:03 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |            tg64 |          6.44 ± 0.38 |
+  done at Wed Apr 29 17:04:37 UTC 2026
+=== gemma_31b / c2 (n=15, env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:04:40 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |            tg64 |          6.65 ± 0.19 |
+  done at Wed Apr 29 17:07:09 UTC 2026
+=== gemma_31b / c3 (n=15, env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:07:12 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |            tg64 |          6.63 ± 0.21 |
+  done at Wed Apr 29 17:09:42 UTC 2026
+
+=== aggregate (canonical n=15) ===
+Model          Config           tg64 t/s (n=15)        Δ vs baseline  
+--------------------------------------------------------------------------------
+  nemotron_9b    baseline         12.94 ± 0.04         (baseline)
+  nemotron_9b    CPU1 stack       13.07 ± 0.03         +1.00%
+  nemotron_9b    CPU2 mbind off   13.17 ± 0.02         +1.78%
+  nemotron_9b    CPU1+CPU2off     13.09 ± 0.03         +1.16%
+
+  qwen36_27b     baseline         4.28 ± 0.06         (baseline)
+  qwen36_27b     CPU1 stack       4.08 ± 0.19         -4.67%
+  qwen36_27b     CPU2 mbind off   4.14 ± 0.20         -3.27%
+  qwen36_27b     CPU1+CPU2off     4.21 ± 0.10         -1.64%
+
+  gemma_31b      baseline         6.40 ± 0.41         (baseline)
+  gemma_31b      CPU1 stack       6.44 ± 0.38         +0.63%
+  gemma_31b      CPU2 mbind off   6.65 ± 0.19         +3.91%
+  gemma_31b      CPU1+CPU2off     6.63 ± 0.21         +3.59%
+
+
+=== completed Wed Apr 29 17:09:45 UTC 2026 ===

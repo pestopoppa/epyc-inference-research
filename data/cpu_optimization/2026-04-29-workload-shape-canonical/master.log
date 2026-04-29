@@ -1,0 +1,129 @@
+=== Probe B START Wed Apr 29 17:11:19 UTC 2026 ===
+Lib md5: 68adda9abb666a80cd0e79dc7195806b
+
+=== nemotron_9b / tg64 / c0 (env: default) ===
+Wed Apr 29 17:11:19 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |            tg64 |         12.69 ± 0.05 |
+  done at Wed Apr 29 17:11:47 UTC 2026
+=== nemotron_9b / pp512 / c0 (env: default) ===
+Wed Apr 29 17:11:49 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |           pp512 |       317.32 ± 14.28 |
+  done at Wed Apr 29 17:12:02 UTC 2026
+=== nemotron_9b / pp2048 / c0 (env: default) ===
+Wed Apr 29 17:12:04 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |          pp2048 |        323.76 ± 7.51 |
+  done at Wed Apr 29 17:12:44 UTC 2026
+=== nemotron_9b / tg64 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:12:46 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |            tg64 |         12.83 ± 0.23 |
+  done at Wed Apr 29 17:13:14 UTC 2026
+=== nemotron_9b / pp512 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:13:16 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |           pp512 |        340.72 ± 2.67 |
+  done at Wed Apr 29 17:13:27 UTC 2026
+=== nemotron_9b / pp2048 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:13:29 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |          pp2048 |        333.83 ± 8.75 |
+  done at Wed Apr 29 17:14:09 UTC 2026
+=== nemotron_9b / tg64 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:14:11 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |            tg64 |         12.96 ± 0.09 |
+  done at Wed Apr 29 17:14:38 UTC 2026
+=== nemotron_9b / pp512 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:14:40 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |           pp512 |        345.57 ± 3.48 |
+  done at Wed Apr 29 17:14:52 UTC 2026
+=== nemotron_9b / pp2048 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:14:54 UTC 2026
+| nemotron_h 9B Q8_0             |   8.80 GiB |     8.89 B | CPU        |      96 |  1 |    0 |          pp2048 |        335.67 ± 3.02 |
+  done at Wed Apr 29 17:15:33 UTC 2026
+=== qwen36_27b / tg64 / c0 (env: default) ===
+Wed Apr 29 17:15:35 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |            tg64 |          4.28 ± 0.03 |
+  done at Wed Apr 29 17:16:58 UTC 2026
+=== qwen36_27b / pp512 / c0 (env: default) ===
+Wed Apr 29 17:17:00 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |           pp512 |        115.03 ± 1.96 |
+  done at Wed Apr 29 17:17:33 UTC 2026
+=== qwen36_27b / pp2048 / c0 (env: default) ===
+Wed Apr 29 17:17:35 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |          pp2048 |        116.46 ± 0.56 |
+  done at Wed Apr 29 17:19:28 UTC 2026
+=== qwen36_27b / tg64 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:19:30 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |            tg64 |          4.30 ± 0.00 |
+  done at Wed Apr 29 17:20:52 UTC 2026
+=== qwen36_27b / pp512 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:20:54 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |           pp512 |        116.80 ± 1.72 |
+  done at Wed Apr 29 17:21:27 UTC 2026
+=== qwen36_27b / pp2048 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:21:29 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |          pp2048 |        115.42 ± 2.09 |
+  done at Wed Apr 29 17:23:23 UTC 2026
+=== qwen36_27b / tg64 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:23:25 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |            tg64 |          4.28 ± 0.03 |
+  done at Wed Apr 29 17:24:47 UTC 2026
+=== qwen36_27b / pp512 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:24:49 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |           pp512 |        114.63 ± 0.80 |
+  done at Wed Apr 29 17:25:23 UTC 2026
+=== qwen36_27b / pp2048 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:25:25 UTC 2026
+| qwen35 27B Q8_0                |  26.62 GiB |    26.90 B | CPU        |      96 |  1 |    0 |          pp2048 |        115.84 ± 1.25 |
+  done at Wed Apr 29 17:27:18 UTC 2026
+=== gemma_31b / tg64 / c0 (env: default) ===
+Wed Apr 29 17:27:20 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |            tg64 |          6.75 ± 0.01 |
+  done at Wed Apr 29 17:28:12 UTC 2026
+=== gemma_31b / pp512 / c0 (env: default) ===
+Wed Apr 29 17:28:14 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |           pp512 |        182.93 ± 0.76 |
+  done at Wed Apr 29 17:28:35 UTC 2026
+=== gemma_31b / pp2048 / c0 (env: default) ===
+Wed Apr 29 17:28:37 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |          pp2048 |        169.26 ± 0.26 |
+  done at Wed Apr 29 17:29:55 UTC 2026
+=== gemma_31b / tg64 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:29:57 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |            tg64 |          6.79 ± 0.00 |
+  done at Wed Apr 29 17:30:48 UTC 2026
+=== gemma_31b / pp512 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:30:50 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |           pp512 |        182.87 ± 0.47 |
+  done at Wed Apr 29 17:31:12 UTC 2026
+=== gemma_31b / pp2048 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:31:14 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |          pp2048 |        168.97 ± 0.27 |
+  done at Wed Apr 29 17:32:31 UTC 2026
+=== gemma_31b / tg64 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:32:33 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |            tg64 |          6.78 ± 0.01 |
+  done at Wed Apr 29 17:33:25 UTC 2026
+=== gemma_31b / pp512 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:33:27 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |           pp512 |        183.97 ± 0.36 |
+  done at Wed Apr 29 17:33:48 UTC 2026
+=== gemma_31b / pp2048 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Wed Apr 29 17:33:50 UTC 2026
+| gemma4 31B Q4_K - Medium       |  17.39 GiB |    30.70 B | CPU        |      96 |  1 |    0 |          pp2048 |        169.28 ± 0.42 |
+  done at Wed Apr 29 17:35:07 UTC 2026
+
+=== aggregate (Probe B canonical n=5) ===
+Model          Shape    c0 baseline            c2 mbind-off           c3 CPU1+mbind-off     
+----------------------------------------------------------------------------------------------------
+  nemotron_9b    tg64     12.69 ± 0.05           12.83 ± 0.23 (+1.1%)   12.96 ± 0.09 (+2.1%)  
+  nemotron_9b    pp512    317.32 ± 14.28         340.72 ± 2.67 (+7.4%)  345.57 ± 3.48 (+8.9%) 
+  nemotron_9b    pp2048   323.76 ± 7.51          333.83 ± 8.75 (+3.1%)  335.67 ± 3.02 (+3.7%) 
+
+  qwen36_27b     tg64     4.28 ± 0.03            4.30 ± 0.00 (+0.5%)    4.28 ± 0.03 (+0.0%)   
+  qwen36_27b     pp512    115.03 ± 1.96          116.80 ± 1.72 (+1.5%)  114.63 ± 0.80 (-0.3%) 
+  qwen36_27b     pp2048   116.46 ± 0.56          115.42 ± 2.09 (-0.9%)  115.84 ± 1.25 (-0.5%) 
+
+  gemma_31b      tg64     6.75 ± 0.01            6.79 ± 0.00 (+0.6%)    6.78 ± 0.01 (+0.4%)   
+  gemma_31b      pp512    182.93 ± 0.76          182.87 ± 0.47 (-0.0%)  183.97 ± 0.36 (+0.6%) 
+  gemma_31b      pp2048   169.26 ± 0.26          168.97 ± 0.27 (-0.2%)  169.28 ± 0.42 (+0.0%) 
+
+
+=== completed Wed Apr 29 17:35:09 UTC 2026 ===
