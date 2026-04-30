@@ -1,0 +1,8 @@
+=== Thu Apr 30 09:38:15 UTC 2026 ===
+CMD: OMP_PROC_BIND=spread OMP_PLACES=cores OMP_WAIT_POLICY=active numactl --interleave=all -- taskset -c 0-95 /mnt/raid0/llm/llama.cpp-experimental/build_v5_clean/bin/llama-bench -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-Q8_0.gguf -t 96 -fa 1 --mmap 0 -p 0 -n 32 -r 5
+| model                          |       size |     params | backend    | threads | fa | mmap |            test |                  t/s |
+| ------------------------------ | ---------: | ---------: | ---------- | ------: | -: | ---: | --------------: | -------------------: |
+| qwen35moe 35B.A3B Q8_0         |  34.36 GiB |    34.66 B | CPU        |      96 |  1 |    0 |            tg32 |         22.79 ± 0.04 |
+
+build: 734d011e0 (8953)
+rc=0

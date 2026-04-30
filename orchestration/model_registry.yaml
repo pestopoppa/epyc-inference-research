@@ -15,6 +15,94 @@
 #
 # =============================================================================
 
+# =============================================================================
+# Kernel audit history
+# =============================================================================
+#
+# Record-of-truth for which `production-consolidated-vN` kernel branch was
+# validated against this benchmark registry. Updated by handoff-driven cleanup
+# audits (see `epyc-root/handoffs/`). Per-role active stack config lives in
+# `epyc-orchestrator/orchestration/model_registry.yaml`; THIS registry is
+# the comprehensive research record (per memory `feedback_registry_scope`).
+#
+kernel_audits:
+  - audit_date: 2026-04-30
+    branch: production-consolidated-v5
+    tip_sha: 23bcd6aaf
+    base_branch: production-consolidated-v4
+    base_sha: e734a6828
+    repo: /mnt/raid0/llm/llama.cpp-experimental
+    handoff: handoffs/active/v5-push-cleanup-audit.md       # moves to completed/ after push
+    bundle: data/cpu_optimization/2026-04-30-v5-cleanup-audit/
+    research_deep_dive: research/numa-weights-deep-dive.md  # NUMA_WEIGHTS family strip rationale
+    summary: >
+      59 commits ahead of v4 (50 cherry-picks + 9 strip/refactor commits net
+      ~-940 LOC of dead-by-default deprecated code). Stripped: CPU22
+      work-stealing, GGML_RMS_NORM_PARALLEL, GGML_GDN_K_PER_HEAD, CPU15
+      Phase 1+2 (intra-process expert sharding + anon-mmap copies),
+      GGML_NUMA_WEIGHTS family (NUMA_REPLICATE, =local warmup,
+      EXPERT_CCD_LAYOUT, EXPERT_ANON_COPIES). Refactors: GGML_EP_VERBOSE
+      info-log gating, GGML_MUL_MAT_BLOCK named constant. Toolchain
+      operator-applied at build (clang-20+libomp+znver5+PGO; per-role
+      BOLT-libggml for Coder-30B). Deployment-draft staging at
+      handoffs/active/model-registry-v5-deployment-draft.yaml (gates on
+      future orchestrator-stack rollout, NOT applied yet).
+    validation:
+      build:
+        toolchain: clang-20 + libomp 5.1 + -march=znver5 (no PGO for sanity build)
+        errors: 0
+        warnings: 1 pre-existing test-code (unused 'rc' in test-expected-attention-eviction.cpp:582)
+      tripwire:
+        model: Qwen3-Coder-30B-A3B-Instruct Q4_K_M
+        test: tg32 r=5 canonical
+        result_t_per_s: 47.13 ± 0.74
+        threshold: ">=47 cold-boot"
+        pass: true
+      ppl_bit_exact:
+        model: Qwen3-Coder-30B-A3B-Instruct Q4_K_M
+        chunks: 1-12 at n_ctx=512
+        v5_ppl: 11.1146 ± 0.62405
+        v4_reference: 11.1146 ± 0.62405
+        match: bit-exact
+      no_regression_tg:
+        - model: Qwen3-Coder-30B-A3B-Instruct Q4_K_M
+          test: tg32 r=5
+          result_t_per_s: 47.49 ± 0.17
+          threshold: ">=46.0"
+          pass: true
+        - model: Qwen3.6-35B-A3B-Q8_0
+          test: tg32 r=5
+          result_t_per_s: 22.79 ± 0.04
+          threshold: ">=22.5"
+          pass: true
+        - model: Qwen3-Coder-REAP-246B-A35B Q4_K_M
+          test: tg32 r=5
+          result_t_per_s: 6.25 ± 0.01
+          threshold: ">=6.15"
+          pass: true
+        - model: gemma-4-31B-it Q4_K_M
+          test: tg64 r=5
+          result_t_per_s: 7.11 ± 0.01
+          threshold: ">=6.25"
+          pass: true
+      ppl_informational:
+        - model: Qwen3.6-35B-A3B-Q8_0
+          ppl_chunks_1_12: 7.3804 ± 0.34202
+          note: no v4 reference documented; healthy value
+        - model: Qwen3-Coder-REAP-246B-A35B Q4_K_M
+          ppl_chunks_1_12: 12.7699 ± 0.66145
+          note: no v4 reference documented; healthy value
+        - model: gemma-4-31B-it Q4_K_M
+          ppl_chunks_1_12: 13357.8082 ± 1744.94
+          note: instruction-tuned model on raw wiki.test — anomalously high PPL is EXPECTED (chat-template not applied), not a v5 regression
+      smoke_per_role: DEFERRED (needs orchestrator integration)
+    decisions_resolved:
+      Q1_cpu22_strip_or_keep: STRIP (closure-via-test failed under canonical)
+      Q2_legacy_q8_0_8x8: REFACTOR-AND-KEEP (gateway flag, complementary to AVX path)
+      Q3_numa_weights: STRIP code + research deep-dive note (research/numa-weights-deep-dive.md)
+      Q4_v4_baseline: in-place workflow (both repos resolve v4 to same SHA e734a6828)
+      Q5_toolchain_ordering: AFTER cherry-picks (final commit before push, no CMake source change)
+
 runtime_defaults:
   quantization: Q4_K_M
   draft_quantization: Q8_0

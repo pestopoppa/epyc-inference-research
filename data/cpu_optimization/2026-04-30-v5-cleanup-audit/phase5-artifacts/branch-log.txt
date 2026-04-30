@@ -1,0 +1,58 @@
+734d011e0 ggml-cpu: name MUL_MAT block-tile constant (refactor — no behavior change)
+47991c6b2 ggml-ep: gate informational stderr output behind GGML_EP_VERBOSE
+f314f1b04 strip GGML_NUMA_WEIGHTS family activations (DEPRECATED — soft strip)
+b43dda32f llama-model-loader: strip CPU15 Phase 2 anon-copies producer (superseded)
+bbe38a683 ggml-cpu: strip CPU15 Phase 1+2 dead paths in mul_mat_id (superseded)
+af42e982b ggml-cpu/ops: strip GGML_GDN_K_PER_HEAD path (no current effect)
+d47ce5660 ggml-cpu/ops: strip GGML_RMS_NORM_PARALLEL path (net-negative)
+f6418b48a ggml-cpu: strip CPU22 work-stealing prototype (closure-via-test)
+9974fa442 CPU4 op-coalesced barriers (GGML_BARRIER_COALESCE) — disabled-by-default opt-in, gate not met
+02a0c8072 slot-promotion Phase 1.1 dispatcher v1: K-parallel verify functional, gate not met on canonical workload
+232567341 slot-promotion Phase 1.1 dispatcher v0: pass-through wiring + state sync helper
+bcb9fc3fd slot-promotion Phase 1.1 foundation v5: K aux contexts active on hybrid
+faf30170d slot-promotion Phase 1.1: fix both blockers — foundation v4 active on hybrid
+d696e5983 slot-promotion Phase 1.1 foundation v3: CLI-surface-only after hybrid crash
+a071e2cb0 slot-promotion Phase 1.1 foundation: --spec-numa-quarters K + K target ctxs
+6b2cbf539 MoE-Spec (arXiv:2602.16052): per-batch top-B expert budget at MoE routing
+cf156e9c5 CPU22: env-gated work-stealing prototype for mul_mat_id (gate FAILED — closes via test)
+69ad1ae2b CPU2 Session 18: Q6_K T1 prefetch (+0.7%); Q4_K prefetch tested + reverted
+529fcbd6a CPU2 Session 17: Q6_K 8x8 AVX-512BW SIMD body landed + bit-exact verified
+fccd715f4 CPU2 Session 16: Q6_K 8x8 AVX-512BW dispatcher scaffolding
+87fabc733 CPU1 P1.3 fix: per-region mbind instead of process-wide set_mempolicy
+b1dec7ae9 CPU2 kill-switch: GGML_NUMA_REPACK_INTERLEAVE=0 disables CPU_REPACK mbind
+6266ec82c CPU15 P3.2(g.1): eager parallel shard warm-up
+5436cea0c CPU15 P3.2(h): master phase-aware threading (env-gated)
+1f085253f CPU15 P3.2(g.0): GGML_EP_MASTER_ALL_NODES — master keeps full bandwidth
+f980fa758 CPU15 P3.2(e.1) FIXED: move EP top block before src1 quantization
+0ef73c2f3 CPU15 P3.2(e.1) attempt: critical OPENMP-guard fix + shard manager
+8516d2276 CPU15 P3.2(e.2): multi-node NUMA pinning per EP instance
+fdef551ff CPU15 P3.2(e.0): worker drone mode — skip non-MoE ops, broadcast src1+ids
+570b6c444 CPU15 P3.2(d.1.c): NUMA-pin EP instances, one per node
+436ad6db2 CPU15 P3.2(d.1.b): expert slicing + gather + sum-reduce + broadcast
+945a59d5c CPU15 P3.2(d.1.a): workers exit passive loop, sync in mul_mat_id
+d8919ac09 CPU15 P3.2(d.0): wire IPC harness around ggml_compute_forward_mul_mat_id
+b21e3b5a8 CPU15 P3.2(b+c): env-var-driven master/worker fork at ggml_cpu_init
+c88e00a4b CPU15 P3.2(a): import ep_dispatcher into ggml-cpu
+13b198ab6 CPU15 Phase 2: anonymous-mmap'd expert-only NUMA copies + mul_mat_id redirect
+a376bcb94 CPU15 Phase 1b: per-expert mbind to CCD-local NUMA node (correct, no measurable gain)
+05b838d5b CPU15 Phase 1a: per-CCD expert sharding work distribution (correct, net-neutral alone)
+cb39b8323 rms_norm: env-gated parallel inner-axis reduction (default off, net-negative)
+1fc225c62 gated_delta_net: env-gated S_v sub-chunking (default off, no current effect)
+a7b0e9644 CPU2 Session 15 follow-up: NUMA interleave of CPU_REPACK buffer + K-parallel activation quant
+7bfac73f3 CPU2 Session 15: AVX-512BW 8x8 Q8_0 GEMV kernel
+9c97e59d5 Revert "CPU1 op-fusion infrastructure: ggml_mul_mat_add_residual API + fused compute path"
+37d023d20 Revert "CPU1 op-fusion Phase 2: MUL_MAT+residual at graph construction (qwen3moe)"
+f5aa07ea2 CPU1 op-fusion Phase 2: MUL_MAT+residual at graph construction (qwen3moe)
+805f40d9a CPU1 op-fusion infrastructure: ggml_mul_mat_add_residual API + fused compute path
+c9802886c CPU1 Phase 1.4: axis-0-aligned element-wise ops + safe CCD-local barrier
+5f38fe18b CPU1 Phase 1.4 attempt complete: graph-level Lever B ruled out as unsafe
+cfe075199 CPU1 Lever B: revert between-op downgrade (PPL-corrupting); keep main-thread cpuset fix
+be474a8b8 CPU1 Lever B v1: CCD-local between-op barrier (env-gated experimental)
+7759b5a21 CPU1 fix: tighten cpuset validation for CCD pinning
+418262c08 CPU1 fix: CCD pinning respects process cpuset (was hanging under taskset)
+fa46150db CPU1 Lever A: ggml_barrier memory-order tightening (neutral, foundational)
+daee1b154 CPU1 Lever A': per-NUMA-node weight replication (env-gated)
+83a36334b CPU1 Phase 1.3 v2: per-CCD warmup touch pass (env-gated, local mode)
+450b1a7eb CPU1 Phase 1.2 + Phase 1.3 'local' mode scaffolding (env-gated)
+5a88bc20e CPU1 Phase 1.3 v1: set_mempolicy(MPOL_INTERLEAVE) for NUMA-aware weight placement
+072bb70dc CPU1 Phase 1.0+1.1: per-CCD 2-level barrier + CCD-aware cpumask (env-var gated)
