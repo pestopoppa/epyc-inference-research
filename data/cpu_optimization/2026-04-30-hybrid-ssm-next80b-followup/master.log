@@ -1,0 +1,53 @@
+=== Qwen3-Next-80B Hybrid SSM follow-up START Thu Apr 30 06:59:31 UTC 2026 ===
+Lib md5: 68adda9abb666a80cd0e79dc7195806b
+
+=== next80 / tg64 / c0 (env: default) ===
+Thu Apr 30 06:59:31 UTC 2026
+| qwen3next 80B.A3B Q4_K - Medium |  45.08 GiB |    79.67 B | CPU        |      96 |  1 |    0 |            tg64 |         22.37 ± 0.01 |
+  done at Thu Apr 30 06:59:56 UTC 2026
+=== next80 / pp512 / c0 (env: default) ===
+Thu Apr 30 06:59:58 UTC 2026
+| qwen3next 80B.A3B Q4_K - Medium |  45.08 GiB |    79.67 B | CPU        |      96 |  1 |    0 |           pp512 |        282.58 ± 0.62 |
+  done at Thu Apr 30 07:00:19 UTC 2026
+=== next80 / pp2048 / c0 (env: default) ===
+Thu Apr 30 07:00:21 UTC 2026
+| qwen3next 80B.A3B Q4_K - Medium |  45.08 GiB |    79.67 B | CPU        |      96 |  1 |    0 |          pp2048 |        274.95 ± 0.67 |
+  done at Thu Apr 30 07:01:16 UTC 2026
+=== next80 / tg64 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Thu Apr 30 07:01:18 UTC 2026
+| qwen3next 80B.A3B Q4_K - Medium |  45.08 GiB |    79.67 B | CPU        |      96 |  1 |    0 |            tg64 |         22.35 ± 0.04 |
+  done at Thu Apr 30 07:01:43 UTC 2026
+=== next80 / pp512 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Thu Apr 30 07:01:45 UTC 2026
+| qwen3next 80B.A3B Q4_K - Medium |  45.08 GiB |    79.67 B | CPU        |      96 |  1 |    0 |           pp512 |        281.02 ± 0.16 |
+  done at Thu Apr 30 07:02:06 UTC 2026
+=== next80 / pp2048 / c2 (env: GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Thu Apr 30 07:02:08 UTC 2026
+| qwen3next 80B.A3B Q4_K - Medium |  45.08 GiB |    79.67 B | CPU        |      96 |  1 |    0 |          pp2048 |        280.15 ± 0.33 |
+  done at Thu Apr 30 07:03:02 UTC 2026
+=== next80 / tg64 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Thu Apr 30 07:03:04 UTC 2026
+| qwen3next 80B.A3B Q4_K - Medium |  45.08 GiB |    79.67 B | CPU        |      96 |  1 |    0 |            tg64 |         22.46 ± 0.04 |
+  done at Thu Apr 30 07:03:29 UTC 2026
+=== next80 / pp512 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Thu Apr 30 07:03:31 UTC 2026
+| qwen3next 80B.A3B Q4_K - Medium |  45.08 GiB |    79.67 B | CPU        |      96 |  1 |    0 |           pp512 |        287.36 ± 0.82 |
+  done at Thu Apr 30 07:03:52 UTC 2026
+=== next80 / pp2048 / c3 (env: GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0) ===
+Thu Apr 30 07:03:54 UTC 2026
+| qwen3next 80B.A3B Q4_K - Medium |  45.08 GiB |    79.67 B | CPU        |      96 |  1 |    0 |          pp2048 |        277.35 ± 0.43 |
+  done at Thu Apr 30 07:04:49 UTC 2026
+
+=== aggregate (Qwen3-Next-80B Hybrid SSM follow-up, n=5) ===
+Shape    c0 baseline            c2 mbind-off           c3 CPU1+mbind-off     
+--------------------------------------------------------------------------------
+  tg64     22.37 ± 0.01           22.35 ± 0.04 (-0.1%)   22.46 ± 0.04 (+0.4%)  
+  pp512    282.58 ± 0.62          281.02 ± 0.16 (-0.6%)  287.36 ± 0.82 (+1.7%) 
+  pp2048   274.95 ± 0.67          280.15 ± 0.33 (+1.9%)  277.35 ± 0.43 (+0.9%) 
+
+Reference (Nemotron-9B, Probe B):
+  tg64    12.69 baseline   12.83 (+1.1%)        12.96 (+2.1%)
+  pp512   317.32 baseline  340.72 (+7.4%)       345.57 (+8.9%)  <<-- headline
+  pp2048  323.76 baseline  333.83 (+3.1%)       335.67 (+3.7%)
+
+=== completed Thu Apr 30 07:04:51 UTC 2026 ===
