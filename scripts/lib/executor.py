@@ -29,6 +29,17 @@ try:
 except ImportError:
     from registry import ModelRegistry, load_registry
 
+try:
+    from .canonical_recipe import (
+        apply_canonical_prefix,
+        build_canonical_env,
+    )
+except ImportError:
+    from canonical_recipe import (  # type: ignore[no-redef]
+        apply_canonical_prefix,
+        build_canonical_env,
+    )
+
 
 def _read_registry_timeout(category: str, key: str, fallback: int) -> int:
     """Read timeout from model_registry.yaml."""
@@ -182,6 +193,17 @@ class ServerManager:
         # Reusable HTTP session for connection pooling (health checks, inference)
         self._http_session: Optional[requests.Session] = None
 
+    @staticmethod
+    def _build_env(extra_vars: Optional[dict] = None) -> dict:
+        """Build subprocess environment via canonical_recipe.build_canonical_env.
+
+        Thin wrapper for backwards compatibility — the canonical OMP stack +
+        libomp override now lives in scripts/lib/canonical_recipe.py (single
+        source of truth). Per-model env_vars from the registry are applied as
+        the `extra_vars` precedence layer.
+        """
+        return build_canonical_env(extra_vars)
+
     def _get_http_session(self) -> requests.Session:
         """Get or create a reusable HTTP session for connection pooling."""
         if self._http_session is None:
@@ -193,7 +215,7 @@ class ServerManager:
         model_path: str,
         moe_override: Optional[str] = None,
         registry: Optional["ModelRegistry"] = None,
-        no_mmap: bool = False,
+        no_mmap: bool = True,  # canonical recipe `-mmp 0`: bulk read >> mmap on EPYC NUMA cold-cache decode
         context_length: Optional[int] = None,
         role: Optional[str] = None,
         draft_model_path: Optional[str] = None,
@@ -203,10 +225,12 @@ class ServerManager:
         spec_type: Optional[str] = None,
         use_chat_api: bool = False,
         chat_template: Optional[str] = None,
+        no_jinja: bool = False,
         cache_type_k: Optional[str] = None,
         cache_type_v: Optional[str] = None,
         reasoning: Optional[str] = None,
         reasoning_budget: Optional[int] = None,
+        env_vars: Optional[dict] = None,
     ) -> None:
         """Start llama-server with model loaded.
 
@@ -246,8 +270,11 @@ class ServerManager:
         use_flash_attn = registry.get_flash_attention(role) if role and registry else True
         ubatch_size = registry.get_ubatch_size(role) if role and registry else 8192
 
-        cmd = [
-            "numactl", "--interleave=all",
+        # Canonical wrapping is centralized in canonical_recipe.apply_canonical_prefix
+        # (taskset -c 0-95 + numactl --interleave=all). The prefix is mandatory for
+        # ≥30 t/s decode on EPYC 9655; without it, decode collapses 3-4×. Single
+        # source of truth — see scripts/lib/canonical_recipe.py.
+        cmd = apply_canonical_prefix([
             binary,
             "-m", model_path,
             "-t", str(self.threads),
@@ -256,7 +283,7 @@ class ServerManager:
             "-c", str(ctx_len),
             "--parallel", "1",  # Single slot for full context (benchmarking)
             "-ub", str(ubatch_size),  # Larger batch size for faster prompt processing
-        ]
+        ])
         if use_flash_attn:
             cmd.extend(["-fa", "on"])  # Flash attention for faster long-context processing
         if moe_override:
@@ -281,10 +308,12 @@ class ServerManager:
             cmd.extend(["-ctv", cache_type_v])
         if chat_template:
             cmd.extend(["--chat-template", chat_template])  # Override embedded template (e.g., chatml for Qwen3.6 text-only)
+            if no_jinja:
+                cmd.append("--no-jinja")  # Fork default is jinja=true; needed to avoid PEG parser on <think> output
         elif use_chat_api:
             cmd.append("--jinja")  # Enable Jinja template engine for models not in built-in list
-        if reasoning:
-            cmd.extend(["--reasoning", reasoning])  # off/on/auto — disables think blocks when "off"
+        if reasoning is not None and reasoning is not False:  # YAML1.1 parses 'off'→False; stringify to avoid silent skip
+            cmd.extend(["--reasoning", str(reasoning)])  # off/on/auto — disables think blocks when "off"
         if reasoning_budget is not None:
             cmd.extend(["--reasoning-budget", str(reasoning_budget)])  # Force </think> after N tokens
 
@@ -306,6 +335,7 @@ class ServerManager:
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=self._stderr_file,
+            env=self._build_env(env_vars),
         )
 
     def wait_ready(self, timeout: int = None) -> bool:
@@ -1002,15 +1032,15 @@ class Executor:
         if is_vision:
             # Vision models use llama-mtmd-cli with different invocation
             binary = get_binary("mtmd", self.registry)
-            cmd = [
-                "numactl", "--interleave=all",
+            # Canonical wrapping (see canonical_recipe.py).
+            cmd = apply_canonical_prefix([
                 binary,
                 "-m", model_path,
                 "--mmproj", mmproj_path,
                 "-t", str(threads),
                 "-n", str(max_tokens),
                 "--temp", str(temperature),
-            ]
+            ])
             # Add context size if specified (required for long prompts > 8K default)
             if context_size is not None:
                 cmd.extend(["-c", str(context_size)])
@@ -1037,15 +1067,18 @@ class Executor:
         completion_binary = get_binary("completion", self.registry)
 
         # Base command with env wrapper
-        cmd = [
-            "numactl", "--interleave=all",
+        # Canonical wrapping is centralized in canonical_recipe.apply_canonical_prefix
+        # (taskset -c 0-95 + numactl --interleave=all). The prefix is mandatory for
+        # ≥30 t/s decode on EPYC 9655; without it, decode collapses 3-4×. Single
+        # source of truth — see scripts/lib/canonical_recipe.py.
+        cmd = apply_canonical_prefix([
             binary,
             "-m", model_path,
             "-t", str(threads),
             "-n", str(max_tokens),
             "--temp", str(temperature),
             "-f", prompt_file,
-        ]
+        ])
 
         # Add context size if specified (required for long prompts > 8K default)
         # Also set batch size to match - lookup/lookahead need batch >= prompt tokens

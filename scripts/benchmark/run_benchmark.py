@@ -25,6 +25,7 @@ Usage:
 import argparse
 import fcntl
 import os
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -358,7 +359,8 @@ def build_work_items(
 class _ServerState:
     """Mutable state for the benchmark server lifecycle."""
 
-    __slots__ = ("server", "model_path", "experts", "draft_path", "lookup")
+    __slots__ = ("server", "model_path", "experts", "draft_path", "lookup",
+                 "_model_flags")
 
     def __init__(self) -> None:
         self.server: Optional[ServerManager] = None
@@ -366,6 +368,20 @@ class _ServerState:
         self.experts: Optional[int] = None
         self.draft_path: Optional[str] = None
         self.lookup: bool = False
+        self._model_flags: dict = {}
+
+    def _start_server(self, model_path, moe_override=None, registry=None,
+                      no_mmap=False, role=None, mmproj_path=None,
+                      draft_model_path=None, draft_max=None, lookup=False,
+                      spec_type=None):
+        """Start server using cached model config flags."""
+        return self.server.start(model_path, moe_override=moe_override,
+                                 registry=registry, no_mmap=no_mmap, role=role,
+                                 mmproj_path=mmproj_path,
+                                 draft_model_path=draft_model_path,
+                                 draft_max=draft_max, lookup=lookup,
+                                 spec_type=spec_type,
+                                 **self._model_flags)
 
     def stop(self) -> None:
         if self.server is not None:
@@ -409,6 +425,7 @@ def _ensure_server(
             model_cfg = role_config.get("model", {}) if role_config else {}
             use_chat = model_cfg.get("use_chat_api", False)
             chat_tmpl = model_cfg.get("chat_template")  # Override template (e.g., "chatml" for Qwen3.6)
+            no_jinja = model_cfg.get("no_jinja", False)  # --no-jinja for legacy template path (avoids PEG parser crash on <think>)
             # KV cache type overrides (e.g. Qwen3.6 needs bf16/q8_0, not default f16)
             kv_cfg = model_cfg.get("kv_cache", {})
             ctk = kv_cfg.get("type_k")
@@ -420,16 +437,26 @@ def _ensure_server(
             accel_str = f" +{use_spec_type}" if use_spec_type else (" +lookup" if use_lookup else "")
             chat_str = f" +{chat_tmpl}" if chat_tmpl else (" +chat" if use_chat else "")
             kv_str = f" kv={ctk}/{ctv}" if ctk else ""
-            reason_str = f" reason={reasoning}" if reasoning else ""
-            print(f"    [SERVER] Starting llama-server{accel_str}{chat_str}{kv_str}{reason_str} (model will stay in RAM)...", flush=True)
+            reason_str = f" reason={reasoning}" if reasoning is not None and reasoning is not False else ""
+            noj_str = " --no-jinja" if no_jinja else ""
+            print(f"    [SERVER] Starting llama-server{accel_str}{chat_str}{kv_str}{reason_str}{noj_str} (model will stay in RAM)...", flush=True)
+            # Performance-critical env vars shared across models (validated April 29 canonical OMP stack)
+            env_vars = model_cfg.get("env_vars", {}) or {}
+            ss._model_flags = {
+                "use_chat_api": use_chat,
+                "chat_template": chat_tmpl,
+                "no_jinja": no_jinja,
+                "cache_type_k": ctk,
+                "cache_type_v": ctv,
+                "reasoning": reasoning,
+                "reasoning_budget": reasoning_budget,
+                "env_vars": env_vars,
+            }
             ss.server = ServerManager(port=8080)
-            ss.server.start(model_path, moe_override=None, registry=registry,
-                            no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
-                            lookup=use_lookup, spec_type=use_spec_type,
-                            draft_max=accel_draft_max, use_chat_api=use_chat,
-                            chat_template=chat_tmpl,
-                            cache_type_k=ctk, cache_type_v=ctv, reasoning=reasoning,
-                            reasoning_budget=reasoning_budget)
+            ss._start_server(model_path, registry=registry,
+                           no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
+                           lookup=use_lookup, spec_type=use_spec_type,
+                           draft_max=accel_draft_max, draft_model_path=None)
             timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
             if not ss.server.wait_ready(timeout=timeout):
                 print(f"    [SERVER] Failed to start, falling back to subprocess mode", flush=True)
@@ -454,21 +481,11 @@ def _ensure_server(
         use_spec_type = accel.get("spec_type") if accel.get("type") == "ngram_lookup" else None
         use_lookup = with_lookup and not use_spec_type
         accel_draft_max = accel.get("draft_max") if use_spec_type else None
-        role_config = registry.get_role_config(role) if registry else None
-        model_cfg = role_config.get("model", {}) if role_config else {}
-        use_chat = model_cfg.get("use_chat_api", False)
-        chat_tmpl = model_cfg.get("chat_template")
-        kv_cfg = model_cfg.get("kv_cache", {})
-        ctk = kv_cfg.get("type_k")
-        ctv = kv_cfg.get("type_v")
-        reasoning = model_cfg.get("reasoning")
         ss.server = ServerManager(port=8080)
-        ss.server.start(model_path, moe_override=moe_override, registry=registry,
-                        no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
-                        lookup=use_lookup, spec_type=use_spec_type,
-                        draft_max=accel_draft_max, use_chat_api=use_chat,
-                        chat_template=chat_tmpl,
-                        cache_type_k=ctk, cache_type_v=ctv, reasoning=reasoning)
+        ss._start_server(model_path, moe_override=moe_override, registry=registry,
+                       no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
+                       lookup=use_lookup, spec_type=use_spec_type,
+                       draft_max=accel_draft_max)
         timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
         if not ss.server.wait_ready(timeout=timeout):
             print(f"      [SERVER] Failed to restart after crash, falling back to subprocess", flush=True)
@@ -502,8 +519,8 @@ def _ensure_server(
 
         ss.stop()
         ss.server = ServerManager(port=8080)
-        ss.server.start(model_path, moe_override=moe_override, registry=registry,
-                        no_mmap=no_mmap, role=role, mmproj_path=mmproj_path)
+        ss._start_server(model_path, moe_override=moe_override, registry=registry,
+                       no_mmap=no_mmap, role=role, mmproj_path=mmproj_path)
         timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
         if not ss.server.wait_ready(timeout=timeout):
             print(f"      [SERVER] Failed to restart, falling back to subprocess", flush=True)
@@ -544,7 +561,7 @@ def _ensure_server(
             print(f"      [SERVER] Restarting with draft {draft_name}{lookup_str}...", flush=True)
             ss.stop()
             ss.server = ServerManager(port=8080)
-            ss.server.start(
+            ss._start_server(
                 model_path, moe_override=moe_override, registry=registry,
                 no_mmap=no_mmap, role=role,
                 draft_model_path=required_draft,
@@ -583,7 +600,7 @@ def _ensure_server(
             print(f"      [SERVER] Restarting with --lookup for {config.name}...", flush=True)
             ss.stop()
             ss.server = ServerManager(port=8080)
-            ss.server.start(
+            ss._start_server(
                 model_path, moe_override=moe_override, registry=registry,
                 no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
                 lookup=True,
@@ -1308,7 +1325,7 @@ def run_benchmark(
                     if ss.server is not None:
                         ss.stop()
                     ss.server = ServerManager(port=8080)
-                    ss.server.start(model_path, registry=registry,
+                    ss._start_server(model_path, registry=registry,
                                     no_mmap=no_mmap, role=role, mmproj_path=mmproj_path)
                     timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
                     if not ss.server.wait_ready(timeout=timeout):
@@ -1494,8 +1511,49 @@ Examples:
     parser.add_argument("--baseline-run", type=str, default=None, help="Pull slowest questions from this run ID (for models with existing baselines)")
     parser.add_argument("--with-lookup", action="store_true", help="Enable --lookup on server for all configs (accelerates baseline quality runs)")
     parser.add_argument("--all-suites", action="store_true", help="Run all quality suites regardless of role mapping (VL excluded for non-VL models)")
+    parser.add_argument(
+        "--skip-preflight",
+        action="store_true",
+        help=(
+            "Skip the canonical-recipe preflight gate (uptime / libomp / launcher wrapping / tripwire / "
+            "freq-under-load). Use only when you've just run the preflight manually and want to start "
+            "another sweep within minutes. The preflight catches the multi-day-uptime CPU freq throttle "
+            "and AOCC libomp issues that cost ~50% throughput silently."
+        ),
+    )
 
     args = parser.parse_args()
+
+    # Canonical-recipe preflight gate. Run before any heavy work (and before any
+    # subprocess that would invalidate freq-under-load measurement). Skipped if
+    # the user is in a non-execution mode (list/dry-run) or has explicitly opted
+    # out via --skip-preflight.
+    _is_dry_or_list = (
+        args.dry_run
+        or args.list_models
+        or args.list_suites
+    )
+    if not args.skip_preflight and not _is_dry_or_list:
+        preflight_path = Path(__file__).resolve().parent.parent / "preflight_canonical.py"
+        if preflight_path.exists():
+            print(f"\n[run_benchmark] Running canonical preflight: {preflight_path}\n")
+            rc = subprocess.run([sys.executable, str(preflight_path)]).returncode
+            if rc != 0:
+                print(
+                    "\n[run_benchmark] Preflight FAILED — refusing to proceed. "
+                    "Address the fix above (typically: reboot for freq throttle, or "
+                    "rebuild for libomp / launcher drift), then re-run. To bypass "
+                    "the gate (NOT recommended), pass --skip-preflight.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            print()  # blank line between preflight and benchmark output
+        else:
+            print(
+                f"[run_benchmark] WARNING: preflight script not found at {preflight_path}; "
+                "proceeding without canonical-recipe gate.",
+                file=sys.stderr,
+            )
 
     # Initialize components
     registry = load_registry()
