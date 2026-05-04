@@ -1,0 +1,39 @@
+[14:42:43] START coder30b_q4km GGML_Q6_K_8X8_AVX=0
+[14:42:50] END   coder30b_q4km env=0 rc=0 elapsed=7s avg_ts=47.365563 +/- 0.108671 n=5
+[14:42:50] START coder30b_q4km GGML_Q6_K_8X8_AVX=1
+[14:42:57] END   coder30b_q4km env=1 rc=0 elapsed=7s avg_ts=47.421158 +/- 0.231485 n=5
+[14:42:57] === coder30b_q4km both env states complete ===
+[14:42:57] START gemma4_31b_q4km GGML_Q6_K_8X8_AVX=0
+[14:43:25] END   gemma4_31b_q4km env=0 rc=0 elapsed=28s avg_ts=6.848542 +/- 0.055531 n=5
+[14:43:25] START gemma4_31b_q4km GGML_Q6_K_8X8_AVX=1
+[14:43:53] END   gemma4_31b_q4km env=1 rc=0 elapsed=28s avg_ts=6.839467 +/- 0.067995 n=5
+[14:43:53] === gemma4_31b_q4km both env states complete ===
+[14:43:53] START supergemma4_31b_q4km GGML_Q6_K_8X8_AVX=0
+[14:44:21] END   supergemma4_31b_q4km env=0 rc=0 elapsed=28s avg_ts=6.936947 +/- 0.050828 n=5
+[14:44:21] START supergemma4_31b_q4km GGML_Q6_K_8X8_AVX=1
+[14:44:48] END   supergemma4_31b_q4km env=1 rc=0 elapsed=27s avg_ts=6.938245 +/- 0.023572 n=5
+[14:44:48] === supergemma4_31b_q4km both env states complete ===
+[14:44:48] START qwen3next_80b_a3b_q4km GGML_Q6_K_8X8_AVX=0
+[14:45:06] END   qwen3next_80b_a3b_q4km env=0 rc=0 elapsed=18s avg_ts=21.322235 +/- 0.129337 n=5
+[14:45:06] START qwen3next_80b_a3b_q4km GGML_Q6_K_8X8_AVX=1
+[14:45:24] END   qwen3next_80b_a3b_q4km env=1 rc=0 elapsed=18s avg_ts=21.237840 +/- 0.112813 n=5
+[14:45:24] === qwen3next_80b_a3b_q4km both env states complete ===
+[14:45:24] START reap246b_a35b_q4km GGML_Q6_K_8X8_AVX=0
+[14:46:20] END   reap246b_a35b_q4km env=0 rc=0 elapsed=56s avg_ts=6.149650 +/- 0.040269 n=5
+[14:46:20] START reap246b_a35b_q4km GGML_Q6_K_8X8_AVX=1
+[14:47:17] END   reap246b_a35b_q4km env=1 rc=0 elapsed=57s avg_ts=6.087431 +/- 0.089412 n=5
+[14:47:17] === reap246b_a35b_q4km both env states complete ===
+[14:47:17] === Phase A.2 ALL DONE ===
+
+=== SUMMARY ===
+model                   env  avg_ts     stddev_ts  n_runs
+coder30b_q4km           0    47.365563  0.108671   5
+coder30b_q4km           1    47.421158  0.231485   5
+gemma4_31b_q4km         0    6.848542   0.055531   5
+gemma4_31b_q4km         1    6.839467   0.067995   5
+supergemma4_31b_q4km    0    6.936947   0.050828   5
+supergemma4_31b_q4km    1    6.938245   0.023572   5
+qwen3next_80b_a3b_q4km  0    21.322235  0.129337   5
+qwen3next_80b_a3b_q4km  1    21.237840  0.112813   5
+reap246b_a35b_q4km      0    6.149650   0.040269   5
+reap246b_a35b_q4km      1    6.087431   0.089412   5

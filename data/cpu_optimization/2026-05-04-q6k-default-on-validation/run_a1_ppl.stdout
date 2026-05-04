@@ -1,0 +1,39 @@
+[14:20:03] START coder30b_q4km GGML_Q6_K_8X8_AVX=0
+[14:20:40] END   coder30b_q4km env=0 rc=0 elapsed=37s ppl=8.2622 +/- 0.27495
+[14:20:40] START coder30b_q4km GGML_Q6_K_8X8_AVX=1
+[14:21:18] END   coder30b_q4km env=1 rc=0 elapsed=38s ppl=8.2622 +/- 0.27495
+[14:21:18] === coder30b_q4km both env states complete ===
+[14:21:18] START gemma4_31b_q4km GGML_Q6_K_8X8_AVX=0
+[14:23:16] END   gemma4_31b_q4km env=0 rc=0 elapsed=118s ppl=4359.7047 +/- 353.16114
+[14:23:16] START gemma4_31b_q4km GGML_Q6_K_8X8_AVX=1
+[14:25:09] END   gemma4_31b_q4km env=1 rc=0 elapsed=113s ppl=4359.7047 +/- 353.16114
+[14:25:09] === gemma4_31b_q4km both env states complete ===
+[14:25:09] START supergemma4_31b_q4km GGML_Q6_K_8X8_AVX=0
+[14:27:02] END   supergemma4_31b_q4km env=0 rc=0 elapsed=113s ppl=19.6921 +/- 0.86338
+[14:27:02] START supergemma4_31b_q4km GGML_Q6_K_8X8_AVX=1
+[14:28:55] END   supergemma4_31b_q4km env=1 rc=0 elapsed=113s ppl=19.6921 +/- 0.86338
+[14:28:55] === supergemma4_31b_q4km both env states complete ===
+[14:28:55] START qwen3next_80b_a3b_q4km GGML_Q6_K_8X8_AVX=0
+[14:30:06] END   qwen3next_80b_a3b_q4km env=0 rc=0 elapsed=71s ppl=4.1565 +/- 0.10725
+[14:30:06] START qwen3next_80b_a3b_q4km GGML_Q6_K_8X8_AVX=1
+[14:31:10] END   qwen3next_80b_a3b_q4km env=1 rc=0 elapsed=64s ppl=4.1565 +/- 0.10725
+[14:31:10] === qwen3next_80b_a3b_q4km both env states complete ===
+[14:31:10] START reap246b_a35b_q4km GGML_Q6_K_8X8_AVX=0
+[14:35:09] END   reap246b_a35b_q4km env=0 rc=0 elapsed=239s ppl=8.1396 +/- 0.24168
+[14:35:09] START reap246b_a35b_q4km GGML_Q6_K_8X8_AVX=1
+[14:38:55] END   reap246b_a35b_q4km env=1 rc=0 elapsed=226s ppl=8.1396 +/- 0.24168
+[14:38:55] === reap246b_a35b_q4km both env states complete ===
+[14:38:55] === Phase A.1 ALL DONE ===
+
+=== SUMMARY ===
+model                   env  ppl        stderr
+coder30b_q4km           0    8.2622     0.27495
+coder30b_q4km           1    8.2622     0.27495
+gemma4_31b_q4km         0    4359.7047  353.16114
+gemma4_31b_q4km         1    4359.7047  353.16114
+supergemma4_31b_q4km    0    19.6921    0.86338
+supergemma4_31b_q4km    1    19.6921    0.86338
+qwen3next_80b_a3b_q4km  0    4.1565     0.10725
+qwen3next_80b_a3b_q4km  1    4.1565     0.10725
+reap246b_a35b_q4km      0    8.1396     0.24168
+reap246b_a35b_q4km      1    8.1396     0.24168

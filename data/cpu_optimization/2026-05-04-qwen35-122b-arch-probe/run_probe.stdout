@@ -1,0 +1,16 @@
+[14:49:21] START c0_default_v5 env=[]
+[14:49:59] END   c0_default_v5 rc=0 elapsed=38s avg_ts=12.040712 +/- 0.037333 n=5
+[14:49:59] START c1_cpu1_stack env=[GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1]
+[14:50:28] END   c1_cpu1_stack rc=0 elapsed=29s avg_ts=12.065425 +/- 0.023916 n=5
+[14:50:28] START c2_mbind_off env=[GGML_NUMA_REPACK_INTERLEAVE=0]
+[14:50:57] END   c2_mbind_off rc=0 elapsed=29s avg_ts=12.194983 +/- 0.050832 n=5
+[14:50:57] START c3_cpu1_plus_mbind env=[GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0]
+[14:51:25] END   c3_cpu1_plus_mbind rc=0 elapsed=28s avg_ts=12.047637 +/- 0.082277 n=5
+[14:51:25] === Probe B single-instance ALL DONE ===
+
+=== SUMMARY ===
+config              env_block                                                                                             avg_ts     stddev_ts  n_runs
+c0_default_v5                                                                                                             12.040712  0.037333   5
+c1_cpu1_stack       GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1                                12.065425  0.023916   5
+c2_mbind_off        GGML_NUMA_REPACK_INTERLEAVE=0                                                                         12.194983  0.050832   5
+c3_cpu1_plus_mbind  GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0  12.047637  0.082277   5
