@@ -1,0 +1,21 @@
+[15:03:41] START w1a (1× --cpunodebind=0 --membind=0 -t 24, c2 env)
+[15:04:33] END   w1a rc=0 elapsed=52s avg_ts=4.207106 +/- 0.011253 n=5
+[15:04:33] START w1b (concurrent 2× -t 24 per-NUMA-node, c2 env)
+  launched node=0 cpus=0-23 PID=682166 out=w1b_node0.json
+  launched node=1 cpus=24-47 PID=682171 out=w1b_node1.json
+[15:05:27] END   w1b elapsed=54s fail=0
+  w1b_node0: avg_ts=4.193806 +/- 0.021558 n=5
+  w1b_node1: avg_ts=4.271460 +/- 0.004419 n=5
+  aggregate t/s: 8.4653
+[15:05:27] START w2 (concurrent 4× -t 24 per-NUMA-node, c2 env)
+  launched node=0 cpus=0-23 PID=682483 out=w2_node0.json
+  launched node=1 cpus=24-47 PID=682488 out=w2_node1.json
+  launched node=2 cpus=48-71 PID=682493 out=w2_node2.json
+  launched node=3 cpus=72-95 PID=682498 out=w2_node3.json
+[15:06:22] END   w2 elapsed=55s fail=0
+  w2_node0: avg_ts=4.152343 +/- 0.070685 n=5
+  w2_node1: avg_ts=4.248540 +/- 0.007522 n=5
+  w2_node2: avg_ts=4.241749 +/- 0.017291 n=5
+  w2_node3: avg_ts=4.219930 +/- 0.005644 n=5
+  aggregate t/s: 16.8624
+[15:06:22] === Phase 2 ALL DONE ===
