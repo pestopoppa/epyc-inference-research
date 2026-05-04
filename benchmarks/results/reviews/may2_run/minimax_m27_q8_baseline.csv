@@ -1,0 +1,9 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,10.25,3,"Identifies 3 distinct failure modes (Goodhart/static thresholds/ritualistic auditing) with clear mechanisms, proposes specific tied amendments, discusses pros/cons trade-offs for each. Complete and well-reasoned."
+general,t3_q3_strategic_communication,10.53,3,"Acknowledges miss without spin, frames LOIs as earned pivot not rescue, gives concrete Day 30/60/90 milestones plus 30% burn reduction, addresses leadership question directly but with appropriate humility. Confident tone preserved."
+general,t2_q1_synthesis,10.74,3,"4 sentences as allowed; concrete (Auth0/Firebase under $20K), addresses all three constraints (2-week churn fix, 3-month refactor not blocked, finance threshold respected). Plug-in wrapper design avoids tech debt."
+general,t2_q2_transform,10.80,3,"Valid nested YAML correctly grouping Alice+Carol under Engineering and Bob+Dave under Sales. Bonus alternative list-of-objects form also correct. No errors."
+general,t2_q4_inconsistency,10.51,3,"Correctly flags body format conflict (B form-encoded vs A/C JSON) and rate limit conflict (A/B 100/min ~6000/hr vs C 1000/hr). Math conversion correct, both discrepancies captured."
+general,t1_q1_json,10.97,3,"Pure JSON output, no explanation, all four fields correct (name, role, department=Platform, start_date=2024-03-15)."
+general,t1_q2_multistep,10.70,3,"Correct case-insensitive dedup yielding 4 items (Apple/banana/cherry/Date), alphabetically sorted, numbered 1-4, count appended. All four steps performed."
+general,t1_q3_compare,10.84,3,"2 sentences as requested; captures independent scaling+failure isolation vs network/data-consistency tradeoffs for microservices, deployment simplicity+joins vs scaling/coupling for monolith. Adds appropriate decision criteria."

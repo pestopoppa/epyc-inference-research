@@ -233,6 +233,36 @@ ROLE_SUITE_MAP = {
 }
 
 
+def _resolve_role_to_suites(role_name: str) -> Optional[list[str]]:
+    """Try to map a role name (or candidate role name) to a suite list.
+
+    Match order:
+      1. Exact match (e.g. "frontdoor", "coder", "architect")
+      2. Prefix-on-underscore (e.g. "architect_general" → "architect")
+      3. Substring contains (e.g. "long_context_qwen35" → "long_context")
+
+    Returns None if no match — caller decides fallback.
+    """
+    rl = role_name.lower()
+
+    # 1. Exact
+    if rl in ROLE_SUITE_MAP:
+        return ROLE_SUITE_MAP[rl]
+
+    # 2. Prefix on underscore (architect_general → architect; coder_escalation → coder)
+    if "_" in rl:
+        prefix = rl.split("_")[0]
+        if prefix in ROLE_SUITE_MAP:
+            return ROLE_SUITE_MAP[prefix]
+
+    # 3. Substring (covers "qwen35_coder_baseline" → coder, etc.)
+    for pattern, suites in ROLE_SUITE_MAP.items():
+        if pattern in rl:
+            return suites
+
+    return None
+
+
 def get_suites_for_role(role: str, registry=None) -> list[str]:
     """Get applicable suite names for a model based on candidate roles.
 
@@ -243,32 +273,25 @@ def get_suites_for_role(role: str, registry=None) -> list[str]:
     Returns:
         List of suite names to test (union of all candidate role suites).
     """
-    # If registry provided, check for candidate_roles field
+    # If registry provided, check for candidate_roles field. Apply the same
+    # exact / prefix-on-underscore / substring resolution to each candidate so
+    # that names like "architect_general" map to architect's suite list (instead
+    # of falling through to the default "general" only).
     if registry is not None:
         role_config = registry.get_role_config(role)
         if role_config and "candidate_roles" in role_config:
-            candidate_roles = role_config["candidate_roles"]
-            # Union of all suites for all candidate roles
             all_suites = set()
-            for candidate in candidate_roles:
-                candidate_lower = candidate.lower()
-                if candidate_lower in ROLE_SUITE_MAP:
-                    all_suites.update(ROLE_SUITE_MAP[candidate_lower])
+            for candidate in role_config["candidate_roles"]:
+                resolved = _resolve_role_to_suites(candidate)
+                if resolved:
+                    all_suites.update(resolved)
             if all_suites:
                 return list(all_suites)
 
-    # Fallback: infer from entry name
-    role_lower = role.lower()
-
-    # Check prefix first (role names like ingest_*, coder_*, etc.)
-    prefix = role_lower.split("_")[0] if "_" in role_lower else role_lower
-    if prefix in ROLE_SUITE_MAP:
-        return ROLE_SUITE_MAP[prefix]
-
-    # Then check for pattern anywhere in name
-    for pattern, suites in ROLE_SUITE_MAP.items():
-        if pattern in role_lower:
-            return suites
+    # Fallback: infer from the entry name itself.
+    resolved = _resolve_role_to_suites(role)
+    if resolved:
+        return resolved
 
     # Default: general suite only
     return ["general"]

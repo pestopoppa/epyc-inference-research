@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+math,t3_q1_analysis,,0,Garbage tokens after closing think tag; no coherent answer to differentiability/closed-form/limit
+math,t3_q2_combinatorics,,0,Entire response in unclosed think tag; runaway repetition of garbage tokens
+math,t3_q3_probability_theory,,0,Entire response in unclosed think tag; only fragmentary garbled tokens
+math,t2_q1_optimization,,0,Garbled tokens after think close; no dimensions or maximum area computed
+math,t2_q2_proof,,0,Garbage tokens (.githubusercontent.com repeated) after think; no identification of the n=1 to n=2 base-case flaw
+math,t2_q3_calculus,,0,Truncated to incomplete fragment after think; no antiderivative or final answer
+math,t2_q4_statistics,,0,Entire response in unclosed think tag; no mean/median/std computed
+math,t1_q1_word_problem,,0,Entire response in unclosed think tag; no discount/tax/percentage computed
+math,t1_q2_system_equations,,0,Heavy garbage tokens; no coherent solution; final answer never produced
+math,t1_q3_probability,,0,Garbled tokens with runaway repetition; no probability calculation completed
+thinking,t3_q1_methodological_critique,16.8,1,"Identifies 2-3 issues (SES confounds, selection bias) in heavily garbled prose; truncated mid-thought; partial credit for naming methodological problems"
+thinking,t3_q2_causal_inference,,0,Entire response in unclosed think tag; no adjustment set or yellow-fingers analysis
+thinking,t3_q3_reasoning_trap,,0,45K-char unclosed think block with runaway repetition; no answer
+thinking,t2_q1_paradox,,1,Attempts continuity vs essentialism in mixed garbled multilingual prose; truncated mid-argument; no conclusion stated
+thinking,t2_q2_counterfactual,17.2,1,Addresses speed/collaboration dimensions with garbled prose; reproducibility dimension not reached; mechanisms vague
+thinking,t2_q3_formal,17.5,0,"Truncated fragment ""P -> Q and Q -> R"" without formal proof or example"
+thinking,t2_q4_metacognition,,0,Entire response in unclosed think tag; no estimation steps or bounds
+thinking,t1_q1_multistep,,0,Unclosed think tag; model self-acknowledges generating garbage
+thinking,t1_q2_hypothesis,,0,"Severe runaway repetition of ""socioeconomic"" thousands of times; no three coherent alternative explanations"
+thinking,t1_q3_planning,,0,Runaway repetition (urlencoded garbage and Chinese tokens); no valid orderings produced
+general,t3_q1_policy_analysis,,1,Mixed Chinese/English garble identifies one failure mode (metric over-specification); other 2 modes and amendments not coherently delivered
+general,t3_q2_system_failure,,1,Identifies RYW violation as root cause but garbled prose; further analysis truncated
+general,t3_q3_strategic_communication,,0,Unclosed think tag with garbled Chinese/garbage; no board narrative produced
+general,t2_q1_synthesis,17.5,2,Coherent synthesis recommending temporary patch under $20K with later refactor; minor garble but addresses all three perspectives
+general,t2_q2_transform,,0,Multiple garbled YAML attempts none correct; never produces valid nested YAML
+general,t2_q3_schedule,,0,Truncated outline with garbled constraint summary; no schedule produced
+general,t2_q4_inconsistency,,1,Identifies JSON vs form-encoded body and rate-limit unit inconsistency in garbled table; truncated
+general,t1_q1_json,,0,"Unclosed think tag, runaway repetition; no JSON output"
+general,t1_q2_multistep,,0,"Garbled list with hallucinated item ""elderberry"" not in input; wrong count"
+general,t1_q3_compare,16.9,1,Attempts comparison but heavy mixed-language garble; somewhat conveys microservices vs monolith tradeoff
+instruction_precision,t3_q1_self_referential,16.0,0,Unclosed think tag with runaway garbage; no self-referential sentence produced
+instruction_precision,t3_q2_cascading_constraints,,0,Unclosed think tag fragment; no 5-word list produced
+instruction_precision,t3_q3_meta_instruction,,0,"Massive runaway repetition of ""AAAA..."" after thinks; instructions not followed"
+instruction_precision,t2_q1_resist_elaboration,24.8,3,"Outputs only ""4"" as required"
+instruction_precision,t2_q2_maintain_format,,0,Garbled multi-language output with repeated FIX lines; format not followed
+instruction_precision,t2_q3_empty_handling,25.0,3,Outputs exactly NONE as required
+instruction_precision,t2_q4_conflicting_constraints,,0,Heavy runaway garbage tokens; no valid sentence under constraints produced
+instruction_precision,t1_q1_negative_instruction,,0,Unclosed think tag with runaway repetition; no 2-sentence explanation
+instruction_precision,t1_q2_word_limit,,0,"Unclosed think tag with runaway ""itecture"" repetition; no 20-25 word description"
+instruction_precision,t1_q3_structured_format,,0,Garbled fragments with hallucinated/duplicate language entries; format violated
+instruction_precision,t1_q4_multiple_constraints,,0,Heavy garble with hallucinated entries (Spartimento) and repeated reattempts; never produces clean alphabetical list of 5
+coder,t3_q1_concurrent_correctness,,0,Truncated after defining threads; no ABA scenario or fix code produced
+coder,t3_q2_distributed_consistency,,1,Lists LWW briefly with one tradeoff; truncated before remaining 3+ strategies and design decision
+coder,t3_q3_algorithmic_hardness,,0,"Runaway repetition of ""assume A claims..."" line; never completes adversary argument or recurrence"
+coder,t2_q1_design,,0,Garbled non-runnable Python pseudocode; class invalid; never completes get/put
+coder,t2_q2_debug_complex,15.1,0,56K-char response with garbled non-runnable code; mentions Lock but final code is broken syntax
+coder,t2_q3_optimize,,0,"Garbled non-runnable optimized version using undefined ""highest"" Counter; broken syntax"
+coder,t2_q4_system,,0,Unclosed think tag with repetitive garbage; no rate limiter class produced
+coder,t1_q1_algorithm,,0,"Truncated at ""Bug 1: off-by-one"" mid-sentence; never identifies both bugs or shows fix"
+coder,t1_q2_refactor,,0,"Unclosed think tag with runaway ""itecture"" repetition; no refactored function"
+coder,t1_q3_test,,0,Garbled non-runnable pytest code with broken syntax (assert.strictEqualpoons); not usable
+agentic,t3_q1_competing_constraints,,0,Truncated 91-char fragment of malformed JSON; no plan produced
+agentic,t3_q2_multi_agent_coordination,,0,"Garbled JSON with massive runaway ""TemplateName.googleapis.com"" repetition; not valid JSON"
+agentic,t3_q3_adversarial_robustness,,0,Runaway repetition of refusal in mixed Chinese/Korean/English garble; no security analysis
+agentic,t2_q1_ambiguous,,1,Asks a clarifying question (channel and outage details) inside garbled multilingual prose; partial credit for identifying ambiguity
+agentic,t2_q2_error_chain,,0,Unclosed think tag with runaway garbage tokens; no tool call produced
+agentic,t2_q3_schema_edge,,0,"Multiple garbled JSON attempts none valid; key names corrupted (RequestMethod, HttpHeaders nhau)"
+agentic,t2_q4_orchestration,,0,"33K unclosed think with runaway ""itecture"" garbage; no deploy sequence"
+agentic,t1_q1_sequential,15.3,0,Multiple garbled JSON arrays none valid; corrupted tool/parameter names throughout
+agentic,t1_q2_error_handling,,1,Identifies search_users as next step in mixed Chinese prose; not valid JSON tool call
+agentic,t1_q3_nested_params,,0,Empty JSON object {} after think; no create_task invocation with title/assignees/metadata

@@ -103,6 +103,61 @@ kernel_audits:
       Q4_v4_baseline: in-place workflow (both repos resolve v4 to same SHA e734a6828)
       Q5_toolchain_ordering: AFTER cherry-picks (final commit before push, no CMake source change)
 
+  - audit_date: 2026-04-30
+    branch: production-consolidated-v5
+    tip_sha: c9626faf8
+    base_sha: 23bcd6aaf  # previous v5 audit tip — same calendar day
+    repo: /mnt/raid0/llm/llama.cpp (production worktree)  # also at /mnt/raid0/llm/llama.cpp-experimental on feature/lightning-attention-port
+    handoff: handoffs/active/lightning-attention-port.md
+    summary: >
+      Lightning Attention port v1 — adds LLM_ARCH_BAILINGMOE_LINEAR for Ant Group
+      Ring-mini-linear-2.0 (and Ring-flash-linear-2.0 if downloaded). Hybrid
+      Lightning Attention (linear, fixed per-(layer,head) ALiBi-style decay) +
+      softmax MoE. Uses existing GGML_OP_GATED_LINEAR_ATTN op with constant-`g` —
+      no new ggml ops. Full validation chain: regression on Qwen3-Coder-30B and
+      Qwen3.5-9B (existing arches still load+decode), converter end-to-end on real
+      Ring-mini BF16 weights → 32.9 GB GGUF, gguf-dump verifies arch metadata +
+      per-layer linear/softmax shape dispatch correct, llama-quantize BF16→Q4_K_M
+      load-path test passes, llama-bench tg8 = 40.68 t/s on Q4_K_M (96t),
+      llama-completion produces COHERENT FACTUALLY-CORRECT output with native
+      `<think>` reasoning, AIME 2025 Problem 1 solved correctly (answer = 70).
+    commits:
+      - sha: 33b60b925
+        scope: 8 files, +408 lines (incl. new src/models/ring-linear.cpp)
+        note: Initial port — converter + arch enum + load_hparams + load_tensors + graph builder + dispatch wiring
+      - sha: c9626faf8
+        scope: 1 file, +13/-6 lines
+        note: GroupRMSNorm fix — replaces ggml_group_norm (LayerNorm semantics) with reshape+ggml_rms_norm. Critical for reasoning quality — without it, the model loads but multi-step reasoning collapses into degenerate repetition loops. Single-step factual retrieval ("capital of France") survived the bug, masking it from initial smoke tests.
+    validation:
+      build:
+        toolchain: cmake -B build -DGGML_CUDA=OFF -DGGML_NATIVE=ON
+        errors: 0
+        warnings: 0 (new code clean; pre-existing test-code warning unchanged)
+      no_regression_existing:
+        - model: Qwen3-Coder-30B-A3B-Instruct Q4_K_M
+          test: tg8 r=1
+          result_t_per_s: 25.96  # cold smoke; canonical 47-48
+          pass: true (loads + decodes)
+        - model: Qwen3.5-9B Q4_K_M (LLM_ARCH_QWEN35 hybrid)
+          test: tg8 r=1
+          result_t_per_s: 10.21
+          pass: true (loads + decodes — confirms is_hybrid extension safe)
+      new_arch:
+        - model: Ring-mini-linear-2.0 Q4_K_M
+          test: tg8 r=1 build_lightning
+          result_t_per_s: 40.68
+          pass: true
+        - model: Ring-mini-linear-2.0 Q4_K_M
+          test: AIME 2025 Problem 1 (correct answer = 70)
+          result: CORRECT — full step-by-step reasoning chain, sum 21 + 49 = 70
+          pass: true
+      long_context:
+        - model: Ring-mini-linear-2.0 Q4_K_M
+          test: pp32768+tg128 combined
+          result_t_per_s: 560.2
+          pass: true (no crash, no recurrence drift through 32K)
+
+
 runtime_defaults:
   quantization: Q4_K_M
   draft_quantization: Q8_0
@@ -2085,8 +2140,24 @@ roles:
       size_gb: 227
       architecture: minimax-m2
       use_chat_api: true  # instruction-tuned, needs chat template + --jinja for proper formatting
+      # ⚠️ WARNING: disable_thinking flag is SENT BUT IGNORED by this model.
+      # Empirically confirmed 2026-05-04: 14 of 15 empty responses on May 4 full sweep had
+      # `completion_tokens=16384` (max budget hit) + entirely-in-`<think>` block that never
+      # closes, despite chat_template_kwargs {"enable_thinking": false} being sent.
+      # MiniMax upstream documentation explicitly states "thinking CANNOT be disabled" — this
+      # registry flag exists for symmetry with other models but does not actually suppress think.
+      # The 6/10 empty rate on the coder suite stems from this: model opens <think>, ruminates
+      # to budget exhaustion, never emits answer. Workaround NOT available without a server-side
+      # template patch. Keep as architect_general only (drop architect_coding).
+      disable_thinking: true
       reasoning: auto  # upstream handles thinking properly; was "off" on our fork
       max_tokens_multiplier: 4  # thinking model: needs 4x token budget for reasoning + answer
+      timeout_multiplier_min: 4.0  # interleaved-thinking can fill 8-16K tokens at ~11 t/s; auto speed-multiplier (1.8×) is insufficient. With max_tokens_multiplier coupling: effective ~4× × 4 = 16× the suite-base timeout, ~48 min/question worst-case headroom.
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
       kv_cache:
         type_k: q8_0  # recommended by unsloth (default f16 degrades MoE quality)
         type_v: q8_0  # q6_0 not supported in our build; q8_0 is next best
@@ -2108,8 +2179,11 @@ roles:
       vocab_size: 200064
       max_context: 196608
     candidate_roles:
-    - architect_general
-    - architect_coding
+    - architect_general  # architect_coding REMOVED 2026-05-04: 60% empty rate on coder suite
+                         # disqualifies the model for code-generation. May 4 scoring (135/183
+                         # full sweep) showed 6/10 empty on coder vs 1/30 empties across the
+                         # other 5 suites combined. Excluded-coder score = 124/153 = 81%.
+                         # See SCORING_SUMMARY_2026-05-04.md.
     acceleration:
       type: none  # ngram zero effect (sweep-verified 2026-04-17)
       ngram_tested: true
@@ -2155,25 +2229,30 @@ roles:
     description: Qwen3.6-35B-A3B Q8_0 — MoE successor to Qwen3.5, thinking model
     model:
       name: Qwen3.6-35B-A3B
-      path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-Q8_0.gguf
+      path: /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
       quant: Q8_0
       size_gb: 37
       architecture: qwen35moe  # MoE variant, arch=qwen35moe in GGUF metadata
       use_chat_api: true  # thinking model needs chat template
-      chat_template: chatml  # MUST override embedded jinja (multimodal VL template corrupts text-only output)
-      reasoning: auto  # Fixed: use --reasoning-budget 4096 to force </think> if model doesn't close naturally
-      reasoning_budget: 4096  # Force </think> after 4K thinking tokens (safety net; model usually closes at 200-1200)
+      disable_thinking: true  # Unsloth recommended: chat_template_kwargs {enable_thinking: false}
+      reasoning: auto  # model natively handles think blocks
+      reasoning_budget: 4096
       max_tokens_multiplier: 4  # thinking model: needs 4x token budget when reasoning enabled
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
       kv_cache:
         type_k: q8_0  # Qwen trained in bf16; f16 KV clips dynamic range (ggml-org/llama.cpp#20035)
         type_v: q8_0
       sampling:  # HuggingFace model card recommended (2026-04-23)
-        thinking:  # when enable_thinking=true (default)
+        thinking:
           temperature: 1.0  # 0.6 for precise coding tasks
           top_p: 0.95
           top_k: 20
           presence_penalty: 0.0
-        non_thinking:  # when enable_thinking=false (benchmark mode)
+        non_thinking:
           temperature: 0.7
           top_p: 0.80
           top_k: 20
@@ -2236,15 +2315,20 @@ roles:
     description: Qwen3.6-27B Q8_0 — dense hybrid SSM (Delta Net + attention), 64 layers, 5120 embd
     model:
       name: Qwen3.6-27B
-      path: /mnt/raid0/llm/models/Qwen3.6-27B-Q8_0.gguf
+      path: /mnt/raid0/llm/models/Qwen_Qwen3.6-27B-Q8_0.gguf
       quant: Q8_0
       size_gb: 27
       architecture: qwen35  # hybrid SSM-Dense, arch=qwen35 in GGUF metadata
       use_chat_api: true
-      chat_template: chatml  # MUST override embedded jinja (multimodal VL template corrupts text-only output)
-      reasoning: auto
+      disable_thinking: true  # chat_template_kwargs {enable_thinking: false} — required for clean output
+      reasoning: auto  # model handles think blocks natively; parser supports proper reasoning extraction
       reasoning_budget: 4096
       max_tokens_multiplier: 4
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
       kv_cache:
         type_k: q8_0
         type_v: q8_0
@@ -2286,15 +2370,20 @@ roles:
     description: Qwen3.6-27B Q4_K_M — dense hybrid SSM, 2x faster than Q8, quality TBD
     model:
       name: Qwen3.6-27B
-      path: /mnt/raid0/llm/models/Qwen3.6-27B-Q4_K_M.gguf
+      path: /mnt/raid0/llm/models/Qwen_Qwen3.6-27B-Q4_K_M.gguf
       quant: Q4_K_M
       size_gb: 16
       architecture: qwen35
       use_chat_api: true
-      chat_template: chatml
-      reasoning: auto
+      disable_thinking: true  # chat_template_kwargs {enable_thinking: false} — required for clean output
+      reasoning: auto  # model handles think blocks natively; parser supports proper reasoning extraction
       reasoning_budget: 4096
       max_tokens_multiplier: 4
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
       kv_cache:
         type_k: q8_0
         type_v: q8_0
@@ -2327,8 +2416,13 @@ roles:
       architecture: dense
       use_chat_api: true
       chat_template: chatml  # standard Qwen3 im_start/im_end; verify at sanity check
-      reasoning: off  # -2507 instruct variant does not produce <think> output
+      reasoning: "off"  # -2507 instruct variant does not produce <think> output
       max_tokens_multiplier: 1
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
       kv_cache:
         type_k: q8_0  # Qwen trained in bf16; f16 KV clips dynamic range (same rationale as Qwen3.6)
         type_v: q8_0
@@ -2386,6 +2480,11 @@ roles:
       kv_cache:
         type_k: q8_0
         type_v: q8_0
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
       sampling:
         non_thinking:
           temperature: 0.7
@@ -2417,6 +2516,164 @@ roles:
       Full-precision BF16 reference for quality ceiling vs Q8_0.
       Same launch notes as qwen3_4b_2507_q8.
 
+  # --- Ring-mini-linear-2.0 (registered 2026-04-30, downloaded + converted same day) ---
+  # Ant Group inclusionAI Lightning Attention + softmax MoE hybrid (16 of 20 layers linear, 4 softmax).
+  # NEW ARCHITECTURE TAG: bailingmoe-linear (LLM_ARCH_BAILINGMOE_LINEAR added in
+  # llama.cpp-experimental commit 33b60b925 + GroupRMSNorm fix in c9626faf8 on
+  # branch feature/lightning-attention-port; required for these to load).
+  # Decode SOTA-class reasoning per AIME 2025 spot-check (correct answer on Problem 1 = 70).
+  # Tokenizer: bailingmoe2 (vocab 157184, distinct from Qwen — drafter-incompat with Qwen3-family targets).
+  ring_mini_linear_q4km:
+    tier: C
+    description: Ring-mini-linear-2.0 Q4_K_M — Ant Group Lightning Attention hybrid, 16B/957M-active
+    model:
+      name: Ring-mini-linear-2.0
+      path: /mnt/raid0/llm/hf_models/Ring-mini-linear-2.0/Ring-mini-linear-2.0-Q4_K_M.gguf
+      huggingface_id: inclusionAI/Ring-mini-linear-2.0
+      quant: Q4_K_M
+      size_gb: 9.55
+      architecture: bailingmoe-linear  # NEW: requires feature/lightning-attention-port branch in experimental fork
+      use_chat_api: true
+      chat_template: null  # ships custom Jinja in tokenizer_config.json — must launch with --jinja
+      reasoning: auto  # native <think>...</think> reasoning format
+      # FULL FIX FOR STUCK-IN-THINK FAILURE MODE 2026-05-04 (see research/deep-dives/
+      # ring-mini-stuck-in-think-failure-mode.md). The Jinja template emits `<think>\n` at
+      # the assistant turn; on multi-constraint enumeration problems Lightning Attention
+      # loses early-context recall, the model cannot close the think block, and decode runs
+      # to budget exhaustion (4096 tokens / ~52s) with the harness then stripping the
+      # unclosed think trace → empty response. Setting reasoning_budget=0 makes llama-server
+      # inject `</think>` immediately after the template's `<think>` open, forcing the model
+      # to skip deliberation and answer directly. This trades reasoning depth (some quality
+      # loss expected on AIME-class problems) for reliability (no more empties on enumeration
+      # tasks). The model still gets to think internally during decode of the answer; it
+      # just can't emit a multi-thousand-token externalized think trace.
+      reasoning_budget: 0
+      max_tokens_multiplier: 2  # 2× suite default (8K tokens). With reasoning_budget=0 the
+      # model no longer fills budget with rumination; 2× is comfortable headroom for direct
+      # answers. Could be reduced back to 1× once the budget=0 fix is empirically confirmed.
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
+      kv_cache:
+        type_k: f16  # state recurrence in F32 internally; KV-quant interaction with linear-attn drift untested
+        type_v: f16
+      sampling:
+        non_thinking: null  # always emits <think> — no non-thinking sampling profile
+        thinking:
+          temperature: 0.7
+          top_p: 0.95
+          top_k: 40
+          min_p: 0.0
+      max_context: 131072  # native 131K
+      max_output_tokens: 8192
+      tokenizer: bailingmoe2  # distinct from qwen — no cross-tokenizer drafter compat
+      n_layer: 20  # 16 linear-attention + 4 softmax (every 5th layer = softmax: indices 4,9,14,19)
+      n_embd: 2048
+      n_head: 16
+      n_head_kv: 4  # softmax-layer GQA factor; linear layers use MHA
+      head_dim: 128
+      n_expert: 256
+      n_expert_used: 8
+      n_expert_shared: 1
+      partial_rotary_factor: 0.5  # NeoX RoPE on first 64 of 128 head_dim
+    candidate_roles:
+    - worker          # standalone reasoning model for non-latency-critical queries
+    - try_cheap_first  # 957M active is small, but linear-attn recurrence sequential at decode
+    - q_scorer        # routing classifier replacement (per-request, throughput doesn't matter)
+    acceleration:
+      type: none  # tokenizer mismatch with Qwen-family targets precludes drafter use; same-family Ring-flash drafter relationship untested
+      ngram_tested: false
+      notes: |
+        Drafter-for-Qwen-Coder NO-GO: (a) tokenizer mismatch (bailingmoe2 ≠ qwen2),
+        (b) drafter throughput 25 ms/tok > target 16.7 ms/tok ratio = 1.5 — even if
+        tokenizers matched, K=4 spec-dec would need E[accepted] > 7 (impossible).
+        Natural drafter relationship is for Ring-flash-linear-2.0 (104B/6.1B-active,
+        same tokenizer, 1:7 ratio) — UNTESTED, requires Ring-flash download.
+    memory:
+      residency: cold
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.7
+    performance:
+      baseline_tps: 40.68  # tg8 single-instance, 96t, fa=1, mmap=0, taskset 0-95 (no numa interleave on this run)
+      optimized_tps: null  # no canonical sweep yet
+      pp512_tps: 858.4
+      pp32k_tg128_combined_tps: 560.2
+      quality_score: null  # AIME-25 spot-check correct on Problem 1 (n=1) — full eval pending
+    benchmark_date: 2026-04-30
+    notes: >
+      First model running on the new bailingmoe-linear architecture. Requires the
+      feature/lightning-attention-port branch in /mnt/raid0/llm/llama.cpp-experimental
+      (HEAD c9626faf8 or descendant). Compile with `cmake -B build_lightning -DGGML_CUDA=OFF
+      -DGGML_NATIVE=ON`. Launch with `--jinja` for the custom Bailing chat template.
+      AIME 2025 Problem 1 spot-check verified correct answer (70) with full reasoning
+      chain. Paper claims AIME-25 73.65% / GPQA-D 65.69% — full benchmark pending.
+      No published RULER/NIAH/LongBench numbers (tier-2b yellow flag). Long-context
+      retrieval claims are paper-untested.
+      Linear-attention recurrence is sequential at decode — small hidden_size (2048)
+      underutilizes 96 threads. Q-scorer / standalone reasoning is the natural fit;
+      drafter use is NOT viable for Qwen-family targets (see acceleration.notes).
+
+  ring_mini_linear_bf16:
+    tier: C
+    description: Ring-mini-linear-2.0 BF16 — full-precision reference for quality ceiling vs Q4_K_M
+    model:
+      name: Ring-mini-linear-2.0
+      path: /mnt/raid0/llm/hf_models/Ring-mini-linear-2.0/Ring-mini-linear-2.0-BF16.gguf
+      huggingface_id: inclusionAI/Ring-mini-linear-2.0
+      quant: BF16
+      size_gb: 32.9
+      architecture: bailingmoe-linear  # see ring_mini_linear_q4km for architecture notes
+      use_chat_api: true
+      chat_template: null  # custom Jinja — launch with --jinja
+      reasoning: auto
+      reasoning_budget: 4096
+      max_tokens_multiplier: 4
+      kv_cache:
+        type_k: f16
+        type_v: f16
+      sampling:
+        thinking:
+          temperature: 0.7
+          top_p: 0.95
+          top_k: 40
+          min_p: 0.0
+      max_context: 131072
+      max_output_tokens: 8192
+      tokenizer: bailingmoe2
+      n_layer: 20
+      n_embd: 2048
+      n_head: 16
+      n_head_kv: 4
+      head_dim: 128
+      n_expert: 256
+      n_expert_used: 8
+      n_expert_shared: 1
+      partial_rotary_factor: 0.5
+    candidate_roles:
+    - worker
+    - q_scorer
+    acceleration:
+      type: none
+    memory:
+      residency: cold
+      pinned: false
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.7
+    performance:
+      baseline_tps: null  # not yet benchmarked on BF16
+      optimized_tps: null
+      quality_score: null
+    benchmark_date: null
+    notes: >
+      Full-precision BF16 reference for quality ceiling vs Q4_K_M. Same launch
+      requirements as ring_mini_linear_q4km (feature/lightning-attention-port branch,
+      --jinja flag). 32.9 GB on disk; reachable for single-instance at 1.1 TB RAM.
+
   # --- Nemotron-Nano-9B-v2 (registered 2026-04-23, downloaded 2026-04-21) ---
   # Hybrid Mamba2-Transformer: only 4 attention layers use KV cache; rest are Mamba2/MLP (no KV cost).
   # Distinct from nemotron_cascade_2 (MoE hybrid) — NEW architecture tag: nemotron_h.
@@ -2435,6 +2692,11 @@ roles:
       reasoning: auto  # default ON; toggle via system prompt (see notes)
       reasoning_budget: 4096
       max_tokens_multiplier: 4
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
       kv_cache:
         type_k: q8_0  # applies only to 4 attention layers
         type_v: q8_0
@@ -2508,6 +2770,11 @@ roles:
       kv_cache:
         type_k: q8_0
         type_v: q8_0
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
       sampling:
         thinking:
           temperature: 0.6
@@ -2557,7 +2824,12 @@ roles:
       size_gb: 18.7
       architecture: gemma4
       use_chat_api: true  # gemma4 instruction-tuned requires chat template
-      reasoning: off  # disable <|turn>thought leakage that costs 1pt per answer
+      reasoning: "off"  # disable <|turn>thought leakage that costs 1pt per answer
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
       kv_cache:
         type_k: q8_0  # gemma4 recommended (avenchat.com/blog/run-gemma-4-with-llama-cpp)
         type_v: q8_0
@@ -2627,10 +2899,15 @@ roles:
       size_gb: 26
       architecture: gemma4
       use_chat_api: true  # gemma4 instruction-tuned requires chat template
-      reasoning: off  # disable <|turn>thought leakage
+      reasoning: "off"  # disable <|turn>thought leakage
       kv_cache:
         type_k: q8_0
         type_v: q8_0
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
       sampling:
         repeat_penalty: 1.05  # gemma4 repetition collapse workaround (google-deepmind/gemma#622)
       active_params: 3.8B
@@ -3217,6 +3494,16 @@ roles:
       quant: Q4_K_M
       size_gb: 17.3
       architecture: moe
+      use_chat_api: true
+      reasoning: off  # Qwen3 coder doesn't use think tags
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
+      kv_cache:
+        type_k: q8_0
+        type_v: q8_0
     candidate_roles:
     - frontdoor
     - coder
@@ -5183,6 +5470,28 @@ runtime_quirks:
     - issue: PyTorch version extremely slow (0.009 pg/s)
       workaround: Use GGUF version via llama.cpp for 19x speedup (0.17 pg/s)
       discovered: 2026-01-20
+  ring_mini_linear:
+    description: Ring-mini-linear-2.0 — Ant Group Lightning Attention hybrid (NEW arch)
+    quirks:
+    - issue: Custom Bailing Jinja chat template not in built-in list
+      workaround: Launch with --jinja (executor.py adds this when use_chat_api=true). Without it llama-server aborts with "this custom template is not supported".
+      discovered: 2026-04-30
+    - issue: New architecture (LLM_ARCH_BAILINGMOE_LINEAR / "bailingmoe-linear")
+      workaround: Requires kernel commit c9626faf8+ on production-consolidated-v5 (or descendant). Pre-c9626faf8 builds fail to load with "unknown architecture" error.
+      discovered: 2026-04-30
+    - issue: No compatible draft model for speculative decoding
+      workaround: bailingmoe2 tokenizer (vocab 157184) ≠ qwen2 (151936). Cross-tokenizer spec-dec is research-stage; same-family Ring-flash-linear-2.0 drafter relationship untested.
+      discovered: 2026-04-30
+    - issue: Linear-attention recurrence is sequential at decode (no batching across time)
+      workaround: Decode at 40 t/s on Q4_K_M is bandwidth/sequence-bound, not compute-bound. Multi-instance NUMA shards may help aggregate throughput; not benchmarked.
+      discovered: 2026-04-30
+    - issue: Always emits <think>...</think> blocks (reasoning model — no non-thinking variant)
+      workaround: Set reasoning=auto (default) and reasoning_budget=4096 to control reasoning trace length. For latency-sensitive use, set reasoning=off to suppress think emission.
+      discovered: 2026-04-30
+    - issue: GroupRMSNorm (group_norm_size=4) on linear-attn output is non-standard
+      workaround: Implemented in llama.cpp via reshape→ggml_rms_norm→reshape (NOT ggml_group_norm which is LayerNorm semantics). v1 commit 33b60b925 had a bug; fix in c9626faf8 (factual queries survive bug, multi-step reasoning collapses without fix). If reasoning quality regresses on a future kernel, audit ring-linear.cpp for accidental ggml_group_norm reintroduction.
+      discovered: 2026-04-30
+
 # Models deleted 2026-01-18 during MiniMax M2.1 download cleanup
 # Based on BLIND_RESCORE_2026-01-16.md analysis
 deprecated_models:

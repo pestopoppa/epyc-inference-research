@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+thinking,t3_q1_methodological_critique,,0,think-block never closed; no answer emitted
+thinking,t3_q2_causal_inference,,0,think-block never closed; no answer emitted
+thinking,t3_q3_reasoning_trap,,0,think-block never closed; no answer emitted
+thinking,t2_q1_paradox,,0,answer present but text is severe mojibake (mixed Chinese garbage + corrupted UTF-8); collapses into runaway token repetition; unreadable
+thinking,t2_q2_counterfactual,,0,answer present but heavy mojibake mixing English/Chinese/Vietnamese fragments; coherent thread breaks down mid-response
+thinking,t2_q3_formal,15.11,0,proof attempt is mojibake-laden; key tokens replaced with garbage (PREMISES/MERCHANTABILITY/ç©çµ); concrete example references rectangle not square; fails as proof
+thinking,t2_q4_metacognition,,0,think-block never closed; no answer emitted
+thinking,t1_q1_multistep,,0,answer truncated mid-setup with mojibake (28autical/9:Ã©gor); never produces a meeting time
+thinking,t1_q2_hypothesis,,0,response cut off after section header; lists zero of the three required alternative explanations
+thinking,t1_q3_planning,,0,model emits Chinese apology then runaway garbage tokens (URIComponent/encodeURIComponent loop); never solves ordering
+general,t3_q1_policy_analysis,16.0,0,structure visible but body is heavy mojibake mixing English/Chinese; amendments degrade into runaway corruption mid-paragraph
+general,t3_q2_system_failure,,0,think-block never closed; no answer emitted
+general,t3_q3_strategic_communication,16.38,0,opening statement laced with mojibake (è¿ä¹å¿«è¿ä¹å¿«/40%/ç¾åä¹) making it unusable as a board statement
+general,t2_q1_synthesis,,0,think-block never closed; no answer emitted
+general,t2_q2_transform,,0,output is YAML fragments interleaved with massive runaway garbage (åµå¥[url=...] loop thousands of tokens); no valid YAML
+general,t2_q3_schedule,,0,think-block never closed; no answer emitted
+general,t2_q4_inconsistency,,0,partial inconsistency list with corrupted Doc labels (Doc&ampstery/Docç¬¬ä¸æ¬¾) and garbled summary table; truncated mid-section
+general,t1_q1_json,,0,no valid JSON; output is runaway repetition of fabricated tokens (uguay.googleapis.com / itecture loops)
+general,t1_q2_multistep,,0,think-block never closed; no answer emitted
+general,t1_q3_compare,16.25,1,short comparison with mojibake injections (åèªç/éè¦éè¿/oczyn) but the gist (A=scalable/fault-isolated, B=simple) is recognizable
+math,t3_q1_analysis,,0,setup degrades immediately into garbage tokens; no proof of differentiability, no closed form, no limit
+math,t3_q2_combinatorics,,0,think-block never closed; no answer emitted
+math,t3_q3_probability_theory,,0,think-block never closed; no answer emitted
+math,t2_q1_optimization,,0,setup is heavy mojibake (åéiantsæ¾ç¢siz/quadraticitecture); never substitutes or solves; no L=100 or A=5000 result
+math,t2_q2_proof,,0,no identification of error (n=1 to n=2 step); response collapses to repeated Chinese/garbage tokens
+math,t2_q3_calculus,,0,setup truncated mid-integral; no antiderivative computed; no numerical answer (expected 10)
+math,t2_q4_statistics,,0,think-block never closed; no answer emitted
+math,t1_q1_word_problem,,0,think-block never closed; no answer emitted
+math,t1_q2_system_equations,,0,no solutions produced; thousands of garbage tokens (xy=tÃ³together/userusercontent/itecture loops); never reaches (3,4)/(4,3)/(-3,-4)/(-4,-3)
+math,t1_q3_probability,,0,25K-char runaway repetition of firebase.googleapis/userusercontent garbage; no probability values computed
+instruction_precision,t3_q1_self_referential,,0,think-block never closed; no answer emitted
+instruction_precision,t3_q2_cascading_constraints,,0,think-block never closed; no answer emitted
+instruction_precision,t3_q3_meta_instruction,,0,think-block never closed; no answer emitted
+instruction_precision,t2_q1_resist_elaboration,24.84,3,returns exactly '4' as required; constraint compliance perfect
+instruction_precision,t2_q2_maintain_format,,0,think-block never closed; no answer emitted
+instruction_precision,t2_q3_empty_handling,24.89,3,returns exactly 'NONE' as required; no extra text
+instruction_precision,t2_q4_conflicting_constraints,,0,never produces a single under-12-word sentence; reasoning trace garbled with mojibake; final attempts violate constraints
+instruction_precision,t1_q1_negative_instruction,,0,think-block never closed; no answer emitted
+instruction_precision,t1_q2_word_limit,,0,think-block never closed; no answer emitted
+instruction_precision,t1_q3_structured_format,,0,produces only fabricated mojibake C-language entries (e.g. C (1 Compiler...)); none of the LANGUAGE (YEAR) entries are real
+instruction_precision,t1_q4_multiple_constraints,15.31,0,massive runaway garbage list (xavierianetwork/AVERAGEments) instead of 5 alphabetized European countries
+coder,t3_q1_concurrent_correctness,,0,no ABA scenario described; response is repeated Chinese fragments and corrupted variable refs; no fix code
+coder,t3_q2_distributed_consistency,,0,think-block never closed; no answer emitted
+coder,t3_q3_algorithmic_hardness,,0,think-block never closed; no answer emitted
+coder,t2_q1_design,,0,no valid LRU class; class body collapses into runaway garbage (TargetException/usercontent/itecture loops); no get/put implementations
+coder,t2_q2_debug_complex,,0,think-block never closed; no answer emitted
+coder,t2_q3_optimize,,0,think-block never closed; no answer emitted
+coder,t2_q4_system,,0,RateLimiter sketch is heavy mojibake (timedelta/è¥å¹²/Criterion); broken syntax; never runnable
+coder,t1_q1_algorithm,,0,think-block never closed; no answer emitted
+coder,t1_q2_refactor,,0,massive runaway corruption (return.googleapis loop); zero functional Python; no complexity discussion
+coder,t1_q3_test,,0,think-block never closed; no answer emitted
+agentic,t3_q1_competing_constraints,,0,JSON plan repeatedly attempted but each version degenerates into mojibake; no parseable JSON tool call
+agentic,t3_q2_multi_agent_coordination,,0,no valid orchestration JSON; output is runaway garbage (-=-=-=-ness/DEALINGS placements)
+agentic,t3_q3_adversarial_robustness,,0,think-block never closed; no answer emitted
+agentic,t2_q1_ambiguous,18.91,1,states clarification is needed but answer is mojibake-laden and never produces a tool call (instruction allowed either path); partial credit for choosing clarify
+agentic,t2_q2_error_chain,,0,think-block never closed; no answer emitted
+agentic,t2_q3_schema_edge,,0,JSON tool call corrupted: name='queryoutube', method='GETOrCreate', headers garbled (ransallah); not valid JSON, runaway tail
+agentic,t2_q4_orchestration,,0,no <think> tags but JSON is invalid: keys garbled (ugno/izzle/ropol), not parseable; hotfix flow not coherent
+agentic,t1_q1_sequential,,0,think-block never closed; no answer emitted
+agentic,t1_q2_error_handling,,0,think-block never closed; no answer emitted
+agentic,t1_q3_nested_params,,0,JSON tool call corrupted (type='createOrUpdateOrUpdate', mojibake field names, due_date collapses into 12K-char runaway repetition); not valid JSON

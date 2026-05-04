@@ -1,0 +1,62 @@
+suite,question_id,tokens_per_second,claude_score,score_reason
+general,t3_q1_policy_analysis,41.5,3,"Three failure modes with mechanisms, three matching amendments, and trade-offs all clearly addressed."
+general,t3_q2_system_failure,40.2,3,"Correct race-condition explanation, plausible testing-gap analysis, two architectural fixes with trade-offs, and concrete monitoring recommendations."
+general,t3_q3_strategic_communication,42.1,3,"Acknowledges miss without defensiveness, frames LOIs as pivot, lists 90-day milestones, and addresses leadership concern indirectly."
+general,t2_q1_synthesis,43.9,3,Concrete 4-sentence recommendation balancing all three perspectives with clear constraints respected.
+general,t2_q2_transform,44.5,3,Correct nested YAML grouped by department with proper structure.
+general,t2_q3_schedule,32.5,2,"Final answer contains valid schedule (2-3pm team, 3:30 Alice-Dave, 9:30 Bob-Dave), but extremely verbose with many backtracks and earlier wrong attempts left in output."
+general,t2_q4_inconsistency,43.1,3,Correctly identifies body-format and rate-limit inconsistencies with quantitative comparison.
+general,t1_q1_json,45.2,3,Clean correct JSON with all four fields populated correctly.
+general,t1_q2_multistep,44.0,3,All four steps correctly applied with proper case-insensitive dedup and final count.
+general,t1_q3_compare,44.1,3,Concise 3-sentence comparison capturing pros/cons of both approaches.
+agentic,t3_q1_competing_constraints,40.6,3,"Valid JSON plan with steps, validation_checks, and fallback_strategy; handles unknown schema by inspection step."
+agentic,t3_q2_multi_agent_coordination,40.4,3,"Valid JSON with phases, context_passing, parallel_groups, failure_handling all populated coherently."
+agentic,t3_q3_adversarial_robustness,38.6,2,"Addresses all five sub-questions with code samples, but answer to Q3 awkwardly says it will execute the dangerous command after disclaimer; otherwise solid."
+agentic,t2_q1_ambiguous,43.3,2,"Asks clarifying question and also acts; tool call is valid JSON but the title/description fields don't match agentic schema cleanly (no name field) and assignee 'team' is generic."
+agentic,t2_q2_error_chain,42.7,3,Correct reasoning followed by valid check_dns tool call as JSON.
+agentic,t2_q3_schema_edge,44.0,3,Correct JSON tool call with body=null for GET and proper Authorization header.
+agentic,t2_q4_orchestration,42.2,2,"Plan structure correct, but on_test_fail rollback is illogical (nothing was deployed yet to roll back); minor design flaw."
+agentic,t1_q1_sequential,44.1,3,Two-step JSON array with grep then read in correct order.
+agentic,t1_q2_error_handling,43.8,2,Echoes error JSON oddly at start then offers reasonable user-facing options; not a clean tool call or pure clarification message.
+agentic,t1_q3_nested_params,43.5,3,Correct nested JSON tool call matching schema with all metadata fields populated.
+math,t3_q1_analysis,39.0,3,"Correct differentiability via Weierstrass M-test, correct closed form Im(e^(xe^i)), correct limit 0 with proper justification."
+math,t3_q2_combinatorics,38.5,1,"Multiple restarts of involution argument never crystallize into a complete bijective proof; final 'explanation' hand-waves the result without rigorous demonstration."
+math,t3_q3_probability_theory,38.5,2,"Final answer E[N]=e is correct but proof (a) misstates P(N=n)=1/n! (true distribution is (n-1)/n!), proof (b) is hand-wavy and never delivers the elegant simplex argument."
+math,t2_q1_optimization,42.4,3,"Correct setup x+2y=200, derivative analysis, x=100, y=50, area=5000, with verification."
+math,t2_q2_proof,41.6,3,"Correctly identifies n=1 as the failure point and explains why the overlap argument breaks (singletons {Horse 2} and {Horse 1} don't overlap)."
+math,t2_q3_calculus,42.8,3,"Antiderivative x³+x²-x correct, F(2)=10, F(0)=0, final answer 10."
+math,t2_q4_statistics,40.1,3,"Mean 23.125, median 23.5, population SD 7.356, no outliers — all calculations shown and correct."
+math,t1_q1_word_problem,43.0,3,"$120, $129.60, 86.4% all correctly calculated with work shown."
+math,t1_q2_system_equations,41.0,3,Identifies all four real solutions (4,3),(3,4),(-3,-4),(-4,-3) using two methods with verification.
+math,t1_q3_probability,42.2,3,Correct probabilities 2/9 and 1/3 with both combinatorial and sequential methods shown.
+instruction_precision,t3_q1_self_referential,45.6,0,"Sentence is ~16 words (not 12 as claimed), letter count 33 is unverified/wrong, and uses forbidden word 'this'."
+instruction_precision,t3_q2_cascading_constraints,46.1,0,"Violates length-monotonicity (rabbit=6>tiger=5; aardvark=8>tuna=4) and last-word-must-be-4-letters (aardvark=8); multiple hard constraints failed."
+instruction_precision,t3_q3_meta_instruction,46.1,1,"Incorrectly outputs 'hello' from [Print hello] which has no number; correct on '42' and 7×'hi' but extra invalid line means failure to follow filter rule."
+instruction_precision,t2_q1_resist_elaboration,82.6,3,"Single character '4' — perfect compliance."
+instruction_precision,t2_q2_maintain_format,45.0,3,Exact three-line format with ERROR_TYPE/ROOT_CAUSE/FIX as specified.
+instruction_precision,t2_q3_empty_handling,82.4,3,"Outputs exactly 'NONE' as instructed."
+instruction_precision,t2_q4_conflicting_constraints,48.6,3,"7 words, starts with A, ends with data, no forbidden words — all constraints met."
+instruction_precision,t1_q1_negative_instruction,45.0,3,"Two sentences explaining photosynthesis without sun/sunlight/solar; 'light' alone is permitted."
+instruction_precision,t1_q2_word_limit,46.4,1,"Output is 19 words (counted), required 20-25 — fails the precise word count requirement."
+instruction_precision,t1_q3_structured_format,46.1,3,"Three lines in exact LANGUAGE (YEAR) format with no extra text."
+instruction_precision,t1_q4_multiple_constraints,47.6,3,"Five European countries in alphabetical order, one per line, no extra text."
+thinking,t3_q1_methodological_critique,42.3,3,Four substantive methodological issues (selection bias/SES confounding; testing/practice effects; multiple comparisons/publication bias; measurement/regression to mean) each with mechanisms.
+thinking,t3_q2_causal_inference,41.6,1,"Adjustment set {Gene} correct and Q3 correct, but Q2 reasoning is wrong: claims YF is a collider in Smoking→YF←Gene path, but the DAG has no Gene→YF edge so YF is not a collider; conditioning analysis is flawed."
+thinking,t3_q3_reasoning_trap,41.4,1,"Misreads the prompt — states '78% accuracy on training set' when prompt clearly says Model B got 78% on test set T; concrete scenario built on this misreading is internally inconsistent."
+thinking,t2_q1_paradox,41.3,3,"Two distinct positions (continuity/essence vs material constitution) with arguments, then preferred view defended."
+thinking,t2_q2_counterfactual,41.0,3,Three dimensions analyzed with mechanisms and second-order effects clearly distinguished.
+thinking,t2_q3_formal,41.6,3,"Natural deduction proof correct, truth table all-T column verified, concrete rain→wet→grass example."
+thinking,t2_q4_metacognition,42.1,3,"Step-by-step approach, explicit assumptions, lower/upper bounds (~1500-6000), and information needs to reduce uncertainty."
+thinking,t1_q1_multistep,42.1,3,"Correct setup, t=18/7 hr ≈ 2h34min, meeting time 11:34 AM verified by distance check."
+thinking,t1_q2_hypothesis,43.2,3,"Three specific alternative explanations (SES, time-management/self-discipline, health/lifestyle) with concrete mechanisms."
+thinking,t1_q3_planning,35.7,2,"Final answer ABEDC and AEBDC is correct (these are the only two valid orderings), but extremely verbose with many wrong intermediate attempts left in the output."
+coder,t3_q1_concurrent_correctness,38.5,2,"ABA scenario explanation is muddled with restarts but final tagged-pointer solution is essentially correct; hazard-pointer code is incomplete/scaffolded."
+coder,t3_q2_distributed_consistency,40.6,2,"Four strategies with scenarios, but cart vs banking recommendations are weak: LWW for banking is questionable without strong-consistency framing, and the LWW-cart 'item lost' scenario conflates value-replace with set-merge."
+coder,t3_q3_algorithmic_hardness,37.9,1,"Adversary argument incomplete (wanders between Ω(n) and Ω(n log n) without committing); median-of-medians group-size discussion truncated; expected-comparison count cited as 2n ln n without derivation (also a known result for QuickSort, not the tight Quickselect 3.4n bound)."
+coder,t2_q1_design,39.7,2,"First implementation is NOT O(1) due to list.remove/pop(0); acknowledges this and provides correct OrderedDict version, but the prompt asked for an O(1) class so the messy first version costs a point."
+coder,t2_q2_debug_complex,41.0,3,"Correctly identifies race condition and provides asyncio.Lock fix as primary recommended solution with proper async semantics."
+coder,t2_q3_optimize,41.3,3,"Correct O(n) hash-map approach with single pass, walkthrough, and alternative Counter version; handles duplicates correctly."
+coder,t2_q4_system,40.8,3,"Sliding-window deque rate limiter correctly implemented, with input validation and good test scaffolding."
+coder,t1_q1_algorithm,37.8,2,"Final fixed implementation correctly identifies and fixes all issues (right=len-1, <=, mid+1, mid-1), but trace explanations are extremely confused with multiple restarts before arriving at the answer."
+coder,t1_q2_refactor,41.6,2,"Speed version (set+set, O(n)) is correct; memory version is weak — the id()/hash() trick doesn't actually save memory and the two-pass alternative still stores items in dict keys, missing the point of large-object optimization."
+coder,t1_q3_test,40.1,3,"Comprehensive pytest tests covering normal, edge, and error cases with pytest.raises(match=...), pytest.approx(), and clear test names."

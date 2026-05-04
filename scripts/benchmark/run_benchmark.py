@@ -1000,10 +1000,15 @@ def _run_quality_question(
             model_disable_thinking = model_cfg.get("disable_thinking", False)
             max_tokens_mult = model_cfg.get("max_tokens_multiplier", 1)
 
-    # Apply max_tokens multiplier for thinking models (need budget for reasoning + answer)
+    # Apply max_tokens multiplier for thinking models (need budget for reasoning + answer).
+    # The timeout MUST scale alongside — generating Nx more tokens at the same t/s takes Nx
+    # more wallclock. Without this coupling, thinking models (minimax-m27, qwen3.6 with
+    # reasoning, ring-mini-linear, etc.) would hit the per-question timeout before consuming
+    # the larger token budget and produce truncated/empty responses despite plenty of t/s.
     if max_tokens_mult > 1:
         effective_params = dict(effective_params)
         effective_params["max_tokens"] = int(effective_params["max_tokens"] * max_tokens_mult)
+        effective_params["timeout"] = int(effective_params["timeout"] * max_tokens_mult)
 
     try:
         use_server = (
@@ -1238,9 +1243,21 @@ def run_benchmark(
                     reg_tps = registry.get_baseline_tps(role)
                     model_tps[model_path] = reg_tps if reg_tps else REFERENCE_TPS
 
-        # Calculate timeout multiplier based on measured speed
+        # Calculate timeout multiplier based on measured speed.
+        # Optional per-model override `timeout_multiplier_min` (registry) acts as a floor —
+        # use it for thinking models whose response sizes vary wildly (e.g. minimax-m27 with
+        # interleaved-thinking can produce 8-16K-token responses on hard questions even at
+        # 10-15 t/s, requiring >20 min per question).
         measured_tps = model_tps.get(model_path, REFERENCE_TPS)
-        timeout_multiplier = max(MIN_TIMEOUT_MULTIPLIER, REFERENCE_TPS / measured_tps)
+        speed_multiplier = max(MIN_TIMEOUT_MULTIPLIER, REFERENCE_TPS / measured_tps)
+        per_model_floor = MIN_TIMEOUT_MULTIPLIER
+        if registry:
+            role_cfg = registry.get_role_config(role)
+            if role_cfg:
+                per_model_floor = float(
+                    role_cfg.get("model", {}).get("timeout_multiplier_min", MIN_TIMEOUT_MULTIPLIER)
+                )
+        timeout_multiplier = max(speed_multiplier, per_model_floor)
 
         # Preload suites and count questions (with timeout multiplier applied)
         suites_data = {}
