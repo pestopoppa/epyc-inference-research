@@ -1,0 +1,9 @@
+[16:39:12] START c0_default_v5 env=[]
+[16:40:07] END   c0_default_v5 rc=0 elapsed=55s avg_ts=6.351383 +/- 0.002923 n=5
+[16:40:07] START c1_cpu1_stack env=[GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1]
+[16:41:01] END   c1_cpu1_stack rc=0 elapsed=54s avg_ts=6.336658 +/- 0.005142 n=5
+[16:41:01] START c2_mbind_off env=[GGML_NUMA_REPACK_INTERLEAVE=0]
+[16:41:56] END   c2_mbind_off rc=0 elapsed=55s avg_ts=6.360573 +/- 0.007091 n=5
+[16:41:56] START c3_cpu1_plus_mbind env=[GGML_CCD_POOLS=1 GGML_CCD_WORK_DIST=1 GGML_BARRIER_LOCAL_BETWEEN_OPS=1 GGML_NUMA_REPACK_INTERLEAVE=0]
+[16:42:51] END   c3_cpu1_plus_mbind rc=0 elapsed=55s avg_ts=6.360093 +/- 0.005497 n=5
+[16:42:51] === Probe B ALL DONE ===
