@@ -547,6 +547,9 @@ def _ensure_server(
         required_draft = config.draft_model_path
         # Enable lookup if this config needs it, OR keep it if already on
         required_lookup = ss.lookup or config.config_type in ("moe_spec_lookup", "spec_lookup")
+        # Surface registry-declared spec_type (e.g. "mtp" for Gemma 4 external-assistant drafters).
+        accel = registry.get_acceleration(role)
+        required_spec_type = accel.get("spec_type") if accel.get("type") == "speculative_decoding" else None
         needs_restart = (required_draft != ss.draft_path) or (required_lookup and not ss.lookup)
 
         if needs_restart:
@@ -558,7 +561,8 @@ def _ensure_server(
 
             draft_name = Path(required_draft).stem if required_draft else "unknown"
             lookup_str = "+lookup" if required_lookup else ""
-            print(f"      [SERVER] Restarting with draft {draft_name}{lookup_str}...", flush=True)
+            spec_str = f"+{required_spec_type}" if required_spec_type else ""
+            print(f"      [SERVER] Restarting with draft {draft_name}{lookup_str}{spec_str}...", flush=True)
             ss.stop()
             ss.server = ServerManager(port=8080)
             ss._start_server(
@@ -568,6 +572,7 @@ def _ensure_server(
                 draft_max=config.spec_k,
                 mmproj_path=mmproj_path,
                 lookup=required_lookup,
+                spec_type=required_spec_type,
             )
             timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
             if not ss.server.wait_ready(timeout=timeout):

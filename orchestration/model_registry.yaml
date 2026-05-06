@@ -634,7 +634,55 @@ server_mode:
     throughput: 2.8  # RTF ~0.35x (2.8x real-time on CPU int8, verified 2026-01-16)
     latency_target_ms: 500
     launch_script: scripts/voice/start_whisper_server.sh
-    notes: "Standalone Python server (not llama.cpp). Serves Aider, Claude Code, orchestrator."
+    managed_by: orchestrator_stack    # Promoted from sidecar 2026-05-06 (start_whisper in orchestrator_stack.py)
+    health_path: /health
+    health_timeout_sec: 60
+    notes: "Python REST service (not llama.cpp). Stack-managed via start_whisper() in orchestrator_stack.py. Serves Aider, Claude Code, orchestrator."
+
+  # ComfyUI diffusion-inference service (ERNIE-Image-Turbo Q8 GGUF + Mistral3 + flux2 VAE)
+  comfyui:
+    url: http://localhost:8188
+    port: 8188
+    model_role: image_generation
+    description: ComfyUI diffusion-inference server (ERNIE-Image-Turbo, single-stream DiT)
+    model: ernie-image-turbo-Q8_0.gguf
+    model_type: diffusion_service
+    huggingface_id: unsloth/ERNIE-Image-Turbo-GGUF
+    model_path: /mnt/raid0/llm/models/diffusion/ernie-image-turbo-gguf/ernie-image-turbo-Q8_0.gguf
+    pipeline_components_dir: /mnt/raid0/llm/models/diffusion/ernie-image-turbo-comfy/
+    text_encoder: ministral-3-3b.safetensors
+    prompt_enhancer: ernie-image-prompt-enhancer.safetensors
+    vae: flux2-vae.safetensors
+    memory_gb: 16
+    tier: warm
+    languages: [en, zh]
+    acceleration:
+      type: gguf_q8
+      numa_pinning: "interleave=all"
+      threads: 96
+    default_params:
+      width: 1024
+      height: 1024
+      steps: 8
+      cfg: 1.0
+      sampler: euler
+      scheduler: simple
+    throughput: 0.0021  # ~478 s/image @ 1024² 8 steps on EPYC 9655 CPU (2026-05-06 smoke test)
+    launch_script: scripts/diffusion/start_comfyui_server.sh
+    managed_by: orchestrator_stack
+    health_path: /system_stats
+    health_timeout_sec: 120
+    notes: "Python REST service (not llama.cpp). Sequential by orchestrator-level admission + ComfyUI's native queue."
+
+  # Image generation virtual role (no model server; execution via Hermes plugin)
+  image_worker:
+    tier: D
+    description: Virtual role for image generation. No model server; TaskIRs handed to Hermes which calls comfyui via local image_generate plugin.
+    backend:
+      type: virtual
+    execution: hermes_plugin
+    execution_target: image_generate
+    notes: "Routing label only. Frontdoor classifies task_type=image -> primary_role=image_worker; orchestrator coordinator dispatches to Hermes."
 
   # Document processing service (llama.cpp GGUF - 19x faster than PyTorch)
   document_formalizer:
@@ -2894,6 +2942,152 @@ roles:
       Strong general/math/thinking. Think-block leakage (<|turn>thought) costs 1pt on many answers.
       Instruction_precision weak (24.2%). Known upstream repetition bug (google-deepmind/gemma#622).
       HuggingFace: top_k=64, temp=1.0, top_p=0.95. Images/audio must go BEFORE text in prompts.
+
+  # --- Gemma 4 31B official + MTP drafter (2026-05-06) ---
+  draft_gemma4_31b_assistant_q8:
+    tier: D
+    description: Gemma 4 MTP assistant drafter (Gemma4Assistant arch, 4 layers, 1024 hidden, ~500M params)
+    model:
+      name: gemma-4-31B-it-assistant
+      huggingface_id: Radamanthys11/Gemma-4-31B-it-assistant-GGUF
+      path: /mnt/raid0/llm/models/gemma-4-31B-it-assistant-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 0.49  # 491 MB
+      architecture: gemma4_mtp
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+    notes: >
+      MTP drafter for gemma4_31b_q4km_mtp target. REQUIRES PR #1744-patched ik_llama.cpp
+      (LLM_ARCH_GEMMA4_MTP). Standard llama.cpp does not support gemma4_mtp arch.
+      Loaded via -mtp -md <path> on the target server. See handoffs/active/gemma4-mtp-drafter-evaluation.md.
+
+  gemma4_31b_q4km_mtp:
+    tier: B  # eval phase — promote based on quality runs
+    description: Gemma 4 31B-it (official Google) Q4_K_M with MTP speculative decoding (2.98x speedup measured 2026-05-06)
+    model:
+      name: gemma-4-31B-it
+      huggingface_id: ggml-org/gemma-4-31B-it-GGUF
+      path: /mnt/raid0/llm/models/gemma-4-31B-it-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 17.4
+      architecture: gemma4
+      use_chat_api: true
+      reasoning: "off"
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
+      kv_cache:
+        type_k: q8_0
+        type_v: q8_0
+      sampling:
+        temperature: 1.0
+        top_p: 0.95
+        top_k: 64
+        repeat_penalty: 1.05
+      max_context: 256000
+    candidate_roles:
+    - architect
+    - general
+    acceleration:
+      type: speculative_decoding
+      spec_type: mtp  # ik_llama.cpp PR #1744 + 1-line gate fix; see deep-dives/gemma4-mtp-drafter-deep-dive.md
+      draft_role: draft_gemma4_31b_assistant_q8
+      draft_max: 3        # measured optimum 2026-05-06 (84.3% per-token acceptance, 100% per-batch)
+      draft_p_min: 0.0    # PR #1744 example default
+    runtime_requirements:
+      binary_dir: /mnt/raid0/llm/ik_llama.cpp/build/bin  # patched PR #1744 branch (pr-1744 / 0f728f380d) + 1-line fix in server-context.cpp
+      ld_library_path:
+      - /mnt/raid0/llm/ik_llama.cpp/build/src
+      - /mnt/raid0/llm/ik_llama.cpp/build/ggml/src
+      - /mnt/raid0/llm/ik_llama.cpp/build/examples/mtmd
+    performance:
+      baseline_tps: 7.05    # measured 2026-05-06, EPYC canonical (96 threads, fa=1, no-mmap, OMP env stack)
+      mtp_tps: 21.02        # measured 2026-05-06, draft-max=3, 84.3% per-token acceptance (91/108)
+      mtp_speedup: 2.98     # vs baseline; exceeds PR #1744 mixed-CPU/GPU 2.3x because small drafter amortizes well against BW-bound dense target
+    benchmark_date: 2026-05-06
+    notes: >
+      Pure-CPU EPYC MTP measurement: 21.02 t/s with 84% per-token acceptance, 2.98x over 7.05 t/s baseline.
+      Quality benchmark NOT YET RUN — Leviathan (arxiv:2211.17192) verifier-rejects guarantees byte-exact
+      output, but worth confirming on standard suite before promoting beyond tier B.
+      Required runtime: PR #1744-patched ik_llama.cpp (binary_dir + ld_library_path above) — standard
+      /mnt/raid0/llm/llama.cpp does NOT support gemma4_mtp arch.
+
+  draft_gemma4_26b_a4b_assistant_q8:
+    tier: D
+    description: Gemma 4 MTP assistant drafter for 26B-A4B target (Gemma4Assistant arch, 4 layers, 1024 hidden, 16/8 heads — half the heads of 31B drafter)
+    model:
+      name: gemma-4-26B-A4B-it-assistant
+      huggingface_id: google/gemma-4-26B-A4B-it-assistant
+      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 0.44  # 441 MB
+      architecture: gemma4_mtp
+      converted_by: in-house  # google did not publish GGUF; converted 2026-05-06 from HF safetensors via PR #1744 convert_hf_to_gguf.py + llama-quantize Q8_0
+    candidate_roles:
+    - draft
+    memory:
+      residency: cold
+    notes: >
+      MTP drafter for gemma4_26b_a4b_q4km_mtp target. REQUIRES PR #1744-patched ik_llama.cpp.
+      Acceptance is materially LOWER than the 31B Dense drafter (58.7% vs 84.3%) because the
+      smaller 16/8-head drafter struggles to predict MoE expert routing on the 26B-A4B target.
+
+  gemma4_26b_a4b_q4km_mtp:
+    tier: X  # eval-only, not deployable — MTP gain insufficient
+    description: Gemma 4 26B-A4B-it Q4_K_M with MTP — MEASURED NOT VIABLE (1.06x speedup, 58% accept, 26B-A4B+MTP at 44 t/s is SLOWER than Coder-30B-A3B Q4_K_M baseline 49.1 t/s, so does not replace coder role)
+    model:
+      name: gemma-4-26B-A4B-it
+      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 16.0
+      architecture: gemma4
+      use_chat_api: true
+      reasoning: "off"
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
+      kv_cache:
+        type_k: q8_0
+        type_v: q8_0
+      sampling:
+        temperature: 1.0
+        top_p: 0.95
+        top_k: 64
+        repeat_penalty: 1.05
+      max_context: 256000
+    candidate_roles: []  # not deployable — see notes
+    acceleration:
+      type: speculative_decoding
+      spec_type: mtp
+      draft_role: draft_gemma4_26b_a4b_assistant_q8
+      draft_max: 3
+      draft_p_min: 0.0
+    runtime_requirements:
+      binary_dir: /mnt/raid0/llm/ik_llama.cpp/build/bin
+      ld_library_path:
+      - /mnt/raid0/llm/ik_llama.cpp/build/src
+      - /mnt/raid0/llm/ik_llama.cpp/build/ggml/src
+      - /mnt/raid0/llm/ik_llama.cpp/build/examples/mtmd
+    performance:
+      baseline_tps: 41.49     # measured 2026-05-06, EPYC canonical
+      mtp_tps: 44.12          # measured 2026-05-06, draft-max=3, 58.7% acceptance (81/138)
+      mtp_speedup: 1.06       # marginal — confirms lilting.ch finding (intake-527 contradicting_evidence): MoE batch=1 expert-routing cancels drafter speedup
+      coder_baseline_tps_for_comparison: 49.1  # Coder-30B-A3B Q4_K_M 96t-single-NUMA-node (project_96t_single_node_operating_point.md)
+    benchmark_date: 2026-05-06
+    notes: >
+      MoE batch=1 MTP cancellation empirically confirmed on EPYC. 1.06x speedup at 58.7% per-token
+      acceptance — far below the 2.98x / 84% achieved on 31B Dense. The smaller 16/8-head drafter
+      cannot predict MoE expert routing reliably, AND each accepted draft token requires distinct
+      expert weight loads on the verifier, eroding the bandwidth savings that make MTP win on dense.
+      Tier X (eval-only) — does not displace existing Coder-30B-A3B coder role (49.1 t/s).
+      Drafter GGUF was converted in-house from google/gemma-4-26B-A4B-it-assistant safetensors
+      because no community GGUF existed. See deep-dives/gemma4-mtp-drafter-deep-dive.md.
 
   supergemma4_26b_q4km:
     tier: X
