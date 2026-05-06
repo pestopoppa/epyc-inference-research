@@ -189,6 +189,13 @@ runtime_defaults:
     parallel_slots: 4
     flash_attention: true
     ubatch_size: 8192
+  # Per-model compression-tolerance for agent files (handoffs/active/agent-file-prose-compression.md).
+  # `none` = model has not been probed; production roles MUST upgrade to `mild` or higher.
+  # `mild` ~20% reduction, `medium` ~40%, `aggressive` ~60% (per .claude/skills/agent-file-compress/SKILL.md).
+  # Override per-role inside `roles.<role>.agent_file_compression_operating_point` after running
+  # `tests/compliance/agent_file/runner.py` against the candidate model (Phase 3 of the handoff).
+  agent_file_compression_operating_point: none
+
   corpus_retrieval:
     enabled: true        # A/B validated: +8.7pp/32B, +15.6pp/480B. Per-role via lookup flag.
     index_path: /mnt/raid0/llm/cache/corpus/v3_sharded  # Sharded SQLite v3 (in-progress build, falls back gracefully). mvp_index kept as backup.
