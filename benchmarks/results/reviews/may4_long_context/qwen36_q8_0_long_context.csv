@@ -1,0 +1,10 @@
+suite,question_id,score,note
+long_context,t1_q1_needle,3,exact key found with file/location
+long_context,t1_q2_multi_file,3,deep analysis with cache-key collision + transformation bug + DRY refactor (best of all 4 candidates)
+long_context,t1_q3_extraction,3,full 3-section extraction (dates + monetary + companies); hit 4320 ctok cap cleanly mid-section closure
+long_context,t2_q1_deep_needle,3,correct server + timestamp clean format
+long_context,t2_q2_synthesis,3,recognized contradictory Q1s + missing Q2; thoughtful refusal with recommendation
+long_context,t2_q3_architecture,3,comprehensive review; identified template-pattern + polyglot architecture + config sprawl
+long_context,t3_q1_multi_hop_reasoning,3,correctly refused (broken context — tech docs vs financial timeline)
+long_context,t3_q2_contradiction_detection,3,sharp critique; called out potential hallucination test
+long_context,t3_q3_evolving_requirements,3,identified text was random tech docs; called out trick question

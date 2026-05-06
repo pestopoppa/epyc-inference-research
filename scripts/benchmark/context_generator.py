@@ -618,6 +618,406 @@ def _generate_business_paragraph() -> str:
 
 # ============== MAIN CONTEXT GENERATOR ==============
 
+# =============================================================================
+# Tier-3 long_context generators (added 2026-05-06)
+# =============================================================================
+# Pre-2026-05-06: t3_q1_multi_hop_reasoning, t3_q2_contradiction_detection,
+# t3_q3_evolving_requirements all referenced context_types that weren't in the
+# GENERATORS dict, so generate_context() silently fell back to tech-docs. All
+# models correctly refused on the wrong-domain context, so the rubric couldn't
+# discriminate quality. The three generators below produce contexts with the
+# domain structure each question expects.
+
+def generate_investigation_docs_section() -> str:
+    """Financial investigation timeline with cross-document references.
+
+    Supports t3_q1_multi_hop_reasoning: trace transactions A→B→C, identify
+    Person D's role, find meeting between D and E. Provides specific entities,
+    dates, amounts, and roles spread across multiple sub-documents to require
+    multi-hop synthesis.
+    """
+    base_year = 2024
+    date_x_month = random.randint(2, 6)
+    date_x_day = random.randint(1, 25)
+    date_y_month = date_x_month if date_x_day <= 14 else date_x_month + 1
+    date_y_day = (date_x_day + 14) % 28 + 1
+    amount_initial = random.randint(2, 9) * 100000
+    amount_transfer = int(amount_initial * random.choice([0.85, 0.90, 0.95]))
+
+    person_d = random.choice(NAMES)
+    person_e = random.choice([n for n in NAMES if n != person_d])
+    company_a = f"Acme Industries LLC"
+    company_b = f"Crestline Holdings Inc."
+    account_c = f"Pacific Trust Account #C-{random.randint(10000, 99999)}"
+
+    sections = []
+
+    sections.append(f"""## Document 1: Wire Transfer Records — {company_a}
+
+Transaction reference: WT-{random.randint(1000, 9999)}-{base_year}
+Date: {base_year}-{date_x_month:02d}-{date_x_day:02d}
+Originator: {company_a}
+Beneficiary: {company_b}
+Amount: ${amount_initial:,}.00 USD
+Memo: Consulting services per contract dated {base_year}-{(date_x_month-1):02d}-15
+Status: COMPLETED
+Compliance flags: None at time of transfer
+
+Notes from compliance review (added {base_year}-{date_x_month:02d}-{date_x_day+3:02d}):
+The amount and timing fall within normal parameters for the consulting agreement.
+Additional review may be warranted if pattern continues.""")
+
+    sections.append(f"""## Document 2: Banking Activity — {company_b}
+
+Account holder: {company_b}
+Statement period: {base_year}-{date_x_month:02d}-01 to {base_year}-{date_x_month:02d}-30
+
+Notable transactions:
+- {base_year}-{date_x_month:02d}-{date_x_day:02d} INCOMING WIRE ${amount_initial:,}.00 from {company_a}
+- {base_year}-{date_x_month:02d}-{(date_x_day+5):02d} ACH DEBIT $4,250.00 (operating expenses)
+- {base_year}-{date_y_month:02d}-{date_y_day:02d} OUTGOING WIRE ${amount_transfer:,}.00 to {account_c}
+- {base_year}-{date_y_month:02d}-{(date_y_day+2):02d} ACH DEBIT $1,800.00 (legal fees)
+
+The {base_year}-{date_y_month:02d}-{date_y_day:02d} transfer to {account_c} occurred
+approximately two weeks after the inbound wire from {company_a}. Funds breakdown:
+${amount_transfer:,} of the ${amount_initial:,} received was forwarded; the
+${amount_initial - amount_transfer:,} difference was retained as reserves.""")
+
+    sections.append(f"""## Document 3: Personnel File — {person_d}
+
+Employee ID: EMP-{random.randint(2000, 5999)}
+Position: Senior Compliance Officer
+Department: Risk & Audit
+Start date: {base_year-2}-09-15
+Reports to: Chief Risk Officer
+
+Role responsibilities:
+- Reviews and approves wire transfers exceeding $250,000 threshold
+- Coordinates with external auditors on quarterly reviews
+- Maintains the compliance exception log
+- Authorizes deviations from standard counterparty protocols
+
+Recent activity ({base_year} Q1-Q2):
+{person_d} signed off on 14 wire transfers including the {company_a} → {company_b}
+transaction on {base_year}-{date_x_month:02d}-{date_x_day:02d}. Compliance log entry
+notes "approved per existing consulting framework" with reference to the standing
+{company_b} relationship.""")
+
+    sections.append(f"""## Document 4: Calendar Records — {person_e}
+
+Position: Director of Strategic Partnerships, {company_b}
+
+{base_year}-{(date_x_month-1):02d}-22  09:00–10:30  Internal: Quarterly review prep
+{base_year}-{(date_x_month-1):02d}-25  14:00–15:00  PRIVATE MEETING with {person_d} (off-site)
+                                                     Location: Westin Hotel, Conference Room B
+                                                     Notes: Discussion of upcoming engagement structure
+{base_year}-{(date_x_month-1):02d}-28  11:00–12:00  Contract review with legal
+{base_year}-{date_x_month:02d}-02  10:00–11:00  Internal: Engagement kickoff
+{base_year}-{date_x_month:02d}-{date_x_day:02d}  --:--   [Wire transfer occurred — see Doc 1]
+{base_year}-{date_x_month:02d}-{(date_x_day+1):02d}  16:00–17:00  Follow-up call with {person_d}
+
+The {base_year}-{(date_x_month-1):02d}-25 meeting between {person_e} and {person_d}
+preceded the {company_a} wire transfer by approximately three weeks. The meeting
+was scheduled outside normal business premises and was not recorded in the
+official engagement minutes.""")
+
+    return "\n\n".join(sections)
+
+
+def generate_witness_statements_section() -> str:
+    """Eight witness statements about an incident with embedded contradictions.
+
+    Supports t3_q2_contradiction_detection: provides 8 narrative statements
+    with deliberate factual conflicts (timing, location, perpetrator features),
+    reliability variation (some witnesses with line-of-sight issues, some
+    impaired), and enough detail to construct a synthesized timeline.
+    """
+    incident_date = f"2024-0{random.randint(2,6)}-{random.randint(10,25)}"
+    base_hour = random.randint(20, 22)
+    locations = ["First and Main", "Second Avenue near the post office",
+                 "the corner of Oak Street", "the parking lot behind the bank"]
+    base_loc = random.choice(locations)
+    alt_loc = random.choice([l for l in locations if l != base_loc])
+    suspect_height = random.choice(["5'10\"", "6'1\"", "5'8\""])
+    alt_height = random.choice([h for h in ["5'10\"", "6'1\"", "5'8\"", "6'3\""] if h != suspect_height])
+
+    statements = [
+        f"""## Witness Statement #1: Margaret Chen (cashier, line of sight: clear, sober)
+
+I was working the register at the time. I heard the noise at exactly {base_hour}:15 PM
+on {incident_date}. The man came in through the front door wearing a dark blue jacket
+and a black baseball cap. He was tall, about {suspect_height}. He walked directly to my
+register without looking around. He didn't say anything for the first few seconds, just
+slid a note across the counter. The note said "give me the cash, no alarms." I followed
+the protocol we trained for. He left within two minutes, carrying a black backpack.""",
+
+        f"""## Witness Statement #2: Robert Alvarez (customer, line of sight: partial, sober)
+
+I was in the parking lot when it happened. Looking at my phone, the time was {base_hour}:25 PM.
+I saw a man walk out the front of the building at a fast pace. He was wearing what looked
+like a black hoodie — definitely dark colors. I couldn't see his height clearly because he
+was at an angle, but he seemed tall. He went around the side of the building toward the alley.
+A few seconds later I heard sirens. I didn't see his face.""",
+
+        f"""## Witness Statement #3: Diane Foster (customer, line of sight: blocked, sober)
+
+I was near the back of the store browsing the magazine section. I never actually saw
+the man — there was a display blocking my view of the counter. But I heard him speak.
+He had a deep voice and an accent I couldn't place — maybe East Coast? He said something
+like "this is a robbery, stay calm." Then I heard the cashier respond. The whole thing
+took maybe 90 seconds. I called 911 from where I was hiding.""",
+
+        f"""## Witness Statement #4: James Park (security guard, line of sight: clear, on duty)
+
+I was monitoring the camera feed from the back office. The man entered at {base_hour}:14 PM
+on the timestamp. White male, approximately {suspect_height}, wearing a dark jacket — I'd
+say navy, not black — and a baseball cap. NO BACKPACK was visible when he entered. He was
+carrying a folded piece of paper in his right hand. He left at {base_hour}:17 PM, this time
+carrying what appeared to be a black bag. Total time inside: 3 minutes 12 seconds per the
+timestamps.""",
+
+        f"""## Witness Statement #5: Elena Vasquez (passing motorist, line of sight: brief, sober)
+
+I was driving past on {base_loc} around {base_hour}:20 PM. There was a man running across
+the street. He was definitely shorter than 6 feet — I'd estimate {alt_height}. He was wearing
+a hoodie, gray I think, not dark. I noticed because he almost ran in front of my car. He went
+into the alley between the bank and the dry cleaner. I called the police as soon as I parked.""",
+
+        f"""## Witness Statement #6: David Brennan (homeless, line of sight: from across street, slight intoxication noted by responding officer)
+
+I was sitting on the bench across from the place. I seen the whole thing. He went in, then
+he came out maybe five minutes later. Couldn't tell you his height — he looked normal, not
+short, not tall. He was wearing dark clothes, but I think there was something red about it,
+maybe his shoes? Or a logo? It was kinda dark out by then. He had a bag, definitely had a bag
+when he left. Walked, didn't run. Walked normally toward {alt_loc}.""",
+
+        f"""## Witness Statement #7: Officer Ramirez (responding officer, arrived 7 minutes after 911 call)
+
+Dispatch received the 911 call at {base_hour}:21 PM. I arrived on scene at {base_hour}:28 PM.
+The cashier (Witness #1) was the only person inside the store at the time of my arrival. She
+provided an initial description matching: white male, approximately {suspect_height}, dark
+jacket, baseball cap, fled with a black backpack. The interior security camera was operational
+and timestamped his entry at {base_hour}:14 PM and exit at {base_hour}:17 PM. No other physical
+evidence was recovered at the scene at that time.""",
+
+        f"""## Witness Statement #8: Jennifer Wu (next-door coffee shop worker, line of sight: window view of front entrance, sober)
+
+I was wiping down tables near the front window of the coffee shop. I have a clear view of the
+neighboring store's entrance from there. I saw a man enter at — I checked my phone right after —
+{base_hour}:14 PM. He was wearing a dark blue or navy jacket, definitely not gray, definitely not
+a hoodie — it had a collar. He was tall, taller than me by a lot, and I'm 5'6". He came out
+about three minutes later carrying a black backpack, which he had NOT been carrying when he went
+in. He turned right and walked toward {base_loc}, NOT into any alley.""",
+    ]
+
+    return "\n\n".join(statements)
+
+
+def generate_email_thread_section() -> str:
+    """Six-month email thread about a notification system feature with scope creep.
+
+    Supports t3_q3_evolving_requirements: chronological email thread tracking
+    the original requirement, multiple changes with dates+requesters, and
+    a scope-creep inflection point. Provides material for original-requirement
+    identification, change tracking, gap analysis, and final-implementation comparison.
+    """
+    base_year = 2024
+    senders = ["Sarah Mitchell (Product Manager)",
+               "Tom Hansen (Engineering Lead)",
+               "Priya Desai (UX Designer)",
+               "Marcus Webb (CEO)",
+               "Sarah Mitchell (Product Manager)",
+               "Tom Hansen (Engineering Lead)",
+               "Sarah Mitchell (Product Manager)",
+               "Marcus Webb (CEO)",
+               "Tom Hansen (Engineering Lead)",
+               "Sarah Mitchell (Product Manager)",
+               "Priya Desai (UX Designer)",
+               "Tom Hansen (Engineering Lead)"]
+
+    emails = [
+        f"""## Email 1
+From: Sarah Mitchell (Product Manager)
+To: Engineering, Design
+Date: {base_year}-01-15 09:23 AM
+Subject: New feature request: Notification system
+
+Hi team,
+
+We need a notification system for the dashboard. Original requirement is straightforward:
+
+- Email notification to users when a workflow completes
+- Single configurable preference: on/off
+- One template, no customization
+- Send within 5 minutes of completion event
+
+Goal: ship in next sprint (4 weeks). This should be a simple feature.
+
+Let me know if you have questions.
+
+Sarah""",
+
+        f"""## Email 2
+From: Tom Hansen (Engineering Lead)
+To: Sarah Mitchell, Engineering
+Date: {base_year}-01-22 02:14 PM
+Subject: Re: New feature request: Notification system
+
+Sarah,
+
+Sounds good. We can wire this up using the existing email service in about a week of dev
+plus QA. I have one question: should this work for failed workflows too, or just successful
+completion? Failed workflows have different metadata available.
+
+Tom""",
+
+        f"""## Email 3
+From: Sarah Mitchell (Product Manager)
+To: Tom Hansen, Engineering
+Date: {base_year}-01-23 10:08 AM
+Subject: Re: New feature request: Notification system
+
+Tom — good question. Let's include failed workflows too. So that's two notification types:
+"workflow completed" and "workflow failed". Each with its own template. Still on/off as one
+toggle.
+
+Sarah""",
+
+        f"""## Email 4
+From: Priya Desai (UX Designer)
+To: Sarah Mitchell, Tom Hansen
+Date: {base_year}-02-08 11:45 AM
+Subject: Re: New feature request: Notification system
+
+Hi both,
+
+Coming back from user research — users actually want more granularity than on/off. They want
+to choose which workflow types trigger notifications. Could we make it per-workflow-type?
+Otherwise we'll get complaints about notification spam.
+
+Priya""",
+
+        f"""## Email 5
+From: Marcus Webb (CEO)
+To: Sarah Mitchell
+Cc: Tom Hansen, Priya Desai
+Date: {base_year}-02-19 04:30 PM
+Subject: Re: New feature request: Notification system
+
+Sarah —
+
+Just got off the phone with the customer advisory board. Two enterprise customers asked
+about Slack integration for these notifications. Can we add Slack as a channel option in
+addition to email? They're asking specifically and I'd like to say yes before the renewal
+conversation next month.
+
+Marcus""",
+
+        f"""## Email 6
+From: Sarah Mitchell (Product Manager)
+To: Marcus Webb, Tom Hansen, Priya Desai
+Date: {base_year}-02-20 09:11 AM
+Subject: Re: New feature request: Notification system
+
+Adding Slack to the scope. So now we have:
+- Email + Slack channels
+- Per-workflow-type granularity
+- Two notification types (success/failure)
+
+Tom — what's the new estimate?
+
+Sarah""",
+
+        f"""## Email 7
+From: Tom Hansen (Engineering Lead)
+To: Sarah Mitchell, Marcus Webb
+Date: {base_year}-02-21 03:55 PM
+Subject: Re: New feature request: Notification system
+
+Hi Sarah, Marcus,
+
+The new scope is a different system. We're now talking 6-8 weeks instead of 4. Slack
+integration alone is 2 weeks (OAuth flow, channel selection UI, message formatting).
+Per-workflow granularity adds another preference UI. Two templates per channel = 4 templates.
+
+Should we still ship Q1?
+
+Tom""",
+
+        f"""## Email 8
+From: Marcus Webb (CEO)
+To: Tom Hansen, Sarah Mitchell
+Date: {base_year}-03-04 06:22 PM
+Subject: Re: New feature request: Notification system
+
+Tom, Sarah —
+
+Need this by end of Q1. Customer advisory board is the priority. Do whatever it takes.
+We can also add SMS — one of the customers brought it up. Add it to the scope.
+
+Marcus
+
+[NOTE: this email is widely cited internally as the moment scope-creep became
+irreversible — the SMS addition without engineering pushback locked in a fundamentally
+different system architecture.]""",
+
+        f"""## Email 9
+From: Tom Hansen (Engineering Lead)
+To: Sarah Mitchell, Marcus Webb
+Date: {base_year}-03-08 10:47 AM
+Subject: Re: New feature request: Notification system
+
+To make Q1 work, I need to bring in two contractors. Total cost ~$40K. Also need to push
+the OAuth library upgrade to Q2 because we don't have time to do both. Approve?
+
+Tom""",
+
+        f"""## Email 10
+From: Sarah Mitchell (Product Manager)
+To: Tom Hansen
+Date: {base_year}-03-15 08:30 AM
+Subject: Re: New feature request: Notification system
+
+Tom — also adding mobile push notifications. The mobile team said it's "a quick wire-up."
+
+Sarah""",
+
+        f"""## Email 11
+From: Priya Desai (UX Designer)
+To: Sarah Mitchell, Tom Hansen
+Date: {base_year}-04-02 02:00 PM
+Subject: Re: New feature request: Notification system
+
+I've now redesigned the preferences UI three times. Could we freeze the design? Each scope
+addition (Slack, SMS, push) means rework. We're at 14 different toggles now.
+
+Priya""",
+
+        f"""## Email 12
+From: Tom Hansen (Engineering Lead)
+To: Sarah Mitchell, Marcus Webb, Priya Desai
+Date: {base_year}-06-28 05:45 PM
+Subject: Re: New feature request: Notification system — SHIPPED
+
+Shipped today after 5+ months. Final feature set:
+- 4 channels: Email, Slack, SMS, Mobile Push
+- Per-workflow-type granularity (12 workflow types × 4 channels = 48 toggles)
+- Three notification types (success/failure/started — added in May at customer request)
+- 12 templates total
+- Custom Slack channel routing
+- SMS rate limiting per user
+
+Original Jan estimate: 4 weeks. Actual: 23 weeks. Original requirement was 1 toggle for
+1 channel for 1 event type. Final implementation is 48 toggles for 4 channels for 3 event
+types. We never circled back to reconcile the in-app notification feature that customers
+keep asking for and that everyone assumed would be obvious — there's still no in-app bell icon.
+
+Tom""",
+    ]
+
+    return "\n\n".join(emails)
+
+
 GENERATORS = {
     "technical_docs": generate_tech_doc_section,
     "meeting_notes": generate_meeting_notes_section,
@@ -628,6 +1028,14 @@ GENERATORS = {
     "server_logs": generate_server_log_section,
     "business_docs": generate_business_doc_section,
     "full_project": generate_code_file_section,  # Same generator, more files
+    # 2026-05-06: Tier-3 long_context contexts. Pre-2026-05-06 these silently fell
+    # back to generate_tech_doc_section, which couldn't support multi-hop reasoning,
+    # contradiction detection, or requirement evolution tasks. All models correctly
+    # refused on the resulting tech-docs context, making the tier-3 questions
+    # unable to discriminate model quality.
+    "investigation_docs": generate_investigation_docs_section,
+    "witness_statements": generate_witness_statements_section,
+    "email_thread": generate_email_thread_section,
 }
 
 
