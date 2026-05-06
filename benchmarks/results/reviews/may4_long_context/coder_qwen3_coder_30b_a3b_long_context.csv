@@ -1,0 +1,10 @@
+suite,question_id,score,note
+long_context,t1_q1_needle,3,exact key found with file/line/value
+long_context,t1_q2_multi_file,2,broken-context (no config.py/main.py); generic analysis; missed deep bugs
+long_context,t1_q3_extraction,1,degenerate repetition collapse at 4096 ctok cap
+long_context,t2_q1_deep_needle,0,MISSING - question never executed (timeout or skip)
+long_context,t2_q2_synthesis,2,reasonable synthesis but generic; no specific numbers
+long_context,t2_q3_architecture,1,hit 4096 cap with degenerate CacheService/Controller repetition
+long_context,t3_q1_multi_hop_reasoning,3,correctly refused - broken context (tech docs vs financial timeline)
+long_context,t3_q2_contradiction_detection,1,hallucinated contradictions from broken context
+long_context,t3_q3_evolving_requirements,3,correctly refused - broken context (tech docs vs email thread)

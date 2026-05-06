@@ -1,2 +1,24 @@
 === nemotron_9b / c0 (n=30) ===
 Wed Apr 29 09:21:24 UTC 2026
+  done at Wed Apr 29 09:26:11 UTC 2026
+=== nemotron_9b / c3 (n=30) ===
+Wed Apr 29 09:26:11 UTC 2026
+  done at Wed Apr 29 09:31:12 UTC 2026
+=== gemma_31b / c0 (n=30) ===
+Wed Apr 29 09:31:12 UTC 2026
+  done at Wed Apr 29 09:37:14 UTC 2026
+=== gemma_31b / c1 (n=30) ===
+Wed Apr 29 09:37:14 UTC 2026
+  done at Wed Apr 29 09:44:53 UTC 2026
+
+=== high-rep replication summary (n=30) ===
+  nemotron_9b    c0     baseline (default)        6.750 ± 0.180  (95% CI: [6.686, 6.814])
+  nemotron_9b    c3     CPU1 + CPU2-off           6.470 ± 0.620  (95% CI: [6.248, 6.692])
+  gemma_31b      c0     baseline (default)        5.400 ± 0.500  (95% CI: [5.221, 5.579])
+  gemma_31b      c1     CPU1 alone                4.220 ± 0.170  (95% CI: [4.159, 4.281])
+
+=== paired comparison (n=30) ===
+  nemotron_9b c3 vs c0: Δ = -4.15%  t = -2.375  p ≈ 0.0175
+  gemma_31b c1 vs c0: Δ = -21.85%  t = -12.238  p ≈ 0.0000
+
+completed at Wed Apr 29 09:44:53 UTC 2026

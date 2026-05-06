@@ -1,0 +1,10 @@
+suite,question_id,score,note
+long_context,t1_q1_needle,3,exact key found with thorough reasoning
+long_context,t1_q2_multi_file,3,identified cache-key collision bug + DRY violation + refactor plan
+long_context,t1_q3_extraction,2,substantial extraction; hit 4096 cap mid-monetary-amounts
+long_context,t2_q1_deep_needle,3,correct server name + timestamp in requested format
+long_context,t2_q2_synthesis,3,recognized Q1/Q2 data anomaly; pragmatic synthesis with concrete numbers
+long_context,t2_q3_architecture,3,deep analysis + concrete refactor recommendations
+long_context,t3_q1_multi_hop_reasoning,3,correctly refused - broken context
+long_context,t3_q2_contradiction_detection,2,acknowledged broken context; rigorous attempt; truncated at 4096
+long_context,t3_q3_evolving_requirements,3,correctly refused - broken context
