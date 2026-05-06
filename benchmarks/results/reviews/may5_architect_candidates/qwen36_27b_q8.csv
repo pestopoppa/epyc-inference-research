@@ -1,0 +1,62 @@
+suite,question_id,score,note
+general,t1_q1_json,3,exact JSON
+general,t1_q2_multistep,3,correct
+general,t1_q3_compare,3,balanced
+general,t2_q1_synthesis,3,phased
+general,t2_q2_transform,3,valid YAML
+general,t2_q3_schedule,0,MISSING (not in JSON)
+general,t2_q4_inconsistency,3,both inconsistencies
+general,t3_q1_policy_analysis,3,covered
+general,t3_q2_system_failure,3,replica lag fix
+general,t3_q3_strategic_communication,3,framing
+agentic,t1_q1_sequential,3,correct order
+agentic,t1_q2_error_handling,3,search_users
+agentic,t1_q3_nested_params,3,correct nesting
+agentic,t2_q1_ambiguous,3,clarifying
+agentic,t2_q2_error_chain,3,logical next
+agentic,t2_q3_schema_edge,3,correct
+agentic,t2_q4_orchestration,3,full plan
+agentic,t3_q1_competing_constraints,3,read-first
+agentic,t3_q2_multi_agent_coordination,3,parallel design
+agentic,t3_q3_adversarial_robustness,3,refuses + safe alt
+math,t1_q1_word_problem,3,correct
+math,t1_q2_system_equations,3,all 4 solutions
+math,t1_q3_probability,3,correct
+math,t2_q1_optimization,3,correct
+math,t2_q2_proof,3,n=1->2 explained
+math,t2_q3_calculus,3,answer 10
+math,t2_q4_statistics,3,all stats
+math,t3_q1_analysis,3,differentiable + closed form + limit
+math,t3_q2_combinatorics,0,MISSING
+math,t3_q3_probability_theory,3,E[N]=e elegant volume argument
+instruction_precision,t1_q1_negative_instruction,3,no forbidden
+instruction_precision,t1_q2_word_limit,3,23 words
+instruction_precision,t1_q3_structured_format,3,exact format
+instruction_precision,t1_q4_multiple_constraints,3,5 countries
+instruction_precision,t2_q1_resist_elaboration,3,just "4"
+instruction_precision,t2_q2_maintain_format,3,exact format
+instruction_precision,t2_q3_empty_handling,3,NONE
+instruction_precision,t2_q4_conflicting_constraints,3,valid sentence
+instruction_precision,t3_q1_self_referential,1,working through; truncated
+instruction_precision,t3_q2_cascading_constraints,0,only 2 words
+instruction_precision,t3_q3_meta_instruction,3,42 + 7x hi
+thinking,t1_q1_multistep,3,11:34 AM
+thinking,t1_q2_hypothesis,3,confounds
+thinking,t1_q3_planning,3,enumeration
+thinking,t2_q1_paradox,3,positions
+thinking,t2_q2_counterfactual,3,analysis
+thinking,t2_q3_formal,3,proof
+thinking,t2_q4_metacognition,3,Fermi
+thinking,t3_q1_methodological_critique,3,multiple
+thinking,t3_q2_causal_inference,3,Gene conditioning
+thinking,t3_q3_reasoning_trap,3,test set issue
+coder,t1_q1_algorithm,0,MISSING
+coder,t1_q2_refactor,3,both versions
+coder,t1_q3_test,3,pytest
+coder,t2_q1_design,3,LRU with linked list
+coder,t2_q2_debug_complex,3,asyncio.Lock
+coder,t2_q3_optimize,3,O(n)
+coder,t2_q4_system,3,rate limiter
+coder,t3_q1_concurrent_correctness,3,ABA + hazard pointers
+coder,t3_q2_distributed_consistency,3,thorough
+coder,t3_q3_algorithmic_hardness,0,MISSING

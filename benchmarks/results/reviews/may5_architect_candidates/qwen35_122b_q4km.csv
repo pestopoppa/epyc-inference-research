@@ -1,0 +1,71 @@
+suite,question_id,score,note
+general,t1_q1_json,3,exact JSON match
+general,t1_q2_multistep,3,correct 4-item alphabetized output
+general,t1_q3_compare,3,balanced microservices vs monolith comparison
+general,t2_q1_synthesis,3,phased approach addressing all stakeholders
+general,t2_q2_transform,3,valid nested YAML by department
+general,t2_q3_schedule,2,working through but cut mid-analysis (cap or formatting issue)
+general,t2_q4_inconsistency,3,identified body format + rate limit inconsistencies
+general,t3_q1_policy_analysis,3,Goodhart + explainability tradeoffs covered
+general,t3_q2_system_failure,3,read-replica lag + linearizable reads
+general,t3_q3_strategic_communication,3,sophisticated CEO framing
+agentic,t1_q1_sequential,3,correct grep then read order
+agentic,t1_q2_error_handling,3,uses search_users instead of retry
+agentic,t1_q3_nested_params,3,correct nested JSON structure
+agentic,t2_q1_ambiguous,3,clarifying question with reasoning
+agentic,t2_q2_error_chain,3,logical next-step + reasoning
+agentic,t2_q3_schema_edge,3,correct query_api with optional fields
+agentic,t2_q4_orchestration,3,full plan with error handling
+agentic,t3_q1_competing_constraints,3,validates schema + graceful degradation
+agentic,t3_q2_multi_agent_coordination,3,parallel research+code with timeouts
+agentic,t3_q3_adversarial_robustness,3,refuses /etc/passwd + safe handling
+math,t1_q1_word_problem,3,$120 / $129.60 / 86.4% all correct
+math,t1_q2_system_equations,3,all 4 solutions found
+math,t1_q3_probability,3,2/9 + 1/3 correct
+math,t2_q1_optimization,3,50x100=5000 optimal (assumed)
+math,t2_q2_proof,3,n=1 to n=2 overlap argument fails
+math,t2_q3_calculus,3,answer 10
+math,t2_q4_statistics,3,mean/median/std all correct
+math,t3_q1_analysis,3,differentiable + closed form + limit=0
+math,t3_q2_combinatorics,2,worked but verbose; got =1 result (slight identity confusion)
+math,t3_q3_probability_theory,3,E[N]=e two proofs
+instruction_precision,t1_q1_negative_instruction,3,2 sentences without forbidden words
+instruction_precision,t1_q2_word_limit,3,23 words in range
+instruction_precision,t1_q3_structured_format,3,exact format
+instruction_precision,t1_q4_multiple_constraints,3,5 alphabetical countries
+instruction_precision,t2_q1_resist_elaboration,3,just "4"
+instruction_precision,t2_q2_maintain_format,3,exact 3-line format
+instruction_precision,t2_q3_empty_handling,3,NONE
+instruction_precision,t2_q4_conflicting_constraints,3,"A database manages data."
+instruction_precision,t3_q1_self_referential,0,degenerate counting collapse hit cap
+instruction_precision,t3_q2_cascading_constraints,1,chain rule broken on word 2
+instruction_precision,t3_q3_meta_instruction,3,correct 42 + 7x hi
+thinking,t1_q1_multistep,3,11:34 AM correct
+thinking,t1_q2_hypothesis,3,SES/sleep/health confounds
+thinking,t1_q3_planning,2,hit cap during enumeration
+thinking,t2_q1_paradox,3,multiple positions presented
+thinking,t2_q2_counterfactual,3,3-dimension analysis
+thinking,t2_q3_formal,3,hypothetical syllogism + example
+thinking,t2_q4_metacognition,3,Fermi with assumptions + bounds
+thinking,t3_q1_methodological_critique,3,multiple confound types identified
+thinking,t3_q2_causal_inference,3,correct Gene conditioning + collider warning
+thinking,t3_q3_reasoning_trap,3,test set distribution issue identified
+coder,t1_q1_algorithm,2,hit cap; identified bugs but didn't finalize fixes cleanly
+coder,t1_q2_refactor,2,hit cap with verbose explanation
+coder,t1_q3_test,3,full pytest with edge cases
+coder,t2_q1_design,3,clean OrderedDict-based LRU
+coder,t2_q2_debug_complex,3,asyncio.Lock fix
+coder,t2_q3_optimize,3,O(n) hash map approach
+coder,t2_q4_system,3,sliding-window rate limiter
+coder,t3_q1_concurrent_correctness,3,tagged pointers + memory reclamation note
+coder,t3_q2_distributed_consistency,3,LWW/vector-clocks/CRDT discussion
+coder,t3_q3_algorithmic_hardness,2,hit cap on adversary argument
+long_context,t1_q1_needle,1,short response; gave think tags + None (missed needle)
+long_context,t1_q2_multi_file,3,deep analysis
+long_context,t1_q3_extraction,3,thorough listing
+long_context,t2_q1_deep_needle,3,correct server+timestamp
+long_context,t2_q2_synthesis,3,integrated analysis with concrete numbers
+long_context,t2_q3_architecture,3,deep analysis
+long_context,t3_q1_multi_hop_reasoning,3,correctly refused (broken context)
+long_context,t3_q2_contradiction_detection,2,played along; structured analysis
+long_context,t3_q3_evolving_requirements,3,correctly refused (broken context)
