@@ -561,6 +561,9 @@ server_mode:
     slots: 1  # Serial — admission=1, no wasted KV
     model_role: qwen35_122b_q4km
     description: System architecture — Qwen3.5-122B-A10B MoE (quality 2.57/3, -64GB vs 235B)
+    # Phase 3 compliance gate (2026-05-07): aggressive passes (117% baseline compliance,
+    # 110% procedure, recall 0.93). Compression actively helps this model.
+    agent_file_compression_operating_point: aggressive
     model: Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf
     draft_model: Qwen3.5-0.8B-Q8_0.gguf  # 0.8B Qwen3.5 draft (moe8+spec_q8_k8+lu = 12.6 t/s)
     memory_gb: 69
@@ -600,6 +603,9 @@ server_mode:
     slots: 1  # Serial — admission=1, no wasted KV
     model_role: ingest_long_context
     description: Long document synthesis & summarization - SSM+MoE hybrid (NO speculation!)
+    # Phase 3 compliance gate (2026-05-07): medium passes; aggressive fails procedure (89%
+    # baseline). Compliance pinned 0.933 across all 4 levels, recall 0.93-1.00.
+    agent_file_compression_operating_point: medium
     model: Qwen3-Next-80B-A3B-Q4_K_M.gguf
     memory_gb: 46
     tier: warm
@@ -820,6 +826,10 @@ roles:
   frontdoor:
     tier: A
     description: Primary interactive orchestrator - high quality, always resident
+    # Phase 3 compliance gate (2026-05-07): NON-MONOTONIC. mild fails (compliance 83% baseline),
+    # medium fails (compliance 92%, procedure 90%); aggressive PASSES (108% C, 100% P,
+    # recall 1.00). Orchestrator routes to aggressive directly per user direction.
+    agent_file_compression_operating_point: aggressive
     backend:
       type: local
     model:
@@ -1059,6 +1069,9 @@ roles:
   ingest_long_context:
     tier: B
     description: Large document ingestion, synthesis & summarization - SSM+MoE hybrid
+    # Phase 3 compliance gate (2026-05-07): medium passes; aggressive fails procedure (89%
+    # baseline). Compliance pinned 0.933, recall 0.93-1.00. Source: data/compliance/2026-05-07-ingest_long_context-curve/SUMMARY.md.
+    agent_file_compression_operating_point: medium
     model:
       name: Qwen3-Next-80B-A3B-Instruct
       huggingface_id: lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF
@@ -1936,6 +1949,9 @@ roles:
   qwen35_122b_q4km:
     tier: B
     description: Qwen3.5-122B-A10B Q4_K_M — architect candidate (MoE, 256 experts, 8 active)
+    # Phase 3 compliance gate (2026-05-07): aggressive passes (117% baseline compliance,
+    # 110% procedure, recall 0.93). Compression actively helps this model.
+    agent_file_compression_operating_point: aggressive
     model:
       name: Qwen3.5-122B-A10B
       path: unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf
@@ -2234,6 +2250,12 @@ roles:
   qwen36_q8_0:
     tier: B
     description: Qwen3.6-35B-A3B Q8_0 — MoE successor to Qwen3.5, thinking model
+    # Phase 3 compliance gate (2026-05-07): medium passes (108% baseline C, 100% P,
+    # recall 1.00); mild and aggressive fail procedure (92% baseline). Best curve in stack
+    # alongside architect_general. Tested with chat_template_kwargs.enable_thinking=False
+    # (mandatory — without it model returns 0 visible chars). Source:
+    # data/compliance/2026-05-07-frontdoor-curve/SUMMARY.md.
+    agent_file_compression_operating_point: medium
     model:
       name: Qwen3.6-35B-A3B
       path: /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
@@ -3495,6 +3517,10 @@ roles:
   coder_qwen3_coder_30b_a3b:
     tier: B
     description: Coder model - Qwen3-Coder-30B-A3B-Instruct-Q4_K_M
+    # Phase 3 compliance gate (2026-05-07): NON-MONOTONIC. mild fails (compliance 83%
+    # baseline), medium fails (C 92%, P 90%); aggressive PASSES (C 108%, P 100%, recall 1.00).
+    # Orchestrator routes directly to aggressive per user direction.
+    agent_file_compression_operating_point: aggressive
     model:
       name: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M
       path: unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
@@ -4357,6 +4383,11 @@ roles:
   draft_qwen2_5_coder_1_5b_q2_k:
     tier: D
     description: Draft model - Qwen2.5-Coder-1.5B.Q2_K
+    # Phase 3 compliance gate (2026-05-07): BLOCKED. Q4 variant of this 1.5B model dropped
+    # baseline recall to 0.33-0.47 — model lacks working memory for a 700-word agent file.
+    # Q2 will be worse. Drafts don't read agent files in current pipeline; setting `none`
+    # preserves deployment-gate-block discipline if ever promoted to a target role.
+    agent_file_compression_operating_point: none
     model:
       name: Qwen2.5-Coder-1.5B.Q2_K
       path: QuantFactory/Qwen2.5-Coder-1.5B-GGUF/Qwen2.5-Coder-1.5B.Q2_K.gguf
@@ -4374,6 +4405,10 @@ roles:
   draft_qwen2_5_coder_1_5b_q4_k_m:
     tier: D
     description: Draft model - Qwen2.5-Coder-1.5B.Q4_K_M
+    # Phase 3 compliance gate (2026-05-07): BLOCKED. Tested directly as worker_fast role.
+    # Baseline recall 0.333 < 0.90 absolute floor. 1.5B size lacks working memory for a
+    # 700-word agent file. Source: data/compliance/2026-05-07-worker_fast-curve/SUMMARY.md.
+    agent_file_compression_operating_point: none
     model:
       name: Qwen2.5-Coder-1.5B.Q4_K_M
       path: QuantFactory/Qwen2.5-Coder-1.5B-GGUF/Qwen2.5-Coder-1.5B.Q4_K_M.gguf
@@ -4817,6 +4852,9 @@ roles:
   ingest_qwen3_coder_30b:
     tier: B
     description: Ingest candidate - Qwen3-Coder-30B-A3B-Instruct-Q4_K_M
+    # Phase 3 compliance gate (2026-05-07): NON-MONOTONIC. Same model as
+    # coder_qwen3_coder_30b_a3b. mild and medium fail; aggressive PASSES. Skip mild/medium.
+    agent_file_compression_operating_point: aggressive
     model:
       name: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M
       path: unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
