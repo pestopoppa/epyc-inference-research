@@ -639,45 +639,51 @@ server_mode:
     health_timeout_sec: 60
     notes: "Python REST service (not llama.cpp). Stack-managed via start_whisper() in orchestrator_stack.py. Serves Aider, Claude Code, orchestrator."
 
-  # ComfyUI diffusion-inference service (ERNIE-Image-Turbo Q8 GGUF + Mistral3 + flux2 VAE)
-  comfyui:
-    url: http://localhost:8188
-    port: 8188
+  # sd-server (stable-diffusion.cpp native ggml) — replaced ComfyUI 2026-05-07.
+  # Native ggml Q8 GEMM kernels skip ComfyUI-GGUF's per-layer dequant-to-BF16 step.
+  # Measured ~1.74× wall-clock and ~3.43× sampler s/iter speedup at 512² / 4 steps.
+  sd_server:
+    url: http://localhost:8190
+    port: 8190
     model_role: image_generation
-    description: ComfyUI diffusion-inference server (ERNIE-Image-Turbo, single-stream DiT)
+    description: sd-server (stable-diffusion.cpp native ggml) running ERNIE-Image-Turbo single-stream DiT
     model: ernie-image-turbo-Q8_0.gguf
     model_type: diffusion_service
     huggingface_id: unsloth/ERNIE-Image-Turbo-GGUF
     model_path: /mnt/raid0/llm/models/diffusion/ernie-image-turbo-gguf/ernie-image-turbo-Q8_0.gguf
     pipeline_components_dir: /mnt/raid0/llm/models/diffusion/ernie-image-turbo-comfy/
     text_encoder: ministral-3-3b.safetensors
-    prompt_enhancer: ernie-image-prompt-enhancer.safetensors
     vae: flux2-vae.safetensors
+    backend: stable-diffusion.cpp
+    backend_binary: /mnt/raid0/llm/stable-diffusion.cpp/build/bin/sd-server
     memory_gb: 16
     tier: warm
     languages: [en, zh]
     acceleration:
-      type: gguf_q8
+      type: ggml_native_q8
+      flash_attention: true
       numa_pinning: "interleave=all"
       threads: 96
     default_params:
       width: 1024
       height: 1024
       steps: 8
-      cfg: 1.0
+      cfg_scale: 1.0
       sampler: euler
       scheduler: simple
-    throughput: 0.0021  # ~478 s/image @ 1024² 8 steps on EPYC 9655 CPU (2026-05-06 smoke test)
-    launch_script: scripts/diffusion/start_comfyui_server.sh
+    throughput: 0.0247  # ~40 s/image @ 512² 4 steps on EPYC 9655 CPU (2026-05-07 A/B vs ComfyUI 70 s)
+    launch_script: scripts/diffusion/start_sd_server.sh
     managed_by: orchestrator_stack
-    health_path: /system_stats
+    health_path: /sdapi/v1/samplers
     health_timeout_sec: 120
-    notes: "Python REST service (not llama.cpp). Sequential by orchestrator-level admission + ComfyUI's native queue."
+    api_endpoint: /sdapi/v1/txt2img
+    api_style: sd-webui-compatible
+    notes: "Native C++/ggml inference. Synchronous HTTP. Replaces ComfyUI (still on disk at /mnt/raid0/llm/comfyui-ernie-test/ for rollback)."
 
   # Image generation virtual role (no model server; execution via Hermes plugin)
   image_worker:
     tier: D
-    description: Virtual role for image generation. No model server; TaskIRs handed to Hermes which calls comfyui via local image_generate plugin.
+    description: Virtual role for image generation. No model server; TaskIRs handed to Hermes which calls sd_server via local image_generate plugin.
     backend:
       type: virtual
     execution: hermes_plugin
