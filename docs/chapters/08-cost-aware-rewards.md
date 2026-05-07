@@ -52,6 +52,15 @@ Now the router learns: for this task type, frontdoor is preferable when both can
 
 The cost-aware routing pattern has converged across multiple independent research groups. Every major system gates cost penalties behind correctness and uses a tunable lambda to trade off quality against efficiency.
 
+Cost-aware routing systems can be grouped by **training methodology**, which is the axis with the strongest implications for production deployment:
+
+1. **RL-trained routers** — xRouter, Router-R1, Conductor (intake-493). End-to-end reinforcement learning against terminal task reward. Strong on cost-quality Pareto but requires multi-GPU training (2-8× H100). Inference-side is cheap but training is not.
+2. **Preference-trained routers** — RouteLLM. Learn from pairwise preference data using matrix factorization or BERT-style classifiers. Cheaper to train than full RL but requires preference labels and is binary (strong vs weak) by default.
+3. **Confidence/cascade routers** — FrugalGPT, Self-REF. Cheap-first cascade with learned escalation thresholds; no global router policy. The training burden moves to the per-model confidence calibration step.
+4. **ES-trained routers** — Trinity (intake-474, ICLR 2026). A small linear head (~10K params) trained with **separable CMA-ES** against terminal task fitness, no RL infrastructure and no labelled trajectories. CPU-feasible at our scale; side-steps the credit-assignment / Q-magnitude problem entirely. Useful as a *cold-start trainer* when episodic labels do not yet exist for a new routing surface.
+
+The three classes (1)–(3) are well-represented in our existing implementation choices; class (4) is a 2026 addition and informs the LRC Phase 4 / DAR-1.5 audit work tracked in `epyc-root/handoffs/active/`.
+
 <details>
 <summary>Survey of cost-aware routing systems</summary>
 
@@ -106,6 +115,36 @@ Feature-driven routing that embeds model cost directly into training. Incorporat
 Confidence-token routing: LoRA-finetuned 8B models learn to express uncertainty, routing only uncertain queries to 70B models. Achieves comparable system-level performance to non-finetuned 70B while dramatically reducing per-query cost.
 
 **Reference**: "Learning to Route LLMs with Confidence Tokens," arXiv:2410.13284 (2024). https://arxiv.org/html/2410.13284v2
+
+### Trinity (Sakana AI, ICLR 2026)
+
+Trinity is the canonical instance of the **ES-trained router** methodological class. Architecture: a small autoregressive backbone (~0.6B Qwen3-0.6B) emits a penultimate-token hidden state mapped through a ~10K-parameter linear head to `(L+3)`-dim flat logits — independent softmaxes over `L` LLMs and 3 roles (Thinker / Worker / Verifier). Multi-turn protocol up to K=5 with Verifier-acceptance termination.
+
+The methodological contribution is the **trainer**: separable CMA-ES (sep-CMA-ES) against terminal binary reward, population λ≈32, replication m=16, total budget 1.5k–40k evaluations. No RL, no SFT, no labelled trajectories. Empirical justification rests on the loss surface being *block-ε-separable* (Hessian-based formal definition; empirically validated by a "block-diagonal-10" head retaining competitive performance). On block-ε-separable geometry, sep-CMA-ES achieves `Ω(1/n)` per-iteration contraction after stabilization, while gradient methods (REINFORCE specifically) drown in off-block noise and collapse — Trinity reports REINFORCE 0.253 LCB / 0.459 Math500 vs sep-CMA-ES 0.615 / 0.880 at the same compute budget.
+
+Reported aggregate result: 21.9% mean error reduction over the constituent-model baseline across LCB / Math500 / MMLU / RLPR. Largest single ablation contributor is the per-call **role axis** (Thinker / Worker / Verifier), worth 5–8 points across all four benchmarks. The role axis is *optimizer-independent* — it lands the same regardless of whether the routing head is trained by ES, SFT, or contrastive Q-update.
+
+**Caveat (Tier 2b, from epyc-root deep-dive)**: Trinity's pool has 7 LLMs with strong heterogeneity (3 closed frontier + 4 open-source). On a more homogeneous open-source-only inner pool, the headline 21.9% number should be discounted by 2-5×. The pool-homogeneity caveat does NOT apply to the *outer coordination layer* (Claude-driven autopilot dispatch) — there the Claude-vs-cheap-frontdoor-vs-specialist gradient is wide and closer to Trinity's regime. This insight motivates the `outer-coordinator-learned-head.md` scoping handoff in epyc-root.
+
+**Cross-references in epyc-root** (this is a competitive-intelligence entry, not a target for direct replication on the inner pool):
+- [`learned-routing-controller.md`](../../../epyc-root/handoffs/active/learned-routing-controller.md) Phase 4 (P4.1-4.4) — block-ε-separability diagnostic, SVD-FT, sep-CMA-ES cold-start spike.
+- [`tri-role-coordinator-architecture.md`](../../../epyc-root/handoffs/active/tri-role-coordinator-architecture.md) — TR-1..5 architectural change for the role axis, optimizer-agnostic.
+- [`decision-aware-routing.md`](../../../epyc-root/handoffs/active/decision-aware-routing.md) DAR-1.5 audit (2026-05-07) — analytical cross-check confirming Trinity's REINFORCE pathology does NOT transfer to per-action Q-table architectures (DAR-2/3 unblocked unconditionally), but DOES apply conditionally to bilinear scorers (DAR-4 needs rank-restriction or sep-CMA-ES if our landscape is block-ε-separable).
+- [`outer-coordinator-learned-head.md`](../../../epyc-root/handoffs/active/outer-coordinator-learned-head.md) — speculative scoping for whether a learned coordinator head can automate part of the Claude-driven autopilot dispatch loop.
+
+**Reference**: Jinglue Xu, Qi Sun, Peter Schwendeman, Stefan Nielsen, Edoardo Cetin, Yujin Tang, "TRINITY: An Evolved LLM Coordinator," ICLR 2026, arXiv:2512.04695. https://openreview.net/forum?id=5HaRjXai12
+
+### Conductor (Sakana AI, ICLR 2026)
+
+Companion paper to Trinity in the optimizer-design space. Architecture: a 7B base LM trained via GRPO (2× H100, 200 iterations × batch 256) emits `(worker_id, NL_subtask, access_list)` per coordination step — communication topology emerges as a derived consequence of access-list selections; "role" is NOT a Conductor primitive (only Trinity has roles). Recursive self-as-worker provides small (+1–2.2 pp) test-time scaling.
+
+**Reported results** (concrete): LCB V6 +1.03 pp vs GPT-5 (within pass@1 noise); GPQA-D +2.7 pp vs Gemini-2.5-Pro; open-source-only inference +~10 pp vs Claude Sonnet 4 (strongest ablation, demonstrates that the orchestrator value is recoverable from open-source pieces).
+
+**Caveat**: six-author overlap with Trinity (parallel design-space probes underpinning Sakana Fugu commercial product) — the two papers are not independent corroboration. Multi-agent-systems literature documents 36.9% inter-agent misalignment failures (MAST taxonomy, arXiv:2503.13657) that terminal-reward RL does not directly address. Code/weights promised in supplementary post-anonymization, NOT visible at intake date.
+
+**Position**: GPU-class escalation path for our routing/coordination work; not a target for inner-pool replication. Documented for completeness in `epyc-root/handoffs/active/outer-coordinator-learned-head.md` OC-0.6 (design-space-reference table).
+
+**Reference**: Stefan Nielsen, Edoardo Cetin, Peter Schwendeman, Qi Sun, Jinglue Xu, Yujin Tang, "Learning to Orchestrate Agents in Natural Language with the Conductor," ICLR 2026, arXiv:2512.04388.
 
 </details>
 
