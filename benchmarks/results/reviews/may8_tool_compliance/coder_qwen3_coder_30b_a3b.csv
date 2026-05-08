@@ -1,0 +1,10 @@
+suite,question_id,score,note
+tool_compliance,t1_q1_list_directory,2,"Long prose preamble explaining tools, then bare line `list_dir(\"/tmp\")` outside any code block. Right tool, but won't execute cleanly in a REPL — needs FINAL wrapper. Verbosity (108 ctok vs gemma4's 35) is itself a tool-loop cost"
+tool_compliance,t1_q2_read_file,2,"Multiple separate code blocks — first lists directory unnecessarily, then peeks. Right tool but two-step plan when one suffices, no FINAL wrapper"
+tool_compliance,t1_q3_search_pattern,1,"Severely garbled: bare-line `list_dir(\"/\")`, then `grep(\"def test_\")` with no file path, then `peek(10)` mid-stream, then literal `FINAL(answer)` with no `answer` defined. Would crash in a real REPL"
+tool_compliance,t2_q1_file_metadata,3,"`FINAL(file_info(\"...\"))` — clean nested call, the most concise correct answer of all 9"
+tool_compliance,t2_q2_combined_list_and_read,3,"Proper Python block, list_dir + peek with f-string path, FINAL wrapping. Correctly checks `if files:` empty guard"
+tool_compliance,t2_q3_search_in_file,2,"Uses `grep(\"class \", \"/mnt/...\")` (positional file path arg works) but as bare line, plus extraneous list_dir+peek calls beforehand, and bogus `FINAL(answer)` with undefined var. Logic right, structure wrong"
+tool_compliance,t3_q1_ocr_document,2,"Second-guesses itself mid-response (\"Wait, I need to think about this differently\"), produces TWO ocr_document attempts in separate code blocks. Right tool but rambling tool-loop noise"
+tool_compliance,t3_q2_llm_delegation,3,"BEST of the suite: full Python program with peek + len-based split + list comprehension + llm_batch(prompts, role='worker') + FINAL. Clean, parallel-correct, complete"
+tool_compliance,t3_q3_shell_command,3,"Verbose preamble then `result = run_shell(\"git status\"); FINAL(result)` in a code block — correct mechanics"

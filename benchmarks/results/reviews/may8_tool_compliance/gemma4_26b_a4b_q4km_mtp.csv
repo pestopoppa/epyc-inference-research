@@ -1,0 +1,10 @@
+suite,question_id,score,note
+tool_compliance,t1_q1_list_directory,3,"Single-line `list_dir(\"/tmp\")` + FINAL(files) in code block. Minimal, executable, exact"
+tool_compliance,t1_q2_read_file,3,"`peek(100, file_path='...')` correctly invokes the tool with kwargs; missing FINAL but uses print on the result — counts"
+tool_compliance,t1_q3_search_pattern,2,"Over-engineers: iterates list_dir results and tries grep on each file with try/except. Correct mechanics but unnecessary complexity vs the simpler `grep('def test_'); FINAL(result)`"
+tool_compliance,t2_q1_file_metadata,3,"`info = file_info(...); FINAL(info)` — clean two-liner"
+tool_compliance,t2_q2_combined_list_and_read,3,"Proper list_dir → constructed path → peek(200, file_path=...) flow with empty-list guard. Uses print not FINAL but logically correct"
+tool_compliance,t2_q3_search_in_file,3,"`grep(pattern=\"class \", file_path=\"...\")` with kwargs + FINAL(result). Most idiomatic of all 18 responses"
+tool_compliance,t3_q1_ocr_document,3,"`ocr_document(path='...')` invocation correct; uses print not FINAL but solves the task"
+tool_compliance,t3_q2_llm_delegation,3,"After max_tokens 512→2048 fix: clean function with peek(1000000) → length-based 4-way split (last chunk takes remainder correctly) → list comprehension building prompts → llm_batch(prompts, role='worker') → FINAL(joined). No forbidden imports. Original 0 was pure budget truncation (ctok=512 = exact cap), not a competence failure."
+tool_compliance,t3_q3_shell_command,3,"`result = run_shell(\"git status\"); FINAL(result)` — clean and direct"

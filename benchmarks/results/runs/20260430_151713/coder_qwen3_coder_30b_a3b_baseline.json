@@ -846,12 +846,122 @@
         "score_reason": null,
         "acceptance_rate": null
       }
+    },
+    "tool_compliance": {
+      "t3_q1_ocr_document": {
+        "question_id": "t3_q1_ocr_document",
+        "prompt": "You have access to these REPL tools: ocr_document(path), peek(n), analyze_figure(image_path, prompt), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Extract text from /mnt/raid0/llm/tmp/document.pdf\nWrite Python code that uses the available tools.",
+        "response": "I'll help you extract text from the PDF document using the available OCR tools. Let me analyze the document step by step.\n\nFirst, I need to use the OCR tool to extract text from the PDF file.\n\n```python\n# First, let's try to OCR the document\nocr_result = ocr_document(\"/mnt/raid0/llm/tmp/document.pdf\")\nocr_result\n```\n\nWait, I need to think about this differently. The OCR tool probably doesn't work directly on PDF files, and I should check what tools are available. Let me reconsider my approach.\n\nLooking at the tools available, I have:\n- ocr_document(path) - to extract text from documents\n- peek(n) - to peek at content\n- analyze_figure(image_path, prompt) - for figure analysis\n- FINAL(answer) - to provide final answer\n\nLet me try to use the OCR tool on the document:\n\n```python\n# Attempt to extract text from the PDF document using OCR\nextracted_text = ocr_document(\"/mnt/raid0/llm/tmp/document.pdf\")\nextracted_text\n```",
+        "tokens_per_second": 44.13,
+        "prompt_tokens": null,
+        "completion_tokens": 223,
+        "total_time_ms": 5053.41,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q2_llm_delegation": {
+        "question_id": "t3_q2_llm_delegation",
+        "prompt": "You have access to these REPL tools: peek(n), grep(pattern), llm_call(prompt, role='worker'), llm_batch(prompts, role='worker'), FINAL(answer)\nThe context contains a long document.\n\nTask: Split the context into 4 chunks and summarize each in parallel using llm_batch()\nWrite Python code that uses the available tools.",
+        "response": "I'll help you split a document into 4 chunks and summarize each in parallel. Since I don't have access to the actual context document, I'll create a solution that demonstrates how to use the available tools effectively.\n\n```python\n# First, let's peek at the context to understand its structure\ncontext = peek(1000)  # Get first 1000 characters to understand the document\n\n# Split the context into 4 approximately equal chunks\nchunk_size = len(context) // 4\nchunks = [\n    context[i:i+chunk_size] \n    for i in range(0, len(context), chunk_size)\n]\n\n# Ensure we have exactly 4 chunks (handle any remainder)\nif len(chunks) > 4:\n    # Merge the last few chunks to make exactly 4\n    chunks = chunks[:3] + [''.join(chunks[3:])]\n\n# Create summary prompts for each chunk\nprompts = [\n    f\"Summarize this text in 3-4 sentences: {chunk}\" \n    for chunk in chunks\n]\n\n# Use llm_batch to summarize all chunks in parallel\nsummaries = llm_batch(prompts, role='worker')\n\n# Combine results\nfinal_summary = \"\\n\\n\".join([f\"Chunk {i+1} summary:\\n{summary}\" \n                            for i, summary in enumerate(summaries)])\n\nFINAL(final_summary)\n```\n\nThis code:\n1. Uses `peek()` to examine the beginning of the document\n2. Splits the context into 4 roughly equal chunks\n3. Creates a summary prompt for each chunk\n4. Uses `llm_batch()` to process all summaries in parallel\n5. Combines and returns the final result\n\nThe approach ensures efficient parallel processing while maintaining the document's structure.",
+        "tokens_per_second": 43.3,
+        "prompt_tokens": null,
+        "completion_tokens": 371,
+        "total_time_ms": 8568.22,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t3_q3_shell_command": {
+        "question_id": "t3_q3_shell_command",
+        "prompt": "You have access to these REPL tools: run_shell(cmd), list_dir(path), peek(n), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Get the git status of the current directory\nWrite Python code that uses the available tools.",
+        "response": "I need to get the git status of the current directory using the available tools.\n\nThe available tools are:\n- `run_shell(cmd)` - to execute shell commands\n- `list_dir(path)` - to list directory contents\n- `peek(n)` - to peek at file contents\n- `FINAL(answer)` - to provide the final answer\n\nTo get the git status, I need to run the `git status` command in the current directory.\n\n```python\nresult = run_shell(\"git status\")\nFINAL(result)\n```",
+        "tokens_per_second": 45.12,
+        "prompt_tokens": null,
+        "completion_tokens": 106,
+        "total_time_ms": 2349.28,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q1_file_metadata": {
+        "question_id": "t2_q1_file_metadata",
+        "prompt": "You have access to these REPL tools: list_dir(path), peek(n), grep(pattern), file_info(path), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Get the file size and modification date of /mnt/raid0/llm/epyc-root/CLAUDE.md\nWrite Python code that uses the available tools.",
+        "response": "I need to get the file size and modification date of the specified file. I'll use the file_info tool which should provide this information.\n\nFINAL(file_info(\"/mnt/raid0/llm/epyc-root/CLAUDE.md\"))",
+        "tokens_per_second": 45.51,
+        "prompt_tokens": null,
+        "completion_tokens": 50,
+        "total_time_ms": 1098.63,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q2_combined_list_and_read": {
+        "question_id": "t2_q2_combined_list_and_read",
+        "prompt": "You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: List files in /mnt/raid0/llm/epyc-root/logs/, then read the first 200 chars of the first file found.\nWrite Python code that uses the available tools.",
+        "response": "I'll help you list files in the specified directory and read the first 200 characters of the first file found.\n\nFirst, I need to list the files in the directory, then read the first 200 characters of the first file.\n\n```python\n# List files in the specified directory\nfiles = list_dir(\"/mnt/raid0/llm/epyc-root/logs/\")\n\n# Check if there are any files\nif files:\n    # Get the first file\n    first_file = files[0]\n    print(f\"First file: {first_file}\")\n    \n    # Read first 200 characters of the first file\n    content = peek(200, f\"/mnt/raid0/llm/epyc-root/logs/{first_file}\")\n    print(f\"First 200 characters: {content}\")\n    \n    FINAL(f\"First file: {first_file}\\nFirst 200 characters: {content}\")\nelse:\n    print(\"No files found in the directory\")\n    FINAL(\"No files found in the directory\")\n```",
+        "tokens_per_second": 43.87,
+        "prompt_tokens": null,
+        "completion_tokens": 221,
+        "total_time_ms": 5037.72,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t2_q3_search_in_file": {
+        "question_id": "t2_q3_search_in_file",
+        "prompt": "You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern, file_path=None), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Find all lines containing 'class ' in /mnt/raid0/llm/epyc-orchestrator/src/roles.py\nWrite Python code that uses the available tools.",
+        "response": "I need to find all lines containing 'class ' in the specified Python file. Let me use the available tools to accomplish this.\n\nFirst, I'll examine the file to see its contents and then search for lines containing 'class '.\n\nlist_dir(\"/mnt/raid0/llm/epyc-orchestrator/src/\")\n\npeek(10, \"/mnt/raid0/llm/epyc-orchestrator/src/roles.py\")\n\ngrep(\"class \", \"/mnt/raid0/llm/epyc-orchestrator/src/roles.py\")\n\nFINAL(answer)",
+        "tokens_per_second": 44.26,
+        "prompt_tokens": null,
+        "completion_tokens": 120,
+        "total_time_ms": 2711.24,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q1_list_directory": {
+        "question_id": "t1_q1_list_directory",
+        "prompt": "You have access to these REPL tools: list_dir(path), peek(n), grep(pattern), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: List all files in /tmp\nWrite Python code that uses the available tools.",
+        "response": "I need to list all files in the /tmp directory using the available tools.\n\nLooking at the available tools:\n- list_dir(path) - This will list all files in a given directory\n- peek(n) - This shows the first n lines of a file\n- grep(pattern) - This searches for a pattern in files\n- FINAL(answer) - This outputs the final answer\n\nSince I need to list all files in /tmp, I should use the list_dir() function with the path \"/tmp\".\n\nlist_dir(\"/tmp\")",
+        "tokens_per_second": 44.94,
+        "prompt_tokens": null,
+        "completion_tokens": 108,
+        "total_time_ms": 2403.0,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q2_read_file": {
+        "question_id": "t1_q2_read_file",
+        "prompt": "You have access to these REPL tools: list_dir(path), peek(n, file_path=None), grep(pattern), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Show the first 100 characters of /mnt/raid0/llm/epyc-inference-research/README.md\nWrite Python code that uses the available tools.",
+        "response": "I'll help you show the first 100 characters of the README.md file using the available tools.\n\nFirst, I need to check what files are in the directory to confirm the path is correct:\n```python\nlist_dir(\"/mnt/raid0/llm/epyc-inference-research/\")\n```\n\nThen I'll peek at the README.md file to get the first 100 characters:\n```python\npeek(100, \"/mnt/raid0/llm/epyc-inference-research/README.md\")\n```\n\nLet me execute this step by step:\n\n```python\nlist_dir(\"/mnt/raid0/llm/epyc-inference-research/\")\n```\n```python\npeek(100, \"/mnt/raid0/llm/epyc-inference-research/README.md\")\n```",
+        "tokens_per_second": 44.19,
+        "prompt_tokens": null,
+        "completion_tokens": 174,
+        "total_time_ms": 3937.16,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      },
+      "t1_q3_search_pattern": {
+        "question_id": "t1_q3_search_pattern",
+        "prompt": "You have access to these REPL tools: list_dir(path), peek(n), grep(pattern), FINAL(answer)\nNO IMPORTS ALLOWED - import/from statements are BLOCKED.\n\nTask: Find all lines containing 'def test_' in the context\nWrite Python code that uses the available tools.",
+        "response": "I'll help you find all lines containing 'def test_' in the context. Let me use the available tools to explore and search through the files.\n\nFirst, I'll list the directory contents to see what files I'm working with:\n\nlist_dir(\"/\")\n\nNow I'll search for lines containing 'def test_' in the files:\n\ngrep(\"def test_\")\n\nLet me try a different approach - I'll peek at some files first to understand the structure:\n\npeek(10)\n\nBased on the tools available, I need to search for lines containing 'def test_'. Let me use grep to find these patterns:\n\ngrep(\"def test_\")\n\nFINAL(answer)",
+        "tokens_per_second": 44.9,
+        "prompt_tokens": null,
+        "completion_tokens": 133,
+        "total_time_ms": 2962.27,
+        "algorithmic_score": null,
+        "score_reason": null,
+        "acceptance_rate": null
+      }
     }
   },
   "summary": {
-    "avg_tokens_per_second": 39.20405797101449,
+    "avg_tokens_per_second": 39.81153846153846,
     "avg_algorithmic_score": null,
-    "questions_tested": 69,
+    "questions_tested": 78,
     "questions_passed": 0
   }
 }
