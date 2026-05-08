@@ -385,17 +385,27 @@ class ModelRegistry:
         return accel.get("override_key")
 
     def get_baseline_experts(self, role: str) -> int:
-        """Get the baseline expert count for an MoE model.
+        """Get the baseline expert count for an MoE model — i.e. the GGUF default.
 
-        Returns the model's default expert count (from GGUF metadata).
-        Used to avoid testing MOE configs that match baseline.
+        Used by `--skip-moe-reduction` to filter out configs that "reduce" the model
+        to its own GGUF default (no-op reductions). Read order:
+          1. `acceleration.baseline_experts` — explicit GGUF default
+          2. `model.baseline_experts` — explicit GGUF default at model level
+          3. fallback 8
+
+        We do NOT fall back to `acceleration.experts` because that field is the
+        production-target reduction count (what we want the deployed model to
+        run with), NOT the GGUF default. Conflating the two caused
+        --skip-moe-reduction to silently keep moe<X>_* configs whenever
+        `experts: X` was set without a matching `baseline_experts`. See
+        2026-05-08 incident: coder_qwen3_coder_30b_a3b had `experts: 4` so
+        --skip-moe-reduction kept all moe4_* configs (those failed exit=1
+        downstream because of an unrelated subprocess-binary issue, masking
+        the filter bug).
         """
         accel = self.get_acceleration(role)
-        # Check acceleration.baseline_experts first, then acceleration.experts, then model.baseline_experts
         if "baseline_experts" in accel:
             return accel["baseline_experts"]
-        if "experts" in accel:
-            return accel["experts"]
         config = self.get_role_config(role)
         if config:
             return config.get("model", {}).get("baseline_experts", 8)

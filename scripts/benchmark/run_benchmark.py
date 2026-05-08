@@ -360,7 +360,7 @@ class _ServerState:
     """Mutable state for the benchmark server lifecycle."""
 
     __slots__ = ("server", "model_path", "experts", "draft_path", "lookup",
-                 "_model_flags")
+                 "lookup_ngram", "_model_flags")
 
     def __init__(self) -> None:
         self.server: Optional[ServerManager] = None
@@ -368,20 +368,41 @@ class _ServerState:
         self.experts: Optional[int] = None
         self.draft_path: Optional[str] = None
         self.lookup: bool = False
+        self.lookup_ngram: Optional[int] = None  # ngram-simple n-size baked into the live server
         self._model_flags: dict = {}
 
     def _start_server(self, model_path, moe_override=None, registry=None,
                       no_mmap=False, role=None, mmproj_path=None,
                       draft_model_path=None, draft_max=None, lookup=False,
-                      spec_type=None):
+                      spec_type=None, spec_ngram_size_n=None,
+                      runtime_requirements=None, draft_p_min=None,
+                      threads_draft=None, ubatch_override=None):
         """Start server using cached model config flags."""
+        # _model_flags may contain runtime_requirements / draft_model_path / draft_p_min /
+        # threads_draft / ubatch_override from cache; explicit params take precedence.
+        flags = dict(self._model_flags or {})
+        cached_runtime = flags.pop("runtime_requirements", None)
+        cached_draft = flags.pop("draft_model_path", None)
+        cached_p_min = flags.pop("draft_p_min", None)
+        cached_threads_draft = flags.pop("threads_draft", None)
+        cached_ubatch = flags.pop("ubatch_override", None)
+        runtime_requirements = runtime_requirements if runtime_requirements is not None else cached_runtime
+        draft_model_path = draft_model_path if draft_model_path is not None else cached_draft
+        draft_p_min = draft_p_min if draft_p_min is not None else cached_p_min
+        threads_draft = threads_draft if threads_draft is not None else cached_threads_draft
+        ubatch_override = ubatch_override if ubatch_override is not None else cached_ubatch
         return self.server.start(model_path, moe_override=moe_override,
                                  registry=registry, no_mmap=no_mmap, role=role,
                                  mmproj_path=mmproj_path,
                                  draft_model_path=draft_model_path,
                                  draft_max=draft_max, lookup=lookup,
                                  spec_type=spec_type,
-                                 **self._model_flags)
+                                 spec_ngram_size_n=spec_ngram_size_n,
+                                 runtime_requirements=runtime_requirements,
+                                 draft_p_min=draft_p_min,
+                                 threads_draft=threads_draft,
+                                 ubatch_override=ubatch_override,
+                                 **flags)
 
     def stop(self) -> None:
         if self.server is not None:
@@ -416,13 +437,56 @@ def _ensure_server(
 
         if ss.server is None:
             # Check if this model uses ngram-simple instead of --lookup
+            # 2026-05-07: also honor explicit spec_type on speculative_decoding accel
+            # blocks (e.g. gemma4 MTP). Without this, MTP-equipped models silently
+            # fell back to baseline mode at run_benchmark.py launch — see
+            # progress/2026-05/2026-05-07.md.
             accel = registry.get_acceleration(role) if with_lookup else {}
-            use_spec_type = accel.get("spec_type") if accel.get("type") == "ngram_lookup" else None
+            _accel_for_spec = registry.get_acceleration(role) or {}
+            if _accel_for_spec.get("type") == "ngram_lookup":
+                use_spec_type = _accel_for_spec.get("spec_type")
+            elif _accel_for_spec.get("type") == "speculative_decoding" and _accel_for_spec.get("spec_type"):
+                # MTP / Eagle / etc. — explicit spec_type means baseline launches
+                # should activate the model's NATIVE speculative path.
+                use_spec_type = _accel_for_spec.get("spec_type")
+            else:
+                use_spec_type = None
             use_lookup = with_lookup and not use_spec_type
-            accel_draft_max = accel.get("draft_max") if use_spec_type else None
+            accel_draft_max = _accel_for_spec.get("draft_max") if use_spec_type else None
             # Check if model requires chat template (e.g. gemma4)
             role_config = registry.get_role_config(role) if registry else None
             model_cfg = role_config.get("model", {}) if role_config else {}
+            # Resolve draft model path from accel.draft_role (when spec_type is set).
+            # Without this, executor.start() never sees the -md flag and spec decode
+            # fails to engage even when the binary supports it.
+            draft_model_path_resolved = None
+            if use_spec_type and _accel_for_spec.get("draft_role") and registry:
+                _draft_role = _accel_for_spec["draft_role"]
+                _draft_cfg = registry.get_role_config(_draft_role) or {}
+                _draft_model_cfg = _draft_cfg.get("model", {})
+                _draft_path = _draft_model_cfg.get("path")
+                if _draft_path:
+                    # Resolve relative paths via model_base_path (same logic as main model)
+                    if not _draft_path.startswith("/"):
+                        _base = registry.config.get("runtime_defaults", {}).get(
+                            "model_base_path", "/mnt/raid0/llm/lmstudio/models"
+                        )
+                        _draft_path = os.path.join(_base, _draft_path)
+                    draft_model_path_resolved = _draft_path
+            # Per-role runtime_requirements (override binary path + LD_LIBRARY_PATH)
+            # for models that need a non-default llama.cpp build (e.g. ik_llama.cpp
+            # PR #1744 for gemma4 MTP).
+            runtime_reqs = (role_config or {}).get("runtime_requirements") if role_config else None
+            # draft_p_min (ik_llama.cpp): 0.0 lets drafter produce full draft_max chains
+            # greedily (best for MTP); 0.8 default rejects low-confidence draft tokens
+            # early (drafter drops out at 1.8 tokens/call instead of full draft_max=3).
+            # Read explicit accel.draft_p_min when set; None = use server default.
+            draft_p_min_resolved = _accel_for_spec.get("draft_p_min") if use_spec_type else None
+            # threads_draft: dedicate N cores to the drafter (default = same as --threads,
+            # which causes drafter to monopolize all 96 cores during its forward).
+            threads_draft_resolved = _accel_for_spec.get("threads_draft") if use_spec_type else None
+            # ubatch override: per-accel preferred ubatch (e.g., gemma4 MTP wants 512).
+            ubatch_override_resolved = _accel_for_spec.get("ubatch") if use_spec_type else None
             use_chat = model_cfg.get("use_chat_api", False)
             chat_tmpl = model_cfg.get("chat_template")  # Override template (e.g., "chatml" for Qwen3.6)
             no_jinja = model_cfg.get("no_jinja", False)  # --no-jinja for legacy template path (avoids PEG parser crash on <think>)
@@ -451,12 +515,22 @@ def _ensure_server(
                 "reasoning": reasoning,
                 "reasoning_budget": reasoning_budget,
                 "env_vars": env_vars,
+                "runtime_requirements": runtime_reqs,
+                "draft_model_path": draft_model_path_resolved,
+                "draft_p_min": draft_p_min_resolved,
+                "threads_draft": threads_draft_resolved,
+                "ubatch_override": ubatch_override_resolved,
             }
             ss.server = ServerManager(port=8080)
             ss._start_server(model_path, registry=registry,
                            no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
                            lookup=use_lookup, spec_type=use_spec_type,
-                           draft_max=accel_draft_max, draft_model_path=None)
+                           draft_max=accel_draft_max,
+                           draft_model_path=draft_model_path_resolved,
+                           runtime_requirements=runtime_reqs,
+                           draft_p_min=draft_p_min_resolved,
+                           threads_draft=threads_draft_resolved,
+                           ubatch_override=ubatch_override_resolved)
             timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
             if not ss.server.wait_ready(timeout=timeout):
                 print(f"    [SERVER] Failed to start, falling back to subprocess mode", flush=True)
@@ -573,6 +647,9 @@ def _ensure_server(
                 mmproj_path=mmproj_path,
                 lookup=required_lookup,
                 spec_type=required_spec_type,
+                # spec+lookup compounds: forward ngram size if config carries it
+                # (Config.spec_lookup defaults lookup_ngram=4 when unset).
+                spec_ngram_size_n=getattr(config, "lookup_ngram", None) if required_lookup else None,
             )
             timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
             if not ss.server.wait_ready(timeout=timeout):
@@ -602,13 +679,17 @@ def _ensure_server(
             if config.config_type == "moe_lookup":
                 moe_key = registry.get_moe_override_key(role) or "qwen3moe.expert_used_count"
                 moe_override = f"{moe_key}=int:{config.moe_experts}"
-            print(f"      [SERVER] Restarting with --lookup for {config.name}...", flush=True)
+            print(f"      [SERVER] Restarting with ngram-simple lookup for {config.name}...", flush=True)
             ss.stop()
             ss.server = ServerManager(port=8080)
             ss._start_server(
                 model_path, moe_override=moe_override, registry=registry,
                 no_mmap=no_mmap, role=role, mmproj_path=mmproj_path,
                 lookup=True,
+                # ngram size baked into server startup (upstream replaced our per-request
+                # legacy --lookup flag). config.lookup_ngram=0 is the sweep sentinel; the
+                # sweep itself restarts the server per ngram in _sweep_lookup_ngram.
+                spec_ngram_size_n=getattr(config, "lookup_ngram", None) or None,
             )
             timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
             if not ss.server.wait_ready(timeout=timeout):
@@ -633,23 +714,42 @@ def _run_speed_test(
     role: str,
     run_id: str,
     stats: dict,
+    ss=None,
 ) -> None:
-    """Execute a speed-only benchmark for *config* (no quality questions)."""
+    """Execute a speed-only benchmark for *config* (no quality questions).
+
+    Prefers the live server (`ss.server`) when available — the subprocess
+    fallback (`executor.run_inference`) requires `llama-speculative` /
+    `llama-lookup` binaries that aren't built on production hosts (see
+    preflight warning: "Missing subprocess binaries"). For spec / lookup
+    configs the subprocess path therefore fails with exit=1 even when the
+    server is running fine. Mirrors the pattern in `_sweep_lookup_ngram`.
+    """
     is_lookup = config.config_type in ("lookup", "moe_lookup")
     speed_prompt = LOOKUP_SPEED_TEST_PROMPT if is_lookup else SPEED_TEST_PROMPT
     speed_max_tokens = _LOOKUP_MAX_TOKENS if is_lookup else _DEFAULT_MAX_TOKENS
     speed_timeout = _compute_timeout(size_gb, base=300 if is_lookup else 180)
 
-    result = executor.run_inference(
-        model_path=model_path,
-        config=config,
-        prompt=speed_prompt,
-        max_tokens=speed_max_tokens,
-        temperature=_DEFAULT_TEMPERATURE,
-        timeout=speed_timeout,
-        mmproj_path=mmproj_path,
-        role=role,
-    )
+    spec_k = getattr(config, "spec_k", None)
+    if ss is not None and ss.server is not None and ss.server.is_running():
+        result = ss.server.run_inference(
+            prompt=speed_prompt,
+            max_tokens=speed_max_tokens,
+            temperature=_DEFAULT_TEMPERATURE,
+            timeout=speed_timeout,
+            speculative_n_max=spec_k,
+        )
+    else:
+        result = executor.run_inference(
+            model_path=model_path,
+            config=config,
+            prompt=speed_prompt,
+            max_tokens=speed_max_tokens,
+            temperature=_DEFAULT_TEMPERATURE,
+            timeout=speed_timeout,
+            mmproj_path=mmproj_path,
+            role=role,
+        )
 
     if result.timed_out:
         stats["errors"] += 1
@@ -658,7 +758,13 @@ def _run_speed_test(
 
     if not result.success:
         stats["errors"] += 1
-        err_hint = (_extract_error_hint(result.stderr, max_chars=60) if result.stderr else "") or f"exit={result.exit_code}"
+        # ServerManager.InferenceResult has no `stderr`/`exit_code` attrs;
+        # subprocess InferenceResult has both. Use getattr to stay agnostic.
+        stderr = getattr(result, "stderr", None)
+        exit_code = getattr(result, "exit_code", None)
+        err_hint = (_extract_error_hint(stderr, max_chars=60) if stderr else "")
+        if not err_hint:
+            err_hint = f"exit={exit_code}" if exit_code is not None else "no_output"
         print(f"    [ERROR] {role}/{config.name} (speed test): {err_hint}")
         return
 
@@ -728,25 +834,47 @@ def _sweep_lookup_ngram(
         speed_max_tokens = _LOOKUP_MAX_TOKENS
         speed_timeout = _compute_timeout(size_gb, base=300)
 
-        # Use server if available
-        if ss.server is not None and ss.server.is_running():
-            result = ss.server.run_inference(
-                prompt=speed_prompt,
-                max_tokens=speed_max_tokens,
-                temperature=_DEFAULT_TEMPERATURE,
-                timeout=speed_timeout,
+        # Upstream --spec-type ngram-simple sets ngram size at server startup
+        # (legacy --lookup let us vary per-request — that flag is gone). Restart
+        # the server with the new ngram size so the sweep actually exercises
+        # different n values. If we already have a server with this ngram, reuse.
+        moe_override = (
+            f"{config_template.moe_override_key}=int:{config_template.moe_experts}"
+            if is_moe else None
+        )
+        current_ngram = getattr(ss, "lookup_ngram", None)
+        if (
+            ss.server is None
+            or not ss.server.is_running()
+            or not ss.lookup
+            or current_ngram != n
+        ):
+            if ss.server is not None:
+                ss.stop()
+            ss.server = ServerManager(port=8080)
+            ss._start_server(
+                model_path, moe_override=moe_override, registry=registry,
+                no_mmap=False, role=role, mmproj_path=mmproj_path,
+                lookup=True, spec_ngram_size_n=n,
             )
-        else:
-            result = executor.run_inference(
-                model_path=model_path,
-                config=cfg,
-                prompt=speed_prompt,
-                max_tokens=speed_max_tokens,
-                temperature=_DEFAULT_TEMPERATURE,
-                timeout=speed_timeout,
-                mmproj_path=mmproj_path,
-                role=role,
-            )
+            timeout = _compute_timeout(size_gb, base=_SERVER_STARTUP_TIMEOUT_BASE)
+            if not ss.server.wait_ready(timeout=timeout):
+                stats["errors"] += 1
+                print(f"      ⚡ {cfg.name}: FAILED (server start)", flush=True)
+                ss.server = None
+                ss.lookup = False
+                return None
+            ss.lookup = True
+            ss.lookup_ngram = n
+            if is_moe:
+                ss.experts = config_template.moe_experts
+
+        result = ss.server.run_inference(
+            prompt=speed_prompt,
+            max_tokens=speed_max_tokens,
+            temperature=_DEFAULT_TEMPERATURE,
+            timeout=speed_timeout,
+        )
 
         if result.timed_out or not result.success:
             stats["errors"] += 1
@@ -1121,6 +1249,7 @@ def run_benchmark(
     baseline_run: Optional[str] = None,
     with_lookup: bool = False,
     skip_moe_reduction: bool = False,
+    skip_speed_tests: bool = False,
     all_suites: bool = False,
 ) -> dict:
     """Run the benchmark with nested progress bars.
@@ -1187,6 +1316,12 @@ def run_benchmark(
         if skip_moe_reduction:
             baseline_experts = registry.get_baseline_experts(role)
             configs = [c for c in configs if c.moe_experts is None or c.moe_experts == baseline_experts]
+        if skip_speed_tests:
+            # Drop every speed-only config (spec_*, lookup_*, moe<X>_spec_*, moe<X>_lookup_*).
+            # Quality runs only need baseline + moe<X> configs that produce real per-question
+            # answers. Cuts the per-MoE-model bench from ~30 min to ~5 min when only quality
+            # data is wanted.
+            configs = [c for c in configs if not getattr(c, "speed_test_only", False)]
 
         if all_suites:
             suite_names = [s for s in get_all_suite_names() if load_suite(s) and load_suite(s).questions]
@@ -1401,7 +1536,8 @@ def run_benchmark(
                             continue
                         try:
                             _run_speed_test(executor, results_manager, config, model_path,
-                                            size_gb, mmproj_path, role, run_id, stats)
+                                            size_gb, mmproj_path, role, run_id, stats,
+                                            ss=ss)
                         except Exception as e:
                             stats["errors"] += 1
                             print(f"    [ERROR] {role}/{config.name}: {e}")
@@ -1428,7 +1564,8 @@ def run_benchmark(
                         continue
                     try:
                         _run_speed_test(executor, results_manager, config, model_path,
-                                        size_gb, mmproj_path, role, run_id, stats)
+                                        size_gb, mmproj_path, role, run_id, stats,
+                                        ss=ss)
                     except Exception as e:
                         stats["errors"] += 1
                         print(f"    [ERROR] {role}/{config.name}: {e}")
@@ -1528,6 +1665,7 @@ Examples:
     parser.add_argument("--list-suites", action="store_true", help="List available suites")
     parser.add_argument("--skip-long-context", action="store_true", help="Skip long_context suite (saves time on quick runs)")
     parser.add_argument("--skip-moe-reduction", action="store_true", help="Skip MoE expert reduction configs; only run baseline + spec/lookup/spec+lookup at full expert count")
+    parser.add_argument("--skip-speed-tests", action="store_true", help="Skip all speed-only configs (spec, lookup, moe+spec, moe+lookup, etc.). Quality benchmarks only — useful for tool_compliance / agentic-only runs.")
     parser.add_argument("--vision-only", action="store_true", help="Only benchmark vision-language models (models with mmproj_path)")
     parser.add_argument("--speed-questions", type=int, default=0, help="Run speed configs on N slowest baseline questions (0=fixed prompt)")
     parser.add_argument("--baseline-run", type=str, default=None, help="Pull slowest questions from this run ID (for models with existing baselines)")
@@ -1657,6 +1795,7 @@ Examples:
             baseline_run=args.baseline_run,
             with_lookup=args.with_lookup,
             skip_moe_reduction=args.skip_moe_reduction,
+            skip_speed_tests=args.skip_speed_tests,
             all_suites=args.all_suites,
         )
     finally:

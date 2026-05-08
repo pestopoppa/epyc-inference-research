@@ -2,10 +2,18 @@ version: 1
 domain: tool_compliance
 description: "Tests REPL tool usage - models must use provided tools instead of Python imports"
 created: "2026-01-24"
-updated: "2026-01-24"
+updated: "2026-05-08"
 note: "Auto-score checks for forbidden patterns (import, os., pathlib) and required tools"
 
 # Roles to test: frontdoor, coder_primary, worker_general, ingest_long_context
+
+# 2026-05-08: bumped max_tokens 512 → 2048 after gemma4-26B silently truncated
+# t3_q2_llm_delegation at exactly 512 ctok mid-prompt. Tier-3 questions (chunking +
+# parallel orchestration plans) need more headroom than the suites.py 512 default.
+inference_params:
+  temperature: 0.2
+  max_tokens: 2048
+  timeout: 180
 
 prompts:
   # ============== TIER 1: Basic Tool Usage ==============

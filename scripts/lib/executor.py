@@ -210,6 +210,50 @@ class ServerManager:
             self._http_session = requests.Session()
         return self._http_session
 
+    @staticmethod
+    def _is_port_free(port: int, host: str = "127.0.0.1") -> bool:
+        """Return True if `host:port` is free to bind. Uses SO_REUSEADDR-less bind probe
+        so we get the same TIME_WAIT semantics llama-server's HTTP scaffolding hits."""
+        import socket
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            s.bind((host, port))
+            return True
+        except OSError:
+            return False
+        finally:
+            s.close()
+
+    @classmethod
+    def _reserve_port(cls, preferred: int, timeout: int = 30, hops: int = 10) -> int:
+        """Return a port we expect to be bindable.
+
+        Strategy:
+        1. Poll `preferred` for up to `timeout` seconds (handles TIME_WAIT decay).
+        2. If still occupied, try `preferred+1 .. preferred+hops` and return the
+           first free one.
+        3. If everything in the hop range is occupied, return `preferred` anyway
+           and let the caller fail loudly — better than a silent skip.
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if cls._is_port_free(preferred):
+                return preferred
+            time.sleep(1)
+        for offset in range(1, hops + 1):
+            candidate = preferred + offset
+            if cls._is_port_free(candidate):
+                print(
+                    f"      [SERVER] port {preferred} stuck, hopping to {candidate}",
+                    flush=True,
+                )
+                return candidate
+        print(
+            f"      [SERVER] port {preferred} and {hops} hops all occupied; trying anyway",
+            flush=True,
+        )
+        return preferred
+
     def start(
         self,
         model_path: str,
@@ -223,6 +267,7 @@ class ServerManager:
         mmproj_path: Optional[str] = None,
         lookup: bool = False,
         spec_type: Optional[str] = None,
+        spec_ngram_size_n: Optional[int] = None,  # n-size for --spec-type ngram-simple (lookup mode)
         use_chat_api: bool = False,
         chat_template: Optional[str] = None,
         no_jinja: bool = False,
@@ -231,6 +276,10 @@ class ServerManager:
         reasoning: Optional[str] = None,
         reasoning_budget: Optional[int] = None,
         env_vars: Optional[dict] = None,
+        runtime_requirements: Optional[dict] = None,
+        draft_p_min: Optional[float] = None,
+        threads_draft: Optional[int] = None,
+        ubatch_override: Optional[int] = None,
     ) -> None:
         """Start llama-server with model loaded.
 
@@ -248,6 +297,9 @@ class ServerManager:
             chat_template: Override chat template (e.g., "chatml"). When set, uses --chat-template instead of --jinja.
             cache_type_k: KV cache data type for K (e.g., "q8_0", "bf16"). None uses server default (f16).
             cache_type_v: KV cache data type for V (e.g., "q8_0", "bf16"). None uses server default (f16).
+            runtime_requirements: Optional dict with 'binary_dir' (override LLAMA_BIN_DIR) and
+                'ld_library_path' (list of paths prepended to LD_LIBRARY_PATH). Used for models
+                that need a non-default llama.cpp build (e.g., ik_llama.cpp PR #1744 for gemma4 MTP).
         """
         if self.process is not None:
             self.stop()
@@ -256,7 +308,16 @@ class ServerManager:
         self.draft_model_path = draft_model_path
         self.mmproj_path = mmproj_path
         self.use_chat_api = use_chat_api
-        binary = get_binary("server", registry)
+
+        # Per-role binary override (e.g., gemma4 MTP needs ik_llama.cpp PR #1744 build,
+        # not default /mnt/raid0/llm/llama.cpp/build/bin). Resolve the override directly
+        # without touching LLAMA_BIN_DIR env (no global side-effects).
+        if runtime_requirements and runtime_requirements.get("binary_dir"):
+            override_bin = runtime_requirements["binary_dir"]
+            binary = os.path.join(override_bin, "llama-server")
+            print(f"      [DEBUG] runtime_requirements: binary={binary}", flush=True)
+        else:
+            binary = get_binary("server", registry)
 
         # Determine context length: explicit > role-based > default
         if context_length is not None:
@@ -269,6 +330,10 @@ class ServerManager:
         # Get optimization settings from registry (with fallbacks)
         use_flash_attn = registry.get_flash_attention(role) if role and registry else True
         ubatch_size = registry.get_ubatch_size(role) if role and registry else 8192
+        # Per-acceleration ubatch override (e.g., gemma4 MTP needs ub 512 to match
+        # deep-dive recipe; canonical 8192 may interact poorly with batched-verify).
+        if ubatch_override is not None:
+            ubatch_size = ubatch_override
 
         # Canonical wrapping is centralized in canonical_recipe.apply_canonical_prefix
         # (taskset -c 0-95 + numactl --interleave=all). The prefix is mandatory for
@@ -298,10 +363,30 @@ class ServerManager:
             cmd.extend(["--spec-type", spec_type])
             if not draft_model_path and draft_max:
                 cmd.extend(["--draft-max", str(draft_max)])
+        if draft_p_min is not None:
+            # ik_llama.cpp default is 0.8 (only accept high-confidence drafter tokens).
+            # MTP setups typically want 0.0 (accept top-1 drafts greedily, let the
+            # verifier reject mismatches). Per gemma4 deep-dive: with default 0.8 the
+            # drafter drops out early (1.8 tokens/call vs draft_max=3), wasting
+            # verifier calls; with 0.0 it produces full draft_max chains and gets
+            # 84% acceptance vs ~70% at 0.8.
+            cmd.extend(["--draft-p-min", str(draft_p_min)])
+        if threads_draft is not None:
+            # Dedicated thread count for the drafter. ik_llama.cpp default is
+            # `--threads-draft = --threads`, meaning drafter steals all 96 cores
+            # during its forward. Lowering to 16 reduces thread-pool churn for the
+            # tiny 4-layer drafter — the target then keeps its 96-thread parallelism
+            # without contention.
+            cmd.extend(["--threads-draft", str(threads_draft)])
         if mmproj_path:
             cmd.extend(["--mmproj", mmproj_path])
         if lookup:
-            cmd.append("--lookup")  # DEPRECATED: upstream --spec-type ngram-simple supersedes this
+            # Upstream replaced our custom --lookup flag with --spec-type ngram-simple.
+            # The n-gram size is set at server startup (was per-request in legacy build);
+            # default 4 if caller didn't specify. _sweep_lookup_ngram() in run_benchmark.py
+            # restarts the server per ngram value to actually sweep.
+            cmd.extend(["--spec-type", "ngram-simple"])
+            cmd.extend(["--spec-ngram-size-n", str(spec_ngram_size_n or 4)])
         if cache_type_k:
             cmd.extend(["-ctk", cache_type_k])
         if cache_type_v:
@@ -331,11 +416,41 @@ class ServerManager:
             print(f"      [DEBUG] Server cmd includes: --mmproj {mmproj_path}", flush=True)
         print(f"      [DEBUG] Server log: {self._stderr_file.name}", flush=True)
 
+        # If runtime_requirements declares additional ld_library_path entries
+        # (e.g., gemma4 MTP needs ik_llama.cpp build's libllama.so + libggml.so),
+        # prepend them to the LD_LIBRARY_PATH that build_canonical_env produces.
+        # This must happen after _build_env so canonical_recipe's LLVM-20 libomp
+        # path stays first (gemma4 doesn't need a different libomp).
+        env = self._build_env(env_vars)
+        if runtime_requirements and runtime_requirements.get("ld_library_path"):
+            extra_ld = runtime_requirements["ld_library_path"]
+            if isinstance(extra_ld, str):
+                extra_ld = [extra_ld]
+            existing = env.get("LD_LIBRARY_PATH", "")
+            # Prepend canonical's existing entries first (LLVM-20 libomp), then extras.
+            # extras appear AFTER canonical so libomp resolution is unchanged.
+            merged = existing + ":" + ":".join(extra_ld) if existing else ":".join(extra_ld)
+            env["LD_LIBRARY_PATH"] = merged
+            print(f"      [DEBUG] runtime_requirements: ld_library_path += {extra_ld}", flush=True)
+
+        # Wait for the target port to be free, port-hop on timeout. Rapid
+        # restart cycles (e.g., MoE expert sweeps) can leave the previous
+        # llama-server in TCP TIME_WAIT or still releasing the bind. Without
+        # this, ik_llama.cpp aborts with "couldn't bind ... double free" and
+        # all subsequent runs for the same model die.
+        self.port = self._reserve_port(self.port, timeout=30, hops=10)
+        # Reflect the resolved port back into the cmd (--port is positional in
+        # cmd; just mutate the argv slot in place).
+        for i, tok in enumerate(cmd):
+            if tok == "--port" and i + 1 < len(cmd):
+                cmd[i + 1] = str(self.port)
+                break
+
         self.process = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
             stderr=self._stderr_file,
-            env=self._build_env(env_vars),
+            env=env,
         )
 
     def wait_ready(self, timeout: int = None) -> bool:
@@ -759,7 +874,8 @@ class Config:
     def spec_lookup(cls, k: int, draft_path: str, draft_name: str = "") -> "Config":
         """Create compound config: speculative decoding + prompt lookup (dense models).
 
-        Server mode only (llama-server supports --lookup + -md together).
+        Server mode only (--spec-type ngram-simple + -md must coexist; the legacy
+        --lookup flag is gone — now routed through ngram-simple in executor.start).
         """
         if draft_name:
             name = f"spec_{draft_name}_k{k}_lookup"
@@ -808,8 +924,9 @@ class Config:
     ) -> "Config":
         """Create compound config: MoE expert reduction + speculative decoding + prompt lookup.
 
-        Only works in server mode (llama-server supports --lookup + -md together;
-        llama-speculative binary does NOT support --lookup).
+        Only works in server mode (--spec-type ngram-simple + -md coexist there).
+        The llama-speculative subprocess binary has no equivalent of ngram-simple, so
+        the subprocess fallback path skips lookup entirely for these compounds.
         """
         if draft_name:
             name = f"moe{experts}_spec_{draft_name}_k{k}_lookup"
@@ -1119,15 +1236,17 @@ class Executor:
                 "--override-kv", f"{config.moe_override_key}=int:{config.moe_experts}",
             ])
         elif config.config_type == "moe_spec_lookup":
-            # Subprocess fallback: use llama-speculative with MoE override
-            # Note: --lookup flag only works in server mode, not with llama-speculative
+            # Subprocess fallback: use llama-speculative with MoE override.
+            # ngram-simple lookup is server-only — the subprocess path runs spec
+            # decode without the lookup component, which we accept as the fallback.
             cmd.extend([
                 "-md", config.draft_model_path,
                 "--draft-max", str(config.spec_k),
                 "--override-kv", f"{config.moe_override_key}=int:{config.moe_experts}",
             ])
         elif config.config_type == "spec_lookup":
-            # Subprocess fallback: use llama-speculative (--lookup only in server mode)
+            # Subprocess fallback: use llama-speculative; ngram-simple lookup is
+            # server-only, so this path runs spec decode alone.
             cmd.extend([
                 "-md", config.draft_model_path,
                 "--draft-max", str(config.spec_k),

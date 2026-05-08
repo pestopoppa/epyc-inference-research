@@ -477,6 +477,7 @@ server_mode:
     numa_ports: [8080, 8180, 8280, 8380]
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 6  # moe6 only — lookup causes segfault on hybrids (diagnosed 2026-03-24, PR #13194)
       override_key: qwen35moe.expert_used_count
       lookup: false  # DISABLED: --lookup segfaults after 1-3 prompts on Qwen3.5 SSM+MoE hybrids
@@ -611,6 +612,7 @@ server_mode:
     tier: warm
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 10  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 4  # MoE4 for quality (MoE2 degrades output)
       override_key: qwen3next.expert_used_count
     throughput: 6.3  # t/s measured 2026-01-26 on 10K context summarization
@@ -900,6 +902,7 @@ roles:
     - ingest
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 6
       override_key: qwen3moe.expert_used_count
       speculative_decoding:
@@ -1139,6 +1142,7 @@ roles:
     - architect
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 10  # GGUF default for Qwen3-Next-80B-A3B (verified from gguf metadata)
       experts: 4  # MoE4 for quality (tested 2026-01-26: 6.29 t/s, best output)
       override_key: qwen3next.expert_used_count
     constraints:
@@ -1290,6 +1294,7 @@ roles:
     - architect
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 2
       override_key: qwen3next.expert_used_count
     constraints:
@@ -1342,6 +1347,7 @@ roles:
     - ingest
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 8
       override_key: qwen35moe.expert_used_count
     constraints:
@@ -1389,6 +1395,7 @@ roles:
     - ingest
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 8
       override_key: qwen35moe.expert_used_count
     constraints:
@@ -1434,6 +1441,7 @@ roles:
     - ingest
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 8
       override_key: qwen35moe.expert_used_count
     constraints:
@@ -1478,6 +1486,7 @@ roles:
     - ingest
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 8
       override_key: qwen35moe.expert_used_count
     constraints:
@@ -1522,6 +1531,7 @@ roles:
     - ingest
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 8
       override_key: qwen35moe.expert_used_count
     constraints:
@@ -2019,6 +2029,7 @@ roles:
     - general
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 8
       override_key: qwen35moe.expert_used_count
     constraints:
@@ -2061,6 +2072,7 @@ roles:
     - general
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 10  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 10
       override_key: qwen35moe.expert_used_count
     constraints:
@@ -2981,6 +2993,11 @@ roles:
       architecture: gemma4
       use_chat_api: true
       reasoning: "off"
+      # 2026-05-07: bumped from default 1 → 2 because the 4 t/s observed in 2026-05-06
+      # bench (vs 21 t/s registered MTP target) caused tier-3 questions to time out.
+      # With MTP wiring fix (run_benchmark.py + executor.py 2026-05-07), expect closer
+      # to 21 t/s per question — but keep buffer for hard tier-3 prompts.
+      max_tokens_multiplier: 2
       env_vars:
         OMP_PROC_BIND: spread
         OMP_PLACES: cores
@@ -2994,16 +3011,35 @@ roles:
         top_p: 0.95
         top_k: 64
         repeat_penalty: 1.05
-      max_context: 256000
+      max_context: 16384  # 2026-05-07: was 256000 (model's native cap), reduced for bench. Allocating
+                          # ~31 GB of q8_0 KV cache for 256K ctx caused 5× per-token slowdown (4 t/s
+                          # observed vs 21 t/s registered). At c=16384 KV is ~2 GB, plenty for the
+                          # benchmark's ~4-15K token prompts. Deep-dive's 21 t/s measurement used c=4096.
+                          # If using this model in production for actual long-context work, override
+                          # ctx via the launcher's context_length param at start time.
+    timeout_multiplier_min: 2.0  # ensure tier-3 questions don't time out at the slow baseline rate
     candidate_roles:
     - architect
     - general
+    - coder
+    - thinking
     acceleration:
       type: speculative_decoding
       spec_type: mtp  # ik_llama.cpp PR #1744 + 1-line gate fix; see deep-dives/gemma4-mtp-drafter-deep-dive.md
       draft_role: draft_gemma4_31b_assistant_q8
-      draft_max: 3        # measured optimum 2026-05-06 (84.3% per-token acceptance, 100% per-batch)
+      draft_max: 2        # 2026-05-08: lowered from 3. At 51% acceptance on bench-realistic tier-3 prompts,
+                          # 2-token chains have less wasted verifier work than 3-token chains.
       draft_p_min: 0.0    # PR #1744 example default
+      threads_draft: 16   # 2026-05-08: dedicate 16 threads to drafter (was sharing 96 with target).
+                          # ik_llama.cpp serializes drafter→verifier within a step; dedicated
+                          # threads should reduce thread-pool contention on the small 4-layer drafter.
+      ubatch: 512         # 2026-05-08: override canonical -ub 8192 to match deep-dive's measurement
+                          # recipe. MTP's per-call batched-verify of K+1 tokens may interact poorly
+                          # with the larger canonical ubatch when sequence is short.
+    constraints:
+      forbid:
+      - prompt_lookup       # MTP-only model; --spec-type ngram-simple conflicts with -md MTP draft
+      reason: MTP speculative decoding (ik_llama.cpp PR #1744) cannot coexist with ngram-simple lookup — both consume the spec-decode slot. Speed test would launch ik_llama.cpp with both `-md mtp_draft` and `--spec-type ngram-simple`, producing inference failures.
     runtime_requirements:
       binary_dir: /mnt/raid0/llm/ik_llama.cpp/build/bin  # patched PR #1744 branch (pr-1744 / 0f728f380d) + 1-line fix in server-context.cpp
       ld_library_path:
@@ -3066,14 +3102,28 @@ roles:
         top_p: 0.95
         top_k: 64
         repeat_penalty: 1.05
-      max_context: 256000
-    candidate_roles: []  # not deployable — see notes
+      max_context: 16384  # 2026-05-07: was 256000. Same KV-cache-size NUMA-imbalance issue as 31B sibling
+                          # (see gemma4_31b_q4km_mtp.max_context comment for details).
+    # 2026-05-07: was candidate_roles: [] — caused only 'general' suite to run during
+    # the 2026-05-06 bench (10 questions). Added full battery roles so eval coverage
+    # is complete. Tier remains X (not deployable) — these scores are for eval-only
+    # quality assessment; they don't promote the model into production.
+    candidate_roles:
+    - general
+    - coder
+    - thinking
     acceleration:
       type: speculative_decoding
       spec_type: mtp
       draft_role: draft_gemma4_26b_a4b_assistant_q8
-      draft_max: 3
+      draft_max: 2          # 2026-05-08: matches 31B sibling tuning (lowered from 3 for realistic acceptance)
       draft_p_min: 0.0
+      threads_draft: 16     # 2026-05-08: drafter dedicated cores
+      ubatch: 512           # 2026-05-08: smaller ubatch to match deep-dive recipe
+    constraints:
+      forbid:
+      - prompt_lookup       # MTP-only model; --spec-type ngram-simple conflicts with -md MTP draft
+      reason: MTP speculative decoding (ik_llama.cpp PR #1744) cannot coexist with ngram-simple lookup — both consume the spec-decode slot. Speed test would launch ik_llama.cpp with both `-md mtp_draft` and `--spec-type ngram-simple`, producing inference failures.
     runtime_requirements:
       binary_dir: /mnt/raid0/llm/ik_llama.cpp/build/bin
       ld_library_path:
@@ -3408,6 +3458,7 @@ roles:
     - vision
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 4
       override_key: qwen3vlmoe.expert_used_count
     performance:
@@ -3744,6 +3795,7 @@ roles:
     - ingest
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 4
       override_key: qwen3moe.expert_used_count
       alternative:
@@ -3949,6 +4001,7 @@ roles:
     - speculative_decoding  # Missing BOS token in GGUF prevents spec decode
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 4
       override_key: qwen3moe.expert_used_count
     thinking_quirks:
@@ -4303,6 +4356,7 @@ roles:
     - vision
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 4
       override_key: qwen3vlmoe.expert_used_count
     constraints:
@@ -4333,6 +4387,7 @@ roles:
     - vision
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 4
       override_key: qwen3vlmoe.expert_used_count
     constraints:
@@ -4955,6 +5010,7 @@ roles:
     - speculative_decoding  # Missing BOS token in GGUF prevents spec decode
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 4
       override_key: qwen3moe.expert_used_count
     memory:
@@ -5071,6 +5127,7 @@ roles:
       pinned: false
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 4
       override_key: qwen3moe.expert_used_count
       alternative:
@@ -5164,6 +5221,7 @@ roles:
       pinned: false
     acceleration:
       type: moe_expert_reduction
+      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
       experts: 4
       override_key: qwen3moe.expert_used_count
   ingest_glm_4_6:
