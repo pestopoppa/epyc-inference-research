@@ -569,15 +569,13 @@ server_mode:
     draft_model: Qwen3.5-0.8B-Q8_0.gguf  # 0.8B Qwen3.5 draft (moe8+spec_q8_k8+lu = 12.6 t/s)
     memory_gb: 69
     tier: hot  # promoted from warm — half the RAM, fits NUMA node0
-    acceleration:
-      type: moe_expert_reduction
-      experts: 8  # full experts for quality (moe8+spec+lu, benchmark 2026-03-09)
-      override_key: qwen35moe.expert_used_count
-      draft_role: draft_qwen35_0_8b_q8_0
-      draft_max: 24   # sweep-verified 2026-03-21 (was 8; dm flat 8-48, 24 marginally best)
-      p_split: 0      # linear only — tree devastating on hybrid (-25% to -40%), sweep-verified
-      lookup: false  # DISABLED: --lookup segfaults on Qwen3.5 hybrids after 1-3 prompts (2026-03-24). Was +25% (9.2→11.5) but crashes.
-    throughput: 4.3    # t/s at 96t NUMA deployment (sweep 2026-03-21). 192t ref: 2.5. Old 12.6 was different config/binary.
+    # acceleration block REMOVED 2026-05-11 — moved to roles.architect_general
+    # (single source of truth). RegistryLoader reads from roles.X.acceleration;
+    # keeping a duplicate here silently no-op'd until the validator caught it
+    # on 2026-05-09.
+    throughput: 12.19  # t/s at 96t NUMA single-instance canonical (Probe B 2026-05-04, n=5).
+                       # Old 4.3 was 2× cross-NUMA wiring (pre-2026-05-04). Bundle:
+                       # epyc-inference-research/data/cpu_optimization/2026-05-04-qwen35-122b-arch-probe/
     previous_model: Qwen3-235B-A22B-Q4_K_M.gguf  # swapped 2026-03-19
 
   architect_coding:
@@ -1168,45 +1166,71 @@ roles:
       Cite source locations when referencing specific content.
       Be thorough but not verbose — prioritize signal over volume.
   architect_general:
+    # 2026-05-11: brought into sync with server_mode.architect_general above.
+    # Previously this block referenced Qwen3-235B-A22B (the model swapped OUT
+    # on 2026-03-19) with acceleration={type=speculative_decoding,
+    # draft_role=draft_qwen3_0_6b_q8_0, k=16} — both fields stale and
+    # disagreeing with server_mode.architect_general.acceleration (the
+    # actually-launched config). RegistryLoader reads from THIS block at
+    # runtime, so the disagreement caused silent no-ops on the
+    # moe_expert_reduction directive (qwen35moe.expert_used_count=8 was
+    # never actually applied; verified 2026-05-09).
+    #
+    # Now: single source of truth here for model + acceleration.
+    # server_mode.architect_general retains port/slots/launch-env config
+    # only (its acceleration block was removed in orchestrator's lean copy
+    # 2026-05-09; will be removed here too when the master compile pipeline
+    # is enabled in production).
     tier: B
     description: System architecture, invariants, acceptance tests - emits IR only
     model:
-      name: Qwen3-235B-A22B
-      huggingface_id: lmstudio-community/Qwen3-235B-A22B-GGUF
-      path: lmstudio-community/Qwen3-235B-A22B-GGUF/Qwen3-235B-A22B-Q4_K_M-00001-of-00004.gguf
+      name: Qwen3.5-122B-A10B
+      huggingface_id: unsloth/Qwen3.5-122B-A10B-GGUF
+      path: unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf
       quant: Q4_K_M
-      size_gb: 133
-      split_count: 4
-      architecture: moe
+      size_gb: 69
+      split_count: 3
+      architecture: moe_hybrid
+      previous_model: Qwen3-235B-A22B (swapped 2026-03-19; 122B = quality 2.57/3, -64GB)
     candidate_roles:
     - architect
     - general
     acceleration:
-      type: speculative_decoding
-      draft_role: draft_qwen3_0_6b_q8_0
-      k: 16
+      type: moe_expert_reduction
+      experts: 8                                  # full experts for quality
+      override_key: qwen35moe.expert_used_count
+      draft_role: draft_qwen35_0_8b_q8_0          # in-house 0.8B Qwen3.5 Q8_0 draft
+      draft_max: 24                               # sweep-verified 2026-03-21
+      k: 24                                       # alias for draft_max (RegistryLoader)
+      p_split: 0                                  # linear only — tree harmful on hybrid
+      lookup: false                               # DISABLED: segfaults on Qwen3.5 hybrids (2026-03-24)
       notes: >
-        0.6B Q8_0 draft VERIFIED (2026-02-13).
-        BOS matched (both 151643). 52-55% acceptance.
-        Full experts + spec = recommended (quality over speed).
-        MoE4+spec was 8.21 t/s but full+spec at 6.08 preserves quality.
-      benchmarked: 2026-02-13
+        Combined moe-expert-reduction (experts=8) + speculative decode
+        (0.8B draft, dm=24). moe8+spec_q8_k8+lu historically = 12.6 t/s
+        single-instance. Spec decode currently gated off at launch via
+        orchestrator _NO_SPEC_DECODE (M-RoPE rollback bug in production
+        llama.cpp build b8957 — Qwen3.5 hybrids refuse position rewind
+        when speculative draft tokens rejected). MoE-expert-reduction
+        fires alone. Re-enable spec when M-RoPE rollback is patched
+        upstream.
+      benchmarked: 2026-05-04                     # Probe B canonical re-bench
     performance:
-      baseline_tps: 5.30
+      baseline_tps: 5.30                          # Qwen3-235B canonical (pre-2026-03-19, kept for history)
       moe4_baseline_tps: 3.87
       moe4_spec_tps: 8.21
       full_spec_tps: 6.08
-      optimized_tps: 6.08
-      speedup: 1.15x
-      spec_acceptance_moe4: 54.8%
+      qwen35_122b_probe_b_tps: 12.19              # 2026-05-04 single-instance canonical (n=5, σ ~0.4%, z ~3)
+      optimized_tps: 12.19
+      speedup: 2.30x                              # 12.19 / 5.30
+      spec_acceptance_moe4: 54.8%                 # historical Qwen3-235B
       spec_acceptance_full: 52.7%
     memory:
-      residency: warm
+      residency: hot                              # promoted 2026-05-04 — half the RAM, fits NUMA node0
       pinned: false
     paged_attention:
       recommended: true
       block_size: 64
-      reason: "133GB model is memory-bound, benefits from block prefetching"
+      reason: "69GB model is memory-bound, benefits from block prefetching"
     generation_defaults:
       n_tokens: -1
       temperature: 0.1
