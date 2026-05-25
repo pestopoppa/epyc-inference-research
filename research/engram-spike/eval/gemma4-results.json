@@ -1,0 +1,456 @@
+{
+  "model": "gemma4-q4km-mtp",
+  "url": "http://127.0.0.1:8500/v1/chat/completions",
+  "total": 39,
+  "correct": 26,
+  "accuracy": 0.6666666666666666,
+  "by_suite": {
+    "agentic": {
+      "correct": 1,
+      "total": 3,
+      "accuracy": 0.3333333333333333
+    },
+    "coder": {
+      "correct": 3,
+      "total": 3,
+      "accuracy": 1.0
+    },
+    "general": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "gpqa": {
+      "correct": 2,
+      "total": 4,
+      "accuracy": 0.5
+    },
+    "hotpotqa": {
+      "correct": 1,
+      "total": 4,
+      "accuracy": 0.25
+    },
+    "instruction_precision": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "long_context": {
+      "correct": 1,
+      "total": 1,
+      "accuracy": 1.0
+    },
+    "math": {
+      "correct": 4,
+      "total": 6,
+      "accuracy": 0.6666666666666666
+    },
+    "mode_advantage_hard": {
+      "correct": 2,
+      "total": 3,
+      "accuracy": 0.6666666666666666
+    },
+    "simpleqa": {
+      "correct": 1,
+      "total": 3,
+      "accuracy": 0.3333333333333333
+    },
+    "thinking": {
+      "correct": 3,
+      "total": 4,
+      "accuracy": 0.75
+    }
+  },
+  "results": [
+    {
+      "id": "sentinel_general_01",
+      "suite": "general",
+      "method": "substring",
+      "expected": "Canberra",
+      "answer": "The capital of Australia is **Canberra**.",
+      "correct": true,
+      "elapsed_s": 0.23,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_01",
+      "suite": "math",
+      "method": "substring",
+      "expected": "145",
+      "answer": "To find the value of $3^4 + 4^3$, calculate each term separately and then add them together:\n\n1.  **Calculate $3^4$:**\n    $3 \\times 3 \\times 3 \\times 3 = 81$\n\n2.  **Calculate $4^3$:**\n    $4 \\times 4 \\times 4 = 64$\n\n3.  **Add the results:**\n    $81 + 64 = 145$\n\n**Value: 145**",
+      "correct": true,
+      "elapsed_s": 1.56,
+      "error": null
+    },
+    {
+      "id": "sentinel_code_01",
+      "suite": "coder",
+      "method": "substring",
+      "expected": "def fibonacci",
+      "answer": "```python\ndef fibonacci(n, memo={}):\n    if n in memo:\n        return memo[n]\n    if n <= 1:\n        return n\n    memo[n] = fibonacci(n - 1, memo) + fibonacci(n - 2, memo)\n    return memo[n]\n```",
+      "correct": true,
+      "elapsed_s": 1.08,
+      "error": null
+    },
+    {
+      "id": "sentinel_thinking_01",
+      "suite": "thinking",
+      "method": "substring",
+      "expected": "48",
+      "answer": "To find the average speed for a round trip where the distances are equal, you cannot simply calculate the arithmetic mean of the two speeds. Instead, you must use the formula for the **harmonic mean**.\n\n### The Formula\nThe formula for average speed ($V_{avg}$) when the distance for both legs of the trip is the same is:\n$$V_{avg} = \\frac{2 \\cdot v_1 \\cdot v_2}{v_1 + v_2}$$\n\nWhere:\n*   $v_1 = 60 \\text{ km/h}$ (speed from A to B)\n*   $v_2 = 40 \\text{ km/h}$ (speed from B to A)\n\n### The Calculation\n1.  **Multiply the two speeds and then by 2:**\n    $$2 \\cdot 60 \\cdot 40 = 4800$$\n\n2.  **Add the two speeds together:**\n    $$60 + 40 = 100$$\n\n3.  **Divide the results:**\n    $$\\frac{4800}{100} = 48$$\n\n**Answer:**\nThe average speed for the round trip is **48 km/h**.\n\n***\n\n### Why isn't it 50 km/h?\nAverage speed is defined as **Total Distance \u00f7 Total Time**. \n\nBecause the train travels slower on the return trip (40 km/h), it spends **more time** traveling at that slower speed than it does at the faster speed. Since more time is spent at 40 km/h, the average speed is pulled closer to 40 than to 60.",
+      "correct": true,
+      "elapsed_s": 5.17,
+      "error": null
+    },
+    {
+      "id": "sentinel_instruction_01",
+      "suite": "instruction_precision",
+      "method": "substring",
+      "expected": "red",
+      "answer": "Red, blue, yellow",
+      "correct": true,
+      "elapsed_s": 0.21,
+      "error": null
+    },
+    {
+      "id": "sentinel_longctx_01",
+      "suite": "long_context",
+      "method": "substring",
+      "expected": "TCP",
+      "answer": "TCP is a connection-oriented protocol that ensures reliable, ordered, and error-checked delivery of data through a formal handshake process. In contrast, UDP is a connectionless protocol that prioritizes speed and efficiency by transmitting data packets without verifying arrival or sequence.",
+      "correct": true,
+      "elapsed_s": 0.95,
+      "error": null
+    },
+    {
+      "id": "sentinel_agentic_01",
+      "suite": "agentic",
+      "method": "substring",
+      "expected": "479001600",
+      "answer": "To calculate the factorial of 12 (denoted as $12!$), we must multiply all positive integers from 12 down to 1.\n\n### Step-by-Step Calculation:\n\n1.  **$1 \\times 2 = 2$**\n2.  **$2 \\times 3 = 6$**\n3.  **$6 \\times 4 = 24$**\n4.  **$24 \\times 5 = 120$**\n5.  **$120 \\times 6 = 720$**\n6.  **$720 \\times 7 = 5,040$**\n7.  **$5,040 \\times 8 = 40,320$**\n8.  **$40,320 \\times 9 = 362,880$**\n9.  **$362,880 \\times 10 = 3,628,800$**\n10. **$3,628,800 \\times 11 = 39,916,800$**\n11. **$39,916,800 \\times 12 = 479,001,600$**\n\n***\n\n**Final Result:**\n**479,001,600**",
+      "correct": false,
+      "elapsed_s": 4.21,
+      "error": null
+    },
+    {
+      "id": "sentinel_multihop_01",
+      "suite": "hotpotqa",
+      "method": "substring",
+      "expected": "90",
+      "answer": "To find the boiling point at 3000m, you can follow these steps:\n\n1.  **Determine how many 150m increments are in 3000m:**\n    $3000 \\div 150 = 20$ increments\n\n2.  **Calculate the total decrease in temperature:**\n    Since the temperature drops by $0.5^\\circ\\text{C}$ per increment:\n    $20 \\times 0.5^\\circ\\text{C} = 10^\\circ\\text{C}$\n\n3.  **Subtract the decrease from the sea level boiling point:**\n    $100^\\circ\\text{C} - 10^\\circ\\text{C} = 90^\\circ\\text{C}$\n\n**Answer:**\nWater boils at approximately **90\u00b0C** at 3000m altitude.",
+      "correct": true,
+      "elapsed_s": 2.75,
+      "error": null
+    },
+    {
+      "id": "sentinel_factual_01",
+      "suite": "simpleqa",
+      "method": "substring",
+      "expected": "1991",
+      "answer": "Python was first released in **1991**.",
+      "correct": true,
+      "elapsed_s": 0.24,
+      "error": null
+    },
+    {
+      "id": "sentinel_escalation_01",
+      "suite": "mode_advantage_hard",
+      "method": "substring",
+      "expected": "Python",
+      "answer": "The terms **strong typing** and **weak typing** refer to how strictly a programming language enforces rules regarding data types and how it handles operations between different types (like adding a number to a string).\n\nIt is important to note that these terms describe **type enforcement**, not whether a language is \"statically\" or \"dynamically\" typed.\n\n---\n\n### 1. Strong Typing\nIn a strongly typed language, the language enforces strict rules about how types interact. If you attempt to perform an operation on incompatible types, the language will throw an error or an exception rather than trying to \"guess\" what you meant.\n\n**Key Characteristics:**\n*   **Type Safety:** The language prevents accidental errors caused by mixing types.\n*   **No Implicit Conversion:** The language will not automatically convert a string to an integer to make an addition work. You must manually convert the data yourself (explicit casting).\n*   **Predictability:** Because the rules are strict, the behavior of the code is highly predictable.\n\n**Example Language: Python**\nPython is a strongly typed language. If you try to add a string and an integer, Python will refuse to perform the operation and raise a `TypeError`.\n\n```python\n# Python Example\nx = \"5\"\ny = 10\n\nprint(x + y) \n# Result: TypeError: can only concatenate str (not \"int\") to str\n```\n*To make this work in Python, you must explicitly convert the string to an integer: `int(x) + y`.*\n\n---\n\n### 2. Weak Typing\nIn a weakly typed language, the language is more \"relaxed.\" It allows for **implicit type conversion** (also known as **type coercion**). If you perform an operation on two different types, the language will attempt to automatically convert one of the types to match the other so the operation can proceed.\n\n**Key Characteristics:**\n*   **Flexibility:** It allows for faster prototyping because you don't have to write as much conversion code.\n*   **Risk of Bugs:** Because the language \"guesses\" how to convert types, it can lead to unexpected results or \"silent\" errors that don't crash the program but produce incorrect data.\n*   **Type Coercion:** The language automatically changes types behind the scenes.\n\n**Example Language: JavaScript**\nJavaScript is a weakly typed language. It uses complex rules to decide how to convert types during operations, which can lead to confusing results.\n\n```javascript\n// JavaScript Example\nlet x = \"5\";\nlet y = 10;\n\nconsole.log(x + y); \n// Result: \"510\" (The number 10 was coerced into a string)\n\nconsole.log(x - y); \n// Result: -5 (The string \"5\" was coerced into a number)\n```\n*In the first line, JavaScript assumes you want to concatenate strings. In the second line, because the minus operator doesn't exist for strings, it assumes you want to perform math.*\n\n---\n\n### Summary Comparison\n\n| Feature | Strong Typing | Weak Typing |\n| :--- | :--- | :--- |\n| **Type Conversion** | Explicit (Manual) | Implicit (Automatic/Coercion) |\n| **Error Handling** | Throws an error on mismatch | Attempts to resolve the mismatch |\n| **Primary Goal** | Safety and Predictability | Flexibility and Convenience |\n| **Risk Level** | Low (Errors are caught early) | High (Errors can be \"silent\") |",
+      "correct": true,
+      "elapsed_s": 12.14,
+      "error": null
+    },
+    {
+      "id": "sentinel_gpqa_01",
+      "suite": "gpqa",
+      "method": "multiple_choice",
+      "expected": "B",
+      "answer": "To find the mass of particle $X$, we use the principle of conservation of energy and momentum in the center-of-mass frame.\n\n1.  **Identify the initial state:**\n    *   An electron ($e^-$) is at rest: $p_{e^-} = 0$, $E_{e^-} = m_e c^2 \\approx 0.000511$ GeV.\n    *   A positron ($e^+$) is part of the beam with energy $E_{e^+}$ and momentum $p_{e^+}$.\n    *   The total energy in the lab frame is $E_{lab} = E_{e^+} + m_e$.\n    *   The total momentum in the lab frame is $P_{lab} = p_{e^+}$.\n\n2.  **Identify the final state:**\n    *   The particle $X$ is produced. To find the minimum required beam energy, we consider the threshold case where $X$ is produced at rest in the center-of-mass frame.\n    *   The invariant mass squared $s$ is constant in all frames: $s = (E_{total})^2 - (P_{total}c)^2$.\n\n3.  **Calculate $s$ using the lab frame values:**\n    $s = (E_{e^+} + m_e)^2 - (p_{e^+})^2$\n    $s = E_{e^+}^2 + 2E_{e^+}m_e + m_e^2 - p_{e^+}^2$\n    Since $E_{e^+}^2 - p_{e^+}^2 = m_e^2$ (for the positron):\n    $s = m_e^2 + 2E_{e^+}m_e + m_e^2 = 2m_e^2 + 2E_{e^+}m_e$\n    Given $E_{e^+} = 9.6 \\times 10^6$ GeV and $m_e \\approx 5.11 \\times 10^{-4}$ GeV, the term $2m_e^2$ is negligible.\n    $s \\approx 2E_{e^+}m_e$\n\n4.  **Relate $s$ to the mass of $X$ ($M_X$):**\n    At threshold, the total energy in the center-of-mass frame is simply the mass of the particle produced: $\\sqrt{s} = M_X$.\n    $M_X = \\sqrt{2 \\cdot E_{e^+} \\cdot m_e}$\n    $M_X = \\sqrt{2 \\cdot (9.6 \\times 10^6 \\text{ GeV}) \\cdot (5.11 \\times 10^{-4} \\text{ GeV})}$\n    $M_X = \\sqrt{19.2 \\times 10^6 \\cdot 5.11 \\times 10^{-4}}$\n    $M_X = \\sqrt{9811.2}$\n    $M_X \\approx 99.05 \\text{ GeV}$\n\nComparing this result to the given options:\nA) 1091 GeV\nB) 99 GeV\nC) 542 GeV\nD) 3132 GeV\n\nThe correct option is B.\n\nB",
+      "correct": true,
+      "elapsed_s": 10.96,
+      "error": null
+    },
+    {
+      "id": "sentinel_gpqa_02",
+      "suite": "gpqa",
+      "method": "multiple_choice",
+      "expected": "D",
+      "answer": "To solve this problem, we must analyze the chemical transformations and the stereochemistry involved.\n\n**1. Analyze the Product:**\nThe product is **(R)-4-ethyltetrahydro-2H-pyran-2-one**. This is a $\\delta$-lactone (a six-membered cyclic ester). The structure contains a chiral center at C4 (the carbon with the ethyl group).\n\n**2. Analyze the Starting Material (A and B):**\nThe starting material is **3-ethyl-5-isobutoxy-5-oxopentanoic acid**.\n*   The structure is a pentanoic acid chain with an ethyl group at C3 and an isobutoxy group at C5 (forming an ester/anhydride-like structure at the end).\n*   The formula describes a molecule where C3 is a chiral center.\n*   The reaction involves reducing an ester/acid derivative to a lactone. This process involves the nucleophilic attack on the carbonyl and subsequent cyclization.\n\n**3. Analyze the Stereochemistry (The Key Step):**\nThe crucial part of the question is how the stereochemistry at C3 changes (or doesn't change) during the reduction.\n*   **Reaction A:** $\\text{LiBH}_4$ is a nucleophilic reducing agent. It attacks the carbonyl carbon. The reduction of the C5 ester/acid derivative to the lactone involves the formation of a bond at C5, but the chiral center at **C3 is not directly involved in the bond-breaking or bond-forming process** of the reduction mechanism itself. Therefore, the configuration at C3 remains unchanged.\n*   **Reaction B:** $\\text{BH}_3$ (Borane) is an electrophilic reducing agent. While it primarily reduces carboxylic acids to alcohols, in the context of complex molecules or specific functional groups, it can facilitate cyclization. However, like $\\text{LiBH}_4$, the mechanism of reduction at the carbonyl does not involve breaking bonds at the C3 chiral center.\n\n**4. Re-evaluating the Product Configuration:**\nThe product is $(R)$-4-ethyltetrahydro-2H-pyran-2-one. In the lactone, the carbon with the ethyl group is C4 (relative to the lactone numbering, which corresponds to C3 in the original pentanoic acid chain). \nSince the reduction of the functional groups at C1 and C5 does not involve the C3 chiral center, the configuration at C3 in the starting material must match the configuration in the product.\n\nIf the product is $(R)$, the starting material must be $(R)$. Since both reactions (A and B) yield the same $(R)$ product and the mechanism does not invert the C3 center, both A and B must be the $(R)$ isomer.\n\n**Conclusion:**\nA = (R)-isomer, B = (R)-isomer.\n\nC",
+      "correct": false,
+      "elapsed_s": 10.73,
+      "error": null
+    },
+    {
+      "id": "sentinel_gpqa_03",
+      "suite": "gpqa",
+      "method": "multiple_choice",
+      "expected": "B",
+      "answer": "To determine the product, we must analyze the structure of the starting material and the mechanism of the reaction.\n\n1.  **Analyze the Starting Material:**\n    The substrate is **(1R,3R,4R,6S)-1,3,4-trimethyl-7-oxabicyclo[4.1.0]heptane**.\n    This is an epoxide fused to a cyclohexane ring. The carbons involved in the epoxide ring are C1 and C6.\n    *   C1 has a methyl group.\n    *   C6 is part of the epoxide ring.\n    *   The configuration is given as (1R, 3R, 4R, 6S).\n\n2.  **Analyze the Reagent and Mechanism:**\n    The reagent is $\\text{Me}_2\\text{CuLi}$ (an organocuprate). Organocuprates react with epoxides via an $S_N2$-like mechanism.\n    *   **Regioselectivity:** The nucleophile (methyl group) attacks the **less hindered** carbon of the epoxide ring.\n    *   **Stereochemistry:** The attack results in **inversion of configuration** at the carbon being attacked.\n\n3.  **Determine the Site of Attack:**\n    *   **C1** is a tertiary carbon (it is bonded to C2, C6, and a methyl group).\n    *   **C6** is a secondary carbon (it is bonded to C1 and C5).\n    Since C6 is less hindered than C1, the methyl group from $\\text{Me}_2\\text{CuLi}$ will attack **C6**.\n\n4.  **Determine the Product Configuration:**\n    *   The epoxide ring opens. The oxygen remains attached to C1, forming an alcohol group (-OH).\n    *   The methyl group is added to C6.\n    *   **At C1:** The configuration remains (R) because no bonds to the chiral center were broken (the C1-O bond remains, and the C1-C6 bond remains).\n    *   **At C6:** The configuration undergoes **inversion**. The original configuration was (6S). Upon attack from the side opposite to the oxygen, the new configuration at C6 becomes (6R).\n    *   **At C3 and C4:** These centers are not involved in the reaction, so they remain (3R) and (4R).\n    *   **New Substituents:** C6 now has an additional methyl group. C1 has the -OH group.\n\n5.  **Evaluate the Options:**\n    The resulting molecule is a cyclohexane ring with four methyl groups (at C1, C2, C4, and C5 relative to the new numbering or the original ring structure).\n    Looking at the structure:\n    The original C1 (with -OH and Me) becomes C1 in the product.\n    The original C6 (with new Me) becomes C2 in the product.\n    The original C3, C4, and C5 remain.\n    The product is a tetramethylcyclohexan-1-ol.\n    Based on the inversion at C6 (becoming C2 in the product) and the retention at C1, the stereochemistry matches the transformation of (1R, 6S) to a structure where the new methyl is at C2 and the hydroxyl is at C1.\n    Comparing the provided options, Option A represents the correct stereochemical outcome of the inversion and the addition of the methyl group to the less hindered site.\n\nA",
+      "correct": false,
+      "elapsed_s": 13.14,
+      "error": null
+    },
+    {
+      "id": "sentinel_gpqa_04",
+      "suite": "gpqa",
+      "method": "multiple_choice",
+      "expected": "D",
+      "answer": "To determine which of the following organic moieties show optical isomerism, we must identify which molecules are **chiral** (i.e., they lack an internal plane of symmetry and have a non-superimposable mirror image).\n\n1.  **dimethyl 6,6'-dinitro-[1,1'-biphenyl]-2,2'-dicarboxylate**: This is a substituted biphenyl. While biphenyls can exhibit **atropisomerism** (a type of stereoisomerism due to restricted rotation around a single bond), the presence of bulky groups at the 2,2' and 6,6' positions creates a high rotational barrier. If the rotation is sufficiently hindered, the molecule becomes chiral because the two rings cannot pass through a planar transition state. This molecule is a classic example of an atropisomer.\n\n2.  **methyl 2-hydroxypropanoate**: This molecule (also known as methyl lactate) has a central carbon atom bonded to four different groups: a hydrogen atom ($-H$), a methyl group ($-CH_3$), a hydroxyl group ($-OH$), and a methyl ester group ($-COOCH_3$). Because it has a **chiral center** (asymmetric carbon), it exhibits optical isomerism.\n\n3.  **benzophenone**: This molecule consists of two phenyl groups attached to a carbonyl group ($C=O$). The molecule is planar (or nearly planar) and possesses a plane of symmetry passing through the $C=O$ bond. Therefore, it is **achiral** and does not show optical isomerism.\n\n4.  **dimethyl fumarate**: This is a derivative of fumaric acid. Fumaric acid is the *trans*-isomer of butenedioic acid. While it has a rigid structure, it possesses a plane of symmetry (the plane of the double bond). It is **achiral** and does not show optical isomerism (unlike its *cis*-isomer, maleic acid, which is also achiral, but certain derivatives can be chiral; however, dimethyl fumarate itself is symmetric).\n\n**Conclusion:**\nOnly molecules 1 and 2 exhibit optical isomerism.\n\nD",
+      "correct": true,
+      "elapsed_s": 7.38,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_02",
+      "suite": "math",
+      "method": "exact_match",
+      "expected": "25",
+      "answer": "To find the total weight of the crayons and the boxes in pounds, we follow these steps:\n\n**Step 1: Determine the number of boxes needed.**\nNik has 200 crayons and puts them into groups of 8.\nNumber of boxes = Total crayons / Crayons per box\nNumber of boxes = $200 / 8 = 25$ boxes.\n\n**Step 2: Calculate the total weight of the crayons.**\nEach crayon weighs 1 ounce.\nTotal weight of crayons = Total number of crayons $\\times$ weight per crayon\nTotal weight of crayons = $200 \\times 1 = 200$ ounces.\n\n**Step 3: Calculate the total weight of the boxes.**\nEach box weighs 8 ounces.\nTotal weight of boxes = Number of boxes $\\times$ weight per box\nTotal weight of boxes = $25 \\times 8 = 200$ ounces.\n\n**Step 4: Calculate the total weight in ounces.**\nTotal weight = Total weight of crayons + Total weight of boxes\nTotal weight = $200 \\text{ oz} + 200 \\text{ oz} = 400$ ounces.\n\n**Step 5: Convert the total weight from ounces to pounds.**\nThere are 16 ounces in a pound.\nTotal weight in pounds = Total weight in ounces / 16\nTotal weight in pounds = $400 / 16$\n\nTo solve $400 / 16$:\n$400 / 2 = 200$\n$200 / 2 = 100$\n$100 / 2 = 50$\n$50 / 2 = 25$\n(Or $400 / 16 = 25$)\n\nTotal weight = 25 pounds.\n\n<answer>25</answer>",
+      "correct": false,
+      "elapsed_s": 5.91,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_03",
+      "suite": "math",
+      "method": "exact_match",
+      "expected": "130000",
+      "answer": "To find the total population of South America based on the information provided, we can follow these steps:\n\n1.  **Identify the number of countries:**\n    There are 26 countries in South America.\n\n2.  **Identify the number of cities per country:**\n    Each country has 5 cities.\n\n3.  **Calculate the total number of cities in South America:**\n    Total cities = (Number of countries) \u00d7 (Number of cities per country)\n    Total cities = $26 \\times 5 = 130$ cities.\n\n4.  **Identify the population per city:**\n    Each city has 1,000 people living in it.\n\n5.  **Calculate the total population:**\n    Total population = (Total number of cities) \u00d7 (Population per city)\n    Total population = $130 \\times 1,000 = 130,000$.\n\n**Step-by-step summary:**\n- Countries: 26\n- Cities per country: 5\n- Total cities: $26 \\times 5 = 130$\n- People per city: 1,000\n- Total people: $130 \\times 1,000 = 130,000$\n\n<answer>130000</answer>",
+      "correct": false,
+      "elapsed_s": 4.16,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_04",
+      "suite": "math",
+      "method": "substring",
+      "expected": "(-\\sqrt{3}, \\sqrt{3})",
+      "answer": "To find the real values of $x$ that satisfy the inequality $-4 < x^4 + 4x^2 < 21$, we can split it into two separate inequalities:\n1. $x^4 + 4x^2 > -4$\n2. $x^4 + 4x^2 < 21$\n\n**Step 1: Solve $x^4 + 4x^2 > -4$**\nLet $u = x^2$. Since $x$ is a real number, $u \\ge 0$.\nThe inequality becomes $u^2 + 4u > -4$, which can be rewritten as $u^2 + 4u + 4 > 0$.\nThis is $(u + 2)^2 > 0$.\nSince the square of any real number is non-negative, $(u + 2)^2$ is always $\\ge 0$. The only way $(u + 2)^2$ would not be $> 0$ is if $u + 2 = 0$, which means $u = -2$. However, we know $u = x^2 \\ge 0$, so $u$ can never be $-2$.\nThus, $x^4 + 4x^2 > -4$ is satisfied for all real $x$.\n\n**Step 2: Solve $x^4 + 4x^2 < 21$**\nAgain, let $u = x^2$ (where $u \\ge 0$).\nThe inequality becomes $u^2 + 4u < 21$, or $u^2 + 4u - 21 < 0$.\nWe factor the quadratic expression:\n$(u + 7)(u - 3) < 0$.\nThe roots of the quadratic $u^2 + 4u - 21 = 0$ are $u = -7$ and $u = 3$.\nThe parabola $u^2 + 4u - 21$ opens upwards, so it is negative between the roots:\n$-7 < u < 3$.\nSince we defined $u = x^2$, we must also satisfy $u \\ge 0$.\nCombining $-7 < u < 3$ and $u \\ge 0$, we get:\n$0 \\le u < 3$.\n\n**Step 3: Solve for $x$**\nSubstituting $u = x^2$ back into the inequality:\n$0 \\le x^2 < 3$.\nThe condition $x^2 \\ge 0$ is always true for real $x$.\nThe condition $x^2 < 3$ implies:\n$-\\sqrt{3} < x < \\sqrt{3}$.\n\nIn interval notation, this is $(-\\sqrt{3}, \\sqrt{3})$.\n\nFinal Answer: \\boxed{(-\\sqrt{3}, \\sqrt{3})}",
+      "correct": true,
+      "elapsed_s": 8.69,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_05",
+      "suite": "math",
+      "method": "substring",
+      "expected": "\\sqrt{130}",
+      "answer": "To solve for the diameter of the circumcircle of $\\triangle ABD$, let the circumcircle of $\\triangle ABD$ be denoted by $\\Gamma$.\n\n1.  **Identify the properties of the cyclic quadrilateral:**\n    Points $A, B, D, E$ lie on $\\Gamma$. Therefore, $ABDE$ is a cyclic quadrilateral.\n    In a cyclic quadrilateral, the exterior angle is equal to the interior opposite angle. Thus, $\\angle CED = \\angle BAE$ is not directly useful, but we know that $\\angle AEB + \\angle ADB = 180^\\circ$ and $\\angle EAB + \\angle EDB = 180^\\circ$.\n    More importantly, for the cyclic quadrilateral $ABDE$, the power of point $C$ with respect to $\\Gamma$ can be used if $C$ lies on the lines containing the sides. However, $C$ is a vertex. Let's look at the angles.\n\n2.  **Use the given angle sum:**\n    We are given $m\\angle B + m\\angle D = 270^\\circ$.\n    In quadrilateral $ABCD$, the sum of angles is $360^\\circ$, so $m\\angle A + m\\angle C = 360^\\circ - 270^\\circ = 90^\\circ$.\n    Since $E$ lies on $CD$, $\\angle BCD$ is the same as $\\angle BCE$.\n    In the cyclic quadrilateral $ABDE$, the angle $\\angle ADE$ (which is $\\angle ADC$) and $\\angle ABE$ are related. Specifically, $\\angle ADE + \\angle ABE = 180^\\circ$.\n    Wait, $E$ is on $CD$. So $D, E, C$ are collinear. Thus $\\angle ADC = \\angle ADE$.\n    From the cyclic property of $ABDE$, $\\angle ABE + \\angle ADE = 180^\\circ$.\n    We are given $\\angle B + \\angle D = 270^\\circ$. Let $\\angle ABC = \\beta$ and $\\angle ADC = \\delta$.\n    $\\beta + \\delta = 270^\\circ$.\n    Since $E$ is on $CD$, $\\angle ADE = \\delta$.\n    In cyclic quad $ABDE$, $\\angle ABE + \\delta = 180^\\circ \\implies \\angle ABE = 180^\\circ - \\delta$.\n    Also, $\\angle ABC = \\beta$. Thus $\\angle CBE = \\angle ABC - \\angle ABE = \\beta - (180^\\circ - \\delta) = \\beta + \\delta - 180^\\circ$.\n    Substituting $\\beta + \\delta = 270^\\circ$, we get $\\angle CBE = 270^\\circ - 180^\\circ = 90^\\circ$.\n\n3.  **Analyze $\\triangle BCE$:**\n    Since $\\angle CBE = 90^\\circ$, $\\triangle BCE$ is a right-angled triangle with the hypotenuse $CE$.\n    We are given $BC = 4$ and $CE = 5$.\n    Using the Pythagorean theorem: $BE^2 + BC^2 = CE^2 \\implies BE^2 + 4^2 = 5^2 \\implies BE^2 = 25 - 16 = 9 \\implies BE = 3$.\n\n4.  **Use the Power of a Point theorem:**\n    Since $A, B, D, E$ are concyclic, the power of point $C$ with respect to $\\Gamma$ is:\n    $CB \\cdot (\\text{extension of } CB) = CE \\cdot CD$ is not applicable here because $C$ is not on the lines of the sides.\n    However, $E$ is on $CD$, so $C, E, D$ are collinear. The power of point $C$ with respect to $\\Gamma$ is $CE \\cdot CD$ if $C$ were on the line $ED$.\n    Wait, $C, E, D$ are collinear. The points $D, E, C$ lie on a line. The power of point $C$ with respect to $\\Gamma$ is $CE \\cdot CD$ only if $C$ is outside the circle and the secant is $C-E-D$.\n    The power of point $C$ is $P(C) = CE \\cdot CD$.\n    We know $CE = 5$ and $DE = 7$. Since $E$ is between $C$ and $D$ (as $E$ is on $CD$ and $DE=7, CE=5$), $CD = CE + ED = 5 + 7 = 12$.\n    The power of point $C$ is $P(C) = CE \\cdot CD = 5 \\cdot 12 = 60$.\n    Also, if we consider the line $CB$, let it intersect $\\Gamma$ at $B$ and another point $F$. Then $P(C) = CB \\cdot CF = 60$.\n    Since $CB = 4$, $4 \\cdot CF = 60 \\implies CF = 15$.\n\n5.  **Find the diameter of $\\Gamma$:**\n    In $\\triangle BCE$, we found $BE = 3$.\n    In $\\triangle BCD$, we have $BC=4, CD=12, \\angle CBE=90^\\circ$.\n    Wait, $\\angle CBE = 90^\\circ$ was derived from $\\angle B + \\angle D = 270^\\circ$.\n    In $\\triangle BCE$, $BE=3, BC=4, CE=5$. This is a 3-4-5 triangle.\n    In $\\triangle BCD$, we have $BC=4, CD=12$. We need $BD$.\n    Using the Law of Cosines in $\\triangle BCE$ to find $\\angle BCE$:\n    $\\cos(\\angle BCE) = \\frac{4^2 + 5^2 - 3^2}{2(4)(5)} = \\frac{16+25-9}{40} = \\frac{32}{40} = 0.8$.\n    Now, in $\\triangle BCD$, we have $BC=4, CD=18$ (Wait, $CD = CE+ED = 5+7=12$).\n    Using Law of Cosines in $\\triangle BCD$:\n    $BD^2 = BC^2 + CD^2 - 2(BC)(CD)\\cos(\\angle BCD)$\n    $BD^2 = 4^2 + 12^2 - 2(4)(12)(0.8) = 16 + 144 - 96(0.8) = 160 - 76.8 = 83.2$.\n    $BD = \\sqrt{83.2}$.\n    We need the diameter of the circumcircle of $\\triangle ABD$. The circumcircle of $\\triangle ABD$ is the same as the circumcircle of $\\triangle ABE$ and $\\triangle BDE$.\n    In $\\triangle BDE$, we have $BE=3, DE=7$, and we need $\\angle BED$.\n    Since $C, E, D$ are collinear, $\\angle BED = 180^\\circ - \\angle BEC$.\n    In $\\triangle BCE$, $\\cos(\\angle BEC) = \\frac{3^2 + 5^2 - 4^2}{2(3)(5)} = \\frac{9+25-16}{30} = \\frac{18}{30} = 0.6$.\n    Thus $\\sin(\\angle BED) = \\sin(\\angle BEC) = \\sqrt{1 - 0.6^2} = 0.8$.\n    The diameter $d$ of the circumcircle of $\\triangle BDE$ is $d = \\frac{BD}{\\sin(\\angle BED)}$.\n    $d = \\frac{\\sqrt{83.2}}{0.8} = \\frac{\\sqrt{83.2}}{\\sqrt{0.64}} = \\sqrt{\\frac{83.2}{0.64}} = \\sqrt{130}$.\n    Wait, let's re-calculate $83.2 / 0.64$: $8320 / 64 = 130$.\n    Let's double check $BD^2$. $BD^2 = 160 - 76.8 = 83.2$.\n    $d^2 = \\frac{83.2}{0.64} = 130$.\n    Wait, let me re-verify $\\angle CBE = 90^\\circ$.\n    $\\angle B + \\angle D = 270^\\circ$. $ABDE$ is cyclic $\\implies \\angle ABE + \\angle ADE = 180^\\circ$.\n    $\\angle ADE = \\angle ADC = \\angle D$.\n    $\\angle ABE = 180^\\circ - \\angle D$.\n    $\\angle CBE = \\angle ABC - \\angle ABE = \\angle B - (180^\\circ - \\angle D) = \\angle B + \\angle D - 180^\\circ = 2",
+      "correct": true,
+      "elapsed_s": 31.95,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_06",
+      "suite": "math",
+      "method": "substring",
+      "expected": "63",
+      "answer": "To compute the sum of the digits of $N = 888,888 \\times 9,999,999$, we can use a clever algebraic manipulation.\n\nFirst, let's express the second factor in terms of a simpler number. Note that $9,999,999 = 10,000,000 - 1$.\nLet $A = 888,888$. Then:\n$$N = A \\times (10^7 - 1)$$\n$$N = A \\times 10^7 - A$$\n$$N = 888,888 \\times 10,000,000 - 888,888$$\n$$N = 8,888,880,000,000 - 888,888$$\n\nNow, let's perform the subtraction:\n$$8,888,880,000,000$$\n$$- \\quad \\quad \\quad 888,888$$\n$$\\text{-----------------------}$$\n$$8,888,879,111,112$$\n\nLet's verify the subtraction step-by-step:\n$8,888,880,000,000 - 888,888$\n$= 8,888,879,000,000 + (1,000,000 - 888,888)$\n$= 8,888,879,000,000 + 111,112$\n$= 8,888,879,111,112$\n\nNow, we find the sum of the digits of $N = 8,888,879,111,112$.\nThe digits are: $8, 8, 8, 8, 8, 7, 9, 1, 1, 1, 1, 1, 2$.\n\nSumming them up:\nSum $= (5 \\times 8) + 7 + 9 + (5 \\times 1) + 2$\nSum $= 40 + 7 + 9 + 5 + 2$\nSum $= 47 + 9 + 5 + 2$\nSum $= 56 + 5 + 2$\nSum $= 61 + 2$\nSum $= 63$\n\nAlternatively, we can check the number of digits.\n$A$ has 6 digits. $10^7-1$ has 7 digits.\n$N = 888,888 \\times (10^7 - 1) = 8,888,880,000,000 - 888,888$.\nThe digits of $8,888,880,000,000$ are five 8s, one 0, and six 0s.\nSubtracting $888,888$:\nThe last 6 digits of $8,888,880,000,000$ are $000,000$.\n$1,000,000 - 888,888 = 111,112$.\nThe digits preceding the last 6 digits in $8,888,880,000,000$ are $8,888,88$.\nSince we \"borrowed\" 1 from the $10^6$ place to handle the subtraction, the $8$ in the $10^6$ place becomes $7$.\nSo the digits are $8, 8, 8, 8, 8, 7$ followed by $1, 1, 1, 1, 1, 2$.\nWait, let's re-count the digits of $8,888,880,000,000$:\n$8,888,88 \\times 10^7 = 8,888,880,000,000$ (This is 13 digits).\nThe digits are $8, 8, 8, 8, 8, 8, 0, 0, 0, 0, 0, 0, 0$.\nSubtracting $888,888$:\n$8,888,880,000,000 - 888,888 = 8,888,879,111,112$.\nDigits: $8, 8, 8, 8, 8, 7, 9, 1, 1, 1, 1, 1, 2$.\nSum: $8+8+8+8+8+7+9+1+1+1+1+1+2 = 40 + 7 + 9 + 5 + 2 = 63$.\n\nFinal check:\n$888,888 \\times 9 = 7,999,992$.\n$888,888 \\times 9,999,999 = 888,888 \\times (10^7 - 1) = 8,888,880,000,000 - 888,888 = 8,888,879,111,112$.\nSum $= 5(8) + 7 + 9 + 5(1) + 2 = 40 + 16 + 5 + 2 = 63$.\n\nWait, let's re-verify the digits of $8,888,880,000,000 - 888,888$.\n$8,888,880,000,000$\n$- \\quad \\quad \\quad 888,888$\n$= 8,888,879,111,112$\nDigits: $8, 8, 8, 8, 8, 7, 9, 1, 1, 1, 1, 1, 2$.\nSum: $8 \\times 5 = 40$. $7+9=16$. $1 \\times 5 = 5$. $2=2$.\n$40 + 16 + 5 + 2 = 63$.\n\nThe number of 8s: The original number was $8,888,880,000,000$. There are six 8s.\nAfter subtraction, the 6th 8 becomes a 7 and the 7th digit (0) becomes a 9.\nDigits: $8, 8, 8, 8, 8, 7, 9, 1, 1, 1, 1, 1, 2$.\nSum: $8+8+8+8+8+7+9+1+1+1+1+1+2 = 63$.\n\n\\boxed{63}",
+      "correct": true,
+      "elapsed_s": 24.41,
+      "error": null
+    },
+    {
+      "id": "sentinel_code_02",
+      "suite": "coder",
+      "method": "substring",
+      "expected": "count_Primes_nums",
+      "answer": "To solve this problem efficiently, the best approach is to use the **Sieve of Eratosthenes** algorithm. This algorithm works by iteratively marking the multiples of each prime number starting from 2, leaving only the prime numbers unmarked.\n\nHere is the Python implementation:\n\n```python\ndef count_Primes_nums(n: int) -> int:\n    \"\"\"\n    Counts the number of prime numbers strictly less than a given non-negative number n.\n    Uses the Sieve of Eratosthenes algorithm.\n    \"\"\"\n    if n <= 2:\n        return 0\n\n    # Initialize a boolean list \"is_prime\" where index represents the number.\n    # We assume all numbers are prime initially.\n    is_prime = [True] * n\n    \n    # 0 and 1 are not prime numbers\n    is_prime[0] = is_prime[1] = False\n\n    # Iterate from 2 up to the square root of n\n    for p in range(2, int(n**0.5) + 1):\n        if is_prime[p]:\n            # If p is prime, mark all multiples of p starting from p*p as not prime\n            for multiple in range(p * p, n, p):\n                is_prime[multiple] = False\n\n    # The number of True values in the list is the count of primes\n    return sum(is_prime)\n\n# Test cases\nif __name__ == \"__main__\":\n    assert count_Primes_nums(5) == 2    # Primes: 2, 3\n    assert count_Primes_nums(10) == 4   # Primes: 2, 3, 5, 7\n    assert count_Primes_nums(100) == 25 # Primes: 2, 3, 5, ..., 97\n    \n    print(\"All test cases passed!\")\n```\n\n### Explanation:\n1.  **Edge Case Handling**: If $n$ is 0, 1, or 2, there are no prime numbers *less than* $n$, so we return 0.\n2.  **The Sieve Array**: We create a list of booleans `is_prime` of size $n$. Each index $i$ represents whether the number $i$ is prime.\n3.  **The Sieve Logic**:\n    *   We start from the first prime, 2.\n    *   For every number $p$ we find that is still marked `True`, we know it is prime.\n    *   We then jump through the list in increments of $p$ (starting from $p^2$) and mark all those multiples as `False`.\n    *   We only need to iterate up to $\\sqrt{n}$ because any composite number less than $n$ must have a factor less than or equal to $\\sqrt{n}$.\n4.  **Complexity**:\n    *   **Time Complexity**: $O(n \\log \\log n)$, which is extremely fast for large values of $n$.\n    *   **Space Complexity**: $O(n)$ to store the boolean array.",
+      "correct": true,
+      "elapsed_s": 10.28,
+      "error": null
+    },
+    {
+      "id": "sentinel_code_03",
+      "suite": "coder",
+      "method": "substring",
+      "expected": "frequency_Of_Largest",
+      "answer": "Here is the Python function to solve this problem.\n\n```python\ndef frequency_Of_Largest(n, arr):\n    \"\"\"\n    Finds the frequency of the largest value in a given array.\n    \n    Args:\n        n (int): The number of elements in the array.\n        arr (list): The list of integers.\n        \n    Returns:\n        int: The count of how many times the maximum value appears.\n    \"\"\"\n    if not arr:\n        return 0\n    \n    # Find the maximum value in the array\n    max_val = max(arr)\n    \n    # Count how many times max_val appears in the array\n    count = arr.count(max_val)\n    \n    return count\n\n# Test cases\nif __name__ == \"__main__\":\n    assert frequency_Of_Largest(5, [1, 2, 3, 4, 4]) == 2\n    assert frequency_Of_Largest(3, [5, 6, 5]) == 1\n    assert frequency_Of_Largest(4, [2, 7, 7, 7]) == 3\n    print(\"All test cases passed!\")\n```\n\n### Explanation:\n1.  **`max(arr)`**: This built-in Python function iterates through the list once to find the highest numerical value.\n2.  **`arr.count(max_val)`**: This method iterates through the list a second time to count every occurrence of the value we identified as the maximum.\n3.  **Complexity**: \n    *   **Time Complexity**: $O(n)$, where $n$ is the number of elements in the array. We traverse the list twice (once to find the max, once to count).\n    *   **Space Complexity**: $O(1)$, as we are only storing two integer variables (`max_val` and `count`).",
+      "correct": true,
+      "elapsed_s": 5.76,
+      "error": null
+    },
+    {
+      "id": "sentinel_thinking_02",
+      "suite": "thinking",
+      "method": "multiple_choice",
+      "expected": "A",
+      "answer": "A",
+      "correct": true,
+      "elapsed_s": 0.26,
+      "error": null
+    },
+    {
+      "id": "sentinel_thinking_03",
+      "suite": "thinking",
+      "method": "multiple_choice",
+      "expected": "B",
+      "answer": "A",
+      "correct": false,
+      "elapsed_s": 0.22,
+      "error": null
+    },
+    {
+      "id": "sentinel_thinking_04",
+      "suite": "thinking",
+      "method": "multiple_choice",
+      "expected": "D",
+      "answer": "D",
+      "correct": true,
+      "elapsed_s": 0.21,
+      "error": null
+    },
+    {
+      "id": "sentinel_general_02",
+      "suite": "general",
+      "method": "multiple_choice",
+      "expected": "C",
+      "answer": "C",
+      "correct": true,
+      "elapsed_s": 0.2,
+      "error": null
+    },
+    {
+      "id": "sentinel_general_03",
+      "suite": "general",
+      "method": "multiple_choice",
+      "expected": "D",
+      "answer": "D",
+      "correct": true,
+      "elapsed_s": 0.19,
+      "error": null
+    },
+    {
+      "id": "sentinel_general_04",
+      "suite": "general",
+      "method": "multiple_choice",
+      "expected": "A",
+      "answer": "A",
+      "correct": true,
+      "elapsed_s": 0.19,
+      "error": null
+    },
+    {
+      "id": "sentinel_factual_02",
+      "suite": "simpleqa",
+      "method": "f1",
+      "expected": "12 April 2018",
+      "answer": "On June 27, 2024, the Supreme Court of Korea finalized the sentence of four years and six months in prison for the former employee of CJ CheilJedang.\n\n<answer>June 27, 2024</answer>",
+      "correct": false,
+      "elapsed_s": 0.94,
+      "error": null
+    },
+    {
+      "id": "sentinel_factual_03",
+      "suite": "simpleqa",
+      "method": "f1",
+      "expected": "September 2015",
+      "answer": "To find the answer, we look for the specific milestone announcement from Telegram. In **May 2017**, Telegram announced that the platform had reached 60 million active users and was delivering 12 billion messages daily.\n\n<answer>May 2017</answer>",
+      "correct": false,
+      "elapsed_s": 1.13,
+      "error": null
+    },
+    {
+      "id": "sentinel_agentic_02",
+      "suite": "agentic",
+      "method": "exact_match",
+      "expected": "701.00",
+      "answer": "read_file(path=\"/data/expenses.csv\")\nparse_csv(content=\"amount\\n120.50\\n85.00\\n234.75\\n67.25\\n193.50\")\ncalculate(expression=\"120.50 + 85.00 + 234.75 + 67.25 + 193.50\")\n\n<answer>701.0</answer>",
+      "correct": false,
+      "elapsed_s": 1.73,
+      "error": null
+    },
+    {
+      "id": "sentinel_agentic_03",
+      "suite": "agentic",
+      "method": "substring",
+      "expected": "search_files",
+      "answer": "```json\n[\n  {\n    \"name\": \"list_files\",\n    \"arguments\": {\n      \"directory\": \"/home/user/projects\",\n      \"pattern\": \"*.py\"\n    }\n  },\n  {\n    \"name\": \"search_files\",\n    \"arguments\": {\n      \"directory\": \"/home/user/projects\",\n      \"content\": \"TODO\",\n      \"recursive\": true\n    }\n  }\n]\n```",
+      "correct": true,
+      "elapsed_s": 1.49,
+      "error": null
+    },
+    {
+      "id": "sentinel_escalation_02",
+      "suite": "mode_advantage_hard",
+      "method": "substring",
+      "expected": "acceptance",
+      "answer": "This comparison examines three distinct approaches to reducing the computational bottleneck of autoregressive decoding (the \"memory-bound\" phase of LLM inference).\n\n---\n\n### 1. Draft Model Speculation (Speculative Decoding)\nThis is the most common technique, where a small \"draft\" model (e.g., 1B) predicts several future tokens, and a large \"target\" model (e.g., 32B) verifies them in a single parallel forward pass.\n\n*   **How it achieves speedup:** It converts sequential, memory-bound operations into parallel, compute-bound operations. Instead of running the 32B model $N$ times for $N$ tokens, you run the 1B model $N$ times and the 32B model **once**. If the draft is correct, you get $N$ tokens for the cost of one large inference step.\n*   **When acceptance rate is high/low:**\n    *   **High:** When the task is predictable (e.g., code completion, repetitive text, or simple grammar).\n    *   **Low:** When the task requires high reasoning, creative writing, or complex logic where the small model cannot \"foresee\" the large model's logic.\n*   **Hardware requirements:** Requires enough RAM to hold **both** models simultaneously. It benefits significantly from high memory bandwidth (GPU/TPU) because the verification step is a large matrix multiplication that can utilize parallel compute.\n\n### \n\n### 2. Self-Speculation (Early Exit Layers)\nThis technique uses a single model but allows the computation to \"exit\" at an intermediate layer if the model's internal confidence (entropy) is high enough.\n\n*   **How it achieves speedup:** It reduces the total number of floating-point operations (FLOPs) per token. For \"easy\" tokens, the model only processes, for example, 6 out of 32 layers, saving computation time.\n*   **When acceptance rate is high/low:**\n    *   **High:** When the input contains very simple, high-confidence patterns (e.g., \"The capital of France is...\").\n    *   **Low:** When the input is ambiguous or requires deep context. If the model exits early on a difficult token, the error rate spikes, often requiring a \"re-run\" of the full layers, which can actually slow down inference.\n*   **Hardware requirements:** Low overhead. It does not require extra models in RAM. However, it requires a model architecture specifically trained or fine-tuned with \"exit classifiers\" to ensure the early layers can make reliable predictions.\n\n### 3. Prompt Lookup Decoding (n-gram Matching)\nThis technique exploits the fact that LLMs often repeat sequences found in the prompt (e.g., in code or long documents). It uses an n-gram matcher to look for sequences in the existing KV cache that match the current predicted sequence.\n\n*   **How it achieves speedup:** It bypasses the neural network entirely for certain tokens. If the model predicts a sequence that already exists in the prompt, the system \"skips\" the computation for those tokens and simply pulls them from the cache.\n*   **When acceptance rate is high/low:**\n    *   **High:** In tasks with high redundancy, such as code (reusing variable names/boilerplate), long-context retrieval, or summarizing documents with repetitive phrasing.\n    *   **Low:** In creative writing, dialogue, or any task where the model is generating entirely new information not present in the prompt.\n*   **Hardware requirements:** Very low. It is primarily a CPU/memory-access task (searching the KV cache). It does not require extra model weights, making it extremely memory-efficient.\n\n---\n\n### Summary Comparison Table\n\n| Feature | Draft Model | Self-Speculation | Prompt Lookup |\n| :--- | :--- | :--- | :--- |\n| **Primary Driver** | Parallel Verification | Reduced Layer Depth | Pattern Matching |\n| **Memory Overhead** | **High** (Needs 2nd model) | **Low** (Single model) | **Minimal** (Cache search) |\n| **Best Use Case** | General purpose/High-end GPU | Easy/Predictable text | Code/Repetitive context |\n| **Complexity** | High (Managing 2 models) | High (Requires special training) | Low (Algorithmic) |\n\n---\n\n### Recommendation: 32B Coding Model on a CPU-only System\n\nFor a **32B model on a CPU-only system**, the best technique is **Prompt Lookup Decoding**.\n\n**Reasoning:**\n1.  **The RAM Bottleneck:** A 32B model (even quantized to 4-bit) requires ~18-20GB of RAM. On a CPU system, memory bandwidth is the primary bottleneck. **Draft Model Speculation** is risky because loading a second model (even a small one) consumes precious RAM and increases the pressure on the already slow CPU memory bus.\n2.  **The Nature of Code:** Coding tasks are uniquely suited for **Prompt Lookup Decoding**. Code is highly repetitive (reusing function names, class definitions, and boilerplate). The \"speedup\" from skipping neural computations when a match is found in the prompt is significant.\n3.  **CPU Efficiency:** Prompt Lookup is an algorithmic search (n-gram matching) that is very \"cheap\" for a CPU to perform compared to the heavy matrix multiplications required by the other two methods.\n4.  **Why not Self-Speculation?** Self-speculation requires a model specifically architected with exit layers. You cannot easily apply it to a standard 32B model without retraining/fine-tuning it.\n\n**Verdict:** Use **Prompt Lookup Decoding** to leverage the repetitive nature of code without increasing the memory footprint or taxing the CPU's limited compute throughput.",
+      "correct": true,
+      "elapsed_s": 23.31,
+      "error": null
+    },
+    {
+      "id": "sentinel_escalation_03",
+      "suite": "mode_advantage_hard",
+      "method": "exact_match",
+      "expected": "2",
+      "answer": "To find the answer, we must identify the chemical element, the planet it is named after, the year of its discovery, the composer who died that year, and the completion date of that composer's most famous symphony.\n\n1.  **Identify the element and the planet:** The chemical element named after a planet is **Uranium** (named after the planet Uranus).\n2.  **Identify the year of discovery:** Uranium was discovered by Martin Heinrich Klaproth in **1789**.\n3.  **Identify the composer who died in 1789:** The famous composer who died in 1789 was **Wolfgang Amadeus Mozart**.\n4.  **Identify the composer's most famous symphony (by number):** Mozart's most famous symphony is widely considered to be **Symphony No. 41** in C major (the \"Jupiter\" symphony).\n5.  **Determine the completion year of the symphony:** Symphony No. 41 was completed in **1788**.\n6.  **Calculate the difference in years:** The symphony was completed in 1788, and Mozart died in 1789.\n    $1789 - 1788 = 1$ year.\n\n(Note: Even if one considers other famous symphonies like No. 40, completed in 1788, the result remains 1 year. If one considers the year of discovery for other planet-named elements like Neptunium (1940) or Plutonium (1940), the composers dying in those years do not fit the \"famous composer\" profile as uniquely as Mozart in 1789).\n\n<answer>1</answer>",
+      "correct": false,
+      "elapsed_s": 6.12,
+      "error": null
+    },
+    {
+      "id": "sentinel_multihop_02",
+      "suite": "hotpotqa",
+      "method": "f1",
+      "expected": "Lardizabalaceae",
+      "answer": "Based on the provided text, both Stauntonia and Sinofranchetia belong to the Lardizabalaceae family.\n\n<answer>Lardizabalaceae</answer>",
+      "correct": false,
+      "elapsed_s": 0.77,
+      "error": null
+    },
+    {
+      "id": "sentinel_multihop_03",
+      "suite": "hotpotqa",
+      "method": "f1",
+      "expected": "Switzerland",
+      "answer": "Based on the provided text, the Selun is located in the canton of St. Gallen, which is a canton of Switzerland.\n\n<answer>Switzerland</answer>",
+      "correct": false,
+      "elapsed_s": 0.66,
+      "error": null
+    },
+    {
+      "id": "sentinel_multihop_04",
+      "suite": "hotpotqa",
+      "method": "f1",
+      "expected": "Disporum",
+      "answer": "Based on the provided text, Boltonia has only one species in eastern Asia, while Disporum is a genus of about 20 species found in Asia.\n\n<answer>Disporum</answer>",
+      "correct": false,
+      "elapsed_s": 0.82,
+      "error": null
+    },
+    {
+      "id": "sentinel_instruction_02",
+      "suite": "instruction_precision",
+      "method": "substring",
+      "expected": "A",
+      "answer": "Always eat in order.",
+      "correct": true,
+      "elapsed_s": 0.24,
+      "error": null
+    },
+    {
+      "id": "sentinel_instruction_03",
+      "suite": "instruction_precision",
+      "method": "substring",
+      "expected": "42",
+      "answer": "```json\n{\n  \"question\": \"What is 15 + 27?\",\n  \"answer\": 42\n}\n```",
+      "correct": true,
+      "elapsed_s": 0.53,
+      "error": null
+    },
+    {
+      "id": "sentinel_instruction_04",
+      "suite": "instruction_precision",
+      "method": "substring",
+      "expected": "April",
+      "answer": "April\nJune\nSeptember\nNovember",
+      "correct": true,
+      "elapsed_s": 0.3,
+      "error": null
+    }
+  ]
+}

@@ -1,0 +1,456 @@
+{
+  "model": "longcat-q4km-2048",
+  "url": "http://127.0.0.1:8500/v1/chat/completions",
+  "total": 39,
+  "correct": 21,
+  "accuracy": 0.5384615384615384,
+  "by_suite": {
+    "agentic": {
+      "correct": 1,
+      "total": 3,
+      "accuracy": 0.3333333333333333
+    },
+    "coder": {
+      "correct": 3,
+      "total": 3,
+      "accuracy": 1.0
+    },
+    "general": {
+      "correct": 4,
+      "total": 4,
+      "accuracy": 1.0
+    },
+    "gpqa": {
+      "correct": 1,
+      "total": 4,
+      "accuracy": 0.25
+    },
+    "hotpotqa": {
+      "correct": 3,
+      "total": 4,
+      "accuracy": 0.75
+    },
+    "instruction_precision": {
+      "correct": 3,
+      "total": 4,
+      "accuracy": 0.75
+    },
+    "long_context": {
+      "correct": 1,
+      "total": 1,
+      "accuracy": 1.0
+    },
+    "math": {
+      "correct": 0,
+      "total": 6,
+      "accuracy": 0.0
+    },
+    "mode_advantage_hard": {
+      "correct": 2,
+      "total": 3,
+      "accuracy": 0.6666666666666666
+    },
+    "simpleqa": {
+      "correct": 1,
+      "total": 3,
+      "accuracy": 0.3333333333333333
+    },
+    "thinking": {
+      "correct": 2,
+      "total": 4,
+      "accuracy": 0.5
+    }
+  },
+  "results": [
+    {
+      "id": "sentinel_general_01",
+      "suite": "general",
+      "method": "substring",
+      "expected": "Canberra",
+      "answer": "The capital of Australia is Canberra.",
+      "correct": true,
+      "elapsed_s": 0.25,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_01",
+      "suite": "math",
+      "method": "substring",
+      "expected": "145",
+      "answer": "To find the value of $3^4 + 4^3$, we calculate each term separately:\n\n- $3^4 = 3 \\times 3 \\times 3 \\times 3 = 81$\n- $4^3 = 4 \\times 4 \u00d7 4 = 16$\n\nNow, add them together:\n\n$8 + 16 = 18$\n\nSo, the value is 18.",
+      "correct": false,
+      "elapsed_s": 2.64,
+      "error": null
+    },
+    {
+      "id": "sentinel_code_01",
+      "suite": "coder",
+      "method": "substring",
+      "expected": "def fibonacci",
+      "answer": "```python\ndef fibonacci(n, memo={}):\n    if n in memo:\n        return memo[n]\n    if n <= 1:\n        return n\n    memo[n] = fibonacci(n - 1, memo) + fibonacci(n - 1, memo)\n    return memo[n]\n```",
+      "correct": true,
+      "elapsed_s": 1.78,
+      "error": null
+    },
+    {
+      "id": "sentinel_thinking_01",
+      "suite": "thinking",
+      "method": "substring",
+      "expected": "48",
+      "answer": "To find the average speed for the entire round trip, we need to use the formula:\n\n\\[\n\\text{Average Speed} = \\frac{\\text{Total Distance}}{\\Total Time}\n\\]\n\nLet\u2019s assume the distance between City A and City B is \\( D \\) kilometers.\n\n**Step 1: Calculate total distance**\n- One way: \\( D \\) km\n- Round trip: \\( 2D \\) km\n\n**Step 2: Calculate time taken for each leg**\n- Time from A to B: \\( \\frac{D}{60} \\) hours (since speed is 60 km/h)\n- Time from B to A: \\( \\frac{D}{40} \\) hours (since speed is 40 km/h)\n\n**Step 3: Total time**\n\\[\n\\text{Total Time} = \\frac{D}{60} + \\frac{D}{40}\n\\]\n\nTo add these fractions, find a common denominator. The least common multiple of 60 and 40 is 120:\n\n\\[\n\\frac{D}{60} = \\frac{2D}{120}, \\quad \\frac{D}{40} = \\frac{3D}{120}\n\\]\n\nSo,\n\\[\n\\text{Total Time} = \\frac{2D}{120} + \\frac3D}{120} = \\frac{5D}{120} = \\frac{D}{24} \\text{ hours}\n\\]\n\n**Step 4: Average speed**\n\\[\n\\text{Average Speed} = \\frac{\\text{Total Distance}}{\\text{Total Time}} = \\frac{2D}{\\frac{D}{24}} = 2D \\times \\frac{24}{D} = 48 \\text{ km/h}\n\\]\n\n\u2705 **Final Answer: 48 km/h**\n\nThis result is independent of the actual distance \\( D \\), as it cancels out in the calculation.",
+      "correct": true,
+      "elapsed_s": 12.0,
+      "error": null
+    },
+    {
+      "id": "sentinel_instruction_01",
+      "suite": "instruction_precision",
+      "method": "substring",
+      "expected": "red",
+      "answer": "Primary colors are the fundamental colors that cannot be created by mixing other colors. In traditional color theory, the three primary colors are red, green, and blue (RGB), which are used in additive color mixing. These are distinct from the subtractive primary colors used in printing, which are cyan, magenta, and yellow (CMYK). However, the question asks for three primary colors, and in the context of additive color theory, the answer is red, green, and blue.\nred, green, blue",
+      "correct": true,
+      "elapsed_s": 2.82,
+      "error": null
+    },
+    {
+      "id": "sentinel_longctx_01",
+      "suite": "long_context",
+      "method": "substring",
+      "expected": "TCP",
+      "answer": "TCP (Transmission Control Protocol) and UDP (efficient, connectionless protocol that sends packets without establishing a connection, prioritizing speed over reliability. TCP ensures reliable, ordered delivery through acknowledgments and retransmissions, while UDP offers faster transmission but does not guarantee delivery or order.\n}",
+      "correct": true,
+      "elapsed_s": 1.62,
+      "error": null
+    },
+    {
+      "id": "sentinel_agentic_01",
+      "suite": "agentic",
+      "method": "substring",
+      "expected": "479001600",
+      "answer": "To calculate the factorial of 12 (denoted as 12!), we multiply all positive integers from 1 to 12 together. Let's do this step by step:\n\nStep 1: Start with 1  \nStep 2: Multiply by 2 \u2192 1 \u00d7 2 = 2  \nStep 3: Multiply by 3 \u2192 2 \u00d7 3 = 6  \nStep 4: Multiply by 10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "correct": false,
+      "elapsed_s": 67.2,
+      "error": null
+    },
+    {
+      "id": "sentinel_multihop_01",
+      "suite": "hotpotqa",
+      "method": "substring",
+      "expected": "90",
+      "answer": "To find the boiling point of water at 3000 meters altitude, we can use the given rate of change: the boiling point decreases by about 0.5\u00b0C per 150 meters.\n\nFirst, calculate how many 150-meter increments are in 3000 meters:\n\n3000 \u00f7 150 = 20\n\nSo, there are 20 increments of 150 meters in 3000 meters.\n\nNext, multiply the number of increments by the rate of change:\n\n20 \u00d7 0.5\u00b0C = 10\u00b0C\n\nNow, subtract this from the standard boiling point at sea level:\n\n100\u00b0C - 10\u00b0C = 90\u00b0C\n\nTherefore, water boils at approximately 90\u00b0C at an altitude of 3000 meters.\n\nFinal Answer: 90\u00b0C",
+      "correct": true,
+      "elapsed_s": 5.21,
+      "error": null
+    },
+    {
+      "id": "sentinel_factual_01",
+      "suite": "simpleqa",
+      "method": "substring",
+      "expected": "1991",
+      "answer": "The Python programming language was first released in 1991.",
+      "correct": true,
+      "elapsed_s": 0.43,
+      "error": null
+    },
+    {
+      "id": "sentinel_escalation_01",
+      "suite": "mode_advantage_hard",
+      "method": "substring",
+      "expected": "Python",
+      "answer": "In programming languages, **strong typing** and **weak typing** refer to how strictly a language enforces type rules when performing operations on data.\n\n### Strong Typing\nA **strongly typed** language enforces strict type rules at compile-time or runtime. This means that once a variable is declared with a specific type, it cannot be used in a way that violates that type. The compiler or interpreter checks for type compatibility and will raise an error if an operation is not allowed.\n\n**Example:** Python is often considered a strongly typed language because it enforces type checking. For example, you cannot concatenate a string and an integer directly without explicit conversion.\n\n```python\n# Python - Strongly Typed\nx = 5\ny = \"Hello\"\n# This will raise an error:\n# print(x + y)  # TypeError: unsupported operand for +: 'int' and 'str'\n```\n\n### Weak Typing\nA **weakly typed** language allows more flexibility in how types are handled. It may perform implicit type conversions automatically, sometimes leading to unexpected results or runtime errors if not careful.\n\n**Example:** JavaScript is a weakly typed language because it allows operations between different types without explicit conversion.\n\n```javascript\n// JavaScript - Weakly Typed\nlet x = 5;\nlet y = \"Hello\";\n// This will concatenate the string and the number:\nconsole.log(x + y); // Output: \"5Hello\"\n```\n\nIn summary:\n- **Strong typing** enforces strict type rules.\n- **Weak typing** allows more flexibility but can lead to type-related errors if not managed carefully.\n- **Strongly typed languages** include Python, Java, and C#.\n- **Weakly typed languages** include JavaScript, PHP, and Perl.\n\nUnderstanding these concepts helps in writing safer and more predictable code.",
+      "correct": true,
+      "elapsed_s": 10.82,
+      "error": null
+    },
+    {
+      "id": "sentinel_gpqa_01",
+      "suite": "gpqa",
+      "method": "multiple_choice",
+      "expected": "B",
+      "answer": "We are given that in a simulation of the process $ e^+ e^- \\to X $, the electron is at rest, and the minimum beam energy required is $ 9.6 \\times 10^6 $ GeV. We are to find the mass of particle X.\n\nSince the electron is at rest, its energy is just its rest mass energy: $ E_e = m_e c^2 \\approx 0.511 $ MeV, which is negligible compared to the beam energy (which is in the millions of GeV). So we can ignore the electron's rest mass.\n\nIn the center-of-mass frame, the total energy available is the sum of the energies of the incoming particles. Here, the positron (beam) and electron (at rest) annihilate to produce particle X. The minimum energy required corresponds to the threshold for producing a particle of mass $ M_X $, where the total energy in the center-of-mass frame is just enough to create the rest mass of X.\n\nHowever, since the electron is at rest, the center-of-mass energy is not symmetric. The total energy in the lab frame is:\n\n$$\nE_{\\text{total}} = E_{\\text{beam}} + m_e c^2 \\approx E_{\\text{beam}}\n$$\n\nBut the center-of-mass energy squared is:\n\n$$\ns = (p_e + p_{\\bar{e}})^2 = m_e^2 c^4 + 2 E_{\\text{beam}} m_e c^2 + E_{\\text{beam}}^2\n$$\n\nSince $ m_e c^2 \\ll E_{\\text{beam}} $, we can approximate:\n\n$$\ns \\approx E_{\\text{beam}}^2\n$$\n\nAt threshold, the minimum center-of-mass energy required to produce particle X is $ s = M_X^2 c^4 $, so:\n\n$$\nE_{\\text{beam}} \\approx M_X c^2\n$$\n\nThus, the beam energy must be at least equal to the rest energy of X. Therefore:\n\n$$\nM_X \\approx E_{\\text{beam}} = 9.6 \\times 10^6 \\, \\text{GeV}\n$$\n\nBut wait \u2014 this would imply the mass is $ 9.6 \\times 10^6 $ GeV, which is not among the options. So let's reconsider.\n\nActually, in $ e^+ e^- \\to X $, if the electron is at rest and the positron is moving, the center-of-mass energy squared is:\n\n$$\ns = (E_+ + E_-)^2 - (\\vec{p}_+ + \\vec{p}_-)^2\n$$\n\nWith $ E_- = m_e c^2 $, $ \\vec{p}_- = 0 $, and $ E_+ = \\sqrt{p_+^2 c^2 + m_e^2 c^4} \\approx p_+ c $ (since $ p_+ c \\gg m_e c^2 $), and $ \\vec{p}_+ = p_+ \\hat{z} $, then:\n\n$$\ns = (E_+ + m_e c^2)^2 - p_+^2 c^2 \\approx E_+^2 + 2 E_+ m_e c^2 - p_+^2 c^2\n$$\n\nBut $ E_+^2 - p_+^2 c^2 = m_e^2 c^4 $, so:\n\n$$\ns \\approx m_e^2 c^4 + 2 E_+ m_e c^2\n$$\n\nAgain, since $ E_+ \\gg m_e c^2 $, we can approximate:\n\n$$\ns \\approx 2 E_+ m_e c^2\n$$\n\nWait \u2014 this is not right. Let's do it carefully.\n\nActually, the correct expression for $ s $ is:\n\n$$\ns = (p_e + p_{\\bar{e}})^2 = m_e^2 c^4 + 2 p_e \\cdot p_{\\bar{e}} c^2\n$$\n\nBut in the lab frame where the electron is at rest, $ p_e = (m_e c, \\vec{0}) $, and $ p_{\\bar{e}} = (E_{\\text{beam}}/c, \\vec{p}) $, so:\n\n$$\ns = (m_e c)^2 + 2 \\vec{p} \\cdot \\vec{0} c^2 + 2 (E_{\\text{beam}}/c)(m_e c) c^2 = m_e^2 c^4 + 2 E_{\\text{beam}} m_e c^2\n$$\n\nSo:\n\n$$\ns \\approx 2 E_{\\text{beam}} m_e c^2\n$$\n\nBut this is tiny! $ m_e c^2 \\approx 0.511 $ MeV, so $ s \\approx 2 \\times 9.6 \\times 10^6 \\, \\text{GeV} \\times 0.511 \\, \\text{MeV} $ \u2014 this is not making sense.\n\nWait \u2014 the beam energy is $ 9.6 \\times 10^6 $ GeV, which is $ 9.6 \\times 10^9 $ MeV. So:\n\n$$\ns \\approx 2 \\times (9.6 \\times 10^9 \\, \\text{MeV}) \\times (0.511 \\, \\text{MeV}) = 2 \\times 9.6 \\times 0.511 \\times 10^9 \\, \\text{MeV}^2\n$$\n\nThis is about $ 9.8 \\times 10^9 \\, \\text{MeV}^2 $, so $ \\sqrt{s} \\approx \\sqrt{9.8 \\times 10^9} \\approx 9.9 \\times 10^4 \\, \\text{MeV} = 99 \\, \\text{GeV} $.\n\nAh! So the center-of-mass energy is approximately:\n\n$$\n\\sqrt{s} \\approx \\sqrt{2 E_{\\text{beam}} m_e c^2}\n$$\n\nBut this is only valid when the beam energy is much greater than the electron mass, but here we are using the exact threshold condition.\n\nActually, the correct threshold condition for $ e^+ e^- \\to X $ is that the center-of-mass energy must be at least $ M_X c^2 $. But in the lab frame where the electron is at rest, the center-of-mass energy is:\n\n$$\n\\sqrt{s} = \\sqrt{2 m_e c^2 E_{\\text{beam}} + m_e^2 c^4} \\approx \\sqrt{2 m_e c^2 E_{\\text{beam}}}\n$$\n\nSo:\n\n$$\nM_X c^2 \\approx \\sqrt{2 m_e c^2 E_{\\text{beam}}}\n$$\n\nBut this gives a very small mass, which contradicts the options.\n\nWait \u2014 this can't be right because $ m_e c^2 $ is tiny, so $ \\sqrt{2 m_e c^2 E_{\\text{beam}}} $ would be small, but the beam energy is huge.\n\nLet's compute:\n\n$ m_e c^2 = 0.511 $ MeV = $ 5.11 \\times 10^{-4} $ GeV\n\n$ E_{\\text{beam}} = 9.6 \\times 10^6 $ GeV\n\nSo:\n\n$$\n\\sqrt{2 \\times (5.11 \\times 10^{-4}) \\times (9.6 \\times 10^6)} = \\sqrt{2 \\times 5.11 \\times 9.6 \\times 10^{2}} = \\sqrt{980.16} \\approx 31.3 \\, \\text{GeV}\n$$\n\nBut this is not among the options either. And it's too small.\n\nWait \u2014 perhaps the simulation is in the center-of-mass frame? But the problem says \"the electron is at rest\", so it's in the lab frame.\n\nBut if the electron is at rest, and the positron is moving, then the center-of-mass energy is not simply $ E_{\\text{beam}} $.\n\nBut for threshold production of a particle of mass $ M_X $, the minimum center-of-mass energy is $ \\sqrt{s} = M_X c^2 $. So we need to find $ M_X $ such that the minimum $ E_{\\text{beam}} $ to reach $ \\sqrt{s} = M_X c^2 $ is $ 9.6 \\times 10^6 $ GeV.\n\nFrom earlier:\n\n$$\ns = m_e^2 c^4 + 2 m_e c^2 E_{\\text{beam}} + E_{\\text{beam}}^2\n$$\n\nAt threshold, $ s = M_X^2 c^4 $, so:\n\n$$\nM_X^2 c^4 = E_{\\text{beam}}^2 + 2 m_e c^2 E_{\\text{beam}} + m_e^2 c^4\n$$\n\nSince $ m_e c^2 \\ll E_{\\text{beam}} $, we can approximate:\n\n$$\nM_X c^2 \\approx E_{\\text{beam}} + m_e c^2 \\approx E_{\\text{beam}}\n$$\n\nSo $ M_X \\approx 9.6 \\times 10^6 $ GeV, which is not among the options.\n\nBut the options are around 10^2 to 10^3 GeV, not 10^6.\n\nSo perhaps the beam energy is not the total energy, but the kinetic energy?\n\nLet's check the problem: \"beam energy has to be at least equal to $ 9.6 \\times 10^6 $ GeV\"\n\nIn particle physics, \"beam energy\" usually means the total energy of the beam particle, not kinetic energy.\n\nBut let's suppose it's kinetic energy. Then",
+      "correct": false,
+      "elapsed_s": 68.72,
+      "error": null
+    },
+    {
+      "id": "sentinel_gpqa_02",
+      "suite": "gpqa",
+      "method": "multiple_choice",
+      "expected": "D",
+      "answer": "To determine the correct starting materials for the two reactions, we need to understand the stereochemistry involved in the reduction of a ketone to an alcohol using different reagents.\n\nThe target product is (R)-4-ethyltetrahydro-2H-pyran-2-one, which is a lactone formed from a hydroxy acid. The key point is that the reduction of a ketone to an alcohol using LiBH4 or BH3 followed by protonation typically gives a racemic mixture if the starting material is prochiral. However, if the starting material is a chiral ketone, the reduction may preserve or invert the stereochemistry depending on the mechanism.\n\nBut here, the product is a single enantiomer: (R)-4-ethyltetrahydro-2H-pyran-2-one. This suggests that the starting material must be a chiral ketone that, upon reduction, gives the (R) configuration.\n\nThe starting materials given in the options are 3-ethyl-5-isobutoxy-5-oxopentanoic acid derivatives. The \"5-oxo\" indicates a ketone at position 5, and \"3-ethyl\" is at position 3. The \"5-isobutoxy\" suggests an ester or ether at position 5.\n\nThe reduction of a ketone to an alcohol using LiBH4 or BH3 typically gives a racemic mixture if the ketone is prochiral. However, if the ketone is chiral, the reduction may give a single enantiomer.\n\nBut in this case, the product is a single enantiomer, so the starting material must be a chiral ketone.\n\nThe key is to realize that the reduction of a chiral ketone using BH3 or LiBH4 can give a single enantiomer if the reduction is stereospecific.\n\nHowever, the more important point is that the product is a lactone, which is formed from a hydroxy acid. The reduction of a ketone to an alcohol, followed by lactonization, can give the desired product.\n\nBut the stereochemistry of the alcohol must match the stereochemistry of the lactone.\n\nThe product is (R)-4-ethyltetrahydro-2H-pyran-2-one. This means that the alcohol formed must have the R configuration at the chiral center.\n\nThe reduction of a chiral ketone using BH3 or LiBH4 can give a single enantiomer if the reduction is stereospecific.\n\nBut in this case, the starting material is a carboxylic acid derivative, and the reduction is of a ketone to an alcohol.\n\nThe key is to realize that the reduction of a chiral ketone using BH3 or LiBH4 can give a single enantiomer if the reduction is stereospecific.\n\nBut the more important point is that the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe starting materials given in the options are 3-ethyl-5-isobutoxy-5-oxopentanoic acid derivatives. The \"5-oxo\" indicates a ketone at position 5, and \"3-ethyl\" is at position 3. The \"5-isobutoxy\" suggests an ester or ether at position 5.\n\nThe reduction of a ketone to an alcohol using LiBH4 or BH3 typically gives a racemic mixture if the ketone is prochiral. However, if the ketone is chiral, the reduction may preserve or invert the stereochemistry depending on the mechanism.\n\nBut in this case, the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe reduction of a chiral ketone using BH3 or LiBH4 can give a single enantiomer if the reduction is stereospecific.\n\nBut the more important point is that the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe starting materials given in the options are 3-ethyl-5-isobutoxy-5-oxopentanoic acid derivatives. The \"5-oxo\" indicates a ketone at position 5, and \"3-ethyl\" is at position 3. The \"5-isobutoxy\" suggests an ester or ether at position 5.\n\nThe reduction of a ketone to an alcohol using LiBH4 or BH3 typically gives a racemic mixture if the ketone is prochiral. However, if the ketone is chiral, the reduction may preserve or invert the stereochemistry depending on the mechanism.\n\nBut in this case, the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe reduction of a chiral ketone using BH3 or LiBH4 can give a single enantiomer if the reduction is stereospecific.\n\nBut the more important point is that the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe starting materials given in the options are 3-ethyl-5-isobutoxy-5-oxopentanoic acid derivatives. The \"5-oxo\" indicates a ket at position 5, and \"3-ethyl\" is at position 3. The \"5-isobutoxy\" suggests an ester or ether at position 5.\n\nThe reduction of a ketone to an alcohol using LiBH4 or BH3 typically gives a racemic mixture if the ketone is prochiral. However, if the ketone is chiral, the reduction may preserve or invert the stereochemistry depending on the mechanism.\n\nBut in this case, the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe reduction of a chiral ketone using BH3 or LiBH4 can give a single enantiomer if the reduction is stereospecific.\n\nBut the more important point is that the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe starting materials given in the options are 3-ethyl-5-isobutoxy-5-oxopentanoic acid derivatives. The \"5-oxo\" indicates a ketone at position 5, and \"3-ethyl\" is at position 3. The \"5-isobutoxy\" suggests an ester or ether at position 5.\n\nThe reduction of a ketone to an alcohol using LiBH4 or BH3 typically gives a racemic mixture if the ketone is prochiral. However, if the ketone is chiral, the reduction may preserve or invert the stereochemistry depending on the mechanism.\n\nBut in this case, the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe reduction of a chiral ketone using BH3 or LiBH4 can give a single enantiomer if the reduction is stereospecific.\n\nBut the more important point is that the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe starting materials given in the options are 3-ethyl-5-isobutoxy-5-oxopentanoic acid derivatives. The \"5-oxo\" indicates a ketone at position 5, and \"3-ethyl\" is at position 3. The \"5-isobutoxy\" suggests an ester or ether at position 5.\n\nThe reduction of a ketone to an alcohol using LiBH4 or BH3 typically gives a racemic mixture if the ketone is prochiral. However, if the ketone is chiral, the reduction may preserve or invert the stereochemistry depending on the mechanism.\n\nBut in this case, the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe reduction of a chiral ketone using BH3 or LiBH4 can give a single enantiomer if the reduction is stereospecific.\n\nBut the more important point is that the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe starting materials given in the options are 3-ethyl-5-isobutoxy-5-oxopentanoic acid derivatives. The \"5-oxo\" indicates a ketone at position 5, and \"3-ethyl\" is at position 3. The \"5-isobutoxy\" suggests an ester or ether at position 5.\n\nThe reduction of a ketone to an alcohol using LiBH4 or BH3 typically gives a racemic mixture if the ketone is prochiral. However, if the ketone is chiral, the reduction may preserve or invert the stereochemistry depending on the mechanism.\n\nBut in this case, the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe reduction of a chiral ketone using BH3 or LiBH4 can give a single enantiomer if the reduction is stereospecific.\n\nBut the more important point is that the product is a single enantiomer, so the starting material must be a chiral ketone that, upon reduction, gives the desired stereochemistry.\n\nThe starting materials given in the options are 3-ethyl-5-isobutoxy-5-oxopentanoic acid derivatives. The \"5-oxo\" indicates a ketone at position 5, and \"3-ethyl\" is at position 3. The \"5-isobutoxy\" suggests an ester or ether at position 5.\n\nThe reduction of a ketone to an alcohol using LiBH4 or BH3 typically gives a racemic mixture if the ketone is prochiral. However, if the ketone is chiral,",
+      "correct": false,
+      "elapsed_s": 69.24,
+      "error": null
+    },
+    {
+      "id": "sentinel_gpqa_03",
+      "suite": "gpqa",
+      "method": "multiple_choice",
+      "expected": "B",
+      "answer": "We are given a bridged epoxide: (1R,3R,4R,6S)-1,3,4-trimethyl-7-oxabicy[4.1.0] heptane.\n\nWe are to react it with Me\u2082CuLi (a Gilman reagent), which is a strong nucleophile that opens epoxides via SN2-like attack at the less hindered carbon of the epoxide ring.\n\nLet\u2019s analyze the structure and the regiochemistry.\n\nStep 1: Understand the structure of the starting material.\n\nThe name is: (1R,3R,4R,6S)-1,3,4-trimethyl-7-oxabicy[4.1.0] heptane.\n\nThis is a bridged bicyclic system with an oxygen in the bridge (the 7-oxa indicates an oxygen in the ring). The parent is a heptane with a bridge between C1 and C4 (since it's [4.1.0], meaning one bridge has 4 atoms including the bridgehead, and the other has 1 atom (just the bridgehead), and there's a 0-atom bridge (i.e., a direct bond between two bridgehead atoms).\n\nSo, the skeleton is a norbornane-like system: two bridgehead carbons (C1 and C4), with bridges: one bridge is a direct bond (0 atoms), and the other is a 4-atom bridge (including the bridgehead), so the other bridge must be a 1-atom bridge (i.e., a methylene group).\n\nWait: [4.1.0] means:\n- One bridge has 4 atoms including the bridgehead (so 3 atoms between bridgeheads),\n- One bridge has 1 atom including the bridgehead (so 0 atoms between bridgeheads \u2014 i.e., a direct bond),\n- And there's a 0-atom bridge (i.e., a direct bond between two bridgehead atoms).\n\nSo the structure is a bicyclo[4.1.0] system: two bridgehead carbons connected by a direct bond (the 0-bridge), and each bridgehead is connected to a bridge: one bridge is a 3-carbon chain (since 4 atoms including bridgehead = 3 atoms between bridgeheads), and the other bridge is a single carbon (methylene group).\n\nSo the carbon skeleton is:\n\n- Bridgehead C1 and C4 are connected by a direct bond (the 0-bridge).\n- C1 is connected to a 3-carbon chain (C2\u2013C3\u2013C4), forming the 4-atom bridge (C1\u2013C2\u2013C3\u2013C4).\n- C1 and C4 are also connected via a methylene group (the 1-bridge), so there is a CH\u2082 group connecting C1 and C4.\n\nWait, that would make it a tricyclic system? No: in bicyclo systems, the two bridges connect the two bridgehead atoms. So:\n\n- One bridge: C1\u2013C2\u2013C3\u2013C4 (4 atoms including bridgeheads, so 3 atoms between C1 and C4).\n- The other bridge: C1\u2013C4 (direct bond, 1 atom including bridgeheads, so 0 atoms between).\n- But that would mean C1 and C4 are connected by two paths: one direct bond, and one through C2\u2013C3.\n\nBut that would be a tricyclic system? No, it's still bicyclic: the two bridges are:\n- One is the direct bond (0 atoms between bridgeheads),\n- The other is the 3-atom chain (C2\u2013C3) between C1 and C4.\n\nSo the structure is:\n\n```\n    C2\n   /   \\\nC1     C3\n |     |\n C4----(direct bond)\n```\n\nWait, no: the direct bond is between C1 and C4. The other bridge is C1\u2013C2\u2013C3\u2013C4, so C2 and C3 are the bridge atoms.\n\nSo the ring system is:\n\n- C1 and C4 are bridgeheads.\n- One bridge is the direct bond (C1\u2013C4).\n- The other bridge is C1\u2013C2\u2013C3\u2013C4, so C2 and C3 are the bridge atoms.\n\nThus, the ring is a 6-membered ring: C1\u2013C2\u2013C3\u2013C4\u2013C1 (via the direct bond), but that would be a 5-membered ring? Let's count:\n\nPath: C1\u2013C2\u2013C3\u2013C4\u2013C1 (via direct bond). That's 4 atoms in the ring: C1, C2, C3, C4. But that's only 4 atoms, but we have a 6-atom ring? No.\n\nWait: the ring is formed by the two bridges. The two bridges are:\n- Bridge 1: C1\u2013C2\u2013C3\u2013C4 (4 atoms including bridgeheads, so 3 atoms between C1 and C4).\n- Bridge 2: C1\u2013C4 (direct bond, 1 atom including bridgeheads, so 0 atoms between).\n\nSo the ring is: C1\u2013C2\u2013C3\u2013C4\u2013C1, which is a 4-membered ring? But that can't be, because we have a 7-atom parent.\n\nWait, the parent is heptane, so 7 carbons. The name is 7-oxabicyclo[4.1.0] heptane, so 7 carbons in total, with one oxygen.\n\nThe \"heptane\" indicates 7 carbons. The \"7-oxa\" means the oxygen is at position 7, but in bicyclic systems, the numbering starts at a bridgehead.\n\nStandard naming: in bicyclo[4.1.0] heptane, the two bridgehead carbons are C1 and C4. The bridges are:\n- One bridge has 4 atoms including bridgeheads (so 3 atoms between C1 and C4),\n- The other bridge has 1 atom including bridgeheads (so 0 atoms between \u2014 direct bond).\n\nSo the carbon skeleton is:\n\n- C1 and C4 are bridgeheads.\n- One bridge: C1\u2013C2\u2013C3\u2013C4 (so C2 and C3 are bridge atoms).\n- The other bridge: C1\u2013C4 (direct bond).\n\nSo the ring is: C1\u2013C2\u2013C3\u2013C4\u2013C1, which is a 4-membered ring? But that would be a cyclobutane ring, but with a direct bond between C1 and C4, and C2\u2013C3 as the other bridge.\n\nBut that would make the ring C1\u2013C2\u2013C3\u2013C4\u2013C1, which is a 4-membered ring, but with a double bond? No, it's saturated.\n\nWait, but we have 7 carbons. So there must be substituents.\n\nThe name is 1,3,4-trimethyl-7-oxabicyclo[4.1.0] heptane.\n\nSo the parent is a bicyclic system with 7 carbons and one oxygen (the 7-oxa means the oxygen is part of the ring, at position 7, but in standard naming, the oxygen is at the bridgehead or in the ring).\n\nIn bicyclo[4.1.0] heptane, the two bridgehead carbons are C1 and C4. The oxygen is at position 7, which is likely at C7, but in a 7-atom ring? No, the ring size is determined by the bridge lengths.\n\nActually, in bicyclo[4.1.0] system, the total number of atoms in the ring is 4 + 1 + 0 = 5 atoms? No.\n\nStandard rule: the numbers in [m.n.0] indicate the number of atoms in each bridge, including the bridgehead atoms.\n\nSo [4.1.0] means:\n- One bridge has 4 atoms (including both bridgeheads),\n- One bridge has 1 atom (including both bridgeheads),\n- One bridge has 0 atoms (i.e., direct bond between bridgeheads).\n\nSo the two bridgehead atoms are connected by three paths:\n- One path has 4 atoms (including bridgeheads),\n- One path has 1 atom (i.e., direct bond),\n- One path has 0 atoms (i.e., another direct bond? That can't be).\n\nWait, no: in a bicyclic system, there are two bridges between the two bridgehead atoms. The [m.n.0] indicates:\n- m = number of atoms in one bridge (including both bridgeheads),\n- n = number of atoms in the second bridge (including both bridgeheads),\n- 0 = number of atoms in the third bridge (i.e., direct bond between bridgeheads).\n\nBut in a bicyclic system, there are only two bridges. The \"0\" indicates that one of the bridges is a direct bond.\n\nSo the two bridges are:\n- One bridge has m atoms including bridgeheads,\n- The other bridge has n atoms including bridgeheads,\n- And there is a direct bond between the bridgeheads (the 0-bridge).\n\nBut that would make three connections between the two bridgeheads, which is impossible for a bicyclic system.\n\nI think I have it wrong.\n\nStandard interpretation: in bicyclo[m.n.p] system, m, n, p are the number of atoms in each bridge, including the bridgehead atoms, and the sum m + n + p = total number of atoms in the ring.\n\nFor example, bicyclo[2.2.1] heptane",
+      "correct": false,
+      "elapsed_s": 69.05,
+      "error": null
+    },
+    {
+      "id": "sentinel_gpqa_04",
+      "suite": "gpqa",
+      "method": "multiple_choice",
+      "expected": "D",
+      "answer": "To determine which of the given compounds show optical isomerism, we need to identify whether each compound has a chiral center or a chiral axis or plane that leads to non-superimposable mirror images (i.e., enantiomers).\n\nLet's analyze each option:\n\n1. **Dimethyl 6,6'-dinitro-[1,1'-biphenyl]-2,2'-dicarboxylate**  \n   - This compound has a biphenyl system with substituents at the 2 and 2' positions.  \n   - The presence of bulky groups (nitro and ester groups) on the ortho positions of the biphenyl ring can lead to **axial chirality** due to restricted rotation around the central bond.  \n   - This is a classic example of **atropisomerism**, a type of stereoisomerism where chirality arises from hindered rotation.  \n   - Therefore, this compound **can exhibit optical isomerism**.\n\n2. **Methyl 2-hydroxypropanoate**  \n   - This is methyl 2-hydroxypropanoate, which is the same as methyl lactate.  \n   - The central carbon (C2) is bonded to: H, OH, CH3, and COOCH3.  \n   - This carbon is a **chiral center**, so the molecule has a **plane of symmetry?** Wait \u2014 actually, let's check:  \n     - The molecule is CH3\u2013CH(OH)\u2013COOCH3  \n     - The chiral center is the carbon with OH, H, CH3, and COOCH3.  \n     - This carbon is **asymmetric**, so it has **two enantiomers**.  \n   - Therefore, this compound **exhibits optical isomerism**.\n\n3. **Benzophenone**  \n   - This is a simple ketone: (C6H5)2C=O  \n   - It has no chiral centers, no chiral axes, and no stereoisomers.  \n   - It is **achiral** and **does not exhibit optical isomerism**.\n\n4. **Dimethyl fumarate**  \n   - Fumarate is the trans isomer of maleic acid.  \n   - The structure is CH2=C(OOCH3)\u2013COOCH3  \n   - The double bond is between C2 and C3, and the two COOCH3 groups are on opposite sides (trans).  \n   - This compound has **no chiral centers** and **no stereoisomers** (it has geometric isomers, but not optical isomers).  \n   - Therefore, it **does not exhibit optical isomerism**.\n\nNow, summarizing:\n- 1: Yes (axial chirality)\n- 2: Yes (chiral center)\n- 3: No\n- 4: No\n\nSo, the compounds that show optical isomerism are **1 and 2**.\n\nTherefore, the correct answer is **D) 1 and 2**.\n\nAnswer: **D**\n\nNote: Although atropisomerism is a form of stereoisomerism, it is still considered under the umbrella of optical isomerism because it leads to enantiomers that are non-superimposable mirror images.\n\nFinal Answer: **D**",
+      "correct": true,
+      "elapsed_s": 21.6,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_02",
+      "suite": "math",
+      "method": "exact_match",
+      "expected": "25",
+      "answer": "We are given:\n\n- Nik has 200 crayons.\n- Each crayon weighs 1 ounce.\n- He wants to group them into groups of 8 crayons per box.\n- Each box weighs 8 ounces.\n- There are 16 ounces in a pound.\n\nWe are to find the total weight in pounds of the crayons and the boxes.\n\n---\n\n**Step 1: Calculate the number of boxes needed.**\n\nSince each box holds 8 crayons:\n\n\\[\n\\text{Number of boxes} = \\frac{200}{8} = 25 \\text{ boxes}\n\\]\n\n---\n\n**Step 2: Calculate the total weight of the crayons.**\n\nEach crayon weighs 1 ounce, so:\n\n\\[\n\\text{Total weight of crayons} = 200 \\text{ c} \\times 1 \\text{ oz/c} = 200 \\text{ ounces}\n\\]\n\n---\n\n**Step 3: Calculate the total weight of the boxes.**\n\nEach box weighs 8 ounces, and there are 25 boxes:\n\n\\[\n\\text{Total weight of boxes} = 25 \\times 8 = 200 \\text{ ounces}\n\\]\n\n---\n\n**Step 4: Add the weight of c and boxes.**\n\n\\[\n\\text{Total weight} = 200 \\text{ oz (crayons)} + 200 \\text{ oz (boxes)} = 200 + 200 = 400 ounces}\n\\]\n\n---\n\n**Step 5: Convert ounces to pounds.**\n\nSince 1 pound = 16 ounces:\n\n\\[\n\\text{Total weight in pounds} = \\frac{400}{16} = 25 \\text{ pounds}\n\\]\n\n---\n\n**Final Answer:**\n\n<answer>25</answer>",
+      "correct": false,
+      "elapsed_s": 12.02,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_03",
+      "suite": "math",
+      "method": "exact_match",
+      "expected": "130000",
+      "answer": "We are given:\n\n- There are 26 countries in South America.\n- Each country has 5 cities.\n- Each city has 1,000 people.\n- The entire population lives in these cities.\n\nWe need to find the total population of South America.\n\nStep 1: Find the number of cities in total.\nEach country has 5 cities, and there are 26 countries:\n\\[\n26 \\text{ countries} \\times 5 \\text{ cities per country} = 130 \\text{ cities}\n\\]\n\nStep 2: Each city has 1,000 people, so multiply the number of cities by 1,000:\n\\[\n130 \\text{ cities} \u00d7 1,000 \\text{ people per city} = 1,300,000 people}\n\\]\n\nTherefore, the total population is 1,300,000.\n\n<answer>1300000</answer>",
+      "correct": false,
+      "elapsed_s": 5.89,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_04",
+      "suite": "math",
+      "method": "substring",
+      "expected": "(-\\sqrt{3}, \\sqrt{3})",
+      "answer": "We are given the inequality:\n\n$$\n-4 < x^4 + 4x^2 < 21\n$$\n\nLet\u2019s simplify by substitution. Let $ y = x^2 $. Since $ x^2 \\geq 0 $ for all real $ x $, we have $ y \\geq 0 $.\n\nThen the inequality becomes:\n\n$$\n-4 < y^2 + 4y < 21\n$$\n\nWe now solve this compound inequality in two parts.\n\n---\n\n### Part 1: Solve $ y^2 + 4y > -4 $\n\nRewriting:\n\n$$\ny^2 + 4y + 4 > 0 \\quad \\Rightarrow \\quad (y + 2)^2 > 0\n$$\n\nThis is true for all $ y \\ne -2 $. But since $ y = x^2 \\geq 0 $, and $ -2 < 0 $, we never have $ y = -2 $. So this inequality is **always true** for all real $ x $. So we can ignore this part.\n\n---\n\n### Part 2: Solve $ y^2 + 4y < 21 $\n\nRewriting:\n\n$$\ny^2 + 4y - 21 < 0\n$$\n\nSolve the quadratic equation:\n\n$$\ny^2 + 4y - 21 = 0\n$$\n\nUse the quadratic formula:\n\n$$\ny = \\frac{-4 \\pm \\sqrt{4^2 - 4(1)(-21)}}{2(1)} = \\frac{-4 \\pm \\sqrt{16 + 84}}{2} = \\frac{-4 \\pm \\sqrt{96}}{2}\n$$\n\n$$\n\\sqrt{96} = \\sqrt{16 \\cdot 6} = 4\\sqrt{6}\n$$\n\nSo:\n\n$$\ny = \\frac{-4 \\pm 4\\sqrt{6}}{2} = -2 \\pm 2\\sqrt{6}\n$$\n\nSo the roots are:\n\n$$\ny_1 = -2 - 2\\sqrt{6}, \\quad y_2 = -2 + 2\\sqrt{6}\n$$\n\nSince $ \\sqrt{6} \\approx 2.45 $, we have:\n\n- $ y_1 \\approx -2 - 4.9 = -6.9 $\n- $ y_2 \\approx -2 + 4.9 = 2.9 $\n\nSo the inequality $ y^2 + 4y - 21 < 0 $ holds for:\n\n$$\n-2 - 2\\sqrt{6} < y < -2 + 2\\sqrt{6}\n$$\n\nBut recall: $ y = x^2 \\geq 0 $. So we only consider the intersection of this interval with $ [0, \\infty) $.\n\nSo we need:\n\n$$\n0 \\leq y < -2 + 2\\sqrt{6}\n$$\n\nNow compute $ -2 + 2\\sqrt{6} $ more precisely:\n\n- $ \\sqrt{6} \\approx 2.44949 $\n- So $ 2\\sqrt{6} \\approx 4.89898 $\n- Then $ -2 + 2\\sqrt{6} \\approx 2.89898 $\n\nSo the upper bound is approximately 2.89898.\n\nThus, $ y \\in [0, -2 + 2\\sqrt{6}) $\n\nNow recall $ y = x^2 $, so:\n\n$$\n0 \\leq x^2 < -2 + 2\\sqrt{6}\n$$\n\nTake square roots:\n\n- $ x^2 < -2 + 2\\sqrt{6} \\Rightarrow |x| < \\sqrt{-2 + 2\\sqrt{6}} $\n\nSo the solution set is:\n\n$$\nx \\in \\left( -\\sqrt{-2 + 2\\sqrt{6}}, \\sqrt{-2 + 2\\sqrt{6}} \\right)\n$$\n\nWe can simplify the expression under the square root:\n\nLet\u2019s try to simplify $ \\sqrt{-2 + 2\\sqrt{6}} $\n\nLet\u2019s suppose:\n\n$$\n\\sqrt{-2 + 2\\sqrt{6}} = \\sqrt{a} - \\sqrt{b}\n$$\n\nBut perhaps it's not necessary to simplify further. Alternatively, we can leave the answer in terms of nested radicals.\n\nBut let\u2019s check if $ -2 + 2\\sqrt{6} $ can be written as a square of a simpler expression.\n\nSuppose:\n\n$$\n(\\sqrt{a} - \\sqrt{b})^2 = a + b - 2\\sqrt{ab} = -2 + 2\\sqrt{6}\n$$\n\nThen:\n\n- $ a + b = -2 $? No, that can\u2019t be since $ a, b \\geq 0 $. So maybe not.\n\nAlternatively, perhaps:\n\nLet\u2019s just compute the exact value.\n\nWe can write:\n\n$$\n\\sqrt{-2 + 2\\sqrt{6}} = \\sqrt{2(\\sqrt{6} - 1)} = \\sqrt{2} \\cdot \\sqrt{\\sqrt{6} - 1}\n$$\n\nBut this doesn\u2019t simplify nicely. So we leave it as is.\n\nThus, the solution is:\n\n$$\nx \\in \\left( -\\sqrt{-2 + 2\\sqrt{6}}, \\sqrt{-2 + 2\\sqrt{6}} \\right)\n$$\n\nBut let\u2019s double-check the algebra.\n\nWe had:\n\n$$\ny^2 + 4y < 21 \\Rightarrow y^2 + 4y - 21 < 0\n$$\n\nRoots: $ y = \\frac{-4 \\pm \\sqrt{16 + 84}}{2} = \\frac{-4 \\pm \\sqrt{96}}{2} = \\frac{-4 \\pm 4\\sqrt{6}}{2} = -2 \\pm 2\\sqrt{6} $\n\nYes.\n\nSo the inequality holds for $ y \\in (-2 - 2\\sqrt{6}, -2 + 2\\sqrt{6}) $\n\nBut $ y = x^2 \\geq 0 $, so we take $ y \\in [0, -2 + 2\\sqrt{6}) $\n\nSo $ x^2 < -2 + 2\\sqrt{6} $\n\nSo $ |x| < \\sqrt{-2 + 2\\sqrt{6}} $\n\nSo final answer:\n\n$$\n\\boxed{\\left( -\\sqrt{-2 + 2\\sqrt{6}}, \\sqrt{-2 + 2\\sqrt{6}} \\right)}\n$$\n\nBut let\u2019s check if this expression can be simplified.\n\nLet\u2019s compute $ -2 + 2\\sqrt{6} = 2(\\sqrt{6} - 1) $\n\nSo:\n\n$$\n\\sqrt{-2 + 2\\sqrt{6}} = \\sqrt{2(\\sqrt{6} - 1)}\n$$\n\nStill not simpler. So we leave it.\n\nAlternatively, we can write the answer as:\n\n$$\n\\boxed{\\left( -\\sqrt{2\\sqrt{6} - 2}, \\sqrt{2\\sqrt{6} - 2} \\right)}\n$$\n\nThis is equivalent and perhaps clearer.\n\nLet me verify numerically:\n\n- $ \\sqrt{6} \\approx 2.449 $\n- $ 2\\sqrt{6} \\approx 4.898 $\n- $ 2\\sqrt{6} - 2 \\approx 2.898 $\n- $ \\sqrt{2.898} \\approx 1.702 $\n\nSo the interval is approximately $ (-1.702, 1.702) $\n\nLet\u2019s test a value: $ x = 1.7 $\n\nThen $ x^2 = 2.89 $, $ x^4 = (x^2)^2 = 8.3521 $\n\nThen $ x^4 + 4x^2 = 8.3521 + 4*2.89 = 8.3521 + 11.56 = 19.9121 < 21 $ \u2192 OK\n\nAt $ x = 1.702 $, $ x^2 \\approx 2.898 $, $ x^4 \\approx (2.898)^2 \\approx 8.398 $, then $ x^4 + 4x^2 \\approx 8.398 + 11.592 = 19.99 < 21 $\n\nAt $ x = 1.71 $, $ x^2 = 2.9241 $, $ x^4 = (2.9241)^2 \u2248 8.55 $, then $ 8.55 + 4*2.9241 = 8.55 + 11.696 = 20.246 < 21 $\n\nAt $ x = 1.8 $, $ x^2 = 3.24 $, $ x^4 = 10.4976 $, then $ 10.4976 + 4*3.24 = 10.4976 + 12.96 = 23.4576 > 21 $ \u2192 too big.\n\nSo the bound is correct.\n\nNow, what about the lower bound? The original inequality is strict: $ -4 < x^4 + 4x^2 $. But since $ x^4 + 4x^2 = (x^2)^2 + 4x^2 \\geq 0 $, and $ -4 < 0 $, this is always true. So no issue.\n\nThus, the solution is all real $ x $ such that $ |x",
+      "correct": false,
+      "elapsed_s": 67.58,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_05",
+      "suite": "math",
+      "method": "substring",
+      "expected": "\\sqrt{130}",
+      "answer": "We are given a quadrilateral $ABCD$ with the condition that $m\\angle B + m\\angle D = 270^\\circ$. The circumcircle of $\\triangle ABD$ intersects segment $CD$ again at point $E \\ne D$. We're told:\n\n- $BC = 4$\n- $CE = 5$\n- $DE = 7$\n\nWe are to find the **diameter** of the circumcircle of $\\triangle ABD$.\n\n---\n\n### Step 1: Understand the configuration\n\nLet\u2019s denote the circumcircle of $\\triangle ABD$ as $\\omega$. Since $E$ lies on both $\\omega$ and segment $CD$, and $E \\ne D$, then $E$ is the second intersection of line $CD$ with $\\omega$.\n\nSo points $A, B, D, E$ all lie on $\\omega$.\n\nWe are given lengths along segment $CD$: from $C$ to $E$ is 5, and from $D$ to $E$ is 7. So total length $CD = CE + ED = 5 + 7 = 12$.\n\nWe also know $BC = 4$.\n\nWe are to find the **diameter** of $\\omega$, i.e., the circumcircle of $\\triangle ABD$.\n\n---\n\n### Step 2: Use angle condition\n\nWe are told:\n$$\n\\angle B + \\angle D = 270^\\circ\n$$\nIn quadrilateral $ABCD$, the sum of interior angles is $360^\\circ$, so:\n$$\n\\angle A + \\angle B + \\angle C + \\angle D = 360^\\circ \\\\\n\\Rightarrow \\angle A + \\angle C = 90^\\circ\n$$\n\nSo $\\angle A + \\angle C = 90^\\circ$.\n\nThis will be useful later.\n\n---\n\n### Step 3: Use cyclic quadrilateral properties\n\nSince $A, B, D, E$ are concyclic (on $\\omega$), we can use cyclic quadrilateral angle properties.\n\nIn particular, opposite angles in a cyclic quadrilateral sum to $180^\\circ$. So in cyclic quadrilateral $ABDE$:\n\n- $\\angle ABD + \\angle AED = 180^\\circ$\n- $\\angle BAD + \\angle BED = 180^\\circ$\n- etc.\n\nBut perhaps more useful: **angles subtended by the same chord are equal**.\n\nFor example, since $A, B, D, E$ are concyclic:\n\n- $\\angle ABD = \\angle AED$ (angles subtended by arc $AD$)\n- $\\angle ADB = \\angle AEB$ (subtended by arc $AB$)\n- $\\angle BAD = \\angle BED$ (subtended by arc $BD$)\n\nWe\u2019ll see which one helps.\n\n---\n\n### Step 4: Consider triangle $CDE$ and power of a point\n\nWe know points $C$, $E$, $D$ are collinear, with $E$ on the circumcircle of $\\triangle ABD$. So from point $C$, we can consider **power of point $C$** with respect to circle $\\omega$ (the circumcircle of $\\triangle ABD$).\n\nPower of point $C$ with respect to $\\omega$ is:\n$$\n\\text{Power}(C) = CA \\cdot CX = CB \\cdot CY\n$$\nBut we don\u2019t know where $C$ connects to the circle directly. However, since line $CD$ intersects $\\omega$ at $D$ and $E$, then:\n$$\n\\text{Power of } C = CD \\cdot CE = (CE)(CD) = CE \\cdot (CE + DE) = 5 \\cdot (5 + 7) = 5 \\cdot 12 = 60\n$$\n\nWait! Actually, **power of point $C$** with respect to $\\omega$ is:\n$$\n\\text{Power}(C) = CD \\cdot CE = (length from C to D) \\cdot (length from C to E)\n$$\nBut careful: if a line through $C$ intersects the circle at two points $X$ and $Y$, then power is $CX \\cdot CY$, **with signed lengths**, but using absolute values for now.\n\nSince $C$ lies outside the circle (likely), and line $CD$ meets the circle at $E$ and $D$, with $E$ between $C$ and $D$ (since $CE = 5$, $DE = 7$, so order is $C - E - D$), then:\n$$\n\\text{Power of } C = CE \\cdot CD = 5 \\cdot 12 = 60\n$$\n\nBut actually, standard formula: if a secant from $C$ intersects the circle at $X$ and $Y$, then power is $CX \\cdot CY$. Here, the two intersection points are $E$ and $D$, so:\n$$\n\\text{Power}(C) = CE \\cdot CD = 5 \\cdot 12 = 60\n$$\n\nYes, that's correct.\n\nSo:\n$$\n\\text{Power of } C = 60\n$$\n\nNow, if we can express this power in another way\u2014say, using segment $CB$ and some angle or triangle\u2014we might get an equation.\n\nBut we don't yet know where point $B$ is relative to the circle. However, **point $B$ lies on the circle**, so the power of point $C$ with respect to the circle is also equal to:\n$$\n\\text{Power}(C) = CB^2 - R^2 + \\text{something}? \n$$\nNo, that\u2019s not helpful directly.\n\nBut we can use **Law of Cosines** in triangle $CBE$ or $CBD$ if we can relate angles.\n\nAlternatively, consider triangle $CBE$, but we don\u2019t know angles.\n\nWait\u2014maybe use **Law of Sines** in triangle $ABD$, since we want its circumradius.\n\nRecall: In any triangle, the circumradius $R$ satisfies:\n$$\n\\frac{a}{\\sin A} = 2R\n$$\nSo if we can find a side and its opposite angle in $\\triangle ABD$, we can get $R$, hence diameter $2R$.\n\nBut we don\u2019t know any sides of $\\triangle ABD$ or its angles directly.\n\nHowever, we do know something about angles at $B$ and $D$ in quadrilateral $ABCD$, and we know that $\\angle B + \\angle D = 270^\\circ$.\n\nLet\u2019s denote:\n\n- $\\angle ABC = \\angle B$\n- $\\angle CDA = \\angle D$\n\nThen $\\angle B + \\angle D = 270^\\circ$.\n\nAlso, since $A, B, D, E$ are concyclic, then **$\\angle ABD = \\angle AED$** (same arc $AD$).\n\nSimilarly, **$\\angle ADB = \\angle AEB$**.\n\nAlso, note that $\\angle ABC$ is composed of $\\angle ABD + \\angle DBC$, if point $C$ lies inside angle $ABD$, but we don\u2019t know the configuration.\n\nMaybe better to consider triangle $CDE$ and use Law of Cosines with angle at $E$ or $D$, and relate to circle.\n\nAnother idea: Use **Ptolemy\u2019s Theorem** on cyclic quadrilateral $ABDE$.\n\nPtolemy\u2019s Theorem states that for cyclic quadrilateral $ABDE$:\n$$\nAB \\cdot DE + AD \\cdot BE = AE \\cdot BD\n$$\n\nBut we don\u2019t know most of these lengths.\n\nAlternative approach:\n\n### Step 5: Use trigonometric form of power of a point\n\nLet\u2019s consider triangle $CBD$, and use the Law of Cosines to compute $CD^2 = CB^2 + BD^2 - 2 \\cdot CB \\cdot BD \\cdot \\cos(\\angle CBD)$\n\nBut again, we don\u2019t know $BD$ or angles.\n\nWait\u2014maybe consider triangle $CDE$, and use the fact that $\\angle CED$ is an angle in the circle.\n\nSince $E$ is on the circumcircle of $\\triangle ABD$, then $\\angle ABD = \\angle AED$, as noted.\n\nBut $\\angle AED$ is an angle in triangle $CED$, so maybe we can relate $\\angle ABD$ to triangle $CBE$?\n\nAlternatively, consider triangle $CBE$: we know $BC = 4$, $CE = 5$, but not angle between them.\n\nBut perhaps we can find $\\angle CED$ using the fact that $\\angle AED = \\angle ABD$, and $\\angle ABD$ is part of $\\angle ABC = \\angle B$.\n\nLet\u2019s try to express $\\angle B$ in terms of triangle $ABC$, but again missing info.\n\n---\n\n### Step 6: Use extended law of sines in triangle $ABD$\n\nLet\u2019s denote:\n\n- Let $R$ be the circumradius of $\\triangle ABD$, so diameter is $2R$.\n- Let $\\angle ABD = \\theta$, then $\\angle AED = \\theta$ (since they subtend same arc $AD$).\n- Let $\\angle ADB = \\phi$, then $\\angle AEB = \\phi$.\n\nIn triangle $ABD$, the third angle is $\\angle BAD = 180^\\circ - \\theta - \\phi$.\n\nNow, consider triangle $CED$. We know sides $CE = 5$, $DE = 7$, and we can compute angle $\\angle CED$ if we can relate it to known angles.\n\nBut $\\angle CED = \\angle AED = \\theta$, because both are angles at point $E$ between lines $ED",
+      "correct": false,
+      "elapsed_s": 68.19,
+      "error": null
+    },
+    {
+      "id": "sentinel_math_06",
+      "suite": "math",
+      "method": "substring",
+      "expected": "63",
+      "answer": "We are given:\n\n$$\nN = 888{,}888 \\times 9{,}999{,}999\n$$\n\nWe are to compute the **sum of the digits** of $ N $.\n\n---\n\n### Step 1: Understand the numbers\n\n- $ 888{,}888 = 8 \\times 111{,}111 $\n- $ 9{,}999{,}999 = 10^7 - 1 $\n\nBut perhaps a better approach is to notice that both numbers are close to round numbers.\n\nAlternatively, we can use the identity:\n\n$$\na \\times b = (a)(b)\n$$\n\nBut maybe even better: **use the fact that 9,999,999 = 10^7 - 1**, and 888,888 is a repeating decimal pattern.\n\nBut let's try a clever trick.\n\n---\n\n### Step 2: Use complement to 10\n\nNote that:\n\n$$\n9{,}999{,}999 = 10{,}000{,}000 - 1\n$$\n\nSo:\n\n$$\nN = 888{,}888 \\times (10{,}000{,}000 - 1) = 888{,}888 \\times 10{,}000{,}000 - 888{,}888\n$$\n\nThis is a **shifted subtraction**:\n\n$$\nN = 888{,}8880{,}000{,}000 - 888{,}888\n$$\n\nThat is:\n\n- Write 888,888 followed by 7 zeros (since multiplying by $10^7$)\n- Then subtract 888,888\n\nSo:\n\n$$\nN = 888{,}888{,}000{,}000 - 888{,}888\n$$\n\nNow perform the subtraction.\n\n---\n\n### Step 3: Subtract 888,888 from 888,888,000,000\n\nWe can think of it as:\n\n```\n   888,888,000,000\n-          888,888\n-------------------\n```\n\nWe need to subtract 888,888 from the last 6 digits (which are zeros), so we need to **borrow**.\n\nLet\u2019s write it out with place values:\n\n- The number is: 888,888,000,000\n- Subtract:\u2003\u2003\u2003\u2003\u2003888,888\n\nWe can do this by borrowing from the leftmost part.\n\nLet\u2019s align:\n\n```\n   888,888,000,000\n-          000,888,888\n-----------------------\n```\n\nActually, better to write with commas aligned:\n\n```\n   888,888,000,000\n-            888,888\n-----------------------\n```\n\nWe can think of it as:\n\n- The last 6 digits: 000,000 \u2192 need to subtract 888,888 \u2192 so we borrow 1 from the higher digits.\n\nBut since the last 6 digits are zero, we borrow 1 from the digit in the millions place (or higher), which will turn into 1,000,000 in the lower part.\n\nBut actually, let's do it step by step.\n\nWe can write:\n\n$$\n888{,}888{,}000{,}000 - 888{,}888 = ?\n$$\n\nLet\u2019s denote:\n\n- A = 888,888,000,000\n- B = 888,888\n\nWe can perform the subtraction:\n\nStart from the right:\n\n- Units: 0 - 8 \u2192 borrow\n- But since all digits are zero until the 7th digit from right, we need to borrow from the 7th digit.\n\nActually, let's write the number as:\n\n$$\n888{,}888{,}000{,}000 = 888{,}888 \\times 10^7\n$$\n\nSo subtracting 888,888 gives:\n\n$$\n888{,}888 \\times 10^7 - 888{,}888 = 888{,}888 \\times (10^7 - 1)\n$$\n\nWait \u2014 that\u2019s circular. But we already used that.\n\nBut now we are computing:\n\n$$\nN = 888{,}888 \\times 9{,}999{,}999 = 888{,}888 \\times (10^7 - 1) = 888{,}888 \\times 10^7 - 888{,}888\n$$\n\nSo we must compute:\n\n$$\n888{,}888{,}000{,}000 - 888{,}888\n$$\n\nLet\u2019s do the subtraction carefully.\n\nWe can write:\n\n```\n   888,888,000,000\n-            888,888\n-----------------------\n```\n\nWe can think of it as:\n\n- The last 6 digits: 000,000 \u2192 need to subtract 888,888 \u2192 so we borrow 1 from the digit in the millions place (which is the 7th digit from right).\n\nBut the digit in the millions place is 0 (since it's 888,888,000,000 \u2014 the digits are: ...888,888,000,000 \u2014 so the first 6 digits are 8s, then 7 zeros).\n\nWait \u2014 let's count digits:\n\n- 888,888 has 6 digits.\n- 888,888,000,000 has 12 digits: 888,888 followed by 6 zeros? No!\n\nWait: 888,888 \u00d7 10^7 = 888,888 followed by 7 zeros \u2192 that\u2019s 6 + 7 = 13 digits.\n\nWait, let's check:\n\n- 888,888 \u00d7 10^7 = 888,888,000,000 \u2192 that\u2019s 12 digits? Let's count:\n\n888,888,000,000 \u2192 888 billion, 888 million \u2192 that\u2019s 12 digits.\n\nWait: 888,888,000,000 \u2014 let's write without commas: 888888000000 \u2014 that\u2019s 12 digits.\n\nBut 888,888 is 6 digits, times 10^7 adds 7 zeros \u2192 total 13 digits? But 888,888 \u00d7 10^7 = 888,888,000,000 \u2014 let's count:\n\n- 888,888,000,000 \u2192 888 billion, 888 million \u2192 that\u2019s 12 digits.\n\nWait: 10^7 is 10 million \u2192 multiplying by 10^7 shifts left by 7 digits.\n\n888,888 has 6 digits \u2192 after shift: 6 + 7 = 13 digits? But 888,888 \u00d7 10^7 = 888,888,000,000 \u2014 let's count the digits:\n\n888,888,000,000 \u2192 888,888 followed by 6 zeros? No \u2014 888,888 followed by 7 zeros would be 888,888,000,000,000 \u2014 that\u2019s 15 digits.\n\nWait, I think I made a mistake.\n\nLet me clarify:\n\n- 888,888 \u00d7 10^7 = 888,888 \u00d7 10,000,000 = 888,888,000,000\n\nNow, how many digits?\n\n888,888,000,000 \u2014 let's write it: 888,888,000,000\n\nBreak it down:\n\n- 888,888,000,000 = 888 billion, 888 million \u2192 that\u2019s 12 digits.\n\nBut 888,888 has 6 digits, times 10^7 should give 6 + 7 = 13 digits? But 8",
+      "correct": false,
+      "elapsed_s": 67.74,
+      "error": null
+    },
+    {
+      "id": "sentinel_code_02",
+      "suite": "coder",
+      "method": "substring",
+      "expected": "count_Primes_nums",
+      "answer": "To solve this problem efficiently, we can use the **Sieve of Euler** (also known as the **Sieve of Eratosthenes**) to count the number of prime numbers less than a given number `n`. This algorithm is efficient for this purpose because it marks the multiples of each prime starting from 2, and it runs in O(n log log n) time complexity.\n\nHere's the Python function:\n\n```python\ndef count_Primes_nums(n):\n    if n <= 1:\n        return 0\n    # Create a boolean array and initialize all entries as true.\n    # A value in prime[i] will be false if i is not a prime, else true.\n    prime = [True] * n\n    prime[0] = prime[1] = False  # 0 and 1 are not prime numbers\n    p = 2\n    while p * p < n:\n        if prime[p]:\n            # Mark all multiples of p as not prime\n            for i in range(p * p, n, p):\n                prime[i] = False\n        p += 1\n    # Count the number of primes\n    return sum(prime)\n```\n\n### Explanation:\n1. **Initialization**: We create a boolean list `prime` where each index represents whether the corresponding number is prime.\n2 **Mark non-prime numbers**: For each prime number `p', we mark all its multiples starting from `p\u00b2` as non-prime.\n3. **Count primes**: Finally, we count the number of `True` values in the `prime[]` array.\n\n### Test Cases:\n```python\nassert count_Primes_nums(5) == 2   # Primes: 2, 2, 4\nassert count_Primes 4\nassert count_Primes_nums(100) == 25\n```\n\nThis solution efficiently counts the number of prime numbers less than a given number ` `.\n\nLet me know if you'd like further explanation or optimization suggestions!",
+      "correct": true,
+      "elapsed_s": 13.11,
+      "error": null
+    },
+    {
+      "id": "sentinel_code_03",
+      "suite": "coder",
+      "method": "substring",
+      "expected": "frequency_Of_Largest",
+      "answer": "Here's a Python function that finds the frequency of the largest value in a given array:\n\n```python\ndef frequency_of_largest(n, arr):\n    \"\"\"\n    Find the frequency of the largest value in the array.\n    \n    Args:\n        n: Length of the array\n        arr: List of integers\n    \n    Returns:\n        Integer representing the frequency of the largest value\n    \"\"\"\n    if n == 0:\n        return 0\n    \n    # Find the maximum value in the array\n    max_value = max(arr)\n    \n    # Count the frequency of the maximum value\n    frequency = 0\n    for num in arr:\n        if num == max_value:\n            frequency += 1\n    \n    return frequency\n\n# Test cases\nassert frequency_of_largest(5, [1, 2, 3, 0, 4, 4]) == 2\nassert frequency_of_largest(3, [5, 6, 5]) == 1\nassert frequency of_largest(4, [2, 7, 7, 7]) == 3\n```\n\nWait, I notice there's a typo in my test case. Let me fix that:\n\n```python\ndef frequency_of_largest(n, arr):\n    \"\"\"\n    Find the frequency of the largest value in the array.\n    \n    Args:\n        n: Length of the array, though we can calculate it from arr\n        arr: List of integers\n    \n    Returns:\n        Integer representing the frequency of the largest value\n    \"\"\"\n    if n == 0:\n        return 0\n    \n    # Find the maximum value in the array\n    max_value = max(arr)\n    \n    # Count the frequency of the largest value\n    frequency = 0\n    for num in arr:\n        if num == max_value:\n            frequency += 1\n    \n    return frequency\n\n# Test cases\nassert frequency_of_largest(5, [1, 2, 3, 4, 4]) == 2\nassert frequency_of_largest(3, [5, 6, 5] ) == 1\nassert frequency_of_largest(4, [2, 7, 7, 7]) == 3\n```\n\nActually, since we're given the length `n`, we could also use it to optimize slightly, but it's not necessary since we can use Python's built-in functions. Here's a more concise version:\n\n```python\ndef frequency_of_largest(n, arr):\n    \"\"\"\n    Find the frequency of the largest value in the array.\n    \n    Args:\n        n: Length of the array\n        arr: List of integers\n    \n    Returns: \n        Integer representing the frequency of the largest value\n    \"\"\"\n    if n == 0:\n        return 0\n    \n    max_value = max(arr)\n    return arr.count(max_value)\n\n# Test cases\nassert frequency_of_largest(5, [1, 2, 3, 0, 4, 4]) ==  count of 4s\nassert frequency_of_largest(3, [5, 6, 5]) == 1\nassert frequency_of_largest(4, [2, 7, 7, 7]) == 3\n```\n\nWait, I see the issue with my test case. Let me correct it:\n\n```python\ndef frequency_of_largest(n, arr):\n    \"\"\"\n    Find the frequency of the largest value in the array.\n    \n    Args:\n        n: Length of the array, though we can calculate it from arr\n        arr: List of integers\n    \n    Returns:\n        Integer representing the frequency of the largest value\n    \"\"\"\n    if n == 0:\n        return 0\n    \n    # Find the maximum value in the array\n    max_value = max(arr)\n    \n    # Count the frequency of the largest value\n    frequency = 0\n    for num in arr:\n        if num == max_value:\n            frequency += 1\n    \n    return frequency\n\n# Test cases\nassert frequency_of_largest(5, [1, 2, 0, 4, 4]) == 2\nassert frequency_of_largest(3, [5, 6, 5]) == 1\nassert frequency_of_largest(4, [2, 7, 7, 7]) == 3\n```\n\nActually, let me simplify this further and make sure the test cases are correct:\n\n```python\ndef frequency_of_largest(n, arr):\n    \"\"\"\n    Find the frequency of the largest value in the array.\n    \n    Args:\n        n: Length of the array\n        arr: List of integers\n    \n    Returns:\n        Integer representing the frequency of the largest value\n    \"\"\"\n    if n == 0:\n        return 0\n    \n    max_value = max(arr)\n    return arr.count(max_value)\n\n# Test cases\nassert frequency function is correct\n```\n\nLet me fix the test cases:\n\n```python\ndef frequency_of_largest(n, arr):\n    \"\"\"\n    Find the frequency of the largest value in the array.\n    \n    Args:\n        n: Length of the array, though we can calculate it from\n        arr: List of integers\n    \n    Returns:\n        Integer representing the frequency of the largest value\n    \"\"\"\n    if n == 0:\n        return 0\n    \n    max_value = max(arr)\n    return arr.count(max_value)\n\n# Test cases\nassert frequency_of_largest(5, [1, 2, 3, 4, 4]) == 2\nassert frequency_of_largest(3, [5, 6, 5]) == 1\nassert frequency_of_largest(4, [2, 7, 7, 7]) == 3\n```\n\nPerfect! This solution is efficient and handles the test cases correctly. The function:\n1. Handles the edge case of an empty array\n2. Finds the maximum value using Python's built-in `max()` function\n3. Uses the `count()` method to count occurrences of the maximum value\n4. Returns the frequency as an integer\n\nThe time complexity is O(n) and space complexity is O(1) for the iterative approach, or O(n) for the `count()` method which also iterates through the array once.",
+      "correct": true,
+      "elapsed_s": 42.4,
+      "error": null
+    },
+    {
+      "id": "sentinel_thinking_02",
+      "suite": "thinking",
+      "method": "multiple_choice",
+      "expected": "A",
+      "answer": "The most plausible continuation is:\n\nC) reels in the hook and begins reeling in the fish.\n\nThis option correctly describes the action of fishing: setting up a line, then reeling in the hook and the fish. The other options either misrepresent the process or are illogical (e.g., pulling a fish through a hole, throwing fish into a hole, or catching a fish and then throwing it back into the hole with others, which is not typical unless it's a release, but even then, the phrasing is awkward).\n\nAnswer: C) reels in the hook and begins reeling in the fish.\n\nLetter only: C",
+      "correct": false,
+      "elapsed_s": 3.65,
+      "error": null
+    },
+    {
+      "id": "sentinel_thinking_03",
+      "suite": "thinking",
+      "method": "multiple_choice",
+      "expected": "B",
+      "answer": "D",
+      "correct": false,
+      "elapsed_s": 0.07,
+      "error": null
+    },
+    {
+      "id": "sentinel_thinking_04",
+      "suite": "thinking",
+      "method": "multiple_choice",
+      "expected": "D",
+      "answer": "D) then brushes off the mans neck.",
+      "correct": true,
+      "elapsed_s": 0.29,
+      "error": null
+    },
+    {
+      "id": "sentinel_general_02",
+      "suite": "general",
+      "method": "multiple_choice",
+      "expected": "C",
+      "answer": "C) appeal to anonymous authority",
+      "correct": true,
+      "elapsed_s": 0.2,
+      "error": null
+    },
+    {
+      "id": "sentinel_general_03",
+      "suite": "general",
+      "method": "multiple_choice",
+      "expected": "D",
+      "answer": "D",
+      "correct": true,
+      "elapsed_s": 0.07,
+      "error": null
+    },
+    {
+      "id": "sentinel_general_04",
+      "suite": "general",
+      "method": "multiple_choice",
+      "expected": "A",
+      "answer": "The statement describes how customer expectations influence their perception of the service encounter. This concept is most closely associated with \"service quality,\" which is defined as the evaluation of the overall excellence or superiority of a service. Service quality is based on the gap between customer expectations and actual service delivery.\nTherefore, the correct answer is:\nA) Service quality.",
+      "correct": true,
+      "elapsed_s": 1.89,
+      "error": null
+    },
+    {
+      "id": "sentinel_factual_02",
+      "suite": "simpleqa",
+      "method": "f1",
+      "expected": "12 April 2018",
+      "answer": "<answer>\n2024\u5e7410\u6708\n</answer>",
+      "correct": false,
+      "elapsed_s": 0.45,
+      "error": null
+    },
+    {
+      "id": "sentinel_factual_03",
+      "suite": "simpleqa",
+      "method": "f1",
+      "expected": "September 2015",
+      "answer": "<answer>\nAugust 2019</answer>",
+      "correct": false,
+      "elapsed_s": 0.37,
+      "error": null
+    },
+    {
+      "id": "sentinel_agentic_02",
+      "suite": "agentic",
+      "method": "exact_match",
+      "expected": "701.00",
+      "answer": "<answer>600.00</answer>",
+      "correct": false,
+      "elapsed_s": 0.37,
+      "error": null
+    },
+    {
+      "id": "sentinel_agentic_03",
+      "suite": "agentic",
+      "method": "substring",
+      "expected": "search_files",
+      "answer": "{\"function\": \"search_files\", \"arguments\": {\"directory\": \"/home/user/project\", \"content\": \"TODO\", \"recursive\": true}}",
+      "correct": true,
+      "elapsed_s": 0.83,
+      "error": null
+    },
+    {
+      "id": "sentinel_escalation_02",
+      "suite": "mode_advantage_hard",
+      "method": "substring",
+      "expected": "acceptance",
+      "answer": "Let's compare the three speculative decoding techniques for LLM inference:\n\n1. **Draft model speculation (using a smaller model)**\n\n   - **How it achieves speedup**: This technique uses a smaller, faster model (the \"draft\" model) to generate a sequence of tokens that is then verified by the larger, slower \"target\" model. The draft model produces a candidate sequence, which is then checked for validity by the target model. If the target model accepts the draft sequence, the process is complete; otherwise, it continues with the next token. This reduces the number of times the expensive target model needs to be invoked, thereby speeding up inference.\n   - **When acceptance rate is high/low**: The acceptance rate depends on the similarity between the draft and target models. If the draft model is well-trained and similar to the target model, the acceptance rate will be high. Conversely, if the draft model is significantly different or poorly trained, the acceptance rate will be low.\n   - **Hardware requirements**: This method requires additional memory to store both the draft and target models. It also requires sufficient computational resources to run both models in parallel or sequentially, depending on the implementation.\n\n2 **Self-speculation (using early exit layers)**\n\n   - **How it achieves speedup**: This technique involves adding early exit layers to the model architecture. During inference, the model can exit early if it determines that the output is sufficiently confident or complete, without needing to process the entire sequence through all layers. This reduces the computational load and speeds up inference.\n   - **When acceptance rate is high/low**: The acceptance rate depends on the model's ability to accurately determine when to exit early. If the model is well-designed and can reliably identify when to exit, the acceptance rate will be high. However, if the model is not well-designed or if the early exit criteria are too strict or lenient, the acceptance rate may be low.\n   - **Hardware requirements**: This method requires additional layers in the model architecture, which increases memory usage. It also requires hardware that can handle the parallel processing capabilities needed for early exit mechanisms.\n\n3 **Prompt lookup decoding (n-gram matching)**\n\n   - **How it achieves speedup**: This technique involves pre-computing and storing n-grams from the training data. During inference, the model uses these stored n-grams to predict the next token, which can be faster than generating tokens one by one. This is particularly effective for models that have a strong statistical basis for predicting n-grams.\n   - **When acceptance rate is high/low**: The acceptance rate depends on the quality and relevance of the n-grams stored. If the n-grams are well-chosen and relevant to the input, the acceptance rate will be high. However, if the n-grams are not well-chosen or are not relevant to the input, the acceptance rate will be low.\n   - **Hardware requirements**: This method requires additional memory to store the n-grams and their associated probabilities. It also requires fast access to this data, which can be achieved with appropriate hardware such as high-speed memory or specialized hardware accelerators.\n\n**Which technique is best for a 32B coding model on a CPU-only system?**\n\nFor a 32B parameter model on a CPU-only system, the best technique would likely be **prompt lookup decoding (n-gram matching)**. Here's why:\n\n- **Draft model speculation** would require additional memory to store both the draft and target models, which may not be feasible on a CPU-only system with limited memory.\n- **Self-speculation** would require additional layers in the model architecture, which increases memory usage and may not be feasible on a CPU-only system.\n- **Prompt lookup decoding** can be implemented with additional memory to store n-grams and their probabilities, which is more feasible on a CPU-only system. It also does not require additional layers or models, making it a more straightforward implementation.\n\nTherefore, **prompt lookup decoding** is the most suitable technique for a 32B model on a CPU-only system.",
+      "correct": true,
+      "elapsed_s": 26.41,
+      "error": null
+    },
+    {
+      "id": "sentinel_escalation_03",
+      "suite": "mode_advantage_hard",
+      "method": "exact_match",
+      "expected": "2",
+      "answer": "To solve this problem, we need to identify:\n\n1. A chemical element named after a planet.\n2. The year it was discovered.\n3. A famous composer who died in the same year.\n4. The composer's most famous symphony (by number).\n5. Calculate how many years before his death the symphony was completed.\n\nLet's go step by step.\n\nStep 1: Identify elements named after planets.\n\nElements named after planets include:\n- Uranium (U, named after Uranus)\n- Neptunium (Np, named after Neptune)\n- Plutonium (Pu, named after Pluto)\n\nNote: Pluto is no longer classified as a planet, but it was when these elements were named.\n\nStep 2: Determine discovery years.\n\n- Uranium: discovered in 1841 by Martin Heinrich Kl\u00fcwer (though often attributed to the Curies later).\n- Neptunium: discovered in 1934 by Edwin Ernesto Alvarez and others.\n- Plutonium: discovered in 1940 by Glenn T. Seaborg and others.\n\nNow, we need to find which of these discovery years matches a composer's death year.\n\nStep 3: Identify composers who died in those years.\n\n- 1841: Composer deaths around this time include:\n  - Giacomo Meyerbeer (died 1863)\n  - Not many major composers died in 1841. Let's check:\n    - Franz Schubert died in 1828.\n    - Felix Mendelssohn died in 1847.\n    - Robert Schumann died in 1850.\n    - So 1841 doesn't match a major composer's death.\n\n- 1934: Composers who died in 1934 include:\n  - Sergei Prokofiev (died 1945)\n  - Not 1934.\n  - Actually, 1934: \n    - No major composer died in 1934? Let's check:\n      - B\u00e9la Bart\u00f3k died in 1945.\n      - Igor Stravinsky died in 1964.\n      - Actually, 1934: \n        - No major composer died in 1934? Let's verify:\n          - 1934: \n            - No major composer died in 1934? \n            - Actually, 1934: \n              - No, let's check:\n                - 1934: \n                  - No major composer died in 1934? \n                  - Wait, 1934: \n                    - Actually, 1934: \n                      - No, let's think differently.\n\nWait, perhaps we need to consider the discovery year of the element.\n\nLet's reconsider: The element named after a planet was discovered in the same year a composer died.\n\nLet's list elements named after planets and their discovery years:\n\n- Uranium: 1841\n- Neptunium: 1934\n- Plutonium: 1940\n\nNow, composers who died in those years:\n\n- 1841: \n  - No major composer died in 1841. \n  - Let's check:\n    - 1841: \n      - No major composer died in 1841. \n      - 1841: \n        - No, actually, 1841: \n          - No major composer died in 1841. \n          - 1841: \n            - No, let's check:\n              - 1841: \n                - No major composer died in 1841. \n                - 1841: \n                  - No, actually, 1841: \n                    - No major composer died in 1841. \n                    - 1841: \n                      - No, let's check:\n                        - 1841: \n                          - No major composer died in 1841. \n                          - 1841: \n                            - No, actually, 1841: \n                              - No major composer died in 1841. \n                              - 1841: \n                                - No, let's check:\n                                  - 1841: \n                                    - No major composer died in 1841. \n                                    - 1841: \n                                      - No, actually, 1841: \n                                        - No major composer died in 1841. \n                                        - 1841: \n                                          - No, let's check:\n                                            - 1841: \n                                              - No major composer died in 1841. \n                                              - 1841: \n                                                - No, actually, 1841: \n                                                  - No major composer died in 1841. \n                                                  - 1841: \n                                                    - No, let's check:\n                                                      - 1841: \n                                                        - No major composer died in 1841. \n                                                        - 1841: \n                                                          - No, actually, 1841: \n                                                            - No major composer died in 1841. \n                                                            - 1841: \n                                                              - No, let's check:\n                                                                - 1841: \n                                                                  - No major composer died in 1841. \n                                                                  - 1841: \n                                                                    - No, actually, 1841: \n                                                                      - No major composer died in 1841. \n                                                                      - 1841: \n                                                                        - No, let's check:\n                                                                          - 1841: \n                                                                            - No major composer died in 1841. \n                                                                            - 1841: \n                                                                              - No, actually, 1841: \n                                                                                - No major composer died in 1841. \n                                                                                - 1841: \n                                                                                  - No, let's check:\n                                                                                    - 1841: \n                                                                                      - No major composer died in 1841. \n                                                                                      - 1841: \n                                                                                        - No, actually, 1841: \n                                                                                          - No major composer died in 1841. \n                                                                                          - 1841: \n                                                                                            - No, let's check:\n                                                                                              - 1841: \n                                                                                                - No major composer died in 1841. \n                                                                                                - 1841: \n                                                                                                  - No, actually, 1841: \n                                                                                                    - No major composer died in 1841. \n                                                                                                    - 1841: \n                                                                                                      - No, let's check:\n                                                                                                        - 1841: \n                                                                                                          - No major composer died in 1841. \n                                                                                                          - 1841: \n                                                                                                            - No, actually, 1841: \n                                                                                                              - No major composer died in 1841. \n                                                                                                              - 1841: \n                                                                                                                - No, let's check:\n                                                                                                                  - 1841: \n                                                                                                                    - No major composer died in 1841. \n                                                                                                                    - 1841: \n                                                                                                                      - No, actually, 1841: \n                                                                                                                        - No major composer died in 1841. \n                                                                                                                        - 1841: \n                                                                                                                          - No, let's check:\n                                                                                                                            - 1841: \n                                                                                                                              - No major composer died in 1841. \n                                                                                                                              - 1841: \n                                                                                                                                - No, actually, 1841: \n                                                                                                                                  - No major composer died in 1841. \n                                                                                                                                  - 1841: \n                                                                                                                                    - No, let's check:\n                                                                                                                                      - 1841: \n                                                                                                                                        - No major composer died in 1841. \n                                                                                                                                        - 1841: \n                                                                                                                                          - No, actually, 1841: \n                                                                                                                                            - No major composer died in 1841. \n                                                                                                                                            - 1841: \n                                                                                                                                              - No, let's check:\n                                                                                                                                                - 1841: \n                                                                                                                                                  - No major composer died in 1841. \n                                                                                                                                                  - 1841: \n                                                                                                                                                    - No, actually, 1841: \n                                                                                                                                                      - No major composer died in 1841. \n                                                                                                                                                      - 1841: \n                                                                                                                                                        - No, let's check:\n                                                                                                                                                          - 1841: \n                                                                                                                                                            - No major composer died in 1841. \n                                                                                                                                                            - 1841: \n                                                                                                                                                              - No, actually, 1841: \n                                                                                                                                                                - No major composer died in 1841. \n                                                                                                                                                                - 1841: \n                                                                                                                                                                  - No, let's check:\n                                                                                                                                                                    - 1841: \n                                                                                                                                                                      - No major composer died in 1841. \n                                                                                                                                                                      - 1841: \n                                                                                                                                                                        - No, actually, 1841: \n                                                                                                                                                                          - No major composer died in 1841. \n                                                                                                                                                                          - 1841: \n                                                                                                                                                                            - No,",
+      "correct": false,
+      "elapsed_s": 67.71,
+      "error": null
+    },
+    {
+      "id": "sentinel_multihop_02",
+      "suite": "hotpotqa",
+      "method": "f1",
+      "expected": "Lardizabalaceae",
+      "answer": "<answer>Lard",
+      "correct": false,
+      "elapsed_s": 0.17,
+      "error": null
+    },
+    {
+      "id": "sentinel_multihop_03",
+      "suite": "hotpotqa",
+      "method": "f1",
+      "expected": "Switzerland",
+      "answer": "<answer>Switzerland</answer>",
+      "correct": true,
+      "elapsed_s": 0.26,
+      "error": null
+    },
+    {
+      "id": "sentinel_multihop_04",
+      "suite": "hotpotqa",
+      "method": "f1",
+      "expected": "Disporum",
+      "answer": "<answer>Disporum</answer>",
+      "correct": true,
+      "elapsed_s": 0.29,
+      "error": null
+    },
+    {
+      "id": "sentinel_instruction_02",
+      "suite": "instruction_precision",
+      "method": "substring",
+      "expected": "A",
+      "answer": "Alright, let's tackle this problem step by step. I'm going to break it down to make sure I understand each part before arriving at the final answer.\n\n### Understanding the Problem\n\nWe need to create a sequence of four words with the following characteristics:\n\n1. **Each word starts with a different vowel**: The vowels are A, E, I, O, and U (though the problem specifies A, E, I, O, so we'll stick to these four).\n2. **Alphabetical order by first letter**: The words should be in alphabetical order based on their starting letters. Since we're using A, E, I, O, the order is A, E, I, O.\n3. **Separated by spaces**: The words should be separated by single spaces.\n4. **Exactly four words**: We need precisely four words in total.\n\n### Identifying the Vowels\n\nThe vowels we're working with are A, E, I, O. Note that U is not included in this list, so we won't use it.\n\n### Alphabetical Order\n\nThe order of the vowels is already given as A, E, I, O. This means the first word must start with A, the second with E, the third with I, and the fourth with O.\n\n### Selecting Words\n\nNow, we need to choose words that start with each of these letters. The words can be any valid English words, and they don't necessarily have to be common or short. However, they must be actual words.\n\nLet's brainstorm some words for each starting letter:\n\n- **A**: apple, ant, alligator, amazing, animal, astronaut, etc.\n- **E**: elephant, eagle, egg, excellent, etc.\n- **I**: igloo, ice, island, etc.\n- **O**: ocean, orange, octopus, etc.\n\nWe can pick any valid words from these lists. For simplicity, let's choose common words.\n\n### Choosing the Words\n\nLet's select one word for each starting letter:\n\n1. **A**: \"apple\"\n2. **E**: \"eagle\"\n3. **I**: \"igloo\"\n4. **O**: \"ocean\"\n\nThese are all valid English words, and they follow the required order.\n\n### Verifying the Order\n\nLet's check if they are in alphabetical order by first letter:\n\n- A (apple)\n- E (eagle)\n- I (igloo)\n- O (ocean)\n\nYes, A, E, I, O is the correct alphabetical order.\n\n### Finalizing the Answer\n\nNow, we just need to present the words separated by spaces:\n\n\"apple eagle igloo ocean\"\n\n### Potential Alternative Words\n\nJust to ensure we're not missing anything, let's consider if there are other words that might fit better or if there's a more precise match. However, since the problem doesn't specify any other constraints (like word length or meaning), our selection is valid.\n\n### Conclusion\n\nAfter carefully considering the requirements and verifying each step, the sequence of words that meets all the given conditions is:\n\n**apple, eagle, igloo, ocean**\n\n### Final Answer\n\napple eagle iglo",
+      "correct": true,
+      "elapsed_s": 20.2,
+      "error": null
+    },
+    {
+      "id": "sentinel_instruction_03",
+      "suite": "instruction_precision",
+      "method": "substring",
+      "expected": "42",
+      "answer": "{\"question\": \"What is 15 + 27?\", \"answer\": 4",
+      "correct": false,
+      "elapsed_s": 0.56,
+      "error": null
+    },
+    {
+      "id": "sentinel_instruction_04",
+      "suite": "instruction_precision",
+      "method": "substring",
+      "expected": "April",
+      "answer": "April, June, September, November\n}",
+      "correct": true,
+      "elapsed_s": 0.28,
+      "error": null
+    }
+  ]
+}
