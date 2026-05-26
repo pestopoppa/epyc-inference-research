@@ -2,13 +2,13 @@
 
 ## Introduction
 
-We developed an 8-suite benchmarking framework to evaluate models for specific roles in our orchestration system. Unlike generic benchmarks (MMLU, etc.), our suites test task-specific capabilities: can a model follow precise formatting? Can it chain multi-step reasoning? Can it generate valid tool calls?
+We developed a multi-suite benchmarking framework to evaluate models for specific roles in our orchestration system. The framework comprises 10 purpose-built suites described in this chapter, plus 15+ HuggingFace-backed adapters documented in [Chapter 07](07-benchmark-suite-construction.md) (~27 suites in production as of 2026-03). Unlike generic benchmarks (MMLU, etc.), our suites test task-specific capabilities: can a model follow precise formatting? Can it chain multi-step reasoning? Can it generate valid tool calls?
 
 **Key Achievement**: 61 baseline models evaluated, with 381 total configurations (including MoE/speculative variants).
 
-## The 8 Benchmark Suites
+## The Benchmark Suites
 
-Every model entering the orchestration system is measured against eight purpose-built suites, each targeting a specific capability that maps directly to an agent role. This is not about leaderboard scores -- it is about answering "can this model do the job we need it to do?"
+Every model entering the orchestration system is measured against a portfolio of purpose-built suites, each targeting a specific capability that maps directly to an agent role. This is not about leaderboard scores -- it is about answering "can this model do the job we need it to do?"
 
 <details>
 <summary>Suite definitions and role mappings</summary>
@@ -177,21 +177,23 @@ The orchestrator benchmark pipeline compares orchestrated responses against dire
 
 ### On-the-Fly Dataset Sampling (January--February 2026)
 
-Nine suites now sample fresh questions from real HuggingFace datasets on each run, totaling 35,560+ questions:
+Eleven HuggingFace-backed suites now sample fresh questions from real datasets on each run, totaling 38,000+ questions (with March 2026 additions for physics reasoning):
 
-| Suite | Dataset(s) | Pool Size |
-|-------|-----------|-----------|
-| general | MMLU (cais/mmlu) | 14,042 |
-| math | GSM8K + MATH-500 | 1,819 |
-| coder | HumanEval + MBPP | 664 |
-| thinking | ARC-Challenge + HellaSwag | 11,214 |
-| instruction_precision | IFEval (google/IFEval) | 541 |
-| vl | OCRBench + ChartQA | 3,500 |
-| gaia | GAIA (gaia-benchmark/GAIA) | 165 |
-| cruxeval | CRUXEval (cruxeval-org/cruxeval) | 1,600 |
-| bigcodebench | BigCodeBench (bigcode/bigcodebench) | 1,140 |
+| Suite | Dataset(s) | Pool Size | Scoring |
+|-------|-----------|-----------|---------|
+| general | MMLU (cais/mmlu) | 14,042 | multiple_choice |
+| math | GSM8K + MATH-500 | 1,819 | exact_match |
+| coder | HumanEval + MBPP | 664 | code_execution |
+| thinking | ARC-Challenge + HellaSwag | 11,214 | multiple_choice |
+| instruction_precision | IFEval (google/IFEval) | 541 | programmatic |
+| vl | OCRBench + ChartQA | 3,500 | substring |
+| gaia | GAIA (gaia-benchmark/GAIA) | 165 | substring |
+| cruxeval | CRUXEval (cruxeval-org/cruxeval) | 1,600 | code_execution |
+| bigcodebench | BigCodeBench (bigcode/bigcodebench) | 1,140 | code_execution |
+| phybench | PHYBench (Eureka-Lab/PHYBench) | 100 | substring |
+| physreason | PhysReason (Eureka-Lab/PhysReason) | 3,117 | llm_judge (with fast-path substring) |
 
-Adapters in `scripts/benchmark/dataset_adapters.py`. Falls back to static YAML for `agentic`, `long_context`, `mode_advantage`, `web_research`, and `skill_transfer`.
+Adapters in `scripts/benchmark/dataset_adapters.py` (see [Chapter 07](07-benchmark-suite-construction.md) for adapter implementation details). Falls back to static YAML for `agentic`, `long_context`, `mode_advantage`, `web_research`, and `skill_transfer`.
 
 Two additional YAML-only suites were added on 2026-03-03:
 

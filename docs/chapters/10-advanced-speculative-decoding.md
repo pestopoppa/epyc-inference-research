@@ -1,5 +1,7 @@
 # Chapter 10: Advanced Speculative Decoding Techniques
 
+> **Current Status (May 2026)**: NUMA 4-way parallel serving remains the **primary** CPU acceleration lever on EPYC 9655 (6.7x aggregate throughput vs single-instance). Speculative decoding provides **incremental** gains (+17–21% from draft tuning, +1–5% from advanced techniques) stacked on top of an already-saturated verification-step budget. The investigations documented in this chapter have produced (as of 2026-04 → 2026-05) three closed NO-GO findings (DFlash on Q4_K_M, slot-promotion on hybrid SSM with Qwen3-1.7B drafter, MAB tree-shape selector) and two deployable mechanisms (MoE-Spec on REAP-246B, Gemma4 MTP on dense + MoE worker_general). Section 10.5 below summarizes the 2026-04-30 closure pass; the original Tier 1/2/3 classifications in Section 8 predate these closures.
+
 ## Motivation
 
 Our EPYC 9655 system is **memory-bandwidth-bound** during autoregressive decoding: each token requires reading the entire model from DRAM. With 8-channel DDR5 (~300+ GB/s aggregate bandwidth), we have substantial bandwidth but still hit this wall with large quantized models. This memory-bound nature has two implications:
@@ -96,11 +98,15 @@ Phase 2: Target model verifies entire tree in one pass (expensive, but amortized
 - Generates **10–20 accepted tokens per target model iteration** at large budgets
 - RTX 2080Ti (1.3B draft → 70B target): 1.86 tok/s (6.1x)
 
-**Why this changes the CPU calculus**: The original "CPU Relevance of Tree Methods" table below assumed tree verification is expensive on CPU. SpecExec shows this assumption is wrong when bandwidth-bound. On our EPYC with ~300 GB/s reading a Q4 32B model (~18GB), one forward pass takes ~60ms regardless of whether we verify 1 token or 1000 tokens — the weight-loading dominates. This means:
+**Why this initially looked like it changes the CPU calculus**: The SpecExec argument predicts that on bandwidth-bound hardware, verifying 1 vs 1000 tokens should cost roughly the same — weight-loading dominates. Naively applied to EPYC, this projection suggested **tree sizes in the hundreds to thousands of nodes** should be optimal.
 
-- **Optimal tree size on CPU is NOT 8–32 nodes** — it could be **hundreds to thousands**
-- The draft model (e.g., Qwen 2B at ~1.5GB) costs only ~5ms per forward pass
-- A draft tree of 1024 tokens costs maybe 50–100ms to build but saves dozens of 60ms verification passes
+**Empirical reality on EPYC (validated 2026-03, see §10.1 and §10.3 below)**: The SpecExec near-flat-verification thesis **holds only for f16 models** on this hardware. **Q4_K_M models — i.e. our entire production stack — show 4.05–4.96x cost growth at batch=64 vs batch=1**, because dequantization compute on CPU dominates once weight-loading is amortized. This is not a contradiction of the SpecExec model; it is a regime difference. SpecExec was measured on GPU HBM (~1.4 TB/s) where dequant is cheap relative to memory traffic. EPYC DDR5 (~300 GB/s, ~4.6× slower) inverts the ratio, making per-token dequant the dominant cost above small batch sizes.
+
+The empirical consequence (§10.3): **linear K-throughput is flat from K=16 to K=256** across all measured target/draft pairs. Acceptance decays geometrically, so extra draft tokens beyond K~16 are generated but almost never accepted, and on Q4_K_M each additional verification token does cost real time.
+
+- **Optimal tree size on CPU is NOT "hundreds to thousands"** — it is bounded by the same K~16 saturation point as linear speculation, modulated by tree branching gains. Empirically (§10.4, §12.2): tree speculation produces +2–5% on the regimes where it helps (f16 targets and large MoE Q4) and -3% to -8% on medium dense Q4/Q6 where verification is fast enough that the ~41ms tree-construction overhead dominates.
+- The draft model (e.g., Qwen 2B at ~1.5GB) costs only ~5ms per forward pass on EPYC — this part of the SpecExec analysis transfers cleanly. Build cost of a depth-5 tree of ~16–64 nodes is ~40ms.
+- Trees of 1024 nodes are **not** validated on EPYC and the empirical profile predicts they will not pay off on Q4_K_M targets. The realistic operating points are K=16 linear, or branching factor 7/5/3/2 with depth ≤ 5 and cap 32 seq_ids (DySpec implementation, §12.1).
 
 ### 1.6 Dynamic Delayed Tree Expansion (Feb 2026)
 
@@ -114,19 +120,21 @@ Standard tree methods branch immediately from the root. Delayed expansion instea
 
 **CPU relevance**: Delayed branching produces smaller trees for the same effective acceptance rate. The draft phase generates fewer tokens (single path to L₁, then K paths for L₂), reducing total draft model weight loads.
 
-### CPU Relevance of Tree Methods (Revised)
+### CPU Relevance of Tree Methods (Revised — Empirical, 2026-03)
 
-The SpecExec observation fundamentally changes the analysis. On bandwidth-bound CPU systems:
+The initial SpecExec-based projection (paragraphs above) over-applied the GPU near-flat-verification thesis to EPYC Q4_K_M. After empirical validation (§10.1 batch-verification profile, §10.3 large-K saturation, §12 DySpec tree implementation on actual hardware), the revised analysis is:
 
-| Factor | GPU Context | CPU Context (Revised) |
-|--------|------------|------------------------|
-| Tree verification cost | Cheap (batched) | **Also cheap** (bandwidth-bound, not token-count-bound) |
-| Optimal tree size | 64–768 nodes | **Hundreds to thousands** (weight-load amortization) |
-| Optimal depth | 7–22 | **Similar or deeper** (each accepted token saves a full weight read) |
-| Draft model cost | Negligible | Moderate but amortizable (small model, fast per-token) |
-| Key constraint | Compute budget | **Memory bandwidth** (already saturated by weight reads) |
+| Factor | GPU Context | CPU Context (Empirical, EPYC 9655) |
+|--------|------------|-------------------------------------|
+| Tree verification cost | Cheap (batched) | **f16 only**: near-flat (1.69x at N=64). **Q4_K_M (production)**: linear, 4.05–4.96x at N=64 — dequant-bound |
+| Linear K saturation | n/a | **K~16** across all measured pairs (§10.3); throughput flat K=16→K=256 |
+| Tree size sweet spot | 64–768 nodes | **16–64 nodes** (branching 7/5/3/2, depth ≤ 5, cap 32 seq_ids); larger trees not validated |
+| Tree gain vs linear K=16 | Substantial | **+2–5%** on f16 + large MoE Q4 (235B+); **-3% to -8%** on medium dense Q4/Q6 (32B) |
+| Construction overhead | <2% (DySpec C++) | **~41ms/round hard floor** — `seq_cp` full-range requirement in llama.cpp |
+| Draft model cost | Negligible | Moderate; fast drafters (Qwen2.5-Coder-0.5B @ 185 t/s) net positive, slow drafters net negative |
+| Key constraint | Compute budget | **Dequant compute on Q4_K_M** above batch~16; memory bandwidth below that |
 
-**Actionable**: The DP topology optimization and dynamic tree construction algorithms are portable to llama.cpp. DySpec's <2% overhead C++ tree builder is closest to integration-ready. The key insight from SpecExec is that on CPU, **larger trees are cheaper than assumed** because verification cost is dominated by weight loading, not token count. llama.cpp's existing `--draft` uses single-sequence speculation; tree verification requires implementing topology-aware causal masks in ggml.
+**Actionable**: Tree speculation is production-viable for f16 targets (any size) and large MoE Q4 (235B+ where per-round verification is slow); enable via `--draft-p-split 0.1`. Keep linear K=16 for medium dense Q4/Q6 workers. DySpec's C++ heap-based tree builder was ported to `common/speculative.cpp` on `feature/tree-speculation` (March 2026) with branching factor 7/5/3/2 and 32 seq_id cap; see §12. The original SpecExec insight (large trees are "free" via weight-loading amortization) does NOT transfer to EPYC Q4_K_M production — keep tree budgets small and target the regimes where empirical data shows positive delta.
 
 ---
 
@@ -452,27 +460,38 @@ The speculation cache itself stores token sequences (not weights or KV caches), 
 
 ### Prioritized Research Directions for EPYC
 
-**Tier 0 — Paradigm shift** (changes how we think about CPU speculation):
+> **Status note (May 2026)**: The tier classification below was drafted before the 2026-03 → 2026-05 empirical pass. Items have been re-tagged with their current closure status. The original "Tier 0 paradigm shift" toward thousand-node trees has been falsified empirically on Q4_K_M (see §10.3 K~16 saturation and §12 tree results). The actual dominant lever on EPYC is **NUMA 4-way parallel serving (6.7x)**, with spec-dec contributing incrementally.
 
-The SpecExec/Sequoia insight that **verification of N tokens costs the same as 1 token when bandwidth-bound** means our EPYC system should target **very large speculation trees** (hundreds to thousands of nodes), not the small trees (8–32) we initially assumed. This reframes every other technique.
+**Tier 0 — Paradigm correction** (2026-03 empirical update):
+
+The original SpecExec/Sequoia projection — that verification of N tokens costs the same as 1 token when bandwidth-bound — holds for **f16 models only** on EPYC. On Q4_K_M (the entire production stack) verification cost grows ~4–5x at batch=64 due to dequant compute (§10.1), and linear K saturates at K~16 (§10.3). The "very large speculation trees" prediction is **NOT** validated on this hardware; realistic tree budgets are 16–64 nodes.
+
+**Tier 0' — Production deployed (2026-05)**:
+- **Gemma4-26B-A4B MTP** (worker_general): 1.06x MoE / 2.98x dense, deployed 2026-05-08
+- **REAP-25B / REAP-246B pure-MoE targets**: enable speculation on Qwen3-Next family
+- **MoE-Spec verification-budget mechanism**: +15.2% forward-pass on REAP-246B
 
 **Tier 1 — Implement now** (low risk, clear benefit):
-1. **SpecExec-style large tree verification**: Profile actual verification cost vs tree size on EPYC. Confirm that verifying 100–1000 tokens costs ≈ the same as 1. If confirmed, increase `--draft` depth dramatically.
-2. **HSD verification algorithm**: Replace token-wise verification in llama.cpp's `--draft` with capped branch resampling. Free 3–7% speedup, no memory cost, no training needed.
-3. **Phase-separated scheduling**: Ensure draft model runs to completion before target model starts (no concurrency needed). This simplifies implementation enormously.
+1. **SpecExec-style large tree verification** — ❌ **CLOSED (2026-03, NO-GO on Q4_K_M)**: Verifying 100–1000 tokens does NOT cost ≈ 1 token on Q4_K_M; ratio is 4–5x at N=64. Tree budget capped at 16–64 nodes (§12.1).
+2. **HSD verification algorithm** — ✅ **DEPLOYED**: Capped branch resampling integrated; A/B measured +0.8% throughput, +0.98pp acceptance, default-on (§11.7).
+3. **Phase-separated scheduling** — ✅ **STANDARD**: Draft → target sequential is the production pattern.
 
 **Tier 2 — Prototype and measure** (moderate effort, high potential):
-4. **DySpec dynamic tree construction**: Port the C++ heap-based tree builder to llama.cpp. Needs topology-aware causal mask in ggml. Would replace fixed-width speculation with adaptive trees tuned per-step.
-5. **PEARL concurrent draft+verify**: Pin draft model to NUMA node 0, target to NUMA node 1. Overlap draft generation with verification. Adaptive γ based on measured speed ratio.
-6. **Multi-worker parallel drafting**: Run 2–4 draft workers on separate core groups, each exploring different token paths. Merge into combined speculation tree. Verify in one pass.
-7. **KV-cache tree with shared prefixes**: Implement branch-aware KV cache in llama.cpp to avoid duplicating prefix KV across speculation branches. Critical for large trees.
-8. **SWIFT self-speculation**: Layer-skipping for draft tokens without training. Infrastructure now available via `n_layer_exit` API (Section 13.5). Active community discussion ([#10787](https://github.com/ggml-org/llama.cpp/discussions/10787)).
+4. **DySpec dynamic tree construction** — ⚠️ **PARTIAL**: C++ heap-based builder ported (§12.1); production-viable on f16 (+4.4%) and large MoE Q4 (+2.0%); net-negative on medium dense Q4/Q6. Phase 5 overhead-reduction paths all exhausted (§12.4); ~41ms/round construction overhead is a hard floor in llama.cpp.
+5. **PEARL concurrent draft+verify** — ⏸ **DEFERRED**: NUMA 4-way parallel serving already provides 6.7x aggregate; adding concurrent draft+verify on top requires NUMA bandwidth accounting that has not been done.
+6. **Multi-worker parallel drafting** — ⏸ **DEFERRED**: Subsumed by NUMA 4-way parallel serving for the throughput-aggregate use case.
+7. **KV-cache tree with shared prefixes** — ⚠️ **PARTIAL**: Required for tree speculation, but `llama_kv_cache.cpp` asserts full-range `seq_cp`, blocking lazy KV copies (§12.4).
+8. **SWIFT self-speculation** — ⚠️ **INFRASTRUCTURE LANDED, ROUTER OPEN**: `n_layer_exit` API in our fork (§13.5); TIDE calibration tooling complete; 1.76x speed projection at 50% layer exit on Qwen3.6-27B. Open problem: trained router that generalizes to unseen prompts (linear projection overfits, RMSNorm fails). See §13.5.
+8b. **MAB tree-shape selector** — ❌ **CLOSED (2026-04, NO-GO)**: -1.34% NS on Qwen3-Coder-30B, -8.20% p<0.001 on REAP-246B. Pythia results don't generalize to Qwen-family. See `handoffs/completed/mab-tree-shape-selector.md`.
+8c. **Slot-promotion speculation for hybrid SSM** — ❌ **CLOSED (2026-04, NO-GO)**: K=4 dispatcher 35% slower than K=1 baseline on Qwen3.6-35B + Qwen3-1.7B drafter; primary path wins 97% of rounds. Mechanism sound, economics unfavorable for this drafter/target pair. See `handoffs/completed/hybrid-ssm-slot-promotion-spec-dec.md`.
+8d. **DFlash block diffusion** — ❌ **CLOSED (2026-02, NO-GO on Q4_K_M)**: GPU/f16 achieves 6.49 accepted tokens/round; CPU Q4_K_M degrades to 27% per-token acceptance (13.0 t/s vs 36.5 t/s AR baseline). Quantization noise in hidden-state extraction is the root cause.
 
 **Tier 3 — Long-term research** (high effort, transformative potential):
-9. **NUMA-aware KV sharding**: Branch-per-NUMA speculation — each NUMA node builds and verifies a subtree from local memory. Prefix KV replicated (affordable with 1.5TB RAM). Zero cross-node traffic during drafting.
+9. **NUMA-aware KV sharding**: Branch-per-NUMA speculation — each NUMA node builds and verifies a subtree from local memory. Prefix KV replicated (affordable with 1.5TB RAM). Zero cross-node traffic during drafting. *(Distinct from NUMA 4-way parallel serving which is already deployed.)*
 10. **SSD/Saguaro meta-speculation**: Predict verification outcomes to pre-compute next draft. Speculation cache in shared memory across EPYC thread groups.
 11. **Sparse attention kernels**: AVX-512 sparse Q×K^T and A×V for speculative verification. 1.9–3.5x attention speedup on growing contexts.
 12. **Hybrid lookup + self-spec + tree**: Use prompt-lookup when n-gram patterns are strong, self-speculation when they aren't, tree expansion when uncertainty is high. Adaptive switching based on recent acceptance rates and entropy.
+13. **Nemotron-Labs-Diffusion (May 2026)**: New unified self-speculation architecture; dense Ministral3 backbone (no SSM), 5.46 accepted tokens/cycle on some tasks. CPU portability assessment in progress.
 
 ---
 
@@ -559,7 +578,9 @@ Speedup ≈ E[accepted_tokens] / (T_draft(tree_size) / T_target + 1)
 
 Where T_target is approximately constant (weight-loading time) regardless of how many tokens are being verified. This means the denominator barely grows with tree size, and the numerator (accepted tokens) grows logarithmically with tree size (Sequoia's Ω(b·log(n)/log(log(n))) bound).
 
-For our system: T_target ≈ 60ms (18GB at 300 GB/s), T_draft ≈ 5ms per step (1.5GB at 300 GB/s). Building a depth-8 tree costs ~40ms of drafting. Total cycle: ~100ms. If 8 tokens accepted: 80 tok/s effective. If 15 tokens accepted: 150 tok/s effective. Compared to baseline ~17 tok/s, this is a **5–9x speedup** — and we haven't yet applied NUMA parallelism, concurrent execution, or multi-worker drafting.
+For our system: T_target ≈ 60ms (18GB at 300 GB/s), T_draft ≈ 5ms per step (1.5GB at 300 GB/s). Building a depth-8 tree costs ~40ms of drafting. Total cycle: ~100ms. If 8 tokens accepted: 80 tok/s effective. If 15 tokens accepted: 150 tok/s effective. Compared to baseline ~17 tok/s, this is a projected **5–9x speedup** under the SpecExec near-flat-verification assumption.
+
+> **Empirical caveat (2026-03)**: The 5–9x projection above is the theoretical ceiling under SpecExec assumptions. On Q4_K_M targets (our entire production stack) the verification-cost-flat assumption fails (§10.1: 4.05–4.96x scaling at N=64) and linear K saturates at K~16 (§10.3). Measured tree-speculation deltas vs linear K=16 are **+2 to +5%** on f16 + large MoE, and **−3% to −8%** on medium dense Q4/Q6. The dominant speedup on EPYC is **NUMA 4-way parallel serving (6.7x aggregate)**, not large-tree speculation; the spec-dec techniques in this chapter stack incremental gains on top of that.
 
 ### The Combined Architecture Vision
 
@@ -652,7 +673,30 @@ The Phase 3 result is the strongest argument **for** tree speculation: linear K 
 
 However, Phase 1 shows verification cost is **not** near-free for Q4_K_M models (4-5x at N=64). Net expected gain from tree speculation: **1.5-2.5x over linear K=16** for Q4_K_M targets, potentially higher for f16 targets where verification is genuinely near-flat.
 
-The verification function `common_sampler_sample_and_accept_n()` (`common/sampling.cpp:521-548`) implements linear-only verification. Tree extension estimated at ~260-370 LOC. Blocked on upstream tree attention support in llama.cpp.
+The verification function `common_sampler_sample_and_accept_n()` (`common/sampling.cpp:521-548`) implements linear-only verification. Tree extension was subsequently landed on `feature/tree-speculation` (March 2026; see §12 for results). Earlier text mentioning "blocked on upstream tree attention support" reflects the pre-March 2026 status — the `feature/llm-tree` branch is now active on `llama.cpp-experimental` (note: verify against current upstream before citing).
+
+---
+
+## 10.5 Empirical Validation — Phase II Closure Pass (2026-04 → 2026-05)
+
+A second wave of investigations completed between 2026-04 and 2026-05 closed several Tier 1/2 directions from §8 and brought two mechanisms to production. Summary:
+
+| Investigation | Status | Headline measurement | Source |
+|---------------|--------|----------------------|--------|
+| **MAB tree-shape selector** (intake-491) | ❌ NO-GO | Qwen3-Coder-30B tree -1.34% NS (n=180); REAP-246B tree -8.20% p<0.001 | `handoffs/completed/mab-tree-shape-selector.md` |
+| **Slot-promotion (hybrid SSM)** | ❌ NO-GO | Qwen3.6-35B + Qwen3-1.7B drafter: K=4 dispatcher 7.42 t/s vs K=1 baseline 11.40 t/s (-35%); primary path wins 97% | `handoffs/completed/hybrid-ssm-slot-promotion-spec-dec.md` |
+| **DFlash block diffusion (CPU Q4_K_M)** | ❌ NO-GO | 21-commit port complete; 27% per-token acceptance vs 36.5 t/s autoregressive baseline → 13.0 t/s; quantization noise corrupts hidden-state conditioning | `handoffs/completed/dflash-block-diffusion-speculation.md` |
+| **MoE-Spec verification-budget (REAP-246B)** | ✅ DEPLOYABLE | +15.2% forward-pass, +3% e2e; independent expert union reduction during verification batches | wiki § "MoE-Spec verification-budget mechanism gate MET" |
+| **Gemma4-26B-A4B MTP (worker_general)** | ✅ DEPLOYED (2026-05-08) | 1.06x MoE batch=1; 2.98x dense Gemma4-31B; +18pp tool_compliance, +36% tps end-to-end; requires `KMP_BLOCKTIME=10` + 8 MTP flags | `progress/2026-05/2026-05-08.md` |
+| **REAP pure-MoE pruning** | ✅ DEPLOYED | REAP-25B at dm=24: 39.62 t/s (+101% vs baseline); REAP-246B re-enables standard `--draft` on Qwen3-Next family | `handoffs/completed/reap-moe-expert-pruning.md` |
+
+**Meta-finding (wiki § "Amdahl ceiling for spec-dec end-to-end gain")**: spec-dec axes are stacking **incremental** gains on top of an already-saturated verification-step budget. NUMA 4-way parallel serving (6.7x aggregate) is the primary CPU acceleration lever; advanced speculation contributes +1–5% on top of MTP/external draft. This reframes the chapter's earlier framing of speculation as the dominant lever.
+
+---
+
+## 10.6 Nemotron-Labs-Diffusion — Unified Self-Speculation (May 2026)
+
+Released 2026-05-19. A new frontier architecture combining a **dense Ministral3 backbone** (no SSM, no recurrent state to checkpoint) with **unified self-speculation** — the model serves as both draft and target without a separate draft head. Reported metrics: **5.46 accepted tokens per cycle** on some tasks, exceeding EAGLE-3 and MTP. Dense backbone makes CPU portability assessment more favorable than DFlash (which was killed by Q4_K_M hidden-state degradation on hybrid-SSM targets) or slot-promotion (which assumed Delta Net branch parallelism). Status: not yet ported to llama.cpp; intake under review. Source: `/workspace/wiki/speculative-decoding.md` § "Unified-model self-speculation (Nemotron-Labs-Diffusion)".
 
 ---
 

@@ -31,12 +31,16 @@ The speedups range from transformative (12.7x for summarization) to negligible (
 
 | Task Type | Model | Baseline | With Lookup | Speedup |
 |-----------|-------|----------|-------------|---------|
-| Summarization | Qwen3-Next-80B | 7.5 t/s | 95.18 t/s | **12.7x** |
-| Code editing | Qwen2.5-Coder-32B | 3.0 t/s | 25.82 t/s | **8.6x** |
+| Summarization | Qwen3-Next-80B¹ | 7.5 t/s | 95.18 t/s | **12.7x** |
+| Code editing | Qwen2.5-Coder-32B² | 3.0 t/s | 25.82 t/s | **8.6x** |
 | Document QA | Qwen2.5-72B | ~4 t/s | ~8 t/s | **2x** |
 | Code generation | Any | - | - | 1.0-1.2x |
-| Code generation (w/ V3 corpus) | Coder-32B | 7.3 t/s | 12.6 t/s | **1.72x** |
+| Code generation (w/ V3 corpus) | Coder-32B² | 7.3 t/s | 12.6 t/s | **1.72x** |
 | Code generation (w/ V3 corpus) | Coder-30B | - | - | 1.16x |
+
+¹ Qwen3-Next-80B is a hybrid-SSM (Delta Net) architecture. Prompt lookup on this class auto-activates `--freeze-recurrent-draft` (server default since 2026-03-10) so the SSM recurrent state does not corrupt on draft rejection. Frozen-state drafting reduces per-token acceptance by **~13pp** vs the equivalent dense target, but the elimination of checkpoint/restore overhead makes the net throughput strongly positive on summarization (where input overlap is very high). The 12.7x figure is the measured end-to-end gain under freeze-recurrent; the "ideal" full-acceptance projection would be higher. See [SSM Compatibility (Updated 2026-03-15)](#ssm-compatibility-updated-2026-03-15) below, [Chapter 10 §11.5](10-advanced-speculative-decoding.md#115-freeze-recurrent-speculation--breakthrough), and `handoffs/completed/hsd-hierarchical-self-speculation.md`.
+
+² **Baseline caveat (2026-05)**: Qwen2.5-Coder-32B is a 2026-02 baseline target. As of 2026-05-08 it has been replaced in production by Gemma4-26B-A4B-Q4_K_M (worker_general role); the current production baseline tokens-per-second is higher (~44 t/s benchmark, ~76 t/s solo verified). The prompt-lookup speedup ratio is expected to be similar on Gemma4 for grounded tasks but has not been re-measured at this row.
 
 </details>
 
@@ -86,6 +90,8 @@ numactl --interleave=all \
 
 Prompt lookup stacks beautifully with both MoE reduction and speculative decoding. In llama-server, spec decode takes priority — the draft model proposes tokens first, and prompt lookup fills gaps when the draft model has low confidence. The best combined result is 47.11 t/s on Qwen3-Coder-30B.
 
+> **Production update (May 2026)**: Prompt lookup is now orthogonal to MTP drafting (Gemma4) and to MoE-Spec verification-budget mechanisms (REAP-246B). On dense models with high input overlap (summarization, code editing, document QA) lookup remains the **primary** acceleration vector. On models with low overlap (open-ended code generation, creative prose) external drafting / MTP takes priority and lookup contributes ~0–10% fallback. The orchestrator stack selects per-role.
+
 <details>
 <summary>Compatibility and combination stack</summary>
 
@@ -118,7 +124,7 @@ def get_draft_tokens(context, prompt):
 
 ## SSM Compatibility (Updated 2026-03-15)
 
-Prompt lookup now works on SSM hybrid models (Qwen3-Next, Qwen3.5-35B-A3B). The server auto-activates `--freeze-recurrent` for all speculation on hybrid models, which freezes SSM state writes during each speculation round. Acceptance rate drops ~13pp compared to dense models, but net throughput is positive. External draft speculation (separate draft model) remains incompatible because SSM state can't fork for multi-path verification.
+Prompt lookup now works on SSM hybrid models (Qwen3-Next, Qwen3.5-35B-A3B). The server auto-activates `--freeze-recurrent` for all speculation on hybrid models, which freezes SSM state writes during each speculation round. Acceptance rate drops **~13pp** compared to dense models (quantified empirically in [Chapter 10 §11.5](10-advanced-speculative-decoding.md#115-freeze-recurrent-speculation--breakthrough): 60.7% → 47.9% on Qwen3.5-9B with Qwen2.5-Coder-0.5B drafter), but net throughput is positive because freezing eliminates the SSM checkpoint/restore overhead entirely. External draft speculation with a separate draft model remains viable **only** under freeze-recurrent on this architectural class — slot-promotion as an alternative was tested April 2026 and found net-negative (Chapter 05 Track 11). Source: `handoffs/completed/hsd-hierarchical-self-speculation.md`.
 
 ## Implementation Notes
 
@@ -310,6 +316,10 @@ Attempted to improve code quality (not just speed) by instructing the model to "
 8. vLLM Team. (2024). *N-gram Prompt Lookup in vLLM*. vLLM Documentation. https://docs.vllm.ai/en/latest/features/spec_decode.html
 
 9. Gerganov, G., et al. (2024). *llama-lookup: Prompt Lookup Decoding in llama.cpp*. GitHub. https://github.com/ggml-org/llama.cpp/tree/master/examples/lookup
+
+### Unified Self-Speculation (Frontier, May 2026)
+
+10. *Nemotron-Labs-Diffusion* (2026-05-19) — Dense Ministral3 backbone (no SSM) with unified self-speculation; 5.46 accepted tokens per cycle on some tasks, outperforming EAGLE-3 / MTP. Not yet ported to llama.cpp; CPU portability assessment in progress. See `/workspace/wiki/speculative-decoding.md` § "Unified-model self-speculation."
 
 </details>
 

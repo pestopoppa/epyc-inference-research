@@ -226,7 +226,7 @@ Per-role optimized speeds from production benchmarks (model_registry.yaml):
 | frontdoor | Qwen3-Coder-30B-A3B Q4_K_M | 18.3 |
 | coder_escalation | Qwen2.5-Coder-32B Q4_K_M + spec | 39.44 |
 | architect_general | Qwen3-235B-A22B Q4_K_M | 6.75 |
-| architect_coding | Qwen3-Coder-480B-A35B Q4_K_M | 10.3 |
+| architect_coding | Qwen3-Coder-480B-A35B Q4_K_M | 7.0 |
 | ingest_long_context | Qwen3-Next-80B-A3B Q4_K_M | 6.29 |
 | worker_explore | Qwen2.5-7B-Instruct f16 | 27.88 |
 | worker_math | Qwen2.5-7B-Instruct f16 + spec | 48.5 |

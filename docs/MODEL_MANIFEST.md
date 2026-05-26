@@ -6,11 +6,11 @@ Role-based model configuration for the orchestrator. You don't need the exact mo
 
 | Role | Port | Model | RAM | Tier | Speed |
 |------|------|-------|-----|------|-------|
-| Front Door | 8080 | Qwen3-Coder-30B-A3B (Q4_K_M) | 20 GB | HOT | 47 t/s |
-| Coder (escalation) | 8081 | Qwen2.5-Coder-32B (Q4_K_M) | 20 GB | HOT | 39 t/s |
-| Worker (general) | 8082 | Qwen2.5-7B (f16) | 16 GB | HOT | 44 t/s |
-| Architect (general) | 8083 | Qwen3-235B-A22B (Q4_K_M) | 134 GB | WARM | 6.1 t/s |
-| Architect (coding) | 8084 | Qwen3-Coder-480B-A35B (Q4_K_M) | 272 GB | WARM | 9.0 t/s |
+| Front Door | 8080 | Qwen3.5-35B-A3B-UD (Q4_K_M, moe6) | 19 GB | HOT | 12.7 t/s per instance (~50.8 t/s agg, NUMA 4×48t) |
+| Coder (escalation) | 8081 | Qwen2.5-Coder-32B (Q4_K_M) | 20 GB | HOT | 10.8 t/s (sweep 2026-03-21) |
+| Worker (general) | 8082 | Qwen3-Coder-30B-A3B (Q4_K_M, spec) | 16 GB | HOT | 39.1 t/s (4×48t agg ~156 t/s) |
+| Architect (general) | 8083 | Qwen3.5-122B-A10B (Q4_K_M) | 69 GB | HOT (promoted 2026-05) | 12.19 t/s (96t NUMA, Probe B 2026-05-04) |
+| Architect (coding) | 8084 | Qwen3-Coder-480B-A35B (Q4_K_M) | ~271 GB | WARM | 7.0 t/s (sweep 2026-03-21) |
 | Ingest (long context) | 8085 | Qwen3-Next-80B-A3B (Q4_K_M) | 46 GB | WARM | 6.3 t/s |
 
 Supporting services:
@@ -25,9 +25,16 @@ Supporting services:
 
 ## Memory Tiers
 
-- **HOT** (~40 GB): Always resident. Minimum for interactive use.
-- **WARM** (~430 GB): mmap-preloaded, loaded on demand. Full production stack.
+- **HOT** (~140 GB): Always resident. Includes frontdoor (19 GB), escalation (20 GB), worker (16 GB), architect_general (69 GB, promoted from WARM 2026-05), vision (5 GB), embeddings + utilities (~10 GB). Minimum for interactive use.
+- **WARM** (~320 GB): mmap-preloaded, loaded on demand. Currently architect_coding (271 GB) + ingest_long_context (46 GB).
 - **COLD**: Disk-only, loaded manually.
+
+### Recent Model Candidates (2026-05)
+
+- **Qwen3.6-35B-A3B-Q8_0**: Alternative frontdoor option (PPL gate passed 2026-05).
+- **gemma-4-31B-it (Q4_K_M)**: Candidate general worker; MTP drafter via ik_llama.cpp PR #1744 (requires `KMP_BLOCKTIME=10` to avoid OMP idle spin). Production swap of `worker_general` to gemma-4-26B-A4B MTP recorded 2026-05-08 (+18pp tool_compliance, +36% tps, 76.5 t/s solo).
+- **Qwen3-Coder-REAP-246B-A35B (Q4_K_M)**: 50%-pruned architect candidate, ~139 GB, 6.25 t/s.
+- **DeepSeek-V3**: Larger architect candidate under evaluation.
 
 Start by tier:
 
@@ -55,7 +62,7 @@ Code generation, refactoring, implementation tasks.
 
 - **Needs**: Strong code model, 32B+ parameters
 - **Acceleration**: Speculative decoding (K=24) + prompt lookup
-- **Compatible substitutes**: DeepSeek-Coder-V2, CodeLlama-34B, StarCoder2-33B
+- **Compatible substitutes** (not currently deployed; reference only): DeepSeek-Coder-V2, CodeLlama-34B, StarCoder2-33B
 - **Draft model**: Same family 0.5B-1.5B quantized to Q8_0
 
 ### Worker (Tier C)
@@ -123,4 +130,4 @@ All model configuration lives in `orchestration/model_registry.yaml`. Key sectio
 - `server_mode` — per-role server definitions with ports, models, acceleration
 - `roles` — detailed role definitions with launch commands and quirks
 
-See the [registry file](../orchestration/model_registry.yaml) for the complete configuration.
+See `orchestration/model_registry.yaml` (at the repo root of `epyc-inference-research`) for the complete configuration. The orchestrator's lean copy is compiled from this master at stack-launch time and lives at `epyc-orchestrator/orchestration/model_registry.yaml` — do not hand-edit the lean copy.

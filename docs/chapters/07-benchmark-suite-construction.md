@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Our 8-suite benchmark framework (Chapter 21) relies on deterministically scorable questions derived from public benchmark datasets. This chapter documents the construction methodology, scoring contracts, and reproduction instructions so anyone can independently rebuild the question pools.
+Our multi-suite benchmark framework (see [Chapter 06: Benchmarking Framework](06-benchmarking-framework.md)) comprises 11 YAML-based curated suites and 15+ HuggingFace-backed dataset adapters (~27 total in production as of 2026-03). This chapter documents the construction methodology, scoring contracts, and reproduction instructions for the curated YAML pools so anyone can independently rebuild them.
 
 The benchmark prompts themselves are gitignored — they are reconstructible artifacts, not source-of-truth data. This chapter is the source of truth.
 
@@ -642,7 +642,7 @@ When adding questions to any suite, follow these six checks. They are quick but 
 
 ## Relationship to Other Benchmark Layers
 
-The project has two parallel benchmark tracks. The `v1/` suite uses Claude-as-Judge with rubric scoring for open-ended quality assessment. The `debug/` suite documented here uses machine verifiers for automated regression testing and MemRL rewards. Both cover the same eight categories but serve different purposes.
+The project has two parallel benchmark tracks. The `debug/` suite documented here uses machine verifiers for automated regression testing and MemRL rewards — this is the production path used by all automated seeding runs. A separate `v1/` rubric-scored track (Claude-as-Judge, open-ended quality assessment) exists for manual quality audits but is no longer executed in automated pipelines as of 2026-03 (deterministic scoring proved sufficient for routing signal).
 
 <details>
 <summary>Comparison of rubric vs deterministic scoring</summary>
