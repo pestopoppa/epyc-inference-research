@@ -158,7 +158,7 @@ Hybrid SSM architectures (Qwen3-Next, Qwen3.5) face a **verification wall**: mul
 
 However, two paths are now viable on this architectural class:
 
-1. **Prompt lookup via auto freeze-recurrent** (validated 2026-03-10): The server auto-activates `--freeze-recurrent-draft` on hybrid models, freezing SSM state writes during speculation. Acceptance drops ~13pp vs dense targets, but net throughput is positive (+5–10% on Qwen3.5-9B with a fast Qwen2.5-Coder-0.5B drafter; see [Chapter 10 §11.5](10-advanced-speculative-decoding.md#115-freeze-recurrent-speculation--breakthrough)). On Qwen3-Next-80B summarization, this combines with prompt-lookup n-gram drafting (Chapter 03) for large gains.
+1. **Prompt lookup via auto freeze-recurrent** (validated 2026-03-10): The server auto-activates `--freeze-recurrent-draft` on hybrid models, freezing SSM state writes during speculation. Acceptance drops ~13pp vs dense targets, but net throughput is positive (+5–10% on Qwen3.5-9B with a fast Qwen2.5-Coder-0.5B drafter; see [Chapter 10 §11.5](10-advanced-speculative-decoding.md#115-freeze-recurrent-speculation-breakthrough)). On Qwen3-Next-80B summarization, this combines with prompt-lookup n-gram drafting (Chapter 03) for large gains.
 2. **Expert reduction (Track 2)**: Independent of speculation, see Chapter 02.
 
 External speculative decoding with a separate draft model **remains incompatible** on hybrid SSM without freeze-recurrent. Slot-promotion speculation (April 2026) was tested as an alternative mechanism and found net-negative (see Chapter 05).
