@@ -76,4 +76,8 @@ Indexed as **epyc-inference-research** (11232 symbols, 15814 relationships, 263 
 ## Skills (invoke via Skill tool)
 
 `gitnexus-exploring` · `gitnexus-impact-analysis` · `gitnexus-debugging` · `gitnexus-refactoring` · `gitnexus-guide` · `gitnexus-cli`
+
+## Additional CLI
+
+`gitnexus query <concept>` (execution flows) · `gitnexus cypher <query>` (graph) · `gitnexus wiki` (docs)
 <!-- gitnexus:end -->
