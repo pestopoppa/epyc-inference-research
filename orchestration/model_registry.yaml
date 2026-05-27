@@ -484,13 +484,15 @@ server_mode:
     throughput: 24.3  # t/s, Qwen3.6 Q8 full (lean registry, May-4)
     previous_model: Qwen3.5-35B-A3B-UD-Q4_K_M.gguf  # frontdoor swapped to Qwen3.6 Q8 2026-05-04 (lean)
 
-  coder_escalation:
+  # qwen25_coder_32b_q4km: launch spec preserved from the former coder_escalation model
+  # (role realigned to Qwen3.6 2026-05-27; kept per model_not_role_indexing). Not in process_layout.
+  qwen25_coder_32b_q4km:
     url: http://localhost:8081
     port: 8081
     slots: 1  # Sweep 2026-02-19: p95 1.98x at concurrency=2, serial only
-    model_role: coder_escalation
-    description: Escalation code generation with spec decode + prompt lookup fallback
-    model: Qwen2.5-Coder-32B-Q4_K_M.gguf
+    model_role: qwen25_coder_32b_q4km
+    description: Escalation code generation with spec decode + prompt lookup fallback (former coder_escalation; Qwen2.5-Coder-32B-Q4)
+    model: Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf
     draft_model: Qwen2.5-Coder-0.5B-Instruct-Q8_0.gguf
     memory_gb: 20
     tier: hot
@@ -501,6 +503,26 @@ server_mode:
       lookup: true  # Prompt n-gram lookup as fallback (--lookup flag, commit 8e35dbc01)
       corpus_retrieval: true  # A/B: +8.7pp acceptance, +6% speed
     throughput: 10.8   # t/s at 48t NUMA deployment (sweep 2026-03-21). 192t ref: 12.2. Old 39.44 was inflated.
+
+  coder_escalation:
+    url: http://localhost:8080
+    port: 8080
+    slots: 1
+    chat_template_kwargs:
+      enable_thinking: false
+    model_role: qwen36_q8_0
+    shared_with: [frontdoor]  # same GGUF as frontdoor, mmap-shared (matches live :8070 shared design)
+    description: Coding escalation — Qwen3.6-35B-A3B Q8 (shares frontdoor GGUF; 97% coder vs 77% Qwen3-Coder-30B; absorbs eliminated architect_coding). Predecessor Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km.
+    model: Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
+    kv_quant: {k: q8_0, v: q8_0}
+    memory_gb: 37
+    tier: hot
+    acceleration:
+      type: none  # Qwen3.6 Q8 runs full — GDN verification wall makes spec-dec net-negative
+      lookup: false
+      corpus_retrieval: true
+    throughput: 24.3  # t/s, shares frontdoor Qwen3.6 Q8 (lean, May-4)
+    previous_model: Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf  # realigned to Qwen3.6 2026-05-27
 
   worker:
     url: http://localhost:8082
@@ -1011,9 +1033,11 @@ roles:
       n_tokens: -1
       temperature: 0.3
 
-  coder_escalation:
+  # qwen25_coder_32b_q4km: benchmark record preserved from the former coder_escalation model
+  # (role realigned to Qwen3.6 2026-05-27; kept per model_not_role_indexing — holds the 5.4x spec-dec data).
+  qwen25_coder_32b_q4km:
     tier: B
-    description: Coding escalation target - dense coder with spec decode + prompt lookup
+    description: Qwen2.5-Coder-32B-Instruct Q4_K_M — dense coder with spec decode + prompt lookup (former coder_escalation; 2025-12-16 bench)
     model:
       name: Qwen2.5-Coder-32B-Instruct
       huggingface_id: lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF
@@ -1038,13 +1062,52 @@ roles:
     memory:
       residency: warm
       pinned: false
+    benchmark_date: 2025-12-16
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.2
+    system_prompt_suffix: |
+      Output code only. No explanations unless requested.
+      Include minimal inline comments. No boilerplate or filler.
+      Handle edge cases explicitly.
+  coder_escalation:
+    tier: B
+    description: Coding escalation — Qwen3.6-35B-A3B Q8 MoE (May-6 swap; same model as frontdoor, shares GGUF mmap; absorbs eliminated architect_coding role). Predecessor Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km.
+    model:
+      name: Qwen3.6-35B-A3B-Q8_0
+      path: /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 37
+      architecture: qwen35moe
+      previous_model: Qwen2.5-Coder-32B-Instruct-Q4_K_M (realigned 2026-05-27; predecessor bench under qwen25_coder_32b_q4km)
+      use_chat_api: true
+      disable_thinking: true
+      reasoning: auto
+      max_tokens_multiplier: 4
+    candidate_roles:
+    - coder
+    - general
+    acceleration:
+      type: none  # Qwen3.6 Q8 runs full; GDN verification wall makes spec-dec net-negative
+      lookup: false
+    performance:
+      baseline_tps: 24.3
+      optimized_tps: 24.3
+      quality_pct: 93  # shares frontdoor bench (May-4 170/183)
+      coder_suite: 29/30 (97%)
+      agentic_suite: 26/30 (87%)
+      math_suite: 29/30 (97%)
+      speedup: shares_frontdoor_gguf
+    memory:
+      residency: hot
+      pinned: true
     escalation_from: frontdoor
     use_cases:
-    - First failure from frontdoor on code tasks
+    - First failure from frontdoor on code tasks (separate slot)
     - Multi-file refactoring requiring broader context
-    - Architecture-level code decisions
+    - Hardest coding/architecture escalation (absorbs eliminated architect_coding role)
     - Complex debugging spanning multiple components
-    benchmark_date: 2025-12-16
+    benchmark_date: 2026-05-04
     generation_defaults:
       n_tokens: -1
       temperature: 0.2
