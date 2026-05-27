@@ -579,6 +579,9 @@ server_mode:
     previous_model: Qwen3-235B-A22B-Q4_K_M.gguf  # swapped 2026-03-19
 
   architect_coding:
+    deprecated: true
+    deprecated_date: 2026-05-27
+    deprecated_reason: "Role removed in the 2026-05 production stack consolidation; model REAP-246B deprecated + GGUF deleted 2026-05-27, original 480B never on local disk. Removed from escalation chains."
     url: http://localhost:8084
     port: 8084
     slots: 1  # Serial — admission=1, no wasted KV
@@ -1066,6 +1069,9 @@ roles:
       Include minimal inline comments. No boilerplate or filler.
       Handle edge cases explicitly.
   coder_escalation_f16:
+    deprecated: true
+    deprecated_date: 2026-05-27
+    deprecated_reason: "Qwen2.5-Coder-32B f16 duplicate GGUF deleted 2026-05-27 (disk sweep); deployable Q4_K_M/Q8_0 quants remain in lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF."
     tier: B
     description: Qwen2.5-Coder-32B-Instruct f16 — full precision coder escalation candidate
     model:
@@ -1243,6 +1249,9 @@ roles:
       Other agents will elaborate — stop once the decision is clear.
   architect_coding:
     tier: B
+    deprecated: true
+    deprecated_date: 2026-05-27
+    deprecated_reason: "Role removed in the 2026-05 production stack consolidation; model REAP-246B deprecated + GGUF deleted 2026-05-27, original 480B never on local disk. Removed from escalation chains + warm_mmap."
     description: Hardest coding/architecture escalation - IR-first
     model:
       name: Qwen3-Coder-480B-A35B-Instruct
@@ -1406,6 +1415,9 @@ roles:
       75% Delta Net (gated linear attention) layers + 25% attention. 40 total layers (30 recurrent, 10 attention).
       Frontdoor target: beat 47.11 t/s (Qwen3-Coder-30B-A3B MoE6+spec+lookup).
   qwen35_q4ks:
+    deprecated: true
+    deprecated_date: 2026-05-27
+    deprecated_reason: "GGUF deleted 2026-05-27 — pointed at Huihui-Qwen3.5-35B-A3B-abliterated (removed, unreferenced). Non-abliterated Qwen3.5-35B-A3B (unsloth, 19G) remains on disk."
     tier: B
     description: Qwen3.5-35B-A3B abliterated Q4_K_S — frontdoor candidate
     model:
@@ -1452,6 +1464,9 @@ roles:
     benchmark_date: null
     notes: Abliterated variant (mradermacher imatrix quant). Compare quality vs unsloth Q4_K_M.
   qwen35_q5ks:
+    deprecated: true
+    deprecated_date: 2026-05-27
+    deprecated_reason: "GGUF deleted 2026-05-27 — pointed at Huihui-Qwen3.5-35B-A3B-abliterated (removed, unreferenced). Non-abliterated Qwen3.5-35B-A3B (unsloth, 19G) remains on disk."
     tier: B
     description: Qwen3.5-35B-A3B abliterated Q5_K_S — quality/speed tradeoff
     model:
@@ -1497,6 +1512,9 @@ roles:
       pinned: false
     benchmark_date: null
   qwen35_q6k:
+    deprecated: true
+    deprecated_date: 2026-05-27
+    deprecated_reason: "GGUF deleted 2026-05-27 — pointed at Huihui-Qwen3.5-35B-A3B-abliterated (removed, unreferenced). Non-abliterated Qwen3.5-35B-A3B (unsloth, 19G) remains on disk."
     tier: B
     description: Qwen3.5-35B-A3B abliterated Q6_K — higher quality
     model:
@@ -1542,6 +1560,9 @@ roles:
       pinned: false
     benchmark_date: null
   qwen35_q8_0:
+    deprecated: true
+    deprecated_date: 2026-05-27
+    deprecated_reason: "GGUF deleted 2026-05-27 — pointed at jiaojjjjje/Qwen3.5-35B-A3B-abliterated (removed, unreferenced). Non-abliterated Qwen3.5-35B-A3B (unsloth, 19G) remains on disk."
     tier: B
     description: Qwen3.5-35B-A3B abliterated Q8_0 — quality ceiling
     model:
@@ -2937,6 +2958,9 @@ roles:
 
   # --- SuperGemma4 (2026-04-17) ---
   supergemma4_31b_q4km:
+    deprecated: true
+    deprecated_date: 2026-05-27
+    deprecated_reason: "GGUF deleted 2026-05-27 (unreferenced abliterated SuperGemma4-31b variant)."
     tier: B
     description: SuperGemma4-31b-abliterated Q4_K_M — dense 31B, abliterated, 60.5% quality
     model:
@@ -4351,6 +4375,9 @@ roles:
       pinned: false
     notes: Older xLAM version. Use xLAM-2 unless testing compatibility.
   tool_formalizer_nexusraven:
+    deprecated: true
+    deprecated_date: 2026-05-27
+    deprecated_reason: "nexusraven-v2-13b GGUF deleted 2026-05-27 (unreferenced)."
     tier: C
     description: Tool formalizer - NexusRaven-V2-13B (best for complex/nested functions)
     model:
@@ -5399,16 +5426,16 @@ process_layout:
   warm_mmap:
   - ingest_long_context
   - architect_general
-  - architect_coding
   - worker_vision
   - worker_summarize
+  # architect_coding removed 2026-05-27 — role deprecated (2026-05 stack consolidation; model deleted)
 escalation_chains:
   coder:
     description: Code generation escalation path
     chain:
     - frontdoor
     - coder_escalation
-    - architect_coding
+    # architect_coding terminal hop removed 2026-05-27 (role deprecated; model deleted)
     triggers:
     - error_categories:
       - timeout
