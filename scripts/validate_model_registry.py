@@ -26,6 +26,7 @@ reviews). Designed to run standalone or in CI:
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -128,17 +129,48 @@ def validate(registry_path: str) -> tuple[list, list]:
                            f"deprecated role '{hint['escalate_to']}' as escalate_to in "
                            f"routing_hint #{i} (if: {cond})"))
 
-    # --- Check 4: section drift between server_mode and roles for active roles ---
+    # --- Check 4: section drift between server_mode and roles for active runtime roles ---
+    # Compares more than the model basename: a matching GGUF can still hide stale runtime
+    # semantics (e.g. a Qwen3.6 path left with a Qwen3.5 MoE-reduction recipe or qwen35
+    # model_role), which is the class of drift the basename-only check missed.
     for role, cfg in data.get("server_mode", {}).items():
         if role in deprecated or role not in roles or not isinstance(cfg, dict):
             continue
+        rc = roles[role] if isinstance(roles.get(role), dict) else {}
+        rcm = rc.get("model") or {}
+        # 4a model basename
         sm_path = _resolve_server_mode_model(cfg.get("model"))
         roles_path = reg.get_model_path(role)
-        if _is_local_gguf(sm_path) and _is_local_gguf(roles_path):
-            if os.path.basename(sm_path) != os.path.basename(roles_path):
-                warnings.append(("SECTION_DRIFT",
-                                 f"role '{role}': server_mode model '{os.path.basename(sm_path)}' "
-                                 f"!= roles model '{os.path.basename(roles_path)}'"))
+        if _is_local_gguf(sm_path) and _is_local_gguf(roles_path) \
+                and os.path.basename(sm_path) != os.path.basename(roles_path):
+            warnings.append(("SECTION_DRIFT_MODEL",
+                             f"role '{role}': server_mode model '{os.path.basename(sm_path)}' "
+                             f"!= roles model '{os.path.basename(roles_path)}'"))
+        # 4b acceleration.type
+        sm_accel = (cfg.get("acceleration") or {}).get("type")
+        roles_accel = (rc.get("acceleration") or {}).get("type")
+        if sm_accel and roles_accel and sm_accel != roles_accel:
+            warnings.append(("SECTION_DRIFT_ACCEL",
+                             f"role '{role}': server_mode acceleration.type '{sm_accel}' "
+                             f"!= roles acceleration.type '{roles_accel}'"))
+        # 4c thinking: server_mode chat_template_kwargs.enable_thinking should be the
+        #     negation of roles.model.disable_thinking
+        sm_think = (cfg.get("chat_template_kwargs") or {}).get("enable_thinking")
+        roles_think_off = rcm.get("disable_thinking")
+        if sm_think is not None and roles_think_off is not None \
+                and bool(sm_think) == bool(roles_think_off):
+            warnings.append(("SECTION_DRIFT_THINKING",
+                             f"role '{role}': server_mode enable_thinking={sm_think} inconsistent "
+                             f"with roles disable_thinking={roles_think_off}"))
+        # 4d model_role version token must appear in the model filename (catches qwen35 model_role
+        #    left on a Qwen3.6 GGUF — exactly finding #1)
+        mr_norm = str(cfg.get("model_role") or "").replace(".", "").replace("_", "").lower()
+        smf_norm = os.path.basename(sm_path or "").replace(".", "").replace("_", "").lower()
+        mtok = re.search(r"qwen3[0-9]", mr_norm)
+        if mtok and smf_norm and mtok.group(0) not in smf_norm:
+            warnings.append(("SECTION_DRIFT_MODEL_ROLE",
+                             f"role '{role}': model_role '{cfg.get('model_role')}' version token "
+                             f"'{mtok.group(0)}' absent from model '{os.path.basename(sm_path or '')}'"))
 
     return errors, warnings
 

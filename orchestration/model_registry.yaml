@@ -465,24 +465,24 @@ server_mode:
     url: http://localhost:8080
     port: 8080
     slots: 1  # NUMA 4-way: 4×48t instances, 1 slot each (round-robin routing)
-    model_role: qwen35_q4km
+    chat_template_kwargs:
+      enable_thinking: false  # Qwen3.6 thinking OFF for task suites (lean parity; +33pp empirically)
+    model_role: qwen36_q8_0
     shared_with: []
-    description: Root LM — Qwen3.6-35B-A3B MoE Q8 (production frontdoor; aligned to lean registry 2026-05-27, was stale Qwen3.5-35B-A3B-UD-Q4_K_M)
+    description: Root LM — Qwen3.6-35B-A3B Q8 (quality 93%, May-4 Claude-as-Judge 170/183; aligned to lean 2026-05-27)
     model: Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
     # No draft model — spec decode net-negative on Qwen3.x MoE hybrids (GDN verification wall on CPU)
-    memory_gb: 19
+    kv_quant: {k: q8_0, v: q8_0}  # Q8 KV (lean parity)
+    memory_gb: 37
     tier: hot
     numa_instances: 4  # 4×48t NUMA-quarter instances
     numa_ports: [8080, 8180, 8280, 8380]
     acceleration:
-      type: moe_expert_reduction
-      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
-      experts: 6  # moe6 only — lookup causes segfault on hybrids (diagnosed 2026-03-24, PR #13194)
-      override_key: qwen35moe.expert_used_count
-      lookup: false  # DISABLED: --lookup segfaults after 1-3 prompts on Qwen3.5 SSM+MoE hybrids
+      type: none  # Qwen3.6 Q8 runs full — no MoE expert reduction / spec-dec (GDN verification wall)
+      lookup: false
       corpus_retrieval: true
-    throughput: 12.7  # t/s per instance (moe6, measured 2026-03-24), ~50.8 agg with NUMA 4×48t
-    previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf  # swapped 2026-03-19
+    throughput: 24.3  # t/s, Qwen3.6 Q8 full (lean registry, May-4)
+    previous_model: Qwen3.5-35B-A3B-UD-Q4_K_M.gguf  # frontdoor swapped to Qwen3.6 Q8 2026-05-04 (lean)
 
   coder_escalation:
     url: http://localhost:8081
@@ -881,7 +881,7 @@ roles:
 
   frontdoor:
     tier: A
-    description: Primary interactive orchestrator - high quality, always resident
+    description: Root LM — Qwen3.6-35B-A3B Q8 (quality 93%, May-4 Claude-as-Judge 170/183)
     # Phase 3 compliance gate (2026-05-07): NON-MONOTONIC. mild fails (compliance 83% baseline),
     # medium fails (compliance 92%, procedure 90%); aggressive PASSES (108% C, 100% P,
     # recall 1.00). Orchestrator routes to aggressive directly per user direction.
@@ -889,43 +889,29 @@ roles:
     backend:
       type: local
     model:
-      name: Qwen3.6-35B-A3B
+      name: Qwen3.6-35B-A3B-Q8_0
       path: /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
       quant: Q8_0
       size_gb: 37
       architecture: qwen35moe  # MoE variant, arch=qwen35moe in GGUF metadata
+      previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M (frontdoor swap 2026-05; bench data under coder_qwen3_coder_30b_a3b)
+      use_chat_api: true
+      disable_thinking: true
+      reasoning: auto
+      max_tokens_multiplier: 4
     candidate_roles:
     - frontdoor
     - coder
     - general
     - ingest
     acceleration:
-      type: moe_expert_reduction
-      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
-      experts: 6
-      override_key: qwen3moe.expert_used_count
-      speculative_decoding:
-        type: speculative_decoding
-        draft_role: draft_qwen3_coder_0_75b
-        k: 16
-        lookup: true
-        notes: >
-          jukofyork vocab transplant draft VERIFIED (2026-02-13).
-          BOS matched (comma token 11). 70-77% acceptance.
-          MoE6 + spec + lookup = 47.11 t/s (best config).
-        benchmarked: 2026-02-13
+      type: none  # Qwen3.6 Q8 runs full; the Qwen3-Coder-30B MoE6+spec recipe (47.11 t/s) lives in coder_qwen3_coder_30b_a3b
+      lookup: false
     performance:
-      baseline_tps: 29.28
-      moe6_baseline_tps: 30.84
-      moe6_spec_tps: 37.08
-      moe6_spec_lookup_tps: 47.11
-      full_spec_tps: 41.75
-      optimized_tps: 47.11
-      quality_pct: 79  # rescored 2026-03-04 (was 90 from lazy scorer)
-      speedup: 1.61x
-      spec_acceptance_moe6: 70.1%
-      spec_acceptance_full: 78.1%
-      spec_acceptance_moe6_lookup: 77.4%
+      baseline_tps: 24.3
+      optimized_tps: 24.3
+      quality_pct: 93  # May-4 Claude-as-Judge 170/183
+      benchmark_date: 2026-05-04
     memory:
       residency: hot
       pinned: true
