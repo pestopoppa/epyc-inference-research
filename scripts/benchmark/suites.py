@@ -221,11 +221,11 @@ ROLE_SUITE_MAP = {
     # Versatile roles - broad testing
     "general": ["general", "agentic", "instruction_precision", "thinking", "coder", "math", "omniscience"],
     "frontdoor": ["general", "agentic", "instruction_precision", "coder", "math", "long_context", "longbench", "needle_parameterized", "omniscience"],
-    "architect": ["thinking", "coder", "agentic", "general", "instruction_precision", "math", "long_context", "longbench", "needle_parameterized", "omniscience", "aa_lcr"],
+    "architect": ["thinking", "coder", "agentic", "general", "instruction_precision", "math", "long_context", "longbench", "needle_parameterized", "omniscience", "aa_lcr", "scoring_verifiers"],
 
     # Context specialists — full long-context battery
-    "ingest": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr"],
-    "long_context": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr"],
+    "ingest": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr", "tulving_episodic"],
+    "long_context": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr", "tulving_episodic"],
 
     # Workers - general purpose
     "worker": ["general", "thinking", "agentic"],

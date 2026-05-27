@@ -63,6 +63,10 @@ ADAPTER_SUITES = {
     "aa_lcr",
     # Phase 7: document extraction quality
     "document_extraction",
+    # EV-3: verifier benchmarks (NVIDIA Scoring-Verifiers / HE-R+)
+    "scoring_verifiers",
+    # P3b: episodic memory (Tulving Benchmark, arXiv 2501.13121)
+    "tulving_episodic",
 }
 
 # Suites that stay YAML-based (no public dataset or intentionally synthetic)
@@ -83,6 +87,24 @@ def _get_long_context_adapter(class_name: str):
             "RULERAdapter": RULERAdapter,
             "NeedleAdapter": NeedleAdapter,
         }[class_name]
+    except ImportError:
+        return None
+
+
+def _get_scoring_verifiers_adapter():
+    """Lazy-import ScoringVerifiersAdapter (EV-3)."""
+    try:
+        from scoring_verifiers_adapter import ScoringVerifiersAdapter
+        return ScoringVerifiersAdapter
+    except ImportError:
+        return None
+
+
+def _get_tulving_episodic_adapter():
+    """Lazy-import TulvingEpisodicAdapter (P3b)."""
+    try:
+        from tulving_episodic_adapter import TulvingEpisodicAdapter
+        return TulvingEpisodicAdapter
     except ImportError:
         return None
 
@@ -123,6 +145,10 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         "leval": _get_long_context_adapter("LEvalAdapter"),
         "ruler": _get_long_context_adapter("RULERAdapter"),
         "needle_parameterized": _get_long_context_adapter("NeedleAdapter"),
+        # EV-3: verifier benchmarks (NVIDIA Scoring-Verifiers / HE-R+)
+        "scoring_verifiers": _get_scoring_verifiers_adapter(),
+        # P3b: episodic memory (Tulving Benchmark, arXiv 2501.13121)
+        "tulving_episodic": _get_tulving_episodic_adapter(),
     }
     cls = adapters.get(suite)
     if cls is None:
