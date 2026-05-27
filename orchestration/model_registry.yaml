@@ -242,7 +242,6 @@ runtime_defaults:
       vision_escalation: 120   # 30B MoE VL, multimodal processing
       ingest_long_context: 300 # 80B SSM, long document ingestion
       architect_general: 600   # 122B MoE hybrid @ 4.3 t/s, complex multi-step reasoning
-      architect_coding: 600    # 480B MoE @ 7.0 t/s, complex multi-step reasoning
 
     # Server/connection timeouts
     server:
@@ -468,9 +467,9 @@ server_mode:
     slots: 1  # NUMA 4-way: 4×48t instances, 1 slot each (round-robin routing)
     model_role: qwen35_q4km
     shared_with: []
-    description: Root LM — Qwen3.5-35B-A3B MoE hybrid (quality 2.48/3, NUMA 4×48t)
-    model: Qwen3.5-35B-A3B-UD-Q4_K_M.gguf
-    # No draft model — spec decode net-negative on Qwen3.5 hybrids (SSM checkpoint overhead)
+    description: Root LM — Qwen3.6-35B-A3B MoE Q8 (production frontdoor; aligned to lean registry 2026-05-27, was stale Qwen3.5-35B-A3B-UD-Q4_K_M)
+    model: Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
+    # No draft model — spec decode net-negative on Qwen3.x MoE hybrids (GDN verification wall on CPU)
     memory_gb: 19
     tier: hot
     numa_instances: 4  # 4×48t NUMA-quarter instances
@@ -890,12 +889,11 @@ roles:
     backend:
       type: local
     model:
-      name: Qwen3-Coder-30B-A3B-Instruct
-      huggingface_id: lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF
-      path: lmstudio-community/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
-      quant: Q4_K_M
-      size_gb: 17.5
-      architecture: moe
+      name: Qwen3.6-35B-A3B
+      path: /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 37
+      architecture: qwen35moe  # MoE variant, arch=qwen35moe in GGUF metadata
     candidate_roles:
     - frontdoor
     - coder
@@ -5443,7 +5441,7 @@ escalation_chains:
       - internal_error
     - output_too_short: 50
     - explicit_request: true
-    max_escalations: 2
+    max_escalations: 1  # coder chain shortened to frontdoor->coder_escalation (architect_coding removed 2026-05-27)
   general:
     description: General task escalation path
     chain:
@@ -5463,16 +5461,13 @@ routing_hints:
 - if: task_type == 'code'
   use:
   - coder_escalation
-  escalate_to: architect_coding
 - if: task_type == 'code' and 'refactor' in objective
   use:
   - coder_escalation
   - worker_general
-  escalate_to: architect_coding
 - if: task_type == 'code' and escalation.triggered
   use:
   - coder_escalation
-  escalate_to: architect_coding
 - if: task_type == 'ingest'
   use:
   - ingest_long_context
@@ -5513,13 +5508,11 @@ routing_hints:
 - if: '''prove'' in objective or ''verify'' in objective'
   preprocess: formalizer
   use:
-  - worker_math
-  - thinking_reasoning
+  - worker_math  # thinking_reasoning (deprecated) dropped 2026-05-27; add an active thinking role here if prove/verify needs one
 - if: '''algorithm'' in objective and ''design'' in objective'
   preprocess: formalizer
   use:
-  - architect_qwen2_5_72b
-  - coder_escalation
+  - coder_escalation  # architect_qwen2_5_72b dropped 2026-05-27 (model off-disk; role still a catalogue candidate pending deprecate/keep)
 - if: ambiguity_score > 0.7
   preprocess: formalizer
   notes: Frontdoor detects vague requirements needing formalization
@@ -5528,7 +5521,7 @@ routing_hints:
   - architect_general
 - if: escalation.max_level == 'B3' and task_type == 'code'
   use:
-  - architect_coding
+  - architect_general  # was architect_coding (role removed 2026-05-27); B3 code escalates to surviving architect
 command_templates:
   speculative_decoding: "numactl --interleave=all \\\n  /mnt/raid0/llm/llama.cpp/build/bin/llama-speculative\
     \ \\\n  -m {model_path} \\\n  -md {draft_path} \\\n  --draft-max {k} \\\n  -t\
