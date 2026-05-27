@@ -996,7 +996,10 @@ roles:
 
   reap_246b:
     tier: A  # DEPLOYED as architect_coding 2026-03-29 (replaces 480B)
-    description: REAP-pruned Qwen3-Coder-246B-A35B — 50% pruned from 480B. 82% quality, 8.0 t/s, 139 GB. DEPLOYED.
+    deprecated: true
+    deprecated_date: 2026-05-27
+    deprecated_reason: "GGUF deleted from disk (operator-directed 2026-05-27) — architect_coding role was removed in the 2026-05 stack consolidation, so this was no longer deployed; 139 GB reclaimed; re-downloadable from source if re-needed."
+    description: REAP-pruned Qwen3-Coder-246B-A35B — 50% pruned from 480B. 82% quality, 8.0 t/s, 139 GB. (was DEPLOYED as architect_coding; role removed 2026-05.)
     model:
       name: Qwen3-Coder-REAP-246B-A35B-Q4_K_M
       path: /mnt/raid0/llm/models/Qwen3-Coder-REAP-246B-A35B-Q4_K_M.gguf
@@ -5678,6 +5681,9 @@ runtime_quirks:
       discovered: 2025-12-15
   qwen3_235b_a22b:
     description: Qwen3-235B-A22B (architect_general)
+    deprecated: true
+    deprecated_date: 2026-05-27
+    deprecated_reason: "GGUF deleted from disk (operator-directed 2026-05-27) — swapped OUT 2026-03-19 for Qwen3.5-122B (architect_general); 133 GB reclaimed; re-downloadable if re-needed."
     quirks:
     - issue: Quality degrades severely at 2 experts
       workaround: Use 4 experts minimum for coherent output
