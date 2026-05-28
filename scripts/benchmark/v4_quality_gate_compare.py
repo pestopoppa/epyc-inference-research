@@ -302,9 +302,11 @@ def main() -> int:
                    help="Min prompts with token-1 match (default: 15 of 20)")
     p.add_argument("--expected-n-prompts", type=int, default=20,
                    help="Required number of prompts on each side (default: 20)")
-    p.add_argument("--min-tokens-per-prompt", type=int, default=None,
-                   help="Required token_count per prompt. Default: min of EPYC "
-                        "and reference n_tokens_requested from runner JSON.")
+    p.add_argument("--min-tokens-per-prompt", type=int, default=64,
+                   help="Required token_count per prompt (default: 64, per "
+                        "§Merge Gates 'first 64 generated tokens'). Use a lower "
+                        "value for side experiments. Hard floor — does NOT "
+                        "trust runner JSON metadata, which can be misconfigured.")
     args = p.parse_args()
 
     with args.epyc.open() as f:

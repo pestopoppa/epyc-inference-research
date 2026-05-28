@@ -72,22 +72,31 @@ CANONICAL_OMP_ENV: dict[str, str] = {
     "OMP_DYNAMIC": "false",
 }
 
-# Production-launch additions on top of the OMP stack. Both are universally
-# beneficial on this host and are applied by orchestrator_stack.py's
-# apply_host_prerequisites() on every server launch. They belong in the
-# bench env so a bench reproduces production decode characteristics.
-#   KMP_BLOCKTIME=10        — per feedback_ik_llamacpp_omp_idle_spin (2026-05-09)
-#                              AOCC libomp ignores omp_pause_resource; this is
-#                              the only way to make threads sleep on futex
-#                              instead of spin-wait. +78% decode on gemma4 MTP
-#                              frontdoor; +0% on non-OMP-pool models (harmless).
-#   GGML_NUMA_WEIGHTS=1     — per project_cpu1_phase13_v1 (2026-04-24).
-#                              set_mempolicy MPOL_INTERLEAVE + suppress
-#                              MAP_POPULATE so weight pages distribute across
-#                              all 4 NUMA nodes correctly under NPS4. +140%
-#                              alone on Coder-30B Q4_K_M.
-# Both are also explicit gates in §Throughput gate of the V4 port handoff.
-CANONICAL_PRODUCTION_ENV: dict[str, str] = {
+# V4 §Throughput-gate-specific env additions. NOT applied by the orchestrator
+# stack universally — scoped here to V4 bench/runner paths only.
+#
+# Honest production-env reality (as of 2026-05-28, verified against
+# epyc-orchestrator/scripts/server/stack_env.py):
+#   KMP_BLOCKTIME=10  — applied at orchestrator_stack worker_pool launch (the
+#                       ik_llama.cpp PR #1744 branch only), NOT inside
+#                       stack_env.build_launch_env(). Documented in
+#                       feedback_ik_llamacpp_omp_idle_spin.
+#   GGML_NUMA_WEIGHTS=1 — DELIBERATELY EXCLUDED from the worker role per
+#                       stack_env.py:62: "DEPRECATED per CPU21 P3 isolation
+#                       (unstable, 19-22σ at warmed state)". Per
+#                       project_cpu1_phase13_v1 it was +140% alone on Coder-30B
+#                       Q4_K_M; later isolation showed warmed-state instability.
+#
+# Both ARE listed in §Throughput gate of the V4 port handoff because the V4
+# bench is the antirez fork (mainstream llama.cpp lineage), not ik_llama —
+# its codepath responds to GGML_NUMA_WEIGHTS without the warmed-state
+# instability seen on ik_llama, and the throughput floor was specified
+# assuming this env. Hence the V4-scoped naming.
+#
+# For non-V4 (gemma4 / Qwen3.6 / Coder-30B) bench, callers should NOT pass
+# use_v4_gate_extras=True — the OMP-only baseline preserves comparability
+# with the 47-48 t/s Coder-30B documented baseline AND with stack_env.py.
+V4_GATE_EXTRA_ENV: dict[str, str] = {
     "KMP_BLOCKTIME": "10",
     "GGML_NUMA_WEIGHTS": "1",
 }
@@ -102,7 +111,8 @@ CANONICAL_PRODUCTION_ENV: dict[str, str] = {
 LLVM20_LIBDIR: str = "/usr/lib/llvm-20/lib"
 
 
-def build_canonical_env(extra_vars: Optional[dict] = None) -> dict[str, str]:
+def build_canonical_env(extra_vars: Optional[dict] = None,
+                        use_v4_gate_extras: bool = False) -> dict[str, str]:
     """Build a subprocess environment with the canonical OMP stack + libomp override.
 
     Starts from os.environ.copy(), prepends LLVM20_LIBDIR to LD_LIBRARY_PATH (if
@@ -110,6 +120,13 @@ def build_canonical_env(extra_vars: Optional[dict] = None) -> dict[str, str]:
     top. Caller-supplied extra_vars take precedence over CANONICAL_OMP_ENV — that
     is the contract: the canonical stack is the default, but a per-model override
     in the registry can override individual keys.
+
+    Args:
+        extra_vars: per-model overrides on top of the canonical stack.
+        use_v4_gate_extras: if True, also merge V4_GATE_EXTRA_ENV
+            (KMP_BLOCKTIME=10, GGML_NUMA_WEIGHTS=1). Required for the V4
+            §Throughput gate. NOT applied for non-V4 callers — orchestrator
+            stack_env.py deliberately excludes these for the worker role.
     """
     env = os.environ.copy()
 
@@ -121,8 +138,9 @@ def build_canonical_env(extra_vars: Optional[dict] = None) -> dict[str, str]:
 
     for k, v in CANONICAL_OMP_ENV.items():
         env[k] = v
-    for k, v in CANONICAL_PRODUCTION_ENV.items():
-        env[k] = v
+    if use_v4_gate_extras:
+        for k, v in V4_GATE_EXTRA_ENV.items():
+            env[k] = v
 
     if extra_vars:
         for k, v in extra_vars.items():
@@ -178,10 +196,18 @@ def assert_canonical_cmd(cmd: list[str]) -> None:
         )
 
 
-def assert_canonical_env(env: dict[str, str]) -> None:
+def assert_canonical_env(env: dict[str, str],
+                         require_v4_gate_extras: bool = False) -> None:
     """Raise CanonicalRecipeViolation if env doesn't carry the canonical OMP stack
-    + production-launch additions (KMP_BLOCKTIME, GGML_NUMA_WEIGHTS) + libomp
-    override.
+    + libomp override (and optionally V4_GATE_EXTRA_ENV).
+
+    Args:
+        env: subprocess env dict to validate.
+        require_v4_gate_extras: if True, also require V4_GATE_EXTRA_ENV (the V4
+            §Throughput gate stack). Default False — non-V4 callers must NOT
+            require these, since orchestrator stack_env.py deliberately
+            excludes GGML_NUMA_WEIGHTS for the worker role and only applies
+            KMP_BLOCKTIME via a separate worker_pool launch branch.
     """
     missing_omp = [k for k, v in CANONICAL_OMP_ENV.items() if env.get(k) != v]
     if missing_omp:
@@ -191,19 +217,16 @@ def assert_canonical_env(env: dict[str, str]) -> None:
             f"Fix: route env through canonical_recipe.build_canonical_env() or merge "
             f"in CANONICAL_OMP_ENV explicitly."
         )
-    missing_prod = [k for k, v in CANONICAL_PRODUCTION_ENV.items() if env.get(k) != v]
-    if missing_prod:
-        raise CanonicalRecipeViolation(
-            f"env is missing or has wrong values for production-launch vars: "
-            f"{missing_prod}\n"
-            f"  expected: {CANONICAL_PRODUCTION_ENV}\n"
-            f"These are part of the §Throughput gate stack in the V4 handoff and\n"
-            f"are applied by orchestrator_stack.py. Without them the bench does NOT\n"
-            f"reproduce production decode (gemma4 idle-spin → -78% throughput per\n"
-            f"feedback_ik_llamacpp_omp_idle_spin; NUMA-weights-off → -58% per\n"
-            f"project_cpu1_phase13_v1).\n"
-            f"Fix: route env through canonical_recipe.build_canonical_env()."
-        )
+    if require_v4_gate_extras:
+        missing_v4 = [k for k, v in V4_GATE_EXTRA_ENV.items() if env.get(k) != v]
+        if missing_v4:
+            raise CanonicalRecipeViolation(
+                f"env is missing or has wrong values for V4 gate-extra vars: "
+                f"{missing_v4}\n"
+                f"  expected: {V4_GATE_EXTRA_ENV}\n"
+                f"These are required by §Throughput gate of the V4 port handoff.\n"
+                f"Fix: build_canonical_env(use_v4_gate_extras=True)."
+            )
 
     ld = env.get("LD_LIBRARY_PATH", "")
     if LLVM20_LIBDIR not in ld.split(":"):
@@ -560,6 +583,7 @@ def validate_canonical_env(
     expected_libs: Optional[list[str]] = None,
     check_host: bool = True,
     skip_perf_paranoid: bool = False,
+    require_v4_gate_extras: bool = False,
 ) -> None:
     """All-in-one validation: command shape + env vars + binary linkage + host config.
 
@@ -584,7 +608,7 @@ def validate_canonical_env(
     if cmd is not None:
         assert_canonical_cmd(cmd)
     if env is not None:
-        assert_canonical_env(env)
+        assert_canonical_env(env, require_v4_gate_extras=require_v4_gate_extras)
     if binary is not None:
         if expected_libs is None:
             raise ValueError("expected_libs must be provided when binary is given")
@@ -651,7 +675,10 @@ def build_canonical_bench_command(
         bench_args = bench_args + list(extra_flags)
 
     cmd = apply_canonical_prefix([binary, *bench_args])
-    env = build_canonical_env()
+    # V4 fork bench is the only path that gets V4 gate extras — those
+    # additions match §Throughput gate in the V4 port handoff and are NOT
+    # part of the canonical baseline for non-V4 benches.
+    env = build_canonical_env(use_v4_gate_extras=use_v4_fork)
 
     return binary, cmd, env
 
@@ -693,11 +720,14 @@ def _emit_bench_command_json(args) -> int:
             return 2
 
     # Emit only the env variables WE set (don't dump entire os.environ).
+    # V4-fork bench gets the V4 gate extras; other paths stay OMP-only to
+    # match the orchestrator's non-V4 launch env (stack_env.py).
     emitted_env = {
         "LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"],
         **CANONICAL_OMP_ENV,
-        **CANONICAL_PRODUCTION_ENV,
     }
+    if args.v4_fork:
+        emitted_env.update(V4_GATE_EXTRA_ENV)
 
     out = {"binary": binary, "cmd": cmd, "env": emitted_env}
     print(json.dumps(out, indent=2))
@@ -720,6 +750,7 @@ def _validate_only(args) -> int:
             expected_libs=expected_libs,
             check_host=True,
             skip_perf_paranoid=not args.with_perf,
+            require_v4_gate_extras=args.v4_fork,
         )
     except (FileNotFoundError, CanonicalRecipeViolation) as e:
         print(f"VALIDATION FAILED:\n{e}", file=sys.stderr)

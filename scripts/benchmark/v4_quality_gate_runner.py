@@ -191,7 +191,11 @@ def main() -> int:
 
     if not args.skip_validate:
         try:
-            r.validate_canonical_env(check_host=True, skip_perf_paranoid=True)
+            r.validate_canonical_env(check_host=True, skip_perf_paranoid=True,
+                                     require_v4_gate_extras=False)
+            # NB: require_v4_gate_extras=False on the env-arg path because the
+            # env we'll build below opts in via use_v4_gate_extras=True; the
+            # validate call above only checks host state, not env.
             binary, _libs = r.discover_v4_fork_bench()
             print(f"Canonical recipe + V4 fork validated.")
         except (FileNotFoundError, r.CanonicalRecipeViolation) as e:
@@ -212,8 +216,10 @@ def main() -> int:
     prompts = parse_yaml_prompts(prompts_path)
     print(f"Loaded {len(prompts)} prompts from {prompts_path}")
 
-    # Launch the server. Canonical env via canonical_recipe.build_canonical_env().
-    env = r.build_canonical_env()
+    # Launch the server. V4 path explicitly opts into the V4 gate-extra env
+    # (KMP_BLOCKTIME=10 + GGML_NUMA_WEIGHTS=1) per §Throughput gate. Non-V4
+    # callers do NOT get these — orchestrator stack_env.py excludes them.
+    env = r.build_canonical_env(use_v4_gate_extras=True)
     # taskset/numactl prefix per CANONICAL_PREFIX; --no-mmap --mlock for THP-pool
     # warmup + anonymous allocation (matches production launches per the
     # project_gemma4_mtp_launch_recipe pattern).

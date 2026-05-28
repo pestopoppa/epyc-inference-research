@@ -59,9 +59,17 @@ class TestCanonicalEnv(unittest.TestCase):
     """Tests for assert_canonical_env — catches drift-traps 3+4."""
 
     def _good_env(self) -> dict[str, str]:
+        """Baseline OMP-only canonical env — matches stack_env.py's
+        build_launch_env() output for non-V4 production roles.
+        """
         env = {"LD_LIBRARY_PATH": f"{r.LLVM20_LIBDIR}:/other/path"}
         env.update(r.CANONICAL_OMP_ENV)
-        env.update(r.CANONICAL_PRODUCTION_ENV)
+        return env
+
+    def _good_env_v4(self) -> dict[str, str]:
+        """Baseline + V4 §Throughput gate extras — for V4-fork bench/runner."""
+        env = self._good_env()
+        env.update(r.V4_GATE_EXTRA_ENV)
         return env
 
     def test_correct_env_passes(self):
@@ -88,29 +96,48 @@ class TestCanonicalEnv(unittest.TestCase):
         self.assertIn(r.LLVM20_LIBDIR, str(ctx.exception))
         self.assertIn("AOCC", str(ctx.exception))
 
-    def test_missing_kmp_blocktime_raises(self):
-        # Production-launch env addition — without it gemma4 MTP spins idle
-        # cores at idle and decode drops ~78% (feedback_ik_llamacpp_omp_idle_spin).
-        env = self._good_env()
+    def test_default_assert_does_not_require_v4_extras(self):
+        """Critical alignment with orchestrator stack_env.py: the default
+        assert_canonical_env must NOT require V4_GATE_EXTRA_ENV. stack_env.py
+        deliberately excludes GGML_NUMA_WEIGHTS for the worker role and only
+        applies KMP_BLOCKTIME via a separate worker_pool launch branch.
+        Requiring these here would falsely flag every non-V4 production env
+        as drifted.
+        """
+        env = self._good_env()  # OMP only, no V4 extras
+        r.assert_canonical_env(env)  # should not raise
+
+    def test_v4_gate_missing_kmp_blocktime_raises(self):
+        # V4 §Throughput gate requires KMP_BLOCKTIME=10 — opt in via require_v4_gate_extras
+        env = self._good_env_v4()
         del env["KMP_BLOCKTIME"]
         with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
-            r.assert_canonical_env(env)
+            r.assert_canonical_env(env, require_v4_gate_extras=True)
         self.assertIn("KMP_BLOCKTIME", str(ctx.exception))
 
-    def test_missing_ggml_numa_weights_raises(self):
-        # Without GGML_NUMA_WEIGHTS=1 under NPS4, weight pages first-touch onto
-        # one node and decode regresses ~58% (project_cpu1_phase13_v1).
-        env = self._good_env()
+    def test_v4_gate_missing_ggml_numa_weights_raises(self):
+        # V4 §Throughput gate requires GGML_NUMA_WEIGHTS=1
+        env = self._good_env_v4()
         del env["GGML_NUMA_WEIGHTS"]
         with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
-            r.assert_canonical_env(env)
+            r.assert_canonical_env(env, require_v4_gate_extras=True)
         self.assertIn("GGML_NUMA_WEIGHTS", str(ctx.exception))
 
-    def test_build_canonical_env_emits_production_vars(self):
+    def test_build_canonical_env_default_omits_v4_extras(self):
+        """Default build_canonical_env() must NOT emit V4 gate extras —
+        preserves comparability with the documented 47-48 t/s Coder-30B
+        baseline AND with stack_env.py's non-V4 launch env.
+        """
         env = r.build_canonical_env()
-        for k, v in r.CANONICAL_PRODUCTION_ENV.items():
+        for k in r.V4_GATE_EXTRA_ENV:
+            self.assertNotIn(k, env,
+                             f"default build_canonical_env() must not set {k}")
+
+    def test_build_canonical_env_v4_opt_in_emits_extras(self):
+        env = r.build_canonical_env(use_v4_gate_extras=True)
+        for k, v in r.V4_GATE_EXTRA_ENV.items():
             self.assertEqual(env.get(k), v,
-                             f"build_canonical_env() must set {k}={v}")
+                             f"V4 opt-in build_canonical_env() must set {k}={v}")
 
 
 class TestBinaryResolution(unittest.TestCase):

@@ -397,6 +397,60 @@ class TestCLIIntegration(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 1)
 
+    def test_cli_default_min_tokens_64_blocks_misconfigured_run(self):
+        """If a runner is misconfigured to capture only 1 token per prompt and
+        the JSON says n_tokens_requested=1, the library auto-derive would let
+        it pass. The CLI hard default of 64 (per §Merge Gates) must block it.
+        """
+        prompts = [make_prompt(f"p{i:02d}", "x", ["A"], [-1.0]) for i in range(20)]
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            epyc_path = tmp / "epyc.json"
+            ref_path = tmp / "ref.json"
+            out_path = tmp / "report.md"
+            # Both sides have only 1 token per prompt, n_tokens_requested=1.
+            # No way for the JSON metadata alone to flag this.
+            epyc_path.write_text(json.dumps(make_result_set(prompts, n_tokens_requested=1)))
+            ref_path.write_text(json.dumps(make_result_set(prompts, n_tokens_requested=1)))
+            script = Path(__file__).resolve().parent / "v4_quality_gate_compare.py"
+            result = subprocess.run(
+                [sys.executable, str(script),
+                 "--epyc", str(epyc_path),
+                 "--reference", str(ref_path),
+                 "--output", str(out_path)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 1,
+                             "CLI must FAIL on 1-token-per-prompt even with "
+                             "n_tokens_requested=1 in JSON")
+            report = out_path.read_text()
+            self.assertIn("**Verdict**: FAIL", report)
+            self.assertIn("truncated", report.lower())
+
+    def test_cli_min_tokens_override_allows_short_runs(self):
+        """Side experiments can use --min-tokens-per-prompt=1 to permit
+        short runs (e.g., debug-only token-level diffs).
+        """
+        prompts = [make_prompt(f"p{i:02d}", "x", ["A"], [-1.0]) for i in range(20)]
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            epyc_path = tmp / "epyc.json"
+            ref_path = tmp / "ref.json"
+            out_path = tmp / "report.md"
+            epyc_path.write_text(json.dumps(make_result_set(prompts, n_tokens_requested=1)))
+            ref_path.write_text(json.dumps(make_result_set(prompts, n_tokens_requested=1)))
+            script = Path(__file__).resolve().parent / "v4_quality_gate_compare.py"
+            result = subprocess.run(
+                [sys.executable, str(script),
+                 "--epyc", str(epyc_path),
+                 "--reference", str(ref_path),
+                 "--output", str(out_path),
+                 "--min-tokens-per-prompt", "1"],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0,
+                             f"override should pass: {result.stdout}\n{result.stderr}")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

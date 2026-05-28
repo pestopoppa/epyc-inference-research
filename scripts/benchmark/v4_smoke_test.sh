@@ -170,8 +170,10 @@ import sys
 sys.path.insert(0, '${REPO_DIR}/scripts/lib')
 import canonical_recipe as r
 import shlex
-env = r.build_canonical_env()
-keys = list(r.CANONICAL_OMP_ENV) + list(r.CANONICAL_PRODUCTION_ENV) + ['LD_LIBRARY_PATH']
+# V4 smoke explicitly opts into V4 gate extras (§Throughput gate); other
+# callers default to OMP-only to stay aligned with stack_env.py.
+env = r.build_canonical_env(use_v4_gate_extras=True)
+keys = list(r.CANONICAL_OMP_ENV) + list(r.V4_GATE_EXTRA_ENV) + ['LD_LIBRARY_PATH']
 out = []
 for k in keys:
     v = env[k]

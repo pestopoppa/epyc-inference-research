@@ -56,6 +56,7 @@ REPS=2
 USE_PERF=0
 NO_IK_LLAMA=0
 V4_FORK=0
+DRY_RUN=0
 EXTRA_ARGS=()
 
 usage() {
@@ -69,6 +70,9 @@ Usage: $(basename "$0") -m MODEL [OPTIONS] [-- EXTRA_BENCH_FLAGS...]
   --perf              Wrap in sudo perf stat with canonical event set
   --no-ik-llama       Prefer v5_clean over ik_llama (default: prefer ik_llama)
   --v4-fork           Use the DeepSeek-V4 fork binary (only for V4 GGUFs)
+  --dry-run           Validate + print the canonical command without executing
+                      llama-bench. Use this to verify the wiring without firing
+                      inference (respects feedback_no_concurrent_inference).
   -h, --help          Show this help
 
 Pass any args after '--' directly to llama-bench (e.g. -ctk q8_0 -ctv q8_0).
@@ -87,6 +91,7 @@ while [[ $# -gt 0 ]]; do
         --perf) USE_PERF=1; shift ;;
         --no-ik-llama) NO_IK_LLAMA=1; shift ;;
         --v4-fork) V4_FORK=1; shift ;;
+        --dry-run) DRY_RUN=1; shift ;;
         -h|--help) usage; exit 0 ;;
         --) shift; EXTRA_ARGS=("$@"); break ;;
         *) EXTRA_ARGS+=("$1"); shift ;;
@@ -110,7 +115,9 @@ PY_ARGS=(emit-bench-command --model "$MODEL" --n-prompt "$N_PROMPT" --n-gen "$N_
 [[ "$V4_FORK" -eq 1 ]] && PY_ARGS+=(--v4-fork)
 [[ "$USE_PERF" -eq 1 ]] && PY_ARGS+=(--with-perf)
 if [[ ${#EXTRA_ARGS[@]} -gt 0 ]]; then
-    PY_ARGS+=(--extra -- "${EXTRA_ARGS[@]}")
+    # canonical_recipe.py splits sys.argv on the bare `--` before argparse;
+    # no `--extra` flag needed (and would be rejected as unknown).
+    PY_ARGS+=(-- "${EXTRA_ARGS[@]}")
 fi
 
 # Validate + emit the canonical command as JSON. canonical_recipe.py raises
@@ -149,6 +156,13 @@ if [[ "$USE_PERF" -eq 1 ]]; then
     echo "Perf wrap: $CANONICAL_PERF_EVENTS" >&2
 fi
 echo "=================================" >&2
+
+# --dry-run: print the command but do not execute. Respects
+# feedback_no_concurrent_inference for verifying wrapper wiring.
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "DRY RUN — skipping llama-bench execution." >&2
+    exit 0
+fi
 
 # Execute
 if [[ "$USE_PERF" -eq 1 ]]; then
