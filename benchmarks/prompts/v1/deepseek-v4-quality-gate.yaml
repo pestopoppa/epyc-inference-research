@@ -1,0 +1,227 @@
+# DeepSeek-V4-Flash quality gate prompt set
+#
+# Per handoffs/active/deepseek-v4-flash-cpu-port.md §Merge Gates.
+# 20 prompts × 5 categories × 4 each.
+#
+# Procedure: for each prompt, run both reference engine (antirez fork on Mac
+# or ds4 reference) and experimental EPYC build with `--temp 0 --seed 1 --top-k 1`.
+# Capture token-level logprobs of GREEDY output sequence for the first 64 tokens.
+#
+# Tolerance: per-prompt MAD (mean absolute log-prob difference) ≤ 0.05 nats.
+# Aggregate: ≥ 18 of 20 prompts pass per-prompt tolerance.
+# Token-1 exact match: ≥ 15 of 20 prompts emit same first token.
+
+prompts:
+  # ── Short factual (4) ────────────────────────────────────────────────────
+  - id: factual_01
+    category: short_factual
+    text: "Who wrote the play Hamlet?"
+
+  - id: factual_02
+    category: short_factual
+    text: "What is the capital of Australia?"
+
+  - id: factual_03
+    category: short_factual
+    text: "In what year did humans first land on the Moon?"
+
+  - id: factual_04
+    category: short_factual
+    text: "What is the chemical symbol for the element gold?"
+
+  # ── Short code completion (4) ────────────────────────────────────────────
+  - id: code_01
+    category: short_code
+    text: "Write a Python function that sorts a list of integers in ascending order."
+
+  - id: code_02
+    category: short_code
+    text: "Write a Python function that returns the n-th Fibonacci number iteratively."
+
+  - id: code_03
+    category: short_code
+    text: "Write a Python function that checks whether a given string is a palindrome."
+
+  - id: code_04
+    category: short_code
+    text: "Write a Python function that returns the maximum element of a list, without using the built-in max()."
+
+  # ── Long-form reasoning (4) ──────────────────────────────────────────────
+  - id: reasoning_01
+    category: long_reasoning
+    text: "A bag contains 5 red balls, 4 blue balls, and 3 green balls. If two balls are drawn at random without replacement, what is the probability that both are red? Show your work step by step."
+
+  - id: reasoning_02
+    category: long_reasoning
+    text: "Alice is twice as old as Bob. In 5 years, Alice will be 35. How old is Bob today? Walk through the reasoning."
+
+  - id: reasoning_03
+    category: long_reasoning
+    text: "A train leaves station A at 9:00 AM traveling east at 60 mph. A second train leaves station B (180 miles east of A) at 10:00 AM traveling west at 40 mph. At what time will the two trains meet? Show each step."
+
+  - id: reasoning_04
+    category: long_reasoning
+    text: "If 3 workers can paint a fence in 4 hours working together, how long would it take 5 workers to paint the same fence, assuming they work at the same rate? Explain the reasoning."
+
+  # ── Instruction-following (4) ────────────────────────────────────────────
+  - id: instruct_01
+    category: instruction_following
+    text: |
+      Produce a JSON object with exactly these three keys: "title", "summary", "tags".
+      The "title" should be a short title for a programming task.
+      The "summary" should be a one-sentence description.
+      The "tags" should be an array of two relevant string tags.
+      Output only the JSON, no commentary.
+
+  - id: instruct_02
+    category: instruction_following
+    text: |
+      Write a numbered list with exactly four items describing the steps to make a peanut butter sandwich.
+      Each item must start with a verb in imperative form.
+      Do not include any text before or after the list.
+
+  - id: instruct_03
+    category: instruction_following
+    text: |
+      Respond ONLY with a single Python function definition called `add_one`.
+      The function takes a list of integers and returns a new list with 1 added to each element.
+      Do not include any explanation, imports, or examples — only the function body.
+
+  - id: instruct_04
+    category: instruction_following
+    text: |
+      Output exactly five short sentences, one per line, describing the planets of the inner solar system in order from the Sun outward.
+      Each sentence must be standalone and on its own line.
+      Do not include any header, bullet markers, or numbering.
+
+  # ── Long-context recall (4) ──────────────────────────────────────────────
+  # Each prompt has a ~1K-token preface then a specific-detail question.
+  - id: longctx_01
+    category: long_context_recall
+    text: |
+      The following document is a transcript of a fictional company all-hands meeting.
+
+      Acme Corporation Quarterly All-Hands Transcript, Q3 2024.
+      CEO Jane Foster opened the meeting at 10:03 AM in the main auditorium.
+      She announced that Acme's Q3 revenue reached $42.3 million, a 17 percent increase year-over-year.
+      The product team, led by VP Marcus Chen, presented the roadmap for Q4 and Q1 2025.
+      Three new products will launch in November 2024: Acme Sync (a file synchronization tool),
+      Acme Notes (a collaborative note-taking application), and Acme Chat (a workplace messenger).
+      Marcus emphasized that Acme Sync has been in private beta with 230 enterprise customers
+      and has received an average satisfaction score of 4.7 out of 5.
+      The engineering team head, Priya Subramaniam, reported that the platform team has migrated
+      87 percent of services to the new Kubernetes-based infrastructure.
+      The migration is expected to complete by end of December 2024.
+      Sales VP Diego Ramirez announced two new enterprise customers signed this quarter:
+      Globex Industries with a $3.2 million annual contract, and Initech with a $1.8 million annual contract.
+      Marketing director Sasha Williams shared that the rebrand launched on August 15, 2024
+      drove a 31 percent increase in inbound leads compared to the prior quarter.
+      Customer Support lead Robert Tanaka reported the average response time on tier-1 tickets
+      dropped from 4.2 hours to 2.8 hours after the support automation rollout.
+      The People team announced a hybrid work policy update effective October 1, 2024:
+      employees are expected to be in office Tuesday, Wednesday, and Thursday each week.
+      Finance director Lin Hua said the company will be cash-flow positive starting Q4 2024.
+      The meeting ended at 11:47 AM with a Q&A session led by CEO Jane Foster.
+
+      Question: What was the average satisfaction score of Acme Sync in private beta?
+      Answer with only the number.
+
+  - id: longctx_02
+    category: long_context_recall
+    text: |
+      The following is a research paper abstract followed by methodology details.
+
+      Title: Robust Multimodal Fusion for Satellite-Based Crop Yield Prediction.
+      Authors: Liu, Chen, Patel, and Roussel.
+      Affiliation: Centre for Applied Earth Observation, ETH Zurich, Switzerland.
+      Published in Journal of Remote Sensing Applications, Volume 14, Issue 3, March 2024.
+
+      Abstract: We propose a multimodal fusion architecture combining Sentinel-2 optical imagery,
+      Sentinel-1 SAR backscatter, and ERA5 reanalysis weather data to predict maize yield at
+      field-level resolution across central France. Our model, called MultiYield-Net, uses a
+      transformer-based cross-attention mechanism to aggregate features across modalities and time.
+      On a held-out 2023 test set of 1,247 fields, MultiYield-Net achieves a root mean squared error
+      of 0.83 tonnes per hectare, outperforming the prior state-of-the-art (LSTM-based ensemble)
+      by 22 percent. The model also generalizes to soybean and winter wheat with minor fine-tuning.
+
+      Methodology: We collected Sentinel-2 imagery at 10 meter resolution with a revisit interval
+      of approximately 5 days, from 1 March to 30 September of each crop year (2018-2023).
+      We applied cloud-masking using the s2cloudless library version 1.7.
+      Sentinel-1 SAR backscatter was collected at 20 meter resolution with a revisit interval of
+      approximately 12 days. We computed VV and VH polarization channels.
+      ERA5 reanalysis weather data was sampled at hourly resolution and aggregated to daily means
+      for temperature, precipitation, and solar radiation.
+      Field boundaries came from the French agricultural land registry (RPG) for the year 2023.
+      We trained MultiYield-Net for 80 epochs on 8 NVIDIA A100 GPUs with a batch size of 32.
+      The Adam optimizer used a learning rate of 1.2e-4 with cosine decay.
+      Total training time was approximately 36 hours.
+
+      Question: What is the test-set root mean squared error of MultiYield-Net in tonnes per hectare?
+      Answer with only the number.
+
+  - id: longctx_03
+    category: long_context_recall
+    text: |
+      The following is a fictional historical chronology of the city of Veridia from 1850 to 1925.
+
+      Veridia was founded in 1822 by settlers led by Captain Elena Vasquez at the confluence of
+      the Greenmoor and Silverleaf rivers. Initially a fur trading post, the settlement grew slowly.
+      In 1851 the discovery of copper deposits in the nearby Ashford Hills triggered the first
+      population boom. By 1860 Veridia's population had reached 12,400.
+      The Veridia Mining Company, founded by industrialist Theodore Nightingale in 1852,
+      controlled most of the copper extraction operations.
+      The Pacific-Eastern Railroad reached Veridia in November 1867, transforming the city into
+      a regional transportation hub. The rail connection cut overland travel time to the coast
+      from 9 days to 11 hours.
+      The Great Veridia Fire of June 14, 1873 destroyed approximately 60 percent of the downtown
+      commercial district. Rebuilding efforts led by mayor Catherine Holloway introduced strict
+      fire codes including mandatory brick or stone construction for buildings over two stories.
+      In 1881, the city's first public library opened, funded by a $50,000 donation from copper
+      heiress Marguerite Nightingale-Hendricks, the daughter of Theodore Nightingale.
+      The Veridia Streetcar Company began operations in March 1889 with three horse-drawn lines
+      and converted to electric trolleys in 1894.
+      The University of Veridia was established by state charter on September 3, 1895, on a
+      120-acre plot donated by the Nightingale family. It opened with 47 students enrolled.
+      Veridia hosted the Pacific Northwest Industrial Exposition from May to October 1903,
+      drawing over 800,000 visitors and putting the city on the international map.
+      The city's population peaked at 287,000 in the 1920 census before declining slightly
+      during the copper bust of 1922-1924.
+
+      Question: In what month and year did the Pacific-Eastern Railroad reach Veridia?
+      Answer with only the month and year.
+
+  - id: longctx_04
+    category: long_context_recall
+    text: |
+      The following is the operations manual excerpt for a fictional autonomous warehouse system.
+
+      Atlas Autonomous Warehouse System, Operations Manual, Revision 7.3, March 2024.
+
+      The Atlas system consists of three primary subsystems: the Inventory Tracking Module (ITM),
+      the Robotic Picking Fleet (RPF), and the Conveyor Routing Engine (CRE).
+
+      The ITM maintains real-time inventory state across all storage zones. Each item in the warehouse
+      is tagged with a unique 18-character alphanumeric identifier, and item positions are updated
+      via RFID readers installed at every shelving unit. The ITM database refresh interval is 250
+      milliseconds. Items can be in one of four states: STOCKED, RESERVED, PICKING, or SHIPPED.
+
+      The RPF consists of 48 autonomous robotic pickers organized into four squads of 12 robots each.
+      Each robot has a maximum payload of 35 kilograms and a top speed of 1.8 meters per second.
+      Robots return to one of eight charging stations when battery falls below 22 percent.
+      A full charge takes 38 minutes and provides approximately 6.5 hours of continuous operation.
+
+      The CRE manages the network of conveyor belts that move items between picking zones, packing
+      stations, and the shipping dock. The conveyor network has 14 zones total. The CRE uses
+      a modified A-star routing algorithm with priority weighting for time-sensitive orders.
+      Average end-to-end transit time for a standard item is 4.2 minutes.
+
+      System operators can issue commands via the Atlas Command Console (ACC) using a structured
+      command syntax. For example, to pause all robots in squad B, the operator types:
+      `RPF SQUAD B PAUSE`. To resume, `RPF SQUAD B RESUME`.
+
+      Safety protocols mandate that humans entering any robotic operation zone must wear an
+      RFID-tagged safety vest. The system enforces a 2-meter safety perimeter around any
+      detected human; robots automatically slow to 0.4 meters per second when within the perimeter.
+
+      Question: What is the maximum payload of a single Atlas robotic picker in kilograms?
+      Answer with only the number.
