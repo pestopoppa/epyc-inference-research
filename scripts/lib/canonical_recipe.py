@@ -13,16 +13,41 @@ Recipe history:
   launcher had drifted away from this recipe (missing taskset, mmap defaulted
   to ON, AOCC libomp resolved instead of clang-20). The recipe is now codified
   to prevent silent drift.
+- During the 2026-05-28 post-reboot session SEVEN compounding drift bugs were
+  caught in one bench run (wrong binary, wrong libomp, missing OMP_DYNAMIC=false,
+  THP defrag reset, perf_event_paranoid reset, broken ik_llama bench binary with
+  RUNPATH-vs-LD_LIBRARY_PATH issue). All seven could have been caught earlier
+  by a single composite validator. Added validate_canonical_env() +
+  validate_host_environment() + assert_binary_resolves_correctly() to surface
+  the failures pre-flight, plus discover_canonical_bench_binary() to pick the
+  right binary automatically. Use the wrapper script bench_canonical.sh as the
+  ONLY sanctioned bench entry point; it composes these validators correctly.
+
+Drift-traps this module catches at validate time (do not reconstruct from memory):
+1. taskset/numactl prefix missing or out of order            → assert_canonical_cmd
+2. --no-mmap / -mmp 0 missing                                → assert_canonical_cmd
+3. OMP_PROC_BIND/PLACES/WAIT_POLICY/DYNAMIC wrong            → assert_canonical_env
+4. LD_LIBRARY_PATH missing /usr/lib/llvm-20/lib (AOCC bug)   → assert_canonical_env
+5. Binary resolves to wrong libllama/libggml via ldd         → assert_binary_resolves_correctly
+6. THP enabled/defrag not 'always'                           → validate_host_environment
+7. scaling_governor not 'performance'                        → validate_host_environment
+8. numa_balancing not 0                                      → validate_host_environment
+9. perf_event_paranoid > 1                                   → validate_host_environment
 
 Memory references:
 - feedback_canonical_baseline_protocol.md
 - feedback_omp_env_stack_required.md
 - feedback_host_throttle_check.md
+- feedback_use_codified_recipes_not_memory.md  (the 2026-05-28 recurrence memo)
 """
 
 from __future__ import annotations
 
 import os
+import re
+import shlex
+import subprocess
+import sys
 from typing import Optional
 
 
@@ -174,3 +199,495 @@ TRIPWIRE_TIMEOUT_S: int = 90  # generous; actual run is ~6 s
 # briefly de-scheduling). Hard fail if more than 16 cores under threshold.
 FREQ_BOOST_THRESHOLD_KHZ: int = 2_500_000
 FREQ_BOOST_MIN_CORES: int = 80  # of 96
+
+
+# ---------------------------------------------------------------------------
+# Binary paths + expected library resolution (catches the 2026-05-28 RUNPATH bug)
+# ---------------------------------------------------------------------------
+
+# Production gemma4 MTP server uses ik_llama.cpp. For bench reproducibility we
+# default to the same binary — DIFFERENT code paths in mainstream llama.cpp
+# vs ik_llama produce ~16% different throughput on the same model.
+IK_LLAMA_BENCH: str = "/mnt/raid0/llm/ik_llama.cpp/build/bin/llama-bench"
+IK_LLAMA_SERVER: str = "/mnt/raid0/llm/ik_llama.cpp/build/bin/llama-server"
+
+EXPECTED_LIBS_IK_LLAMA: list[str] = [
+    "/mnt/raid0/llm/ik_llama.cpp/build/src/libllama.so",
+    "/mnt/raid0/llm/ik_llama.cpp/build/ggml/src/libggml.so",
+]
+
+# Fallback: mainstream llama.cpp v5_clean build. ONLY use if ik_llama is broken.
+# Bench numbers from v5_clean are NOT directly comparable to the production
+# baseline; the codepaths differ (different AVX-512BW quant kernels).
+V5_CLEAN_BENCH: str = "/mnt/raid0/llm/llama.cpp-experimental/build_v5_clean/bin/llama-bench"
+EXPECTED_LIBS_V5_CLEAN: list[str] = [
+    "/mnt/raid0/llm/llama.cpp/build/bin/libllama.so",
+    "/mnt/raid0/llm/llama.cpp/build/bin/libggml.so",
+]
+
+
+def assert_binary_resolves_correctly(binary: str, expected_libs: list[str]) -> None:
+    """Run `ldd binary` and check that libllama/libggml resolve to expected paths.
+
+    Catches the RUNPATH-vs-LD_LIBRARY_PATH drift that broke ik_llama llama-bench
+    on 2026-05-28. The binary's DT_RUNPATH is overridden by a polluted
+    LD_LIBRARY_PATH, causing it to resolve to mainstream llama.cpp's libllama.so
+    (which has since dropped the llama_set_offload_policy symbol that ik_llama
+    expects). The fix is to rebuild with `-Wl,--disable-new-dtags` so DT_RPATH
+    is set instead of DT_RUNPATH (RPATH beats LD_LIBRARY_PATH).
+
+    Raises CanonicalRecipeViolation with the actual resolution if drift is found.
+    """
+    if not os.path.isfile(binary):
+        raise CanonicalRecipeViolation(f"binary not found: {binary}")
+
+    try:
+        out = subprocess.check_output(
+            ["ldd", binary], text=True, stderr=subprocess.STDOUT
+        )
+    except subprocess.CalledProcessError as e:
+        raise CanonicalRecipeViolation(
+            f"ldd {binary} failed (exit {e.returncode}):\n{e.output}"
+        )
+
+    for expected in expected_libs:
+        lib_name = os.path.basename(expected)
+        # Match either "libname => /path (0x...)" or "libname.0 => /path (0x...)"
+        # (suffix variants happen with SONAME differences).
+        # Strip any trailing version from the expected lib_name for matching.
+        base_lib = lib_name.split(".so")[0]
+        pattern = re.compile(
+            rf"^\s*{re.escape(base_lib)}\.so(?:\.[0-9.]+)?\s*=>\s*(\S+)\s+\(0x[0-9a-f]+\)\s*$",
+            re.MULTILINE,
+        )
+        match = pattern.search(out)
+        if not match:
+            # Lib might not be a NEEDED dependency at all (e.g. statically linked).
+            # That's not a violation; just means we can't check it. Skip.
+            continue
+        actual = match.group(1)
+        # Expected and actual can differ by suffix (.so vs .so.0); compare prefix.
+        expected_base = expected.rstrip("0123456789.")
+        actual_base = actual.rstrip("0123456789.")
+        if actual_base != expected_base:
+            raise CanonicalRecipeViolation(
+                f"{binary} resolves {lib_name} INCORRECTLY:\n"
+                f"  expected base: {expected_base}\n"
+                f"  actual:        {actual}\n"
+                f"\n"
+                f"This is the 2026-05-28 RUNPATH-vs-LD_LIBRARY_PATH bug. The\n"
+                f"binary has DT_RUNPATH set (per `readelf -d {binary}`), but\n"
+                f"RUNPATH loses to LD_LIBRARY_PATH at runtime. Fix: rebuild the\n"
+                f"binary with `-Wl,--disable-new-dtags` so DT_RPATH is set\n"
+                f"instead (RPATH beats LD_LIBRARY_PATH).\n"
+                f"\n"
+                f"Example fix for ik_llama:\n"
+                f"  cd /mnt/raid0/llm/ik_llama.cpp/build\n"
+                f"  cmake .. \\\n"
+                f"      -DCMAKE_EXE_LINKER_FLAGS='-Wl,--disable-new-dtags' \\\n"
+                f"      -DCMAKE_SHARED_LINKER_FLAGS='-Wl,--disable-new-dtags'\n"
+                f"  cmake --build . -j 32"
+            )
+
+
+def discover_canonical_bench_binary(prefer_ik_llama: bool = True) -> tuple[str, list[str]]:
+    """Return (binary_path, expected_libs_list) preferring ik_llama.
+
+    Verifies via assert_binary_resolves_correctly that the chosen binary resolves
+    to ITS OWN libllama/libggml, not someone else's. If ik_llama is broken (the
+    pre-2026-05-28 RUNPATH state), falls back to v5_clean with a stderr warning.
+
+    Production gemma4 MTP runs on ik_llama; bench reproducibility requires the
+    same binary or numbers are not comparable.
+    """
+    candidates: list[tuple[str, list[str]]] = []
+    if prefer_ik_llama:
+        candidates = [
+            (IK_LLAMA_BENCH, EXPECTED_LIBS_IK_LLAMA),
+            (V5_CLEAN_BENCH, EXPECTED_LIBS_V5_CLEAN),
+        ]
+    else:
+        candidates = [
+            (V5_CLEAN_BENCH, EXPECTED_LIBS_V5_CLEAN),
+            (IK_LLAMA_BENCH, EXPECTED_LIBS_IK_LLAMA),
+        ]
+
+    last_err: Optional[Exception] = None
+    for binary, expected_libs in candidates:
+        if not os.path.isfile(binary):
+            continue
+        try:
+            assert_binary_resolves_correctly(binary, expected_libs)
+            return binary, expected_libs
+        except CanonicalRecipeViolation as e:
+            last_err = e
+            print(
+                f"WARN: {binary} failed linkage validation; trying next candidate.\n"
+                f"  Reason: {e}",
+                file=sys.stderr,
+            )
+
+    if last_err is not None:
+        raise CanonicalRecipeViolation(
+            f"No working llama-bench binary found. Last failure:\n{last_err}"
+        )
+    raise FileNotFoundError(
+        f"No llama-bench binary found at any candidate path:\n"
+        f"  {IK_LLAMA_BENCH}\n  {V5_CLEAN_BENCH}\n"
+        f"Check that ik_llama.cpp is built (cmake --build).\n"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Host-environment validation (catches 2026-05-28 post-reboot defaults reset)
+# ---------------------------------------------------------------------------
+
+# Required host state for canonical bench. apply_host_prerequisites() in
+# orchestrator_stack.py applies all of these on stack start, but they reset
+# to kernel defaults on reboot.
+REQUIRED_THP_ENABLED: str = "always"
+REQUIRED_THP_DEFRAG: str = "always"
+REQUIRED_SCALING_GOVERNOR: str = "performance"
+REQUIRED_NUMA_BALANCING: str = "0"
+MAX_PERF_EVENT_PARANOID: int = 1  # user-mode HW events need ≤1
+
+
+def _read_sysfs(path: str) -> Optional[str]:
+    """Read a single-line sysfs/proc file; return None if missing or unreadable."""
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except (FileNotFoundError, PermissionError, OSError):
+        return None
+
+
+def _parse_thp_active(thp_value: str) -> Optional[str]:
+    """Parse `[always] madvise never` and return the active mode ('always'),
+    or None if unparseable.
+    """
+    m = re.search(r"\[(\w+)\]", thp_value)
+    return m.group(1) if m else None
+
+
+def validate_host_environment(skip_perf_paranoid: bool = False) -> None:
+    """Check host-level prerequisites: THP, scaling_governor, numa_balancing,
+    perf_event_paranoid.
+
+    All of these reset to kernel defaults at boot. orchestrator_stack.py applies
+    them via apply_host_prerequisites() on stack start; this helper catches the
+    drift if bench is run before the stack is started.
+
+    Raises CanonicalRecipeViolation listing every drift found, with the exact
+    sysctl/sysfs fix for each.
+
+    skip_perf_paranoid: pass True if you don't intend to use perf stat (it's only
+    needed for the perf-wrapped bench path).
+    """
+    issues: list[str] = []
+
+    # THP enabled
+    thp_enabled = _read_sysfs("/sys/kernel/mm/transparent_hugepage/enabled")
+    if thp_enabled is not None:
+        active = _parse_thp_active(thp_enabled)
+        if active != REQUIRED_THP_ENABLED:
+            issues.append(
+                f"transparent_hugepage/enabled active mode = {active!r}\n"
+                f"  expected: {REQUIRED_THP_ENABLED!r}\n"
+                f"  fix: echo always | sudo tee /sys/kernel/mm/transparent_hugepage/enabled"
+            )
+
+    # THP defrag (this was the missed one on 2026-05-28 reboot)
+    thp_defrag = _read_sysfs("/sys/kernel/mm/transparent_hugepage/defrag")
+    if thp_defrag is not None:
+        active = _parse_thp_active(thp_defrag)
+        if active != REQUIRED_THP_DEFRAG:
+            issues.append(
+                f"transparent_hugepage/defrag active mode = {active!r}\n"
+                f"  expected: {REQUIRED_THP_DEFRAG!r}\n"
+                f"  fix: echo always | sudo tee /sys/kernel/mm/transparent_hugepage/defrag"
+            )
+
+    # CPU governor (sample cpu0)
+    governor = _read_sysfs("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
+    if governor is not None and governor != REQUIRED_SCALING_GOVERNOR:
+        issues.append(
+            f"cpu0 scaling_governor = {governor!r}\n"
+            f"  expected: {REQUIRED_SCALING_GOVERNOR!r}\n"
+            f"  fix: sudo cpupower frequency-set -g performance"
+        )
+
+    # numa_balancing (per feedback_numa_balancing_self_reset, this resets to 0
+    # at boot which is what we want; only flag if non-zero)
+    nb = _read_sysfs("/proc/sys/kernel/numa_balancing")
+    if nb is not None and nb != REQUIRED_NUMA_BALANCING:
+        issues.append(
+            f"kernel.numa_balancing = {nb!r}\n"
+            f"  expected: {REQUIRED_NUMA_BALANCING!r}\n"
+            f"  fix: sudo sysctl -w kernel.numa_balancing=0\n"
+            f"  see feedback_numa_balancing_self_reset memory."
+        )
+
+    # perf_event_paranoid (post-reboot default is 4; we need ≤1 for user-mode HW events)
+    if not skip_perf_paranoid:
+        pep = _read_sysfs("/proc/sys/kernel/perf_event_paranoid")
+        if pep is not None:
+            try:
+                pep_int = int(pep)
+                if pep_int > MAX_PERF_EVENT_PARANOID:
+                    issues.append(
+                        f"kernel.perf_event_paranoid = {pep_int}\n"
+                        f"  expected: ≤{MAX_PERF_EVENT_PARANOID} (for user-mode HW events)\n"
+                        f"  fix: sudo sysctl -w kernel.perf_event_paranoid={MAX_PERF_EVENT_PARANOID}"
+                    )
+            except ValueError:
+                pass
+
+    if issues:
+        raise CanonicalRecipeViolation(
+            "Host environment drift detected (kernel defaults reset on reboot;\n"
+            "orchestrator_stack.py start applies the correct values via\n"
+            "apply_host_prerequisites()):\n\n"
+            + "\n\n".join(issues)
+            + "\n\n"
+            "Alternative: run `python3 /mnt/raid0/llm/epyc-orchestrator/scripts/server/"
+            "orchestrator_stack.py start` to apply all prerequisites at once."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Composite validator — call BEFORE constructing any bench command
+# ---------------------------------------------------------------------------
+
+
+def validate_canonical_env(
+    cmd: Optional[list[str]] = None,
+    env: Optional[dict[str, str]] = None,
+    binary: Optional[str] = None,
+    expected_libs: Optional[list[str]] = None,
+    check_host: bool = True,
+    skip_perf_paranoid: bool = False,
+) -> None:
+    """All-in-one validation: command shape + env vars + binary linkage + host config.
+
+    Call this BEFORE running any bench. Raises CanonicalRecipeViolation with a
+    detailed error message identifying what drifted. None of the checks run the
+    binary; they're all static / read-only.
+
+    Args:
+        cmd: command list to validate (must start with CANONICAL_PREFIX, must
+            include --no-mmap or -mmp 0). Pass None to skip cmd check.
+        env: environment dict to validate (must have CANONICAL_OMP_ENV + LLVM20
+            on LD_LIBRARY_PATH). Pass None to skip env check.
+        binary: path to llama-bench (or llama-server). Pass None to skip linkage
+            check.
+        expected_libs: expected libllama/libggml resolutions for the binary.
+            Required if binary is provided.
+        check_host: validate THP/governor/numa_balancing/perf_event_paranoid.
+            Pass False to skip (default True).
+        skip_perf_paranoid: pass True if you don't intend to use perf stat;
+            skips the perf_event_paranoid check.
+    """
+    if cmd is not None:
+        assert_canonical_cmd(cmd)
+    if env is not None:
+        assert_canonical_env(env)
+    if binary is not None:
+        if expected_libs is None:
+            raise ValueError("expected_libs must be provided when binary is given")
+        assert_binary_resolves_correctly(binary, expected_libs)
+    if check_host:
+        validate_host_environment(skip_perf_paranoid=skip_perf_paranoid)
+
+
+# ---------------------------------------------------------------------------
+# High-level bench-command constructor (the one canonical entry point)
+# ---------------------------------------------------------------------------
+
+
+def build_canonical_bench_command(
+    model: str,
+    n_prompt: int = 0,
+    n_gen: int = 512,
+    reps: int = 2,
+    extra_flags: Optional[list[str]] = None,
+    prefer_ik_llama: bool = True,
+) -> tuple[str, list[str], dict[str, str]]:
+    """Build (binary_path, cmd_list, env_dict) for the canonical llama-bench run.
+
+    This is the ONLY blessed way to construct a bench command. Do not reconstruct
+    from memory — drift bit this project at least 3 times (2026-05-02, 2026-05-28
+    multiple), and the recipe has been codified specifically to prevent it.
+
+    Args:
+        model: path to GGUF model file
+        n_prompt: prefill tokens (default 0 = decode-only bench)
+        n_gen: generation tokens per rep (default 512)
+        reps: repetitions (default 2)
+        extra_flags: optional list of additional flags to pass to llama-bench
+            (e.g. ['-ctk', 'q8_0', '-ctv', 'q8_0']). Do NOT include flags that
+            are already in CANONICAL_BENCH_FLAGS_LLAMA_BENCH.
+        prefer_ik_llama: prefer ik_llama llama-bench (matches production server).
+            Falls back to v5_clean if ik_llama is broken; emits a stderr warning.
+
+    Returns:
+        binary: absolute path to llama-bench
+        cmd: full command list ready for subprocess.run (includes
+            taskset+numactl prefix + binary + canonical flags + user flags)
+        env: subprocess environment ready for subprocess.run (canonical OMP +
+            libomp LD_LIBRARY_PATH override + caller's os.environ)
+    """
+    if not os.path.isfile(model):
+        raise FileNotFoundError(f"Model file not found: {model}")
+
+    binary, _expected_libs = discover_canonical_bench_binary(prefer_ik_llama=prefer_ik_llama)
+
+    bench_args: list[str] = (
+        list(CANONICAL_BENCH_FLAGS_LLAMA_BENCH)
+        + ["-m", model, "-p", str(n_prompt), "-n", str(n_gen), "-r", str(reps), "-o", "md"]
+    )
+    if extra_flags:
+        bench_args = bench_args + list(extra_flags)
+
+    cmd = apply_canonical_prefix([binary, *bench_args])
+    env = build_canonical_env()
+
+    return binary, cmd, env
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point for shell-script consumption
+# ---------------------------------------------------------------------------
+
+
+def _emit_bench_command_json(args) -> int:
+    """Build the canonical bench command and emit it as JSON to stdout.
+
+    The shell wrapper (bench_canonical.sh) consumes this and exec's the command
+    with the right env. Keeping the construction logic in Python (single source
+    of truth) and the orchestration in shell (so perf-stat wrapping is natural)
+    gives clean separation.
+    """
+    import json
+
+    try:
+        binary, cmd, env = build_canonical_bench_command(
+            model=args.model,
+            n_prompt=args.n_prompt,
+            n_gen=args.n_gen,
+            reps=args.reps,
+            extra_flags=args.extra,
+            prefer_ik_llama=not args.no_ik_llama,
+        )
+    except (FileNotFoundError, CanonicalRecipeViolation) as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    if args.validate_host:
+        try:
+            validate_host_environment(skip_perf_paranoid=not args.with_perf)
+        except CanonicalRecipeViolation as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            return 2
+
+    # Emit only the env variables WE set (don't dump entire os.environ).
+    emitted_env = {
+        "LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"],
+        **CANONICAL_OMP_ENV,
+    }
+
+    out = {"binary": binary, "cmd": cmd, "env": emitted_env}
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+def _validate_only(args) -> int:
+    """Run validate_canonical_env() against the host + discovered binary,
+    without emitting any command. Useful as a pre-bench preflight check.
+    """
+    try:
+        binary, expected_libs = discover_canonical_bench_binary(
+            prefer_ik_llama=not args.no_ik_llama
+        )
+        validate_canonical_env(
+            binary=binary,
+            expected_libs=expected_libs,
+            check_host=True,
+            skip_perf_paranoid=not args.with_perf,
+        )
+    except (FileNotFoundError, CanonicalRecipeViolation) as e:
+        print(f"VALIDATION FAILED:\n{e}", file=sys.stderr)
+        return 1
+
+    print(f"OK: canonical recipe validated. Binary: {binary}")
+    return 0
+
+
+def _main() -> int:
+    import argparse
+
+    p = argparse.ArgumentParser(
+        prog="canonical_recipe",
+        description="Single source of truth for EPYC 9655 canonical bench recipe.",
+    )
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    # validate subcommand
+    pv = sub.add_parser(
+        "validate",
+        help="Validate host + binary linkage. Exits non-zero on drift.",
+    )
+    pv.add_argument(
+        "--no-ik-llama",
+        action="store_true",
+        help="Prefer v5_clean over ik_llama (default: prefer ik_llama).",
+    )
+    pv.add_argument(
+        "--with-perf",
+        action="store_true",
+        help="Also validate perf_event_paranoid (needed for perf-wrapped bench).",
+    )
+
+    # emit-bench-command subcommand
+    pe = sub.add_parser(
+        "emit-bench-command",
+        help="Emit canonical bench command as JSON (for shell wrapper consumption).",
+    )
+    pe.add_argument("--model", required=True, help="Path to GGUF model file.")
+    pe.add_argument("--n-prompt", type=int, default=0)
+    pe.add_argument("--n-gen", type=int, default=512)
+    pe.add_argument("--reps", type=int, default=2)
+    pe.add_argument(
+        "--extra",
+        nargs=argparse.REMAINDER,
+        default=None,
+        help="Extra flags to pass to llama-bench (use after --).",
+    )
+    pe.add_argument(
+        "--no-ik-llama",
+        action="store_true",
+        help="Prefer v5_clean over ik_llama (default: prefer ik_llama).",
+    )
+    pe.add_argument(
+        "--no-validate-host",
+        dest="validate_host",
+        action="store_false",
+        default=True,
+        help="Skip host-environment validation (default: validate).",
+    )
+    pe.add_argument(
+        "--with-perf",
+        action="store_true",
+        help="Wrap-with-perf intent — affects perf_event_paranoid check only.",
+    )
+
+    args = p.parse_args()
+    if args.cmd == "validate":
+        return _validate_only(args)
+    if args.cmd == "emit-bench-command":
+        return _emit_bench_command_json(args)
+    p.print_help(sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(_main())
