@@ -8,6 +8,8 @@ Research repository for AMD EPYC 9655 inference optimization. Contains benchmark
 
 `orchestration/model_registry.yaml` is the **source of truth** for all model information: paths, quantization levels, compatible draft models, launch commands, and known quirks.
 
+Run `scripts/validate_model_registry.py` after edits — checks that active *deployable* roles have on-disk model files, that deprecated roles are absent from `process_layout` / escalation chains / routing-hint `use`+`escalate_to` targets, and `server_mode`↔`roles` section drift (model basename, `model_role` version token, `acceleration.type`, thinking consistency). Exit 1 on errors; warnings are off-disk catalogue candidates + minor drift surfaced for review.
+
 ## Benchmarking Workflow
 
 1. **Prompts**: Standardized in `benchmarks/prompts/v1/`
