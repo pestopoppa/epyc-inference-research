@@ -14,8 +14,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source environment library for path variables
-# shellcheck source=../lib/env.sh
-source "${SCRIPT_DIR}/../lib/env.sh"
+if [[ -f "${SCRIPT_DIR}/../lib/env.sh" ]]; then
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+  # shellcheck source=../lib/env.sh
+  source "${SCRIPT_DIR}/../lib/env.sh"
+elif [[ -f "${SCRIPT_DIR}/../../lib/env.sh" ]]; then
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+  # shellcheck source=../../lib/env.sh
+  source "${SCRIPT_DIR}/../../lib/env.sh"
+else
+  echo "ERROR: Could not locate scripts/lib/env.sh from $SCRIPT_DIR"
+  exit 1
+fi
 
 # Defaults
 PORT="${WHISPER_PORT:-9000}"
@@ -79,16 +89,34 @@ if lsof -i ":$PORT" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Activate pace-env if not already active
-if [[ -z "${VIRTUAL_ENV:-}" ]]; then
-  # Try common locations for the virtual environment
-  for venv_path in \
-    "${LLM_ROOT}/pace-env/bin/activate" \
-    "$HOME/pace-env/bin/activate" \
-    "${PROJECT_ROOT}/../pace-env/bin/activate"; do
+# Resolve Python. Prefer explicit WHISPER_PYTHON, then an active venv, then
+# persistent venv locations that survive reboot.
+PYTHON_BIN="${WHISPER_PYTHON:-python}"
+if [[ -n "${WHISPER_PYTHON:-}" ]]; then
+  if [[ ! -x "$PYTHON_BIN" ]]; then
+    echo "ERROR: WHISPER_PYTHON is not executable: $PYTHON_BIN"
+    exit 1
+  fi
+elif [[ -n "${VIRTUAL_ENV:-}" ]]; then
+  PYTHON_BIN="${VIRTUAL_ENV}/bin/python"
+else
+  venv_candidates=()
+  if [[ -n "${WHISPER_VENV:-}" ]]; then
+    venv_candidates+=("${WHISPER_VENV}/bin/activate")
+  fi
+  venv_candidates+=(
+    "${LLM_ROOT}/pace-env/bin/activate"
+    "$HOME/pace-env/bin/activate"
+    "${REPO_ROOT}/.venv/bin/activate"
+    "${PROJECT_ROOT}/../pace-env/bin/activate"
+  )
+
+  for venv_path in "${venv_candidates[@]}"; do
     if [[ -f "$venv_path" ]]; then
       echo "Activating venv: $venv_path"
+      # shellcheck disable=SC1090
       source "$venv_path"
+      PYTHON_BIN="${VIRTUAL_ENV}/bin/python"
       break
     fi
   done
@@ -98,15 +126,20 @@ if [[ -z "${VIRTUAL_ENV:-}" ]]; then
 fi
 
 # Check faster-whisper is installed
-if ! python -c "import faster_whisper" 2>/dev/null; then
+if ! "$PYTHON_BIN" -c "import faster_whisper" 2>/dev/null; then
   echo "ERROR: faster-whisper not installed"
-  echo "Run: pip install faster-whisper uvicorn fastapi python-multipart"
+  echo "Run:"
+  echo "  python3 -m venv ${LLM_ROOT}/pace-env"
+  echo "  ${LLM_ROOT}/pace-env/bin/python -m pip install faster-whisper uvicorn fastapi python-multipart"
   exit 1
 fi
 
-# Run with NUMA interleaving for optimal memory bandwidth
 echo "Starting server..."
-exec numactl --interleave=all \
-  python "$SCRIPT_DIR/whisper_server.py" \
-  --port "$PORT" \
-  --model "$MODEL"
+server_cmd=("$PYTHON_BIN" "$SCRIPT_DIR/whisper_server.py" --port "$PORT" --model "$MODEL")
+if command -v numactl >/dev/null 2>&1; then
+  # Run with NUMA interleaving for optimal memory bandwidth.
+  exec numactl --interleave=all "${server_cmd[@]}"
+else
+  echo "WARNING: numactl not found; starting without NUMA interleaving"
+  exec "${server_cmd[@]}"
+fi
