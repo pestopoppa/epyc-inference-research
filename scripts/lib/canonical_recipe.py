@@ -225,6 +225,21 @@ EXPECTED_LIBS_V5_CLEAN: list[str] = [
     "/mnt/raid0/llm/llama.cpp/build/bin/libggml.so",
 ]
 
+# Strategy-B fork for DeepSeek-V4 (antirez/llama.cpp-deepseek-v4-flash). Cloned
+# 2026-05-28 into /mnt/raid0/llm/llama.cpp-deepseek-v4 and built with the same
+# canonical hardening as ik_llama (-Wl,--disable-new-dtags so DT_RPATH wins
+# over LD_LIBRARY_PATH; clang-20 + LLVM-20 libomp + znver5 native).
+#
+# This binary is used ONLY for DeepSeek-V4 — it does NOT support gemma4 / Qwen3.6
+# / other production-stack models. Bench numbers from this fork are comparable
+# to other mainstream-llama.cpp-based forks (e.g. v5_clean) but NOT to ik_llama
+# (different codepaths). See handoff deepseek-v4-flash-cpu-port.md Strategy D.
+V4_FORK_BENCH: str = "/mnt/raid0/llm/llama.cpp-deepseek-v4/build/bin/llama-bench"
+EXPECTED_LIBS_V4_FORK: list[str] = [
+    "/mnt/raid0/llm/llama.cpp-deepseek-v4/build/bin/libllama.so",
+    "/mnt/raid0/llm/llama.cpp-deepseek-v4/build/bin/libggml.so",
+]
+
 
 def assert_binary_resolves_correctly(binary: str, expected_libs: list[str]) -> None:
     """Run `ldd binary` and check that libllama/libggml resolve to expected paths.
@@ -290,6 +305,25 @@ def assert_binary_resolves_correctly(binary: str, expected_libs: list[str]) -> N
             )
 
 
+def discover_v4_fork_bench() -> tuple[str, list[str]]:
+    """Return (V4_FORK_BENCH, EXPECTED_LIBS_V4_FORK) if available and correctly
+    linked. Used ONLY for DeepSeek-V4 — this binary doesn't support other archs.
+
+    Raises CanonicalRecipeViolation if the fork isn't built or has the same
+    RUNPATH-vs-LD_LIBRARY_PATH issue that ik_llama had pre-2026-05-28.
+    """
+    if not os.path.isfile(V4_FORK_BENCH):
+        raise FileNotFoundError(
+            f"DeepSeek-V4 fork bench not found at {V4_FORK_BENCH}.\n"
+            f"Build it first: cd /mnt/raid0/llm/llama.cpp-deepseek-v4/build && "
+            f"cmake .. -DCMAKE_EXE_LINKER_FLAGS='-Wl,--disable-new-dtags' "
+            f"-DCMAKE_SHARED_LINKER_FLAGS='-Wl,--disable-new-dtags' && "
+            f"cmake --build . -j 32"
+        )
+    assert_binary_resolves_correctly(V4_FORK_BENCH, EXPECTED_LIBS_V4_FORK)
+    return V4_FORK_BENCH, EXPECTED_LIBS_V4_FORK
+
+
 def discover_canonical_bench_binary(prefer_ik_llama: bool = True) -> tuple[str, list[str]]:
     """Return (binary_path, expected_libs_list) preferring ik_llama.
 
@@ -299,6 +333,10 @@ def discover_canonical_bench_binary(prefer_ik_llama: bool = True) -> tuple[str, 
 
     Production gemma4 MTP runs on ik_llama; bench reproducibility requires the
     same binary or numbers are not comparable.
+
+    NOTE: this function does NOT consider V4_FORK_BENCH; that binary supports
+    ONLY DeepSeek-V4 and is selected explicitly via discover_v4_fork_bench()
+    or by passing the v4-fork flag through CLI / build_canonical_bench_command.
     """
     candidates: list[tuple[str, list[str]]] = []
     if prefer_ik_llama:
@@ -511,6 +549,7 @@ def build_canonical_bench_command(
     reps: int = 2,
     extra_flags: Optional[list[str]] = None,
     prefer_ik_llama: bool = True,
+    use_v4_fork: bool = False,
 ) -> tuple[str, list[str], dict[str, str]]:
     """Build (binary_path, cmd_list, env_dict) for the canonical llama-bench run.
 
@@ -528,6 +567,10 @@ def build_canonical_bench_command(
             are already in CANONICAL_BENCH_FLAGS_LLAMA_BENCH.
         prefer_ik_llama: prefer ik_llama llama-bench (matches production server).
             Falls back to v5_clean if ik_llama is broken; emits a stderr warning.
+            Ignored when use_v4_fork=True.
+        use_v4_fork: select the DeepSeek-V4 fork binary (V4_FORK_BENCH). The
+            V4 fork is the ONLY way to run V4 GGUFs; it doesn't support other
+            archs. See handoff deepseek-v4-flash-cpu-port.md Strategy D.
 
     Returns:
         binary: absolute path to llama-bench
@@ -539,7 +582,10 @@ def build_canonical_bench_command(
     if not os.path.isfile(model):
         raise FileNotFoundError(f"Model file not found: {model}")
 
-    binary, _expected_libs = discover_canonical_bench_binary(prefer_ik_llama=prefer_ik_llama)
+    if use_v4_fork:
+        binary, _expected_libs = discover_v4_fork_bench()
+    else:
+        binary, _expected_libs = discover_canonical_bench_binary(prefer_ik_llama=prefer_ik_llama)
 
     bench_args: list[str] = (
         list(CANONICAL_BENCH_FLAGS_LLAMA_BENCH)
@@ -577,6 +623,7 @@ def _emit_bench_command_json(args) -> int:
             reps=args.reps,
             extra_flags=args.extra,
             prefer_ik_llama=not args.no_ik_llama,
+            use_v4_fork=args.v4_fork,
         )
     except (FileNotFoundError, CanonicalRecipeViolation) as e:
         print(f"ERROR: {e}", file=sys.stderr)
@@ -605,9 +652,12 @@ def _validate_only(args) -> int:
     without emitting any command. Useful as a pre-bench preflight check.
     """
     try:
-        binary, expected_libs = discover_canonical_bench_binary(
-            prefer_ik_llama=not args.no_ik_llama
-        )
+        if args.v4_fork:
+            binary, expected_libs = discover_v4_fork_bench()
+        else:
+            binary, expected_libs = discover_canonical_bench_binary(
+                prefer_ik_llama=not args.no_ik_llama
+            )
         validate_canonical_env(
             binary=binary,
             expected_libs=expected_libs,
@@ -642,6 +692,11 @@ def _main() -> int:
         help="Prefer v5_clean over ik_llama (default: prefer ik_llama).",
     )
     pv.add_argument(
+        "--v4-fork",
+        action="store_true",
+        help="Validate the DeepSeek-V4 fork binary instead of ik_llama/v5_clean.",
+    )
+    pv.add_argument(
         "--with-perf",
         action="store_true",
         help="Also validate perf_event_paranoid (needed for perf-wrapped bench).",
@@ -666,6 +721,12 @@ def _main() -> int:
         "--no-ik-llama",
         action="store_true",
         help="Prefer v5_clean over ik_llama (default: prefer ik_llama).",
+    )
+    pe.add_argument(
+        "--v4-fork",
+        action="store_true",
+        help="Select the DeepSeek-V4 fork binary (V4_FORK_BENCH). Only valid for "
+        "V4 GGUFs; this binary doesn't support other archs.",
     )
     pe.add_argument(
         "--no-validate-host",

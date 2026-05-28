@@ -118,7 +118,7 @@ class TestBinaryResolution(unittest.TestCase):
 
 
 class TestBinaryDiscovery(unittest.TestCase):
-    """Tests for discover_canonical_bench_binary."""
+    """Tests for discover_canonical_bench_binary + discover_v4_fork_bench."""
 
     def test_discovery_returns_ik_llama_by_default(self):
         if not os.path.isfile(r.IK_LLAMA_BENCH):
@@ -126,6 +126,35 @@ class TestBinaryDiscovery(unittest.TestCase):
         binary, libs = r.discover_canonical_bench_binary()
         self.assertEqual(binary, r.IK_LLAMA_BENCH)
         self.assertEqual(libs, r.EXPECTED_LIBS_IK_LLAMA)
+
+    def test_v4_fork_discovery_when_built(self):
+        if not os.path.isfile(r.V4_FORK_BENCH):
+            self.skipTest("V4 fork bench binary not built")
+        binary, libs = r.discover_v4_fork_bench()
+        self.assertEqual(binary, r.V4_FORK_BENCH)
+        self.assertEqual(libs, r.EXPECTED_LIBS_V4_FORK)
+
+    def test_v4_fork_discovery_raises_when_unbuilt(self):
+        # Negative case: if the binary doesn't exist, FileNotFoundError with
+        # rebuild instructions
+        if os.path.isfile(r.V4_FORK_BENCH):
+            self.skipTest(
+                "V4 fork is built; this test only meaningful pre-build."
+            )
+        with self.assertRaises(FileNotFoundError) as ctx:
+            r.discover_v4_fork_bench()
+        # Error message must include the rebuild command
+        self.assertIn("--disable-new-dtags", str(ctx.exception))
+
+    def test_v4_fork_does_not_appear_in_default_discovery(self):
+        # discover_canonical_bench_binary must NOT return V4_FORK_BENCH because
+        # the V4 fork binary doesn't support other archs.
+        if not os.path.isfile(r.IK_LLAMA_BENCH) and not os.path.isfile(
+            r.V5_CLEAN_BENCH
+        ):
+            self.skipTest("no default-discovery binary built")
+        binary, _ = r.discover_canonical_bench_binary()
+        self.assertNotEqual(binary, r.V4_FORK_BENCH)
 
 
 class TestHostEnvironment(unittest.TestCase):
