@@ -16,9 +16,27 @@ MODEL_DIR=/mnt/raid0/llm/models/deepseek-v4-flash
 TARGET_BASENAME=DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf
 TMP_FILE="${MODEL_DIR}/${TARGET_BASENAME}.tmp"
 FINAL_FILE="${MODEL_DIR}/${TARGET_BASENAME}"
+HF_URL="https://huggingface.co/antirez/deepseek-v4-gguf/resolve/main/${TARGET_BASENAME}"
 
-# Expected size in bytes — split to dodge the PII precommit hook's long-digit heuristic
-EXPECTED_BYTES=$((153 * 1024 * 1024 * 1024 + 1294557184))
+# Resolve the actual target size dynamically by following the HF redirect to
+# the signed S3-style URL and reading its Content-Length. This avoids hardcoding
+# the byte count (which also gets flagged by the PII precommit hook as a long
+# digit run) and tracks the canonical file size from the source of truth.
+fetch_expected_bytes() {
+    local resolved=$(curl -sI "$HF_URL" | grep -i '^location:' | awk '{print $2}' | tr -d '\r\n')
+    if [[ -z "$resolved" ]]; then
+        echo "ERROR: could not resolve HF redirect for $HF_URL" >&2
+        return 1
+    fi
+    local size=$(curl -sI "$resolved" | grep -i '^content-length:' | awk '{print $2}' | tr -d '\r\n')
+    if [[ -z "$size" ]]; then
+        echo "ERROR: could not read Content-Length from $resolved" >&2
+        return 1
+    fi
+    echo "$size"
+}
+
+EXPECTED_BYTES=$(fetch_expected_bytes) || exit 1
 ONCE=0
 [[ "${1:-}" == "--once" ]] && ONCE=1
 
