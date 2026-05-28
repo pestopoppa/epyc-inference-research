@@ -72,6 +72,26 @@ CANONICAL_OMP_ENV: dict[str, str] = {
     "OMP_DYNAMIC": "false",
 }
 
+# Production-launch additions on top of the OMP stack. Both are universally
+# beneficial on this host and are applied by orchestrator_stack.py's
+# apply_host_prerequisites() on every server launch. They belong in the
+# bench env so a bench reproduces production decode characteristics.
+#   KMP_BLOCKTIME=10        — per feedback_ik_llamacpp_omp_idle_spin (2026-05-09)
+#                              AOCC libomp ignores omp_pause_resource; this is
+#                              the only way to make threads sleep on futex
+#                              instead of spin-wait. +78% decode on gemma4 MTP
+#                              frontdoor; +0% on non-OMP-pool models (harmless).
+#   GGML_NUMA_WEIGHTS=1     — per project_cpu1_phase13_v1 (2026-04-24).
+#                              set_mempolicy MPOL_INTERLEAVE + suppress
+#                              MAP_POPULATE so weight pages distribute across
+#                              all 4 NUMA nodes correctly under NPS4. +140%
+#                              alone on Coder-30B Q4_K_M.
+# Both are also explicit gates in §Throughput gate of the V4 port handoff.
+CANONICAL_PRODUCTION_ENV: dict[str, str] = {
+    "KMP_BLOCKTIME": "10",
+    "GGML_NUMA_WEIGHTS": "1",
+}
+
 # clang-20's libomp directory. Prepended to LD_LIBRARY_PATH so the dynamic loader
 # resolves the binary's libomp.so dependency to clang-20 even when AMD AOCC is
 # also on disk. The build's CMakeCache.txt records OpenMP_omp_LIBRARY=
@@ -100,6 +120,8 @@ def build_canonical_env(extra_vars: Optional[dict] = None) -> dict[str, str]:
         )
 
     for k, v in CANONICAL_OMP_ENV.items():
+        env[k] = v
+    for k, v in CANONICAL_PRODUCTION_ENV.items():
         env[k] = v
 
     if extra_vars:
@@ -158,15 +180,29 @@ def assert_canonical_cmd(cmd: list[str]) -> None:
 
 def assert_canonical_env(env: dict[str, str]) -> None:
     """Raise CanonicalRecipeViolation if env doesn't carry the canonical OMP stack
-    + libomp override.
+    + production-launch additions (KMP_BLOCKTIME, GGML_NUMA_WEIGHTS) + libomp
+    override.
     """
-    missing = [k for k, v in CANONICAL_OMP_ENV.items() if env.get(k) != v]
-    if missing:
+    missing_omp = [k for k, v in CANONICAL_OMP_ENV.items() if env.get(k) != v]
+    if missing_omp:
         raise CanonicalRecipeViolation(
-            f"env is missing or has wrong values for: {missing}\n"
+            f"env is missing or has wrong values for OMP vars: {missing_omp}\n"
             f"  expected: {CANONICAL_OMP_ENV}\n"
             f"Fix: route env through canonical_recipe.build_canonical_env() or merge "
             f"in CANONICAL_OMP_ENV explicitly."
+        )
+    missing_prod = [k for k, v in CANONICAL_PRODUCTION_ENV.items() if env.get(k) != v]
+    if missing_prod:
+        raise CanonicalRecipeViolation(
+            f"env is missing or has wrong values for production-launch vars: "
+            f"{missing_prod}\n"
+            f"  expected: {CANONICAL_PRODUCTION_ENV}\n"
+            f"These are part of the §Throughput gate stack in the V4 handoff and\n"
+            f"are applied by orchestrator_stack.py. Without them the bench does NOT\n"
+            f"reproduce production decode (gemma4 idle-spin → -78% throughput per\n"
+            f"feedback_ik_llamacpp_omp_idle_spin; NUMA-weights-off → -58% per\n"
+            f"project_cpu1_phase13_v1).\n"
+            f"Fix: route env through canonical_recipe.build_canonical_env()."
         )
 
     ld = env.get("LD_LIBRARY_PATH", "")
@@ -271,6 +307,26 @@ def assert_binary_resolves_correctly(binary: str, expected_libs: list[str]) -> N
         # (suffix variants happen with SONAME differences).
         # Strip any trailing version from the expected lib_name for matching.
         base_lib = lib_name.split(".so")[0]
+        # First: fail CLOSED on "=> not found" — this is the broken-link case
+        # that the previous skip-on-no-match would silently mask.
+        not_found_pat = re.compile(
+            rf"^\s*{re.escape(base_lib)}\.so(?:\.[0-9.]+)?\s*=>\s*not found\s*$",
+            re.MULTILINE,
+        )
+        if not_found_pat.search(out):
+            raise CanonicalRecipeViolation(
+                f"{binary} has UNRESOLVED dependency on {lib_name}:\n"
+                f"  ldd reports: => not found\n"
+                f"  expected:    {expected}\n"
+                f"\n"
+                f"The binary lists this as a NEEDED dep but the loader cannot\n"
+                f"resolve it. Either the lib was deleted/renamed since build\n"
+                f"time or LD_LIBRARY_PATH points away from the build tree.\n"
+                f"\n"
+                f"Inspect with:\n"
+                f"  readelf -d {binary} | grep NEEDED\n"
+                f"  ldd {binary}"
+            )
         pattern = re.compile(
             rf"^\s*{re.escape(base_lib)}\.so(?:\.[0-9.]+)?\s*=>\s*(\S+)\s+\(0x[0-9a-f]+\)\s*$",
             re.MULTILINE,
@@ -640,6 +696,7 @@ def _emit_bench_command_json(args) -> int:
     emitted_env = {
         "LD_LIBRARY_PATH": env["LD_LIBRARY_PATH"],
         **CANONICAL_OMP_ENV,
+        **CANONICAL_PRODUCTION_ENV,
     }
 
     out = {"binary": binary, "cmd": cmd, "env": emitted_env}
@@ -674,6 +731,18 @@ def _validate_only(args) -> int:
 
 def _main() -> int:
     import argparse
+
+    # Manually split off post-`--` argv before argparse sees it. argparse's
+    # nargs=REMAINDER on a subparser arg silently rejects dash-prefixed extras
+    # passed after `--` (it treats `--` as an unknown option). Splitting here
+    # preserves the natural shell-wrapper convention:
+    #   bench_canonical.sh -m MODEL -- -ctk q8_0 -ctv q8_0
+    argv = sys.argv[1:]
+    extra_args: Optional[list[str]] = None
+    if "--" in argv:
+        idx = argv.index("--")
+        extra_args = argv[idx + 1:]
+        argv = argv[:idx]
 
     p = argparse.ArgumentParser(
         prog="canonical_recipe",
@@ -711,12 +780,10 @@ def _main() -> int:
     pe.add_argument("--n-prompt", type=int, default=0)
     pe.add_argument("--n-gen", type=int, default=512)
     pe.add_argument("--reps", type=int, default=2)
-    pe.add_argument(
-        "--extra",
-        nargs=argparse.REMAINDER,
-        default=None,
-        help="Extra flags to pass to llama-bench (use after --).",
-    )
+    # NOTE: --extra is handled by the pre-argparse split-on-`--` above.
+    # Any args after `--` on the command line are captured into extra_args and
+    # attached to args.extra below. Do not declare --extra as an argparse arg —
+    # REMAINDER + subparsers + dash-prefixed extras is a known argparse failure.
     pe.add_argument(
         "--no-ik-llama",
         action="store_true",
@@ -741,7 +808,9 @@ def _main() -> int:
         help="Wrap-with-perf intent — affects perf_event_paranoid check only.",
     )
 
-    args = p.parse_args()
+    args = p.parse_args(argv)
+    # Attach the post-`--` extras (parsed before argparse).
+    args.extra = extra_args
     if args.cmd == "validate":
         return _validate_only(args)
     if args.cmd == "emit-bench-command":

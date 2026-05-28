@@ -43,12 +43,18 @@ def make_prompt(pid: str, category: str, tokens_text: list[str],
 
 
 def make_result_set(prompts: list[dict], model_path: str = "/test/model.gguf",
-                    binary: str = "/test/bin/llama-server") -> dict:
-    """Build a synthetic top-level runner output."""
+                    binary: str = "/test/bin/llama-server",
+                    n_tokens_requested: int = 1) -> dict:
+    """Build a synthetic top-level runner output.
+
+    Defaults to n_tokens_requested=1 so existing 3-token synthetic prompts
+    pass the strict per-prompt token-count check; the dedicated strict-token
+    test class overrides this to exercise the gate.
+    """
     return {
         "model_path": model_path,
         "binary": binary,
-        "n_tokens_requested": 64,
+        "n_tokens_requested": n_tokens_requested,
         "n_prompts": len(prompts),
         "seed": 1,
         "temperature": 0,
@@ -275,6 +281,73 @@ class TestCompareEndToEnd(unittest.TestCase):
                                    make_result_set(ref_prompts), max_mad=0.05)
         # 19 prompts pass, 1 marked runtime-fail (missing on EPYC)
         self.assertEqual(summary["n_runtime_fail"], 1)
+
+
+class TestStrictTokenCount(unittest.TestCase):
+    """Per-prompt token-count enforcement — catches the false-pass on truncated runs."""
+
+    def test_one_token_per_prompt_fails_when_64_requested(self):
+        # 20 prompts × 1 token each, n_tokens_requested=64 → all marked runtime_failure
+        epyc_p = [make_prompt(f"p{i:02d}", "x", ["A"], [-1.0]) for i in range(20)]
+        ref_p = [make_prompt(f"p{i:02d}", "x", ["A"], [-1.0]) for i in range(20)]
+        epyc = make_result_set(epyc_p, n_tokens_requested=64)
+        ref = make_result_set(ref_p, n_tokens_requested=64)
+        rows, summary = c.compare(epyc, ref, max_mad=0.05)
+        self.assertEqual(summary["n_runtime_fail"], 20,
+                         "20 short prompts must all be runtime_failure")
+        ok, text = c.verdict(summary, 18, 15)
+        self.assertFalse(ok, "Strict-token gate must FAIL on 1-token-per-prompt run")
+        self.assertIn("runtime failure", text)
+
+    def test_partial_truncation_some_pass(self):
+        # 18 full-length + 2 truncated → 2 runtime_failure → verdict FAIL
+        epyc_p = ([make_prompt(f"p{i:02d}", "x", ["A"] * 64, [-1.0] * 64) for i in range(18)]
+                  + [make_prompt(f"p{i:02d}", "x", ["A"] * 10, [-1.0] * 10) for i in (18, 19)])
+        ref_p = [make_prompt(f"p{i:02d}", "x", ["A"] * 64, [-1.0] * 64) for i in range(20)]
+        rows, summary = c.compare(make_result_set(epyc_p, n_tokens_requested=64),
+                                   make_result_set(ref_p, n_tokens_requested=64),
+                                   max_mad=0.05)
+        self.assertEqual(summary["n_runtime_fail"], 2)
+        ok, _ = c.verdict(summary, 18, 15)
+        self.assertFalse(ok)
+
+    def test_explicit_min_tokens_override(self):
+        # CLI override: --min-tokens-per-prompt=10 with 64-token n_tokens_requested
+        # should allow shorter runs to pass.
+        epyc_p = [make_prompt(f"p{i:02d}", "x", ["A"] * 20, [-1.0] * 20) for i in range(20)]
+        ref_p = [make_prompt(f"p{i:02d}", "x", ["A"] * 20, [-1.0] * 20) for i in range(20)]
+        rows, summary = c.compare(make_result_set(epyc_p, n_tokens_requested=64),
+                                   make_result_set(ref_p, n_tokens_requested=64),
+                                   max_mad=0.05,
+                                   min_tokens_per_prompt=10)
+        self.assertEqual(summary["n_runtime_fail"], 0)
+        self.assertEqual(summary["n_pass_mad"], 20)
+
+
+class TestStrictPromptCount(unittest.TestCase):
+    """expected_n_prompts enforcement — catches truncated-run false-pass."""
+
+    def test_below_expected_count_marks_missing_slots(self):
+        epyc_p = [make_prompt(f"p{i:02d}", "x", ["A"] * 64, [-1.0] * 64) for i in range(15)]
+        ref_p = [make_prompt(f"p{i:02d}", "x", ["A"] * 64, [-1.0] * 64) for i in range(15)]
+        rows, summary = c.compare(make_result_set(epyc_p, n_tokens_requested=64),
+                                   make_result_set(ref_p, n_tokens_requested=64),
+                                   max_mad=0.05,
+                                   expected_n_prompts=20)
+        self.assertEqual(summary["n_runtime_fail"], 5,
+                         "5 missing slots out of 20 expected")
+        ok, _ = c.verdict(summary, 18, 15)
+        self.assertFalse(ok)
+
+    def test_none_disables_strict_count(self):
+        # library callers can opt out
+        epyc_p = [make_prompt(f"p{i:02d}", "x", ["A"], [-1.0]) for i in range(3)]
+        ref_p = [make_prompt(f"p{i:02d}", "x", ["A"], [-1.0]) for i in range(3)]
+        rows, summary = c.compare(make_result_set(epyc_p),
+                                   make_result_set(ref_p),
+                                   max_mad=0.05,
+                                   expected_n_prompts=None)
+        self.assertEqual(summary["n_runtime_fail"], 0)
 
 
 class TestCLIIntegration(unittest.TestCase):

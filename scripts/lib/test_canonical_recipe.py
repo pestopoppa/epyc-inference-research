@@ -61,6 +61,7 @@ class TestCanonicalEnv(unittest.TestCase):
     def _good_env(self) -> dict[str, str]:
         env = {"LD_LIBRARY_PATH": f"{r.LLVM20_LIBDIR}:/other/path"}
         env.update(r.CANONICAL_OMP_ENV)
+        env.update(r.CANONICAL_PRODUCTION_ENV)
         return env
 
     def test_correct_env_passes(self):
@@ -86,6 +87,30 @@ class TestCanonicalEnv(unittest.TestCase):
             r.assert_canonical_env(env)
         self.assertIn(r.LLVM20_LIBDIR, str(ctx.exception))
         self.assertIn("AOCC", str(ctx.exception))
+
+    def test_missing_kmp_blocktime_raises(self):
+        # Production-launch env addition — without it gemma4 MTP spins idle
+        # cores at idle and decode drops ~78% (feedback_ik_llamacpp_omp_idle_spin).
+        env = self._good_env()
+        del env["KMP_BLOCKTIME"]
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            r.assert_canonical_env(env)
+        self.assertIn("KMP_BLOCKTIME", str(ctx.exception))
+
+    def test_missing_ggml_numa_weights_raises(self):
+        # Without GGML_NUMA_WEIGHTS=1 under NPS4, weight pages first-touch onto
+        # one node and decode regresses ~58% (project_cpu1_phase13_v1).
+        env = self._good_env()
+        del env["GGML_NUMA_WEIGHTS"]
+        with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+            r.assert_canonical_env(env)
+        self.assertIn("GGML_NUMA_WEIGHTS", str(ctx.exception))
+
+    def test_build_canonical_env_emits_production_vars(self):
+        env = r.build_canonical_env()
+        for k, v in r.CANONICAL_PRODUCTION_ENV.items():
+            self.assertEqual(env.get(k), v,
+                             f"build_canonical_env() must set {k}={v}")
 
 
 class TestBinaryResolution(unittest.TestCase):
@@ -115,6 +140,48 @@ class TestBinaryResolution(unittest.TestCase):
             r.assert_binary_resolves_correctly(r.IK_LLAMA_BENCH, fake_expected)
         # The error message must point at the disable-new-dtags fix
         self.assertIn("disable-new-dtags", str(ctx.exception))
+
+    def test_not_found_dep_fails_closed(self):
+        """If ldd reports `<libname> => not found`, validation must FAIL — the
+        pre-fix code skipped on no-regex-match which let truly-broken binaries
+        pass. Build a tiny fake binary whose ldd output we mock via a wrapper
+        script, then point assert_binary_resolves_correctly at it.
+        """
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            # Create a fake binary that's executable but whose ldd output is
+            # mocked via the LD_TRACE_LOADED_OBJECTS pattern. Simpler: build a
+            # tiny C program that has an unresolved dep, OR mock ldd via PATH.
+            # Simplest: write a shell script that mimics ldd's output for a
+            # binary we point at, by intercepting ldd via PATH.
+            fake_binary = os.path.join(tmp, "fake-bench")
+            fake_ldd_out = os.path.join(tmp, "fake-bench")
+            # Create an actual executable file so the os.path.isfile check passes.
+            with open(fake_binary, "w") as f:
+                f.write("#!/bin/sh\nexit 0\n")
+            os.chmod(fake_binary, 0o755)
+            # Create a fake `ldd` in tmp that emits "=> not found" for our libs.
+            fake_ldd = os.path.join(tmp, "ldd")
+            with open(fake_ldd, "w") as f:
+                f.write(
+                    "#!/bin/sh\n"
+                    "echo '\tlibllama.so => not found'\n"
+                    "echo '\tlibggml.so => not found'\n"
+                )
+            os.chmod(fake_ldd, 0o755)
+            # Prepend tmp to PATH so our fake ldd wins
+            old_path = os.environ.get("PATH", "")
+            try:
+                os.environ["PATH"] = f"{tmp}:{old_path}"
+                with self.assertRaises(r.CanonicalRecipeViolation) as ctx:
+                    r.assert_binary_resolves_correctly(
+                        fake_binary,
+                        ["/expected/libllama.so", "/expected/libggml.so"],
+                    )
+                self.assertIn("not found", str(ctx.exception))
+                self.assertIn("UNRESOLVED", str(ctx.exception))
+            finally:
+                os.environ["PATH"] = old_path
 
 
 class TestBinaryDiscovery(unittest.TestCase):

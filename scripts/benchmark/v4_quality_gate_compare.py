@@ -67,11 +67,17 @@ def token1_match(epyc_tokens: list[str], ref_tokens: list[str]) -> bool:
     return epyc_tokens[0] == ref_tokens[0]
 
 
-def has_runtime_failure(prompt_result: dict) -> bool:
-    """Detect assert/segfault/NaN proxies in a runner result entry."""
+def has_runtime_failure(prompt_result: dict, min_tokens: int = 1) -> bool:
+    """Detect assert/segfault/NaN proxies + short-output runs.
+
+    A prompt result with fewer than `min_tokens` captured tokens is treated as
+    a runtime failure. The pre-fix MAD-over-min(len) logic falsely PASSED runs
+    where the server emitted only 1 token per prompt; with min_tokens set from
+    the runner's n_tokens_requested, short runs now fail the gate.
+    """
     if "error" in prompt_result:
         return True
-    if prompt_result.get("token_count", 0) == 0:
+    if prompt_result.get("token_count", 0) < min_tokens:
         return True
     # NaN/Inf in logprobs are caught by compute_mad returning None
     return False
@@ -82,16 +88,70 @@ def has_runtime_failure(prompt_result: dict) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def compare(epyc: dict, reference: dict, max_mad: float) -> tuple[list[dict], dict]:
-    """Per-prompt comparison loop. Returns (rows, summary)."""
+def compare(epyc: dict, reference: dict, max_mad: float,
+            expected_n_prompts: int | None = None,
+            min_tokens_per_prompt: int | None = None) -> tuple[list[dict], dict]:
+    """Per-prompt comparison loop. Returns (rows, summary).
+
+    Args:
+        epyc: EPYC runner JSON (must have prompts[] and n_tokens_requested)
+        reference: reference runner JSON (same shape)
+        max_mad: per-prompt MAD threshold (nats)
+        expected_n_prompts: required number of prompts on each side (default 20
+            per §Merge Gates). A run with fewer prompts gets the missing slots
+            flagged as runtime_failure rows.
+        min_tokens_per_prompt: minimum token_count per prompt to count as a
+            non-failure. If None, derived as min(epyc.n_tokens_requested,
+            reference.n_tokens_requested). Any prompt with fewer tokens is
+            flagged runtime_failure (this prevents 1-token-per-prompt runs
+            from falsely passing the gate).
+    """
     epyc_by_id = {p["id"]: p for p in epyc["prompts"]}
     ref_by_id = {p["id"]: p for p in reference["prompts"]}
     all_ids = sorted(set(epyc_by_id) | set(ref_by_id))
+
+    # Derive expected per-prompt token count from runner metadata if not given.
+    if min_tokens_per_prompt is None:
+        epyc_n = epyc.get("n_tokens_requested")
+        ref_n = reference.get("n_tokens_requested")
+        if isinstance(epyc_n, int) and isinstance(ref_n, int):
+            min_tokens_per_prompt = min(epyc_n, ref_n)
+        elif isinstance(epyc_n, int):
+            min_tokens_per_prompt = epyc_n
+        elif isinstance(ref_n, int):
+            min_tokens_per_prompt = ref_n
+        else:
+            min_tokens_per_prompt = 1  # last resort; existing-pass behavior
 
     rows: list[dict] = []
     n_pass_mad = 0
     n_token1_match = 0
     n_runtime_fail = 0
+
+    # If a strict expected_n_prompts is set and either side falls short, add
+    # synthetic runtime-failure rows for the missing slots. The CLI layer
+    # defaults this to 20 (per §Merge Gates); library callers can pass None to
+    # disable the strict prompt-count check.
+    if expected_n_prompts is not None and (
+        len(epyc_by_id) < expected_n_prompts or len(ref_by_id) < expected_n_prompts
+    ):
+        missing_count = expected_n_prompts - len(all_ids)
+        for i in range(max(0, missing_count)):
+            rows.append({
+                "id": f"<missing-{i+1}>",
+                "category": "",
+                "error": (
+                    f"truncated run: expected {expected_n_prompts} prompts, "
+                    f"got {len(all_ids)} (epyc={len(epyc_by_id)}, "
+                    f"ref={len(ref_by_id)})"
+                ),
+                "mad": None,
+                "mad_pass": False,
+                "token1_match": False,
+                "runtime_failure": True,
+            })
+            n_runtime_fail += 1
+
     for pid in all_ids:
         e = epyc_by_id.get(pid)
         rf = ref_by_id.get(pid)
@@ -105,8 +165,19 @@ def compare(epyc: dict, reference: dict, max_mad: float) -> tuple[list[dict], di
             n_runtime_fail += 1
             rows.append(row)
             continue
-        if has_runtime_failure(e) or has_runtime_failure(rf):
-            row["error"] = "runtime failure (empty tokens / explicit error)"
+        if (has_runtime_failure(e, min_tokens=min_tokens_per_prompt)
+                or has_runtime_failure(rf, min_tokens=min_tokens_per_prompt)):
+            row["category"] = e.get("category", "?")
+            e_short = e.get("token_count", 0) < min_tokens_per_prompt
+            r_short = rf.get("token_count", 0) < min_tokens_per_prompt
+            if e_short or r_short:
+                row["error"] = (
+                    f"truncated tokens: epyc={e.get('token_count',0)} "
+                    f"ref={rf.get('token_count',0)} "
+                    f"need ≥ {min_tokens_per_prompt}"
+                )
+            else:
+                row["error"] = "runtime failure (empty tokens / explicit error)"
             row["mad"] = None
             row["mad_pass"] = False
             row["token1_match"] = False
@@ -136,6 +207,8 @@ def compare(epyc: dict, reference: dict, max_mad: float) -> tuple[list[dict], di
         "n_token1_match": n_token1_match,
         "n_runtime_fail": n_runtime_fail,
         "max_mad_threshold": max_mad,
+        "expected_n_prompts": expected_n_prompts,
+        "min_tokens_per_prompt": min_tokens_per_prompt,
     }
     return rows, summary
 
@@ -227,6 +300,11 @@ def main() -> int:
                    help="Min prompts passing MAD (default: 18 of 20)")
     p.add_argument("--min-token1-pass", type=int, default=15,
                    help="Min prompts with token-1 match (default: 15 of 20)")
+    p.add_argument("--expected-n-prompts", type=int, default=20,
+                   help="Required number of prompts on each side (default: 20)")
+    p.add_argument("--min-tokens-per-prompt", type=int, default=None,
+                   help="Required token_count per prompt. Default: min of EPYC "
+                        "and reference n_tokens_requested from runner JSON.")
     args = p.parse_args()
 
     with args.epyc.open() as f:
@@ -234,7 +312,9 @@ def main() -> int:
     with args.reference.open() as f:
         reference = json.load(f)
 
-    rows, summary = compare(epyc, reference, args.max_mad)
+    rows, summary = compare(epyc, reference, args.max_mad,
+                            expected_n_prompts=args.expected_n_prompts,
+                            min_tokens_per_prompt=args.min_tokens_per_prompt)
     passed, verdict_text = verdict(summary, args.min_prompt_pass, args.min_token1_pass)
     report = render_markdown(rows, summary, verdict_text, epyc, reference,
                              args.max_mad, args.min_prompt_pass, args.min_token1_pass)

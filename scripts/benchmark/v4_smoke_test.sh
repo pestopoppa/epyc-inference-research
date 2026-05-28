@@ -91,8 +91,11 @@ if [[ ! -x "$LLAMA_GGUF" ]]; then
     exit 3
 fi
 
-GGUF_OUT=$(LD_LIBRARY_PATH="$V4_FORK_BIN" "$LLAMA_GGUF" "$MODEL" r 2>&1)
-GGUF_RC=$?
+# set -e + pipefail can exit on the failing command substitution before we
+# get to inspect the rc. Capture exit code via `&&...||` so the error block
+# runs deterministically.
+GGUF_OUT=$(LD_LIBRARY_PATH="$V4_FORK_BIN" "$LLAMA_GGUF" "$MODEL" r 2>&1) \
+    && GGUF_RC=0 || GGUF_RC=$?
 if [[ "$GGUF_RC" -ne 0 ]]; then
     echo "ERROR: llama-gguf failed (rc=$GGUF_RC):" >&2
     echo "$GGUF_OUT" | head -20 >&2
@@ -150,28 +153,47 @@ CLI_FLAGS=( -m "$MODEL" -t 96 -c "$CTX" --temp 0 --seed 1 -n 4 -p "Hello," --no-
 [[ "$USE_MLOCK" -eq 1 ]] && CLI_FLAGS+=( --mlock )
 CLI_FLAGS+=( --no-mmap )
 
-# Canonical env (taskset + numactl + OMP stack + LLVM-20 libomp)
+# Canonical env loaded from the single source of truth. The V4 fork bench dir
+# also goes on LD_LIBRARY_PATH so llama-cli resolves to the fork's libllama /
+# libggml (DT_RPATH from --disable-new-dtags is the primary mechanism, but
+# this is belt-and-braces).
 SMOKE_OUT=/tmp/v4-smoke-test.stdout
 SMOKE_ERR=/tmp/v4-smoke-test.stderr
 echo "Running (may take 1-2 min to mlock 153 GiB on first load):"
 echo "  taskset -c 0-95 numactl --interleave=all $LLAMA_CLI ${CLI_FLAGS[*]}"
 echo ""
 
+# Build env exports from canonical_recipe.py — single source of truth includes
+# OMP_* + KMP_BLOCKTIME + GGML_NUMA_WEIGHTS + LLVM-20 libomp on LD_LIBRARY_PATH.
+ENV_EXPORTS=$(python3 -c "
+import sys
+sys.path.insert(0, '${REPO_DIR}/scripts/lib')
+import canonical_recipe as r
+import shlex
+env = r.build_canonical_env()
+keys = list(r.CANONICAL_OMP_ENV) + list(r.CANONICAL_PRODUCTION_ENV) + ['LD_LIBRARY_PATH']
+out = []
+for k in keys:
+    v = env[k]
+    if k == 'LD_LIBRARY_PATH':
+        v = '${V4_FORK_BIN}:' + v
+    out.append(f'{k}={shlex.quote(v)}')
+print(' '.join(out))
+")
+
 # Use timeout because if the load takes too long we want to fail visibly,
 # not hang. 10 minutes is generous (mlock'ing 153 GiB on cold cache + first-
 # touch faulting is the long-pole; should be <5 min on this host).
-LD_LIBRARY_PATH=/usr/lib/llvm-20/lib:$V4_FORK_BIN \
-    OMP_PROC_BIND=spread OMP_PLACES=cores OMP_WAIT_POLICY=active OMP_DYNAMIC=false \
-    KMP_BLOCKTIME=10 GGML_NUMA_WEIGHTS=1 \
-    timeout 600 \
-    taskset -c 0-95 numactl --interleave=all \
-    "$LLAMA_CLI" "${CLI_FLAGS[@]}" \
-    > "$SMOKE_OUT" 2> "$SMOKE_ERR" || SMOKE_RC=$?
+eval "env $ENV_EXPORTS timeout 600 taskset -c 0-95 numactl --interleave=all \
+    '$LLAMA_CLI' ${CLI_FLAGS[*]@Q} \
+    > '$SMOKE_OUT' 2> '$SMOKE_ERR'" || SMOKE_RC=$?
 
 SMOKE_RC=${SMOKE_RC:-0}
 
-# Output analysis
-GENERATED=$(grep -v "^[[:space:]]*$" "$SMOKE_OUT" 2>/dev/null | tail -5)
+# Output analysis. `grep | tail` under pipefail returns nonzero if grep matches
+# nothing (no output → empty input to tail), and set -e would then abort here
+# before the custom no-output error block runs. Append `|| true` to neutralize.
+GENERATED=$(grep -v "^[[:space:]]*$" "$SMOKE_OUT" 2>/dev/null | tail -5 || true)
 if [[ "$SMOKE_RC" -eq 124 ]]; then
     echo "ERROR: smoke test timed out after 10 minutes (model load too slow)." >&2
     echo "  stderr tail:" >&2
