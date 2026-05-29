@@ -24,6 +24,13 @@
 
 set -euo pipefail
 
+# Suppress core dumps. Per feedback_no_core_dumps, asserts here should leave a
+# stderr backtrace only — not a multi-hundred-GiB core file. ik_llama / V4
+# llama-bench and llama-server asserts on this 153 GiB model produce ~165 GiB
+# cores each; with the devcontainer's `ulimit -c` defaulting to unlimited,
+# a single assert can fill the raid0 mount.
+ulimit -c 0
+
 MODEL=""
 CTX=8192
 USE_MLOCK=1
@@ -168,6 +175,11 @@ fi
 # but emit-bench-command is bench-specific. For llama-completion we compose
 # the prefix + env directly here.
 CLI_FLAGS=( -m "$MODEL" -t 96 -c "$CTX" --temp 0 --seed 1 -n 4 -p "Hello," -ngl 0 -fa 1 )
+# The V4 GGUF embeds a chat template, and llama-completion auto-enables
+# conversation mode when one is present (completion.cpp:213 "auto enable
+# conversation mode if chat template is available; disable it with -no-cnv").
+# For bare prompt completion we need to disable explicitly.
+CLI_FLAGS+=( -no-cnv )
 [[ "$USE_MLOCK" -eq 1 ]] && CLI_FLAGS+=( --mlock )
 CLI_FLAGS+=( --no-mmap )
 

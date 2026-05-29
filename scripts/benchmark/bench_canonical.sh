@@ -31,6 +31,11 @@
 
 set -euo pipefail
 
+# Suppress core dumps (feedback_no_core_dumps). Without this, a llama-bench
+# assert on the V4 GGUF (153 GiB) produces a 165 GiB core that immediately
+# fills the raid0 mount on a single failure.
+ulimit -c 0
+
 # Locate canonical_recipe.py
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${EPYC_RESEARCH_REPO:-${SCRIPT_DIR%/scripts/*}}"
