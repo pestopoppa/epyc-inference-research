@@ -91,20 +91,29 @@ if [[ ! -x "$LLAMA_GGUF" ]]; then
     exit 3
 fi
 
-# set -e + pipefail can exit on the failing command substitution before we
-# get to inspect the rc. Capture exit code via `&&...||` so the error block
-# runs deterministically.
-GGUF_OUT=$(LD_LIBRARY_PATH="$V4_FORK_BIN" "$LLAMA_GGUF" "$MODEL" r 2>&1) \
-    && GGUF_RC=0 || GGUF_RC=$?
-if [[ "$GGUF_RC" -ne 0 ]]; then
-    echo "ERROR: llama-gguf failed (rc=$GGUF_RC):" >&2
-    echo "$GGUF_OUT" | head -20 >&2
+# NOTE: llama-gguf's `r` mode also runs gguf_ex_read_1 which validates that
+# tensor data matches a hardcoded test pattern (100.0 in every position) —
+# meant for round-trip testing of the gguf example, NOT for inspecting real
+# model files. Real GGUFs ALWAYS abort on that check. But the kv + tensor-
+# metadata pass (gguf_ex_read_0) runs first and prints everything we need.
+#
+# Spool to a temp file rather than a shell variable: V4's chat template
+# embeds U+FF5C special tokens + raw Jinja \n sequences (~2800 lines total).
+# Holding that in a bash var and piping through `echo` causes silent grep
+# misses on lines containing certain byte sequences. Reading from a file
+# avoids shell expansion of the output content entirely.
+GGUF_DUMP=/tmp/v4-smoke-test.gguf-dump
+LD_LIBRARY_PATH="$V4_FORK_BIN" "$LLAMA_GGUF" "$MODEL" r > "$GGUF_DUMP" 2>&1 || true
+
+# Extract key facts (from the metadata-read pass that completes before the
+# data-content assert fires).
+N_KV=$(grep -E 'gguf_ex_read_0: n_kv:' "$GGUF_DUMP" | head -1 | awk '{print $NF}')
+N_TENSORS=$(grep -E 'gguf_ex_read_0: n_tensors:' "$GGUF_DUMP" | head -1 | awk '{print $NF}')
+if [[ -z "$N_KV" ]] || [[ -z "$N_TENSORS" ]]; then
+    echo "ERROR: llama-gguf did not produce metadata output." >&2
+    tail -20 "$GGUF_DUMP" >&2
     exit 4
 fi
-
-# Extract key facts
-N_KV=$(echo "$GGUF_OUT" | grep -E 'n_kv:' | head -1 | awk '{print $NF}')
-N_TENSORS=$(echo "$GGUF_OUT" | grep -E 'n_tensors:' | head -1 | awk '{print $NF}')
 echo "  n_kv:     $N_KV"
 echo "  n_tensors: $N_TENSORS"
 
@@ -120,7 +129,7 @@ REQUIRED_KV=(
 )
 MISSING_KV=()
 for k in "${REQUIRED_KV[@]}"; do
-    if ! echo "$GGUF_OUT" | grep -qF "key = $k"; then
+    if ! grep -qF "key = $k" "$GGUF_DUMP"; then
         MISSING_KV+=("$k")
     fi
 done
@@ -131,25 +140,34 @@ if [[ "${#MISSING_KV[@]}" -gt 0 ]]; then
     echo "GGUF metadata may be incomplete (download corrupted?) or this GGUF" >&2
     echo "is not actually V4-Flash. Inspect the file with:" >&2
     echo "  LD_LIBRARY_PATH=$V4_FORK_BIN $LLAMA_GGUF '$MODEL' r" >&2
+    echo "(The trailing 'failed to read gguf file' GGML_ASSERT is EXPECTED on" >&2
+    echo "real model files — llama-gguf's r mode validates a test data pattern.)" >&2
     exit 5
 fi
-echo "  all $((${#REQUIRED_KV[@]})) required V4 kv fields present ✓"
+echo "  all ${#REQUIRED_KV[@]} required V4 kv fields present ✓"
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Phase 3: SMOKE (4-token decode via llama-cli; uses canonical env)
 # ─────────────────────────────────────────────────────────────────────────────
 echo "=== PHASE 3: SMOKE (tiny 4-token decode) ==="
-LLAMA_CLI="${V4_FORK_BIN}/llama-cli"
-if [[ ! -x "$LLAMA_CLI" ]]; then
-    echo "ERROR: llama-cli not found at $LLAMA_CLI" >&2
+# Antirez fork removed --no-conversation from llama-cli and replaced the
+# non-interactive completion path with a dedicated llama-completion binary
+# (see "--no-conversation is not supported by llama-cli, please use
+# llama-completion instead" message). Always use llama-completion for the
+# smoke test — llama-cli would drop into interactive chat mode + spew prompts
+# in a tight loop on EOF stdin (observed 5.4 GB stdout / 2.88 B lines /
+# 10-min timeout).
+LLAMA_BIN="${V4_FORK_BIN}/llama-completion"
+if [[ ! -x "$LLAMA_BIN" ]]; then
+    echo "ERROR: llama-completion not found at $LLAMA_BIN" >&2
     exit 3
 fi
 
 # Build the canonical command via canonical_recipe.py emit-bench-command —
-# but emit-bench-command is bench-specific. For llama-cli we compose the
-# prefix + env directly here.
-CLI_FLAGS=( -m "$MODEL" -t 96 -c "$CTX" --temp 0 --seed 1 -n 4 -p "Hello," --no-conversation -ngl 0 -fa 1 )
+# but emit-bench-command is bench-specific. For llama-completion we compose
+# the prefix + env directly here.
+CLI_FLAGS=( -m "$MODEL" -t 96 -c "$CTX" --temp 0 --seed 1 -n 4 -p "Hello," -ngl 0 -fa 1 )
 [[ "$USE_MLOCK" -eq 1 ]] && CLI_FLAGS+=( --mlock )
 CLI_FLAGS+=( --no-mmap )
 
@@ -160,7 +178,7 @@ CLI_FLAGS+=( --no-mmap )
 SMOKE_OUT=/tmp/v4-smoke-test.stdout
 SMOKE_ERR=/tmp/v4-smoke-test.stderr
 echo "Running (may take 1-2 min to mlock 153 GiB on first load):"
-echo "  taskset -c 0-95 numactl --interleave=all $LLAMA_CLI ${CLI_FLAGS[*]}"
+echo "  taskset -c 0-95 numactl --interleave=all $LLAMA_BIN ${CLI_FLAGS[*]}"
 echo ""
 
 # Build env exports from canonical_recipe.py — single source of truth includes
@@ -187,7 +205,7 @@ print(' '.join(out))
 # not hang. 10 minutes is generous (mlock'ing 153 GiB on cold cache + first-
 # touch faulting is the long-pole; should be <5 min on this host).
 eval "env $ENV_EXPORTS timeout 600 taskset -c 0-95 numactl --interleave=all \
-    '$LLAMA_CLI' ${CLI_FLAGS[*]@Q} \
+    '$LLAMA_BIN' ${CLI_FLAGS[*]@Q} \
     > '$SMOKE_OUT' 2> '$SMOKE_ERR'" || SMOKE_RC=$?
 
 SMOKE_RC=${SMOKE_RC:-0}
