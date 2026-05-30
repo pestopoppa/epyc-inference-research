@@ -214,9 +214,12 @@ PROMPT_LINE=$(grep -E 'prompt eval time' "$STDERR" | tail -1 || true)
 LOAD_LINE=$(grep -E 'load time' "$STDERR" | tail -1 || true)
 TOTAL_LINE=$(grep -E 'total time' "$STDERR" | tail -1 || true)
 
-# Extract eval-time tokens per second value (last numeric on the line before "tokens per second").
-EVAL_TPS=$(echo "$EVAL_LINE" | sed -nE 's/.*\(([0-9]+\.[0-9]+) tokens per second\)/\1/p' | tail -1)
-PP_TPS=$(echo "$PROMPT_LINE" | sed -nE 's/.*\(([0-9]+\.[0-9]+) tokens per second\)/\1/p' | tail -1)
+# Extract the LAST decimal number before "tokens per second" in the parens.
+# Actual format: "(<ms_per_token> ms per token, <tps> tokens per second)".
+# The previous regex required `(<num> tokens per second)` immediately after `(`,
+# missing the t/s value that comes after the comma.
+EVAL_TPS=$(echo "$EVAL_LINE" | sed -nE 's/.*[, ]+([0-9]+\.[0-9]+) tokens per second\)/\1/p' | tail -1)
+PP_TPS=$(echo "$PROMPT_LINE" | sed -nE 's/.*[, ]+([0-9]+\.[0-9]+) tokens per second\)/\1/p' | tail -1)
 
 VERDICT="UNKNOWN"
 VERDICT_REASON=""
