@@ -4384,6 +4384,34 @@ roles:
     output_format: FormalizationIR
     notes: Smaller quantization of MathSmith. Use for faster preprocessing when memory
       is constrained. Same capabilities as Q8_0 version.
+  goedel_code_prover_8b_q4km:
+    tier: B
+    description: Lean prover - Goedel-Code-Prover-8B Q4_K_M (smoke-pass, non-production)
+    model:
+      name: Goedel-Code-Prover-8B-Q4_K_M
+      path: /mnt/raid0/llm/models/Goedel-Code-Prover-8B-GGUF/Goedel-Code-Prover-8B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 4.7
+      architecture: qwen3
+      context_length: 40960
+    candidate_roles:
+    - lean_prover
+    - formal_verification
+    memory:
+      residency: cold
+      pinned: false
+    output_format: Lean4Proof
+    validation:
+      smoke_date: 2026-06-13
+      smoke_status: load_and_generation_pass
+      smoke_artifact: /mnt/raid0/llm/tmp/goedel_q4_smoke_20260613.json
+      formal_verifier_status: not_run
+    notes: 'Downloaded from Goedel-LM/Goedel-Code-Prover-8B revision 858f3b5e04bf24aca3a1a113ea1889a4de9ed4ef,
+      converted to GGUF f16, and quantized to Q4_K_M on 2026-06-13. Smoke
+      tested via llama-server on a trivial Lean conjunction theorem; no local
+      Lean toolchain was available, so this is a load/generation pass rather
+      than proof-validity certification. Keep cold and non-production until a
+      FormalQualBench or Lean verifier subset passes.'
   tool_formalizer_xlam2:
     tier: D
     description: Tool sequence formalizer - xLAM-2 (newest, outperforms GPT-4o on BFCL)
