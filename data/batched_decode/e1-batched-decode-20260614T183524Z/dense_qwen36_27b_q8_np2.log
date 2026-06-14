@@ -1,0 +1,61 @@
+=== Validating canonical recipe ===
+=== Canonical bench command ===
+Binary:    /mnt/raid0/llm/ik_llama.cpp/build/bin/llama-bench
+Env:       LD_LIBRARY_PATH=/usr/lib/llvm-20/lib:/opt/AMD/aocc-compiler-5.0.0/lib:/mnt/raid0/llm/llama.cpp/build/bin:/mnt/raid0/llm/llama.cpp-dflash/build/bin OMP_PROC_BIND=spread OMP_PLACES=cores OMP_WAIT_POLICY=active OMP_DYNAMIC=false
+Cmd:       taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/ik_llama.cpp/build/bin/llama-bench -t 96 -fa 1 -mmp 0 -m /mnt/raid0/llm/models/Qwen_Qwen3.6-27B-Q8_0.gguf -p 0 -n 512 -r 2 -o md -np 2
+=================================
+error: invalid parameter for argument: -np
+usage: /mnt/raid0/llm/ik_llama.cpp/build/bin/llama-bench [options]
+
+options:
+  -h, --help
+  -m, --model <filename>              (default: models/7B/ggml-model-q4_0.gguf)
+  -p, --n-prompt <n>                  (default: 512)
+  -n, --n-gen <n>                     (default: 128)
+  -pg <pp,tg>                         (default: )
+  -gp <pp,tg>                         (default: )
+  -b, --batch-size <n>                (default: 2048)
+  -ub, --ubatch-size <n>              (default: 512)
+  -ctk, --cache-type-k <t>            (default: f16)
+  -ctv, --cache-type-v <t>            (default: f16)
+  -t, --threads <n>                   (default: {96, 96})
+  -tgb, --threads-gen-batch <n1,n2>   (default: {96, 96})
+  -ngl, --n-gpu-layers <n>            (default: 999)
+  --n-cpu-moe <n>                     (default: none)
+  -rpc, --rpc <rpc_servers>           (default: )
+  -sm, --split-mode <none|layer|graph>(default: layer)
+  -mg, --main-gpu <i>                 (default: 0)
+  -nkvo, --no-kv-offload <0|1>        (default: 0)
+  -fa, --flash-attn <0|1>             (default: 1)
+  -mla, --mla-attn <0|1|2>            (default: 3)
+  -amb, --attn-max-batch <i>          (default: 0)
+  -ser, --smart-expert-reduction <i,f>(default: 0)
+  -gr, --graph-reuse <0|1>            (default: 1)
+  -mmp, --mmap <0|1>                  (default: 1)
+  --numa <distribute|isolate|numactl> (default: disabled)
+  -embd, --embeddings <0|1>           (default: 0)
+  -ts, --tensor-split <ts0/ts1/..>    (default: 0)
+  -r, --repetitions <n>               (default: 5)
+  -o, --output <csv|json|md|sql>      (default: md)
+  -oe, --output-err <csv|json|md|sql> (default: none)
+  -v, --verbose                       (default: 0)
+  -w, --warmup <0|1>                  (default: 1)
+  -rtr, --run-time-repack <0|1>       (default: 0)
+  -cuda, --cuda-params <string>       (default: )
+  -mqkv, --merge-qkv                  (default: 0)
+  -muge, --merge-up-gate-experts      (default: 0)
+  --defer-experts                     (Linux only, default: 0)
+  -rcache, --rope-cache               (default: 0)
+  -thp, --transparent-huge-pages <0|1> (default: 0)
+  -ot, --override-tensor pattern      (default: none)
+  -fmoe, --fused-moe <0|1>            (default: 1)
+  -ger, --grouped-expert-routing <0|1>(default: 0)
+  -no-fug, --no-fused-up-gate <0|1>   (default: 0)
+  -no-ooae, --no-offload-only-active-experts <0|1>   (default: 0)
+  -sas, --scheduler-async <0|1>       (default: 0)
+  --fit <0|1>                         (default: 0)
+  --fit-margin N                      (default: 0)
+  --max-gpu <N>                       (default: 0)
+        --print-overrides <0|1>       (default: 0)
+
+Multiple values can be given for each parameter by separating them with ',' or by specifying the parameter multiple times.

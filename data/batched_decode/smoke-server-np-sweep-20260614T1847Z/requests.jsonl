@@ -1,0 +1,1 @@
+{"error": "", "http_status": 200, "latency_ms": 1714.6077761426568, "model": "qwen36_q8_0", "np_level": 1, "predicted_tokens": 4, "predicted_tps": 29.268863782707957, "prompt_tokens": 321, "qid": "debugbench_fizz-buzz_python", "request_index": 0, "success": true, "suite": "debugbench"}

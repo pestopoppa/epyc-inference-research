@@ -1,0 +1,2 @@
+timestamp,protocol_id,model,registry_key,np,success_count,total_count,error_rate,wall_seconds,tasks_per_hour,aggregate_predicted_tps,predicted_tokens_total,prompt_tokens_total,per_request_tps_mean,per_request_tps_stdev,p50_latency_ms,p95_latency_ms,ttft_ms,model_path
+2026-06-14T18:46:37.274834+00:00,P-BENCH-3,qwen36_q8_0,qwen36_q8_0,1,1,1,0.0,1.7154622869566083,2098.559687014011,2.3317329855711235,4,321,29.268863782707957,0.0,1714.6077761426568,1714.6077761426568,1675.6989730056375,/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf

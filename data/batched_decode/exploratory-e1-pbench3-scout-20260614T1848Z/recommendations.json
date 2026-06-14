@@ -1,0 +1,27 @@
+{
+  "created_at": "2026-06-14T18:56:43.310972+00:00",
+  "protocol_id": "P-BENCH-3",
+  "recommendations": [
+    {
+      "best_np": 8,
+      "best_p95_latency_ms": 38742.5,
+      "best_tasks_per_hour": 837.091,
+      "model": "qwen36_27b_q8",
+      "saturation_np_95pct": 8,
+      "saturation_p95_latency_ms": 38742.5,
+      "saturation_tasks_per_hour": 837.091,
+      "status": "ok"
+    },
+    {
+      "best_np": 8,
+      "best_p95_latency_ms": 19405.1,
+      "best_tasks_per_hour": 1816.373,
+      "model": "qwen36_q8_0",
+      "saturation_np_95pct": 8,
+      "saturation_p95_latency_ms": 19405.1,
+      "saturation_tasks_per_hour": 1816.373,
+      "status": "ok"
+    }
+  ],
+  "summary_csv": "/mnt/raid0/llm/epyc-inference-research/data/batched_decode/exploratory-e1-pbench3-scout-20260614T1848Z/summary.csv"
+}
