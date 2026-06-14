@@ -48,7 +48,7 @@ Earlier versions of this table used inflated algorithmic scores — those have b
 
 ---
 
-## Production Throughput — NUMA Deployment (verified 2026-03-21)
+## Production Throughput - NUMA Deployment (verified 2026-03-21) [Protocol: P-BENCH-2, n=5, 2026-03-21]
 
 Single-model (192t, all cores) vs NUMA-pinned deployment throughput. All values verified by comprehensive spec param sweep (`bench_all_spec_sweeps.sh`, 1,290 measurements).
 
