@@ -40,6 +40,7 @@ import json
 import re
 import sys
 from collections import Counter
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -185,6 +186,16 @@ def stage3_parse(prompt: str) -> list[str]:
     return codes
 
 
+def stage3_parse_toolchain_status() -> str:
+    """Return a short status string for the optional Stage 3 LaTeX parser."""
+    ok, err = _try_sympy_parse("Probe $x+1$.")
+    if not ok:
+        return err or "sympy_parse_unavailable"
+    if err:
+        return f"sympy_parse_probe_failed: {err}"
+    return "sympy_parse_available"
+
+
 def audit_pool(
     pool: list[dict[str, Any]],
     suites: set[str],
@@ -197,6 +208,7 @@ def audit_pool(
         "stage1_codes": Counter(),
         "stage2_codes": Counter(),
         "stage3_codes": Counter(),
+        "stage3_parse_toolchain": stage3_parse_toolchain_status(),
         "suites_scanned": Counter(),
         "suite_flag_rate": {},
     }
@@ -255,11 +267,11 @@ def write_report(stats: dict[str, Any], report_path: Path | None) -> str:
     lines = []
     lines.append("# MathQ-Verify Audit Report")
     lines.append("")
-    lines.append(f"**Date**: 2026-04-21  ")
-    lines.append(f"**Script**: `scripts/benchmark/dataset_audit/mathq_verify_audit.py` (NIB2-03)  ")
-    lines.append(f"**Source**: intake-379 MathQ-Verify (arxiv:2505.13903), stages 1-3 only  ")
-    lines.append(f"**Total scanned**: {stats['total_scanned']}  ")
-    lines.append(f"**Total flagged**: {stats['total_flagged']} ({100.0 * stats['total_flagged'] / max(stats['total_scanned'], 1):.2f}%)  ")
+    lines.append(f"**Date**: {date.today().isoformat()}")
+    lines.append("**Script**: `scripts/benchmark/dataset_audit/mathq_verify_audit.py` (NIB2-03)")
+    lines.append("**Source**: intake-379 MathQ-Verify (arxiv:2505.13903), stages 1-3 only")
+    lines.append(f"**Total scanned**: {stats['total_scanned']}")
+    lines.append(f"**Total flagged**: {stats['total_flagged']} ({100.0 * stats['total_flagged'] / max(stats['total_scanned'], 1):.2f}%)")
     lines.append("")
     lines.append("## Per-suite flag rate")
     lines.append("")
@@ -286,11 +298,13 @@ def write_report(stats: dict[str, Any], report_path: Path | None) -> str:
     lines.append("")
     lines.append("## Stage 3 (Parse) reason-code distribution")
     lines.append("")
+    lines.append(f"Toolchain: `{stats.get('stage3_parse_toolchain', 'unknown')}`")
+    lines.append("")
     if stats["stage3_codes"]:
         for code, count in stats["stage3_codes"].most_common():
             lines.append(f"- `{code}`: {count}")
     else:
-        lines.append("_No stage 3 parse issues detected (note: may reflect missing antlr4/math-verify dependency)._")
+        lines.append("_No stage 3 parse issues detected._")
     lines.append("")
     lines.append("## Out of scope")
     lines.append("")
