@@ -1,17 +1,47 @@
 # Model Manifest
 
-Role-based model configuration for the orchestrator. You don't need the exact models listed here — the orchestrator supports any compatible GGUF models in each role slot.
+Role-based model reference for the current orchestration stack. This research
+repo records benchmark evidence and candidate history; the live deployment
+truth is compiled in `epyc-orchestrator` from its lean registry, descriptors,
+launch manifest, and generated stack priors.
 
-## Server Topology
+**Live snapshot source**:
+`/mnt/raid0/llm/epyc-orchestrator/orchestration/derived/stack_priors.yaml`
+compiled at `2026-06-14T14:15:21Z` with `stack_priors_version: 4`.
 
-| Role | Port | Model | RAM | Tier | Speed |
-|------|------|-------|-----|------|-------|
-| Front Door | 8080 | Qwen3.5-35B-A3B-UD (Q4_K_M, moe6) | 19 GB | HOT | 12.7 t/s per instance (~50.8 t/s agg, NUMA 4×48t) |
-| Coder (escalation) | 8081 | Qwen2.5-Coder-32B (Q4_K_M) | 20 GB | HOT | 10.8 t/s (sweep 2026-03-21) |
-| Worker (general) | 8082 | Qwen3-Coder-30B-A3B (Q4_K_M, spec) | 16 GB | HOT | 39.1 t/s (4×48t agg ~156 t/s) |
-| Architect (general) | 8083 | Qwen3.5-122B-A10B (Q4_K_M) | 69 GB | HOT (promoted 2026-05) | 12.19 t/s (96t NUMA, Probe B 2026-05-04) |
-| Architect (coding) | 8084 | Qwen3-Coder-480B-A35B (Q4_K_M) | ~271 GB | WARM | 7.0 t/s (sweep 2026-03-21) |
-| Ingest (long context) | 8085 | Qwen3-Next-80B-A3B (Q4_K_M) | 46 GB | WARM | 6.3 t/s |
+## Live Server Topology
+
+| Role | Endpoint | Model | Model RAM | Tier | Prior TPS | Context |
+|------|----------|-------|-----------|------|-----------|---------|
+| `frontdoor` | `8070` primary; launch ports `8070/8080/8180/8280/8380` | Qwen3.6-35B-A3B-Q8_0 | 37 GB | HOT | 24.3 | 32K effective / 262K max |
+| `coder_escalation` | `8070` | Qwen3.6-35B-A3B-Q8_0, shared with `frontdoor` | 37 GB shared | HOT | 24.3 | 32K effective / 262K max |
+| `worker_general` | `8072` primary; launch ports `8072/8082/8182/8282/8382` | gemma-4-26B-A4B-it-Q4_K_M | 16 GB | HOT | 60.7 | 16K |
+| `worker_math` | `8072/8082` | shared with `worker_general` | 16 GB shared | HOT | 60.7 | 16K |
+| `worker_summarize` | `8070` | shared with `frontdoor` | 37 GB shared | HOT | 24.3 | 32K effective / 262K max |
+| `toolrunner` | `8072/8082` | shared with `worker_general` | 16 GB shared | HOT | 60.7 | 16K |
+| `worker_vision` | `8086` | Qwen2.5-VL-7B-Instruct | 4.4 GB | HOT | 20.0 | 8K effective / 128K max |
+| `vision_escalation` | `8087` primary; launch ports `8087/8187/8287/8387/8487` | Qwen3-VL-30B-A3B-Instruct | 18 GB | HOT | 27.6 | 16K effective / 262K max |
+| `architect_general` | `8083` | Qwen3.5-122B-A10B | 69 GB | HOT | 12.19 | 16K effective / 262K max |
+| `ingest_long_context` | `8085` primary; launch ports `8085/8185/8285/8385/8485` | Qwen3-Next-80B-A3B-Instruct | 45 GB | HOT | 20.8 | 32K effective / 262K max |
+
+`architect_coding` is retired as a distinct live role. Legacy serialized labels
+may normalize to `architect_general` in orchestrator compatibility paths, but
+new routing, scoring, launch, and benchmark interpretation must not treat it as
+a live server.
+
+## Memory And Cost Semantics
+
+- All live roles in the generated stack-prior snapshot are HOT.
+- Shared mmap roles must not be double-counted by role. For example,
+  `frontdoor`, `coder_escalation`, and `worker_summarize` share the same
+  Qwen3.6 server family; `worker_general`, `worker_math`, and `toolrunner`
+  share the Gemma worker runtime.
+- `priors.memory_cost` is `1.0` for every live role in the current generated
+  stack-prior contract. Consumers that need physical RAM should use the model
+  descriptor `mem_gb` plus shared-server binding, not handwritten role totals.
+- There is no current live WARM role in stack priors. Benchmark candidates and
+  historical large models remain evidence/candidate records until explicitly
+  promoted into the live orchestrator stack.
 
 Supporting services:
 
@@ -21,113 +51,94 @@ Supporting services:
 | Document OCR | 9001 | LightOnOCR-2-1B (Q4_K_M) | PDF/image OCR |
 | Code Search | 8088 | LateOn-Code (130M ONNX) | NextPLAID code retrieval |
 | Doc Search | 8089 | answerai-colbert-small-v1 (ONNX INT8) | NextPLAID doc retrieval |
-| Embeddings | 8090-8095 | BGE-large-en-v1.5 (f16) | 6-instance embedding pool |
+| Embeddings | 8090-8095 | BGE-large-en-v1.5 (f16) | Embedding pool |
 
-## Memory Tiers
+## Current Model Candidates And Evidence
 
-- **HOT** (~140 GB): Always resident. Includes frontdoor (19 GB), escalation (20 GB), worker (16 GB), architect_general (69 GB, promoted from WARM 2026-05), vision (5 GB), embeddings + utilities (~10 GB). Minimum for interactive use.
-- **WARM** (~320 GB): mmap-preloaded, loaded on demand. Currently architect_coding (271 GB) + ingest_long_context (46 GB).
-- **COLD**: Disk-only, loaded manually.
-
-### Recent Model Candidates (2026-05)
-
-- **Qwen3.6-35B-A3B-Q8_0**: Alternative frontdoor option (PPL gate passed 2026-05).
-- **gemma-4-31B-it (Q4_K_M)**: Candidate general worker; MTP drafter via ik_llama.cpp PR #1744 (requires `KMP_BLOCKTIME=10` to avoid OMP idle spin). Production swap of `worker_general` to gemma-4-26B-A4B MTP recorded 2026-05-08 (+18pp tool_compliance, +36% tps, 76.5 t/s solo).
-- **Qwen3-Coder-REAP-246B-A35B (Q4_K_M)**: 50%-pruned architect candidate, ~139 GB, 6.25 t/s.
-- **DeepSeek-V3**: Larger architect candidate under evaluation.
-
-Start by tier:
-
-```bash
-python3 scripts/server/orchestrator_stack.py start --hot-only   # HOT only
-python3 scripts/server/orchestrator_stack.py start              # HOT + WARM
-```
+- **Qwen3-Coder-REAP-246B-A35B (Q4_K_M)**: 50%-pruned architect candidate,
+  about 139 GB, measured around 6.25 t/s in earlier research probes.
+- **DeepSeek-V3 and other large architects**: candidate/evidence records only
+  unless promoted through the stack-change pipeline.
+- **Historical Qwen2.5/Qwen3-Coder rows**: retained for benchmark comparison,
+  draft-compatibility notes, and regression context; they are not live-role
+  truth unless present in generated stack priors.
 
 ## Substitution Guide
 
-Each role has specific requirements. When substituting models, match these constraints:
+Each role has specific requirements. When substituting models, update structured
+orchestrator truth first, then compile descriptors and stack priors.
 
-### Front Door (Tier A)
+### Front Door / Coder Escalation
 
-Routes requests, generates Python code, runs tools.
+Routes requests, writes code, and handles escalation paths through the shared
+Qwen3.6 server.
 
-- **Needs**: Fast MoE model with good instruction following
-- **Acceleration**: MoE expert reduction + speculative decoding + prompt lookup
-- **Compatible substitutes**: Any Qwen3 MoE model, Mixtral-family models
-- **Draft model**: Must share vocabulary with target. Qwen3-Coder family uses BOS=comma (token 11) — use jukofyork vocab-transplant drafts only
+- **Needs**: Fast MoE model with strong instruction following and code ability.
+- **Acceleration**: Current live stack records no speculative decoding for this
+  server; use generated launch requirements rather than copying old draft
+  settings.
+- **Compatibility risk**: Frontdoor and coder escalation share a physical model
+  and endpoint, so cost, memory, and health accounting must be alias-aware.
 
-### Coder (Tier B)
+### Worker Roles
 
-Code generation, refactoring, implementation tasks.
+Parallel file-level tasks, summaries, exploration, tool calls, and simple code
+paths use the Gemma worker runtime or a shared frontdoor summarization path.
 
-- **Needs**: Strong code model, 32B+ parameters
-- **Acceleration**: Speculative decoding (K=24) + prompt lookup
-- **Compatible substitutes** (not currently deployed; reference only): DeepSeek-Coder-V2, CodeLlama-34B, StarCoder2-33B
-- **Draft model**: Same family 0.5B-1.5B quantized to Q8_0
+- **Needs**: Fast instruction-following model with reliable tool compliance.
+- **Acceleration**: Current Gemma worker records MTP acceleration in generated
+  stack priors.
+- **Compatibility risk**: `worker_math` and `toolrunner` are shared-runtime
+  aliases, not separate live model processes.
 
-### Worker (Tier C)
+### Architect General
 
-Parallel file-level tasks — summaries, exploration, simple code.
+System architecture, deep multi-step reasoning, and high-stakes planning.
 
-- **Needs**: Fast 7B-class model
-- **Acceleration**: Speculative decoding + prompt lookup
-- **Compatible substitutes**: Any 7B instruction-tuned model (Llama-3, Mistral-7B, Phi-3)
-- **Draft model**: 0.5B from same family
+- **Needs**: Largest available high-quality reasoning MoE model.
+- **Acceleration**: Current stack uses MoE expert reduction; generated runtime
+  witness disables speculative decoding for this role.
+- **Compatibility risk**: Do not reintroduce a distinct `architect_coding`
+  server without a full stack-change update and guard pass.
 
-### Architect — General (Tier B)
+### Ingest / Long Context
 
-System architecture, complex multi-step reasoning.
+Long-context document synthesis and ingestion.
 
-- **Needs**: Largest available MoE model, full expert count for quality
-- **Acceleration**: Speculative decoding only (K=16). No expert reduction.
-- **Compatible substitutes**: DeepSeek-V3, Llama-3-405B (dense, requires more RAM)
-
-### Architect — Coding (Tier B)
-
-Hardest coding problems, architecture-level code decisions.
-
-- **Needs**: Largest code-specialized model available
-- **Acceleration**: Speculative decoding only (K=16). No expert reduction.
-- **Compatible substitutes**: DeepSeek-Coder-V3, any 200B+ code model
-
-### Ingest / Long Context (Tier B)
-
-Document summarization, long-context synthesis.
-
-- **Needs**: SSM or hybrid architecture for efficient long-context processing
-- **Acceleration**: MoE expert reduction only. **No speculative decoding** (SSM requires consecutive positions)
-- **Compatible substitutes**: Mamba-family, RWKV-family, any SSM model
+- **Needs**: SSM or hybrid architecture for efficient long-context processing.
+- **Acceleration**: MoE expert reduction only. SSM state makes speculative
+  decoding unsafe unless future evidence and launcher support explicitly prove
+  otherwise.
 
 ## Draft Model Compatibility
 
-Speculative decoding requires the draft model to share the target model's vocabulary:
+Speculative decoding requires the draft model to share the target model's
+vocabulary and runtime assumptions. Treat this table as compatibility guidance,
+not a statement of what is currently enabled in production.
 
 | Target Family | Compatible Draft | Notes |
-|---------------|-----------------|-------|
+|---------------|------------------|-------|
 | Qwen2.5 | Qwen2.5-0.5B / Qwen2.5-Coder-0.5B | Standard vocab match |
-| Qwen3 (non-Coder) | Qwen3-0.6B | Standard Qwen3 vocab |
-| Qwen3-Coder | jukofyork-Qwen3-Coder-0.75B | Vocab-transplant draft (BOS=comma) |
-| Llama-3 | Llama-3-1B | Same tokenizer family |
-| Mistral | Mistral-0.5B (if available) | Same tokenizer |
+| Qwen3 non-Coder | Qwen3-0.6B | Standard Qwen3 vocab |
+| Qwen3-Coder | jukofyork-Qwen3-Coder-0.75B | Vocab-transplant draft; BOS=comma |
+| Gemma worker | Generated MTP requirements | Use stack-prior launch requirements |
+| SSM / Qwen3-Next | None by default | Speculation can corrupt recurrent state |
+| Vision models | None by default | Vision encoder/mmproj path must match |
 
 Run `/draft-compat` to validate draft-target compatibility for a specific pair.
 
-## Downloading Models
-
-Models with `huggingface_id` in the registry can be downloaded automatically:
-
-```bash
-python scripts/setup/download_models.py --tier hot    # Minimum set
-python scripts/setup/download_models.py --tier warm   # Full production
-python scripts/setup/download_models.py --tier all    # Everything
-```
-
 ## Configuration
 
-All model configuration lives in `orchestration/model_registry.yaml`. Key sections:
+Live deployment configuration is validated in `epyc-orchestrator`:
 
-- `runtime_defaults` — quantization, thread count, NUMA policy, context limits
-- `server_mode` — per-role server definitions with ports, models, acceleration
-- `roles` — detailed role definitions with launch commands and quirks
+- `orchestration/model_registry.yaml` for lean live topology.
+- `orchestration/model_descriptors.yaml` for model identity and measured
+  evidence.
+- `orchestration/derived/stack_priors.yaml` for generated consumer contracts.
+- `scripts/registry/stack_change_pipeline.py check --run-promotion-gate` before
+  launch, AutoPilot promotion, or benchmark interpretation.
 
-See `orchestration/model_registry.yaml` (at the repo root of `epyc-inference-research`) for the complete configuration. The orchestrator's lean copy is compiled from this master at stack-launch time and lives at `epyc-orchestrator/orchestration/model_registry.yaml` — do not hand-edit the lean copy.
+This research repo's `orchestration/model_registry.yaml` remains useful for
+comprehensive benchmark history and candidate evidence. Do not treat it as the
+live launch source without reconciling through the orchestrator stack-change
+pipeline.
