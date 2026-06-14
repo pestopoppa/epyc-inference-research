@@ -49,6 +49,10 @@ data/cpu_optimization/**/*.data
 perf.data*
 perf-*.data
 
+# Batched-decode raw llama-server logs contain noisy runtime counters and are
+# blocked by the PII hook; structured summaries/manifests remain versioned.
+data/batched_decode/**/logs/
+
 # Nested external repos (cloned checkout, not a submodule)
 data/external/
 
