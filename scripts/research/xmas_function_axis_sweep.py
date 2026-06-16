@@ -171,6 +171,36 @@ def build_requests(
     return requests
 
 
+def filter_requests(
+    requests: list[dict[str, Any]],
+    *,
+    domain: str | None = None,
+    function: str | None = None,
+    cell: str | None = None,
+    source_task_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return requests matching optional sweep-slice filters."""
+    if cell is not None:
+        if ":" not in cell:
+            raise ValueError("--cell must use domain:function syntax")
+        raw_domain, raw_function = cell.split(":", 1)
+        domain = raw_domain
+        function = raw_function
+    if domain is not None and domain not in XMAS_DOMAINS:
+        raise ValueError(f"unknown X-MAS domain: {domain}")
+    if function is not None and function not in XMAS_FUNCTIONS:
+        raise ValueError(f"unknown X-MAS function: {function}")
+    return [
+        request for request in requests
+        if (domain is None or request["domain"] == domain)
+        and (function is None or request["function"] == function)
+        and (
+            source_task_id is None
+            or request["source_task_id"] == source_task_id
+        )
+    ]
+
+
 def _model_capture_profiles(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
     models = manifest.get("models", {})
     profiles = manifest.get("capture_profiles", {})
@@ -546,6 +576,10 @@ def main() -> int:
     parser.add_argument("--emit-requests", type=Path)
     parser.add_argument("--run-out", type=Path)
     parser.add_argument("--limit-requests", type=int)
+    parser.add_argument("--domain", choices=XMAS_DOMAINS)
+    parser.add_argument("--function", choices=XMAS_FUNCTIONS)
+    parser.add_argument("--cell", help="domain:function request filter")
+    parser.add_argument("--source-task-id", help="single source task id filter")
     parser.add_argument("--request-timeout-s", type=float, default=600.0)
     parser.add_argument("--skip-health-gate", action="store_true")
     parser.add_argument("--results-jsonl", type=Path)
@@ -562,6 +596,15 @@ def main() -> int:
                 manifest,
                 load_question_pool(args.question_pool),
             )
+            requests = filter_requests(
+                requests,
+                domain=args.domain,
+                function=args.function,
+                cell=args.cell,
+                source_task_id=args.source_task_id,
+            )
+            if args.limit_requests:
+                requests = requests[:args.limit_requests]
             write_jsonl(args.emit_requests, requests)
             print(f"Wrote {len(requests)} requests to {args.emit_requests}")
         if args.run_out:
@@ -569,6 +612,13 @@ def main() -> int:
             requests = build_requests(
                 manifest,
                 load_question_pool(args.question_pool),
+            )
+            requests = filter_requests(
+                requests,
+                domain=args.domain,
+                function=args.function,
+                cell=args.cell,
+                source_task_id=args.source_task_id,
             )
             if not args.skip_health_gate:
                 errors = preflight_idle(manifest)

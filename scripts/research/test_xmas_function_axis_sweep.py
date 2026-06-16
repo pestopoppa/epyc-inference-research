@@ -100,6 +100,38 @@ def test_build_requests_emits_25_cells() -> None:
     }
 
 
+def test_filter_requests_selects_precise_slices() -> None:
+    requests = xmas_sweep.build_requests(_manifest(), _question_pool())
+
+    assert len(xmas_sweep.filter_requests(requests, cell="math:verify")) == 2
+    assert {
+        row["cell"]
+        for row in xmas_sweep.filter_requests(requests, domain="code")
+    } == {f"code:{function}" for function in xmas_sweep.XMAS_FUNCTIONS}
+    assert {
+        row["cell"]
+        for row in xmas_sweep.filter_requests(requests, function="extract")
+    } == {f"{domain}:extract" for domain in xmas_sweep.XMAS_DOMAINS}
+    assert len(
+        xmas_sweep.filter_requests(
+            requests,
+            cell="math:solve",
+            source_task_id="math_task_1",
+        )
+    ) == 1
+
+
+def test_filter_requests_rejects_invalid_cell() -> None:
+    requests = xmas_sweep.build_requests(_manifest(), _question_pool())
+
+    try:
+        xmas_sweep.filter_requests(requests, cell="math")
+    except ValueError as exc:
+        assert "domain:function" in str(exc)
+    else:
+        raise AssertionError("expected invalid cell failure")
+
+
 def test_summarize_results_outputs_function_axis_table() -> None:
     rows = []
     for domain in xmas_sweep.XMAS_DOMAINS:
