@@ -4,8 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import re
+import signal
 import sys
+import time
+import urllib.request
 from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
@@ -204,7 +209,11 @@ def _expected_for_function(function: str, source: dict[str, Any]) -> str:
     return str(source.get("expected") or "")
 
 
-def summarize_results(rows: list[dict[str, Any]]) -> dict[str, Any]:
+def summarize_results(
+    rows: list[dict[str, Any]],
+    *,
+    require_complete: bool = True,
+) -> dict[str, Any]:
     buckets: dict[tuple[str, str, str], dict[str, Any]] = defaultdict(
         lambda: {
             "correct": 0,
@@ -242,6 +251,8 @@ def summarize_results(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 if d == domain and f == function
             }
             if not model_rows:
+                if not require_complete:
+                    continue
                 raise ValueError(f"no result rows for cell {domain}:{function}")
             winner = _choose_winner(model_rows)
             table[domain][function] = model_rows
@@ -298,25 +309,288 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             fh.write(json.dumps(row, sort_keys=True) + "\n")
 
 
+def normalise_text(value: str) -> str:
+    """Normalize text for low-cost auto-scoring."""
+    return re.sub(r"\s+", " ", (value or "")).strip().lower()
+
+
+def extract_answer(text: str) -> str:
+    match = re.search(r"<answer>(.*?)</answer>", text or "", flags=re.IGNORECASE | re.DOTALL)
+    return match.group(1).strip() if match else (text or "").strip()
+
+
+def score_response(request: dict[str, Any], answer: str) -> tuple[bool, str]:
+    """Return (correct, failure_class) for auto-scorable sweep cells."""
+    if not answer:
+        return False, "empty_content"
+    scoring_family = request.get("scoring_family")
+    expected = str(request.get("expected") or "").strip()
+    extracted = extract_answer(answer)
+    normalized_expected = normalise_text(expected)
+    normalized_answer = normalise_text(extracted)
+
+    if scoring_family == "binary_validity":
+        if normalized_answer.startswith("valid"):
+            return expected == "valid", ""
+        if normalized_answer.startswith("invalid"):
+            return expected == "invalid", ""
+        return False, "parse_failure"
+
+    if scoring_family == "rubric":
+        return _score_plan_structure(answer)
+
+    source_method = str(request.get("source_scoring_method") or "substring")
+    if source_method == "multiple_choice":
+        letter = expected.upper()
+        if not letter or letter not in "ABCD":
+            return False, "scoring_error"
+        pattern = rf"(?:^|[\s\(\[\*]){letter}(?:[\s\)\]\*\.\,\:]|$)"
+        return bool(re.search(pattern, extracted.upper())), ""
+    if source_method in {"exact_match", "substring", "f1"}:
+        return normalized_expected in normalized_answer, ""
+    return normalized_expected in normalized_answer, ""
+
+
+def _score_plan_structure(answer: str) -> tuple[bool, str]:
+    lines = [line.strip() for line in answer.splitlines() if line.strip()]
+    step_lines = [
+        line for line in lines
+        if re.match(r"^(?:\d+[\.\)]|[-*])\s+", line)
+    ]
+    if 3 <= len(step_lines) <= 8:
+        return True, ""
+    return False, "rubric_unscored"
+
+
+def _health_url(api_url: str) -> str:
+    return api_url.rstrip("/").removesuffix("/v1") + "/health"
+
+
+def preflight_idle(manifest: dict[str, Any]) -> list[str]:
+    """Return health-gate errors for configured model endpoints."""
+    errors: list[str] = []
+    models = manifest.get("models", {})
+    if not isinstance(models, dict):
+        return ["manifest models must be a mapping"]
+    for model_id, model_cfg in models.items():
+        if not isinstance(model_cfg, dict):
+            errors.append(f"model {model_id} config must be a mapping")
+            continue
+        url = model_cfg.get("url")
+        if not isinstance(url, str) or not url:
+            errors.append(f"model {model_id} missing url")
+            continue
+        try:
+            with urllib.request.urlopen(_health_url(url), timeout=5.0) as resp:
+                health = json.loads(resp.read())
+        except Exception as exc:
+            errors.append(f"{model_id} unreachable: {exc}")
+            continue
+        if health.get("status") != "ok":
+            errors.append(f"{model_id} status={health.get('status')!r}")
+        if int(health.get("slots_processing", 0) or 0) > 0:
+            errors.append(f"{model_id} busy: slots_processing={health.get('slots_processing')}")
+    return errors
+
+
+async def query_model(
+    client: Any,
+    request: dict[str, Any],
+    model_id: str,
+    model_cfg: dict[str, Any],
+    *,
+    timeout_s: float = 600.0,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "model": model_id,
+        "messages": [{"role": "user", "content": request["prompt"]}],
+        "max_tokens": 2048,
+        "temperature": 0.0,
+    }
+    chat_template_kwargs = model_cfg.get("chat_template_kwargs")
+    if isinstance(chat_template_kwargs, dict):
+        body["chat_template_kwargs"] = chat_template_kwargs
+
+    t0 = time.monotonic()
+    try:
+        payload = _post_json(
+            f"{model_cfg['url'].rstrip('/')}/chat/completions",
+            body,
+            timeout_s,
+        )
+        content = payload["choices"][0]["message"].get("content") or ""
+        usage = payload.get("usage", {}) or {}
+        return {
+            "ok": True,
+            "wall_s": time.monotonic() - t0,
+            "answer": content,
+            "prompt_tokens": usage.get("prompt_tokens", 0) or 0,
+            "completion_tokens": usage.get("completion_tokens", 0) or 0,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "wall_s": time.monotonic() - t0,
+            "answer": "",
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "error": repr(exc),
+        }
+
+
+def _post_json(url: str, body: dict[str, Any], timeout_s: float) -> dict[str, Any]:
+    def _raise_timeout(signum: int, frame: Any) -> None:
+        raise TimeoutError(f"request exceeded {timeout_s:.1f}s wall timeout")
+
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.setitimer(signal.ITIMER_REAL, timeout_s)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            payload = json.loads(resp.read())
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0.0)
+        signal.signal(signal.SIGALRM, previous_handler)
+    if not isinstance(payload, dict):
+        raise ValueError("chat completion response must be a mapping")
+    return payload
+
+
+async def run_requests(
+    requests: list[dict[str, Any]],
+    *,
+    limit_requests: int | None = None,
+    output_path: Path | None = None,
+    skip_keys: set[tuple[str, str]] | None = None,
+    timeout_s: float = 600.0,
+) -> list[dict[str, Any]]:
+    selected = requests[:limit_requests] if limit_requests else requests
+    skipped = skip_keys or set()
+    rows: list[dict[str, Any]] = []
+    output_fh = output_path.open("a", encoding="utf-8") if output_path else None
+    for request in selected:
+        model_profiles = request.get("model_capture_profiles", {})
+        if not isinstance(model_profiles, dict):
+            raise ValueError(f"request {request['request_id']} missing model profiles")
+        for model_id, model_cfg in model_profiles.items():
+            row_key = (str(request["request_id"]), str(model_id))
+            if row_key in skipped:
+                continue
+            if not isinstance(model_cfg, dict):
+                raise ValueError(f"model profile {model_id} must be a mapping")
+            result = await query_model(
+                None,
+                request,
+                str(model_id),
+                model_cfg,
+                timeout_s=timeout_s,
+            )
+            correct, failure_class = score_response(request, result["answer"])
+            row = {
+                "request_id": request["request_id"],
+                "domain": request["domain"],
+                "function": request["function"],
+                "cell": request["cell"],
+                "source_task_id": request["source_task_id"],
+                "source_suite": request["source_suite"],
+                "model_id": model_id,
+                "correct": correct,
+                "failure_class": failure_class,
+                "wall_s": result["wall_s"],
+                "prompt_tokens": result["prompt_tokens"],
+                "completion_tokens": result["completion_tokens"],
+                "answer_excerpt": (result["answer"] or "")[:300],
+                "expected": request["expected"],
+                "scoring_family": request["scoring_family"],
+                "source_scoring_method": request["source_scoring_method"],
+                "ok": result["ok"],
+                "error": result.get("error"),
+            }
+            rows.append(row)
+            if output_fh is not None:
+                output_fh.write(json.dumps(row, sort_keys=True) + "\n")
+                output_fh.flush()
+            print(
+                f"  [{model_id:<22} {request['cell']:<22} "
+                f"{request['source_task_id']:<36}] correct={correct} "
+                f"wall={result['wall_s']:.1f}s"
+                + (" ERROR" if not result["ok"] else "")
+            )
+    if output_fh is not None:
+        output_fh.close()
+    return rows
+
+
+def completed_result_keys(path: Path) -> set[tuple[str, str]]:
+    if not path.exists():
+        return set()
+    keys: set[tuple[str, str]] = set()
+    for row in read_jsonl(path):
+        request_id = row.get("request_id")
+        model_id = row.get("model_id")
+        if isinstance(request_id, str) and isinstance(model_id, str):
+            keys.add((request_id, model_id))
+    return keys
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--question-pool", type=Path, default=DEFAULT_QUESTION_POOL)
     parser.add_argument("--emit-requests", type=Path)
+    parser.add_argument("--run-out", type=Path)
+    parser.add_argument("--limit-requests", type=int)
+    parser.add_argument("--request-timeout-s", type=float, default=600.0)
+    parser.add_argument("--skip-health-gate", action="store_true")
     parser.add_argument("--results-jsonl", type=Path)
     parser.add_argument("--summary-out", type=Path)
+    parser.add_argument("--allow-partial-summary", action="store_true")
     args = parser.parse_args()
 
     try:
         manifest = load_manifest(args.manifest)
+        action_taken = False
         if args.emit_requests:
+            action_taken = True
             requests = build_requests(
                 manifest,
                 load_question_pool(args.question_pool),
             )
             write_jsonl(args.emit_requests, requests)
             print(f"Wrote {len(requests)} requests to {args.emit_requests}")
+        if args.run_out:
+            action_taken = True
+            requests = build_requests(
+                manifest,
+                load_question_pool(args.question_pool),
+            )
+            if not args.skip_health_gate:
+                errors = preflight_idle(manifest)
+                if errors:
+                    raise ValueError("health gate failed: " + "; ".join(errors))
+            args.run_out.parent.mkdir(parents=True, exist_ok=True)
+            existing = completed_result_keys(args.run_out)
+            rows = asyncio.run(
+                run_requests(
+                    requests,
+                    limit_requests=args.limit_requests,
+                    output_path=args.run_out,
+                    skip_keys=existing,
+                    timeout_s=args.request_timeout_s,
+                )
+            )
+            print(
+                f"Appended {len(rows)} result rows to {args.run_out} "
+                f"({len(existing)} existing skipped)"
+            )
         if args.results_jsonl:
+            action_taken = True
             if args.summary_out is None:
                 raise ValueError("--results-jsonl requires --summary-out")
             rows = read_jsonl(args.results_jsonl)
@@ -325,7 +599,10 @@ def main() -> int:
                 "manifest": str(args.manifest),
                 "n_tasks": len({row.get("request_id") for row in rows}),
                 "n_models": len({row.get("model_id") for row in rows}),
-                "summary": summarize_results(rows),
+                "summary": summarize_results(
+                    rows,
+                    require_complete=not args.allow_partial_summary,
+                ),
             }
             args.summary_out.parent.mkdir(parents=True, exist_ok=True)
             args.summary_out.write_text(
@@ -337,7 +614,7 @@ def main() -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    if not args.emit_requests and not args.results_jsonl:
+    if not action_taken:
         print("Manifest validation passed")
     return 0
 

@@ -126,6 +126,95 @@ def test_summarize_results_outputs_function_axis_table() -> None:
     assert summary["table"]["math"]["solve"]["worker_general"]["total"] == 1
 
 
+def test_summarize_results_allows_partial_smoke_rows() -> None:
+    rows = [
+        {
+            "request_id": "math:solve:sample",
+            "domain": "math",
+            "function": "solve",
+            "model_id": "frontdoor",
+            "correct": True,
+            "ok": True,
+            "wall_s": 1.0,
+        }
+    ]
+
+    summary = xmas_sweep.summarize_results(rows, require_complete=False)
+
+    assert summary["cell_winners"] == {"math:solve": "frontdoor"}
+    assert summary["table"]["math"]["solve"]["frontdoor"]["correct"] == 1
+    assert summary["table"]["math"].get("verify") is None
+
+
+def test_score_response_handles_source_binary_and_plan_cells() -> None:
+    source_request = {
+        "scoring_family": "source_auto",
+        "source_scoring_method": "exact_match",
+        "expected": "42",
+    }
+    assert xmas_sweep.score_response(source_request, "<answer>42</answer>") == (
+        True,
+        "",
+    )
+
+    verify_request = {
+        "scoring_family": "binary_validity",
+        "expected": "valid",
+    }
+    assert xmas_sweep.score_response(
+        verify_request,
+        "<answer>valid</answer> because it matches.",
+    ) == (True, "")
+    assert xmas_sweep.score_response(verify_request, "maybe") == (
+        False,
+        "parse_failure",
+    )
+
+    plan_request = {"scoring_family": "rubric", "expected": ""}
+    assert xmas_sweep.score_response(
+        plan_request,
+        "1. Read the task\n2. Compute the result\n3. Format the answer",
+    ) == (True, "")
+    assert xmas_sweep.score_response(plan_request, "do it") == (
+        False,
+        "rubric_unscored",
+    )
+
+
+def test_run_requests_rows_are_summarizable(monkeypatch) -> None:
+    async def fake_query_model(client, request, model_id, model_cfg, *, timeout_s=600.0):
+        return {
+            "ok": True,
+            "wall_s": 1.0 if model_id == "frontdoor" else 2.0,
+            "answer": "<answer>expected-0</answer>",
+            "prompt_tokens": 10,
+            "completion_tokens": 3,
+        }
+
+    monkeypatch.setattr(xmas_sweep, "query_model", fake_query_model)
+    request = xmas_sweep.build_requests(_manifest(), _question_pool())[0]
+
+    rows = __import__("asyncio").run(xmas_sweep.run_requests([request]))
+
+    assert len(rows) == 2
+    assert {row["model_id"] for row in rows} == {"frontdoor", "worker_general"}
+    assert rows[0]["domain"] == "math"
+    summary = xmas_sweep.summarize_results(rows)
+    assert summary["cell_winners"]["math:solve"] == "frontdoor"
+
+
+def test_completed_result_keys_reads_existing_rows(tmp_path: Path) -> None:
+    results = tmp_path / "results.jsonl"
+    results.write_text(
+        json.dumps({"request_id": "math:solve:a", "model_id": "frontdoor"}) + "\n",
+        encoding="utf-8",
+    )
+
+    assert xmas_sweep.completed_result_keys(results) == {
+        ("math:solve:a", "frontdoor")
+    }
+
+
 def test_cli_emit_requests_and_summary(tmp_path: Path) -> None:
     manifest_path = tmp_path / "manifest.yaml"
     manifest_path.write_text(yaml.safe_dump(_manifest()), encoding="utf-8")
