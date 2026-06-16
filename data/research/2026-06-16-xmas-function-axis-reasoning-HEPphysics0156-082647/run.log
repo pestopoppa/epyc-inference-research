@@ -1,0 +1,21 @@
+  [frontdoor              reasoning:solve        gpqa_High-energy particle physics_0156] correct=True wall=0.2s
+  [worker_general         reasoning:solve        gpqa_High-energy particle physics_0156] correct=True wall=10.1s
+  [architect_general      reasoning:solve        gpqa_High-energy particle physics_0156] correct=False wall=0.3s
+  [ingest_long_context    reasoning:solve        gpqa_High-energy particle physics_0156] correct=False wall=0.2s
+  [frontdoor              reasoning:verify       gpqa_High-energy particle physics_0156] correct=True wall=5.3s
+  [worker_general         reasoning:verify       gpqa_High-energy particle physics_0156] correct=False wall=3.8s
+  [architect_general      reasoning:verify       gpqa_High-energy particle physics_0156] correct=False wall=63.9s
+  [ingest_long_context    reasoning:verify       gpqa_High-energy particle physics_0156] correct=False wall=51.8s
+  [frontdoor              reasoning:plan         gpqa_High-energy particle physics_0156] correct=True wall=24.6s
+  [worker_general         reasoning:plan         gpqa_High-energy particle physics_0156] correct=True wall=3.6s
+  [architect_general      reasoning:plan         gpqa_High-energy particle physics_0156] correct=False wall=1.1s
+  [ingest_long_context    reasoning:plan         gpqa_High-energy particle physics_0156] correct=True wall=12.7s
+  [frontdoor              reasoning:refine       gpqa_High-energy particle physics_0156] correct=True wall=0.7s
+  [worker_general         reasoning:refine       gpqa_High-energy particle physics_0156] correct=True wall=9.1s
+  [architect_general      reasoning:refine       gpqa_High-energy particle physics_0156] correct=True wall=1.1s
+  [ingest_long_context    reasoning:refine       gpqa_High-energy particle physics_0156] correct=True wall=41.4s
+  [frontdoor              reasoning:extract      gpqa_High-energy particle physics_0156] correct=True wall=0.9s
+  [worker_general         reasoning:extract      gpqa_High-energy particle physics_0156] correct=True wall=8.1s
+  [architect_general      reasoning:extract      gpqa_High-energy particle physics_0156] correct=True wall=1.6s
+  [ingest_long_context    reasoning:extract      gpqa_High-energy particle physics_0156] correct=False wall=0.8s
+Appended 20 result rows to data/research/2026-06-16-xmas-function-axis-reasoning-HEPphysics0156-082647/run.jsonl (0 existing skipped)
