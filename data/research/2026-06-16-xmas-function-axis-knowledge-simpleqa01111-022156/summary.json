@@ -1,0 +1,195 @@
+{
+  "manifest": "data/research/xmas_function_axis_manifest.v1.yaml",
+  "n_models": 4,
+  "n_tasks": 5,
+  "started_at": "2026-06-16T02:24:09Z",
+  "summary": {
+    "cell_winners": {
+      "knowledge:extract": "frontdoor",
+      "knowledge:plan": "worker_general",
+      "knowledge:refine": "worker_general",
+      "knowledge:solve": "frontdoor",
+      "knowledge:verify": "worker_general"
+    },
+    "derivation_mode": "function_axis_sweep",
+    "table": {
+      "code": {},
+      "knowledge": {
+        "extract": {
+          "architect_general": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 1.7069761401508003
+          },
+          "frontdoor": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 0.9408855580259115
+          },
+          "ingest_long_context": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 1.0956071179825813
+          },
+          "worker_general": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 3.999486036133021
+          }
+        },
+        "plan": {
+          "architect_general": {
+            "accuracy": 1.0,
+            "correct": 1,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 9.963943677023053
+          },
+          "frontdoor": {
+            "accuracy": 1.0,
+            "correct": 1,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 9.062414904125035
+          },
+          "ingest_long_context": {
+            "accuracy": 1.0,
+            "correct": 1,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 4.355422140099108
+          },
+          "worker_general": {
+            "accuracy": 1.0,
+            "correct": 1,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 2.5776129020377994
+          }
+        },
+        "refine": {
+          "architect_general": {
+            "accuracy": 1.0,
+            "correct": 1,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 4.8101247798185796
+          },
+          "frontdoor": {
+            "accuracy": 1.0,
+            "correct": 1,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 2.291326506063342
+          },
+          "ingest_long_context": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 3.3567433608695865
+          },
+          "worker_general": {
+            "accuracy": 1.0,
+            "correct": 1,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 2.1327396070118994
+          }
+        },
+        "solve": {
+          "architect_general": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 1.6700982260517776
+          },
+          "frontdoor": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 0.8907502789516002
+          },
+          "ingest_long_context": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 1.130307107931003
+          },
+          "worker_general": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 1.6253111211117357
+          }
+        },
+        "verify": {
+          "architect_general": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 70.31006055395119
+          },
+          "frontdoor": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 3.922402147902176
+          },
+          "ingest_long_context": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 4.664862595032901
+          },
+          "worker_general": {
+            "accuracy": 0.0,
+            "correct": 0,
+            "failures": {},
+            "ok": 1,
+            "total": 1,
+            "wall_mean_s": 1.7101347870193422
+          }
+        }
+      },
+      "long_context": {},
+      "math": {},
+      "reasoning": {}
+    },
+    "winner_rule": "correct_desc_then_wall_mean_s_asc"
+  }
+}
