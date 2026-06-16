@@ -7,7 +7,7 @@ import argparse
 import asyncio
 import json
 import re
-import signal
+import subprocess
 import sys
 import time
 import urllib.request
@@ -469,24 +469,34 @@ async def query_model(
 
 
 def _post_json(url: str, body: dict[str, Any], timeout_s: float) -> dict[str, Any]:
-    def _raise_timeout(signum: int, frame: Any) -> None:
-        raise TimeoutError(f"request exceeded {timeout_s:.1f}s wall timeout")
-
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    previous_handler = signal.getsignal(signal.SIGALRM)
-    signal.signal(signal.SIGALRM, _raise_timeout)
-    signal.setitimer(signal.ITIMER_REAL, timeout_s)
     try:
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            payload = json.loads(resp.read())
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0.0)
-        signal.signal(signal.SIGALRM, previous_handler)
+        completed = subprocess.run(
+            [
+                "curl",
+                "--silent",
+                "--show-error",
+                "--fail-with-body",
+                "--max-time",
+                f"{timeout_s:.3f}",
+                "--connect-timeout",
+                "5",
+                "--header",
+                "Content-Type: application/json",
+                "--data-binary",
+                json.dumps(body),
+                url,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s + 2.0,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError(f"request exceeded {timeout_s:.1f}s wall timeout") from exc
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or str(exc)).strip()
+        raise RuntimeError(detail) from exc
+    payload = json.loads(completed.stdout)
     if not isinstance(payload, dict):
         raise ValueError("chat completion response must be a mapping")
     return payload

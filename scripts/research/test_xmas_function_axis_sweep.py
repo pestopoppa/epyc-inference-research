@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+from types import SimpleNamespace
 from pathlib import Path
 
 import yaml
@@ -245,6 +246,25 @@ def test_completed_result_keys_reads_existing_rows(tmp_path: Path) -> None:
     assert xmas_sweep.completed_result_keys(results) == {
         ("math:solve:a", "frontdoor")
     }
+
+
+def test_post_json_uses_curl_wall_timeout(monkeypatch) -> None:
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        return SimpleNamespace(stdout=json.dumps({"ok": True}))
+
+    monkeypatch.setattr(xmas_sweep.subprocess, "run", fake_run)
+
+    assert xmas_sweep._post_json("http://example.test/v1/chat/completions", {"x": 1}, 7.5) == {
+        "ok": True,
+    }
+    cmd, kwargs = calls[0]
+    assert cmd[:3] == ["curl", "--silent", "--show-error"]
+    assert "--max-time" in cmd
+    assert "7.500" in cmd
+    assert kwargs["timeout"] == 9.5
 
 
 def test_cli_emit_requests_and_summary(tmp_path: Path) -> None:
