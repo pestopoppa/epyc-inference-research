@@ -1,0 +1,144 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+from pathlib import Path
+
+import yaml
+
+MODULE_PATH = Path(__file__).with_name("xmas_function_axis_sweep.py")
+SPEC = importlib.util.spec_from_file_location("xmas_function_axis_sweep", MODULE_PATH)
+assert SPEC is not None
+xmas_sweep = importlib.util.module_from_spec(SPEC)
+assert SPEC.loader is not None
+SPEC.loader.exec_module(xmas_sweep)
+
+
+def _manifest() -> dict:
+    domain_task_sets = {
+        f"{domain}_v1": [f"{domain}_task_0", f"{domain}_task_1"]
+        for domain in xmas_sweep.XMAS_DOMAINS
+    }
+    cells = {}
+    for domain in xmas_sweep.XMAS_DOMAINS:
+        cells[domain] = {}
+        for function in xmas_sweep.XMAS_FUNCTIONS:
+            cells[domain][function] = {
+                "task_ids_ref": f"{domain}_v1",
+                "prompt_wrapper": "verify_answer"
+                if function == "verify"
+                else "solve_direct",
+                "scoring_family": "binary_validity"
+                if function == "verify"
+                else "source_auto",
+                "failure_policy": "answer_tag_valid_invalid"
+                if function == "verify"
+                else "source_parse_then_score",
+            }
+    return {
+        "version": "test",
+        "capture_profiles": {
+            "default": {},
+            "qwen_nothink": {"chat_template_kwargs": {"enable_thinking": False}},
+        },
+        "models": {
+            "frontdoor": {
+                "url": "http://127.0.0.1:8070/v1",
+                "capture_profile": "qwen_nothink",
+            },
+            "worker_general": {
+                "url": "http://127.0.0.1:8072/v1",
+                "capture_profile": "default",
+            },
+        },
+        "domain_task_sets": domain_task_sets,
+        "cells": cells,
+    }
+
+
+def _question_pool() -> dict[str, dict]:
+    out = {}
+    for domain in xmas_sweep.XMAS_DOMAINS:
+        for idx in range(2):
+            task_id = f"{domain}_task_{idx}"
+            out[task_id] = {
+                "id": task_id,
+                "suite": domain,
+                "prompt": f"Prompt {task_id}",
+                "expected": f"expected-{idx}",
+                "scoring_method": "exact_match",
+            }
+    return out
+
+
+def test_manifest_validation_requires_all_cells() -> None:
+    manifest = _manifest()
+    manifest["cells"]["math"].pop("solve")
+
+    try:
+        xmas_sweep.validate_manifest(manifest)
+    except ValueError as exc:
+        assert "manifest missing cells.math.solve" in str(exc)
+    else:
+        raise AssertionError("expected missing cell failure")
+
+
+def test_build_requests_emits_25_cells() -> None:
+    requests = xmas_sweep.build_requests(_manifest(), _question_pool())
+
+    assert len(requests) == 5 * 5 * 2
+    assert {row["cell"] for row in requests} == {
+        f"{domain}:{function}"
+        for domain in xmas_sweep.XMAS_DOMAINS
+        for function in xmas_sweep.XMAS_FUNCTIONS
+    }
+    verify = next(row for row in requests if row["cell"] == "math:verify")
+    assert verify["expected"] == "valid"
+    assert "Expected answer:" in verify["prompt"]
+    assert verify["model_capture_profiles"]["frontdoor"]["chat_template_kwargs"] == {
+        "enable_thinking": False,
+    }
+
+
+def test_summarize_results_outputs_function_axis_table() -> None:
+    rows = []
+    for domain in xmas_sweep.XMAS_DOMAINS:
+        for function in xmas_sweep.XMAS_FUNCTIONS:
+            for model_id, correct, wall_s in [
+                ("frontdoor", False, 1.0),
+                ("worker_general", True, 2.0),
+            ]:
+                rows.append({
+                    "request_id": f"{domain}:{function}:sample",
+                    "domain": domain,
+                    "function": function,
+                    "model_id": model_id,
+                    "correct": correct,
+                    "ok": True,
+                    "wall_s": wall_s,
+                })
+
+    summary = xmas_sweep.summarize_results(rows)
+
+    assert summary["derivation_mode"] == "function_axis_sweep"
+    assert summary["cell_winners"]["math:solve"] == "worker_general"
+    assert summary["table"]["math"]["solve"]["worker_general"]["correct"] == 1
+    assert summary["table"]["math"]["solve"]["worker_general"]["total"] == 1
+
+
+def test_cli_emit_requests_and_summary(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.yaml"
+    manifest_path.write_text(yaml.safe_dump(_manifest()), encoding="utf-8")
+    pool_path = tmp_path / "pool.jsonl"
+    with pool_path.open("w", encoding="utf-8") as fh:
+        for row in _question_pool().values():
+            fh.write(json.dumps(row) + "\n")
+    requests_path = tmp_path / "requests.jsonl"
+
+    assert xmas_sweep.main.__module__ == "xmas_function_axis_sweep"
+    requests = xmas_sweep.build_requests(
+        xmas_sweep.load_manifest(manifest_path),
+        xmas_sweep.load_question_pool(pool_path),
+    )
+    xmas_sweep.write_jsonl(requests_path, requests)
+    assert len(requests_path.read_text(encoding="utf-8").splitlines()) == 50

@@ -1,0 +1,127 @@
+version: xmas-function-axis-v1
+description: >
+  Function-axis X-MAS sweep manifest. Each cell reuses five current
+  question_pool tasks from the domain and applies a function-specific prompt
+  wrapper in scripts/research/xmas_function_axis_sweep.py.
+
+capture_profiles:
+  default:
+    max_tokens: 2048
+    temperature: 0.0
+    failure_classes:
+      - transport_error
+      - timeout
+      - empty_content
+      - parse_failure
+      - scoring_error
+      - rubric_unscored
+  qwen_nothink:
+    applies_to:
+      - frontdoor
+      - architect_general
+    chat_template_kwargs:
+      enable_thinking: false
+  qwen_next_thinking:
+    applies_to:
+      - ingest_long_context
+    note: "Qwen3-Next exception from benchmarking guide; do not force nothink."
+
+models:
+  frontdoor:
+    url: http://127.0.0.1:8070/v1
+    capture_profile: qwen_nothink
+  worker_general:
+    url: http://127.0.0.1:8072/v1
+    capture_profile: default
+  architect_general:
+    url: http://127.0.0.1:8083/v1
+    capture_profile: qwen_nothink
+  ingest_long_context:
+    url: http://127.0.0.1:8085/v1
+    capture_profile: qwen_next_thinking
+
+domain_task_sets:
+  math_v1:
+    - gsm8k_00000
+    - gsm8k_00001
+    - gsm8k_00002
+    - gsm8k_00003
+    - gsm8k_00004
+  code_v1:
+    - cruxeval_output_0000
+    - cruxeval_output_0001
+    - cruxeval_output_0002
+    - cruxeval_output_0003
+    - cruxeval_output_0004
+  knowledge_v1:
+    - simpleqa_general_03756
+    - simpleqa_general_01111
+    - simpleqa_general_01587
+    - simpleqa_general_01896
+    - simpleqa_general_02351
+  long_context_v1:
+    - needle_001
+    - needle_002
+    - needle_003
+    - needle_004
+    - needle_005
+  reasoning_v1:
+    - gpqa_High-energy particle physics_0437
+    - gpqa_High-energy particle physics_0156
+    - gpqa_Organic Chemistry_0388
+    - gpqa_Organic Chemistry_0115
+    - gpqa_Chemistry (general)_0432
+
+cell_defaults:
+  solve:
+    prompt_wrapper: solve_direct
+    scoring_family: source_auto
+    failure_policy: source_parse_then_score
+  verify:
+    prompt_wrapper: verify_answer
+    scoring_family: binary_validity
+    failure_policy: answer_tag_valid_invalid
+  plan:
+    prompt_wrapper: plan_solution
+    scoring_family: rubric
+    failure_policy: rubric_unscored_until_judge
+  refine:
+    prompt_wrapper: refine_answer
+    scoring_family: source_auto
+    failure_policy: source_parse_then_score
+  extract:
+    prompt_wrapper: extract_answer
+    scoring_family: source_auto
+    failure_policy: answer_tag_then_source_score
+
+cells:
+  math:
+    solve: {task_ids_ref: math_v1, prompt_wrapper: solve_direct, scoring_family: source_auto, failure_policy: source_parse_then_score}
+    verify: {task_ids_ref: math_v1, prompt_wrapper: verify_answer, scoring_family: binary_validity, failure_policy: answer_tag_valid_invalid}
+    plan: {task_ids_ref: math_v1, prompt_wrapper: plan_solution, scoring_family: rubric, failure_policy: rubric_unscored_until_judge}
+    refine: {task_ids_ref: math_v1, prompt_wrapper: refine_answer, scoring_family: source_auto, failure_policy: source_parse_then_score}
+    extract: {task_ids_ref: math_v1, prompt_wrapper: extract_answer, scoring_family: source_auto, failure_policy: answer_tag_then_source_score}
+  code:
+    solve: {task_ids_ref: code_v1, prompt_wrapper: solve_direct, scoring_family: source_auto, failure_policy: source_parse_then_score}
+    verify: {task_ids_ref: code_v1, prompt_wrapper: verify_answer, scoring_family: binary_validity, failure_policy: answer_tag_valid_invalid}
+    plan: {task_ids_ref: code_v1, prompt_wrapper: plan_solution, scoring_family: rubric, failure_policy: rubric_unscored_until_judge}
+    refine: {task_ids_ref: code_v1, prompt_wrapper: refine_answer, scoring_family: source_auto, failure_policy: source_parse_then_score}
+    extract: {task_ids_ref: code_v1, prompt_wrapper: extract_answer, scoring_family: source_auto, failure_policy: answer_tag_then_source_score}
+  knowledge:
+    solve: {task_ids_ref: knowledge_v1, prompt_wrapper: solve_direct, scoring_family: source_auto, failure_policy: source_parse_then_score}
+    verify: {task_ids_ref: knowledge_v1, prompt_wrapper: verify_answer, scoring_family: binary_validity, failure_policy: answer_tag_valid_invalid}
+    plan: {task_ids_ref: knowledge_v1, prompt_wrapper: plan_solution, scoring_family: rubric, failure_policy: rubric_unscored_until_judge}
+    refine: {task_ids_ref: knowledge_v1, prompt_wrapper: refine_answer, scoring_family: source_auto, failure_policy: source_parse_then_score}
+    extract: {task_ids_ref: knowledge_v1, prompt_wrapper: extract_answer, scoring_family: source_auto, failure_policy: answer_tag_then_source_score}
+  long_context:
+    solve: {task_ids_ref: long_context_v1, prompt_wrapper: solve_direct, scoring_family: source_auto, failure_policy: source_parse_then_score}
+    verify: {task_ids_ref: long_context_v1, prompt_wrapper: verify_answer, scoring_family: binary_validity, failure_policy: answer_tag_valid_invalid}
+    plan: {task_ids_ref: long_context_v1, prompt_wrapper: plan_solution, scoring_family: rubric, failure_policy: rubric_unscored_until_judge}
+    refine: {task_ids_ref: long_context_v1, prompt_wrapper: refine_answer, scoring_family: source_auto, failure_policy: source_parse_then_score}
+    extract: {task_ids_ref: long_context_v1, prompt_wrapper: extract_answer, scoring_family: source_auto, failure_policy: answer_tag_then_source_score}
+  reasoning:
+    solve: {task_ids_ref: reasoning_v1, prompt_wrapper: solve_direct, scoring_family: source_auto, failure_policy: source_parse_then_score}
+    verify: {task_ids_ref: reasoning_v1, prompt_wrapper: verify_answer, scoring_family: binary_validity, failure_policy: answer_tag_valid_invalid}
+    plan: {task_ids_ref: reasoning_v1, prompt_wrapper: plan_solution, scoring_family: rubric, failure_policy: rubric_unscored_until_judge}
+    refine: {task_ids_ref: reasoning_v1, prompt_wrapper: refine_answer, scoring_family: source_auto, failure_policy: source_parse_then_score}
+    extract: {task_ids_ref: reasoning_v1, prompt_wrapper: extract_answer, scoring_family: source_auto, failure_policy: answer_tag_then_source_score}
