@@ -429,18 +429,18 @@ class TulvingEpisodicAdapter(BaseAdapter):
 
     def _load_qa_from_variant(self, variant_dir: Path) -> list[dict]:
         """Load QA pairs from parquet files in the variant directory."""
-        # Find parquet files matching target chapter count
-        parquet_files = sorted(variant_dir.rglob("*.parquet"))
-        target_files = [
-            f for f in parquet_files
-            if f"_{self._target_chapters}chapters" in f.name
-            or f"_{self._target_chapters}ch" in f.name
-        ]
+        # The Figshare extract stores chapter count in the parent directory
+        # (for example ``..._nbchapters_19_.../df_qa.parquet``), not in the
+        # parquet filename. Select the intended QA table only; debug/book
+        # parquet files must not expand the 20ch run into 100K/1M variants.
+        parquet_files = sorted(variant_dir.rglob("df_qa.parquet"))
+        target_files = self._select_target_qa_files(parquet_files)
         if not target_files:
             target_files = parquet_files  # Fallback: any parquet file
 
         if not target_files:
             return []
+        self._book_text = self._load_book_text(target_files[0].parent)
 
         try:
             import pandas as pd
@@ -457,6 +457,46 @@ class TulvingEpisodicAdapter(BaseAdapter):
         except ImportError:
             print("  [adapter] pandas not available; falling back to JSON")
             return []
+
+    def _select_target_qa_files(self, parquet_files: list[Path]) -> list[Path]:
+        """Pick QA parquet files for the configured chapter target."""
+        if not parquet_files:
+            return []
+
+        def chapter_count(path: Path) -> int | None:
+            match = re.search(r"nbchapters_(\d+)", str(path))
+            if not match:
+                return None
+            return int(match.group(1))
+
+        by_chapter: dict[int, list[Path]] = {}
+        for path in parquet_files:
+            chapters = chapter_count(path)
+            if chapters is not None:
+                by_chapter.setdefault(chapters, []).append(path)
+        if not by_chapter:
+            return []
+
+        claude_files = [p for p in parquet_files if "model_claude" in str(p)]
+        if claude_files:
+            claude_by_chapter: dict[int, list[Path]] = {}
+            for path in claude_files:
+                chapters = chapter_count(path)
+                if chapters is not None:
+                    claude_by_chapter.setdefault(chapters, []).append(path)
+            if claude_by_chapter:
+                by_chapter = claude_by_chapter
+
+        # The nominal 20ch dataset is represented as 19 chapters for the
+        # Claude-generated default book and 20 for the GPT-4o variant. Prefer
+        # the closest lower-or-equal count to preserve the documented 456-QA
+        # default, then fall back to the closest absolute match.
+        lower_or_equal = [c for c in by_chapter if c <= self._target_chapters]
+        if lower_or_equal:
+            selected = max(lower_or_equal)
+        else:
+            selected = min(by_chapter, key=lambda c: abs(c - self._target_chapters))
+        return by_chapter[selected]
 
     def _load_from_json(self, variant_dir: Path) -> list[dict]:
         """Fallback: load QA from JSON files (exported via epbench io.export_list)."""
@@ -475,6 +515,14 @@ class TulvingEpisodicAdapter(BaseAdapter):
 
     def _load_book_text(self, variant_dir: Path) -> Optional[str]:
         """Load the full book narrative text (for context injection into prompts)."""
+        json_book = variant_dir / "book.json"
+        if json_book.exists():
+            try:
+                data = json.loads(json_book.read_text(encoding="utf-8"))
+                if isinstance(data, str):
+                    return data
+            except Exception:
+                pass
         book_files = sorted(variant_dir.rglob("book*.txt")) + sorted(
             variant_dir.rglob("*.txt")
         )
@@ -569,6 +617,13 @@ class TulvingEpisodicAdapter(BaseAdapter):
             )
 
         prompt = f"{question}\n\n{instruction}"
+        if self._book_text:
+            prompt = (
+                "Book narrative:\n"
+                f"{self._book_text.strip()}\n\n"
+                "---\n\n"
+                f"{prompt}"
+            )
 
         # Serialise expected as JSON for storage (we keep it as list in metadata)
         expected_str = json.dumps(ground_truth)
@@ -577,7 +632,7 @@ class TulvingEpisodicAdapter(BaseAdapter):
             "id": f"tulving_{self._variant}_ch{chapter:04d}_q{idx:04d}",
             "suite": "tulving_episodic",
             "prompt": prompt,
-            "context": "",  # Callers inject the book text separately
+            "context": self._book_text or "",
             "expected": expected_str,  # JSON-encoded list
             "scoring": [],
             "image_path": "",

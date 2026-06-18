@@ -62,7 +62,7 @@ class Suite:
 
 
 def load_suite(name: str, prompts_dir: str = PROMPTS_DIR) -> Optional[Suite]:
-    """Load a benchmark suite from YAML.
+    """Load a benchmark suite from YAML or a registered dataset adapter.
 
     Args:
         name: Suite name (e.g., 'thinking', 'coder').
@@ -73,7 +73,7 @@ def load_suite(name: str, prompts_dir: str = PROMPTS_DIR) -> Optional[Suite]:
     """
     yaml_path = Path(prompts_dir) / f"{name}.yaml"
     if not yaml_path.exists():
-        return None
+        return _load_adapter_suite(name)
 
     with open(yaml_path) as f:
         data = yaml.safe_load(f)
@@ -134,6 +134,47 @@ def load_suite(name: str, prompts_dir: str = PROMPTS_DIR) -> Optional[Suite]:
         description=data.get("description", ""),
         questions=questions,
         inference_params=data.get("inference_params", {}),
+    )
+
+
+def _load_adapter_suite(name: str) -> Optional[Suite]:
+    """Build a Suite from a registered dataset adapter when no YAML exists."""
+    try:
+        from dataset_adapters import get_adapter
+    except ImportError:
+        return None
+
+    adapter = get_adapter(name)
+    if adapter is None:
+        return None
+
+    questions = []
+    for item in adapter.extract_all():
+        qid = str(item.get("id") or f"{name}_{len(questions):04d}")
+        questions.append(
+            Question(
+                id=qid,
+                tier=int(item.get("tier", 1) or 1),
+                name=str(item.get("name") or qid),
+                prompt=str(item.get("prompt", "")),
+                expected=str(item.get("expected", "")),
+                scoring=list(item.get("scoring", []) or []),
+                context_tokens=item.get("context_tokens"),
+                context_type=item.get("context_type"),
+                needle=item.get("needle"),
+                needle_position=item.get("needle_position"),
+                image_path=item.get("image_path"),
+            )
+        )
+
+    questions.sort(key=lambda q: (-q.tier, q.id))
+    return Suite(
+        name=name,
+        version=1,
+        domain=name,
+        description=f"{name} dataset adapter suite",
+        questions=questions,
+        inference_params={},
     )
 
 

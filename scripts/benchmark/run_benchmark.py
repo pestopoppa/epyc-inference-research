@@ -1678,7 +1678,7 @@ Examples:
             "Skip the canonical-recipe preflight gate (uptime / libomp / launcher wrapping / tripwire / "
             "freq-under-load). Use only when you've just run the preflight manually and want to start "
             "another sweep within minutes. The preflight catches the multi-day-uptime CPU freq throttle "
-            "and AOCC libomp issues that cost ~50% throughput silently."
+            "and AOCC libomp issues that cost ~50%% throughput silently."
         ),
     )
 
