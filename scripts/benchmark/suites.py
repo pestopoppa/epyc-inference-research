@@ -61,6 +61,31 @@ class Suite:
     inference_params: dict[str, Any]
 
 
+def _iter_prompt_items(prompts: Any) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Yield normalized ``(qid, qdata)`` pairs from supported YAML prompt shapes."""
+    if isinstance(prompts, dict):
+        for qid, qdata in prompts.items():
+            if isinstance(qdata, dict):
+                yield str(qid), qdata
+        return
+
+    if isinstance(prompts, list):
+        for idx, qdata in enumerate(prompts):
+            if not isinstance(qdata, dict):
+                continue
+            qid = qdata.get("id") or qdata.get("name") or f"q{idx:04d}"
+            yield str(qid), qdata
+
+
+def _prompt_text(qdata: dict[str, Any]) -> str:
+    """Return prompt text across legacy dict suites and compact prompt-list gates."""
+    for key in ("prompt", "text", "query"):
+        value = qdata.get(key)
+        if value is not None:
+            return str(value).strip()
+    return ""
+
+
 def load_suite(name: str, prompts_dir: str = PROMPTS_DIR) -> Optional[Suite]:
     """Load a benchmark suite from YAML or a registered dataset adapter.
 
@@ -83,8 +108,8 @@ def load_suite(name: str, prompts_dir: str = PROMPTS_DIR) -> Optional[Suite]:
     prompts = data.get("prompts", {})
     is_long_context = name == "long_context"
 
-    for qid, qdata in prompts.items():
-        raw_prompt = qdata.get("prompt", "").strip()
+    for qid, qdata in _iter_prompt_items(prompts):
+        raw_prompt = _prompt_text(qdata)
 
         # For long_context suite, generate context and build full prompt
         if is_long_context:
@@ -178,7 +203,7 @@ def _load_adapter_suite(name: str) -> Optional[Suite]:
     )
 
 
-def get_all_suite_names(prompts_dir: str = PROMPTS_DIR) -> list[str]:
+def get_all_suite_names(prompts_dir: str = PROMPTS_DIR, *, include_adapters: bool = False) -> list[str]:
     """Get names of all available suites.
 
     Args:
@@ -187,11 +212,20 @@ def get_all_suite_names(prompts_dir: str = PROMPTS_DIR) -> list[str]:
     Returns:
         List of suite names (without .yaml extension).
     """
+    names: set[str] = set()
     path = Path(prompts_dir)
-    if not path.exists():
-        return []
+    if path.exists():
+        names.update(f.stem for f in path.glob("*.yaml"))
 
-    return sorted([f.stem for f in path.glob("*.yaml")])
+    if include_adapters:
+        try:
+            from dataset_adapters import ADAPTER_SUITES
+        except ImportError:
+            pass
+        else:
+            names.update(ADAPTER_SUITES)
+
+    return sorted(names)
 
 
 def load_all_suites(prompts_dir: str = PROMPTS_DIR) -> dict[str, Suite]:

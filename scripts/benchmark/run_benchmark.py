@@ -47,7 +47,7 @@ from lib.output_parser import parse_output
 # NOTE: Algorithmic scoring is deprecated. Quality evaluation is done via Claude-as-Judge only.
 # See benchmarks/results/reviews/ for Claude-as-Judge scores.
 
-from suites import load_suite, get_suites_for_role, get_inference_params, get_all_suite_names
+from suites import PROMPTS_DIR, load_suite, get_suites_for_role, get_inference_params, get_all_suite_names
 from results import (
     ResultsManager,
     QuestionResult,
@@ -1732,8 +1732,18 @@ Examples:
         return
 
     if args.list_suites:
+        try:
+            from dataset_adapters import ADAPTER_SUITES
+        except ImportError:
+            adapter_suites: set[str] = set()
+        else:
+            adapter_suites = set(ADAPTER_SUITES)
+        prompts_dir = Path(PROMPTS_DIR)
         print("Available suites:")
-        for name in get_all_suite_names():
+        for name in get_all_suite_names(include_adapters=True):
+            if name in adapter_suites and not (prompts_dir / f"{name}.yaml").exists():
+                print(f"  {name:25} (adapter-backed; load with --suite {name})")
+                continue
             suite = load_suite(name)
             if suite:
                 print(f"  {name:25} ({len(suite.questions)} questions) - {suite.description[:50]}...")
