@@ -11,8 +11,10 @@ and writes a manifest that can be committed with the resulting evidence.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import shlex
+import statistics
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,6 +35,8 @@ DEFAULT_BATCH_MODEL_KEY = "qwen36_q8_0"
 DEFAULT_BATCH_NP = 8
 DEFAULT_CURRENT_CONCURRENCY = 3
 DEFAULT_TRIAL_ID_BASE = 920000
+DEFAULT_MIN_SPEEDUP = 1.05
+DEFAULT_MAX_ERROR_RATE = 0.0
 
 
 def utc_now() -> str:
@@ -246,8 +250,210 @@ def write_outputs(args: argparse.Namespace) -> Path:
     return output_dir
 
 
+def _float_value(row: dict[str, Any], key: str, default: float = 0.0) -> float:
+    try:
+        value = row.get(key, default)
+        return float(value) if value is not None and value != "" else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _int_value(row: dict[str, Any], key: str, default: int = 0) -> int:
+    try:
+        value = row.get(key, default)
+        return int(value) if value is not None and value != "" else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _read_manifest(run_dir: Path) -> dict[str, Any]:
+    path = run_dir / "manifest.json"
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else {}
+
+
+def _batch_summary_path(manifest: dict[str, Any], run_dir: Path) -> Path:
+    arms = manifest.get("arms")
+    if isinstance(arms, list):
+        for arm in arms:
+            if not isinstance(arm, dict) or arm.get("kind") != "server_np_sweep":
+                continue
+            artifacts = arm.get("primary_artifacts")
+            if isinstance(artifacts, list) and artifacts:
+                return Path(str(artifacts[0]))
+    run_id = str(manifest.get("run_id") or run_dir.name)
+    batch_np = str((manifest.get("comparison") or {}).get("batch_np") or DEFAULT_BATCH_NP)
+    return run_dir / "serving" / f"{run_id}-batch-np{batch_np}" / "summary.csv"
+
+
+def _current_jsonl_path(manifest: dict[str, Any], run_dir: Path) -> Path:
+    arms = manifest.get("arms")
+    if isinstance(arms, list):
+        for arm in arms:
+            if not isinstance(arm, dict) or arm.get("kind") != "core_v2_calibrate":
+                continue
+            artifacts = arm.get("primary_artifacts")
+            if isinstance(artifacts, list) and artifacts:
+                return Path(str(artifacts[0]))
+    return run_dir / "current_quarters.jsonl"
+
+
+def _load_batch_row(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+    if not path.exists():
+        return None, f"missing batch summary: {path}"
+    with path.open(newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    if not rows:
+        return None, f"empty batch summary: {path}"
+    successful = [row for row in rows if _int_value(row, "success_count") > 0]
+    candidates = successful or rows
+    return max(candidates, key=lambda row: _float_value(row, "tasks_per_hour")), None
+
+
+def _load_current_rows(path: Path) -> tuple[list[dict[str, Any]], str | None]:
+    if not path.exists():
+        return [], f"missing current-arm JSONL: {path}"
+    rows: list[dict[str, Any]] = []
+    with path.open(encoding="utf-8") as handle:
+        for line_no, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as exc:
+                return [], f"invalid JSONL at {path}:{line_no}: {exc}"
+            if isinstance(row, dict):
+                rows.append(row)
+    if not rows:
+        return [], f"empty current-arm JSONL: {path}"
+    return rows, None
+
+
+def summarize_run(
+    run_dir: Path,
+    *,
+    min_speedup: float = DEFAULT_MIN_SPEEDUP,
+    max_error_rate: float = DEFAULT_MAX_ERROR_RATE,
+) -> dict[str, Any]:
+    """Summarize completed E2 arm artifacts into a keep/kill/hold recommendation."""
+    manifest = _read_manifest(run_dir)
+    batch_path = _batch_summary_path(manifest, run_dir)
+    current_path = _current_jsonl_path(manifest, run_dir)
+    missing: list[str] = []
+
+    batch_row, error = _load_batch_row(batch_path)
+    if error:
+        missing.append(error)
+    current_rows, error = _load_current_rows(current_path)
+    if error:
+        missing.append(error)
+
+    decision_grade = bool(manifest.get("decision_grade", False))
+    status = "incomplete" if missing else "hold"
+    reasons: list[str] = list(missing)
+    batch_metrics: dict[str, Any] = {"path": str(batch_path)}
+    current_metrics: dict[str, Any] = {"path": str(current_path)}
+    comparison: dict[str, Any] = {}
+
+    if batch_row and current_rows:
+        batch_wall_s = _float_value(batch_row, "wall_seconds")
+        batch_error_rate = _float_value(batch_row, "error_rate", 1.0)
+        current_wall_values = [_float_value(row, "eval_wall_s") for row in current_rows]
+        current_wall_values = [value for value in current_wall_values if value > 0]
+        current_question_values = [_int_value(row, "n_questions") for row in current_rows]
+        current_question_values = [value for value in current_question_values if value > 0]
+        current_wall_s = statistics.mean(current_wall_values) if current_wall_values else 0.0
+
+        batch_metrics.update(
+            {
+                "model": batch_row.get("model"),
+                "np": _int_value(batch_row, "np"),
+                "success_count": _int_value(batch_row, "success_count"),
+                "total_count": _int_value(batch_row, "total_count"),
+                "error_rate": batch_error_rate,
+                "wall_seconds": batch_wall_s,
+                "wall_minutes_per_eval": batch_wall_s / 60.0 if batch_wall_s > 0 else None,
+                "tasks_per_hour": _float_value(batch_row, "tasks_per_hour"),
+                "p95_latency_ms": _float_value(batch_row, "p95_latency_ms"),
+            }
+        )
+        current_metrics.update(
+            {
+                "rows": len(current_rows),
+                "eval_concurrency": current_rows[-1].get("eval_concurrency"),
+                "mean_eval_wall_s": current_wall_s,
+                "wall_minutes_per_eval": current_wall_s / 60.0 if current_wall_s > 0 else None,
+                "mean_n_questions": statistics.mean(current_question_values) if current_question_values else None,
+            }
+        )
+        speedup = current_wall_s / batch_wall_s if batch_wall_s > 0 and current_wall_s > 0 else 0.0
+        comparison.update(
+            {
+                "speedup_current_over_batch": speedup,
+                "batch_wall_delta_s": batch_wall_s - current_wall_s,
+                "min_speedup": min_speedup,
+                "max_error_rate": max_error_rate,
+            }
+        )
+
+        if not decision_grade:
+            status = "scout_only"
+            reasons.append("manifest is not decision-grade; do not use this summary for production keep/kill")
+        elif batch_error_rate > max_error_rate:
+            status = "kill_candidate"
+            reasons.append(f"batch error_rate {batch_error_rate:.3f} exceeds {max_error_rate:.3f}")
+        elif speedup >= min_speedup:
+            status = "keep_candidate"
+            reasons.append(f"batch arm is {speedup:.3f}x faster than current arm")
+        else:
+            status = "kill_candidate"
+            reasons.append(f"batch arm speedup {speedup:.3f} is below required {min_speedup:.3f}")
+
+    return {
+        "run_dir": str(run_dir),
+        "created_at": utc_now(),
+        "protocol_id": "P-BENCH-3/E2",
+        "status": status,
+        "decision_grade": decision_grade and not missing,
+        "recommendation": {
+            "status": status,
+            "reasons": reasons,
+        },
+        "batch_arm": batch_metrics,
+        "current_arm": current_metrics,
+        "comparison": comparison,
+        "manifest": {
+            "path": str(run_dir / "manifest.json"),
+            "run_id": manifest.get("run_id"),
+            "source_status": manifest.get("status"),
+            "source_decision_grade": manifest.get("decision_grade"),
+        },
+    }
+
+
+def write_summary(run_dir: Path, output_path: Path | None, *, min_speedup: float, max_error_rate: float) -> Path:
+    summary = summarize_run(
+        run_dir,
+        min_speedup=min_speedup,
+        max_error_rate=max_error_rate,
+    )
+    path = output_path or run_dir / "summary.json"
+    path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    return path
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--summarize-run",
+        type=Path,
+        help="Summarize a completed E2 run directory instead of writing a new run plan.",
+    )
+    parser.add_argument("--summary-output", type=Path)
+    parser.add_argument("--min-speedup", type=float, default=DEFAULT_MIN_SPEEDUP)
+    parser.add_argument("--max-error-rate", type=float, default=DEFAULT_MAX_ERROR_RATE)
     parser.add_argument("--run-id", default=f"e2-eval-driver-ab-{utc_compact()}")
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--research-root", type=Path, default=RESEARCH_ROOT)
@@ -284,11 +490,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--current-concurrency must be positive")
     if args.scout_skip_clean_check and not args.allow_host_health_warning:
         parser.error("--scout-skip-clean-check requires --allow-host-health-warning")
+    if args.min_speedup <= 0:
+        parser.error("--min-speedup must be positive")
+    if not (0 <= args.max_error_rate <= 1):
+        parser.error("--max-error-rate must be between 0 and 1")
+    if args.summary_output and not args.summarize_run:
+        parser.error("--summary-output requires --summarize-run")
     return args
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if args.summarize_run:
+        summary_path = write_summary(
+            args.summarize_run,
+            args.summary_output,
+            min_speedup=args.min_speedup,
+            max_error_rate=args.max_error_rate,
+        )
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        print(f"wrote {summary_path}")
+        print(f"status={summary['status']} decision_grade={summary['decision_grade']}")
+        for reason in summary["recommendation"]["reasons"]:
+            print(f"reason: {reason}")
+        return 0
+
     output_dir = write_outputs(args)
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     print(f"wrote {output_dir}")

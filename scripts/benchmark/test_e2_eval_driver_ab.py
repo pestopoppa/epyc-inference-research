@@ -116,5 +116,87 @@ def test_clean_manifest_records_two_e2_arms(monkeypatch, tmp_path):
     assert manifest["comparison"]["metric"] == "wall_minutes_per_eval"
 
 
+def _write_completed_e2_run(tmp_path: Path, *, decision_grade: bool = True) -> Path:
+    run_dir = tmp_path / "e2-complete"
+    batch_dir = run_dir / "serving" / "e2-complete-batch-np8"
+    batch_dir.mkdir(parents=True)
+    manifest = {
+        "run_id": "e2-complete",
+        "status": "runnable",
+        "decision_grade": decision_grade,
+        "arms": [
+            {
+                "kind": "server_np_sweep",
+                "primary_artifacts": [str(batch_dir / "summary.csv")],
+            },
+            {
+                "kind": "core_v2_calibrate",
+                "primary_artifacts": [str(run_dir / "current_quarters.jsonl")],
+            },
+        ],
+    }
+    (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (batch_dir / "summary.csv").write_text(
+        "\n".join(
+            [
+                "model,np,success_count,total_count,error_rate,wall_seconds,tasks_per_hour,p95_latency_ms",
+                "qwen36_q8_0,8,43,43,0.0,300.0,516.0,12000.0",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (run_dir / "current_quarters.jsonl").write_text(
+        json.dumps(
+            {
+                "eval_wall_s": 600.0,
+                "n_questions": 43,
+                "eval_concurrency": 3,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return run_dir
+
+
+def test_summarize_run_marks_fast_decision_grade_batch_keep_candidate(tmp_path):
+    run_dir = _write_completed_e2_run(tmp_path)
+
+    summary = e2.summarize_run(run_dir)
+
+    assert summary["status"] == "keep_candidate"
+    assert summary["decision_grade"] is True
+    assert summary["batch_arm"]["wall_minutes_per_eval"] == 5.0
+    assert summary["current_arm"]["wall_minutes_per_eval"] == 10.0
+    assert summary["comparison"]["speedup_current_over_batch"] == 2.0
+
+
+def test_summarize_run_keeps_scout_data_out_of_decisions(tmp_path):
+    run_dir = _write_completed_e2_run(tmp_path, decision_grade=False)
+
+    summary = e2.summarize_run(run_dir)
+
+    assert summary["status"] == "scout_only"
+    assert summary["decision_grade"] is False
+    assert "not decision-grade" in summary["recommendation"]["reasons"][0]
+
+
+def test_summarize_run_reports_missing_artifacts(tmp_path):
+    run_dir = tmp_path / "e2-missing"
+    run_dir.mkdir()
+    (run_dir / "manifest.json").write_text(
+        json.dumps({"run_id": "e2-missing", "decision_grade": True}),
+        encoding="utf-8",
+    )
+
+    summary = e2.summarize_run(run_dir)
+
+    assert summary["status"] == "incomplete"
+    assert summary["decision_grade"] is False
+    assert any("missing batch summary" in reason for reason in summary["recommendation"]["reasons"])
+    assert any("missing current-arm JSONL" in reason for reason in summary["recommendation"]["reasons"])
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
