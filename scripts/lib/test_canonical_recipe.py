@@ -125,7 +125,7 @@ class TestCanonicalEnv(unittest.TestCase):
 
     def test_build_canonical_env_default_omits_v4_extras(self):
         """Default build_canonical_env() must NOT emit V4 gate extras —
-        preserves comparability with the documented 47-48 t/s Coder-30B
+        preserves comparability with the documented raw Coder-30B tripwire
         baseline AND with stack_env.py's non-V4 launch env.
         """
         env = r.build_canonical_env()

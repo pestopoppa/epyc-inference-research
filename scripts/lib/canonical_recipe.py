@@ -6,9 +6,10 @@ modules import the constants and helpers below; a unit test (or the preflight
 itself) verifies that the resulting subprocess invocation matches CANONICAL_*.
 
 Recipe history:
-- The 47-48 t/s Coder-30B-A3B Q4_K_M tg128 baseline documented in
-  cpu-inference-optimization-index.md and 2026-04-28-cpu11-pgo/decision.md
-  was measured under the wrapping defined here.
+- The raw llama-bench tripwire for Coder-30B-A3B Q4_K_M tg128 is expected
+  around 29 t/s under the wrapping defined here. The 47-48 t/s Coder-30B
+  numbers in older docs are accelerated MoE/spec/lookup recipes, not this raw
+  standalone llama-bench gate.
 - During the 2026-05-02 benchmark debugging session it became clear that the
   launcher had drifted away from this recipe (missing taskset, mmap defaulted
   to ON, AOCC libomp resolved instead of clang-20). The recipe is now codified
@@ -250,7 +251,7 @@ TRIPWIRE_MODEL_PATH: str = (
     "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/"
     "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
 )
-TRIPWIRE_TARGET_TPS: float = 45.0  # documented baseline 47-48; allow 5% margin
+TRIPWIRE_TARGET_TPS: float = 28.0  # raw llama-bench baseline ~29; accelerated recipes are ~47
 TRIPWIRE_TIMEOUT_S: int = 90  # generous; actual run is ~6 s
 
 # Freq gate threshold: under load, expect ALL 96 cores boosting above 2.5 GHz.
