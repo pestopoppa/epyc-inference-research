@@ -113,6 +113,7 @@ def test_rope_cells_block_when_context_exceeds_registered_max(monkeypatch, tmp_p
 
     contexts = {entry["context_length"]: entry for entry in built["entries"]}
     assert contexts[4096]["status"] == "ready"
+    assert " --api chat " in contexts[4096]["command"]
     assert contexts[32768]["status"] == "blocked"
     assert "exceeds registered max_context" in contexts[32768]["notes"][0]
 

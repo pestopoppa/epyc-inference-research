@@ -203,6 +203,8 @@ def _rope_command(role: str, context_length: int, port: int, output_root: Path) 
     return shlex.join([
         sys.executable,
         str(ROPE_PROBE_SCRIPT),
+        "--api",
+        "chat",
         "--host",
         "127.0.0.1",
         "--port",

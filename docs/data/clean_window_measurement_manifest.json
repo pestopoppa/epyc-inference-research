@@ -2,7 +2,7 @@
   "attestation": {
     "generated_by": "scripts/benchmark/clean_window_manifest.py",
     "inference_started": false,
-    "research_head": "785c66fcc9ff898e12324f9a971e54e706273425"
+    "research_head": "74e580e3c76fff64e400067d09df6e1090638122"
   },
   "entries": [
     {
@@ -118,7 +118,7 @@
       "suite": "tulving_episodic"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_4096.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8070 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_4096.json",
       "context_length": 4096,
       "kind": "rope_position_probe",
       "model": {
@@ -146,7 +146,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_8192.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8070 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_8192.json",
       "context_length": 8192,
       "kind": "rope_position_probe",
       "model": {
@@ -174,7 +174,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_16384.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8070 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_16384.json",
       "context_length": 16384,
       "kind": "rope_position_probe",
       "model": {
@@ -202,7 +202,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_32768.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8070 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_32768.json",
       "context_length": 32768,
       "kind": "rope_position_probe",
       "model": {
@@ -230,7 +230,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_4096.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8072 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_4096.json",
       "context_length": 4096,
       "kind": "rope_position_probe",
       "model": {
@@ -258,7 +258,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_8192.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8072 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_8192.json",
       "context_length": 8192,
       "kind": "rope_position_probe",
       "model": {
@@ -286,7 +286,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_16384.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8072 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_16384.json",
       "context_length": 16384,
       "kind": "rope_position_probe",
       "model": {
@@ -314,7 +314,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_32768.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8072 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_32768.json",
       "context_length": 32768,
       "kind": "rope_position_probe",
       "model": {
@@ -344,7 +344,7 @@
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_4096.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8083 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_4096.json",
       "context_length": 4096,
       "kind": "rope_position_probe",
       "model": {
@@ -372,7 +372,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_8192.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8083 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_8192.json",
       "context_length": 8192,
       "kind": "rope_position_probe",
       "model": {
@@ -400,7 +400,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_16384.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8083 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_16384.json",
       "context_length": 16384,
       "kind": "rope_position_probe",
       "model": {
@@ -428,7 +428,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_32768.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8083 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_32768.json",
       "context_length": 32768,
       "kind": "rope_position_probe",
       "model": {
@@ -458,7 +458,7 @@
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_4096.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8085 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_4096.json",
       "context_length": 4096,
       "kind": "rope_position_probe",
       "model": {
@@ -486,7 +486,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_8192.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8085 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_8192.json",
       "context_length": 8192,
       "kind": "rope_position_probe",
       "model": {
@@ -514,7 +514,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_16384.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8085 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_16384.json",
       "context_length": 16384,
       "kind": "rope_position_probe",
       "model": {
@@ -542,7 +542,7 @@
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_32768.json",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8085 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_32768.json",
       "context_length": 32768,
       "kind": "rope_position_probe",
       "model": {
@@ -690,7 +690,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-19T01:09:24.197387+00:00",
+  "generated_at": "2026-06-19T04:34:02.166774+00:00",
   "groups": [
     {
       "entries": [
@@ -723,7 +723,7 @@
           "suite": "tulving_episodic"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_4096.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8085 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_4096.json",
           "context_length": 4096,
           "kind": "rope_position_probe",
           "model": {
@@ -751,7 +751,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_8192.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8085 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_8192.json",
           "context_length": 8192,
           "kind": "rope_position_probe",
           "model": {
@@ -779,7 +779,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_16384.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8085 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_16384.json",
           "context_length": 16384,
           "kind": "rope_position_probe",
           "model": {
@@ -807,7 +807,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_32768.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8085 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_32768.json",
           "context_length": 32768,
           "kind": "rope_position_probe",
           "model": {
@@ -876,7 +876,7 @@
           "suite": "omniscience"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_4096.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8083 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_4096.json",
           "context_length": 4096,
           "kind": "rope_position_probe",
           "model": {
@@ -904,7 +904,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_8192.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8083 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_8192.json",
           "context_length": 8192,
           "kind": "rope_position_probe",
           "model": {
@@ -932,7 +932,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_16384.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8083 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_16384.json",
           "context_length": 16384,
           "kind": "rope_position_probe",
           "model": {
@@ -960,7 +960,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_32768.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8083 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_32768.json",
           "context_length": 32768,
           "kind": "rope_position_probe",
           "model": {
@@ -1071,7 +1071,7 @@
           "suite": "omniscience"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_4096.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8070 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_4096.json",
           "context_length": 4096,
           "kind": "rope_position_probe",
           "model": {
@@ -1099,7 +1099,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_8192.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8070 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_8192.json",
           "context_length": 8192,
           "kind": "rope_position_probe",
           "model": {
@@ -1127,7 +1127,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_16384.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8070 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_16384.json",
           "context_length": 16384,
           "kind": "rope_position_probe",
           "model": {
@@ -1155,7 +1155,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_32768.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8070 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_32768.json",
           "context_length": 32768,
           "kind": "rope_position_probe",
           "model": {
@@ -1264,7 +1264,7 @@
           "suite": "omniscience"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_4096.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8072 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_4096.json",
           "context_length": 4096,
           "kind": "rope_position_probe",
           "model": {
@@ -1292,7 +1292,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_8192.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8072 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_8192.json",
           "context_length": 8192,
           "kind": "rope_position_probe",
           "model": {
@@ -1320,7 +1320,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_16384.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8072 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_16384.json",
           "context_length": 16384,
           "kind": "rope_position_probe",
           "model": {
@@ -1348,7 +1348,7 @@
           "status": "ready"
         },
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_32768.json",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8072 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_32768.json",
           "context_length": 32768,
           "kind": "rope_position_probe",
           "model": {
@@ -1435,7 +1435,7 @@
   "output_root": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window",
   "pass_fail_gate": "All ready commands require a clean inference window, successful preflight, and per-task result aggregation; blocked entries must remain non-executable.",
   "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1",
-  "run_id": "clean-window-2026-06-19T010924.197387Z0000",
+  "run_id": "clean-window-2026-06-19T043402.166774Z0000",
   "source_handoff": "/mnt/raid0/llm/epyc-root/handoffs/active/bulk-inference-campaign.md",
   "summary": {
     "entries_blocked": 2,

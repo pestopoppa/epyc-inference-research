@@ -117,6 +117,68 @@ def _call_completion(
         return None
 
 
+def _load_chat_template_kwargs(raw: str | None) -> dict[str, object] | None:
+    """Parse optional llama.cpp chat_template_kwargs JSON."""
+    if raw is None or raw == "":
+        return None
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict):
+        raise ValueError("--chat-template-kwargs-json must decode to an object")
+    return parsed
+
+
+def _call_chat_completion(
+    prompt: str,
+    host: str,
+    port: int,
+    endpoint: str,
+    *,
+    chat_template_kwargs: dict[str, object] | None = None,
+    timeout: int = 120,
+) -> str | None:
+    """POST to llama-server /v1/chat/completions and return message content."""
+    url = f"http://{host}:{port}{endpoint}"
+    payload: dict[str, object] = {
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 4,
+        "temperature": 0.0,
+        "stream": False,
+    }
+    if chat_template_kwargs is not None:
+        payload["chat_template_kwargs"] = chat_template_kwargs
+
+    try:
+        resp = requests.post(url, json=payload, timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        message = data["choices"][0]["message"]
+        content = (message.get("content") or "").strip()
+        if content:
+            return content
+        reasoning = (message.get("reasoning_content") or "").strip()
+        return reasoning or None
+    except Exception as exc:  # noqa: BLE001
+        print(f"[warn] request failed: {exc}", file=sys.stderr)
+        return None
+
+
+def _call_model(prompt: str, args: argparse.Namespace) -> str | None:
+    if args.api == "chat":
+        return _call_chat_completion(
+            prompt,
+            host=args.host,
+            port=args.port,
+            endpoint=args.endpoint,
+            chat_template_kwargs=args.chat_template_kwargs,
+        )
+    return _call_completion(
+        prompt,
+        host=args.host,
+        port=args.port,
+        endpoint=args.endpoint,
+    )
+
+
 def _parse_answer(text: str | None) -> int | None:
     """Extract the first digit 0-3 from model output, or None if unparseable."""
     if text is None:
@@ -155,12 +217,7 @@ def run_probe(args: argparse.Namespace) -> None:
             print(prompt[-400:])
             return
 
-        raw = _call_completion(
-            prompt,
-            host=args.host,
-            port=args.port,
-            endpoint=args.endpoint,
-        )
+        raw = _call_model(prompt, args)
         predicted = _parse_answer(raw)
 
         hit = (predicted == expected) if predicted is not None else False
@@ -202,7 +259,9 @@ def run_probe(args: argparse.Namespace) -> None:
         "seed": args.seed,
         "host": args.host,
         "port": args.port,
+        "api": args.api,
         "endpoint": args.endpoint,
+        "chat_template_kwargs": args.chat_template_kwargs,
         "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "records": records,
     }
@@ -228,8 +287,25 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--host", default="127.0.0.1", help="llama-server host (default: 127.0.0.1)")
     p.add_argument("--port", type=int, default=8080, help="llama-server port (default: 8080)")
     p.add_argument(
-        "--endpoint", default="/completion",
-        help="Server endpoint (default: /completion)",
+        "--api",
+        choices=("completion", "chat"),
+        default="completion",
+        help="API style to call: completion or chat (default: completion)",
+    )
+    p.add_argument(
+        "--endpoint",
+        help=(
+            "Server endpoint. Defaults to /completion for --api completion and "
+            "/v1/chat/completions for --api chat"
+        ),
+    )
+    p.add_argument(
+        "--chat-template-kwargs-json",
+        default='{"enable_thinking": false}',
+        help=(
+            "JSON object passed as chat_template_kwargs for --api chat "
+            "(default: disable Qwen thinking)"
+        ),
     )
     p.add_argument(
         "--context-length", type=int, required=True,
@@ -246,7 +322,15 @@ def _parse_args() -> argparse.Namespace:
         "--dry-run", action="store_true",
         help="Build and print one sample prompt without calling the server, then exit",
     )
-    return p.parse_args()
+    args = p.parse_args()
+    if args.endpoint is None:
+        args.endpoint = "/v1/chat/completions" if args.api == "chat" else "/completion"
+    args.chat_template_kwargs = (
+        _load_chat_template_kwargs(args.chat_template_kwargs_json)
+        if args.api == "chat"
+        else None
+    )
+    return args
 
 
 if __name__ == "__main__":
