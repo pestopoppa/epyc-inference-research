@@ -1,0 +1,1471 @@
+{
+  "attestation": {
+    "generated_by": "scripts/benchmark/clean_window_manifest.py",
+    "inference_started": false,
+    "research_head": "cf3cd3aa806e8e8faa7461e12d8161857c7f3792"
+  },
+  "entries": [
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_general --suite omniscience --new-run",
+      "kind": "run_benchmark_suite",
+      "model": {
+        "architecture": "moe_hybrid",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "max_context": 262144,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "model_path_source": "live_registry",
+        "role": "architect_general",
+        "server": {
+          "name": "architect_general",
+          "port": 8083,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8083"
+        },
+        "tier": "B"
+      },
+      "notes": [],
+      "package": "G10",
+      "question_count": 600,
+      "role": "architect_general",
+      "status": "ready",
+      "suite": "omniscience"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model frontdoor --suite omniscience --new-run",
+      "kind": "run_benchmark_suite",
+      "model": {
+        "architecture": "qwen35moe",
+        "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "max_context": 131072,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "model_path_source": "live_registry",
+        "role": "frontdoor",
+        "server": {
+          "name": "frontdoor",
+          "port": 8070,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8070"
+        },
+        "tier": "A"
+      },
+      "notes": [],
+      "package": "G11",
+      "question_count": 600,
+      "role": "frontdoor",
+      "status": "ready",
+      "suite": "omniscience"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run",
+      "kind": "run_benchmark_suite",
+      "model": {
+        "architecture": "gemma4",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": true,
+        "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "max_context": 8192,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "model_path_source": "live_registry",
+        "role": "worker_general",
+        "server": {
+          "name": "worker",
+          "port": 8072,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8072"
+        },
+        "tier": "C"
+      },
+      "notes": [
+        "benchmark registry model path differs from live registry; run_benchmark.py would not measure the live role"
+      ],
+      "package": "G11",
+      "question_count": 600,
+      "role": "worker_general",
+      "status": "blocked",
+      "suite": "omniscience"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_long_context --suite tulving_episodic --new-run --server-mode",
+      "kind": "run_benchmark_suite",
+      "model": {
+        "architecture": "ssm_moe_hybrid",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "max_context": 262144,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "model_path_source": "live_registry",
+        "role": "ingest_long_context",
+        "server": {
+          "name": "ingest_long_context",
+          "port": 8085,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8085"
+        },
+        "tier": "B"
+      },
+      "notes": [],
+      "package": "K-MEM-1",
+      "question_count": 456,
+      "role": "ingest_long_context",
+      "status": "ready",
+      "suite": "tulving_episodic"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_4096.json",
+      "context_length": 4096,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "qwen35moe",
+        "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "max_context": 131072,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "model_path_source": "live_registry",
+        "role": "frontdoor",
+        "server": {
+          "name": "frontdoor",
+          "port": 8070,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8070"
+        },
+        "tier": "A"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "frontdoor",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_8192.json",
+      "context_length": 8192,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "qwen35moe",
+        "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "max_context": 131072,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "model_path_source": "live_registry",
+        "role": "frontdoor",
+        "server": {
+          "name": "frontdoor",
+          "port": 8070,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8070"
+        },
+        "tier": "A"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "frontdoor",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_16384.json",
+      "context_length": 16384,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "qwen35moe",
+        "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "max_context": 131072,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "model_path_source": "live_registry",
+        "role": "frontdoor",
+        "server": {
+          "name": "frontdoor",
+          "port": 8070,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8070"
+        },
+        "tier": "A"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "frontdoor",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_32768.json",
+      "context_length": 32768,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "qwen35moe",
+        "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "max_context": 131072,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "model_path_source": "live_registry",
+        "role": "frontdoor",
+        "server": {
+          "name": "frontdoor",
+          "port": 8070,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8070"
+        },
+        "tier": "A"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "frontdoor",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_4096.json",
+      "context_length": 4096,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "gemma4",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": true,
+        "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "max_context": 8192,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "model_path_source": "live_registry",
+        "role": "worker_general",
+        "server": {
+          "name": "worker",
+          "port": 8072,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8072"
+        },
+        "tier": "C"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "worker_general",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_8192.json",
+      "context_length": 8192,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "gemma4",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": true,
+        "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "max_context": 8192,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "model_path_source": "live_registry",
+        "role": "worker_general",
+        "server": {
+          "name": "worker",
+          "port": 8072,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8072"
+        },
+        "tier": "C"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "worker_general",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_16384.json",
+      "context_length": 16384,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "gemma4",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": true,
+        "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "max_context": 8192,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "model_path_source": "live_registry",
+        "role": "worker_general",
+        "server": {
+          "name": "worker",
+          "port": 8072,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8072"
+        },
+        "tier": "C"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "worker_general",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_32768.json",
+      "context_length": 32768,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "gemma4",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": true,
+        "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "max_context": 8192,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "model_path_source": "live_registry",
+        "role": "worker_general",
+        "server": {
+          "name": "worker",
+          "port": 8072,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8072"
+        },
+        "tier": "C"
+      },
+      "notes": [
+        "context 32768 exceeds live server context 16384"
+      ],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "worker_general",
+      "status": "blocked"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_4096.json",
+      "context_length": 4096,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "moe_hybrid",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "max_context": 262144,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "model_path_source": "live_registry",
+        "role": "architect_general",
+        "server": {
+          "name": "architect_general",
+          "port": 8083,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8083"
+        },
+        "tier": "B"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "architect_general",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_8192.json",
+      "context_length": 8192,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "moe_hybrid",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "max_context": 262144,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "model_path_source": "live_registry",
+        "role": "architect_general",
+        "server": {
+          "name": "architect_general",
+          "port": 8083,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8083"
+        },
+        "tier": "B"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "architect_general",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_16384.json",
+      "context_length": 16384,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "moe_hybrid",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "max_context": 262144,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "model_path_source": "live_registry",
+        "role": "architect_general",
+        "server": {
+          "name": "architect_general",
+          "port": 8083,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8083"
+        },
+        "tier": "B"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "architect_general",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_32768.json",
+      "context_length": 32768,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "moe_hybrid",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "max_context": 262144,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "model_path_source": "live_registry",
+        "role": "architect_general",
+        "server": {
+          "name": "architect_general",
+          "port": 8083,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8083"
+        },
+        "tier": "B"
+      },
+      "notes": [
+        "context 32768 exceeds live server context 16384"
+      ],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "architect_general",
+      "status": "blocked"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_4096.json",
+      "context_length": 4096,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "ssm_moe_hybrid",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "max_context": 262144,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "model_path_source": "live_registry",
+        "role": "ingest_long_context",
+        "server": {
+          "name": "ingest_long_context",
+          "port": 8085,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8085"
+        },
+        "tier": "B"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "ingest_long_context",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_8192.json",
+      "context_length": 8192,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "ssm_moe_hybrid",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "max_context": 262144,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "model_path_source": "live_registry",
+        "role": "ingest_long_context",
+        "server": {
+          "name": "ingest_long_context",
+          "port": 8085,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8085"
+        },
+        "tier": "B"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "ingest_long_context",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_16384.json",
+      "context_length": 16384,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "ssm_moe_hybrid",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "max_context": 262144,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "model_path_source": "live_registry",
+        "role": "ingest_long_context",
+        "server": {
+          "name": "ingest_long_context",
+          "port": 8085,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8085"
+        },
+        "tier": "B"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "ingest_long_context",
+      "status": "ready"
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_32768.json",
+      "context_length": 32768,
+      "kind": "rope_position_probe",
+      "model": {
+        "architecture": "ssm_moe_hybrid",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "max_context": 262144,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+        "model_path_source": "live_registry",
+        "role": "ingest_long_context",
+        "server": {
+          "name": "ingest_long_context",
+          "port": 8085,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8085"
+        },
+        "tier": "B"
+      },
+      "notes": [],
+      "package": "K-ROPE-1",
+      "port_source": "override",
+      "role": "ingest_long_context",
+      "status": "ready"
+    },
+    {
+      "command": null,
+      "grouping": {
+        "k": 3,
+        "m": 1,
+        "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+        "vote_rule": "majority"
+      },
+      "kind": "short_mk_voting",
+      "model": {
+        "architecture": "qwen35moe",
+        "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "max_context": 131072,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+        "model_path_source": "live_registry",
+        "role": "frontdoor",
+        "server": {
+          "name": "frontdoor",
+          "port": 8070,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8070"
+        },
+        "tier": "A"
+      },
+      "notes": [
+        "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
+      ],
+      "package": "G5",
+      "role": "frontdoor",
+      "runner_candidates": [
+        "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
+        "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
+      ],
+      "status": "blocked",
+      "suite_candidates": [
+        "gpqa",
+        "math"
+      ]
+    },
+    {
+      "command": null,
+      "grouping": {
+        "k": 3,
+        "m": 1,
+        "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+        "vote_rule": "majority"
+      },
+      "kind": "short_mk_voting",
+      "model": {
+        "architecture": "gemma4",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": true,
+        "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "max_context": 8192,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "model_path_source": "live_registry",
+        "role": "worker_general",
+        "server": {
+          "name": "worker",
+          "port": 8072,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8072"
+        },
+        "tier": "C"
+      },
+      "notes": [
+        "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
+      ],
+      "package": "G5",
+      "role": "worker_general",
+      "runner_candidates": [
+        "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
+        "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
+      ],
+      "status": "blocked",
+      "suite_candidates": [
+        "gpqa",
+        "math"
+      ]
+    },
+    {
+      "command": null,
+      "grouping": {
+        "k": 3,
+        "m": 1,
+        "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+        "vote_rule": "majority"
+      },
+      "kind": "short_mk_voting",
+      "model": {
+        "architecture": "moe_hybrid",
+        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "benchmark_registry_mismatch": false,
+        "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "max_context": 262144,
+        "model_exists": true,
+        "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+        "model_path_source": "live_registry",
+        "role": "architect_general",
+        "server": {
+          "name": "architect_general",
+          "port": 8083,
+          "source": "registry.server_mode",
+          "url": "http://localhost:8083"
+        },
+        "tier": "B"
+      },
+      "notes": [
+        "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
+      ],
+      "package": "G5",
+      "role": "architect_general",
+      "runner_candidates": [
+        "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
+        "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
+      ],
+      "status": "blocked",
+      "suite_candidates": [
+        "gpqa",
+        "math"
+      ]
+    }
+  ],
+  "generated_at": "2026-06-19T00:55:05.551902+00:00",
+  "groups": [
+    {
+      "entries": [
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_long_context --suite tulving_episodic --new-run --server-mode",
+          "kind": "run_benchmark_suite",
+          "model": {
+            "architecture": "ssm_moe_hybrid",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "max_context": 262144,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "model_path_source": "live_registry",
+            "role": "ingest_long_context",
+            "server": {
+              "name": "ingest_long_context",
+              "port": 8085,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8085"
+            },
+            "tier": "B"
+          },
+          "notes": [],
+          "package": "K-MEM-1",
+          "question_count": 456,
+          "role": "ingest_long_context",
+          "status": "ready",
+          "suite": "tulving_episodic"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_4096.json",
+          "context_length": 4096,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "ssm_moe_hybrid",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "max_context": 262144,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "model_path_source": "live_registry",
+            "role": "ingest_long_context",
+            "server": {
+              "name": "ingest_long_context",
+              "port": 8085,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8085"
+            },
+            "tier": "B"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "ingest_long_context",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_8192.json",
+          "context_length": 8192,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "ssm_moe_hybrid",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "max_context": 262144,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "model_path_source": "live_registry",
+            "role": "ingest_long_context",
+            "server": {
+              "name": "ingest_long_context",
+              "port": 8085,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8085"
+            },
+            "tier": "B"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "ingest_long_context",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_16384.json",
+          "context_length": 16384,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "ssm_moe_hybrid",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "max_context": 262144,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "model_path_source": "live_registry",
+            "role": "ingest_long_context",
+            "server": {
+              "name": "ingest_long_context",
+              "port": 8085,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8085"
+            },
+            "tier": "B"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "ingest_long_context",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8085 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/ingest_long_context/ctx_32768.json",
+          "context_length": 32768,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "ssm_moe_hybrid",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "max_context": 262144,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+            "model_path_source": "live_registry",
+            "role": "ingest_long_context",
+            "server": {
+              "name": "ingest_long_context",
+              "port": 8085,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8085"
+            },
+            "tier": "B"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "ingest_long_context",
+          "status": "ready"
+        }
+      ],
+      "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+      "roles": [
+        "ingest_long_context"
+      ],
+      "summary": {
+        "blocked": 0,
+        "entries": 5,
+        "ready": 5
+      }
+    },
+    {
+      "entries": [
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_general --suite omniscience --new-run",
+          "kind": "run_benchmark_suite",
+          "model": {
+            "architecture": "moe_hybrid",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "max_context": 262144,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "model_path_source": "live_registry",
+            "role": "architect_general",
+            "server": {
+              "name": "architect_general",
+              "port": 8083,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8083"
+            },
+            "tier": "B"
+          },
+          "notes": [],
+          "package": "G10",
+          "question_count": 600,
+          "role": "architect_general",
+          "status": "ready",
+          "suite": "omniscience"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_4096.json",
+          "context_length": 4096,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "moe_hybrid",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "max_context": 262144,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "model_path_source": "live_registry",
+            "role": "architect_general",
+            "server": {
+              "name": "architect_general",
+              "port": 8083,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8083"
+            },
+            "tier": "B"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "architect_general",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_8192.json",
+          "context_length": 8192,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "moe_hybrid",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "max_context": 262144,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "model_path_source": "live_registry",
+            "role": "architect_general",
+            "server": {
+              "name": "architect_general",
+              "port": 8083,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8083"
+            },
+            "tier": "B"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "architect_general",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_16384.json",
+          "context_length": 16384,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "moe_hybrid",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "max_context": 262144,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "model_path_source": "live_registry",
+            "role": "architect_general",
+            "server": {
+              "name": "architect_general",
+              "port": 8083,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8083"
+            },
+            "tier": "B"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "architect_general",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_32768.json",
+          "context_length": 32768,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "moe_hybrid",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "max_context": 262144,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "model_path_source": "live_registry",
+            "role": "architect_general",
+            "server": {
+              "name": "architect_general",
+              "port": 8083,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8083"
+            },
+            "tier": "B"
+          },
+          "notes": [
+            "context 32768 exceeds live server context 16384"
+          ],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "architect_general",
+          "status": "blocked"
+        },
+        {
+          "command": null,
+          "grouping": {
+            "k": 3,
+            "m": 1,
+            "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+            "vote_rule": "majority"
+          },
+          "kind": "short_mk_voting",
+          "model": {
+            "architecture": "moe_hybrid",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "max_context": 262144,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+            "model_path_source": "live_registry",
+            "role": "architect_general",
+            "server": {
+              "name": "architect_general",
+              "port": 8083,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8083"
+            },
+            "tier": "B"
+          },
+          "notes": [
+            "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
+          ],
+          "package": "G5",
+          "role": "architect_general",
+          "runner_candidates": [
+            "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
+            "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
+          ],
+          "status": "blocked",
+          "suite_candidates": [
+            "gpqa",
+            "math"
+          ]
+        }
+      ],
+      "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+      "roles": [
+        "architect_general"
+      ],
+      "summary": {
+        "blocked": 2,
+        "entries": 6,
+        "ready": 4
+      }
+    },
+    {
+      "entries": [
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model frontdoor --suite omniscience --new-run",
+          "kind": "run_benchmark_suite",
+          "model": {
+            "architecture": "qwen35moe",
+            "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "max_context": 131072,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "model_path_source": "live_registry",
+            "role": "frontdoor",
+            "server": {
+              "name": "frontdoor",
+              "port": 8070,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8070"
+            },
+            "tier": "A"
+          },
+          "notes": [],
+          "package": "G11",
+          "question_count": 600,
+          "role": "frontdoor",
+          "status": "ready",
+          "suite": "omniscience"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_4096.json",
+          "context_length": 4096,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "qwen35moe",
+            "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "max_context": 131072,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "model_path_source": "live_registry",
+            "role": "frontdoor",
+            "server": {
+              "name": "frontdoor",
+              "port": 8070,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8070"
+            },
+            "tier": "A"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "frontdoor",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_8192.json",
+          "context_length": 8192,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "qwen35moe",
+            "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "max_context": 131072,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "model_path_source": "live_registry",
+            "role": "frontdoor",
+            "server": {
+              "name": "frontdoor",
+              "port": 8070,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8070"
+            },
+            "tier": "A"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "frontdoor",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_16384.json",
+          "context_length": 16384,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "qwen35moe",
+            "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "max_context": 131072,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "model_path_source": "live_registry",
+            "role": "frontdoor",
+            "server": {
+              "name": "frontdoor",
+              "port": 8070,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8070"
+            },
+            "tier": "A"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "frontdoor",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_32768.json",
+          "context_length": 32768,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "qwen35moe",
+            "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "max_context": 131072,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "model_path_source": "live_registry",
+            "role": "frontdoor",
+            "server": {
+              "name": "frontdoor",
+              "port": 8070,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8070"
+            },
+            "tier": "A"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "frontdoor",
+          "status": "ready"
+        },
+        {
+          "command": null,
+          "grouping": {
+            "k": 3,
+            "m": 1,
+            "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+            "vote_rule": "majority"
+          },
+          "kind": "short_mk_voting",
+          "model": {
+            "architecture": "qwen35moe",
+            "benchmark_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "benchmark_registry_mismatch": false,
+            "live_model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "max_context": 131072,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+            "model_path_source": "live_registry",
+            "role": "frontdoor",
+            "server": {
+              "name": "frontdoor",
+              "port": 8070,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8070"
+            },
+            "tier": "A"
+          },
+          "notes": [
+            "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
+          ],
+          "package": "G5",
+          "role": "frontdoor",
+          "runner_candidates": [
+            "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
+            "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
+          ],
+          "status": "blocked",
+          "suite_candidates": [
+            "gpqa",
+            "math"
+          ]
+        }
+      ],
+      "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+      "roles": [
+        "frontdoor"
+      ],
+      "summary": {
+        "blocked": 1,
+        "entries": 6,
+        "ready": 5
+      }
+    },
+    {
+      "entries": [
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run",
+          "kind": "run_benchmark_suite",
+          "model": {
+            "architecture": "gemma4",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": true,
+            "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "max_context": 8192,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "model_path_source": "live_registry",
+            "role": "worker_general",
+            "server": {
+              "name": "worker",
+              "port": 8072,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8072"
+            },
+            "tier": "C"
+          },
+          "notes": [
+            "benchmark registry model path differs from live registry; run_benchmark.py would not measure the live role"
+          ],
+          "package": "G11",
+          "question_count": 600,
+          "role": "worker_general",
+          "status": "blocked",
+          "suite": "omniscience"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_4096.json",
+          "context_length": 4096,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "gemma4",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": true,
+            "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "max_context": 8192,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "model_path_source": "live_registry",
+            "role": "worker_general",
+            "server": {
+              "name": "worker",
+              "port": 8072,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8072"
+            },
+            "tier": "C"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "worker_general",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 8192 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_8192.json",
+          "context_length": 8192,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "gemma4",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": true,
+            "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "max_context": 8192,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "model_path_source": "live_registry",
+            "role": "worker_general",
+            "server": {
+              "name": "worker",
+              "port": 8072,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8072"
+            },
+            "tier": "C"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "worker_general",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 16384 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_16384.json",
+          "context_length": 16384,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "gemma4",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": true,
+            "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "max_context": 8192,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "model_path_source": "live_registry",
+            "role": "worker_general",
+            "server": {
+              "name": "worker",
+              "port": 8072,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8072"
+            },
+            "tier": "C"
+          },
+          "notes": [],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "worker_general",
+          "status": "ready"
+        },
+        {
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_32768.json",
+          "context_length": 32768,
+          "kind": "rope_position_probe",
+          "model": {
+            "architecture": "gemma4",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": true,
+            "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "max_context": 8192,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "model_path_source": "live_registry",
+            "role": "worker_general",
+            "server": {
+              "name": "worker",
+              "port": 8072,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8072"
+            },
+            "tier": "C"
+          },
+          "notes": [
+            "context 32768 exceeds live server context 16384"
+          ],
+          "package": "K-ROPE-1",
+          "port_source": "override",
+          "role": "worker_general",
+          "status": "blocked"
+        },
+        {
+          "command": null,
+          "grouping": {
+            "k": 3,
+            "m": 1,
+            "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+            "vote_rule": "majority"
+          },
+          "kind": "short_mk_voting",
+          "model": {
+            "architecture": "gemma4",
+            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": true,
+            "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "max_context": 8192,
+            "model_exists": true,
+            "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "model_path_source": "live_registry",
+            "role": "worker_general",
+            "server": {
+              "name": "worker",
+              "port": 8072,
+              "source": "registry.server_mode",
+              "url": "http://localhost:8072"
+            },
+            "tier": "C"
+          },
+          "notes": [
+            "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
+          ],
+          "package": "G5",
+          "role": "worker_general",
+          "runner_candidates": [
+            "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
+            "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
+          ],
+          "status": "blocked",
+          "suite_candidates": [
+            "gpqa",
+            "math"
+          ]
+        }
+      ],
+      "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+      "roles": [
+        "worker_general"
+      ],
+      "summary": {
+        "blocked": 3,
+        "entries": 6,
+        "ready": 3
+      }
+    }
+  ],
+  "journal_quarantine_rule": "Do not mix these results into calibration journals if another benchmark or AutoPilot run is concurrently mutating the live stack.",
+  "kind": "model_batched_clean_window",
+  "next_action": "After AutoPilot quiesces, verify live topology/affinity, then run ready commands model group by model group.",
+  "output_root": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window",
+  "pass_fail_gate": "All ready commands require a clean inference window, successful preflight, and per-task result aggregation; blocked entries must remain non-executable.",
+  "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1",
+  "run_id": "clean-window-2026-06-19T005505.551902Z0000",
+  "source_handoff": "/mnt/raid0/llm/epyc-root/handoffs/active/bulk-inference-campaign.md",
+  "summary": {
+    "entries_blocked": 6,
+    "entries_ready": 17,
+    "entries_total": 23,
+    "models_total": 4
+  },
+  "topology": {
+    "affinity_artifact": null,
+    "live_affinity_verified": false,
+    "live_registry_artifact": "/mnt/raid0/llm/epyc-orchestrator/orchestration/model_registry.yaml",
+    "live_registry_hash": "99368745def2306ba47381ed63807e5bc10065d06e803d5d25f754f110d4a14f",
+    "matrix_status": "not_required",
+    "required_topology_hash": "bcab2f10b09420e41bd108b1a5631fbe18bff872e57af76f187058c9480afa94",
+    "topology_artifact": "/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml"
+  }
+}
