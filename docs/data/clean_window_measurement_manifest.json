@@ -2,7 +2,7 @@
   "attestation": {
     "generated_by": "scripts/benchmark/clean_window_manifest.py",
     "inference_started": false,
-    "research_head": "cf3cd3aa806e8e8faa7461e12d8161857c7f3792"
+    "research_head": "8f126b2088de9a3fda66e279a26b7ee3ef1dc4c5"
   },
   "entries": [
     {
@@ -66,10 +66,10 @@
       "kind": "run_benchmark_suite",
       "model": {
         "architecture": "gemma4",
-        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-        "benchmark_registry_mismatch": true,
+        "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": false,
         "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-        "max_context": 8192,
+        "max_context": 16384,
         "model_exists": true,
         "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
         "model_path_source": "live_registry",
@@ -82,13 +82,11 @@
         },
         "tier": "C"
       },
-      "notes": [
-        "benchmark registry model path differs from live registry; run_benchmark.py would not measure the live role"
-      ],
+      "notes": [],
       "package": "G11",
       "question_count": 600,
       "role": "worker_general",
-      "status": "blocked",
+      "status": "ready",
       "suite": "omniscience"
     },
     {
@@ -237,10 +235,10 @@
       "kind": "rope_position_probe",
       "model": {
         "architecture": "gemma4",
-        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-        "benchmark_registry_mismatch": true,
+        "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": false,
         "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-        "max_context": 8192,
+        "max_context": 16384,
         "model_exists": true,
         "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
         "model_path_source": "live_registry",
@@ -265,10 +263,10 @@
       "kind": "rope_position_probe",
       "model": {
         "architecture": "gemma4",
-        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-        "benchmark_registry_mismatch": true,
+        "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": false,
         "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-        "max_context": 8192,
+        "max_context": 16384,
         "model_exists": true,
         "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
         "model_path_source": "live_registry",
@@ -293,10 +291,10 @@
       "kind": "rope_position_probe",
       "model": {
         "architecture": "gemma4",
-        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-        "benchmark_registry_mismatch": true,
+        "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": false,
         "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-        "max_context": 8192,
+        "max_context": 16384,
         "model_exists": true,
         "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
         "model_path_source": "live_registry",
@@ -321,10 +319,10 @@
       "kind": "rope_position_probe",
       "model": {
         "architecture": "gemma4",
-        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-        "benchmark_registry_mismatch": true,
+        "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": false,
         "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-        "max_context": 8192,
+        "max_context": 16384,
         "model_exists": true,
         "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
         "model_path_source": "live_registry",
@@ -624,10 +622,10 @@
       "kind": "short_mk_voting",
       "model": {
         "architecture": "gemma4",
-        "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-        "benchmark_registry_mismatch": true,
+        "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+        "benchmark_registry_mismatch": false,
         "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-        "max_context": 8192,
+        "max_context": 16384,
         "model_exists": true,
         "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
         "model_path_source": "live_registry",
@@ -698,7 +696,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-19T00:55:05.551902+00:00",
+  "generated_at": "2026-06-19T01:00:13.881340+00:00",
   "groups": [
     {
       "entries": [
@@ -1252,10 +1250,10 @@
           "kind": "run_benchmark_suite",
           "model": {
             "architecture": "gemma4",
-            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-            "benchmark_registry_mismatch": true,
+            "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": false,
             "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-            "max_context": 8192,
+            "max_context": 16384,
             "model_exists": true,
             "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
             "model_path_source": "live_registry",
@@ -1268,13 +1266,11 @@
             },
             "tier": "C"
           },
-          "notes": [
-            "benchmark registry model path differs from live registry; run_benchmark.py would not measure the live role"
-          ],
+          "notes": [],
           "package": "G11",
           "question_count": 600,
           "role": "worker_general",
-          "status": "blocked",
+          "status": "ready",
           "suite": "omniscience"
         },
         {
@@ -1283,10 +1279,10 @@
           "kind": "rope_position_probe",
           "model": {
             "architecture": "gemma4",
-            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-            "benchmark_registry_mismatch": true,
+            "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": false,
             "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-            "max_context": 8192,
+            "max_context": 16384,
             "model_exists": true,
             "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
             "model_path_source": "live_registry",
@@ -1311,10 +1307,10 @@
           "kind": "rope_position_probe",
           "model": {
             "architecture": "gemma4",
-            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-            "benchmark_registry_mismatch": true,
+            "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": false,
             "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-            "max_context": 8192,
+            "max_context": 16384,
             "model_exists": true,
             "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
             "model_path_source": "live_registry",
@@ -1339,10 +1335,10 @@
           "kind": "rope_position_probe",
           "model": {
             "architecture": "gemma4",
-            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-            "benchmark_registry_mismatch": true,
+            "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": false,
             "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-            "max_context": 8192,
+            "max_context": 16384,
             "model_exists": true,
             "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
             "model_path_source": "live_registry",
@@ -1367,10 +1363,10 @@
           "kind": "rope_position_probe",
           "model": {
             "architecture": "gemma4",
-            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-            "benchmark_registry_mismatch": true,
+            "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": false,
             "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-            "max_context": 8192,
+            "max_context": 16384,
             "model_exists": true,
             "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
             "model_path_source": "live_registry",
@@ -1402,10 +1398,10 @@
           "kind": "short_mk_voting",
           "model": {
             "architecture": "gemma4",
-            "benchmark_model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf",
-            "benchmark_registry_mismatch": true,
+            "benchmark_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+            "benchmark_registry_mismatch": false,
             "live_model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
-            "max_context": 8192,
+            "max_context": 16384,
             "model_exists": true,
             "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
             "model_path_source": "live_registry",
@@ -1439,9 +1435,9 @@
         "worker_general"
       ],
       "summary": {
-        "blocked": 3,
+        "blocked": 2,
         "entries": 6,
-        "ready": 3
+        "ready": 4
       }
     }
   ],
@@ -1451,11 +1447,11 @@
   "output_root": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window",
   "pass_fail_gate": "All ready commands require a clean inference window, successful preflight, and per-task result aggregation; blocked entries must remain non-executable.",
   "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1",
-  "run_id": "clean-window-2026-06-19T005505.551902Z0000",
+  "run_id": "clean-window-2026-06-19T010013.881340Z0000",
   "source_handoff": "/mnt/raid0/llm/epyc-root/handoffs/active/bulk-inference-campaign.md",
   "summary": {
-    "entries_blocked": 6,
-    "entries_ready": 17,
+    "entries_blocked": 5,
+    "entries_ready": 18,
     "entries_total": 23,
     "models_total": 4
   },
@@ -1465,7 +1461,7 @@
     "live_registry_artifact": "/mnt/raid0/llm/epyc-orchestrator/orchestration/model_registry.yaml",
     "live_registry_hash": "99368745def2306ba47381ed63807e5bc10065d06e803d5d25f754f110d4a14f",
     "matrix_status": "not_required",
-    "required_topology_hash": "bcab2f10b09420e41bd108b1a5631fbe18bff872e57af76f187058c9480afa94",
+    "required_topology_hash": "98fa5a05aff59d3f90a90dd3f55bd8039c161f99480c2bb2f4d157a2e98a0bbe",
     "topology_artifact": "/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml"
   }
 }

@@ -3442,30 +3442,61 @@ roles:
       temperature: 0.3
   worker_general:
     tier: C
-    description: Boilerplate, rewrites, doc polish, small diffs
+    description: General worker — gemma4-26B-A4B Q4_K_M (MTP) — swapped 2026-05-08 from Meta-Llama-3-8B / Qwen3-Coder-30B-A3B lineage. Mirrors the live orchestrator worker_general target for benchmark correctness.
     model:
-      name: Meta-Llama-3-8B-Instruct
-      path: lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf
+      name: gemma-4-26B-A4B-it-Q4_K_M
+      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf
       quant: Q4_K_M
-      size_gb: 4.7
-      architecture: dense
+      size_gb: 16
+      architecture: gemma4
+      use_chat_api: true
+      reasoning: "off"
+      previous_model: Meta-Llama-3-8B-Instruct-Q4_K_M
+      env_vars:
+        OMP_PROC_BIND: spread
+        OMP_PLACES: cores
+        OMP_WAIT_POLICY: active
+        OMP_DYNAMIC: "false"
+      kv_cache:
+        type_k: q8_0
+        type_v: q8_0
+      sampling:
+        temperature: 1.0
+        top_p: 0.95
+        top_k: 64
+        repeat_penalty: 1.05
+      max_context: 16384
     candidate_roles:
     - worker
     - general
+    - coder
+    acceleration:
+      type: speculative_decoding
+      spec_type: mtp
+      draft_role: draft_gemma4_26b_a4b_assistant_q8
+      draft_max: 2
+      draft_p_min: 0.0
+      threads_draft: 16
+      ubatch: 512
     constraints:
       forbid:
-      - speculative_decoding
-    acceleration:
-      type: prompt_lookup
-      ngram_min: 3
+      - prompt_lookup
+      reason: MTP and ngram-simple lookup both consume the spec-decode slot; ik_llama.cpp cannot hold both.
+    runtime_requirements:
+      binary_dir: /mnt/raid0/llm/ik_llama.cpp/build/bin
+      ld_library_path:
+      - /mnt/raid0/llm/ik_llama.cpp/build/src
+      - /mnt/raid0/llm/ik_llama.cpp/build/ggml/src
+      - /mnt/raid0/llm/ik_llama.cpp/build/examples/mtmd
     performance:
-      baseline_tps: 17.52
-      optimized_tps: 37.07
-      speedup: 2.1x
+      baseline_tps: 44.7
+      optimized_tps: 60.7
+      quality_pct: 90
+      tool_compliance_pct: 96
     memory:
       residency: hot
       pinned: true
-      max_instances: 2
+      max_instances: 4
     tool_permissions:
       web_access: false
       allowed_categories: [file, data]

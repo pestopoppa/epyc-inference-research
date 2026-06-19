@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Generated at 2026-06-19T00:55:05.551902+00:00
+# Generated at 2026-06-19T01:00:13.881340+00:00
 # Review live topology before running commands with direct --port values.
 
 # model_path: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf
@@ -63,9 +63,8 @@ set -euo pipefail
 
 # model_path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf
 # roles: worker_general
-# G11 worker_general run_benchmark_suite omniscience [blocked]
-# blocked: /mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run
-# note: benchmark registry model path differs from live registry; run_benchmark.py would not measure the live role
+# G11 worker_general run_benchmark_suite omniscience [ready]
+/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run
 
 # K-ROPE-1 worker_general rope_position_probe ctx=4096 [ready]
 /mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_4096.json
