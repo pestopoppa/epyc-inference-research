@@ -2,7 +2,7 @@
   "attestation": {
     "generated_by": "scripts/benchmark/clean_window_manifest.py",
     "inference_started": false,
-    "research_head": "74e580e3c76fff64e400067d09df6e1090638122"
+    "research_head": "89443493b8b5dc3ff01d8f02596c49dae1e65ae5"
   },
   "entries": [
     {
@@ -141,7 +141,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "frontdoor",
       "status": "ready"
     },
@@ -169,7 +169,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "frontdoor",
       "status": "ready"
     },
@@ -197,7 +197,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "frontdoor",
       "status": "ready"
     },
@@ -223,11 +223,13 @@
         },
         "tier": "A"
       },
-      "notes": [],
+      "notes": [
+        "context 32768 needs chat-template headroom below live server context 32768"
+      ],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "frontdoor",
-      "status": "ready"
+      "status": "blocked"
     },
     {
       "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8072 --context-length 4096 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_4096.json",
@@ -253,7 +255,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "worker_general",
       "status": "ready"
     },
@@ -281,7 +283,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "worker_general",
       "status": "ready"
     },
@@ -307,11 +309,13 @@
         },
         "tier": "C"
       },
-      "notes": [],
+      "notes": [
+        "context 16384 needs chat-template headroom below live server context 16384"
+      ],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "worker_general",
-      "status": "ready"
+      "status": "blocked"
     },
     {
       "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8072 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_32768.json",
@@ -336,10 +340,10 @@
         "tier": "C"
       },
       "notes": [
-        "context 32768 exceeds live server context 16384"
+        "context 32768 needs chat-template headroom below live server context 16384"
       ],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "worker_general",
       "status": "blocked"
     },
@@ -367,7 +371,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "architect_general",
       "status": "ready"
     },
@@ -395,7 +399,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "architect_general",
       "status": "ready"
     },
@@ -421,11 +425,13 @@
         },
         "tier": "B"
       },
-      "notes": [],
+      "notes": [
+        "context 16384 needs chat-template headroom below live server context 16384"
+      ],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "architect_general",
-      "status": "ready"
+      "status": "blocked"
     },
     {
       "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8083 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_32768.json",
@@ -450,10 +456,10 @@
         "tier": "B"
       },
       "notes": [
-        "context 32768 exceeds live server context 16384"
+        "context 32768 needs chat-template headroom below live server context 16384"
       ],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "architect_general",
       "status": "blocked"
     },
@@ -481,7 +487,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "ingest_long_context",
       "status": "ready"
     },
@@ -509,7 +515,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "ingest_long_context",
       "status": "ready"
     },
@@ -537,7 +543,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "ingest_long_context",
       "status": "ready"
     },
@@ -563,11 +569,13 @@
         },
         "tier": "B"
       },
-      "notes": [],
+      "notes": [
+        "context 32768 needs chat-template headroom below live server context 32768"
+      ],
       "package": "K-ROPE-1",
-      "port_source": "registry.server_mode",
+      "port_source": "override",
       "role": "ingest_long_context",
-      "status": "ready"
+      "status": "blocked"
     },
     {
       "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role frontdoor --host 127.0.0.1 --model-port 8070 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/frontdoor.json",
@@ -690,7 +698,7 @@
       ]
     }
   ],
-  "generated_at": "2026-06-19T04:34:02.166774+00:00",
+  "generated_at": "2026-06-19T06:47:06.696246+00:00",
   "groups": [
     {
       "entries": [
@@ -746,7 +754,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "ingest_long_context",
           "status": "ready"
         },
@@ -774,7 +782,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "ingest_long_context",
           "status": "ready"
         },
@@ -802,7 +810,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "ingest_long_context",
           "status": "ready"
         },
@@ -828,11 +836,13 @@
             },
             "tier": "B"
           },
-          "notes": [],
+          "notes": [
+            "context 32768 needs chat-template headroom below live server context 32768"
+          ],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "ingest_long_context",
-          "status": "ready"
+          "status": "blocked"
         }
       ],
       "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
@@ -840,9 +850,9 @@
         "ingest_long_context"
       ],
       "summary": {
-        "blocked": 0,
+        "blocked": 1,
         "entries": 5,
-        "ready": 5
+        "ready": 4
       }
     },
     {
@@ -899,7 +909,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "architect_general",
           "status": "ready"
         },
@@ -927,7 +937,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "architect_general",
           "status": "ready"
         },
@@ -953,11 +963,13 @@
             },
             "tier": "B"
           },
-          "notes": [],
+          "notes": [
+            "context 16384 needs chat-template headroom below live server context 16384"
+          ],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "architect_general",
-          "status": "ready"
+          "status": "blocked"
         },
         {
           "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8083 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_32768.json",
@@ -982,10 +994,10 @@
             "tier": "B"
           },
           "notes": [
-            "context 32768 exceeds live server context 16384"
+            "context 32768 needs chat-template headroom below live server context 16384"
           ],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "architect_general",
           "status": "blocked"
         },
@@ -1035,9 +1047,9 @@
         "architect_general"
       ],
       "summary": {
-        "blocked": 1,
+        "blocked": 2,
         "entries": 6,
-        "ready": 5
+        "ready": 4
       }
     },
     {
@@ -1094,7 +1106,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "frontdoor",
           "status": "ready"
         },
@@ -1122,7 +1134,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "frontdoor",
           "status": "ready"
         },
@@ -1150,7 +1162,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "frontdoor",
           "status": "ready"
         },
@@ -1176,11 +1188,13 @@
             },
             "tier": "A"
           },
-          "notes": [],
+          "notes": [
+            "context 32768 needs chat-template headroom below live server context 32768"
+          ],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "frontdoor",
-          "status": "ready"
+          "status": "blocked"
         },
         {
           "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role frontdoor --host 127.0.0.1 --model-port 8070 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/frontdoor.json",
@@ -1228,9 +1242,9 @@
         "frontdoor"
       ],
       "summary": {
-        "blocked": 0,
+        "blocked": 1,
         "entries": 6,
-        "ready": 6
+        "ready": 5
       }
     },
     {
@@ -1287,7 +1301,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "worker_general",
           "status": "ready"
         },
@@ -1315,7 +1329,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "worker_general",
           "status": "ready"
         },
@@ -1341,11 +1355,13 @@
             },
             "tier": "C"
           },
-          "notes": [],
+          "notes": [
+            "context 16384 needs chat-template headroom below live server context 16384"
+          ],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "worker_general",
-          "status": "ready"
+          "status": "blocked"
         },
         {
           "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --api chat --host 127.0.0.1 --port 8072 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_32768.json",
@@ -1370,10 +1386,10 @@
             "tier": "C"
           },
           "notes": [
-            "context 32768 exceeds live server context 16384"
+            "context 32768 needs chat-template headroom below live server context 16384"
           ],
           "package": "K-ROPE-1",
-          "port_source": "registry.server_mode",
+          "port_source": "override",
           "role": "worker_general",
           "status": "blocked"
         },
@@ -1423,9 +1439,9 @@
         "worker_general"
       ],
       "summary": {
-        "blocked": 1,
+        "blocked": 2,
         "entries": 6,
-        "ready": 5
+        "ready": 4
       }
     }
   ],
@@ -1435,11 +1451,11 @@
   "output_root": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window",
   "pass_fail_gate": "All ready commands require a clean inference window, successful preflight, and per-task result aggregation; blocked entries must remain non-executable.",
   "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1",
-  "run_id": "clean-window-2026-06-19T043402.166774Z0000",
+  "run_id": "clean-window-2026-06-19T064706.696246Z0000",
   "source_handoff": "/mnt/raid0/llm/epyc-root/handoffs/active/bulk-inference-campaign.md",
   "summary": {
-    "entries_blocked": 2,
-    "entries_ready": 21,
+    "entries_blocked": 6,
+    "entries_ready": 17,
     "entries_total": 23,
     "models_total": 4
   },

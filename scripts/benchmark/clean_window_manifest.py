@@ -310,8 +310,10 @@ def _rope_entries(
         if port is None:
             notes.append("server port unavailable; pass --server-port ROLE=PORT after verifying live topology")
         if role in server_contexts:
-            if context_length > server_contexts[role]:
-                notes.append(f"context {context_length} exceeds live server context {server_contexts[role]}")
+            if context_length >= server_contexts[role]:
+                notes.append(
+                    f"context {context_length} needs chat-template headroom below live server context {server_contexts[role]}"
+                )
         elif meta["max_context"] and context_length > meta["max_context"]:
             notes.append(f"context {context_length} exceeds registered max_context {meta['max_context']}")
         status = "ready" if not notes else "blocked"

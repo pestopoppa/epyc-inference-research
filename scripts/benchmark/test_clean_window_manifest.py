@@ -181,7 +181,7 @@ def test_rope_entry_uses_live_context_override(monkeypatch, tmp_path):
         registry,
         "frontdoor",
         {"frontdoor": 8070},
-        {"frontdoor": 8192},
+        {"frontdoor": 16384},
         tmp_path,
         live_registry=None,
     )
@@ -189,7 +189,7 @@ def test_rope_entry_uses_live_context_override(monkeypatch, tmp_path):
     contexts = {entry["context_length"]: entry for entry in entries}
     assert contexts[8192]["status"] == "ready"
     assert contexts[16384]["status"] == "blocked"
-    assert "exceeds live server context 8192" in contexts[16384]["notes"][0]
+    assert "needs chat-template headroom below live server context 16384" in contexts[16384]["notes"][0]
 
 
 def test_write_outputs_comments_blocked_commands(tmp_path):
