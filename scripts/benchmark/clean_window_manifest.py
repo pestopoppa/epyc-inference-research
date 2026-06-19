@@ -33,6 +33,7 @@ from suites import get_suites_for_role
 
 RUN_BENCHMARK_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "run_benchmark.py"
 ROPE_PROBE_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "rope_position_probe.py"
+SHORT_MK_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "short_mk_voting.py"
 DEFAULT_MANIFEST_PATH = PROJECT_ROOT / "docs" / "data" / "clean_window_measurement_manifest.json"
 DEFAULT_COMMANDS_PATH = PROJECT_ROOT / "docs" / "data" / "clean_window_measurement_commands.sh"
 DEFAULT_LIVE_REGISTRY_PATH = Path("/mnt/raid0/llm/epyc-orchestrator/orchestration/model_registry.yaml")
@@ -217,6 +218,32 @@ def _rope_command(role: str, context_length: int, port: int, output_root: Path) 
     ])
 
 
+def _short_mk_command(role: str, port: int, output_root: Path) -> str:
+    out = output_root / "short_mk_voting" / f"{role}.json"
+    return shlex.join([
+        sys.executable,
+        str(SHORT_MK_SCRIPT),
+        "--role",
+        role,
+        "--host",
+        "127.0.0.1",
+        "--model-port",
+        str(port),
+        "--suites",
+        "gpqa",
+        "math",
+        "--sample-per-suite",
+        "20",
+        "--k",
+        "3",
+        "--m",
+        "3",
+        "--sequential",
+        "--output",
+        str(out),
+    ])
+
+
 def _suite_entry(
     registry,
     *,
@@ -300,15 +327,28 @@ def _rope_entries(
     return entries
 
 
-def _g5_entry(registry, role: str, live_registry: dict[str, Any] | None = None) -> dict[str, Any]:
+def _g5_entry(
+    registry,
+    role: str,
+    live_registry: dict[str, Any] | None = None,
+    output_root: Path | None = None,
+) -> dict[str, Any]:
     meta = _role_metadata(registry, role, live_registry)
     runner_candidates = [
-        PROJECT_ROOT / "scripts" / "benchmark" / "short_mk_voting.py",
+        SHORT_MK_SCRIPT,
         PROJECT_ROOT / "scripts" / "benchmark" / "short_m_at_k.py",
     ]
     existing = [str(path) for path in runner_candidates if path.exists()]
-    status = "blocked" if not existing else "ready"
-    notes = [] if existing else ["no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"]
+    output_root = output_root or (PROJECT_ROOT / "data" / "benchmarks" / "clean_window")
+    port = meta["server"].get("port") if meta["server"] else None
+    notes = []
+    if not existing:
+        notes.append("no short-m@k voting runner found; G5 needs runner wiring before clean-window execution")
+    if not meta["model_exists"]:
+        notes.append("model path missing")
+    if port is None:
+        notes.append("server port unavailable; pass --server-port ROLE=PORT after verifying live topology")
+    status = "ready" if not notes else "blocked"
     return {
         "package": "G5",
         "kind": "short_mk_voting",
@@ -316,12 +356,12 @@ def _g5_entry(registry, role: str, live_registry: dict[str, Any] | None = None) 
         "suite_candidates": ["gpqa", "math"],
         "grouping": {
             "k": 3,
-            "m": 1,
+            "m": 3,
             "vote_rule": "majority",
-            "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+            "run_style": "sequential clean-window default; pass --parallel only for isolated capacity windows",
         },
         "status": status,
-        "command": None,
+        "command": _short_mk_command(role, int(port), output_root) if port is not None and existing else None,
         "notes": notes,
         "runner_candidates": [str(path) for path in runner_candidates],
         "model": meta,
@@ -367,7 +407,7 @@ def build_manifest(
         entries.extend(_rope_entries(registry, role, server_ports, server_contexts, output_root, live_registry=live_registry))
 
     for role in g5_roles if g5_roles is not None else G5_TARGETS:
-        entries.append(_g5_entry(registry, role, live_registry=live_registry))
+        entries.append(_g5_entry(registry, role, live_registry=live_registry, output_root=output_root))
 
     groups: dict[str, dict[str, Any]] = {}
     for entry in entries:

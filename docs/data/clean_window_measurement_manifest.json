@@ -2,7 +2,7 @@
   "attestation": {
     "generated_by": "scripts/benchmark/clean_window_manifest.py",
     "inference_started": false,
-    "research_head": "8f126b2088de9a3fda66e279a26b7ee3ef1dc4c5"
+    "research_head": "785c66fcc9ff898e12324f9a971e54e706273425"
   },
   "entries": [
     {
@@ -141,7 +141,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "frontdoor",
       "status": "ready"
     },
@@ -169,7 +169,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "frontdoor",
       "status": "ready"
     },
@@ -197,7 +197,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "frontdoor",
       "status": "ready"
     },
@@ -225,7 +225,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "frontdoor",
       "status": "ready"
     },
@@ -253,7 +253,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "worker_general",
       "status": "ready"
     },
@@ -281,7 +281,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "worker_general",
       "status": "ready"
     },
@@ -309,7 +309,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "worker_general",
       "status": "ready"
     },
@@ -339,7 +339,7 @@
         "context 32768 exceeds live server context 16384"
       ],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "worker_general",
       "status": "blocked"
     },
@@ -367,7 +367,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "architect_general",
       "status": "ready"
     },
@@ -395,7 +395,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "architect_general",
       "status": "ready"
     },
@@ -423,7 +423,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "architect_general",
       "status": "ready"
     },
@@ -453,7 +453,7 @@
         "context 32768 exceeds live server context 16384"
       ],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "architect_general",
       "status": "blocked"
     },
@@ -481,7 +481,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "ingest_long_context",
       "status": "ready"
     },
@@ -509,7 +509,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "ingest_long_context",
       "status": "ready"
     },
@@ -537,7 +537,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "ingest_long_context",
       "status": "ready"
     },
@@ -565,16 +565,16 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "ingest_long_context",
       "status": "ready"
     },
     {
-      "command": null,
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role frontdoor --host 127.0.0.1 --model-port 8070 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/frontdoor.json",
       "grouping": {
         "k": 3,
-        "m": 1,
-        "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+        "m": 3,
+        "run_style": "sequential clean-window default; pass --parallel only for isolated capacity windows",
         "vote_rule": "majority"
       },
       "kind": "short_mk_voting",
@@ -596,27 +596,25 @@
         },
         "tier": "A"
       },
-      "notes": [
-        "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
-      ],
+      "notes": [],
       "package": "G5",
       "role": "frontdoor",
       "runner_candidates": [
         "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
         "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
       ],
-      "status": "blocked",
+      "status": "ready",
       "suite_candidates": [
         "gpqa",
         "math"
       ]
     },
     {
-      "command": null,
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role worker_general --host 127.0.0.1 --model-port 8072 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/worker_general.json",
       "grouping": {
         "k": 3,
-        "m": 1,
-        "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+        "m": 3,
+        "run_style": "sequential clean-window default; pass --parallel only for isolated capacity windows",
         "vote_rule": "majority"
       },
       "kind": "short_mk_voting",
@@ -638,27 +636,25 @@
         },
         "tier": "C"
       },
-      "notes": [
-        "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
-      ],
+      "notes": [],
       "package": "G5",
       "role": "worker_general",
       "runner_candidates": [
         "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
         "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
       ],
-      "status": "blocked",
+      "status": "ready",
       "suite_candidates": [
         "gpqa",
         "math"
       ]
     },
     {
-      "command": null,
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role architect_general --host 127.0.0.1 --model-port 8083 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/architect_general.json",
       "grouping": {
         "k": 3,
-        "m": 1,
-        "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+        "m": 3,
+        "run_style": "sequential clean-window default; pass --parallel only for isolated capacity windows",
         "vote_rule": "majority"
       },
       "kind": "short_mk_voting",
@@ -680,23 +676,21 @@
         },
         "tier": "B"
       },
-      "notes": [
-        "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
-      ],
+      "notes": [],
       "package": "G5",
       "role": "architect_general",
       "runner_candidates": [
         "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
         "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
       ],
-      "status": "blocked",
+      "status": "ready",
       "suite_candidates": [
         "gpqa",
         "math"
       ]
     }
   ],
-  "generated_at": "2026-06-19T01:00:13.881340+00:00",
+  "generated_at": "2026-06-19T01:09:24.197387+00:00",
   "groups": [
     {
       "entries": [
@@ -752,7 +746,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "ingest_long_context",
           "status": "ready"
         },
@@ -780,7 +774,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "ingest_long_context",
           "status": "ready"
         },
@@ -808,7 +802,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "ingest_long_context",
           "status": "ready"
         },
@@ -836,7 +830,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "ingest_long_context",
           "status": "ready"
         }
@@ -905,7 +899,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "architect_general",
           "status": "ready"
         },
@@ -933,7 +927,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "architect_general",
           "status": "ready"
         },
@@ -961,7 +955,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "architect_general",
           "status": "ready"
         },
@@ -991,16 +985,16 @@
             "context 32768 exceeds live server context 16384"
           ],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "architect_general",
           "status": "blocked"
         },
         {
-          "command": null,
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role architect_general --host 127.0.0.1 --model-port 8083 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/architect_general.json",
           "grouping": {
             "k": 3,
-            "m": 1,
-            "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+            "m": 3,
+            "run_style": "sequential clean-window default; pass --parallel only for isolated capacity windows",
             "vote_rule": "majority"
           },
           "kind": "short_mk_voting",
@@ -1022,16 +1016,14 @@
             },
             "tier": "B"
           },
-          "notes": [
-            "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
-          ],
+          "notes": [],
           "package": "G5",
           "role": "architect_general",
           "runner_candidates": [
             "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
             "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
           ],
-          "status": "blocked",
+          "status": "ready",
           "suite_candidates": [
             "gpqa",
             "math"
@@ -1043,9 +1035,9 @@
         "architect_general"
       ],
       "summary": {
-        "blocked": 2,
+        "blocked": 1,
         "entries": 6,
-        "ready": 4
+        "ready": 5
       }
     },
     {
@@ -1102,7 +1094,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "frontdoor",
           "status": "ready"
         },
@@ -1130,7 +1122,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "frontdoor",
           "status": "ready"
         },
@@ -1158,7 +1150,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "frontdoor",
           "status": "ready"
         },
@@ -1186,16 +1178,16 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "frontdoor",
           "status": "ready"
         },
         {
-          "command": null,
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role frontdoor --host 127.0.0.1 --model-port 8070 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/frontdoor.json",
           "grouping": {
             "k": 3,
-            "m": 1,
-            "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+            "m": 3,
+            "run_style": "sequential clean-window default; pass --parallel only for isolated capacity windows",
             "vote_rule": "majority"
           },
           "kind": "short_mk_voting",
@@ -1217,16 +1209,14 @@
             },
             "tier": "A"
           },
-          "notes": [
-            "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
-          ],
+          "notes": [],
           "package": "G5",
           "role": "frontdoor",
           "runner_candidates": [
             "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
             "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
           ],
-          "status": "blocked",
+          "status": "ready",
           "suite_candidates": [
             "gpqa",
             "math"
@@ -1238,9 +1228,9 @@
         "frontdoor"
       ],
       "summary": {
-        "blocked": 1,
+        "blocked": 0,
         "entries": 6,
-        "ready": 5
+        "ready": 6
       }
     },
     {
@@ -1297,7 +1287,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "worker_general",
           "status": "ready"
         },
@@ -1325,7 +1315,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "worker_general",
           "status": "ready"
         },
@@ -1353,7 +1343,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "worker_general",
           "status": "ready"
         },
@@ -1383,16 +1373,16 @@
             "context 32768 exceeds live server context 16384"
           ],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "worker_general",
           "status": "blocked"
         },
         {
-          "command": null,
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role worker_general --host 127.0.0.1 --model-port 8072 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/worker_general.json",
           "grouping": {
             "k": 3,
-            "m": 1,
-            "run_style": "sequential fallback unless a parallel runner is explicitly provided",
+            "m": 3,
+            "run_style": "sequential clean-window default; pass --parallel only for isolated capacity windows",
             "vote_rule": "majority"
           },
           "kind": "short_mk_voting",
@@ -1414,16 +1404,14 @@
             },
             "tier": "C"
           },
-          "notes": [
-            "no short-m@k voting runner found; G5 needs runner wiring before clean-window execution"
-          ],
+          "notes": [],
           "package": "G5",
           "role": "worker_general",
           "runner_candidates": [
             "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py",
             "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_m_at_k.py"
           ],
-          "status": "blocked",
+          "status": "ready",
           "suite_candidates": [
             "gpqa",
             "math"
@@ -1435,9 +1423,9 @@
         "worker_general"
       ],
       "summary": {
-        "blocked": 2,
+        "blocked": 1,
         "entries": 6,
-        "ready": 4
+        "ready": 5
       }
     }
   ],
@@ -1447,11 +1435,11 @@
   "output_root": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window",
   "pass_fail_gate": "All ready commands require a clean inference window, successful preflight, and per-task result aggregation; blocked entries must remain non-executable.",
   "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1",
-  "run_id": "clean-window-2026-06-19T010013.881340Z0000",
+  "run_id": "clean-window-2026-06-19T010924.197387Z0000",
   "source_handoff": "/mnt/raid0/llm/epyc-root/handoffs/active/bulk-inference-campaign.md",
   "summary": {
-    "entries_blocked": 5,
-    "entries_ready": 18,
+    "entries_blocked": 2,
+    "entries_ready": 21,
     "entries_total": 23,
     "models_total": 4
   },

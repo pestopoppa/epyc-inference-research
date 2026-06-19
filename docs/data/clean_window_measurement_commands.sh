@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Generated at 2026-06-19T01:00:13.881340+00:00
+# Generated at 2026-06-19T01:09:24.197387+00:00
 # Review live topology before running commands with direct --port values.
 
 # model_path: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf
@@ -38,8 +38,8 @@ set -euo pipefail
 # blocked: /mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8083 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/architect_general/ctx_32768.json
 # note: context 32768 exceeds live server context 16384
 
-# G5 architect_general short_mk_voting [blocked]
-# note: no short-m@k voting runner found; G5 needs runner wiring before clean-window execution
+# G5 architect_general short_mk_voting [ready]
+/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role architect_general --host 127.0.0.1 --model-port 8083 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/architect_general.json
 
 # model_path: /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
 # roles: frontdoor
@@ -58,8 +58,8 @@ set -euo pipefail
 # K-ROPE-1 frontdoor rope_position_probe ctx=32768 [ready]
 /mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8070 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/frontdoor/ctx_32768.json
 
-# G5 frontdoor short_mk_voting [blocked]
-# note: no short-m@k voting runner found; G5 needs runner wiring before clean-window execution
+# G5 frontdoor short_mk_voting [ready]
+/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role frontdoor --host 127.0.0.1 --model-port 8070 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/frontdoor.json
 
 # model_path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf
 # roles: worker_general
@@ -79,5 +79,5 @@ set -euo pipefail
 # blocked: /mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/rope_position_probe.py --host 127.0.0.1 --port 8072 --context-length 32768 --n-samples 100 --seed 42 --out /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/rope_probe/worker_general/ctx_32768.json
 # note: context 32768 exceeds live server context 16384
 
-# G5 worker_general short_mk_voting [blocked]
-# note: no short-m@k voting runner found; G5 needs runner wiring before clean-window execution
+# G5 worker_general short_mk_voting [ready]
+/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role worker_general --host 127.0.0.1 --model-port 8072 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/worker_general.json
