@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Targeted retest of SuperGemma4-31b questions that scored 0 due to degenerate repetition/empty responses.
+Targeted retest of gemma-4-31B-it questions that scored 0 due to degenerate repetition/empty responses.
 
 Tests only the 7 specific questions that scored 0 on the baseline benchmark.
 Failure modes: repetition collapse (gemma#622), prompt echoing, think loops.
@@ -19,7 +19,7 @@ import requests
 import yaml
 
 # --- Config ---
-MODEL_PATH = "/mnt/raid0/llm/models/SuperGemma4-31b-abliterated.Q4_K_M.gguf"
+MODEL_PATH = "/mnt/raid0/llm/models/gemma-4-31B-it-Q4_K_M.gguf"
 SERVER_BIN = "/mnt/raid0/llm/llama.cpp/build/bin/llama-server"
 PORT = 8092
 THREADS = 96
@@ -60,7 +60,7 @@ def load_question(suite_name: str, question_id: str) -> dict:
 
 
 def start_server():
-    """Start llama-server for SuperGemma4-31b."""
+    """Start llama-server for gemma-4-31B-it."""
     cmd = [
         "numactl", "--interleave=all",
         SERVER_BIN,
@@ -224,7 +224,7 @@ def main():
 
     try:
         print(f"Server ready on port {PORT}. Running {len(FAILING_QUESTIONS)} questions.", flush=True)
-        print(f"  Model: SuperGemma4-31b-abliterated Q4_K_M", flush=True)
+        print(f"  Model: gemma-4-31B-it Q4_K_M", flush=True)
         print(f"  repeat_penalty={REPEAT_PENALTY}, max_tokens={MAX_TOKENS}, temperature={TEMPERATURE}", flush=True)
         print(flush=True)
         print(f"{'Suite':<25} {'Question':<35} {'Status':<12} {'TPS':>6} {'Tokens':>7} {'Time':>6}", flush=True)
@@ -263,7 +263,7 @@ def main():
         output_path.parent.mkdir(parents=True, exist_ok=True)
         with open(output_path, "w") as f:
             json.dump({
-                "model": "SuperGemma4-31b-abliterated-Q4_K_M",
+                "model": "gemma-4-31B-it-Q4_K_M",
                 "model_path": MODEL_PATH,
                 "binary": SERVER_BIN,
                 "port": PORT,

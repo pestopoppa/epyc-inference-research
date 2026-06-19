@@ -18,7 +18,7 @@ import requests
 import yaml
 
 # --- Config ---
-MODEL_PATH = "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-Q8_0.gguf"
+MODEL_PATH = "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf"
 SERVER_BIN = "/mnt/raid0/llm/llama.cpp/build/bin/llama-server"
 PORT = 8091
 THREADS = 96
