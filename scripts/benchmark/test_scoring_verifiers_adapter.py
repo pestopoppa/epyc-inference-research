@@ -193,6 +193,55 @@ class TestLocalJSONLLoading:
         loaded = ScoringVerifiersAdapter._load_from_local(Path(tmp))
         assert len(loaded) == 2
 
+    def test_records_subset_from_jsonl_filename(self):
+        rows = [{"problem": "Q1", "all_solutions": []}]
+        tmp_dir = self._make_temp_jsonl(rows)
+        (tmp_dir / "test.jsonl").rename(tmp_dir / "HE-R+.jsonl")
+        loaded = ScoringVerifiersAdapter._load_from_local(tmp_dir)
+        assert loaded[0]["subset"] == "HE-R+"
+
+
+class TestSolutionExpansion:
+    def test_expands_all_solutions_to_labeled_items(self):
+        rows = [
+            {
+                "task_id": "HumanEval/0",
+                "subset": "HE-R+",
+                "prompt": "Write f().",
+                "all_solutions": [
+                    {"rank": 1, "average_test_score": 1.0, "solution": "def f(): return 1"},
+                    {"rank": 2, "average_test_score": 0.0, "solution": "def f(): return 0"},
+                ],
+            }
+        ]
+        expanded = ScoringVerifiersAdapter._expand_solution_rows(rows)
+
+        assert len(expanded) == 2
+        assert expanded[0]["label"] == 1.0
+        assert expanded[1]["label"] == 0.0
+        assert expanded[0]["solution"] == "def f(): return 1"
+        assert expanded[0]["id"] == "HumanEval/0::sol0"
+
+    def test_prompt_uses_expanded_solution_score(self):
+        adapter = ScoringVerifiersAdapter()
+        row = {
+            "id": "HumanEval/0::sol1",
+            "subset": "HE-R+",
+            "problem": "Write f().",
+            "solution": "def f(): return 0",
+            "label": 0.0,
+            "average_test_score": 0.0,
+            "rank": 2,
+            "task_id": "HumanEval/0",
+        }
+
+        prompt = adapter._row_to_prompt(0, row)
+
+        assert prompt["expected"] == "incorrect"
+        assert "def f(): return 0" in prompt["prompt"]
+        assert prompt["metadata"]["average_test_score"] == 0.0
+        assert prompt["metadata"]["task_id"] == "HumanEval/0"
+
 
 # ── Graceful failure with missing dataset ────────────────────────────────────
 

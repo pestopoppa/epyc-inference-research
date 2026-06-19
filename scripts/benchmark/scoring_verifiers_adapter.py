@@ -87,6 +87,7 @@ class ScoringVerifiersAdapter(BaseAdapter):
             Path(local_path) if local_path else _DEFAULT_LOCAL_PATH
         )
         self._subset = subset
+        self._dataset: list[dict] | None = None
 
     # ── loading ─────────────────────────────────────────────────────────────
 
@@ -98,19 +99,19 @@ class ScoringVerifiersAdapter(BaseAdapter):
         if self._local_path and self._local_path.exists():
             rows = self._load_from_local(self._local_path)
             if rows:
-                self._dataset = rows
+                self._dataset = self._expand_solution_rows(rows)
                 return
 
         # 2. Fallback: HF datasets streaming
         try:
             import datasets as hf
             ds = hf.load_dataset(_HF_DATASET_ID, split="test")
-            self._dataset = [dict(row) for row in ds]
+            self._dataset = self._expand_solution_rows([dict(row) for row in ds])
         except Exception:
             try:
                 import datasets as hf
                 ds = hf.load_dataset(_HF_DATASET_ID, split="train")
-                self._dataset = [dict(row) for row in ds]
+                self._dataset = self._expand_solution_rows([dict(row) for row in ds])
             except Exception as e:
                 print(
                     f"  [adapter] ScoringVerifiers load failed: {e}\n"
@@ -130,11 +131,14 @@ class ScoringVerifiersAdapter(BaseAdapter):
         jsonl_files = sorted(base.rglob("*.jsonl"))
         if jsonl_files:
             for jf in jsonl_files:
+                subset = jf.stem
                 for line in jf.read_text(encoding="utf-8").strip().split("\n"):
                     line = line.strip()
                     if line:
                         try:
-                            rows.append(json.loads(line))
+                            row = json.loads(line)
+                            row.setdefault("subset", subset)
+                            rows.append(row)
                         except json.JSONDecodeError:
                             pass
             if rows:
@@ -153,6 +157,44 @@ class ScoringVerifiersAdapter(BaseAdapter):
                 pass
 
         return rows
+
+    @staticmethod
+    def _expand_solution_rows(rows: list[dict]) -> list[dict]:
+        """Expand benchmark problems into per-candidate verifier examples.
+
+        The Scoring-Verifiers JSONL files store one programming problem per row
+        and put candidate solutions plus oracle scores in ``all_solutions``.
+        EV-4 needs calibration labels per candidate, not one unlabeled problem
+        row, so each solution becomes its own verifier item.
+        """
+        expanded: list[dict] = []
+        for row_idx, row in enumerate(rows):
+            solutions = row.get("all_solutions")
+            if not isinstance(solutions, list) or not solutions:
+                expanded.append(row)
+                continue
+
+            for sol_idx, solution in enumerate(solutions):
+                if not isinstance(solution, dict):
+                    continue
+                item = {
+                    "id": f"{row.get('task_id', row.get('id', row_idx))}::sol{sol_idx}",
+                    "subset": row.get("subset", row.get("split", "unknown")),
+                    "task_id": row.get("task_id"),
+                    "problem": row.get("prompt", row.get("problem", "")),
+                    "solution": solution.get("solution", ""),
+                    "label": solution.get("average_test_score"),
+                    "average_test_score": solution.get("average_test_score"),
+                    "rank": solution.get("rank"),
+                    "entry_point": row.get("entry_point"),
+                    "canonical_solution": row.get("canonical_solution"),
+                    "test": row.get("test", row.get("assertion", row.get("test_list"))),
+                    "source_row": row_idx,
+                    "source_solution_index": sol_idx,
+                }
+                expanded.append(item)
+
+        return expanded
 
     # ── prompt construction ──────────────────────────────────────────────────
 
@@ -252,6 +294,9 @@ class ScoringVerifiersAdapter(BaseAdapter):
             "metadata": {
                 "subset": subset_tag,
                 "raw_label": str(raw_label),
+                "average_test_score": row.get("average_test_score"),
+                "rank": row.get("rank"),
+                "task_id": row.get("task_id"),
             },
         }
 
