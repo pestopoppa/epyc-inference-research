@@ -21,6 +21,8 @@ N_PREDICT="${N_PREDICT:-32}"
 EXECUTE=0
 ROLE_FILTER=""
 CTX_FILTER=""
+ALLOW_ACTIVE_AUTOPILOT=0
+ALLOW_LIVE_LLAMA=0
 
 # role|model_id|model_path|max_ctx
 TARGETS=(
@@ -40,6 +42,11 @@ llama-server at a time, measures RSS and server-reported KV allocation, and
 writes:
   data/dynamic_stack/ds_e1_kv_measurements_<timestamp>/kv_measurements.csv
 
+Execute mode fails closed when AutoPilot or existing llama-server processes are
+live. Override only for an intentional coordinated window:
+  --allow-active-autopilot
+  --allow-live-llama
+
 Environment overrides:
   LLAMA_SERVER, OUTPUT_DIR, PORT, THREADS, UBATCH, N_PREDICT
 EOF
@@ -50,10 +57,58 @@ while [[ $# -gt 0 ]]; do
     --execute) EXECUTE=1; shift ;;
     --role) ROLE_FILTER="$2"; shift 2 ;;
     --ctx) CTX_FILTER="$2"; shift 2 ;;
+    --allow-active-autopilot) ALLOW_ACTIVE_AUTOPILOT=1; shift ;;
+    --allow-live-llama) ALLOW_LIVE_LLAMA=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 2 ;;
   esac
 done
+
+port_in_use() {
+  python3 - "$PORT" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.settimeout(0.25)
+try:
+    sys.exit(0 if sock.connect_ex(("127.0.0.1", port)) == 0 else 1)
+finally:
+    sock.close()
+PY
+}
+
+clean_window_preflight() {
+  local blockers=()
+  local autopilot_pids=""
+  local llama_pids=""
+
+  if [[ "$ALLOW_ACTIVE_AUTOPILOT" -ne 1 ]]; then
+    autopilot_pids=$(pgrep -af "scripts/autopilot/autopilot.py start" || true)
+    if [[ -n "$autopilot_pids" ]]; then
+      blockers+=("active AutoPilot process(es): ${autopilot_pids//$'\n'/; }")
+    fi
+  fi
+
+  if [[ "$ALLOW_LIVE_LLAMA" -ne 1 ]]; then
+    llama_pids=$(pgrep -a -x "llama-server" || true)
+    if [[ -n "$llama_pids" ]]; then
+      blockers+=("live llama-server process(es): ${llama_pids//$'\n'/; }")
+    fi
+  fi
+
+  if port_in_use; then
+    blockers+=("measurement port ${PORT} is already accepting connections")
+  fi
+
+  if [[ "${#blockers[@]}" -gt 0 ]]; then
+    echo "Refusing DS-E1 KV execute mode: clean-window preflight failed." >&2
+    printf '  - %s\n' "${blockers[@]}" >&2
+    echo "Stop or coordinate the live workload, or pass the explicit --allow-* override for an intentional contaminated run." >&2
+    exit 3
+  fi
+}
 
 generate_prompt() {
   local target_tokens=$1
@@ -162,6 +217,8 @@ if [[ "$EXECUTE" -ne 1 ]]; then
   echo "Dry-run only. Re-run with --execute in a clean window to collect measurements."
   exit 0
 fi
+
+clean_window_preflight
 
 mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
 echo "role,model_id,model_path,context_length,max_context,ctk,ctv,hadamard,status,rss_load_mb,rss_after_prefill_mb,server_kv_size_mb,prompt_tokens,prompt_tps,log_file,notes" > "$RESULTS_FILE"
