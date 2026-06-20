@@ -48,6 +48,7 @@ Metrics (per benchmark paper):
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 import string
@@ -224,10 +225,11 @@ def _extract_list_from_response(response: str) -> list[str]:
     """
     # Abstention patterns (also "None" which is the prompt-instructed abstention token)
     abstention_re = re.compile(
-        r"(?i)(^none$|i don'?t know|i'?m not sure|i cannot|no information|"
-        r"not mentioned|not available|n/a)"
+        r"(?is)(none|n/a|i don'?t know\.?|i'?m not sure\.?|"
+        r"i cannot (answer|determine).*|no information( available)?\.?|"
+        r"not mentioned\.?|not available\.?)"
     )
-    if abstention_re.search(response.strip()):
+    if abstention_re.fullmatch(response.strip()):
         return []
 
     # Try bullet / numbered list first
@@ -243,7 +245,7 @@ def _extract_list_from_response(response: str) -> list[str]:
         items = [n.strip() for n in numbered if n.strip()]
     else:
         # Try comma-separated (if the line has commas and ≤200 chars)
-        lines = [l.strip() for l in response.strip().split("\n") if l.strip()]
+        lines = [line.strip() for line in response.strip().split("\n") if line.strip()]
         candidates = []
         for line in lines:
             if "," in line and len(line) < 200:
@@ -536,8 +538,6 @@ class TulvingEpisodicAdapter(BaseAdapter):
         row = self._dataset[idx]
         # Use number of ground truth items as difficulty proxy
         nb_gt = self._nb_gt(row)
-        retrieval_type = str(row.get("retrieval_type", ""))
-
         # T3: chronological ordering OR many items (≥6)
         if row.get("get") == "chronological" or nb_gt >= 6:
             return 3
@@ -549,20 +549,15 @@ class TulvingEpisodicAdapter(BaseAdapter):
     @staticmethod
     def _nb_gt(row: dict) -> int:
         """Number of ground truth items for the row."""
-        ca = row.get("correct_answer", [])
-        if isinstance(ca, list):
-            return len(ca)
-        if isinstance(ca, str):
-            try:
-                parsed = json.loads(ca)
-                return len(parsed) if isinstance(parsed, list) else 1
-            except json.JSONDecodeError:
-                return 1
-        return 0
+        return len(
+            TulvingEpisodicAdapter._parse_correct_answer(row.get("correct_answer", []))
+        )
 
     @staticmethod
     def _parse_correct_answer(raw) -> list[str]:
         """Coerce correct_answer to a list of strings."""
+        if hasattr(raw, "tolist"):
+            raw = raw.tolist()
         if isinstance(raw, list):
             return [str(x) for x in raw if x is not None]
         if isinstance(raw, str):
@@ -572,6 +567,13 @@ class TulvingEpisodicAdapter(BaseAdapter):
                     return [str(x) for x in parsed if x is not None]
                 return [str(parsed)]
             except json.JSONDecodeError:
+                pass
+            try:
+                parsed = ast.literal_eval(raw)
+                if isinstance(parsed, list):
+                    return [str(x) for x in parsed if x is not None]
+                return [str(parsed)]
+            except (SyntaxError, ValueError):
                 return [raw] if raw else []
         return []
 

@@ -6,36 +6,36 @@
     "result_questions": 456,
     "scored_questions": 456,
     "missing_ground_truth": 0,
-    "avg_f1": 0.043859649122807015,
-    "simple_recall_score": 0.043859649122807015,
-    "chronological_awareness_score": 0.05555555555555555,
+    "avg_f1": 0.4309309013138371,
+    "simple_recall_score": 0.5530031710339809,
+    "chronological_awareness_score": 0.15931546587152992,
     "latest_questions": 45,
     "chronological_questions": 45,
     "avg_tokens_per_second": 17.274627192982457,
     "by_retrieval_type": {
       "Spaces": {
         "count": 116,
-        "avg_f1": 0.034482758620689655
+        "avg_f1": 0.553766420361248
       },
       "Entities": {
         "count": 87,
-        "avg_f1": 0.0
+        "avg_f1": 0.5977011494252874
       },
       "Times": {
         "count": 117,
-        "avg_f1": 0.05982905982905983
+        "avg_f1": 0.5868498966538181
       },
       "Event contents": {
         "count": 116,
-        "avg_f1": 0.06896551724137931
+        "avg_f1": 0.07255040838850932
       },
       "Full event details": {
         "count": 10,
-        "avg_f1": 0.1
+        "avg_f1": 0.019030095564113537
       },
       "Other entities": {
         "count": 10,
-        "avg_f1": 0.0
+        "avg_f1": 0.3
       }
     }
   },
@@ -43,213 +43,273 @@
   "per_question": [
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0000",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 37,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.37,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0001",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 36,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.41,
       "completion_tokens": 355,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line"
+      ],
+      "matched_gt_items": [
+        "High Line"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0002",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 12,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.44,
       "completion_tokens": 76,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Woolworth Building"
+      ],
+      "matched_gt_items": [
+        "Woolworth Building"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0003",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 31,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.37,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0004",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 37,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.39,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Queensboro Bridge"
+      ],
+      "matched_gt_items": [
+        "Queensboro Bridge"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0005",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.43,
       "completion_tokens": 17,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Levi Rodriguez"
+      ],
+      "matched_gt_items": [
+        "Levi Rodriguez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0006",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 96,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.32,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Logan Diaz"
+      ],
+      "matched_gt_items": [
+        "Logan Diaz"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0007",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 97,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.28,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Scarlett Thomas"
+      ],
+      "matched_gt_items": [
+        "Scarlett Thomas"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0008",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 108,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.25,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Chloe Castillo"
+      ],
+      "matched_gt_items": [
+        "Chloe Castillo"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0009",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 17.23,
       "completion_tokens": 17,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Henry Reed"
+      ],
+      "matched_gt_items": [
+        "Henry Reed"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0010",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.3,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "December 26, 2026"
+      ],
+      "matched_gt_items": [
+        "December 26, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0011",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.68,
       "completion_tokens": 13,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "March 23, 2024"
+      ],
+      "matched_gt_items": [
+        "March 23, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0012",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.62,
       "completion_tokens": 13,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "October 13, 2024"
+      ],
+      "matched_gt_items": [
+        "October 13, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0013",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 15,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.12,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 22, 2026"
+      ],
+      "matched_gt_items": [
+        "September 22, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0014",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 4,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.45,
       "completion_tokens": 114,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "October 13, 2024"
+      ],
+      "matched_gt_items": [
+        "October 13, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0015",
@@ -463,827 +523,1102 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0030",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 17,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.35,
       "completion_tokens": 209,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Washington Square Park"
+      ],
+      "matched_gt_items": [
+        "Washington Square Park"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0031",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 98,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.38,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green",
+        "Henry Reed"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green",
+        "Henry Reed"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0032",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 2,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.92,
       "completion_tokens": 31,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 11, 2026",
+        "February 27, 2026"
+      ],
+      "matched_gt_items": [
+        "May 11, 2026",
+        "February 27, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0033",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 3,
       "nb_pred": 3,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.83,
       "completion_tokens": 37,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 11, 2026",
+        "September 13, 2025",
+        "September 27, 2025"
+      ],
+      "matched_gt_items": [
+        "May 11, 2026",
+        "September 13, 2025",
+        "September 27, 2025"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0034",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 3,
       "nb_pred": 43,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.33,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "April 09, 2026",
+        "May 31, 2024",
+        "March 23, 2024"
+      ],
+      "matched_gt_items": [
+        "April 09, 2026",
+        "May 31, 2024",
+        "March 23, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0035",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 3,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.57,
       "completion_tokens": 46,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "February 27, 2026",
+        "January 03, 2026"
+      ],
+      "matched_gt_items": [
+        "February 27, 2026",
+        "January 03, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0036",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 3,
       "nb_pred": 98,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.44,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Owen Thomas",
+        "Ezra Edwards",
+        "Chloe Castillo"
+      ],
+      "matched_gt_items": [
+        "Owen Thomas",
+        "Ezra Edwards",
+        "Chloe Castillo"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0037",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 3,
       "nb_pred": 99,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.17,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green",
+        "Zoe Brown",
+        "Julian Ross"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green",
+        "Zoe Brown",
+        "Julian Ross"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0038",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 10,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.43,
       "completion_tokens": 69,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Jackson Ramos",
+        "Mila Gonzalez"
+      ],
+      "matched_gt_items": [
+        "Jackson Ramos",
+        "Mila Gonzalez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0039",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 3,
       "nb_pred": 3,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.83,
       "completion_tokens": 28,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line",
+        "Bethpage Black Course",
+        "Snug Harbor Cultural Center"
+      ],
+      "matched_gt_items": [
+        "High Line",
+        "Bethpage Black Course",
+        "Snug Harbor Cultural Center"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0040",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 3,
       "nb_pred": 13,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.44,
       "completion_tokens": 171,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Woolworth Building",
+        "Snug Harbor Cultural Center",
+        "Port Jefferson"
+      ],
+      "matched_gt_items": [
+        "Woolworth Building",
+        "Snug Harbor Cultural Center",
+        "Port Jefferson"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0041",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.75,
+      "precision": 0.75,
+      "recall": 0.75,
+      "nb_gt": 3,
       "nb_pred": 21,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.09,
       "completion_tokens": 186,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line",
+        "St. Patrick's Cathedral",
+        "Statue of Liberty"
+      ],
+      "matched_gt_items": [
+        "High Line",
+        "St. Patrick's Cathedral"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0042",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 5,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.52,
       "completion_tokens": 68,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
-      "kendall_tau": 0.0
+      "ground_truth_items": [
+        "February 27, 2026",
+        "April 09, 2026"
+      ],
+      "matched_gt_items": [
+        "February 27, 2026",
+        "April 09, 2026"
+      ],
+      "kendall_tau": -1.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0043",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 3,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.38,
       "completion_tokens": 40,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
-      "kendall_tau": 0.0
+      "ground_truth_items": [
+        "May 11, 2026",
+        "September 22, 2026"
+      ],
+      "matched_gt_items": [
+        "May 11, 2026",
+        "September 22, 2026"
+      ],
+      "kendall_tau": 1.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0044",
       "f1": 1.0,
       "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_gt": 2,
+      "nb_pred": 7,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.22,
       "completion_tokens": 340,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
-      "kendall_tau": 0.0
+      "ground_truth_items": [
+        "January 03, 2026",
+        "February 27, 2026"
+      ],
+      "matched_gt_items": [
+        "January 03, 2026",
+        "February 27, 2026"
+      ],
+      "kendall_tau": -1.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0045",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 3,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.22,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
-      "kendall_tau": 0.0
+      "ground_truth_items": [
+        "March 23, 2024",
+        "May 07, 2024"
+      ],
+      "matched_gt_items": [
+        "March 23, 2024",
+        "May 07, 2024"
+      ],
+      "kendall_tau": -1.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0046",
-      "f1": 1.0,
-      "precision": 1.0,
-      "recall": 1.0,
-      "nb_gt": 0,
-      "nb_pred": 0,
+      "f1": 0.6,
+      "precision": 0.6,
+      "recall": 0.6,
+      "nb_gt": 2,
+      "nb_pred": 13,
       "retrieval_type": "Spaces",
       "get_style": "chronological",
       "tokens_per_second": 16.29,
       "completion_tokens": 338,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
+      "ground_truth_items": [
+        "Washington Square Park",
+        "Snug Harbor Cultural Center"
+      ],
+      "matched_gt_items": [
+        "Snug Harbor Cultural Center"
+      ],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0047",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 2,
       "retrieval_type": "Spaces",
       "get_style": "chronological",
       "tokens_per_second": 17.07,
       "completion_tokens": 18,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
-      "kendall_tau": 0.0
+      "ground_truth_items": [
+        "High Line",
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "High Line",
+        "American Museum of Natural History"
+      ],
+      "kendall_tau": -1.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0048",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.4242424242424242,
+      "precision": 0.4242424242424242,
+      "recall": 0.4242424242424242,
+      "nb_gt": 2,
       "nb_pred": 21,
       "retrieval_type": "Spaces",
       "get_style": "chronological",
       "tokens_per_second": 16.28,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
+      "ground_truth_items": [
+        "St. Patrick's Cathedral",
+        "Statue of Liberty"
+      ],
+      "matched_gt_items": [
+        "St. Patrick's Cathedral"
+      ],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0049",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.8333333333333333,
+      "precision": 0.8333333333333333,
+      "recall": 0.8333333333333333,
+      "nb_gt": 2,
       "nb_pred": 2,
       "retrieval_type": "Spaces",
       "get_style": "chronological",
       "tokens_per_second": 17.23,
       "completion_tokens": 20,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
-      "kendall_tau": 0.0
+      "ground_truth_items": [
+        "Port Jefferson",
+        "Hither Hills State Park"
+      ],
+      "matched_gt_items": [
+        "Port Jefferson",
+        "Hither Hills State Park"
+      ],
+      "kendall_tau": -1.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0050",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 19,
       "retrieval_type": "Times",
       "get_style": "latest",
       "tokens_per_second": 16.32,
       "completion_tokens": 315,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "April 09, 2026"
+      ],
+      "matched_gt_items": [
+        "April 09, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0051",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.35294117647058826,
+      "precision": 0.35294117647058826,
+      "recall": 0.35294117647058826,
+      "nb_gt": 1,
       "nb_pred": 14,
       "retrieval_type": "Times",
       "get_style": "latest",
       "tokens_per_second": 16.21,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "September 22, 2026"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0052",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 23,
       "retrieval_type": "Times",
       "get_style": "latest",
       "tokens_per_second": 16.42,
       "completion_tokens": 502,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "February 27, 2026"
+      ],
+      "matched_gt_items": [
+        "February 27, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0053",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.35294117647058826,
+      "precision": 0.35294117647058826,
+      "recall": 0.35294117647058826,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Times",
       "get_style": "latest",
       "tokens_per_second": 16.33,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "May 07, 2024"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0054",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.10238095238095238,
+      "precision": 0.10238095238095238,
+      "recall": 0.10238095238095238,
+      "nb_gt": 2,
       "nb_pred": 17,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.31,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon",
+        "Ice Sculpture Exhibition"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0055",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.13942307692307693,
+      "precision": 0.13942307692307693,
+      "recall": 0.13942307692307693,
+      "nb_gt": 2,
       "nb_pred": 13,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.39,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Fashion Show",
+        "Parkour Workshop"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0056",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.11764705882352941,
+      "precision": 0.11764705882352941,
+      "recall": 0.11764705882352941,
+      "nb_gt": 1,
       "nb_pred": 18,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.37,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0057",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.06060606060606061,
+      "precision": 0.06060606060606061,
+      "recall": 0.06060606060606061,
+      "nb_gt": 2,
       "nb_pred": 12,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.36,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon",
+        "Karaoke Night"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0058",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.0909090909090909,
+      "precision": 0.0909090909090909,
+      "recall": 0.0909090909090909,
+      "nb_gt": 1,
       "nb_pred": 8,
       "retrieval_type": "Event contents",
       "get_style": "latest",
       "tokens_per_second": 16.26,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0059",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.23529411764705882,
+      "precision": 0.23529411764705882,
+      "recall": 0.23529411764705882,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Event contents",
       "get_style": "latest",
       "tokens_per_second": 16.37,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Fashion Show"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0060",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 1,
       "nb_pred": 44,
       "retrieval_type": "Event contents",
       "get_style": "latest",
       "tokens_per_second": 16.34,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0061",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 1,
       "nb_pred": 9,
       "retrieval_type": "Event contents",
       "get_style": "latest",
       "tokens_per_second": 16.4,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Karaoke Night"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0062",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 25,
       "retrieval_type": "Spaces",
       "get_style": "latest",
       "tokens_per_second": 16.45,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Snug Harbor Cultural Center"
+      ],
+      "matched_gt_items": [
+        "Snug Harbor Cultural Center"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0063",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 6,
       "retrieval_type": "Spaces",
       "get_style": "latest",
       "tokens_per_second": 16.39,
       "completion_tokens": 78,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0064",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.25,
+      "precision": 0.25,
+      "recall": 0.25,
+      "nb_gt": 1,
       "nb_pred": 74,
       "retrieval_type": "Spaces",
       "get_style": "latest",
       "tokens_per_second": 16.3,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Statue of Liberty"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0065",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 6,
       "retrieval_type": "Spaces",
       "get_style": "latest",
       "tokens_per_second": 16.11,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Hither Hills State Park"
+      ],
+      "matched_gt_items": [
+        "Hither Hills State Park"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0066",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 43,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.19,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "April 09, 2026",
+        "February 27, 2026"
+      ],
+      "matched_gt_items": [
+        "April 09, 2026",
+        "February 27, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0067",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 2,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.95,
       "completion_tokens": 25,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 11, 2026",
+        "September 22, 2026"
+      ],
+      "matched_gt_items": [
+        "May 11, 2026",
+        "September 22, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0068",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 13,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.41,
       "completion_tokens": 416,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "February 27, 2026",
+        "January 03, 2026"
+      ],
+      "matched_gt_items": [
+        "February 27, 2026",
+        "January 03, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0069",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 43,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.36,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "March 23, 2024",
+        "May 07, 2024"
+      ],
+      "matched_gt_items": [
+        "March 23, 2024",
+        "May 07, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0070",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 41,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.42,
       "completion_tokens": 367,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Snug Harbor Cultural Center",
+        "Washington Square Park"
+      ],
+      "matched_gt_items": [
+        "Snug Harbor Cultural Center",
+        "Washington Square Park"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0071",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 18,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.35,
       "completion_tokens": 242,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line",
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "High Line",
+        "American Museum of Natural History"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0072",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.625,
+      "precision": 0.625,
+      "recall": 0.625,
+      "nb_gt": 2,
       "nb_pred": 29,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.5,
       "completion_tokens": 259,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "St. Patrick's Cathedral",
+        "Statue of Liberty"
+      ],
+      "matched_gt_items": [
+        "St. Patrick's Cathedral"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0073",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 24,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.45,
       "completion_tokens": 352,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Hither Hills State Park",
+        "Port Jefferson"
+      ],
+      "matched_gt_items": [
+        "Hither Hills State Park",
+        "Port Jefferson"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0074",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.25,
+      "precision": 0.25,
+      "recall": 0.25,
+      "nb_gt": 2,
       "nb_pred": 27,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.17,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Ice Sculpture Exhibition",
+        "Tech Hackathon"
+      ],
       "matched_gt_items": [],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0075",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.5151515151515151,
+      "precision": 0.5151515151515151,
+      "recall": 0.5151515151515151,
+      "nb_gt": 2,
       "nb_pred": 7,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.39,
       "completion_tokens": 252,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
+      "ground_truth_items": [
+        "Parkour Workshop",
+        "Fashion Show"
+      ],
+      "matched_gt_items": [
+        "Parkour Workshop"
+      ],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0076",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 2,
       "nb_pred": 6,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.23,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance",
+        "Theater Performance"
+      ],
       "matched_gt_items": [],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0077",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.125,
+      "precision": 0.125,
+      "recall": 0.125,
+      "nb_gt": 2,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.29,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon",
+        "Karaoke Night"
+      ],
       "matched_gt_items": [],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0078",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 15,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.41,
       "completion_tokens": 292,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Washington Square Park"
+      ],
+      "matched_gt_items": [
+        "Washington Square Park"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0079",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 4,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.98,
       "completion_tokens": 27,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Snug Harbor Cultural Center"
+      ],
+      "matched_gt_items": [
+        "Snug Harbor Cultural Center"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0080",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 53,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.25,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0081",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 28,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.4,
       "completion_tokens": 431,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line"
+      ],
+      "matched_gt_items": [
+        "High Line"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0082",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 28,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.45,
       "completion_tokens": 418,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Bethpage Black Course"
+      ],
+      "matched_gt_items": [
+        "Bethpage Black Course"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0083",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.13,
       "completion_tokens": 25,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "February 27, 2026"
+      ],
+      "matched_gt_items": [
+        "February 27, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0084",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 31,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.41,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "April 09, 2026"
+      ],
+      "matched_gt_items": [
+        "April 09, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0085",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 22,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.45,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 22, 2026"
+      ],
+      "matched_gt_items": [
+        "September 22, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0086",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 4,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.06,
       "completion_tokens": 168,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 11, 2026"
+      ],
+      "matched_gt_items": [
+        "May 11, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0087",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.84,
       "completion_tokens": 45,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 13, 2025"
+      ],
+      "matched_gt_items": [
+        "September 13, 2025"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0088",
@@ -1371,11 +1706,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0094",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 22,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.2,
@@ -1497,11 +1832,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0103",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 2,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.34,
@@ -1527,11 +1862,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0105",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 2,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.04,
@@ -1572,11 +1907,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0108",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 3,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.43,
@@ -1617,11 +1952,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0111",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 2,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.39,
@@ -1647,11 +1982,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0113",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 2,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.54,
@@ -1815,11 +2150,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0125",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 2,
       "retrieval_type": "Spaces",
       "get_style": "latest",
       "tokens_per_second": 16.58,
@@ -2044,11 +2379,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0141",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 17,
       "retrieval_type": "Times",
       "get_style": "latest",
       "tokens_per_second": 16.32,
@@ -2072,1575 +2407,1993 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0143",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 20,
       "retrieval_type": "Times",
       "get_style": "latest",
       "tokens_per_second": 16.53,
       "completion_tokens": 300,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 13, 2025"
+      ],
+      "matched_gt_items": [
+        "September 13, 2025"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0144",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 32,
       "retrieval_type": "Times",
       "get_style": "latest",
       "tokens_per_second": 16.41,
       "completion_tokens": 446,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 03, 2026"
+      ],
+      "matched_gt_items": [
+        "September 03, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0145",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 31,
       "retrieval_type": "Times",
       "get_style": "latest",
       "tokens_per_second": 16.5,
       "completion_tokens": 466,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "February 27, 2026"
+      ],
+      "matched_gt_items": [
+        "February 27, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0146",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 19,
       "retrieval_type": "Times",
       "get_style": "latest",
       "tokens_per_second": 16.36,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 31, 2024"
+      ],
+      "matched_gt_items": [
+        "May 31, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0147",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 14,
       "retrieval_type": "Times",
       "get_style": "latest",
       "tokens_per_second": 16.26,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "December 26, 2026"
+      ],
+      "matched_gt_items": [
+        "December 26, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0148",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.69,
       "completion_tokens": 40,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
+      "ground_truth_items": [
+        "September 13, 2025"
+      ],
+      "matched_gt_items": [
+        "September 13, 2025"
+      ],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0149",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 15,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.32,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
+      "ground_truth_items": [
+        "September 03, 2026"
+      ],
+      "matched_gt_items": [
+        "September 03, 2026"
+      ],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0150",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 1,
       "nb_pred": 17,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.38,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "February 27, 2026"
+      ],
       "matched_gt_items": [],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0151",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.27,
       "completion_tokens": 147,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
+      "ground_truth_items": [
+        "May 31, 2024"
+      ],
+      "matched_gt_items": [
+        "May 31, 2024"
+      ],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0152",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.4000000000000001,
+      "precision": 0.4,
+      "recall": 0.4,
+      "nb_gt": 1,
       "nb_pred": 19,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.37,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "December 26, 2026"
+      ],
       "matched_gt_items": [],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0153",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Spaces",
       "get_style": "chronological",
       "tokens_per_second": 16.61,
       "completion_tokens": 46,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
+      "ground_truth_items": [
+        "Bethpage Black Course"
+      ],
+      "matched_gt_items": [
+        "Bethpage Black Course"
+      ],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0154",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.5714285714285715,
+      "precision": 0.5714285714285715,
+      "recall": 0.5714285714285715,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Spaces",
       "get_style": "chronological",
       "tokens_per_second": 16.66,
       "completion_tokens": 24,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
+      "ground_truth_items": [
+        "Brooklyn Bridge"
+      ],
+      "matched_gt_items": [
+        "Brooklyn Bridge"
+      ],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0155",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 52,
       "retrieval_type": "Spaces",
       "get_style": "chronological",
       "tokens_per_second": 16.35,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
+      "ground_truth_items": [
+        "High Line"
+      ],
+      "matched_gt_items": [
+        "High Line"
+      ],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0156",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 9,
       "retrieval_type": "Spaces",
       "get_style": "chronological",
       "tokens_per_second": 16.37,
       "completion_tokens": 263,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
+      "ground_truth_items": [
+        "Woolworth Building"
+      ],
+      "matched_gt_items": [
+        "Woolworth Building"
+      ],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0157",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.9090909090909091,
+      "precision": 0.9090909090909091,
+      "recall": 0.9090909090909091,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Spaces",
       "get_style": "chronological",
       "tokens_per_second": 17.0,
       "completion_tokens": 18,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
+      "ground_truth_items": [
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History"
+      ],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0158",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.16666666666666669,
+      "precision": 0.16666666666666669,
+      "recall": 0.16666666666666669,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.73,
       "completion_tokens": 44,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Parkour Workshop"
+      ],
       "matched_gt_items": [],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0159",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.33333333333333337,
+      "precision": 0.33333333333333337,
+      "recall": 0.33333333333333337,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.6,
       "completion_tokens": 64,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Historical Reenactment"
+      ],
       "matched_gt_items": [],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0160",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.21052631578947367,
+      "precision": 0.21052631578947367,
+      "recall": 0.21052631578947367,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.58,
       "completion_tokens": 101,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": [],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0161",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.1818181818181818,
+      "precision": 0.1818181818181818,
+      "recall": 0.1818181818181818,
+      "nb_gt": 1,
       "nb_pred": 21,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.38,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon"
+      ],
       "matched_gt_items": [],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0162",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.05128205128205129,
+      "precision": 0.05128205128205129,
+      "recall": 0.05128205128205129,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.55,
       "completion_tokens": 65,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Astronomy Night"
+      ],
       "matched_gt_items": [],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0163",
-      "f1": 1.0,
-      "precision": 1.0,
-      "recall": 1.0,
-      "nb_gt": 0,
-      "nb_pred": 0,
+      "f1": 0.21052631578947367,
+      "precision": 0.21052631578947367,
+      "recall": 0.21052631578947367,
+      "nb_gt": 1,
+      "nb_pred": 16,
       "retrieval_type": "Event contents",
       "get_style": "latest",
       "tokens_per_second": 16.43,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Parkour Workshop"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0164",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 1,
       "nb_pred": 13,
       "retrieval_type": "Event contents",
       "get_style": "latest",
       "tokens_per_second": 16.5,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Historical Reenactment"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0165",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.19999999999999998,
+      "precision": 0.19999999999999998,
+      "recall": 0.19999999999999998,
+      "nb_gt": 1,
       "nb_pred": 4,
       "retrieval_type": "Event contents",
       "get_style": "latest",
       "tokens_per_second": 16.48,
       "completion_tokens": 213,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0166",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.05555555555555555,
+      "precision": 0.05555555555555555,
+      "recall": 0.05555555555555555,
+      "nb_gt": 1,
       "nb_pred": 11,
       "retrieval_type": "Event contents",
       "get_style": "latest",
       "tokens_per_second": 16.35,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0167",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.08695652173913042,
+      "precision": 0.08695652173913042,
+      "recall": 0.08695652173913042,
+      "nb_gt": 1,
       "nb_pred": 6,
       "retrieval_type": "Event contents",
       "get_style": "latest",
       "tokens_per_second": 16.45,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Astronomy Night"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0168",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.14285714285714288,
+      "precision": 0.14285714285714288,
+      "recall": 0.14285714285714288,
+      "nb_gt": 1,
       "nb_pred": 5,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.39,
       "completion_tokens": 173,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Parkour Workshop"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0169",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.16,
+      "precision": 0.16,
+      "recall": 0.16,
+      "nb_gt": 1,
       "nb_pred": 11,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.43,
       "completion_tokens": 316,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Historical Reenactment"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0170",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.17391304347826084,
+      "precision": 0.17391304347826084,
+      "recall": 0.17391304347826084,
+      "nb_gt": 1,
       "nb_pred": 7,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.51,
       "completion_tokens": 206,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0171",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.08333333333333334,
+      "precision": 0.08333333333333334,
+      "recall": 0.08333333333333334,
+      "nb_gt": 1,
       "nb_pred": 11,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.55,
       "completion_tokens": 357,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0172",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.14285714285714288,
+      "precision": 0.14285714285714288,
+      "recall": 0.14285714285714288,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.39,
       "completion_tokens": 347,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Astronomy Night"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0173",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 20,
       "retrieval_type": "Spaces",
       "get_style": "latest",
       "tokens_per_second": 16.47,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Bethpage Black Course"
+      ],
+      "matched_gt_items": [
+        "Bethpage Black Course"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0174",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 23,
       "retrieval_type": "Spaces",
       "get_style": "latest",
       "tokens_per_second": 16.23,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Brooklyn Bridge"
+      ],
+      "matched_gt_items": [
+        "Brooklyn Bridge"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0175",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 30,
       "retrieval_type": "Spaces",
       "get_style": "latest",
       "tokens_per_second": 16.44,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line"
+      ],
+      "matched_gt_items": [
+        "High Line"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0176",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.4444444444444445,
+      "precision": 0.4444444444444445,
+      "recall": 0.4444444444444445,
+      "nb_gt": 1,
       "nb_pred": 14,
       "retrieval_type": "Spaces",
       "get_style": "latest",
       "tokens_per_second": 16.46,
       "completion_tokens": 338,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Woolworth Building"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0177",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 20,
       "retrieval_type": "Spaces",
       "get_style": "latest",
       "tokens_per_second": 16.4,
       "completion_tokens": 212,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0178",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 17,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.53,
       "completion_tokens": 230,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Bethpage Black Course"
+      ],
+      "matched_gt_items": [
+        "Bethpage Black Course"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0179",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 30,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.0,
       "completion_tokens": 300,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Brooklyn Bridge"
+      ],
+      "matched_gt_items": [
+        "Brooklyn Bridge"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0180",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 39,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.32,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line"
+      ],
+      "matched_gt_items": [
+        "High Line"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0181",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.58,
       "completion_tokens": 114,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Woolworth Building"
+      ],
+      "matched_gt_items": [
+        "Woolworth Building"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0182",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 21,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.39,
       "completion_tokens": 301,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0183",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 11,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.5,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 13, 2025"
+      ],
+      "matched_gt_items": [
+        "September 13, 2025"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0184",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.4,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 03, 2026"
+      ],
+      "matched_gt_items": [
+        "September 03, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0185",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.29,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "February 27, 2026"
+      ],
+      "matched_gt_items": [
+        "February 27, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0186",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 13,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.11,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 31, 2024"
+      ],
+      "matched_gt_items": [
+        "May 31, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0187",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.76,
       "completion_tokens": 13,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "December 26, 2026"
+      ],
+      "matched_gt_items": [
+        "December 26, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0188",
       "f1": 1.0,
       "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_gt": 1,
+      "nb_pred": 13,
       "retrieval_type": "Times",
       "get_style": "latest",
       "tokens_per_second": 16.46,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 22, 2026"
+      ],
+      "matched_gt_items": [
+        "September 22, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0189",
       "f1": 1.0,
       "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_gt": 3,
+      "nb_pred": 18,
       "retrieval_type": "Times",
       "get_style": "chronological",
       "tokens_per_second": 16.12,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
-      "kendall_tau": 0.0
+      "ground_truth_items": [
+        "October 13, 2024",
+        "May 11, 2026",
+        "September 22, 2026"
+      ],
+      "matched_gt_items": [
+        "October 13, 2024",
+        "May 11, 2026",
+        "September 22, 2026"
+      ],
+      "kendall_tau": 1.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0190",
-      "f1": 1.0,
-      "precision": 1.0,
-      "recall": 1.0,
-      "nb_gt": 0,
-      "nb_pred": 0,
+      "f1": 0.058823529411764705,
+      "precision": 0.058823529411764705,
+      "recall": 0.058823529411764705,
+      "nb_gt": 1,
+      "nb_pred": 7,
       "retrieval_type": "Event contents",
       "get_style": "latest",
       "tokens_per_second": 16.32,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Photography Exhibition"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0191",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.09066951566951569,
+      "precision": 0.09066951566951569,
+      "recall": 0.09066951566951569,
+      "nb_gt": 3,
       "nb_pred": 9,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.5,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Film Festival",
+        "Photography Exhibition",
+        "Ice Sculpture Exhibition"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0192",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.5793650793650794,
+      "precision": 0.5793650793650794,
+      "recall": 0.5793650793650794,
+      "nb_gt": 3,
       "nb_pred": 19,
       "retrieval_type": "Spaces",
       "get_style": "chronological",
       "tokens_per_second": 16.41,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": [],
-      "kendall_tau": 0.0
+      "ground_truth_items": [
+        "Queensboro Bridge",
+        "Washington Square Park",
+        "Port Jefferson"
+      ],
+      "matched_gt_items": [
+        "Queensboro Bridge",
+        "Washington Square Park",
+        "Port Jefferson"
+      ],
+      "kendall_tau": -1.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0193",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.11066781066781069,
+      "precision": 0.11066781066781069,
+      "recall": 0.11066781066781069,
+      "nb_gt": 3,
       "nb_pred": 7,
       "retrieval_type": "Event contents",
       "get_style": "chronological",
       "tokens_per_second": 16.37,
       "completion_tokens": 507,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Film Festival",
+        "Ice Sculpture Exhibition",
+        "Photography Exhibition"
+      ],
       "matched_gt_items": [],
       "kendall_tau": 0.0
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0194",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.7777777777777778,
+      "precision": 0.7777777777777778,
+      "recall": 0.7777777777777778,
+      "nb_gt": 3,
       "nb_pred": 4,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.78,
       "completion_tokens": 56,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 11, 2026",
+        "October 13, 2024",
+        "September 22, 2026"
+      ],
+      "matched_gt_items": [
+        "May 11, 2026",
+        "October 13, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0195",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 13,
       "retrieval_type": "Spaces",
       "get_style": "latest",
       "tokens_per_second": 16.34,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Port Jefferson"
+      ],
+      "matched_gt_items": [
+        "Port Jefferson"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0196",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 3,
       "nb_pred": 32,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.46,
       "completion_tokens": 343,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Washington Square Park",
+        "Port Jefferson",
+        "Queensboro Bridge"
+      ],
+      "matched_gt_items": [
+        "Washington Square Park",
+        "Port Jefferson",
+        "Queensboro Bridge"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0197",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 2,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.0,
       "completion_tokens": 25,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "February 27, 2026",
+        "January 03, 2026"
+      ],
+      "matched_gt_items": [
+        "February 27, 2026",
+        "January 03, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0198",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.625,
+      "precision": 0.625,
+      "recall": 0.625,
+      "nb_gt": 2,
       "nb_pred": 54,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.46,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "St. Patrick's Cathedral",
+        "Statue of Liberty"
+      ],
+      "matched_gt_items": [
+        "St. Patrick's Cathedral"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0199",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 95,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.49,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Levi Rodriguez",
+        "Chloe Castillo"
+      ],
+      "matched_gt_items": [
+        "Levi Rodriguez",
+        "Chloe Castillo"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0200",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 37,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.46,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Henry Reed",
+        "Zoe Brown"
+      ],
+      "matched_gt_items": [
+        "Henry Reed",
+        "Zoe Brown"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0201",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 112,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.4,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green",
+        "Owen Thomas"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green",
+        "Owen Thomas"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0202",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 98,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.17,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green",
+        "Henry Reed"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green",
+        "Henry Reed"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0203",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 99,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.39,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Scarlett Thomas",
+        "Julian Ross"
+      ],
+      "matched_gt_items": [
+        "Scarlett Thomas",
+        "Julian Ross"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0204",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.058144012321909896,
+      "precision": 0.058144012321909896,
+      "recall": 0.058144012321909896,
+      "nb_gt": 2,
       "nb_pred": 2,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.24,
       "completion_tokens": 131,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Astronomy Night",
+        "Fashion Show"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0205",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.08603145235892692,
+      "precision": 0.08603145235892692,
+      "recall": 0.08603145235892692,
+      "nb_gt": 2,
       "nb_pred": 4,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.47,
       "completion_tokens": 270,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon",
+        "Photography Exhibition"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0206",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.1380952380952381,
+      "precision": 0.1380952380952381,
+      "recall": 0.1380952380952381,
+      "nb_gt": 2,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.47,
       "completion_tokens": 431,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon",
+        "Parkour Workshop"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0207",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.1739130434782609,
+      "precision": 0.1739130434782609,
+      "recall": 0.1739130434782609,
+      "nb_gt": 1,
       "nb_pred": 17,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.43,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Ice Sculpture Exhibition"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0208",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.11262626262626262,
+      "precision": 0.11262626262626262,
+      "recall": 0.11262626262626262,
+      "nb_gt": 2,
       "nb_pred": 2,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.59,
       "completion_tokens": 123,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Craft Beer Festival",
+        "Tech Hackathon"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0209",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 4,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.7,
       "completion_tokens": 49,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 22, 2026",
+        "December 26, 2026"
+      ],
+      "matched_gt_items": [
+        "September 22, 2026",
+        "December 26, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0210",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 15,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.49,
       "completion_tokens": 186,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 22, 2026",
+        "March 23, 2024"
+      ],
+      "matched_gt_items": [
+        "September 22, 2026",
+        "March 23, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0211",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 42,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.41,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "April 09, 2026",
+        "September 27, 2025"
+      ],
+      "matched_gt_items": [
+        "April 09, 2026",
+        "September 27, 2025"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0212",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 12,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.58,
       "completion_tokens": 151,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 11, 2026",
+        "February 27, 2026"
+      ],
+      "matched_gt_items": [
+        "May 11, 2026",
+        "February 27, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0213",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 43,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.4,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "October 13, 2024",
+        "May 31, 2024"
+      ],
+      "matched_gt_items": [
+        "October 13, 2024",
+        "May 31, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0214",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.79,
       "completion_tokens": 13,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "December 26, 2026"
+      ],
+      "matched_gt_items": [
+        "December 26, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0215",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.58,
       "completion_tokens": 13,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 22, 2026"
+      ],
+      "matched_gt_items": [
+        "September 22, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0216",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.77,
       "completion_tokens": 25,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 13, 2025"
+      ],
+      "matched_gt_items": [
+        "September 13, 2025"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0217",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 6,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.38,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 03, 2026"
+      ],
+      "matched_gt_items": [
+        "September 03, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0218",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.8,
       "completion_tokens": 13,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "March 23, 2024"
+      ],
+      "matched_gt_items": [
+        "March 23, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0219",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 111,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.5,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Levi Rodriguez"
+      ],
+      "matched_gt_items": [
+        "Levi Rodriguez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0220",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 96,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.42,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Chloe Castillo"
+      ],
+      "matched_gt_items": [
+        "Chloe Castillo"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0221",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 81,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.44,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Ezra Edwards"
+      ],
+      "matched_gt_items": [
+        "Ezra Edwards"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0222",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 17.38,
       "completion_tokens": 16,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Hazel Lewis"
+      ],
+      "matched_gt_items": [
+        "Hazel Lewis"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0223",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 96,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.47,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Logan Diaz"
+      ],
+      "matched_gt_items": [
+        "Logan Diaz"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0224",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.09090909090909091,
+      "precision": 0.09090909090909091,
+      "recall": 0.09090909090909091,
+      "nb_gt": 1,
       "nb_pred": 5,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.37,
       "completion_tokens": 171,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Fashion Show"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0225",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.05000000000000001,
+      "precision": 0.05,
+      "recall": 0.05,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.4,
       "completion_tokens": 473,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Astronomy Night"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0226",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.2222222222222222,
+      "precision": 0.2222222222222222,
+      "recall": 0.2222222222222222,
+      "nb_gt": 1,
       "nb_pred": 18,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.27,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Parkour Workshop"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0227",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.11764705882352941,
+      "precision": 0.11764705882352941,
+      "recall": 0.11764705882352941,
+      "nb_gt": 1,
       "nb_pred": 8,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.45,
       "completion_tokens": 286,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Historical Reenactment"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0228",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.14285714285714288,
+      "precision": 0.14285714285714288,
+      "recall": 0.14285714285714288,
+      "nb_gt": 1,
       "nb_pred": 15,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.32,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Parkour Workshop"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0229",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.39,
       "completion_tokens": 34,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 22, 2026"
+      ],
+      "matched_gt_items": [
+        "September 22, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0230",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.78,
       "completion_tokens": 13,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "December 26, 2026"
+      ],
+      "matched_gt_items": [
+        "December 26, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0231",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.82,
       "completion_tokens": 13,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 13, 2025"
+      ],
+      "matched_gt_items": [
+        "September 13, 2025"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0232",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.38,
       "completion_tokens": 18,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 03, 2026"
+      ],
+      "matched_gt_items": [
+        "September 03, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0233",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.87,
       "completion_tokens": 37,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 11, 2026"
+      ],
+      "matched_gt_items": [
+        "May 11, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0234",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 43,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.32,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 22, 2026"
+      ],
+      "matched_gt_items": [
+        "September 22, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0235",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.79,
       "completion_tokens": 13,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "December 26, 2026"
+      ],
+      "matched_gt_items": [
+        "December 26, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0236",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.96,
       "completion_tokens": 37,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 13, 2025"
+      ],
+      "matched_gt_items": [
+        "September 13, 2025"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0237",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.38,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 03, 2026"
+      ],
+      "matched_gt_items": [
+        "September 03, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0238",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 43,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.46,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 11, 2026"
+      ],
+      "matched_gt_items": [
+        "May 11, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0239",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 17.59,
       "completion_tokens": 15,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Ezra Edwards"
+      ],
+      "matched_gt_items": [
+        "Ezra Edwards"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0240",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 24,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.44,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Hazel Lewis"
+      ],
+      "matched_gt_items": [
+        "Hazel Lewis"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0241",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.65,
       "completion_tokens": 62,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Zoe Brown"
+      ],
+      "matched_gt_items": [
+        "Zoe Brown"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0242",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 17.0,
       "completion_tokens": 23,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Henry Reed"
+      ],
+      "matched_gt_items": [
+        "Henry Reed"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0243",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 98,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.47,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Mila Gonzalez"
+      ],
+      "matched_gt_items": [
+        "Mila Gonzalez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0244",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.19999999999999998,
+      "precision": 0.19999999999999998,
+      "recall": 0.19999999999999998,
+      "nb_gt": 1,
       "nb_pred": 4,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.58,
       "completion_tokens": 111,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Parkour Workshop"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0245",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.07407407407407407,
+      "precision": 0.07407407407407407,
+      "recall": 0.07407407407407407,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.51,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Historical Reenactment"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0246",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.09090909090909091,
+      "precision": 0.09090909090909091,
+      "recall": 0.09090909090909091,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.49,
       "completion_tokens": 284,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Karaoke Night"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0247",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 21.42,
       "completion_tokens": 4,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Film Festival"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0248",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.04878048780487805,
+      "precision": 0.048780487804878044,
+      "recall": 0.048780487804878044,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.46,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0249",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.71,
       "completion_tokens": 13,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 13, 2025"
+      ],
+      "matched_gt_items": [
+        "September 13, 2025"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0250",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 17,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.59,
       "completion_tokens": 210,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "September 03, 2026"
+      ],
+      "matched_gt_items": [
+        "September 03, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0251",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 16,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.39,
       "completion_tokens": 391,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 07, 2024"
+      ],
+      "matched_gt_items": [
+        "May 07, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0252",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 18,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.42,
       "completion_tokens": 217,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "October 13, 2024"
+      ],
+      "matched_gt_items": [
+        "October 13, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0253",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.39,
       "completion_tokens": 215,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "January 03, 2026"
+      ],
+      "matched_gt_items": [
+        "January 03, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0254",
@@ -3812,11 +4565,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0266",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 3,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.44,
@@ -4204,282 +4957,363 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0294",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.7777777777777778,
+      "precision": 0.7777777777777778,
+      "recall": 0.7777777777777778,
+      "nb_gt": 3,
       "nb_pred": 43,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 16.21,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 11, 2026",
+        "February 27, 2026",
+        "March 23, 2024"
+      ],
+      "matched_gt_items": [
+        "May 11, 2026",
+        "March 23, 2024"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0295",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.16875208541875208,
+      "precision": 0.16875208541875208,
+      "recall": 0.16875208541875208,
+      "nb_gt": 3,
       "nb_pred": 14,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.56,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Business Networking Event",
+        "Parkour Workshop",
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0296",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 3,
       "nb_pred": 98,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.46,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Jackson Ramos",
+        "Logan Diaz",
+        "Chloe Castillo"
+      ],
+      "matched_gt_items": [
+        "Jackson Ramos",
+        "Logan Diaz",
+        "Chloe Castillo"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0297",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 97,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.5,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green",
+        "Henry Reed"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green",
+        "Henry Reed"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0298",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 2,
       "retrieval_type": "Times",
       "get_style": "all",
       "tokens_per_second": 17.0,
       "completion_tokens": 31,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "May 11, 2026",
+        "February 27, 2026"
+      ],
+      "matched_gt_items": [
+        "May 11, 2026",
+        "February 27, 2026"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0299",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 99,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.51,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0300",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 98,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.48,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Levi Rodriguez"
+      ],
+      "matched_gt_items": [
+        "Levi Rodriguez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0301",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 104,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.53,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Mila Gonzalez"
+      ],
+      "matched_gt_items": [
+        "Mila Gonzalez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0302",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 17.24,
       "completion_tokens": 17,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Zoe Brown"
+      ],
+      "matched_gt_items": [
+        "Zoe Brown"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0303",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 17.4,
       "completion_tokens": 17,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Julian Ross"
+      ],
+      "matched_gt_items": [
+        "Julian Ross"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0304",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 17.47,
       "completion_tokens": 8,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Snug Harbor Cultural Center"
+      ],
+      "matched_gt_items": [
+        "Snug Harbor Cultural Center"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0305",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 33,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.48,
       "completion_tokens": 507,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0306",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 18.63,
       "completion_tokens": 8,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "St. Patrick's Cathedral"
+      ],
+      "matched_gt_items": [
+        "St. Patrick's Cathedral"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0307",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 21,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.46,
       "completion_tokens": 282,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Hither Hills State Park"
+      ],
+      "matched_gt_items": [
+        "Hither Hills State Park"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0308",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 16,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.48,
       "completion_tokens": 318,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Woolworth Building"
+      ],
+      "matched_gt_items": [
+        "Woolworth Building"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0309",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.13333333333333333,
+      "precision": 0.13333333333333333,
+      "recall": 0.13333333333333333,
+      "nb_gt": 1,
       "nb_pred": 15,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.22,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0310",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.05405405405405405,
+      "precision": 0.05405405405405405,
+      "recall": 0.05405405405405405,
+      "nb_gt": 1,
       "nb_pred": 11,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.43,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Astronomy Night"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0311",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.06060606060606061,
+      "precision": 0.06060606060606061,
+      "recall": 0.06060606060606061,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.43,
       "completion_tokens": 486,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0312",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.06451612903225806,
+      "precision": 0.06451612903225806,
+      "recall": 0.06451612903225806,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.56,
       "completion_tokens": 348,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Karaoke Night"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0313",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.06451612903225806,
+      "precision": 0.06451612903225806,
+      "recall": 0.06451612903225806,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.18,
       "completion_tokens": 387,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon"
+      ],
       "matched_gt_items": []
     },
     {
@@ -4624,361 +5458,447 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0324",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 97,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.21,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0325",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 17.89,
       "completion_tokens": 12,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Levi Rodriguez"
+      ],
+      "matched_gt_items": [
+        "Levi Rodriguez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0326",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 82,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.43,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0327",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 5,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.9,
       "completion_tokens": 38,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Mila Gonzalez"
+      ],
+      "matched_gt_items": [
+        "Mila Gonzalez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0328",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 25,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.45,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Logan Diaz"
+      ],
+      "matched_gt_items": [
+        "Logan Diaz"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0329",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 19,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.46,
       "completion_tokens": 356,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Snug Harbor Cultural Center"
+      ],
+      "matched_gt_items": [
+        "Snug Harbor Cultural Center"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0330",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 51,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.42,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0331",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 16,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.3,
       "completion_tokens": 380,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Washington Square Park"
+      ],
+      "matched_gt_items": [
+        "Washington Square Park"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0332",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 1,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 17.66,
       "completion_tokens": 14,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "St. Patrick's Cathedral"
+      ],
+      "matched_gt_items": [
+        "St. Patrick's Cathedral"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0333",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 17.64,
       "completion_tokens": 15,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line"
+      ],
+      "matched_gt_items": [
+        "High Line"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0334",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.08695652173913042,
+      "precision": 0.08695652173913042,
+      "recall": 0.08695652173913042,
+      "nb_gt": 1,
       "nb_pred": 8,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.56,
       "completion_tokens": 239,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0335",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.05714285714285715,
+      "precision": 0.05714285714285715,
+      "recall": 0.05714285714285715,
+      "nb_gt": 1,
       "nb_pred": 13,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.45,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Astronomy Night"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0336",
-      "f1": 1.0,
-      "precision": 1.0,
-      "recall": 1.0,
-      "nb_gt": 0,
-      "nb_pred": 0,
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "nb_gt": 1,
+      "nb_pred": 2,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.61,
       "completion_tokens": 101,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Ice Sculpture Exhibition"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0337",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.11764705882352941,
+      "precision": 0.11764705882352941,
+      "recall": 0.11764705882352941,
+      "nb_gt": 1,
       "nb_pred": 19,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 15.97,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0338",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.07692307692307693,
+      "precision": 0.07692307692307693,
+      "recall": 0.07692307692307693,
+      "nb_gt": 1,
       "nb_pred": 8,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.49,
       "completion_tokens": 322,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0339",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 9,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.55,
       "completion_tokens": 198,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Snug Harbor Cultural Center"
+      ],
+      "matched_gt_items": [
+        "Snug Harbor Cultural Center"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0340",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 17.03,
       "completion_tokens": 26,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0341",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 27,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.19,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Washington Square Park"
+      ],
+      "matched_gt_items": [
+        "Washington Square Park"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0342",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 13,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.51,
       "completion_tokens": 345,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line"
+      ],
+      "matched_gt_items": [
+        "High Line"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0343",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.375,
+      "precision": 0.375,
+      "recall": 0.375,
+      "nb_gt": 1,
       "nb_pred": 17,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.48,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Statue of Liberty"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0344",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 25,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.45,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Snug Harbor Cultural Center"
+      ],
+      "matched_gt_items": [
+        "Snug Harbor Cultural Center"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0345",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 17.07,
       "completion_tokens": 25,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "American Museum of Natural History"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0346",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 18,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.45,
       "completion_tokens": 450,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Washington Square Park"
+      ],
+      "matched_gt_items": [
+        "Washington Square Park"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0347",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 73,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.36,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line"
+      ],
+      "matched_gt_items": [
+        "High Line"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0348",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 1,
       "nb_pred": 3,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 17.18,
       "completion_tokens": 23,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Statue of Liberty"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0349",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 2,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.07,
@@ -5030,11 +5950,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0353",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 2,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.84,
@@ -5114,11 +6034,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0359",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 34,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.46,
@@ -5184,143 +6104,173 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0364",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.16666666666666669,
+      "precision": 0.16666666666666669,
+      "recall": 0.16666666666666669,
+      "nb_gt": 1,
       "nb_pred": 7,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.57,
       "completion_tokens": 173,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0365",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.125,
+      "precision": 0.125,
+      "recall": 0.125,
+      "nb_gt": 1,
       "nb_pred": 9,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.28,
       "completion_tokens": 266,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Astronomy Night"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0366",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 1,
       "nb_pred": 5,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.34,
       "completion_tokens": 149,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0367",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.08333333333333334,
+      "precision": 0.08333333333333334,
+      "recall": 0.08333333333333334,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.42,
       "completion_tokens": 362,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0368",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.21052631578947367,
+      "precision": 0.21052631578947367,
+      "recall": 0.21052631578947367,
+      "nb_gt": 1,
       "nb_pred": 20,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.44,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Ice Sculpture Exhibition"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0369",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 98,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.29,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0370",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 2,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 17.25,
       "completion_tokens": 12,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Levi Rodriguez"
+      ],
+      "matched_gt_items": [
+        "Levi Rodriguez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0371",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 97,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.43,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Jackson Ramos"
+      ],
+      "matched_gt_items": [
+        "Jackson Ramos"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0372",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 5,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.94,
       "completion_tokens": 38,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Mila Gonzalez"
+      ],
+      "matched_gt_items": [
+        "Mila Gonzalez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0373",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 98,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.42,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0374",
@@ -5394,282 +6344,343 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0379",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 95,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.36,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0380",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 96,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.48,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Levi Rodriguez"
+      ],
+      "matched_gt_items": [
+        "Levi Rodriguez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0381",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 124,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.48,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Jackson Ramos"
+      ],
+      "matched_gt_items": [
+        "Jackson Ramos"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0382",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 28,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.27,
       "completion_tokens": 188,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Mila Gonzalez"
+      ],
+      "matched_gt_items": [
+        "Mila Gonzalez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0383",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 98,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.44,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0384",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.1081081081081081,
+      "precision": 0.1081081081081081,
+      "recall": 0.1081081081081081,
+      "nb_gt": 1,
       "nb_pred": 4,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.44,
       "completion_tokens": 185,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0385",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.058823529411764705,
+      "precision": 0.058823529411764705,
+      "recall": 0.058823529411764705,
+      "nb_gt": 1,
       "nb_pred": 7,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.51,
       "completion_tokens": 305,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Astronomy Night"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0386",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.10256410256410257,
+      "precision": 0.10256410256410257,
+      "recall": 0.10256410256410257,
+      "nb_gt": 1,
       "nb_pred": 8,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.56,
       "completion_tokens": 336,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0387",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.06896551724137931,
+      "precision": 0.06896551724137931,
+      "recall": 0.06896551724137931,
+      "nb_gt": 1,
       "nb_pred": 7,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.39,
       "completion_tokens": 317,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0388",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.15,
+      "precision": 0.15,
+      "recall": 0.15,
+      "nb_gt": 1,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.33,
       "completion_tokens": 459,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Ice Sculpture Exhibition"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0389",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 1,
       "nb_pred": 9,
       "retrieval_type": "Full event details",
       "get_style": "all",
       "tokens_per_second": 16.57,
       "completion_tokens": 209,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Full chapter 14"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0390",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.04878048780487805,
+      "precision": 0.048780487804878044,
+      "recall": 0.048780487804878044,
+      "nb_gt": 1,
       "nb_pred": 11,
       "retrieval_type": "Full event details",
       "get_style": "all",
       "tokens_per_second": 16.44,
       "completion_tokens": 384,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Full chapter 15"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0391",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 1,
       "nb_pred": 17,
       "retrieval_type": "Full event details",
       "get_style": "all",
       "tokens_per_second": 16.37,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Full chapter 18"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0392",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.05263157894736842,
+      "precision": 0.05263157894736842,
+      "recall": 0.05263157894736842,
+      "nb_gt": 1,
       "nb_pred": 8,
       "retrieval_type": "Full event details",
       "get_style": "all",
       "tokens_per_second": 16.32,
       "completion_tokens": 314,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Full chapter 9"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0393",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.08888888888888889,
+      "precision": 0.08888888888888889,
+      "recall": 0.08888888888888889,
+      "nb_gt": 1,
       "nb_pred": 9,
       "retrieval_type": "Full event details",
       "get_style": "all",
       "tokens_per_second": 16.48,
       "completion_tokens": 405,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Full chapter 7"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0394",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 96,
       "retrieval_type": "Other entities",
       "get_style": "all",
       "tokens_per_second": 16.4,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Genevieve Burgin"
+      ],
+      "matched_gt_items": [
+        "Genevieve Burgin"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0395",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 1,
       "nb_pred": 5,
       "retrieval_type": "Other entities",
       "get_style": "all",
       "tokens_per_second": 16.44,
       "completion_tokens": 123,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Quill Womack"
+      ],
+      "matched_gt_items": [
+        "Quill Womack"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0396",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 1,
       "nb_pred": 5,
       "retrieval_type": "Other entities",
       "get_style": "all",
       "tokens_per_second": 16.92,
       "completion_tokens": 38,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Israel Gallo"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0397",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 3,
       "nb_pred": 8,
       "retrieval_type": "Other entities",
       "get_style": "all",
       "tokens_per_second": 16.67,
       "completion_tokens": 114,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Diem Nix",
+        "Eli Groth",
+        "Rey Pierre"
+      ],
+      "matched_gt_items": [
+        "Diem Nix",
+        "Eli Groth",
+        "Rey Pierre"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0398",
       "f1": 0.0,
       "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "recall": 0.0,
+      "nb_gt": 2,
       "nb_pred": 1,
       "retrieval_type": "Other entities",
       "get_style": "all",
       "tokens_per_second": 18.15,
       "completion_tokens": 10,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Dakari Liebert",
+        "Creed Berlin"
+      ],
       "matched_gt_items": []
     },
     {
@@ -5856,11 +6867,11 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0412",
-      "f1": 1.0,
-      "precision": 1.0,
+      "f1": 0.0,
+      "precision": 0.0,
       "recall": 1.0,
       "nb_gt": 0,
-      "nb_pred": 0,
+      "nb_pred": 1,
       "retrieval_type": "Full event details",
       "get_style": "all",
       "tokens_per_second": 16.56,
@@ -6234,241 +7245,330 @@
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0439",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.75,
+      "precision": 0.75,
+      "recall": 0.75,
+      "nb_gt": 3,
       "nb_pred": 19,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.37,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line",
+        "Statue of Liberty",
+        "Washington Square Park"
+      ],
+      "matched_gt_items": [
+        "High Line",
+        "Washington Square Park"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0440",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.14303959131545338,
+      "precision": 0.14303959131545338,
+      "recall": 0.14303959131545338,
+      "nb_gt": 2,
       "nb_pred": 10,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.53,
       "completion_tokens": 294,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Ice Sculpture Exhibition",
+        "Theater Performance"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0441",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 3,
       "nb_pred": 97,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.54,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Benjamin Green",
+        "Jackson Ramos",
+        "Mila Gonzalez"
+      ],
+      "matched_gt_items": [
+        "Benjamin Green",
+        "Jackson Ramos",
+        "Mila Gonzalez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0442",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 109,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.35,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Jackson Ramos",
+        "Mila Gonzalez"
+      ],
+      "matched_gt_items": [
+        "Jackson Ramos",
+        "Mila Gonzalez"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0443",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.5,
+      "precision": 0.5,
+      "recall": 0.5,
+      "nb_gt": 2,
       "nb_pred": 5,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.56,
       "completion_tokens": 426,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line",
+        "Statue of Liberty"
+      ],
+      "matched_gt_items": [
+        "High Line"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0444",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.16233766233766234,
+      "precision": 0.16233766233766234,
+      "recall": 0.16233766233766234,
+      "nb_gt": 2,
       "nb_pred": 4,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.68,
       "completion_tokens": 140,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Tech Hackathon",
+        "Business Networking Event"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0445",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.15714285714285714,
+      "precision": 0.15714285714285714,
+      "recall": 0.15714285714285714,
+      "nb_gt": 2,
       "nb_pred": 5,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.61,
       "completion_tokens": 184,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Ice Sculpture Exhibition",
+        "Parkour Workshop"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0446",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.1919191919191919,
+      "precision": 0.1919191919191919,
+      "recall": 0.1919191919191919,
+      "nb_gt": 2,
       "nb_pred": 19,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.29,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Craft Beer Festival",
+        "Film Festival"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0447",
-      "f1": 0.0,
-      "precision": 0.0,
-      "recall": 1.0,
-      "nb_gt": 0,
+      "f1": 0.1005656819610308,
+      "precision": 0.1005656819610308,
+      "recall": 0.1005656819610308,
+      "nb_gt": 2,
       "nb_pred": 14,
       "retrieval_type": "Event contents",
       "get_style": "all",
       "tokens_per_second": 16.55,
       "completion_tokens": 512,
-      "ground_truth_items": [],
+      "ground_truth_items": [
+        "Fashion Show",
+        "Photography Exhibition"
+      ],
       "matched_gt_items": []
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0448",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 95,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.53,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Logan Diaz",
+        "Zoe Brown"
+      ],
+      "matched_gt_items": [
+        "Logan Diaz",
+        "Zoe Brown"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0449",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 97,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.56,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Henry Reed",
+        "Chloe Castillo"
+      ],
+      "matched_gt_items": [
+        "Henry Reed",
+        "Chloe Castillo"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0450",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 99,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.12,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Scarlett Thomas",
+        "Henry Reed"
+      ],
+      "matched_gt_items": [
+        "Scarlett Thomas",
+        "Henry Reed"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0451",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 88,
       "retrieval_type": "Entities",
       "get_style": "all",
       "tokens_per_second": 16.31,
       "completion_tokens": 512,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Henry Reed",
+        "Chloe Castillo"
+      ],
+      "matched_gt_items": [
+        "Henry Reed",
+        "Chloe Castillo"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0452",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 2,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 18.36,
       "completion_tokens": 9,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line",
+        "Port Jefferson"
+      ],
+      "matched_gt_items": [
+        "High Line",
+        "Port Jefferson"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0453",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 2,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 18.18,
       "completion_tokens": 10,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "High Line",
+        "Washington Square Park"
+      ],
+      "matched_gt_items": [
+        "High Line",
+        "Washington Square Park"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0454",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 7,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.53,
       "completion_tokens": 176,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "Woolworth Building",
+        "Queensboro Bridge"
+      ],
+      "matched_gt_items": [
+        "Woolworth Building",
+        "Queensboro Bridge"
+      ]
     },
     {
       "question_id": "tulving_Udefault_Sdefault_seed0_ch-001_q0455",
-      "f1": 0.0,
-      "precision": 0.0,
+      "f1": 1.0,
+      "precision": 1.0,
       "recall": 1.0,
-      "nb_gt": 0,
+      "nb_gt": 2,
       "nb_pred": 32,
       "retrieval_type": "Spaces",
       "get_style": "all",
       "tokens_per_second": 16.52,
       "completion_tokens": 486,
-      "ground_truth_items": [],
-      "matched_gt_items": []
+      "ground_truth_items": [
+        "American Museum of Natural History",
+        "Port Jefferson"
+      ],
+      "matched_gt_items": [
+        "American Museum of Natural History",
+        "Port Jefferson"
+      ]
     }
   ]
 }

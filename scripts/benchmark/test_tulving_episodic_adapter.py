@@ -229,6 +229,10 @@ class TestExtractListFromResponse:
         assert _extract_list_from_response("I'm not sure") == []
         assert _extract_list_from_response("No information available") == []
 
+    def test_explanatory_not_mentioned_does_not_erase_list(self):
+        response = "- High Line\n- Woolworth Building\n\nSome other locations are not mentioned."
+        assert _extract_list_from_response(response) == ["High Line", "Woolworth Building"]
+
     def test_single_item(self):
         items = _extract_list_from_response("New York")
         assert len(items) >= 1
@@ -246,8 +250,20 @@ class TestParseCorrectAnswer:
         result = TulvingEpisodicAdapter._parse_correct_answer(["A", "B"])
         assert result == ["A", "B"]
 
+    def test_numpy_array_like(self):
+        class ArrayLike:
+            def tolist(self):
+                return ["A", "B"]
+
+        result = TulvingEpisodicAdapter._parse_correct_answer(ArrayLike())
+        assert result == ["A", "B"]
+
     def test_json_string(self):
         result = TulvingEpisodicAdapter._parse_correct_answer('["A", "B"]')
+        assert result == ["A", "B"]
+
+    def test_python_list_string(self):
+        result = TulvingEpisodicAdapter._parse_correct_answer("['A', 'B']")
         assert result == ["A", "B"]
 
     def test_plain_string(self):
@@ -354,6 +370,10 @@ class TestTierAssignment:
 
     def test_tier2_medium(self):
         a = self._adapter([{"correct_answer": ["A", "B", "C"], "get": "all"}])
+        assert a._get_tier_for_index(0) == 2
+
+    def test_tier_uses_python_list_string_count(self):
+        a = self._adapter([{"correct_answer": "['A', 'B', 'C']", "get": "all"}])
         assert a._get_tier_for_index(0) == 2
 
 
