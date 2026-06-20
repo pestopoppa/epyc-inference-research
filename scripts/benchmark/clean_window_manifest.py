@@ -35,6 +35,17 @@ RUN_BENCHMARK_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "run_benchmark.p
 ROPE_PROBE_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "rope_position_probe.py"
 SHORT_MK_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "short_mk_voting.py"
 DS_E1_KV_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "ds_e1_kv_measurements.sh"
+ORCHESTRATOR_ROOT = Path("/mnt/raid0/llm/epyc-orchestrator")
+XMAS_LIVE_AB_SCRIPT = ORCHESTRATOR_ROOT / "scripts" / "benchmark" / "xmas_live_ab.py"
+XMAS_HELDOUT_PROMPTS = (
+    ORCHESTRATOR_ROOT
+    / "benchmarks"
+    / "results"
+    / "runs"
+    / "xmas_live_ab"
+    / "20260618-heldout-resilient"
+    / "prompts.jsonl"
+)
 DEFAULT_MANIFEST_PATH = PROJECT_ROOT / "docs" / "data" / "clean_window_measurement_manifest.json"
 DEFAULT_COMMANDS_PATH = PROJECT_ROOT / "docs" / "data" / "clean_window_measurement_commands.sh"
 DEFAULT_LIVE_REGISTRY_PATH = Path("/mnt/raid0/llm/epyc-orchestrator/orchestration/model_registry.yaml")
@@ -251,6 +262,23 @@ def _ds_e1_kv_command() -> str:
     return shlex.join(["bash", str(DS_E1_KV_SCRIPT), "--execute"])
 
 
+def _xmas_live_ab_command() -> str:
+    argv = [
+        "uv",
+        "run",
+        "python",
+        "scripts/benchmark/xmas_live_ab.py",
+        "--prompts",
+        "benchmarks/results/runs/xmas_live_ab/20260618-heldout-resilient/prompts.jsonl",
+        "--reps",
+        "2",
+        "--host-quiet-confirmed",
+        "--output",
+    ]
+    output = "benchmarks/results/runs/xmas_live_ab/$(date -u +%Y%m%dT%H%M%SZ)-constrained-policy"
+    return f"cd {shlex.quote(str(ORCHESTRATOR_ROOT))} && {shlex.join(argv)} {output}"
+
+
 def _suite_entry(
     registry,
     *,
@@ -413,6 +441,45 @@ def _ds_e1_entry() -> dict[str, Any]:
     }
 
 
+def _xmas_live_ab_entry() -> dict[str, Any]:
+    notes = [
+        "requires attested quiet window; runner refuses AutoPilot and competing benchmark coordinators",
+        "summary.json must carry xmas_policy=incumbent_constrained_v1 and decision.status=promote_candidate",
+        "writes benchmarks/results/runs/xmas_live_ab/<timestamp>-constrained-policy/{meta.json,results.jsonl,summary.json,report.md}",
+    ]
+    if not XMAS_LIVE_AB_SCRIPT.exists():
+        notes.append("X-MAS held-out A/B runner missing")
+    if not XMAS_HELDOUT_PROMPTS.exists():
+        notes.append("X-MAS held-out prompt manifest missing")
+    status = "ready" if XMAS_LIVE_AB_SCRIPT.exists() and XMAS_HELDOUT_PROMPTS.exists() else "blocked"
+    return {
+        "package": "X-MAS",
+        "kind": "constrained_policy_heldout_ab",
+        "role": "xmas_routing",
+        "status": status,
+        "command": _xmas_live_ab_command() if status == "ready" else None,
+        "notes": notes,
+        "model": {
+            "role": "xmas_routing",
+            "tier": "clean_window",
+            "architecture": "function_axis_routing_ab",
+            "model_path": "clean-window-harness:xmas-constrained-policy",
+            "benchmark_model_path": None,
+            "live_model_path": None,
+            "model_path_source": "harness",
+            "benchmark_registry_mismatch": False,
+            "model_exists": status == "ready",
+            "max_context": None,
+            "server": {
+                "name": "xmas_live_ab",
+                "url": None,
+                "port": None,
+                "source": str(XMAS_LIVE_AB_SCRIPT),
+            },
+        },
+    }
+
+
 def build_manifest(
     *,
     aa_roles: list[str] | None = None,
@@ -455,6 +522,7 @@ def build_manifest(
         entries.append(_g5_entry(registry, role, live_registry=live_registry, output_root=output_root))
 
     entries.append(_ds_e1_entry())
+    entries.append(_xmas_live_ab_entry())
 
     groups: dict[str, dict[str, Any]] = {}
     for entry in entries:
@@ -481,7 +549,7 @@ def build_manifest(
         "generated_at": generated_at,
         "run_id": f"clean-window-{generated_at.replace(':', '').replace('+', 'Z')}",
         "kind": "model_batched_clean_window",
-        "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1 plus DS-E1 KV measurements",
+        "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1 plus DS-E1 KV measurements and X-MAS constrained-policy A/B",
         "source_handoff": SOURCE_HANDOFF,
         "output_root": str(output_root),
         "topology": {

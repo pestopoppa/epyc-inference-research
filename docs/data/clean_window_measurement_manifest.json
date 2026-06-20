@@ -2,7 +2,7 @@
   "attestation": {
     "generated_by": "scripts/benchmark/clean_window_manifest.py",
     "inference_started": false,
-    "research_head": "dea5f8d31d91e790291de813d3c7660522f6c3d9"
+    "research_head": "0fd0772eb4864b2169129eeacdd492077b3aa581"
   },
   "entries": [
     {
@@ -141,7 +141,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "frontdoor",
       "status": "ready"
     },
@@ -169,7 +169,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "frontdoor",
       "status": "ready"
     },
@@ -197,7 +197,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "frontdoor",
       "status": "ready"
     },
@@ -227,7 +227,7 @@
         "context 32768 needs chat-template headroom below live server context 32768"
       ],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "frontdoor",
       "status": "blocked"
     },
@@ -255,7 +255,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "worker_general",
       "status": "ready"
     },
@@ -283,7 +283,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "worker_general",
       "status": "ready"
     },
@@ -313,7 +313,7 @@
         "context 16384 needs chat-template headroom below live server context 16384"
       ],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "worker_general",
       "status": "blocked"
     },
@@ -343,7 +343,7 @@
         "context 32768 needs chat-template headroom below live server context 16384"
       ],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "worker_general",
       "status": "blocked"
     },
@@ -371,7 +371,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "architect_general",
       "status": "ready"
     },
@@ -399,7 +399,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "architect_general",
       "status": "ready"
     },
@@ -429,7 +429,7 @@
         "context 16384 needs chat-template headroom below live server context 16384"
       ],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "architect_general",
       "status": "blocked"
     },
@@ -459,7 +459,7 @@
         "context 32768 needs chat-template headroom below live server context 16384"
       ],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "architect_general",
       "status": "blocked"
     },
@@ -487,7 +487,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "ingest_long_context",
       "status": "ready"
     },
@@ -515,7 +515,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "ingest_long_context",
       "status": "ready"
     },
@@ -543,7 +543,7 @@
       },
       "notes": [],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "ingest_long_context",
       "status": "ready"
     },
@@ -573,7 +573,7 @@
         "context 32768 needs chat-template headroom below live server context 32768"
       ],
       "package": "K-ROPE-1",
-      "port_source": "override",
+      "port_source": "registry.server_mode",
       "role": "ingest_long_context",
       "status": "blocked"
     },
@@ -725,9 +725,39 @@
       "package": "DS-E1",
       "role": "dynamic_stack",
       "status": "ready"
+    },
+    {
+      "command": "cd /mnt/raid0/llm/epyc-orchestrator && uv run python scripts/benchmark/xmas_live_ab.py --prompts benchmarks/results/runs/xmas_live_ab/20260618-heldout-resilient/prompts.jsonl --reps 2 --host-quiet-confirmed --output benchmarks/results/runs/xmas_live_ab/$(date -u +%Y%m%dT%H%M%SZ)-constrained-policy",
+      "kind": "constrained_policy_heldout_ab",
+      "model": {
+        "architecture": "function_axis_routing_ab",
+        "benchmark_model_path": null,
+        "benchmark_registry_mismatch": false,
+        "live_model_path": null,
+        "max_context": null,
+        "model_exists": true,
+        "model_path": "clean-window-harness:xmas-constrained-policy",
+        "model_path_source": "harness",
+        "role": "xmas_routing",
+        "server": {
+          "name": "xmas_live_ab",
+          "port": null,
+          "source": "/mnt/raid0/llm/epyc-orchestrator/scripts/benchmark/xmas_live_ab.py",
+          "url": null
+        },
+        "tier": "clean_window"
+      },
+      "notes": [
+        "requires attested quiet window; runner refuses AutoPilot and competing benchmark coordinators",
+        "summary.json must carry xmas_policy=incumbent_constrained_v1 and decision.status=promote_candidate",
+        "writes benchmarks/results/runs/xmas_live_ab/<timestamp>-constrained-policy/{meta.json,results.jsonl,summary.json,report.md}"
+      ],
+      "package": "X-MAS",
+      "role": "xmas_routing",
+      "status": "ready"
     }
   ],
-  "generated_at": "2026-06-20T18:46:22.855143+00:00",
+  "generated_at": "2026-06-20T20:21:12.309355+00:00",
   "groups": [
     {
       "entries": [
@@ -783,7 +813,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "ingest_long_context",
           "status": "ready"
         },
@@ -811,7 +841,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "ingest_long_context",
           "status": "ready"
         },
@@ -839,7 +869,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "ingest_long_context",
           "status": "ready"
         },
@@ -869,7 +899,7 @@
             "context 32768 needs chat-template headroom below live server context 32768"
           ],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "ingest_long_context",
           "status": "blocked"
         }
@@ -938,7 +968,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "architect_general",
           "status": "ready"
         },
@@ -966,7 +996,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "architect_general",
           "status": "ready"
         },
@@ -996,7 +1026,7 @@
             "context 16384 needs chat-template headroom below live server context 16384"
           ],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "architect_general",
           "status": "blocked"
         },
@@ -1026,7 +1056,7 @@
             "context 32768 needs chat-template headroom below live server context 16384"
           ],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "architect_general",
           "status": "blocked"
         },
@@ -1135,7 +1165,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "frontdoor",
           "status": "ready"
         },
@@ -1163,7 +1193,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "frontdoor",
           "status": "ready"
         },
@@ -1191,7 +1221,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "frontdoor",
           "status": "ready"
         },
@@ -1221,7 +1251,7 @@
             "context 32768 needs chat-template headroom below live server context 32768"
           ],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "frontdoor",
           "status": "blocked"
         },
@@ -1330,7 +1360,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "worker_general",
           "status": "ready"
         },
@@ -1358,7 +1388,7 @@
           },
           "notes": [],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "worker_general",
           "status": "ready"
         },
@@ -1388,7 +1418,7 @@
             "context 16384 needs chat-template headroom below live server context 16384"
           ],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "worker_general",
           "status": "blocked"
         },
@@ -1418,7 +1448,7 @@
             "context 32768 needs chat-template headroom below live server context 16384"
           ],
           "package": "K-ROPE-1",
-          "port_source": "override",
+          "port_source": "registry.server_mode",
           "role": "worker_general",
           "status": "blocked"
         },
@@ -1514,6 +1544,49 @@
         "entries": 1,
         "ready": 1
       }
+    },
+    {
+      "entries": [
+        {
+          "command": "cd /mnt/raid0/llm/epyc-orchestrator && uv run python scripts/benchmark/xmas_live_ab.py --prompts benchmarks/results/runs/xmas_live_ab/20260618-heldout-resilient/prompts.jsonl --reps 2 --host-quiet-confirmed --output benchmarks/results/runs/xmas_live_ab/$(date -u +%Y%m%dT%H%M%SZ)-constrained-policy",
+          "kind": "constrained_policy_heldout_ab",
+          "model": {
+            "architecture": "function_axis_routing_ab",
+            "benchmark_model_path": null,
+            "benchmark_registry_mismatch": false,
+            "live_model_path": null,
+            "max_context": null,
+            "model_exists": true,
+            "model_path": "clean-window-harness:xmas-constrained-policy",
+            "model_path_source": "harness",
+            "role": "xmas_routing",
+            "server": {
+              "name": "xmas_live_ab",
+              "port": null,
+              "source": "/mnt/raid0/llm/epyc-orchestrator/scripts/benchmark/xmas_live_ab.py",
+              "url": null
+            },
+            "tier": "clean_window"
+          },
+          "notes": [
+            "requires attested quiet window; runner refuses AutoPilot and competing benchmark coordinators",
+            "summary.json must carry xmas_policy=incumbent_constrained_v1 and decision.status=promote_candidate",
+            "writes benchmarks/results/runs/xmas_live_ab/<timestamp>-constrained-policy/{meta.json,results.jsonl,summary.json,report.md}"
+          ],
+          "package": "X-MAS",
+          "role": "xmas_routing",
+          "status": "ready"
+        }
+      ],
+      "model_path": "clean-window-harness:xmas-constrained-policy",
+      "roles": [
+        "xmas_routing"
+      ],
+      "summary": {
+        "blocked": 0,
+        "entries": 1,
+        "ready": 1
+      }
     }
   ],
   "journal_quarantine_rule": "Do not mix these results into calibration journals if another benchmark or AutoPilot run is concurrently mutating the live stack.",
@@ -1521,14 +1594,14 @@
   "next_action": "After AutoPilot quiesces, verify live topology/affinity, then run ready commands model group by model group.",
   "output_root": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window",
   "pass_fail_gate": "All ready commands require a clean inference window, successful preflight, and per-task result aggregation; blocked entries must remain non-executable.",
-  "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1 plus DS-E1 KV measurements",
-  "run_id": "clean-window-2026-06-20T184622.855143Z0000",
+  "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1 plus DS-E1 KV measurements and X-MAS constrained-policy A/B",
+  "run_id": "clean-window-2026-06-20T202112.309355Z0000",
   "source_handoff": "/mnt/raid0/llm/epyc-root/handoffs/active/bulk-inference-campaign.md",
   "summary": {
     "entries_blocked": 6,
-    "entries_ready": 18,
-    "entries_total": 24,
-    "models_total": 5
+    "entries_ready": 19,
+    "entries_total": 25,
+    "models_total": 6
   },
   "topology": {
     "affinity_artifact": null,

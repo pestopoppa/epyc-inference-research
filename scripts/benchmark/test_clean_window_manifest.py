@@ -111,7 +111,11 @@ def test_rope_cells_block_when_context_exceeds_registered_max(monkeypatch, tmp_p
         live_registry_path=None,
     )
 
-    contexts = {entry["context_length"]: entry for entry in built["entries"]}
+    contexts = {
+        entry["context_length"]: entry
+        for entry in built["entries"]
+        if entry["kind"] == "rope_position_probe"
+    }
     assert contexts[4096]["status"] == "ready"
     assert " --api chat " in contexts[4096]["command"]
     assert contexts[32768]["status"] == "blocked"
@@ -134,6 +138,50 @@ def test_g5_is_blocked_when_runner_is_missing(monkeypatch):
     assert built["entries"][0]["package"] == "G5"
     assert built["entries"][0]["status"] == "blocked"
     assert built["entries"][0]["command"] is None
+
+
+def test_xmas_entry_records_constrained_policy_command(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        manifest,
+        "XMAS_LIVE_AB_SCRIPT",
+        tmp_path / "epyc-orchestrator" / "scripts" / "benchmark" / "xmas_live_ab.py",
+    )
+    monkeypatch.setattr(
+        manifest,
+        "XMAS_HELDOUT_PROMPTS",
+        tmp_path
+        / "epyc-orchestrator"
+        / "benchmarks"
+        / "results"
+        / "runs"
+        / "xmas_live_ab"
+        / "20260618-heldout-resilient"
+        / "prompts.jsonl",
+    )
+    monkeypatch.setattr(manifest.Path, "exists", lambda self: True)
+
+    entry = manifest._xmas_live_ab_entry()
+
+    assert entry["package"] == "X-MAS"
+    assert entry["status"] == "ready"
+    assert "--host-quiet-confirmed" in entry["command"]
+    assert "--reps 2" in entry["command"]
+    assert "$(date -u +%Y%m%dT%H%M%SZ)-constrained-policy" in entry["command"]
+    assert any("incumbent_constrained_v1" in note for note in entry["notes"])
+
+
+def test_xmas_entry_blocks_when_prompt_manifest_missing(monkeypatch, tmp_path):
+    runner = tmp_path / "xmas_live_ab.py"
+    runner.touch()
+    missing_prompts = tmp_path / "missing-prompts.jsonl"
+    monkeypatch.setattr(manifest, "XMAS_LIVE_AB_SCRIPT", runner)
+    monkeypatch.setattr(manifest, "XMAS_HELDOUT_PROMPTS", missing_prompts)
+
+    entry = manifest._xmas_live_ab_entry()
+
+    assert entry["status"] == "blocked"
+    assert entry["command"] is None
+    assert "X-MAS held-out prompt manifest missing" in entry["notes"]
 
 
 def test_suite_entry_blocks_when_live_registry_differs(monkeypatch):

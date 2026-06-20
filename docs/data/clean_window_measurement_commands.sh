@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Generated at 2026-06-20T18:46:22.855143+00:00
+# Generated at 2026-06-20T20:21:12.309355+00:00
 # Review live topology before running commands with direct --port values.
 
 # model_path: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf
@@ -90,3 +90,8 @@ set -euo pipefail
 # roles: dynamic_stack
 # DS-E1 dynamic_stack production_kv_measurements [ready]
 bash /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/ds_e1_kv_measurements.sh --execute
+
+# model_path: clean-window-harness:xmas-constrained-policy
+# roles: xmas_routing
+# X-MAS xmas_routing constrained_policy_heldout_ab [ready]
+cd /mnt/raid0/llm/epyc-orchestrator && uv run python scripts/benchmark/xmas_live_ab.py --prompts benchmarks/results/runs/xmas_live_ab/20260618-heldout-resilient/prompts.jsonl --reps 2 --host-quiet-confirmed --output benchmarks/results/runs/xmas_live_ab/$(date -u +%Y%m%dT%H%M%SZ)-constrained-policy
