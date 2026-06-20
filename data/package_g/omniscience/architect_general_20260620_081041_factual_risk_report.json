@@ -1,0 +1,280 @@
+{
+  "dataset": {
+    "exists": true,
+    "field_presence": {
+      "label_4class": 2600,
+      "label_source": 2600,
+      "risk_band_v1": 2600,
+      "risk_features": 2600,
+      "risk_score_computed": 2600
+    },
+    "path": "/mnt/raid0/llm/epyc-orchestrator/orchestration/factual_risk_calibration_v2.jsonl",
+    "risk_label_counts": {
+      "CORRECT": 298,
+      "INCORRECT": 483,
+      "NOT_ATTEMPTED": 1819
+    },
+    "row_count": 2600,
+    "source_counts": {
+      "aa_omniscience": 600,
+      "v1_regex": 2000
+    },
+    "tier_counts": {},
+    "tier_source_crosstab": {}
+  },
+  "results": {
+    "by_model": {
+      "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf": {
+        "metrics": {
+          "accuracy": 0.131667,
+          "hallucination_rate": 0.497121,
+          "not_attempted_rate": 0.268333,
+          "partial_rate": 0.168333,
+          "total": 600
+        },
+        "outcomes": {
+          "CORRECT": 79,
+          "INCORRECT": 259,
+          "NOT_ATTEMPTED": 161,
+          "PARTIAL_ANSWER": 101
+        },
+        "source_counts": {
+          "aa_omniscience": 600
+        },
+        "total": 600
+      },
+      "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf": {
+        "metrics": {
+          "accuracy": 0.115556,
+          "hallucination_rate": 0.562814,
+          "not_attempted_rate": 0.213333,
+          "partial_rate": 0.173333,
+          "total": 1800
+        },
+        "outcomes": {
+          "CORRECT": 208,
+          "INCORRECT": 896,
+          "NOT_ATTEMPTED": 384,
+          "PARTIAL_ANSWER": 312
+        },
+        "source_counts": {
+          "aa_omniscience": 1800
+        },
+        "total": 1800
+      },
+      "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf": {
+        "metrics": {
+          "accuracy": 0.143333,
+          "hallucination_rate": 0.682879,
+          "not_attempted_rate": 0.088333,
+          "partial_rate": 0.183333,
+          "total": 600
+        },
+        "outcomes": {
+          "CORRECT": 86,
+          "INCORRECT": 351,
+          "NOT_ATTEMPTED": 53,
+          "PARTIAL_ANSWER": 110
+        },
+        "source_counts": {
+          "aa_omniscience": 600
+        },
+        "total": 600
+      }
+    },
+    "by_role": {
+      "architect_general": {
+        "metrics": {
+          "accuracy": 0.131667,
+          "hallucination_rate": 0.497121,
+          "not_attempted_rate": 0.268333,
+          "partial_rate": 0.168333,
+          "total": 600
+        },
+        "outcomes": {
+          "CORRECT": 79,
+          "INCORRECT": 259,
+          "NOT_ATTEMPTED": 161,
+          "PARTIAL_ANSWER": 101
+        },
+        "source_counts": {
+          "aa_omniscience": 600
+        },
+        "total": 600
+      },
+      "frontdoor": {
+        "metrics": {
+          "accuracy": 0.115556,
+          "hallucination_rate": 0.562814,
+          "not_attempted_rate": 0.213333,
+          "partial_rate": 0.173333,
+          "total": 1800
+        },
+        "outcomes": {
+          "CORRECT": 208,
+          "INCORRECT": 896,
+          "NOT_ATTEMPTED": 384,
+          "PARTIAL_ANSWER": 312
+        },
+        "source_counts": {
+          "aa_omniscience": 1800
+        },
+        "total": 1800
+      },
+      "worker_general": {
+        "metrics": {
+          "accuracy": 0.143333,
+          "hallucination_rate": 0.682879,
+          "not_attempted_rate": 0.088333,
+          "partial_rate": 0.183333,
+          "total": 600
+        },
+        "outcomes": {
+          "CORRECT": 86,
+          "INCORRECT": 351,
+          "NOT_ATTEMPTED": 53,
+          "PARTIAL_ANSWER": 110
+        },
+        "source_counts": {
+          "aa_omniscience": 600
+        },
+        "total": 600
+      }
+    },
+    "by_role_model": {
+      "architect_general::/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf": {
+        "metrics": {
+          "accuracy": 0.131667,
+          "hallucination_rate": 0.497121,
+          "not_attempted_rate": 0.268333,
+          "partial_rate": 0.168333,
+          "total": 600
+        },
+        "outcomes": {
+          "CORRECT": 79,
+          "INCORRECT": 259,
+          "NOT_ATTEMPTED": 161,
+          "PARTIAL_ANSWER": 101
+        },
+        "total": 600
+      },
+      "frontdoor::/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf": {
+        "metrics": {
+          "accuracy": 0.115556,
+          "hallucination_rate": 0.562814,
+          "not_attempted_rate": 0.213333,
+          "partial_rate": 0.173333,
+          "total": 1800
+        },
+        "outcomes": {
+          "CORRECT": 208,
+          "INCORRECT": 896,
+          "NOT_ATTEMPTED": 384,
+          "PARTIAL_ANSWER": 312
+        },
+        "total": 1800
+      },
+      "worker_general::/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf": {
+        "metrics": {
+          "accuracy": 0.143333,
+          "hallucination_rate": 0.682879,
+          "not_attempted_rate": 0.088333,
+          "partial_rate": 0.183333,
+          "total": 600
+        },
+        "outcomes": {
+          "CORRECT": 86,
+          "INCORRECT": 351,
+          "NOT_ATTEMPTED": 53,
+          "PARTIAL_ANSWER": 110
+        },
+        "total": 600
+      }
+    },
+    "enabled": true,
+    "files": [
+      {
+        "path": "/mnt/raid0/llm/epyc-inference-research/data/package_g/omniscience/frontdoor_20260620_035613_aa_omniscience.jsonl",
+        "row_count": 1800
+      },
+      {
+        "path": "/mnt/raid0/llm/epyc-inference-research/data/package_g/omniscience/worker_general_20260620_062750_aa_omniscience.jsonl",
+        "row_count": 600
+      },
+      {
+        "path": "/mnt/raid0/llm/epyc-inference-research/data/package_g/omniscience/architect_general_20260620_081041_aa_omniscience.jsonl",
+        "row_count": 600
+      }
+    ]
+  },
+  "splits": {
+    "test": {
+      "exists": true,
+      "path": "/mnt/raid0/llm/epyc-orchestrator/orchestration/factual_risk_calibration_v2_test.jsonl",
+      "row_count": 419
+    },
+    "train": {
+      "exists": true,
+      "path": "/mnt/raid0/llm/epyc-orchestrator/orchestration/factual_risk_calibration_v2_train.jsonl",
+      "row_count": 1806
+    },
+    "val": {
+      "exists": true,
+      "path": "/mnt/raid0/llm/epyc-orchestrator/orchestration/factual_risk_calibration_v2_val.jsonl",
+      "row_count": 375
+    }
+  },
+  "tier_calibration_readiness": {
+    "complete": true,
+    "expected_roles": [
+      "architect_general",
+      "frontdoor",
+      "worker_general"
+    ],
+    "missing_roles": [],
+    "note": "Preview only: do not update factual-risk role tiers until all expected roles are present and the deterministic-vs-LLM-judge scoring decision is resolved.",
+    "observed_roles": [
+      "architect_general",
+      "frontdoor",
+      "worker_general"
+    ],
+    "role_metrics": {
+      "architect_general": {
+        "accuracy": 0.131667,
+        "hallucination_rate": 0.497121,
+        "not_attempted_rate": 0.268333,
+        "partial_rate": 0.168333,
+        "tier": "tier_1",
+        "total": 600
+      },
+      "frontdoor": {
+        "accuracy": 0.115556,
+        "hallucination_rate": 0.562814,
+        "not_attempted_rate": 0.213333,
+        "partial_rate": 0.173333,
+        "tier": "tier_2",
+        "total": 1800
+      },
+      "worker_general": {
+        "accuracy": 0.143333,
+        "hallucination_rate": 0.682879,
+        "not_attempted_rate": 0.088333,
+        "partial_rate": 0.183333,
+        "tier": "tier_3",
+        "total": 600
+      }
+    },
+    "role_multiplier_preview_vs_worst": {
+      "architect_general": 0.727978,
+      "frontdoor": 0.824178,
+      "worker_general": 1.0
+    },
+    "status": "ready_for_tier_update",
+    "tier_multiplier_preview_vs_worst": {
+      "tier_1": 0.727978,
+      "tier_2": 0.824178,
+      "tier_3": 1.0
+    },
+    "worst_observed_hallucination_rate": 0.682879
+  }
+}

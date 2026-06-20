@@ -1,0 +1,100 @@
+{
+  "configs": {
+    "baseline": {
+      "accuracy": 0.13166666666666665,
+      "avg_f1": 0.21025670352563805,
+      "avg_tokens_per_second": 11.050766666666666,
+      "hallucination_rate": 0.4971209213051823,
+      "label_counts": {
+        "CORRECT": 79,
+        "INCORRECT": 259,
+        "NOT_ATTEMPTED": 161,
+        "PARTIAL_ANSWER": 101
+      },
+      "omniscience_index": 0.3172728726807421,
+      "total": 600
+    }
+  },
+  "configs_scored": [
+    "baseline"
+  ],
+  "domains": {
+    "Finance": {
+      "accuracy": 0.12,
+      "hallucination_rate": 0.5568181818181818,
+      "label_counts": {
+        "CORRECT": 12,
+        "INCORRECT": 49,
+        "NOT_ATTEMPTED": 17,
+        "PARTIAL_ANSWER": 22
+      },
+      "omniscience_index": 0.2815909090909091,
+      "total": 100
+    },
+    "Health": {
+      "accuracy": 0.13,
+      "hallucination_rate": 0.6896551724137931,
+      "label_counts": {
+        "CORRECT": 13,
+        "INCORRECT": 60,
+        "NOT_ATTEMPTED": 14,
+        "PARTIAL_ANSWER": 13
+      },
+      "omniscience_index": 0.22017241379310343,
+      "total": 100
+    },
+    "Humanities and Social Sciences": {
+      "accuracy": 0.11,
+      "hallucination_rate": 0.5056179775280899,
+      "label_counts": {
+        "CORRECT": 11,
+        "INCORRECT": 45,
+        "NOT_ATTEMPTED": 41,
+        "PARTIAL_ANSWER": 3
+      },
+      "omniscience_index": 0.30219101123595504,
+      "total": 100
+    },
+    "Law": {
+      "accuracy": 0.09,
+      "hallucination_rate": 0.38461538461538464,
+      "label_counts": {
+        "CORRECT": 9,
+        "INCORRECT": 35,
+        "NOT_ATTEMPTED": 40,
+        "PARTIAL_ANSWER": 16
+      },
+      "omniscience_index": 0.3526923076923077,
+      "total": 100
+    },
+    "Science Engineering and Mathematics": {
+      "accuracy": 0.13,
+      "hallucination_rate": 0.4942528735632184,
+      "label_counts": {
+        "CORRECT": 13,
+        "INCORRECT": 43,
+        "NOT_ATTEMPTED": 19,
+        "PARTIAL_ANSWER": 25
+      },
+      "omniscience_index": 0.31787356321839083,
+      "total": 100
+    },
+    "Software Engineering": {
+      "accuracy": 0.21,
+      "hallucination_rate": 0.34177215189873417,
+      "label_counts": {
+        "CORRECT": 21,
+        "INCORRECT": 27,
+        "NOT_ATTEMPTED": 30,
+        "PARTIAL_ANSWER": 22
+      },
+      "omniscience_index": 0.43411392405063287,
+      "total": 100
+    }
+  },
+  "jsonl_path": "/mnt/raid0/llm/epyc-inference-research/data/package_g/omniscience/architect_general_20260620_081041_aa_omniscience.jsonl",
+  "role": "architect_general",
+  "row_count": 600,
+  "run_dir": "benchmarks/results/runs/20260620_081041",
+  "scoring_method": "deterministic_f1"
+}
