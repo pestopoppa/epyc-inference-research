@@ -410,6 +410,32 @@ class _ServerState:
             self.server = None
 
 
+class _AttachedServerManager(ServerManager):
+    """ServerManager facade for a resident llama-server we do not own."""
+
+    def __init__(self, port: int, registry: ModelRegistry, role: str) -> None:
+        super().__init__(port=port, registry=registry)
+        role_config = registry.get_role_config(role) or {}
+        model_cfg = role_config.get("model", {})
+        self.use_chat_api = bool(model_cfg.get("use_chat_api", False))
+        self.mmproj_path = registry.get_mmproj_path(role)
+
+    def is_running(self) -> bool:
+        try:
+            response = self._get_http_session().get(
+                f"http://127.0.0.1:{self.port}/health",
+                timeout=2,
+            )
+        except Exception:
+            return False
+        return response.status_code == 200
+
+    def stop(self) -> None:
+        if self._http_session is not None:
+            self._http_session.close()
+            self._http_session = None
+
+
 def _ensure_server(
     ss: _ServerState,
     model_path: str,
@@ -1251,6 +1277,7 @@ def run_benchmark(
     skip_moe_reduction: bool = False,
     skip_speed_tests: bool = False,
     all_suites: bool = False,
+    existing_server_port: Optional[int] = None,
 ) -> dict:
     """Run the benchmark with nested progress bars.
 
@@ -1258,6 +1285,8 @@ def run_benchmark(
     Inner bar: configs × suites × questions for current model
     """
     stats = {"total": 0, "skipped": 0, "passed": 0, "errors": 0}  # "passed" = completed
+    if existing_server_port is not None and not server_mode:
+        raise ValueError("--existing-server-port requires --server-mode")
 
     # Get models to test
     roles = registry.get_all_roles(include_deprecated=False)
@@ -1322,6 +1351,15 @@ def run_benchmark(
             # answers. Cuts the per-MoE-model bench from ~30 min to ~5 min when only quality
             # data is wanted.
             configs = [c for c in configs if not getattr(c, "speed_test_only", False)]
+        if existing_server_port is not None:
+            unsupported = [c.name for c in configs if c.name != "baseline"]
+            if unsupported:
+                raise ValueError(
+                    "--existing-server-port only supports baseline quality configs; "
+                    f"unsupported configs after filters: {', '.join(unsupported)}"
+                )
+            if with_lookup:
+                raise ValueError("--existing-server-port cannot enable lookup on a resident server")
 
         if all_suites:
             suite_names = [s for s in get_all_suite_names() if load_suite(s) and load_suite(s).questions]
@@ -1349,7 +1387,7 @@ def run_benchmark(
 
         # Run baseline speed test for each model (once per model, not per role)
         if model_path not in model_tps:
-            if dry_run:
+            if dry_run or existing_server_port is not None:
                 # In dry run, use registry baseline_tps or default
                 reg_tps = registry.get_baseline_tps(role)
                 model_tps[model_path] = reg_tps if reg_tps else REFERENCE_TPS
@@ -1419,7 +1457,22 @@ def run_benchmark(
             print(f"\n  {model_name} ({size_gb:.1f}GB) @ {tps_str} → timeout {mult_str}", flush=True)
             print(f"    roles: {', '.join(model_to_roles[model_path])}", flush=True)
 
-            if server_mode and not dry_run:
+            if server_mode and existing_server_port is not None and not dry_run:
+                if ss.server is None:
+                    ss.server = _AttachedServerManager(existing_server_port, registry, role)
+                    if not ss.server.is_running():
+                        raise RuntimeError(
+                            f"Existing server on port {existing_server_port} is not healthy"
+                        )
+                    ss.model_path = model_path
+                    ss.experts = None
+                    ss.draft_path = None
+                    ss.lookup = False
+                    print(
+                        f"    [SERVER] Using resident llama-server on port {existing_server_port}",
+                        flush=True,
+                    )
+            elif server_mode and not dry_run:
                 _ensure_server(ss, model_path, configs[0] if configs else None, role,
                                size_gb, registry, no_mmap, mmproj_path, is_new_model=True,
                                with_lookup=with_lookup)
@@ -1474,7 +1527,12 @@ def run_benchmark(
                         continue
 
             # Server management per config
-            if server_mode and not dry_run:
+            if server_mode and existing_server_port is not None and not dry_run:
+                if ss.server is None or not ss.server.is_running():
+                    raise RuntimeError(
+                        f"Existing server on port {existing_server_port} is no longer healthy"
+                    )
+            elif server_mode and not dry_run:
                 if ss.server is None or (ss.server is not None and not ss.server.is_running()):
                     # Server was lost (crash, failed restart, or process died) — restart fresh baseline
                     reason = "crashed" if ss.server is not None else "stopped"
@@ -1670,6 +1728,16 @@ Examples:
     parser.add_argument("--speed-questions", type=int, default=0, help="Run speed configs on N slowest baseline questions (0=fixed prompt)")
     parser.add_argument("--baseline-run", type=str, default=None, help="Pull slowest questions from this run ID (for models with existing baselines)")
     parser.add_argument("--with-lookup", action="store_true", help="Enable --lookup on server for all configs (accelerates baseline quality runs)")
+    parser.add_argument(
+        "--existing-server-port",
+        type=int,
+        default=None,
+        help=(
+            "Reuse an already-loaded resident llama-server on this port. "
+            "Requires --server-mode and only supports baseline quality configs "
+            "(for example: --skip-moe-reduction --skip-speed-tests)."
+        ),
+    )
     parser.add_argument("--all-suites", action="store_true", help="Run all quality suites regardless of role mapping (VL excluded for non-VL models)")
     parser.add_argument(
         "--skip-preflight",
@@ -1807,6 +1875,7 @@ Examples:
             skip_moe_reduction=args.skip_moe_reduction,
             skip_speed_tests=args.skip_speed_tests,
             all_suites=args.all_suites,
+            existing_server_port=args.existing_server_port,
         )
     finally:
         if lock_fd is not None:
