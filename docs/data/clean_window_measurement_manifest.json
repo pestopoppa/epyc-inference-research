@@ -2,7 +2,7 @@
   "attestation": {
     "generated_by": "scripts/benchmark/clean_window_manifest.py",
     "inference_started": false,
-    "research_head": "7e9f67f526d8c59205d62a1325ce75da61b44d79"
+    "research_head": "dea5f8d31d91e790291de813d3c7660522f6c3d9"
   },
   "entries": [
     {
@@ -696,9 +696,38 @@
         "gpqa",
         "math"
       ]
+    },
+    {
+      "command": "bash /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/ds_e1_kv_measurements.sh --execute",
+      "kind": "production_kv_measurements",
+      "model": {
+        "architecture": "production_stack_kv_probe",
+        "benchmark_model_path": null,
+        "benchmark_registry_mismatch": false,
+        "live_model_path": null,
+        "max_context": null,
+        "model_exists": true,
+        "model_path": "clean-window-harness:ds-e1-kv",
+        "model_path_source": "harness",
+        "role": "dynamic_stack",
+        "server": {
+          "name": "ds_e1_kv_measurements",
+          "port": 8194,
+          "source": "scripts/benchmark/ds_e1_kv_measurements.sh",
+          "url": "http://127.0.0.1:8194"
+        },
+        "tier": "clean_window"
+      },
+      "notes": [
+        "execute mode fails closed if AutoPilot, live llama-server processes, or port 8194 are active",
+        "writes data/dynamic_stack/ds_e1_kv_measurements_<timestamp>/kv_measurements.csv for the DS-E1 packet"
+      ],
+      "package": "DS-E1",
+      "role": "dynamic_stack",
+      "status": "ready"
     }
   ],
-  "generated_at": "2026-06-20T04:30:33.277846+00:00",
+  "generated_at": "2026-06-20T18:46:22.855143+00:00",
   "groups": [
     {
       "entries": [
@@ -1443,6 +1472,48 @@
         "entries": 6,
         "ready": 4
       }
+    },
+    {
+      "entries": [
+        {
+          "command": "bash /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/ds_e1_kv_measurements.sh --execute",
+          "kind": "production_kv_measurements",
+          "model": {
+            "architecture": "production_stack_kv_probe",
+            "benchmark_model_path": null,
+            "benchmark_registry_mismatch": false,
+            "live_model_path": null,
+            "max_context": null,
+            "model_exists": true,
+            "model_path": "clean-window-harness:ds-e1-kv",
+            "model_path_source": "harness",
+            "role": "dynamic_stack",
+            "server": {
+              "name": "ds_e1_kv_measurements",
+              "port": 8194,
+              "source": "scripts/benchmark/ds_e1_kv_measurements.sh",
+              "url": "http://127.0.0.1:8194"
+            },
+            "tier": "clean_window"
+          },
+          "notes": [
+            "execute mode fails closed if AutoPilot, live llama-server processes, or port 8194 are active",
+            "writes data/dynamic_stack/ds_e1_kv_measurements_<timestamp>/kv_measurements.csv for the DS-E1 packet"
+          ],
+          "package": "DS-E1",
+          "role": "dynamic_stack",
+          "status": "ready"
+        }
+      ],
+      "model_path": "clean-window-harness:ds-e1-kv",
+      "roles": [
+        "dynamic_stack"
+      ],
+      "summary": {
+        "blocked": 0,
+        "entries": 1,
+        "ready": 1
+      }
     }
   ],
   "journal_quarantine_rule": "Do not mix these results into calibration journals if another benchmark or AutoPilot run is concurrently mutating the live stack.",
@@ -1450,14 +1521,14 @@
   "next_action": "After AutoPilot quiesces, verify live topology/affinity, then run ready commands model group by model group.",
   "output_root": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window",
   "pass_fail_gate": "All ready commands require a clean inference window, successful preflight, and per-task result aggregation; blocked entries must remain non-executable.",
-  "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1",
-  "run_id": "clean-window-2026-06-20T043033.277846Z0000",
+  "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1 plus DS-E1 KV measurements",
+  "run_id": "clean-window-2026-06-20T184622.855143Z0000",
   "source_handoff": "/mnt/raid0/llm/epyc-root/handoffs/active/bulk-inference-campaign.md",
   "summary": {
     "entries_blocked": 6,
-    "entries_ready": 17,
-    "entries_total": 23,
-    "models_total": 4
+    "entries_ready": 18,
+    "entries_total": 24,
+    "models_total": 5
   },
   "topology": {
     "affinity_artifact": null,

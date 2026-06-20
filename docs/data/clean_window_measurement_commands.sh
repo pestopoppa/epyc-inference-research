@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Generated at 2026-06-20T04:30:33.277846+00:00
+# Generated at 2026-06-20T18:46:22.855143+00:00
 # Review live topology before running commands with direct --port values.
 
 # model_path: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf
@@ -85,3 +85,8 @@ set -euo pipefail
 
 # G5 worker_general short_mk_voting [ready]
 /mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/short_mk_voting.py --role worker_general --host 127.0.0.1 --model-port 8072 --suites gpqa math --sample-per-suite 20 --k 3 --m 3 --sequential --output /mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window/short_mk_voting/worker_general.json
+
+# model_path: clean-window-harness:ds-e1-kv
+# roles: dynamic_stack
+# DS-E1 dynamic_stack production_kv_measurements [ready]
+bash /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/ds_e1_kv_measurements.sh --execute

@@ -34,6 +34,7 @@ from suites import get_suites_for_role
 RUN_BENCHMARK_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "run_benchmark.py"
 ROPE_PROBE_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "rope_position_probe.py"
 SHORT_MK_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "short_mk_voting.py"
+DS_E1_KV_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "ds_e1_kv_measurements.sh"
 DEFAULT_MANIFEST_PATH = PROJECT_ROOT / "docs" / "data" / "clean_window_measurement_manifest.json"
 DEFAULT_COMMANDS_PATH = PROJECT_ROOT / "docs" / "data" / "clean_window_measurement_commands.sh"
 DEFAULT_LIVE_REGISTRY_PATH = Path("/mnt/raid0/llm/epyc-orchestrator/orchestration/model_registry.yaml")
@@ -246,6 +247,10 @@ def _short_mk_command(role: str, port: int, output_root: Path) -> str:
     ])
 
 
+def _ds_e1_kv_command() -> str:
+    return shlex.join(["bash", str(DS_E1_KV_SCRIPT), "--execute"])
+
+
 def _suite_entry(
     registry,
     *,
@@ -372,6 +377,42 @@ def _g5_entry(
     }
 
 
+def _ds_e1_entry() -> dict[str, Any]:
+    notes = [
+        "execute mode fails closed if AutoPilot, live llama-server processes, or port 8194 are active",
+        "writes data/dynamic_stack/ds_e1_kv_measurements_<timestamp>/kv_measurements.csv for the DS-E1 packet",
+    ]
+    if not DS_E1_KV_SCRIPT.exists():
+        notes.append("DS-E1 KV measurement harness missing")
+    status = "ready" if DS_E1_KV_SCRIPT.exists() else "blocked"
+    return {
+        "package": "DS-E1",
+        "kind": "production_kv_measurements",
+        "role": "dynamic_stack",
+        "status": status,
+        "command": _ds_e1_kv_command() if DS_E1_KV_SCRIPT.exists() else None,
+        "notes": notes,
+        "model": {
+            "role": "dynamic_stack",
+            "tier": "clean_window",
+            "architecture": "production_stack_kv_probe",
+            "model_path": "clean-window-harness:ds-e1-kv",
+            "benchmark_model_path": None,
+            "live_model_path": None,
+            "model_path_source": "harness",
+            "benchmark_registry_mismatch": False,
+            "model_exists": DS_E1_KV_SCRIPT.exists(),
+            "max_context": None,
+            "server": {
+                "name": "ds_e1_kv_measurements",
+                "url": "http://127.0.0.1:8194",
+                "port": 8194,
+                "source": "scripts/benchmark/ds_e1_kv_measurements.sh",
+            },
+        },
+    }
+
+
 def build_manifest(
     *,
     aa_roles: list[str] | None = None,
@@ -413,6 +454,8 @@ def build_manifest(
     for role in g5_roles if g5_roles is not None else G5_TARGETS:
         entries.append(_g5_entry(registry, role, live_registry=live_registry, output_root=output_root))
 
+    entries.append(_ds_e1_entry())
+
     groups: dict[str, dict[str, Any]] = {}
     for entry in entries:
         model_path = entry["model"].get("model_path") or f"missing:{entry['role']}"
@@ -438,7 +481,7 @@ def build_manifest(
         "generated_at": generated_at,
         "run_id": f"clean-window-{generated_at.replace(':', '').replace('+', 'Z')}",
         "kind": "model_batched_clean_window",
-        "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1",
+        "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1 plus DS-E1 KV measurements",
         "source_handoff": SOURCE_HANDOFF,
         "output_root": str(output_root),
         "topology": {
