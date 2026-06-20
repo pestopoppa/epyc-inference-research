@@ -232,7 +232,7 @@
       "worker_general"
     ],
     "missing_roles": [],
-    "note": "Preview only: do not update factual-risk role tiers until all expected roles are present and the deterministic-vs-LLM-judge scoring decision is resolved.",
+    "note": "Deterministic AA-Omniscience 4-class scoring is accepted for this role-tier recalibration only; keep factual-risk mode/canary/enforce decisions on their separate telemetry gates.",
     "observed_roles": [
       "architect_general",
       "frontdoor",
@@ -268,6 +268,12 @@
       "architect_general": 0.727978,
       "frontdoor": 0.824178,
       "worker_general": 1.0
+    },
+    "scoring_policy": {
+      "basis": "deterministic_aa_omniscience_4class",
+      "decided_at": "2026-06-20",
+      "decision": "accepted_for_role_tier_recalibration",
+      "scope": "factual_risk_role_adjustments_only"
     },
     "status": "ready_for_tier_update",
     "tier_multiplier_preview_vs_worst": {
