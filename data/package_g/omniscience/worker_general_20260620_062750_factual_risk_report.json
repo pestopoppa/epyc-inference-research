@@ -1,0 +1,90 @@
+{
+  "dataset": {
+    "exists": true,
+    "field_presence": {
+      "label_4class": 2600,
+      "label_source": 2600,
+      "risk_band_v1": 2600,
+      "risk_features": 2600,
+      "risk_score_computed": 2600
+    },
+    "path": "/mnt/raid0/llm/epyc-orchestrator/orchestration/factual_risk_calibration_v2.jsonl",
+    "risk_label_counts": {
+      "CORRECT": 298,
+      "INCORRECT": 483,
+      "NOT_ATTEMPTED": 1819
+    },
+    "row_count": 2600,
+    "source_counts": {
+      "aa_omniscience": 600,
+      "v1_regex": 2000
+    },
+    "tier_counts": {},
+    "tier_source_crosstab": {}
+  },
+  "results": {
+    "by_model": {
+      "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf": {
+        "outcomes": {
+          "CORRECT": 86,
+          "INCORRECT": 351,
+          "NOT_ATTEMPTED": 53,
+          "PARTIAL_ANSWER": 110
+        },
+        "source_counts": {
+          "aa_omniscience": 600
+        },
+        "total": 600
+      }
+    },
+    "by_role": {
+      "worker_general": {
+        "outcomes": {
+          "CORRECT": 86,
+          "INCORRECT": 351,
+          "NOT_ATTEMPTED": 53,
+          "PARTIAL_ANSWER": 110
+        },
+        "source_counts": {
+          "aa_omniscience": 600
+        },
+        "total": 600
+      }
+    },
+    "by_role_model": {
+      "worker_general::/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf": {
+        "outcomes": {
+          "CORRECT": 86,
+          "INCORRECT": 351,
+          "NOT_ATTEMPTED": 53,
+          "PARTIAL_ANSWER": 110
+        },
+        "total": 600
+      }
+    },
+    "enabled": true,
+    "files": [
+      {
+        "path": "/mnt/raid0/llm/epyc-inference-research/data/package_g/omniscience/worker_general_20260620_062750_aa_omniscience.jsonl",
+        "row_count": 600
+      }
+    ]
+  },
+  "splits": {
+    "test": {
+      "exists": true,
+      "path": "/mnt/raid0/llm/epyc-orchestrator/orchestration/factual_risk_calibration_v2_test.jsonl",
+      "row_count": 419
+    },
+    "train": {
+      "exists": true,
+      "path": "/mnt/raid0/llm/epyc-orchestrator/orchestration/factual_risk_calibration_v2_train.jsonl",
+      "row_count": 1806
+    },
+    "val": {
+      "exists": true,
+      "path": "/mnt/raid0/llm/epyc-orchestrator/orchestration/factual_risk_calibration_v2_val.jsonl",
+      "row_count": 375
+    }
+  }
+}
