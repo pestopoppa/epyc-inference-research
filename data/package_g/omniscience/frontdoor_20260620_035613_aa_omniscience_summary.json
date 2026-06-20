@@ -1,0 +1,130 @@
+{
+  "configs": {
+    "baseline": {
+      "accuracy": 0.11166666666666666,
+      "avg_f1": 0.1949018536312138,
+      "avg_tokens_per_second": 24.882266666666666,
+      "hallucination_rate": 0.5609756097560976,
+      "label_counts": {
+        "CORRECT": 67,
+        "INCORRECT": 299,
+        "NOT_ATTEMPTED": 128,
+        "PARTIAL_ANSWER": 106
+      },
+      "omniscience_index": 0.27534552845528454,
+      "total": 600
+    },
+    "moe4": {
+      "accuracy": 0.11166666666666666,
+      "avg_f1": 0.19183793947519437,
+      "avg_tokens_per_second": 25.945266666666665,
+      "hallucination_rate": 0.5666041275797373,
+      "label_counts": {
+        "CORRECT": 67,
+        "INCORRECT": 302,
+        "NOT_ATTEMPTED": 122,
+        "PARTIAL_ANSWER": 109
+      },
+      "omniscience_index": 0.2725312695434647,
+      "total": 600
+    },
+    "moe6": {
+      "accuracy": 0.12333333333333334,
+      "avg_f1": 0.1962461767535297,
+      "avg_tokens_per_second": 25.775750000000002,
+      "hallucination_rate": 0.5608365019011406,
+      "label_counts": {
+        "CORRECT": 74,
+        "INCORRECT": 295,
+        "NOT_ATTEMPTED": 134,
+        "PARTIAL_ANSWER": 97
+      },
+      "omniscience_index": 0.2812484157160963,
+      "total": 600
+    }
+  },
+  "configs_scored": [
+    "baseline",
+    "moe4",
+    "moe6"
+  ],
+  "domains": {
+    "Finance": {
+      "accuracy": 0.12,
+      "hallucination_rate": 0.6098484848484849,
+      "label_counts": {
+        "CORRECT": 36,
+        "INCORRECT": 161,
+        "NOT_ATTEMPTED": 48,
+        "PARTIAL_ANSWER": 55
+      },
+      "omniscience_index": 0.25507575757575757,
+      "total": 300
+    },
+    "Health": {
+      "accuracy": 0.10333333333333333,
+      "hallucination_rate": 0.6617100371747212,
+      "label_counts": {
+        "CORRECT": 31,
+        "INCORRECT": 178,
+        "NOT_ATTEMPTED": 56,
+        "PARTIAL_ANSWER": 35
+      },
+      "omniscience_index": 0.22081164807930606,
+      "total": 300
+    },
+    "Humanities and Social Sciences": {
+      "accuracy": 0.07,
+      "hallucination_rate": 0.6845878136200717,
+      "label_counts": {
+        "CORRECT": 21,
+        "INCORRECT": 191,
+        "NOT_ATTEMPTED": 59,
+        "PARTIAL_ANSWER": 29
+      },
+      "omniscience_index": 0.19270609318996415,
+      "total": 300
+    },
+    "Law": {
+      "accuracy": 0.056666666666666664,
+      "hallucination_rate": 0.519434628975265,
+      "label_counts": {
+        "CORRECT": 17,
+        "INCORRECT": 147,
+        "NOT_ATTEMPTED": 70,
+        "PARTIAL_ANSWER": 66
+      },
+      "omniscience_index": 0.2686160188457008,
+      "total": 300
+    },
+    "Science Engineering and Mathematics": {
+      "accuracy": 0.15333333333333332,
+      "hallucination_rate": 0.4881889763779528,
+      "label_counts": {
+        "CORRECT": 46,
+        "INCORRECT": 124,
+        "NOT_ATTEMPTED": 64,
+        "PARTIAL_ANSWER": 66
+      },
+      "omniscience_index": 0.3325721784776903,
+      "total": 300
+    },
+    "Software Engineering": {
+      "accuracy": 0.19,
+      "hallucination_rate": 0.39094650205761317,
+      "label_counts": {
+        "CORRECT": 57,
+        "INCORRECT": 95,
+        "NOT_ATTEMPTED": 87,
+        "PARTIAL_ANSWER": 61
+      },
+      "omniscience_index": 0.39952674897119345,
+      "total": 300
+    }
+  },
+  "jsonl_path": "data/package_g/omniscience/frontdoor_20260620_035613_aa_omniscience.jsonl",
+  "role": "frontdoor",
+  "row_count": 1800,
+  "run_dir": "benchmarks/results/runs/20260620_035613",
+  "scoring_method": "deterministic_f1"
+}

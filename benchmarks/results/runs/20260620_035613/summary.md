@@ -23,4 +23,10 @@ The `frontdoor_moe*_lookup_*.json` files in this directory are speed-only lookup
 
 This package proves the corrected server-mode path completed all expected frontdoor quality configurations with 600/600 non-blank responses and no recorded row-level failures.
 
-It does not yet close AA hallucination-rate calibration. The benchmark runner stores `algorithmic_score = null` for this suite, so `questions_passed = 0` in the JSON summaries means "unscored", not "all questions failed". G12 tier calibration still requires the AA grading pass that maps responses to `CORRECT`, `INCORRECT`, `PARTIAL_ANSWER`, or `NOT_ATTEMPTED`.
+The deterministic AA F1 scoring pass is packaged separately at:
+
+- `data/package_g/omniscience/frontdoor_20260620_035613_aa_omniscience.jsonl`
+- `data/package_g/omniscience/frontdoor_20260620_035613_aa_omniscience_summary.json`
+- `data/package_g/omniscience/frontdoor_20260620_035613_factual_risk_report.json`
+
+That pass maps responses to `CORRECT`, `INCORRECT`, `PARTIAL_ANSWER`, and `NOT_ATTEMPTED` using the dataset adapter's expected answers and F1 threshold. It is deterministic scorer evidence, not LLM-as-judge evidence.
