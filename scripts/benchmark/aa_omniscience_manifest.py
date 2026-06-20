@@ -115,6 +115,8 @@ def _build_role_entry(role: str, registry, executor: Executor) -> dict[str, Any]
         "--suite",
         SUITE_NAME,
         "--new-run",
+        "--server-mode",
+        "--skip-speed-tests",
     ])
 
     notes: list[str] = []

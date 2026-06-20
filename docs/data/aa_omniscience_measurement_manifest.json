@@ -1,282 +1,282 @@
 {
   "commands": [
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_general --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_general --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "architect_general",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_hermes_4_70b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_hermes_4_70b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "architect_hermes_4_70b",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_qwen2_5_72b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_qwen2_5_72b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "architect_qwen2_5_72b",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_qwen2_5_72b_q4_k_m --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_qwen2_5_72b_q4_k_m --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "architect_qwen2_5_72b_q4_k_m",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_escalation --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_escalation --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "coder_escalation",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_escalation_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_escalation_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "coder_escalation_q8",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_qwen3_coder_30b_a3b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_qwen3_coder_30b_a3b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "coder_qwen3_coder_30b_a3b",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_claude_opus --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_claude_opus --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "external_claude_opus",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_claude_sonnet --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_claude_sonnet --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "external_claude_sonnet",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_gpt4o --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_gpt4o --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "external_gpt4o",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_gpt4o_mini --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_gpt4o_mini --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "external_gpt4o_mini",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model frontdoor --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model frontdoor --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "frontdoor",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model gemma4_26b_a4b_q4km_mtp --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model gemma4_26b_a4b_q4km_mtp --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "gemma4_26b_a4b_q4km_mtp",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model gemma4_31b_q4km_mtp --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model gemma4_31b_q4km_mtp --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "gemma4_31b_q4km_mtp",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_deepseek_r1_0528_qwen3_8b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_deepseek_r1_0528_qwen3_8b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "general_deepseek_r1_0528_qwen3_8b",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_gemma_3_12b_it --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_gemma_3_12b_it --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "general_gemma_3_12b_it",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_gemma_3_27b_it_qat --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_gemma_3_27b_it_qat --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "general_gemma_3_27b_it_qat",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_meta_llama_3_1_8b_q4_k_s --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_meta_llama_3_1_8b_q4_k_s --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "general_meta_llama_3_1_8b_q4_k_s",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_meta_llama_3_8b_instruct_fp16 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_meta_llama_3_8b_instruct_fp16 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "general_meta_llama_3_8b_instruct_fp16",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_qwen2_5_7b_q4_k_s --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_qwen2_5_7b_q4_k_s --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "general_qwen2_5_7b_q4_k_s",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_qwen3_32b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_qwen3_32b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "general_qwen3_32b",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model glm_47_flash --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model glm_47_flash --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "glm_47_flash",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_hermes_4_70b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_hermes_4_70b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "ingest_hermes_4_70b",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_long_context --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_long_context --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "ingest_long_context",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen2_5_72b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen2_5_72b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "ingest_qwen2_5_72b",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen2_5_coder_32b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen2_5_coder_32b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "ingest_qwen2_5_coder_32b",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen3_32b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen3_32b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "ingest_qwen3_32b",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen3_coder_30b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen3_coder_30b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "ingest_qwen3_coder_30b",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model math_qwen2_5_math_72b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model math_qwen2_5_math_72b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "math_qwen2_5_math_72b",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model math_qwen2_5_math_72b_2 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model math_qwen2_5_math_72b_2 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "math_qwen2_5_math_72b_2",
       "status": "blocked"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model minimax_m27_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model minimax_m27_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "minimax_m27_q8",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model nemotron_cascade_2 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model nemotron_cascade_2 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "nemotron_cascade_2",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen25_coder_32b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen25_coder_32b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen25_coder_32b_q4km",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_122b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_122b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_122b_q4km",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_27b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_27b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_27b_q4km",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_27b_q6k --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_27b_q6k --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_27b_q6k",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_2b_q4km",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q6k --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q6k --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_2b_q6k",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_2b_q8",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_397b_q4kxl --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_397b_q4kxl --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_397b_q4kxl",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_4b_q4km",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q6k --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q6k --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_4b_q6k",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_4b_q8",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_9b_q4km",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q6k --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q6k --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_9b_q6k",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_9b_q8",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen35_q4km",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_27b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_27b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen36_27b_q4km",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_27b_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_27b_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen36_27b_q8",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_q8_0 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_q8_0 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "qwen36_q8_0",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model reap_25b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model reap_25b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "reap_25b",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model thinking_deepseek_r1_distill_qwen_14b_q6kl --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model thinking_deepseek_r1_distill_qwen_14b_q6kl --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "thinking_deepseek_r1_distill_qwen_14b_q6kl",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model thinking_deepseek_r1_distill_qwen_32b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model thinking_deepseek_r1_distill_qwen_32b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "thinking_deepseek_r1_distill_qwen_32b",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model toolrunner --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model toolrunner --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "toolrunner",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "worker_general",
       "status": "ready"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_summarize --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_summarize --suite omniscience --new-run --server-mode --skip-speed-tests",
       "role": "worker_summarize",
       "status": "ready"
     }
@@ -298,11 +298,11 @@
     "suite": "omniscience",
     "total_available": 600
   },
-  "generated_at": "2026-06-19T01:00:12.071895+00:00",
+  "generated_at": "2026-06-20T04:29:32.238533+00:00",
   "roles": [
     {
       "architecture": "moe_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_general --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_general --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_qwen35_0_8b_q4_0_k4",
@@ -370,7 +370,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_hermes_4_70b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_hermes_4_70b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -408,7 +408,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_qwen2_5_72b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_qwen2_5_72b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_qwen25_k4",
@@ -572,7 +572,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_qwen2_5_72b_q4_k_m --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_qwen2_5_72b_q4_k_m --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_qwen25_k4",
@@ -736,7 +736,7 @@
     },
     {
       "architecture": "qwen35moe",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_escalation --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_escalation --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "moe4",
@@ -769,7 +769,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_escalation_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_escalation_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_qwen25_coder_k4",
@@ -922,7 +922,7 @@
     },
     {
       "architecture": "moe",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_qwen3_coder_30b_a3b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model coder_qwen3_coder_30b_a3b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "moe4",
@@ -999,7 +999,7 @@
     },
     {
       "architecture": "external_api",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_claude_opus --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_claude_opus --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -1033,7 +1033,7 @@
     },
     {
       "architecture": "external_api",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_claude_sonnet --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_claude_sonnet --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -1067,7 +1067,7 @@
     },
     {
       "architecture": "external_api",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_gpt4o --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_gpt4o --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -1096,7 +1096,7 @@
     },
     {
       "architecture": "external_api",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_gpt4o_mini --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model external_gpt4o_mini --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -1125,7 +1125,7 @@
     },
     {
       "architecture": "qwen35moe",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model frontdoor --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model frontdoor --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "moe4",
@@ -1166,7 +1166,7 @@
     },
     {
       "architecture": "gemma4",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model gemma4_26b_a4b_q4km_mtp --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model gemma4_26b_a4b_q4km_mtp --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -1190,7 +1190,7 @@
     },
     {
       "architecture": "gemma4",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model gemma4_31b_q4km_mtp --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model gemma4_31b_q4km_mtp --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -1219,7 +1219,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_deepseek_r1_0528_qwen3_8b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_deepseek_r1_0528_qwen3_8b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -1246,7 +1246,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_gemma_3_12b_it --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_gemma_3_12b_it --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_gemma3_k4",
@@ -1291,7 +1291,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_gemma_3_27b_it_qat --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_gemma_3_27b_it_qat --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_gemma3_k4",
@@ -1341,7 +1341,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_meta_llama_3_1_8b_q4_k_s --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_meta_llama_3_1_8b_q4_k_s --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -1368,7 +1368,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_meta_llama_3_8b_instruct_fp16 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_meta_llama_3_8b_instruct_fp16 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -1397,7 +1397,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_qwen2_5_7b_q4_k_s --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_qwen2_5_7b_q4_k_s --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_qwen2_5_coder_0_5b_k4",
@@ -1532,7 +1532,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_qwen3_32b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model general_qwen3_32b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_pard_qwen3_0_6b_q4_0_k4",
@@ -1639,7 +1639,7 @@
     },
     {
       "architecture": "deepseek2",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model glm_47_flash --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model glm_47_flash --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "moe4_lookup_n0"
@@ -1669,7 +1669,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_hermes_4_70b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_hermes_4_70b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -1707,7 +1707,7 @@
     },
     {
       "architecture": "ssm_moe_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_long_context --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_long_context --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "moe4",
@@ -1743,7 +1743,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen2_5_72b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen2_5_72b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_qwen25_k4",
@@ -1907,7 +1907,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen2_5_coder_32b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen2_5_coder_32b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_qwen25_coder_k4",
@@ -2068,7 +2068,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen3_32b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen3_32b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_pard_qwen3_0_6b_q4_0_k4",
@@ -2175,7 +2175,7 @@
     },
     {
       "architecture": "moe",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen3_coder_30b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_qwen3_coder_30b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "moe4",
@@ -2252,7 +2252,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model math_qwen2_5_math_72b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model math_qwen2_5_math_72b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_qwen25_k4",
@@ -2412,7 +2412,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model math_qwen2_5_math_72b_2 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model math_qwen2_5_math_72b_2 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_qwen25_k4",
@@ -2572,7 +2572,7 @@
     },
     {
       "architecture": "minimax-m2",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model minimax_m27_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model minimax_m27_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -2604,7 +2604,7 @@
     },
     {
       "architecture": "nemotron_h_moe",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model nemotron_cascade_2 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model nemotron_cascade_2 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -2633,7 +2633,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen25_coder_32b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen25_coder_32b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_qwen25_coder_k4",
@@ -2786,7 +2786,7 @@
     },
     {
       "architecture": "qwen35moe",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_122b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_122b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "moe4",
@@ -2896,7 +2896,7 @@
     },
     {
       "architecture": "ssm_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_27b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_27b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -2928,7 +2928,7 @@
     },
     {
       "architecture": "ssm_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_27b_q6k --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_27b_q6k --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -2960,7 +2960,7 @@
     },
     {
       "architecture": "ssm_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -2987,7 +2987,7 @@
     },
     {
       "architecture": "ssm_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q6k --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q6k --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -3014,7 +3014,7 @@
     },
     {
       "architecture": "ssm_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_2b_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -3041,7 +3041,7 @@
     },
     {
       "architecture": "qwen35moe",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_397b_q4kxl --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_397b_q4kxl --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "moe4",
@@ -3178,7 +3178,7 @@
     },
     {
       "architecture": "ssm_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -3205,7 +3205,7 @@
     },
     {
       "architecture": "ssm_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q6k --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q6k --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -3232,7 +3232,7 @@
     },
     {
       "architecture": "ssm_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_4b_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -3259,7 +3259,7 @@
     },
     {
       "architecture": "ssm_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -3286,7 +3286,7 @@
     },
     {
       "architecture": "ssm_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q6k --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q6k --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -3313,7 +3313,7 @@
     },
     {
       "architecture": "ssm_hybrid",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_9b_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -3340,7 +3340,7 @@
     },
     {
       "architecture": "qwen35moe",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen35_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "moe4",
@@ -3453,7 +3453,7 @@
     },
     {
       "architecture": "qwen35",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_27b_q4km --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_27b_q4km --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -3480,7 +3480,7 @@
     },
     {
       "architecture": "qwen35",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_27b_q8 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_27b_q8 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -3507,7 +3507,7 @@
     },
     {
       "architecture": "qwen35moe",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_q8_0 --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model qwen36_q8_0 --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "moe4",
@@ -3543,7 +3543,7 @@
     },
     {
       "architecture": "moe",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model reap_25b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model reap_25b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "moe4",
@@ -3579,7 +3579,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model thinking_deepseek_r1_distill_qwen_14b_q6kl --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model thinking_deepseek_r1_distill_qwen_14b_q6kl --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_deepseek_r1_distill_qwen_1_5b_k4",
@@ -3660,7 +3660,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model thinking_deepseek_r1_distill_qwen_32b --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model thinking_deepseek_r1_distill_qwen_32b --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_deepseek_r1_distill_qwen_1_5b_k4",
@@ -3746,7 +3746,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model toolrunner --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model toolrunner --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "lookup_n0"
@@ -3773,7 +3773,7 @@
     },
     {
       "architecture": "gemma4",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline"
       ],
@@ -3797,7 +3797,7 @@
     },
     {
       "architecture": "dense",
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_summarize --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_summarize --suite omniscience --new-run --server-mode --skip-speed-tests",
       "config_names": [
         "baseline",
         "spec_draft_qwen25_coder_k4",

@@ -171,6 +171,8 @@ def test_suite_entry_blocks_when_live_registry_differs(monkeypatch):
     assert entry["status"] == "blocked"
     assert entry["model"]["benchmark_registry_mismatch"] is True
     assert "run_benchmark.py would not measure the live role" in entry["notes"][0]
+    assert "--server-mode" in entry["command"]
+    assert "--skip-speed-tests" in entry["command"]
 
 
 def test_rope_entry_uses_live_context_override(monkeypatch, tmp_path):

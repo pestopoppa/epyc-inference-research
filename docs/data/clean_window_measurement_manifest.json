@@ -2,11 +2,11 @@
   "attestation": {
     "generated_by": "scripts/benchmark/clean_window_manifest.py",
     "inference_started": false,
-    "research_head": "89443493b8b5dc3ff01d8f02596c49dae1e65ae5"
+    "research_head": "7e9f67f526d8c59205d62a1325ce75da61b44d79"
   },
   "entries": [
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_general --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_general --suite omniscience --new-run --server-mode --skip-speed-tests",
       "kind": "run_benchmark_suite",
       "model": {
         "architecture": "moe_hybrid",
@@ -34,7 +34,7 @@
       "suite": "omniscience"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model frontdoor --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model frontdoor --suite omniscience --new-run --server-mode --skip-speed-tests",
       "kind": "run_benchmark_suite",
       "model": {
         "architecture": "qwen35moe",
@@ -62,7 +62,7 @@
       "suite": "omniscience"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run --server-mode --skip-speed-tests",
       "kind": "run_benchmark_suite",
       "model": {
         "architecture": "gemma4",
@@ -90,7 +90,7 @@
       "suite": "omniscience"
     },
     {
-      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_long_context --suite tulving_episodic --new-run --server-mode",
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_long_context --suite tulving_episodic --new-run --server-mode --skip-speed-tests",
       "kind": "run_benchmark_suite",
       "model": {
         "architecture": "ssm_moe_hybrid",
@@ -698,12 +698,12 @@
       ]
     }
   ],
-  "generated_at": "2026-06-19T06:47:06.696246+00:00",
+  "generated_at": "2026-06-20T04:30:33.277846+00:00",
   "groups": [
     {
       "entries": [
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_long_context --suite tulving_episodic --new-run --server-mode",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model ingest_long_context --suite tulving_episodic --new-run --server-mode --skip-speed-tests",
           "kind": "run_benchmark_suite",
           "model": {
             "architecture": "ssm_moe_hybrid",
@@ -858,7 +858,7 @@
     {
       "entries": [
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_general --suite omniscience --new-run",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model architect_general --suite omniscience --new-run --server-mode --skip-speed-tests",
           "kind": "run_benchmark_suite",
           "model": {
             "architecture": "moe_hybrid",
@@ -1055,7 +1055,7 @@
     {
       "entries": [
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model frontdoor --suite omniscience --new-run",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model frontdoor --suite omniscience --new-run --server-mode --skip-speed-tests",
           "kind": "run_benchmark_suite",
           "model": {
             "architecture": "qwen35moe",
@@ -1250,7 +1250,7 @@
     {
       "entries": [
         {
-          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run",
+          "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/run_benchmark.py --model worker_general --suite omniscience --new-run --server-mode --skip-speed-tests",
           "kind": "run_benchmark_suite",
           "model": {
             "architecture": "gemma4",
@@ -1451,7 +1451,7 @@
   "output_root": "/mnt/raid0/llm/epyc-inference-research/benchmarks/results/clean_window",
   "pass_fail_gate": "All ready commands require a clean inference window, successful preflight, and per-task result aggregation; blocked entries must remain non-executable.",
   "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1",
-  "run_id": "clean-window-2026-06-19T064706.696246Z0000",
+  "run_id": "clean-window-2026-06-20T043033.277846Z0000",
   "source_handoff": "/mnt/raid0/llm/epyc-root/handoffs/active/bulk-inference-campaign.md",
   "summary": {
     "entries_blocked": 6,

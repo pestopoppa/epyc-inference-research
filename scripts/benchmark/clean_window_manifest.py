@@ -192,9 +192,9 @@ def _benchmark_command(role: str, suite: str, *, server_mode: bool = False) -> s
         "--suite",
         suite,
         "--new-run",
+        "--server-mode",
+        "--skip-speed-tests",
     ]
-    if server_mode:
-        argv.append("--server-mode")
     return shlex.join(argv)
 
 

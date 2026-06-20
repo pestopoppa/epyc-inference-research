@@ -101,6 +101,8 @@ def test_build_manifest_includes_ready_role(monkeypatch):
     assert not errors
     assert built["roles"][0]["role"] == "role_ready"
     assert "--suite omniscience" in built["roles"][0]["command"]
+    assert "--server-mode" in built["roles"][0]["command"]
+    assert "--skip-speed-tests" in built["roles"][0]["command"]
     assert "--skip-preflight" not in built["roles"][0]["command"]
     assert built["commands"][0]["role"] == "role_ready"
 
