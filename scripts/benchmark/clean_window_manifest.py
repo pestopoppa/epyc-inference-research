@@ -35,6 +35,8 @@ RUN_BENCHMARK_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "run_benchmark.p
 ROPE_PROBE_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "rope_position_probe.py"
 SHORT_MK_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "short_mk_voting.py"
 DS_E1_KV_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "ds_e1_kv_measurements.sh"
+SERVER_NP_SWEEP_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "server_np_sweep.py"
+E2_EVAL_DRIVER_AB_SCRIPT = PROJECT_ROOT / "scripts" / "benchmark" / "e2_eval_driver_ab.py"
 ORCHESTRATOR_ROOT = Path("/mnt/raid0/llm/epyc-orchestrator")
 XMAS_LIVE_AB_SCRIPT = ORCHESTRATOR_ROOT / "scripts" / "benchmark" / "xmas_live_ab.py"
 XMAS_HELDOUT_PROMPTS = (
@@ -262,6 +264,54 @@ def _ds_e1_kv_command() -> str:
     return shlex.join(["bash", str(DS_E1_KV_SCRIPT), "--execute"])
 
 
+def _e1_batched_decode_command() -> str:
+    argv = [
+        "uv",
+        "run",
+        "--extra",
+        "benchmark",
+        "python",
+        "scripts/benchmark/server_np_sweep.py",
+        "--run-id",
+        "__RUN_ID__",
+        "--prompt-limit",
+        "43",
+        "--prompt-seed",
+        "42",
+        "--tier",
+        "1",
+        "--np-levels",
+        "1,2,4,8,16",
+    ]
+    command = shlex.join(argv).replace("__RUN_ID__", '"$run_id"')
+    return f"cd {shlex.quote(str(PROJECT_ROOT))} && run_id=e1-pbench3-$(date -u +%Y%m%dT%H%M%SZ) && {command}"
+
+
+def _e2_eval_driver_plan_command() -> str:
+    argv = [
+        "uv",
+        "run",
+        "--extra",
+        "benchmark",
+        "python",
+        "scripts/benchmark/e2_eval_driver_ab.py",
+        "--run-id",
+        "__RUN_ID__",
+        "--prompt-limit",
+        "43",
+        "--prompt-seed",
+        "42",
+        "--tier",
+        "1",
+        "--batch-np",
+        "8",
+        "--current-concurrency",
+        "3",
+    ]
+    command = shlex.join(argv).replace("__RUN_ID__", '"$run_id"')
+    return f"cd {shlex.quote(str(PROJECT_ROOT))} && run_id=e2-pbench3-$(date -u +%Y%m%dT%H%M%SZ) && {command}"
+
+
 def _xmas_live_ab_command() -> str:
     argv = [
         "uv",
@@ -441,6 +491,81 @@ def _ds_e1_entry() -> dict[str, Any]:
     }
 
 
+def _e1_batched_decode_entry() -> dict[str, Any]:
+    notes = [
+        "P-BENCH-3 direct serving sweep over qwen36_q8_0 and qwen36_27b_q8 with -np 1,2,4,8,16",
+        "server_np_sweep.py refuses decision-grade execution when AutoPilot, live llama-server processes, or host-health warnings are present",
+        "writes data/batched_decode/<run-id>/{manifest.json,selected_prompts.jsonl,summary.csv,recommendations.json,cells.jsonl,events.jsonl}",
+    ]
+    if not SERVER_NP_SWEEP_SCRIPT.exists():
+        notes.append("E1 server -np sweep harness missing")
+    status = "ready" if SERVER_NP_SWEEP_SCRIPT.exists() else "blocked"
+    return {
+        "package": "E1",
+        "kind": "batched_decode_np_sweep",
+        "role": "eval_serving",
+        "status": status,
+        "command": _e1_batched_decode_command() if status == "ready" else None,
+        "notes": notes,
+        "model": {
+            "role": "eval_serving",
+            "tier": "clean_window",
+            "architecture": "continuous_batching_serving_sweep",
+            "model_path": "clean-window-harness:server-np-sweep",
+            "benchmark_model_path": None,
+            "live_model_path": None,
+            "model_path_source": "harness",
+            "benchmark_registry_mismatch": False,
+            "model_exists": SERVER_NP_SWEEP_SCRIPT.exists(),
+            "max_context": 32768,
+            "server": {
+                "name": "server_np_sweep",
+                "url": "http://127.0.0.1:<dynamic>",
+                "port": None,
+                "source": str(SERVER_NP_SWEEP_SCRIPT),
+            },
+        },
+    }
+
+
+def _e2_eval_driver_ab_entry() -> dict[str, Any]:
+    notes = [
+        "Queue-2 coordinator for current EvalTower fan-out versus one full continuous-batching server at -np 8",
+        "command writes an E2 run manifest plus commands.sh; execute that generated commands.sh only in the same clean window",
+        "generated E2 plan marks decision_grade=false and comments arm commands when host-health warnings are present",
+        "summary step after arms complete: uv run --extra benchmark python scripts/benchmark/e2_eval_driver_ab.py --summarize-run <run-dir>",
+    ]
+    if not E2_EVAL_DRIVER_AB_SCRIPT.exists():
+        notes.append("E2 eval-driver A/B planner missing")
+    status = "ready" if E2_EVAL_DRIVER_AB_SCRIPT.exists() else "blocked"
+    return {
+        "package": "E2",
+        "kind": "eval_driver_ab_plan",
+        "role": "eval_serving",
+        "status": status,
+        "command": _e2_eval_driver_plan_command() if status == "ready" else None,
+        "notes": notes,
+        "model": {
+            "role": "eval_serving",
+            "tier": "clean_window",
+            "architecture": "eval_driver_ab_coordinator",
+            "model_path": "clean-window-harness:e2-eval-driver-ab",
+            "benchmark_model_path": None,
+            "live_model_path": None,
+            "model_path_source": "harness",
+            "benchmark_registry_mismatch": False,
+            "model_exists": E2_EVAL_DRIVER_AB_SCRIPT.exists(),
+            "max_context": None,
+            "server": {
+                "name": "e2_eval_driver_ab",
+                "url": None,
+                "port": None,
+                "source": str(E2_EVAL_DRIVER_AB_SCRIPT),
+            },
+        },
+    }
+
+
 def _xmas_live_ab_entry() -> dict[str, Any]:
     notes = [
         "requires attested quiet window; runner refuses AutoPilot and competing benchmark coordinators",
@@ -521,6 +646,8 @@ def build_manifest(
     for role in g5_roles if g5_roles is not None else G5_TARGETS:
         entries.append(_g5_entry(registry, role, live_registry=live_registry, output_root=output_root))
 
+    entries.append(_e2_eval_driver_ab_entry())
+    entries.append(_e1_batched_decode_entry())
     entries.append(_ds_e1_entry())
     entries.append(_xmas_live_ab_entry())
 
@@ -549,7 +676,7 @@ def build_manifest(
         "generated_at": generated_at,
         "run_id": f"clean-window-{generated_at.replace(':', '').replace('+', 'Z')}",
         "kind": "model_batched_clean_window",
-        "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1 plus DS-E1 KV measurements and X-MAS constrained-policy A/B",
+        "purpose": "model-batched clean-window plan for G5/G10/G11/K-MEM-1/K-ROPE-1 plus Queue-2 E1/E2, DS-E1 KV measurements, and X-MAS constrained-policy A/B",
         "source_handoff": SOURCE_HANDOFF,
         "output_root": str(output_root),
         "topology": {

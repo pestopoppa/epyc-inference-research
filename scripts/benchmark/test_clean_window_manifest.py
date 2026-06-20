@@ -184,6 +184,57 @@ def test_xmas_entry_blocks_when_prompt_manifest_missing(monkeypatch, tmp_path):
     assert "X-MAS held-out prompt manifest missing" in entry["notes"]
 
 
+def test_e1_entry_records_decision_grade_np_sweep_command(monkeypatch, tmp_path):
+    runner = tmp_path / "server_np_sweep.py"
+    runner.touch()
+    monkeypatch.setattr(manifest, "SERVER_NP_SWEEP_SCRIPT", runner)
+
+    entry = manifest._e1_batched_decode_entry()
+
+    assert entry["package"] == "E1"
+    assert entry["status"] == "ready"
+    assert "scripts/benchmark/server_np_sweep.py" in entry["command"]
+    assert "--np-levels 1,2,4,8,16" in entry["command"]
+    assert "e1-pbench3-$(date -u +%Y%m%dT%H%M%SZ)" in entry["command"]
+    assert any("refuses decision-grade execution" in note for note in entry["notes"])
+
+
+def test_e2_entry_records_plan_generation_command(monkeypatch, tmp_path):
+    runner = tmp_path / "e2_eval_driver_ab.py"
+    runner.touch()
+    monkeypatch.setattr(manifest, "E2_EVAL_DRIVER_AB_SCRIPT", runner)
+
+    entry = manifest._e2_eval_driver_ab_entry()
+
+    assert entry["package"] == "E2"
+    assert entry["status"] == "ready"
+    assert "scripts/benchmark/e2_eval_driver_ab.py" in entry["command"]
+    assert "--batch-np 8" in entry["command"]
+    assert "--current-concurrency 3" in entry["command"]
+    assert any("generated commands.sh" in note for note in entry["notes"])
+
+
+def test_queue2_entries_are_included_in_manifest(monkeypatch):
+    registry = _FakeRegistry()
+    monkeypatch.setattr(manifest, "load_registry", lambda: registry)
+    monkeypatch.setattr(manifest.Path, "exists", lambda self: str(self).startswith("/tmp/"))
+    monkeypatch.setattr(manifest, "get_adapter", lambda suite: _FakeAdapter())
+    monkeypatch.setattr(manifest, "get_suites_for_role", lambda role, registry=None: ["omniscience"])
+
+    built = manifest.build_manifest(
+        aa_roles=[],
+        k_mem_roles=[],
+        k_rope_roles=[],
+        g5_roles=[],
+        live_registry_path=None,
+    )
+
+    packages = {(entry["package"], entry["kind"]) for entry in built["entries"]}
+    assert ("E1", "batched_decode_np_sweep") in packages
+    assert ("E2", "eval_driver_ab_plan") in packages
+    assert "Queue-2 E1/E2" in built["purpose"]
+
+
 def test_suite_entry_blocks_when_live_registry_differs(monkeypatch):
     registry = _FakeRegistry()
     live_registry = {

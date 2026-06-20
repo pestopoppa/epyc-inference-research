@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Generated at 2026-06-20T20:21:12.309355+00:00
+# Generated at 2026-06-20T21:15:27.138163+00:00
 # Review live topology before running commands with direct --port values.
 
 # model_path: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf
@@ -90,6 +90,16 @@ set -euo pipefail
 # roles: dynamic_stack
 # DS-E1 dynamic_stack production_kv_measurements [ready]
 bash /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/ds_e1_kv_measurements.sh --execute
+
+# model_path: clean-window-harness:e2-eval-driver-ab
+# roles: eval_serving
+# E2 eval_serving eval_driver_ab_plan [ready]
+cd /mnt/raid0/llm/epyc-inference-research && run_id=e2-pbench3-$(date -u +%Y%m%dT%H%M%SZ) && uv run --extra benchmark python scripts/benchmark/e2_eval_driver_ab.py --run-id "$run_id" --prompt-limit 43 --prompt-seed 42 --tier 1 --batch-np 8 --current-concurrency 3
+
+# model_path: clean-window-harness:server-np-sweep
+# roles: eval_serving
+# E1 eval_serving batched_decode_np_sweep [ready]
+cd /mnt/raid0/llm/epyc-inference-research && run_id=e1-pbench3-$(date -u +%Y%m%dT%H%M%SZ) && uv run --extra benchmark python scripts/benchmark/server_np_sweep.py --run-id "$run_id" --prompt-limit 43 --prompt-seed 42 --tier 1 --np-levels 1,2,4,8,16
 
 # model_path: clean-window-harness:xmas-constrained-policy
 # roles: xmas_routing
