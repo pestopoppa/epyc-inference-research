@@ -70,7 +70,10 @@ ADAPTER_SUITES = {
 }
 
 # Suites that stay YAML-based (no public dataset or intentionally synthetic)
-YAML_ONLY_SUITES = {"agentic", "long_context", "mode_advantage", "mode_advantage_hard", "skill_transfer", "web_research"}
+YAML_ONLY_SUITES = {
+    "agentic", "long_context", "mode_advantage", "mode_advantage_hard", "real_suite_v1",
+    "skill_transfer", "web_research",
+}
 
 
 def _get_long_context_adapter(class_name: str):

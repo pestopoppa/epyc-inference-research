@@ -1,0 +1,1797 @@
+suite: real_suite_v1
+version: '1.0'
+generated_at: '2026-06-21T01:31:05+00:00'
+description: Scoreable F1 W3 real-task eval slice selected from observed workflow
+  rows whose prompts and expected answers are backed by the existing question pool.
+scoring_default:
+  method: exact_match
+  config: {}
+questions:
+- id: real_suite_v1_0001
+  tier: 2
+  prompt: "Complete the following Python function:\n\n```python\n\ndef get_row(lst,\
+    \ x):\n    \"\"\"\n    You are given a 2 dimensional data, as a nested lists,\n\
+    \    which is similar to matrix, however, unlike matrices,\n    each row may contain\
+    \ a different number of columns.\n    Given lst, and integer x, find integers\
+    \ x in the list,\n    and return list of tuples, [(x1, y1), (x2, y2) ...] such\
+    \ that\n    each tuple is a coordinate - (row, columns), starting with 0.\n  \
+    \  Sort coordinates initially by rows in ascending order.\n    Also, sort coordinates\
+    \ of the row by columns in descending order.\n    \n    Examples:\n    get_row([\n\
+    \      [1,2,3,4,5,6],\n      [1,2,3,4,1,6],\n      [1,2,3,4,5,1]\n    ], 1) ==\
+    \ [(0, 0), (1, 4), (1, 0), (2, 5), (2, 0)]\n    get_row([], 1) == []\n    get_row([[],\
+    \ [1], [1, 2, 3]], 3) == [(2, 2)]\n    \"\"\"\n```\n\nWrite only the function\
+    \ body (the part after the signature)."
+  expected: get_row
+  scoring_method: substring
+  scoring_config:
+    case_sensitive: true
+    substring: get_row
+  source_suite: coder
+  source_question_id: humaneval_HumanEval_87
+  real_task_id: chat-d3dd9660
+  real_task_class: benchmark_eval_measurement
+  real_task_outcome: failure
+- id: real_suite_v1_0002
+  tier: 1
+  prompt: "Analyze a text by creating a document term matrix with CountVectorizer.\
+    \ The text contains several sentences, each separated by a period. Ignore empty\
+    \ sentences.\nThe function should output with:\n    DataFrame: A pandas DataFrame\
+    \ with the document-term matrix. Its column names should be adapted from the vectorizer\
+    \ feature names.\nYou should write self-contained code starting with:\n```\nimport\
+    \ pandas as pd\nimport regex as re\nfrom sklearn.feature_extraction.text import\
+    \ CountVectorizer\ndef task_func(text):\n```"
+  expected: task_func
+  scoring_method: code_execution
+  scoring_config:
+    language: python
+    timeout: 30
+    test_code: "import unittest\nclass TestCases(unittest.TestCase):\n    \"\"\"Test\
+      \ cases for the task_func function.\"\"\"\n    def test_case_1(self):\n    \
+      \    # Test with a basic input\n        text = \"This is a sample sentence.\
+      \ This sentence contains sample words.\"\n        dtm = task_func(text)\n  \
+      \      # Assertions\n        self.assertEqual(\n            dtm.shape, (2, 6)\n\
+      \        )  # Expected 2 rows (sentences) and 6 unique words\n        self.assertEqual(dtm[\"\
+      sample\"].tolist(), [1, 1])\n        self.assertEqual(dtm[\"this\"].tolist(),\
+      \ [1, 1])\n    def test_case_2(self):\n        # Test with a single sentence\
+      \ (with a trailing period)\n        text = \"A single sentence.\"\n        dtm\
+      \ = task_func(text)\n        # Assertions\n        self.assertEqual(\n     \
+      \       dtm.shape, (1, 2)\n        )  # Expected 1 rows (sentences) and 2 unique\
+      \ words\n        self.assertEqual(dtm[\"single\"].tolist(), [1])\n    def test_case_3(self):\n\
+      \        # Test with no periods (still should consider it as one sentence)\n\
+      \        text = \"No periods in this text\"\n        dtm = task_func(text)\n\
+      \        # Assertions\n        self.assertEqual(\n            dtm.shape, (1,\
+      \ 5)\n        )  # Expected 1 row (sentence) and 5 unique words\n        self.assertEqual(dtm[\"\
+      text\"].tolist(), [1])\n    def test_case_4(self):\n        # Test with a single\
+      \ sentence (with same word multiple times)\n        text = (\"test test test\
+      \ test test test test test test test test \" * 3).strip()\n        dtm = task_func(text)\n\
+      \        # Assertions\n        self.assertEqual(\n            dtm.shape, (1,\
+      \ 1)\n        )  # Expected 1 row (sentence) and 1 unique words\n        self.assertEqual(dtm[\"\
+      test\"].tolist(), [33])\n    def test_case_5(self):\n        # Test with no\
+      \ periods (still should consider it as one sentence)\n        text = \"This\
+      \ is the first sentence. This is the second sentence. This is the third sentence.\
+      \ This is the fourth sentence. This is the fith and last sentence.\"\n     \
+      \   dtm = task_func(text)\n        # Assertions\n        self.assertEqual(\n\
+      \            dtm.shape, (5, 11)\n        )  # Expected 5 rows (sentence) and\
+      \ 11 unique words\n        self.assertEqual(dtm[\"this\"].tolist(), [1, 1, 1,\
+      \ 1, 1])\n        self.assertEqual(dtm[\"is\"].tolist(), [1, 1, 1, 1, 1])\n\
+      \        self.assertEqual(dtm[\"the\"].tolist(), [1, 1, 1, 1, 1])\n        self.assertEqual(dtm[\"\
+      sentence\"].tolist(), [1, 1, 1, 1, 1])"
+  source_suite: bigcodebench
+  source_question_id: bcb_BigCodeBench/54
+  real_task_id: chat-dd628d0d
+  real_task_class: benchmark_eval_measurement
+  real_task_outcome: failure
+- id: real_suite_v1_0003
+  tier: 2
+  prompt: 'Explain the differences between:
+
+
+    1. Retrieval-Augmented Generation (RAG)
+
+    2. Fine-tuning on domain data
+
+    3. In-context learning with examples
+
+
+    For each approach, describe:
+
+    - Computational requirements
+
+    - When it''s most appropriate
+
+    - Key limitations
+
+
+    For a legal document analysis task with 10,000 proprietary documents,
+
+    which approach would you recommend and why?'
+  expected: retrieval
+  scoring_method: substring
+  scoring_config:
+    case_sensitive: false
+  source_suite: mode_advantage_hard
+  source_question_id: ma_hard_synth_005
+  real_task_id: chat-01e75429
+  real_task_class: benchmark_eval_measurement
+  real_task_outcome: success
+- id: real_suite_v1_0004
+  tier: 2
+  prompt: 'Read the following passage and answer the question.
+
+
+    The archaeological expedition investigates ancient settlement sites
+
+    in the Mediterranean. The team uses ground-penetrating radar, aerial
+
+    photography, and traditional excavation techniques.
+
+
+    Pottery fragments are cataloged and analyzed for trade routes and
+
+    cultural connections. Chemical analysis identifies clay origins.
+
+
+    The site supervisor recorded that artifact catalog number AR-2025-1847
+
+    is a bronze figurine discovered at coordinates 36.8529N, 14.5147E at
+
+    a depth of 2.3 meters. Carbon dating suggests approximately 800 BCE.
+
+
+    Artifacts are preserved in climate-controlled facilities.
+
+
+    Question: What is the catalog number of the bronze figurine?'
+  expected: AR-2025-1847
+  scoring_method: substring
+  scoring_config:
+    case_sensitive: false
+  source_suite: long_context
+  source_question_id: needle_022
+  real_task_id: chat-0777028d
+  real_task_class: benchmark_eval_measurement
+  real_task_outcome: success
+- id: real_suite_v1_0005
+  tier: 1
+  prompt: 'This question refers to the following information.
+
+    "If it be conceded, as it must be by every one who is the least conversant with
+    our institutions, that the sovereign powers delegated are divided between the
+    General and State Governments, and that the latter hold their portion by the same
+    tenure as the former, it would seem impossible to deny to the States the right
+    of deciding on the infractions of their powers, and the proper remedy to be applied
+    for their correction. The right of judging, in such cases, is an essential attribute
+    of sovereignty, of which the States cannot be divested without losing their sovereignty
+    itself, and being reduced to a subordinate corporate condition. In fact, to divide
+    power, and to give to one of the parties the exclusive right of judging of the
+    portion allotted to each, is, in reality, not to divide it at all; and to reserve
+    such exclusive right to the General Government (it matters not by what department
+    to be exercised), is to convert it, in fact, into a great consolidated government,
+    with unlimited powers, and to divest the States, in reality, of all their rights,
+    It is impossible to understand the force of terms, and to deny so plain a conclusion."
+
+    —John C. Calhoun, "South Carolina Exposition and Protest," 1828
+
+    The language of "protest" that Calhoun used in his "Exposition and Protest" was
+    similar to the language of which of the following political positions?
+
+
+    A) The response of supporters of Andrew Jackson to the "corrupt bargain" of 1824.
+
+    B) The response of New England Federalists to the War of 1812.
+
+    C) The response of the Jefferson administration to the actions of the "Barbary
+    pirates."
+
+    D) The response of Daniel Shays to fiscal policies of the Massachusetts legislature
+    in the 1780s.
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: B
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: general
+  source_question_id: mmlu_high_school_us_history_05807
+  real_task_id: chat-07834ef3
+  real_task_class: benchmark_eval_measurement
+  real_task_outcome: success
+- id: real_suite_v1_0006
+  tier: 2
+  prompt: '# All Divisions With the Highest Score of a Binary Array
+
+
+    You are given a **0-indexed** binary array `nums` of length `n`. `nums` can be
+    divided at index `i` (where `0 <= i <= n)` into two arrays (possibly empty) `numsleft`
+    and `numsright`: * `numsleft` has all the elements of `nums` between index `0`
+    and `i - 1` **(inclusive)**, while `numsright` has all the elements of nums between
+    index `i` and `n - 1` **(inclusive)**. * If `i == 0`, `numsleft` is **empty**,
+    while `numsright` has all the elements of `nums`. * If `i == n`, `numsleft` has
+    all the elements of nums, while `numsright` is **empty**. The **division score**
+    of an index `i` is the **sum** of the number of `0`''s in `numsleft` and the number
+    of `1`''s in `numsright`. Return _**all distinct indices** that have the **highest**
+    possible **division score**_. You may return the answer in **any order**. **Example
+    1:** **Input:** nums = \[0,0,1,0\] **Output:** \[2,4\] **Explanation:** Division
+    at index - 0: numsleft is \[\]. numsright is \[0,0,**1**,0\]. The score is 0 +
+    1 = 1. - 1: numsleft is \[**0**\]. numsright is \[0,**1**,0\]. The score is 1
+    + 1 = 2. - 2: numsleft is \[**0**,**0**\]. numsright is \[**1**,0\]. The score
+    is 2 + 1 = 3. - 3: numsleft is \[**0**,**0**,1\]. numsright is \[0\]. The score
+    is 2 + 0 = 2. - 4: numsleft is \[**0**,**0**,1,**0**\]. numsright is \[\]. The
+    score is 3 + 0 = 3. Indices 2 and 4 both have the highest possible division score
+    3. Note the answer \[4,2\] would also be accepted. **Example 2:** **Input:** nums
+    = \[0,0,0\] **Output:** \[3\] **Explanation:** Division at index - 0: numsleft
+    is \[\]. numsright is \[0,0,0\]. The score is 0 + 0 = 0. - 1: numsleft is \[**0**\].
+    numsright is \[0,0\]. The score is 1 + 0 = 1. - 2: numsleft is \[**0**,**0**\].
+    numsright is \[0\]. The score is 2 + 0 = 2. - 3: numsleft is \[**0**,**0**,**0**\].
+    numsright is \[\]. The score is 3 + 0 = 3. Only index 3 has the highest possible
+    division score 3. **Example 3:** **Input:** nums = \[1,1\] **Output:** \[0\] **Explanation:**
+    Division at index - 0: numsleft is \[\]. numsright is \[**1**,**1**\]. The score
+    is 0 + 2 = 2. - 1: numsleft is \[1\]. numsright is \[**1**\]. The score is 0 +
+    1 = 1. - 2: numsleft is \[1,1\]. numsright is \[\]. The score is 0 + 0 = 0. Only
+    index 0 has the highest possible division score 2. **Constraints:** * `n == nums.length`
+    * `1 <= n <= 105` * `nums[i]` is either `0` or `1`.
+
+
+    Write a Python function to solve this problem. Include proper type hints and handle
+    edge cases.'
+  expected: 'def '
+  scoring_method: substring
+  scoring_config:
+    language: python
+    timeout: 30
+    case_sensitive: true
+    substring: 'def '
+  source_suite: livecodebench
+  source_question_id: leetcode_all-divisions-with-the-highest-score-of-a-binary-array
+  real_task_id: chat-140e0c9a
+  real_task_class: benchmark_eval_measurement
+  real_task_outcome: success
+- id: real_suite_v1_0007
+  tier: 2
+  prompt: '# Difference Between Ones and Zeros in Row and Column
+
+
+    You are given a **0-indexed** `m x n` binary matrix `grid`. A **0-indexed** `m
+    x n` difference matrix `diff` is created with the following procedure: * Let the
+    number of ones in the `ith` row be `onesRowi`. * Let the number of ones in the
+    `jth` column be `onesColj`. * Let the number of zeros in the `ith` row be `zerosRowi`.
+    * Let the number of zeros in the `jth` column be `zerosColj`. * `diff[i][j] =
+    onesRowi + onesColj - zerosRowi - zerosColj` Return _the difference matrix_ `diff`.
+    **Example 1:** **Input:** grid = \[\[0,1,1\],\[1,0,1\],\[0,0,1\]\] **Output:**
+    \[\[0,0,4\],\[0,0,4\],\[-2,-2,2\]\] **Explanation:** - diff\[0\]\[0\] = `onesRow0
+    + onesCol0 - zerosRow0 - zerosCol0` = 2 + 1 - 1 - 2 = 0 - diff\[0\]\[1\] = `onesRow0
+    + onesCol1 - zerosRow0 - zerosCol1` = 2 + 1 - 1 - 2 = 0 - diff\[0\]\[2\] = `onesRow0
+    + onesCol2 - zerosRow0 - zerosCol2` = 2 + 3 - 1 - 0 = 4 - diff\[1\]\[0\] = `onesRow1
+    + onesCol0 - zerosRow1 - zerosCol0` = 2 + 1 - 1 - 2 = 0 - diff\[1\]\[1\] = `onesRow1
+    + onesCol1 - zerosRow1 - zerosCol1` = 2 + 1 - 1 - 2 = 0 - diff\[1\]\[2\] = `onesRow1
+    + onesCol2 - zerosRow1 - zerosCol2` = 2 + 3 - 1 - 0 = 4 - diff\[2\]\[0\] = `onesRow2
+    + onesCol0 - zerosRow2 - zerosCol0` = 1 + 1 - 2 - 2 = -2 - diff\[2\]\[1\] = `onesRow2
+    + onesCol1 - zerosRow2 - zerosCol1` = 1 + 1 - 2 - 2 = -2 - diff\[2\]\[2\] = `onesRow2
+    + onesCol2 - zerosRow2 - zerosCol2` = 1 + 3 - 2 - 0 = 2 **Example 2:** **Input:**
+    grid = \[\[1,1,1\],\[1,1,1\]\] **Output:** \[\[5,5,5\],\[5,5,5\]\] **Explanation:**
+    - diff\[0\]\[0\] = onesRow0 + onesCol0 - zerosRow0 - zerosCol0 = 3 + 2 - 0 - 0
+    = 5 - diff\[0\]\[1\] = onesRow0 + onesCol1 - zerosRow0 - zerosCol1 = 3 + 2 - 0
+    - 0 = 5 - diff\[0\]\[2\] = onesRow0 + onesCol2 - zerosRow0 - zerosCol2 = 3 + 2
+    - 0 - 0 = 5 - diff\[1\]\[0\] = onesRow1 + onesCol0 - zerosRow1 - zerosCol0 = 3
+    + 2 - 0 - 0 = 5 - diff\[1\]\[1\] = onesRow1 + onesCol1 - zerosRow1 - zerosCol1
+    = 3 + 2 - 0 - 0 = 5 - diff\[1\]\[2\] = onesRow1 + onesCol2 - zerosRow1 - zerosCol2
+    = 3 + 2 - 0 - 0 = 5 **Constraints:** * `m == grid.length` * `n == grid[i].length`
+    * `1 <= m, n <= 105` * `1 <= m * n <= 105` * `grid[i][j]` is either `0` or `1`.
+
+
+    Write a Python function to solve this problem. Include proper type hints and handle
+    edge cases.'
+  expected: 'def '
+  scoring_method: substring
+  scoring_config:
+    language: python
+    timeout: 30
+    case_sensitive: true
+    substring: 'def '
+  source_suite: livecodebench
+  source_question_id: leetcode_difference-between-ones-and-zeros-in-row-and-column
+  real_task_id: chat-1759c287
+  real_task_class: benchmark_eval_measurement
+  real_task_outcome: success
+- id: real_suite_v1_0008
+  tier: 1
+  prompt: "Generates a DataFrame and heatmap from a 2D list. This function takes a\
+    \ 2D list and returns a pandas DataFrame and a seaborn heatmap representing the\
+    \ correlation matrix of the DataFrame. Assumes sublists of length 5. Also assumes\
+    \ DataFrame columns: 'A', 'B', 'C', 'D', 'E'.\nThe function should raise the exception\
+    \ for: ValueError: If the input array is empty or contains sublists of varying\
+    \ lengths.\nThe function should output with:\n    DataFrame: Constructed from\
+    \ the input 2D list.\n    heatmap: Seaborn heatmap of the DataFrame's correlation\
+    \ matrix.\nYou should write self-contained code starting with:\n```\nimport pandas\
+    \ as pd\nimport seaborn as sns\ndef task_func(array):\n```"
+  expected: task_func
+  scoring_method: code_execution
+  scoring_config:
+    language: python
+    timeout: 30
+    test_code: "import unittest\nimport pandas as pd\nimport numpy as np\nimport matplotlib.pyplot\
+      \ as plt\nimport random\nclass TestCases(unittest.TestCase):\n    def setUp(self):\n\
+      \        random.seed(42)\n        self.mock_data = [[random.randint(1, 100)\
+      \ for _ in range(5)] for _ in range(5)]\n    def test_case_1(self):\n      \
+      \  # Test dataframe creation with valid input\n        df, _ = task_func(self.mock_data)\n\
+      \        self.assertIsInstance(df, pd.DataFrame)\n        self.assertEqual(df.shape,\
+      \ (5, 5))\n    def test_case_2(self):\n        # Test heatmap creation with\
+      \ valid input\n        _, heatmap = task_func(self.mock_data)\n        self.assertIsNotNone(heatmap)\n\
+      \    def test_case_3(self):\n        # Test correlation accuracy with known\
+      \ data\n        correlated_data = [[1, 2, 3, 4, 5], [5, 4, 3, 2, 1]]\n     \
+      \   df, _ = task_func(correlated_data)\n        corr_matrix = df.corr()\n  \
+      \      np.testing.assert_array_almost_equal(\n            corr_matrix, np.corrcoef(correlated_data,\
+      \ rowvar=False)\n        )\n    def test_case_4(self):\n        # Test handling\
+      \ of non-numeric data\n        with self.assertRaises(ValueError):\n       \
+      \     task_func([[\"a\", \"b\", \"c\", \"d\", \"e\"], [1, 2, 3, 4, 5]])\n  \
+      \  def test_case_5(self):\n        # Test with empty list\n        with self.assertRaises(ValueError):\n\
+      \            task_func([])\n    def test_case_6(self):\n        # Test with\
+      \ single sublist\n        single_sublist = [[1, 2, 3, 4, 5]]\n        df, _\
+      \ = task_func(single_sublist)\n        self.assertEqual(df.shape, (1, 5))\n\
+      \    def test_case_7(self):\n        # Test handling sublists of varying lengths\n\
+      \        with self.assertRaises(ValueError):\n            task_func([[1, 2,\
+      \ 3], [4, 5, 6, 7, 8]])\n    def tearDown(self):\n        plt.close(\"all\")"
+  source_suite: bigcodebench
+  source_question_id: bcb_BigCodeBench/515
+  real_task_id: chat-30cf81e9
+  real_task_class: benchmark_eval_measurement
+  real_task_outcome: success
+- id: real_suite_v1_0009
+  tier: 2
+  prompt: Explain in French why it is important to eat healthy foods to heal the body,
+    without using the word "nourriture". Make sure your entire response is wrapped
+    in JSON format.
+  expected: ''
+  scoring_method: programmatic
+  scoring_config:
+    verifier: json_valid
+  source_suite: instruction_precision
+  source_question_id: ifeval_1137
+  real_task_id: chat-1cdc5bfd
+  real_task_class: ops_deploy_process
+  real_task_outcome: failure
+- id: real_suite_v1_0010
+  tier: 1
+  prompt: 'Choose the most plausible continuation:
+
+
+    Context: [header] How to make vegan chicken nuggets [title] Put the chickpeas
+    in a food processor and pulse until no whole beans are visible. [step] If you
+    don''t have a food processor available, a fork or potato masher will work just
+    fine. [title] Add ingredients to a medium-sized bowl.
+
+
+    A) [step] For the creamiest chicken nuggets, start by adding a tablespoon of raw
+    soy sauce, a pinch of salt, and a teaspoon of flour, which will keep the nuggets
+    moist until you finish preparing them. [title] Smash the cubes of chickpeas with
+    a fork.
+
+    B) [step] It''s a good idea to have about 10 tablespoons of leftover chickpeas
+    per batch of chicken. [title] Add 2 cups of water and sauté the chickpeas.
+
+    C) [step] Add in textured vegetable protein, vital wheat gluten, mashed chickpeas,
+    soy sauce, mustard, spices, water, and agave mix together with a spoon. [title]
+    Place the chickpea mixture on a clean, flat surface.
+
+    D) [step] Use a 1 ounce package to about 3/4 cup. [title] Stir everything together
+    with a fork until creamy.
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: C
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: thinking
+  source_question_id: hellaswag_14793
+  real_task_id: chat-3294af16
+  real_task_class: ops_deploy_process
+  real_task_outcome: failure
+- id: real_suite_v1_0011
+  tier: 1
+  prompt: Write a resume for a fresh high school graduate who is seeking their first
+    job. Make sure to include at least 12 placeholder represented by square brackets,
+    such as [address], [name].
+  expected: ''
+  scoring_method: programmatic
+  scoring_config:
+    verifier: placeholder_count
+    count: 12
+  source_suite: instruction_precision
+  source_question_id: ifeval_1005
+  real_task_id: chat-948925b8
+  real_task_class: ops_deploy_process
+  real_task_outcome: failure
+- id: real_suite_v1_0012
+  tier: 2
+  prompt: 'A fortune teller told fortunes by means of Tarot cards. An elderly woman,
+    who was worried about her failing health, had heard that the fortuneteller was
+    clairvoyant and could see into the future. Consequently, the woman decided to
+    see the fortuneteller in order to have her Tarot cards read. As the fortuneteller
+    was telling the woman her fortune, she suddenly said, "I have a vision. If you
+    give me $25,000 tomorrow, you will live to be 100 years old. " The woman, who
+    was 72 years of age, believed the fortuneteller and gave her the money the next
+    day. The following week, the woman''s physician informed her that she had a serious
+    heart disease and he didn''t expect her to live for more than a year or two. If
+    the woman asserts a claim against the fortuneteller based on deceit, the plaintiff
+    should
+
+
+    A) prevail, because she relied to her detriment on the fortune teller''s foretelling.
+
+    B) prevail, if the fortuneteller did not honestly believe that the woman would
+    live to be 100 years of age.
+
+    C) not prevail, unless there was a fiduciary relationship between the parties.
+
+    D) not prevail, unless the fortuneteller warranted the truth as believed.
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: B
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: general
+  source_question_id: mmlu_professional_law_10862
+  real_task_id: chat-998379a1
+  real_task_class: ops_deploy_process
+  real_task_outcome: failure
+- id: real_suite_v1_0013
+  tier: 2
+  prompt: 'In signal processing, calculate the cutoff frequency fc in Hz for a
+
+    second-order Butterworth low-pass filter with:
+
+    - R = 10 kΩ
+
+    - C = 100 nF
+
+
+    Use: fc = 1/(2πRC)
+
+
+    Give fc rounded to 1 decimal place after ####.'
+  expected: '159.2'
+  scoring_method: exact_match
+  scoring_config:
+    extract_pattern: '####\s*([\d.]+)'
+  source_suite: mode_advantage_hard
+  source_question_id: ma_hard_comp_011
+  real_task_id: chat-d18bf231
+  real_task_class: ops_deploy_process
+  real_task_outcome: failure
+- id: real_suite_v1_0014
+  tier: 1
+  prompt: "Convert this Python dictionary to a YAML configuration:\n\nconfig = {\n\
+    \    \"server\": {\"host\": \"0.0.0.0\", \"port\": 8080},\n    \"database\": {\"\
+    url\": \"postgresql://localhost/mydb\", \"pool_size\": 5},\n    \"logging\": {\"\
+    level\": \"INFO\", \"file\": \"/var/log/app.log\"}\n}\n\nReturn valid YAML.\n\n\
+    Put your final answer inside <answer></answer> tags."
+  expected: "server:\n  host: 0.0.0.0\n  port: 8080\ndatabase:\n  url: postgresql://localhost/mydb\n\
+    \  pool_size: 5\nlogging:\n  level: INFO\n  file: /var/log/app.log"
+  scoring_method: f1
+  scoring_config:
+    threshold: 0.5
+  source_suite: skill_transfer
+  source_question_id: st_fmt_code_002
+  real_task_id: chat-da3f9d67
+  real_task_class: ops_deploy_process
+  real_task_outcome: failure
+- id: real_suite_v1_0015
+  tier: 1
+  prompt: Is praying for someone's health a good idea? Your answer must be in all
+    capital letters and in English.
+  expected: ''
+  scoring_method: programmatic
+  scoring_config:
+    verifier: non_empty
+    constraint: change_case:english_capital
+  source_suite: instruction_precision
+  source_question_id: ifeval_2341
+  real_task_id: chat-191f4052
+  real_task_class: ops_deploy_process
+  real_task_outcome: success
+- id: real_suite_v1_0016
+  tier: 1
+  prompt: 'Decompose this refactoring task into ordered steps:
+
+
+    "We have a 2000-line monolithic Flask app (app.py) that needs to be
+
+    split into a proper package structure with blueprints. The app has
+
+    routes for users, products, and orders, plus shared middleware for
+
+    auth and logging."
+
+
+    List 5-7 concrete steps in execution order.
+
+
+    Put your final answer inside <answer></answer> tags.'
+  expected: create package directory structure, extract shared middleware into separate
+    modules, create blueprint for users routes, create blueprint for products routes,
+    create blueprint for orders routes, create application factory, update imports
+    and register blueprints
+  scoring_method: f1
+  scoring_config:
+    threshold: 0.5
+  source_suite: skill_transfer
+  source_question_id: st_plan_code_001
+  real_task_id: chat-06ded5e0
+  real_task_class: code_change_implementation
+  real_task_outcome: failure
+- id: real_suite_v1_0017
+  tier: 1
+  prompt: "What does the following Python code print when called with the given input?\n\
+    \n```python\ndef f(needle, haystack):\n    count = 0\n    while needle in haystack:\n\
+    \        haystack = haystack.replace(needle, '', 1)\n        count += 1\n    return\
+    \ count\n```\n\nInput: `'a', 'xxxaaxaaxx'`\n\nGive the exact output inside <answer></answer>\
+    \ tags."
+  expected: '4'
+  scoring_method: exact_match
+  scoring_config:
+    extract_pattern: <answer>(.*?)</answer>
+    normalize: true
+  source_suite: cruxeval
+  source_question_id: cruxeval_output_0319
+  real_task_id: chat-3594658b
+  real_task_class: code_change_implementation
+  real_task_outcome: failure
+- id: real_suite_v1_0018
+  tier: 3
+  prompt: "# Bug Fixing Task (JAVA)\n\n## Problem Description\nThere is a directed\
+    \ weighted graph that consists of n nodes numbered from 0 to n - 1. The edges\
+    \ of the graph are initially represented by the given array edges where edges[i]\
+    \ = [fromi, toi, edgeCosti] meaning that there is an edge from fromi to toi with\
+    \ the cost edgeCosti.\nImplement the Graph class:\n\nGraph(int n, int[][] edges)\
+    \ initializes the object with n nodes and the given edges.\naddEdge(int[] edge)\
+    \ adds an edge to the list of edges where edge = [from, to, edgeCost]. It is guaranteed\
+    \ that th\n\n## Examples\n```\nInput\n[\"Graph\", \"shortestPath\", \"shortestPath\"\
+    , \"addEdge\", \"shortestPath\"]\n[[4, [[0, 2, 5], [0, 1, 2], [1, 2, 1], [3, 0,\
+    \ 3]]], [3, 2], [0, 3], [[1, 3, 4]], [0, 3]]\nOutput\n[null, 6, -1, null, 6]\n\
+    \nExpla\n```\n\n## Constraints\n1 <= n <= 100\n0 <= edges.length <= n * (n - 1)\n\
+    edges[i].length == edge.length == 3\n0 <= fromi, toi, from, to, node1, node2 <=\
+    \ n - 1\n1 <= edgeCosti, edgeCost <= 106\nThere are no repeated edges and no s\n\
+    \n## Buggy Code\n```java\n\nclass Graph {\n    List<List<int[]>> adj=new ArrayList<>();\n\
+    \    int n;\n    public Graph(int n, int[][] edges) {\n        for(int i=0;i<n;i++){\n\
+    \            adj.add(new ArrayList<>());\n        }\n        this.n=n;\n     \
+    \   for(int edge[]: edges){\n            adj.get(edge[0]).add(new int[]{edge[1],edge[2]});\n\
+    \        }\n    }\n    \n    public void removeEdge(int[] edge) {\n        adj.get(edge[0]).remove(new\
+    \ int[]{edge[1],edge[2]});\n    }\n    \n    public int shortestPath(int node1,\
+    \ int node2) {\n        int dist[]=new int[n+1];\n        Arrays.fill(dist,Integer.MAX_VALUE);\n\
+    \        dist[node1]=0;\n        PriorityQueue<int[]> pq=new PriorityQueue<>((a,b)->a[1]-b[1]);\n\
+    \        pq.add(new int[]{node1,0});\n        while(!pq.isEmpty()){\n        \
+    \    int u=pq.poll()[0];\n            for(int p[]: adj.get(u)){\n            \
+    \    int v=p[0];\n                int w=p[1];\n                if(dist[v]>dist[u]+w){\n\
+    \                    dist[v]=dist[u]+w;\n                    pq.add(new int[]{v,dist[v]});\n\
+    \                }\n\n```\n\nFind and fix the bug(s) in the code above. Provide\
+    \ the corrected code. Fix ONLY the bug — do NOT rewrite, rename variables, change\
+    \ data structures, or optimize. Keep the original code structure."
+  expected: "class Graph {\n    List<List<int[]>> adj=new ArrayList<>();\n    int\
+    \ n;\n    public Graph(int n, int[]["
+  scoring_method: substring
+  scoring_config:
+    case_sensitive: true
+  source_suite: debugbench
+  source_question_id: debugbench_design-graph-with-shortest-path-calculator_java
+  real_task_id: chat-73cee283
+  real_task_class: code_change_implementation
+  real_task_outcome: failure
+- id: real_suite_v1_0019
+  tier: 1
+  prompt: "What does the following Python code print when called with the given input?\n\
+    \n```python\ndef f(values, value):\n    length = len(values)\n    new_dict = dict.fromkeys(values,\
+    \ value)\n    new_dict[''.join(sorted(values))] = value * 3\n    return new_dict\n\
+    ```\n\nInput: `['0','3'], 117`\n\nGive the exact output inside <answer></answer>\
+    \ tags."
+  expected: '{''0'': 117, ''3'': 117, ''03'': 351}'
+  scoring_method: exact_match
+  scoring_config:
+    extract_pattern: <answer>(.*?)</answer>
+    normalize: true
+  source_suite: cruxeval
+  source_question_id: cruxeval_output_0766
+  real_task_id: chat-75476644
+  real_task_class: code_change_implementation
+  real_task_outcome: failure
+- id: real_suite_v1_0020
+  tier: 2
+  prompt: "Given the following Python code and its output, determine what input was\
+    \ provided.\n\n```python\ndef f(text, delim):\n    return text[:text[::-1].find(delim)][::-1]\n\
+    ```\n\nOutput: `'d'`\n\nGive the exact input value inside <answer></answer> tags."
+  expected: '''dsj osq wi w'', '' '''
+  scoring_method: exact_match
+  scoring_config:
+    extract_pattern: <answer>(.*?)</answer>
+    normalize: true
+  source_suite: cruxeval
+  source_question_id: cruxeval_input_0500
+  real_task_id: chat-a16c2a4c
+  real_task_class: code_change_implementation
+  real_task_outcome: failure
+- id: real_suite_v1_0021
+  tier: 1
+  prompt: "What does the following Python code print when called with the given input?\n\
+    \n```python\ndef f(text):\n    uppercase_index = text.find('A')\n    if uppercase_index\
+    \ >= 0:\n        return text[:uppercase_index] + text[text.find('a') + 1 :]\n\
+    \    else:\n        return ''.join(sorted(text))\n```\n\nInput: `'E jIkx HtDpV\
+    \ G'`\n\nGive the exact output inside <answer></answer> tags."
+  expected: '''   DEGHIVjkptx'''
+  scoring_method: exact_match
+  scoring_config:
+    extract_pattern: <answer>(.*?)</answer>
+    normalize: true
+  source_suite: cruxeval
+  source_question_id: cruxeval_output_0340
+  real_task_id: chat-bcef2e2b
+  real_task_class: code_change_implementation
+  real_task_outcome: failure
+- id: real_suite_v1_0022
+  tier: 1
+  prompt: "What does the following Python code print when called with the given input?\n\
+    \n```python\ndef f(sentence):\n    ls = list(sentence)\n    for letter in ls:\n\
+    \        if not letter.istitle():\n            ls.remove(letter)\n    return ''.join(ls)\n\
+    ```\n\nInput: `'XYZ LittleRedRidingHood LiTTleBIGGeXEiT fault'`\n\nGive the exact\
+    \ output inside <answer></answer> tags."
+  expected: '''XYZLtRRdnHodLTTBIGGeXET fult'''
+  scoring_method: exact_match
+  scoring_config:
+    extract_pattern: <answer>(.*?)</answer>
+    normalize: true
+  source_suite: cruxeval
+  source_question_id: cruxeval_output_0112
+  real_task_id: chat-dcc273e8
+  real_task_class: code_change_implementation
+  real_task_outcome: failure
+- id: real_suite_v1_0023
+  tier: 3
+  prompt: 'An astronomer wants to study the profile of the H_alpha emission for an
+    active galaxy. She has data for 4 galaxies with spectral coverage coincident with
+    the "i" Sloan band. The inearly-approximated distances to the galaxies are approximately
+    1 Mpc,  7 Mpc, 70 Mpc, and 700 Mpc. Which galaxy should she choose to study?
+
+
+    A) The galaxy at ~ 700 Mpc
+
+    B) The galaxy at  ~ 7 Mpc
+
+    C) The galaxy at ~ 1 Mpc
+
+    D) The galaxy at ~ 70 Mpc
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: A
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: gpqa
+  source_question_id: gpqa_Astrophysics_0368
+  real_task_id: chat-145407b7
+  real_task_class: debug_root_cause
+  real_task_outcome: success
+- id: real_suite_v1_0024
+  tier: 2
+  prompt: 'Data were collected on two variables X and Y and a least squares regression
+    line was fitted to the data. The estimated equation for this data is y = –2.29
+    + 1.70x. One point has x = 5, y = 6. What is the residual for this point?
+
+
+    A) 7.91
+
+    B) 6.21
+
+    C) 0.21
+
+    D) –0.21
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: D
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: general
+  source_question_id: mmlu_high_school_statistics_05452
+  real_task_id: chat-2cb850bc
+  real_task_class: debug_root_cause
+  real_task_outcome: success
+- id: real_suite_v1_0025
+  tier: 3
+  prompt: 'Read the following passage and answer the question.
+
+
+    The cybersecurity firm provides threat intelligence and incident
+
+    response services. Their SOC operates 24/7, monitoring network
+
+    traffic and analyzing threats.
+
+
+    Machine learning models detect anomalous behavior patterns. False
+
+    positive rates have been reduced 85% over two years.
+
+
+    During forensic investigation of a client breach in November 2025,
+
+    the analysis team identified the initial compromise through a
+
+    spear-phishing email sent to employee ID EMP-5583. The email
+
+    contained a malicious PDF exploiting a zero-day vulnerability.
+
+
+    The attacker gained access on October 28 at 09:17 UTC and maintained
+
+    persistence through a custom backdoor using DNS tunneling. The
+
+    backdoor remained undetected for 12 days.
+
+
+    Question: What employee ID was targeted in the spear-phishing attack?'
+  expected: EMP-5583
+  scoring_method: substring
+  scoring_config:
+    case_sensitive: false
+  source_suite: long_context
+  source_question_id: needle_027
+  real_task_id: chat-6778bc2f
+  real_task_class: debug_root_cause
+  real_task_outcome: success
+- id: real_suite_v1_0026
+  tier: 1
+  prompt: "Sorts a CSV file by a specific column key using pandas, and optionally\
+    \ writes the sorted data to another CSV file. Can also fit a linear regression\
+    \ model to specified columns if required.\nThe function should raise the exception\
+    \ for: Exception: If there is an error in reading, sorting the data, or fitting\
+    \ the model. If the specified columns for linear regression do not exist in the\
+    \ dataframe, a ValueError with \"Specified columns for linear regression do not\
+    \ exist in the dataframe\" message is also raised.\nThe function should output\
+    \ with:\n    DataFrame, str, or LinearRegression model: The sorted pandas DataFrame\
+    \ if 'output_path' is None and\n    'linear_regression' is False, otherwise the\
+    \ path to the saved output file. If 'linear_regression' is True,\n    returns\
+    \ the fitted model.\nYou should write self-contained code starting with:\n```\n\
+    import pandas as pd\nfrom sklearn.linear_model import LinearRegression\ndef task_func(file_path,\
+    \ output_path=None, sort_key='title', linear_regression=False, x_column=None,\
+    \ y_column=None):\n```"
+  expected: task_func
+  scoring_method: code_execution
+  scoring_config:
+    language: python
+    timeout: 30
+    test_code: "import unittest\nimport pandas as pd\nimport numpy as np\nimport os\n\
+      import shutil\nimport tempfile\nclass TestCases(unittest.TestCase):\n    def\
+      \ setUp(self):\n        # Create a temporary directory for test files\n    \
+      \    self.test_dir = tempfile.mkdtemp()\n        self.test_csv_path = os.path.join(self.test_dir,\
+      \ 'test_data.csv')\n        # Create a sample CSV file\n        df = pd.DataFrame({\n\
+      \            'title': ['Book C', 'Book A', 'Book B'],\n            'x': [1,\
+      \ 2, 3],\n            'y': [5, 7, 9]\n        })\n        df.to_csv(self.test_csv_path,\
+      \ index=False)\n    def tearDown(self):\n        # Remove the temporary directory\
+      \ after the test\n        shutil.rmtree(self.test_dir)\n    def test_valid_input_no_output_path(self):\n\
+      \        # Test with valid input, no output file specified (should return DataFrame)\n\
+      \        df = task_func(self.test_csv_path, sort_key='title')\n        self.assertIsInstance(df,\
+      \ pd.DataFrame)\n        self.assertTrue(df['title'].is_monotonic_increasing)\n\
+      \    def test_invalid_file_path(self):\n        # Test with invalid file path\
+      \ (should raise an exception)\n        with self.assertRaises(Exception):\n\
+      \            task_func(os.path.join(self.test_dir, 'non_existent.csv'))\n  \
+      \  def test_invalid_sort_key(self):\n        # Test with invalid sort key (should\
+      \ raise an exception)\n        with self.assertRaises(Exception):\n        \
+      \    task_func(self.test_csv_path, sort_key='non_existent_column')\n    def\
+      \ test_output_data_saving(self):\n        # Test if the function saves the sorted\
+      \ data correctly when an output path is provided\n        output_path = os.path.join(self.test_dir,\
+      \ 'sorted_data.csv')\n        result_path = task_func(self.test_csv_path, output_path=output_path,\
+      \ sort_key='title')\n        self.assertEqual(result_path, output_path)\n  \
+      \      # Check if the file is created and is not empty\n        self.assertTrue(os.path.exists(output_path))\n\
+      \        self.assertGreater(os.stat(output_path).st_size, 0)\n    def test_linear_regression_functionality(self):\n\
+      \        # Test if linear regression model is fitted correctly\n        model\
+      \ = task_func(self.test_csv_path, linear_regression=True, x_column='x', y_column='y')\n\
+      \        self.assertIsInstance(model, LinearRegression)\n        # Check if\
+      \ coefficients are as expected (approximate)\n        np.testing.assert_almost_equal(model.coef_,\
+      \ [2], decimal=1)\n        np.testing.assert_almost_equal(model.intercept_,\
+      \ 3, decimal=1)\n    def test_linear_regression_error_on_invalid_columns(self):\n\
+      \        # Test error handling for non-existent columns in linear regression\n\
+      \        with self.assertRaises(Exception) as context:\n            task_func(self.test_csv_path,\
+      \ linear_regression=True, x_column='nonexistent', y_column='title')\n      \
+      \  self.assertIn(\"Specified columns for linear regression do not exist in the\
+      \ dataframe\", str(context.exception))"
+  source_suite: bigcodebench
+  source_question_id: bcb_BigCodeBench/776
+  real_task_id: chat-f92766f8
+  real_task_class: debug_root_cause
+  real_task_outcome: success
+- id: real_suite_v1_0027
+  tier: 3
+  prompt: 'What is the index of hydrogen deficiency of the product obtained when 2-formyl-5-vinylcyclohex-3-enecarboxylic
+    acid is reacted with red phosphorus and excess of HI?
+
+
+    A) 1
+
+    B) 0
+
+    C) 5
+
+    D) 3
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: A
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: gpqa
+  source_question_id: gpqa_Organic Chemistry_0223
+  real_task_id: chat-1b4cdfad
+  real_task_class: governance_docs_handoff
+  real_task_outcome: failure
+- id: real_suite_v1_0028
+  tier: 2
+  prompt: 'What was the name of the winner of the 1991 Scandinavian Masters golf tournament?
+
+
+    Give a short, precise answer. Put your final answer inside <answer></answer> tags.'
+  expected: Colin Montgomerie
+  scoring_method: f1
+  scoring_config:
+    extract_pattern: <answer>(.*?)</answer>
+    threshold: 0.5
+    normalize: true
+  source_suite: simpleqa
+  source_question_id: simpleqa_general_02107
+  real_task_id: chat-15c9b451
+  real_task_class: governance_docs_handoff
+  real_task_outcome: success
+- id: real_suite_v1_0029
+  tier: 1
+  prompt: 'Convert this unstructured meeting notes text into a structured
+
+    action-item list:
+
+
+    "In today''s meeting, John agreed to finish the API docs by Friday.
+
+    Sarah will review the security audit results and report back next
+
+    Tuesday. The team decided to postpone the database migration until
+
+    Q2. Mike needs to set up the staging environment before the sprint
+
+    demo on Thursday."
+
+
+    Format as: assignee | action | deadline
+
+
+    Put your final answer inside <answer></answer> tags.'
+  expected: John | finish API docs | Friday; Sarah | review security audit results
+    | next Tuesday; team | postpone database migration | Q2; Mike | set up staging
+    environment | before Thursday sprint demo
+  scoring_method: f1
+  scoring_config:
+    threshold: 0.5
+  source_suite: skill_transfer
+  source_question_id: st_fmt_web_002
+  real_task_id: chat-201ba524
+  real_task_class: governance_docs_handoff
+  real_task_outcome: success
+- id: real_suite_v1_0030
+  tier: 3
+  prompt: 'Context:
+
+    ### Kitty Brazelton
+
+    Kitty Brazelton (born 1951 in Cambridge, Massachusetts) is an American vocalist,
+    composer, flutist, lead singer, and bandleader.  Her bands include progressive
+    rock/folk rock/contemporary classical "Musica Orbis", metal "V", power pop "Hide
+    the Babies", the art rock/alternative rock/avant-garde jazz band "Dadadah", punk
+    rock/computer music trio "What Is It Like To Be A Bat?"  and "Hildegurls" (with
+    Eve Beglarian, Lisa Bielawa and Elaine Kaplinsky) who appeared at Lincoln Center
+    for the Performing Arts Festival ''98 in celebration of abbess composer Hildegard
+    von Bingen''s 900th birthday.  Brazelton is the daughter of pediatrician and author
+    T. Berry Brazelton.
+
+
+    ### Tell the Birds
+
+    Tell the Birds is the 2007 album by experimental composer Eve Beglarian.
+
+
+    ### Almost Human (Maya Beiser album)
+
+    Almost Human is a 2006 album by cellist Maya Beiser.  The album features composer
+    Eve Beglarian''s setting of Henri Michaux''s prose poem "I am writing to you from
+    a far-off country" and Joby Talbot''s "Motion Detector" and "Falling".
+
+
+    ### Armenians in the United Kingdom
+
+    The Armenian community of the United Kingdom consists mainly of British citizens
+    who are fully or partially of Armenian descent.  There has been sporadic emigration
+    from Armenia to the UK since the 18th century, with the biggest influx coming
+    after the Second World War.  The majority are based in the major cities of London
+    and Manchester.  The 2001 UK Census recorded 589 Armenian-born people living in
+    the UK, and in 2013, the Office for National Statistics estimated that there were
+    1,235 people born in Armenia resident in the UK, with the number of Armenian nationals
+    being 1,720, although it has been estimated by the Armenian Diaspora Conference
+    that there are up to 18,000 ethnic Armenians including those who are British-born,
+    and of part Armenian descent, living in the UK.
+
+
+    ### Play Nice (album)
+
+    Play Nice is a 1999 album from Twisted Tutu, featuring composer/vocalist/performance
+    artist Eve Beglarian and pianist/keyboardist Kathleen Supové.
+
+
+    ### Corey Dargel
+
+    Corey Dargel (born October 19, 1977 in McAllen, Texas) is a composer, lyricist,
+    and singer of electronic art songs that "smartly and impishly blur the boundaries
+    between contemporary classical idioms and pop" (New York Times).  Dargel has also
+    sung music by other living composers, including Eve Beglarian, k. terumi shorb,
+    Phil Kline, Nick Brooke, and Pauline Oliveros.  Formally trained in music composition,
+    Dargel studied with Oliveros, John Luther Adams, and Brenda Hutchinson, and received
+    a B.M. from Oberlin.
+
+
+    ### Overstepping
+
+    Overstepping is the 1998 debut album by avant-garde composer Eve Beglarian.  The
+    disc features sixty-four minutes of music with four different works composed between
+    1984 and 1995 with performers Kathleen Supové (keyboards), Margaret Lancaster
+    (flute), and Eve Beglarian.
+
+
+    ### Zach Bogosian
+
+    Zachary M. Bogosian (Armenian: Զաքարի Մ.  Պողոսյան , born July 15, 1990) is an
+    American professional ice hockey defenseman currently playing for the Buffalo
+    Sabres.  Bogosian attended Cushing Academy in Massachusetts before he joined the
+    Peterborough Petes of the Ontario Hockey League (OHL) in 2006.  He played two
+    seasons in the OHL, and was nominated for the Red Tilson Trophy as the league''s
+    most outstanding player in his second season.  Bogosian was regarded as a complete,
+    physical defenseman who could contribute on both offense and defense; he was rated
+    as one of the top players heading into the 2008 NHL Entry Draft, where the Atlanta
+    Thrashers selected him third overall.  He signed a contract with the team a few
+    weeks after the draft and began the season with the Thrashers, though he missed
+    several weeks of his rookie year due to injury.  In his second season, he tied
+    a team record for goals by a defenseman.  Bogosian first played in an international
+    tournament when he joined the American national team at the 2009 IIHF World Championship.
+
+
+    ### Robert Beglarian
+
+    Robert Beglarian (Persian: روبرت بگلریان‎ ‎ , Armenian: Ռոբերտ Բեգլարյան ) is
+    an Iranian MP of Armenian descent, and the current representative of the Armenian
+    community of southern Iran in the parliament.
+
+
+    ### Eve Beglarian
+
+    Eve Beglarian (born Ann Arbor, Michigan, U.S., July 22, 1958) is a contemporary
+    American composer, performer and audio producer of Armenian descent.  Her music
+    is often characterized as postminimalist.
+
+
+    Question: Are Eve Beglarian and Zach Bogosian both of Armenian descent?
+
+
+    Give a short, precise answer based on the context. Put your final answer inside
+    <answer></answer> tags.'
+  expected: 'yes'
+  scoring_method: f1
+  scoring_config:
+    extract_pattern: <answer>(.*?)</answer>
+    threshold: 0.5
+  source_suite: hotpotqa
+  source_question_id: hotpot_comparison_5ab9ddef5542994dbf019875
+  real_task_id: chat-223cbdac
+  real_task_class: governance_docs_handoff
+  real_task_outcome: success
+- id: real_suite_v1_0031
+  tier: 2
+  prompt: '# Intervals Between Identical Elements
+
+
+    You are given a **0-indexed** array of `n` integers `arr`. The **interval** between
+    two elements in `arr` is defined as the **absolute difference** between their
+    indices. More formally, the **interval** between `arr[i]` and `arr[j]` is `|i
+    - j|`. Return _an array_ `intervals` _of length_ `n` _where_ `intervals[i]` _is
+    **the sum of intervals** between_ `arr[i]` _and each element in_ `arr` _with the
+    same value as_ `arr[i]`_._ **Note:** `|x|` is the absolute value of `x`. **Example
+    1:** **Input:** arr = \[2,1,3,1,2,3,3\] **Output:** \[4,2,7,2,4,4,5\] **Explanation:**
+    - Index 0: Another 2 is found at index 4. |0 - 4| = 4 - Index 1: Another 1 is
+    found at index 3. |1 - 3| = 2 - Index 2: Two more 3s are found at indices 5 and
+    6. |2 - 5| + |2 - 6| = 7 - Index 3: Another 1 is found at index 1. |3 - 1| = 2
+    - Index 4: Another 2 is found at index 0. |4 - 0| = 4 - Index 5: Two more 3s are
+    found at indices 2 and 6. |5 - 2| + |5 - 6| = 4 - Index 6: Two more 3s are found
+    at indices 2 and 5. |6 - 2| + |6 - 5| = 5 **Example 2:** **Input:** arr = \[10,5,10,10\]
+    **Output:** \[5,0,3,4\] **Explanation:** - Index 0: Two more 10s are found at
+    indices 2 and 3. |0 - 2| + |0 - 3| = 5 - Index 1: There is only one 5 in the array,
+    so its sum of intervals to identical elements is 0. - Index 2: Two more 10s are
+    found at indices 0 and 3. |2 - 0| + |2 - 3| = 3 - Index 3: Two more 10s are found
+    at indices 0 and 2. |3 - 0| + |3 - 2| = 4 **Constraints:** * `n == arr.length`
+    * `1 <= n <= 105` * `1 <= arr[i] <= 105`
+
+
+    Write a Python function to solve this problem. Include proper type hints and handle
+    edge cases.'
+  expected: 'def '
+  scoring_method: substring
+  scoring_config:
+    language: python
+    timeout: 30
+    case_sensitive: true
+    substring: 'def '
+  source_suite: livecodebench
+  source_question_id: leetcode_intervals-between-identical-elements
+  real_task_id: chat-2d6ccca0
+  real_task_class: governance_docs_handoff
+  real_task_outcome: success
+- id: real_suite_v1_0032
+  tier: 3
+  prompt: 'Read the following company documents carefully. You will need to
+
+    combine information from multiple sections.
+
+
+    === DOCUMENT 1: Employee Directory ===
+
+    - Alice Chen: Engineering Manager, Team Alpha, Office 301
+
+    - Bob Kumar: Senior Engineer, Team Beta, Office 412
+
+    - Carol Davis: Product Manager, Team Alpha, Office 303
+
+    - David Lee: Junior Engineer, Team Alpha, Office 305
+
+    - Eve Wilson: Senior Engineer, Team Alpha, Office 302
+
+
+    === DOCUMENT 2: Team Assignments ===
+
+    Team Alpha is working on Project Phoenix. The team lead is Alice Chen.
+
+    Team Beta is working on Project Mercury. The team lead is Frank Martinez.
+
+    Project Phoenix has a deadline of March 2026.
+
+    Project Mercury has a deadline of June 2026.
+
+
+    === DOCUMENT 3: Budget Allocations ===
+
+    Project Phoenix: $1.2M (Q1: $400K, Q2: $500K, Q3: $300K)
+
+    Project Mercury: $800K (Q1: $300K, Q2: $300K, Q3: $200K)
+
+    The Project Phoenix technical reviewer is Eve Wilson.
+
+
+    Question: Who is the technical reviewer for the project that
+
+    David Lee is working on, and what is that project''s Q2 budget?'
+  expected: Eve Wilson
+  scoring_method: substring
+  scoring_config:
+    case_sensitive: false
+  source_suite: long_context
+  source_question_id: needle_006
+  real_task_id: chat-3cc55cb8
+  real_task_class: governance_docs_handoff
+  real_task_outcome: success
+- id: real_suite_v1_0033
+  tier: 2
+  prompt: 'Context:
+
+    ### Lance Todd Trophy
+
+    The Lance Todd Trophy is awarded to the annual Challenge Cup Final''s man of the
+    match.  Introduced in 1946, the trophy was named in memory of Lance Todd, the
+    New Zealand-born player and administrator, who was killed in a road accident during
+    the Second World War.  The trophy''s winner is selected by the members of the
+    Rugby League Writers'' Association present at the game.  The Lance Todd Trophy
+    is presented at a celebratory dinner at the AJ Bell Stadium, home of the Salford
+    Red Devils.  The trophy belongs to the Red Devils Association, the official body
+    representing ex-Salford players, as of 2017 no Salford player has won this award.
+
+
+    ### Kevin Sinfield
+
+    Kevin "Sir Kev" Sinfield, MBE (born 12 September 1980 in Oldham) is an English
+    former professional rugby league player who captained Leeds Rhinos in Super League.  An
+    England captain, his usual position was Loose forward , although he could cover
+    both Stand-off and Hooker .  Sinfield played his entire professional career with
+    Leeds and is one of the most successful players in Super League history, having
+    captained the team to seven Super League championships and two Challenge Cup successes
+    as well as achieving individual accolades as winner of the Lance Todd Trophy (2005),
+    Harry Sunderland Trophy twice (2009, 2012) and the Golden Boot (2012), one of
+    only four British-based players to achieve the latter.  He holds records as the
+    highest points-scorer in Leeds Rhinos history, the highest points-scorer in Super
+    League history and the third highest points-scorer in British rugby league history,
+    behind Jim Sullivan and Neil Fox.  Sinfield is also the only captain to ever lead
+    a team to win three back-to-back-to-back Super League titles.
+
+
+    ### 1964–65 Challenge Cup
+
+    The 1965 Challenge Cup was the 64th staging of rugby league''s oldest knockout
+    competition, the Challenge Cup.  The final was contested by Wigan and Hunslet
+    at Wembley Stadium.  Wigan won the match 20–16, with Wigan''s Ray Ashby and Hunslet''s
+    Brian Gabbitas jointly receiving the Lance Todd Trophy.
+
+
+    ### Paul Wellens
+
+    Paul Simon Wellens (born 27 February 1980) is a retired English professional rugby
+    league footballer.  A Great Britain and England national representative fullback,
+    he played his entire career with St. Helens, with whom he won several Super League
+    championships and Challenge Cup titles.  Wellens also became only the third player
+    to have won the Lance Todd Trophy, Harry Sunderland Trophy, and the Man of Steel
+    Award.
+
+
+    ### 1947–48 Challenge Cup
+
+    The 1948 Challenge Cup was the 47th staging of rugby league''s oldest knockout
+    competition, the Challenge Cup.  The final was contested by Wigan and Bradford
+    Northern at Wembley Stadium, and was the first ever rugby league match to be televised.  Wigan
+    won the match 8–3, with Bradford''s Frank Whitcombe receiving the Lance Todd Trophy
+    – the first time the trophy had been awarded to a player on the losing team.
+
+
+    ### Brett Hodgson
+
+    Brett Hodgson (born 12 February 1978 in Liverpool, New South Wales) is an Australian
+    former professional rugby league footballer who played in the 1990s, 2000s, and
+    2010s, and the current Assistant Coach at Widnes Vikings working alongside Denis
+    Betts.  A New South Wales State of Origin representative goal-kicking fullback,
+    he played his club football in the National Rugby League (NRL) for the Western
+    Suburbs Magpies, Parramatta Eels and Wests Tigers (with whom he won the 2005 NRL
+    premiership), and in Super League for Huddersfield (with whom he won the 2009
+    Man of Steel Award) and Warrington Wolves (with whom he won the Challenge Cup
+    and the Lance Todd Trophy).  Hodgson also gained representative selection for
+    Exiles and City NSW.
+
+
+    ### AJ Bell Stadium
+
+    The Salford City Stadium (referred to as the AJ Bell Stadium for sponsorship purposes)
+    is a rugby stadium in Barton-upon-Irwell, Eccles, Salford, England.  It was built
+    to replace Salford rugby league club''s ground the Willows for the 2012 season.  Sale
+    Sharks rugby union club have also played at the stadium since the 2012–13 season.
+
+
+    ### Graham Eadie
+
+    Graham "Wombat" Eadie (born 25 November 1953 in Lidcombe, New South Wales), is
+    an Australian former rugby league footballer who played in the 1970s, and 1980s
+    who has been named amongst the nation''s finest of the 20th century.  A New South
+    Wales State of Origin and Australian international representative fullback, he
+    played in Australia during Manly-Warringah''s dominance of the NSWRFL competition
+    during the 1970s.  He won four premierships with them and his 1,917 points in
+    first grade and 2,070 points in all grades were both records at the time of his
+    retirement.  Eadie also played in England for Halifax, winning the Challenge Cup
+    Final of 1987 with them.  He also won World Cups with Australia and collected
+    awards such as the Rothmans Medal and Lance Todd Trophy.
+
+
+    ### Ryan Hall (rugby league)
+
+    Ryan Lee Hall (born 27 November 1987) is an English professional rugby league
+    player who plays for the Leeds Rhinos in the Super League.  An England international
+    representative winger, he has played his entire professional career to date with
+    Leeds, having won the 2008, 2009, 2011, 2012 and 2015 Super League Grand Finals
+    with them.  In 2014 he was part of the Leeds team that won the Challenge Cup and
+    was the winner of the Lance Todd Trophy.
+
+
+    ### Mark Aston
+
+    Mark Aston (born 27 September 1967) is an English former rugby league Scrum-half
+    /Halfback with Sheffield Eagles and Great Britain.  He also had short spells with
+    Featherstone Rovers (Captain) (Heritage № 709), and Bramley but the bulk of his
+    career was spent with the Eagles, who he joined in 1985.  He retired from playing
+    in 2004, having been the figurehead in the fight to save the Eagles after their
+    merger with Huddersfield in 1999.  In less than three months, a new club was formed
+    that was allowed into the Northern Ford Premiership with Aston as player/coach
+    and a completely new semi-professional team.  This must have seemed a long way
+    from the day, only 18 months earlier, when Aston won the Lance Todd Trophy in
+    the Rugby League Challenge Cup Final at Wembley Stadium, inspiring Sheffield Eagles
+    to a famous 17-8 win over Wigan.
+
+
+    Question: The Lance Todd Trophy is presented at a stadium located in what country?
+
+
+    Give a short, precise answer based on the context. Put your final answer inside
+    <answer></answer> tags.'
+  expected: England
+  scoring_method: f1
+  scoring_config:
+    extract_pattern: <answer>(.*?)</answer>
+    threshold: 0.5
+  source_suite: hotpotqa
+  source_question_id: hotpot_bridge_5a779be75542995d83181215
+  real_task_id: chat-6948c85b
+  real_task_class: governance_docs_handoff
+  real_task_outcome: success
+- id: real_suite_v1_0034
+  tier: 1
+  prompt: 'Choose the most plausible continuation:
+
+
+    Context: [header] How to wear paperbag waist pants [title] Check that the pants
+    are flattering for your body type. [step] While paperbag waist pants are extremely
+    comfortable, they aren''t always the best option depending on what part of your
+    body that you wish to emphasize or de-emphasize. In particular, they work best
+    on shapes with a defined waist, such as an hourglass or pear.
+
+
+    A) [substeps] You may want to avoid paperbag waist pants if you carry most of
+    your weight in your midsection or lack a defined waist. For example, apple and
+    rectangle body shapes may find the style less flattering.
+
+    B) [substeps] Use a sizing guide that is relevant to your body type and your interests.
+    Pants with square waists tend to slim down the legs and highlight your body for
+    extra appeal.
+
+    C) [substeps] If you want to balance out your waist shape without covering it
+    completely, try feeling at the waist for curves. If you want a waist that looks
+    cakey, the way to go is to try different clothing styles.
+
+    D) A well-fitting and comfortable waist will have a very noticeable effect on
+    your clothes. If you''re looking for a more flattering waist, go for straight
+    leg-high pants that above-emphasize your waist.
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: A
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: thinking
+  source_question_id: hellaswag_24873
+  real_task_id: chat-53dc42cc
+  real_task_class: research_intake_deep_dive
+  real_task_outcome: failure
+- id: real_suite_v1_0035
+  tier: 2
+  prompt: 'Write a short proposal for a new research project that investigates how
+    language evolves over time. I want to make it challenging, so:
+
+    1. Do not include any commas in your response.
+
+    2. Do not include the letter "c" anywhere in your response.
+
+    3. Your response should contain at least 250 words.'
+  expected: ''
+  scoring_method: programmatic
+  scoring_config:
+    verifier: no_comma
+  source_suite: instruction_precision
+  source_question_id: ifeval_1300
+  real_task_id: chat-04b7e51c
+  real_task_class: research_intake_deep_dive
+  real_task_outcome: success
+- id: real_suite_v1_0036
+  tier: 1
+  prompt: 'Choose the most plausible continuation:
+
+
+    Context: A man and a woman are playing rock paper scissors. the man
+
+
+    A) throws the scissors on the ground.
+
+    B) pulls the woman''s arm down.
+
+    C) gets on his knee and pulls out a ring.
+
+    D) stops and puts down the knife.
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: C
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: thinking
+  source_question_id: hellaswag_30181
+  real_task_id: chat-3cc12c4f
+  real_task_class: research_intake_deep_dive
+  real_task_outcome: success
+- id: real_suite_v1_0037
+  tier: 3
+  prompt: 'Read the following research paper abstracts and determine which claims
+
+    are supported, contradicted, or unaddressed across all three papers.
+
+
+    Paper A (Chen et al., 2023): "We demonstrate that transformer models
+
+    with more than 10B parameters show emergent chain-of-thought reasoning
+
+    on mathematical tasks, achieving 78% accuracy on GSM8K without explicit
+
+    CoT prompting. Models below 3B parameters showed no such emergence.
+
+    Fine-tuning on synthetic math data improved results by 12 percentage
+
+    points across all model sizes."
+
+
+    Paper B (Williams & Patel, 2024): "Our analysis reveals that apparent
+
+    ''emergent'' abilities in large language models are largely artifacts of
+
+    discrete evaluation metrics. When using continuous metrics, performance
+
+    scales smoothly with model size. However, we confirm that models above
+
+    7B parameters do show qualitatively different reasoning patterns on
+
+    multi-step math tasks compared to smaller models."
+
+
+    Paper C (Nakamura et al., 2024): "We replicate the findings of Chen et
+
+    al. on mathematical reasoning emergence but find the threshold to be 7B
+
+    parameters rather than 10B when using improved training data. Our models
+
+    at 7B achieve 82% on GSM8K. We also find that fine-tuning gains are
+
+    inversely proportional to model size, contradicting Chen et al.''s
+
+    finding of uniform improvement."
+
+
+    For each claim, state: SUPPORTED, CONTRADICTED, or MIXED
+
+    1. Emergence requires >10B parameters
+
+    2. Fine-tuning provides uniform improvement across sizes
+
+    3. Larger models show different reasoning patterns
+
+
+    Format: "1: X, 2: Y, 3: Z"
+
+    Give your answer after ####.'
+  expected: '1: CONTRADICTED, 2: CONTRADICTED, 3: SUPPORTED'
+  scoring_method: exact_match
+  scoring_config:
+    extract_pattern: '####\s*(.+)'
+    normalize: true
+  source_suite: long_context
+  source_question_id: lc_ma_004
+  real_task_id: chat-46bd3e5c
+  real_task_class: research_intake_deep_dive
+  real_task_outcome: success
+- id: real_suite_v1_0038
+  tier: 1
+  prompt: 'Read the following passage and answer the question.
+
+
+    The medical research facility conducts studies on various treatment
+
+    protocols. Dr. Sarah Chen leads the cardiology research division.
+
+
+    During the quarterly review, it was noted that Patient ID MRN-847392
+
+    showed remarkable improvement in cardiac function after the
+
+    experimental treatment.
+
+
+    The research team continues to analyze data from the clinical trial,
+
+    which involves 200 participants across three sites.
+
+
+    Question: What was the patient ID that showed remarkable improvement?'
+  expected: MRN-847392
+  scoring_method: substring
+  scoring_config:
+    case_sensitive: false
+  source_suite: long_context
+  source_question_id: needle_010
+  real_task_id: chat-4be328bd
+  real_task_class: research_intake_deep_dive
+  real_task_outcome: success
+- id: real_suite_v1_0039
+  tier: 2
+  prompt: 'Read this document about renewable energy.
+
+
+    Solar energy has become one of the fastest-growing renewable energy
+
+    sources worldwide. Photovoltaic cells convert sunlight directly into
+
+    electricity using semiconductor materials, typically silicon. The
+
+    efficiency of commercial solar panels has increased from about 15%
+
+    in the early 2000s to over 22% in modern panels. Some experimental
+
+    cells have achieved efficiencies above 40%.
+
+
+    Wind energy is another major renewable source. Modern wind turbines
+
+    can generate several megawatts of power. Offshore wind farms are
+
+    becoming increasingly popular due to stronger and more consistent
+
+    wind patterns at sea. Denmark leads the world in wind energy
+
+    generation per capita.
+
+
+    The password to the energy grid control system is: renewable-2847-solar.
+
+
+    Hydroelectric power remains the largest source of renewable
+
+    electricity globally. Large dams like the Three Gorges Dam in China
+
+    and the Itaipu Dam on the Brazil-Paraguay border generate enormous
+
+    amounts of electricity. However, the environmental impact of large
+
+    dams, including habitat destruction and altered river ecosystems,
+
+    has led to controversy.
+
+
+    Geothermal energy harnesses heat from the Earth''s interior. Iceland
+
+    generates about 25% of its electricity from geothermal sources.
+
+    Enhanced geothermal systems (EGS) could expand geothermal energy to
+
+    areas without natural hot springs.
+
+
+    Biomass energy involves burning organic materials for heat or
+
+    electricity. While considered renewable, biomass energy has been
+
+    criticized for its carbon emissions and competition with food
+
+    production for land use.
+
+
+    Question: What is the password to the energy grid control system?'
+  expected: renewable-2847-solar
+  scoring_method: substring
+  scoring_config:
+    case_sensitive: true
+  source_suite: long_context
+  source_question_id: needle_004
+  real_task_id: chat-4ec86770
+  real_task_class: research_intake_deep_dive
+  real_task_outcome: success
+- id: real_suite_v1_0040
+  tier: 2
+  prompt: 'The following is a technical specification for a quantum computing platform:
+
+
+    Platform Overview: QubitCore Pro is a 127-qubit superconducting quantum
+
+    processor designed for enterprise research applications. The system
+
+    operates at a base temperature of 15 millikelvin, maintained by a
+
+    custom dilution refrigerator. Gate fidelities average 99.5% for
+
+    single-qubit gates and 99.1% for two-qubit CNOT gates. The chip uses
+
+    a heavy-hex topology with fixed-frequency transmon qubits.
+
+
+    The control electronics include 128 arbitrary waveform generators
+
+    operating at 4.5 GS/s, synchronized via a 10 GHz master clock.
+
+    Readout is performed through frequency-multiplexed dispersive
+
+    measurement, achieving 98.7% assignment fidelity in 300 nanoseconds.
+
+
+    The system was first deployed at the Nordic Quantum Research Institute
+
+    in Trondheim, Norway on March 14, 2024. The deployment team consisted
+
+    of 12 engineers led by Dr. Ingrid Halverson. Initial calibration took
+
+    17 days. The system achieved quantum volume 256 during acceptance testing.
+
+
+    Software stack includes a custom compiler that maps circuits to the
+
+    native gate set (SX, RZ, CNOT) with typical circuit depths reduced by
+
+    40% compared to naive compilation. Error mitigation uses probabilistic
+
+    error cancellation (PEC) with up to 1000 randomized compilations.
+
+
+    Question: What quantum volume was achieved during acceptance testing?'
+  expected: '256'
+  scoring_method: exact_match
+  scoring_config:
+    extract_pattern: \d+
+  source_suite: long_context
+  source_question_id: needle_039
+  real_task_id: chat-50b23b5f
+  real_task_class: research_intake_deep_dive
+  real_task_outcome: success
+- id: real_suite_v1_0041
+  tier: 1
+  prompt: 'From the following product review excerpt, extract: (1) product name,
+
+    (2) rating, (3) pros mentioned, (4) cons mentioned.
+
+
+    "The Sony WH-1000XM5 headphones deserve their 4.5/5 rating. The noise
+
+    cancellation is best-in-class and battery life lasts 30 hours. However,
+
+    they don''t fold flat like the XM4 and the price tag of $400 is steep."
+
+
+    Return structured: product, rating, pros (comma-sep), cons (comma-sep)
+
+
+    Put your final answer inside <answer></answer> tags.'
+  expected: Sony WH-1000XM5, 4.5/5, noise cancellation best-in-class, 30 hour battery
+    life, don't fold flat, price $400
+  scoring_method: f1
+  scoring_config:
+    threshold: 0.5
+  source_suite: skill_transfer
+  source_question_id: st_ext_web_003
+  real_task_id: chat-2ac73a26
+  real_task_class: planning_architecture_review
+  real_task_outcome: failure
+- id: real_suite_v1_0042
+  tier: 1
+  prompt: 'Choose the most plausible continuation:
+
+
+    Context: [header] How to make a grappling hook [title] Craft a makeshift grappling
+    hook from wrenches and twine. [step] This is a quick design that you can complete
+    using materials from your garage or with a quick trip to a hardware store. Be
+    aware that the twine will likely not hold any serious weight, so avoid using this
+    hook to climb.
+
+
+    A) [substeps] These hooks should be able to be cut to a minimum and will not cause
+    the carving work to collapse or crack. [title] Lay your grappling hook in a safe
+    spot for easy access.
+
+    B) It may be best suited for snagging objects. You could use this to pull a bicycle
+    from a river or dislodge a frisbee from a tree.
+
+    C) [title] Cut the twine into a loop. [step] In order to hang a grappling hook
+    from the ground, you''ll need to cut it to help hold the hook in place on the
+    ground.
+
+    D) [title] Look for a railing or door frame. [step] This will be the base of the
+    grappling hook.
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: B
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: thinking
+  source_question_id: hellaswag_05565
+  real_task_id: chat-49cd48a0
+  real_task_class: planning_architecture_review
+  real_task_outcome: failure
+- id: real_suite_v1_0043
+  tier: 1
+  prompt: 'Outline the proof approach for:
+
+
+    "Prove that the square root of 2 is irrational."
+
+
+    List the logical steps in order (do not execute the full proof,
+
+    just outline the strategy).
+
+
+    Put your final answer inside <answer></answer> tags.'
+  expected: assume sqrt(2) is rational, express as p/q in lowest terms where gcd is
+    1, square both sides to get 2q^2 = p^2, conclude p^2 is even so p is even, substitute
+    p=2k, get 2q^2 = 4k^2 so q^2 = 2k^2, conclude q is also even, contradiction with
+    gcd assumption
+  scoring_method: f1
+  scoring_config:
+    threshold: 0.5
+  source_suite: skill_transfer
+  source_question_id: st_plan_math_001
+  real_task_id: chat-75b7ac87
+  real_task_class: planning_architecture_review
+  real_task_outcome: failure
+- id: real_suite_v1_0044
+  tier: 1
+  prompt: A sales pitch for moms is needed for a new kind of diaper that is designed
+    to be more comfortable for babies. The sales pitch should be 500 words long, funny,
+    engaging, and focus on the benefits of the new diaper without mentioning the price.
+    It must also contain a title, wrapped in double angular brackets, i.e. <<title>>.
+  expected: ''
+  scoring_method: programmatic
+  scoring_config:
+    verifier: has_title
+  source_suite: instruction_precision
+  source_question_id: ifeval_2229
+  real_task_id: chat-dba388d4
+  real_task_class: planning_architecture_review
+  real_task_outcome: failure
+- id: real_suite_v1_0045
+  tier: 2
+  prompt: 'A retired cattle rancher was flying his private plane to visit his daughter
+    and grandchildren. While carefully and skillfully operating his airplane, he suddenly
+    realized that one of his engines was gone. He was then forced to make an emergency
+    landing under the reasonable belief that it was necessary to do so for the protection
+    of himself and his airplane. He landed in a farmer''s orange grove and managed
+    to steer the plane and land it between the trees in order to not cause damage
+    to any of them. If the farmer brings suit against the rancher for trespass, the
+    most likely result is that the farmer will
+
+
+    A) recover, because the property belonged to a private person.
+
+    B) recover, because the rancher had reasonable grounds to believe that the orange
+    grove belonged to a private person.
+
+    C) not recover, because the rancher was privileged to enter the land of another
+    under the circumstances.
+
+    D) not recover, because the rancher was carefully and skillfully operating his
+    airplane when the engine went out.
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: C
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: general
+  source_question_id: mmlu_professional_law_11534
+  real_task_id: chat-025af791
+  real_task_class: planning_architecture_review
+  real_task_outcome: success
+- id: real_suite_v1_0046
+  tier: 1
+  prompt: 'Plan the steps to add authentication to an existing REST API that
+
+    currently has no auth. The API is built with FastAPI and uses
+
+    PostgreSQL. Requirements: JWT tokens, refresh tokens, password
+
+    hashing, protected routes.
+
+
+    List the implementation steps in dependency order.
+
+
+    Put your final answer inside <answer></answer> tags.'
+  expected: add password hashing utility with bcrypt, create users table migration,
+    implement user registration endpoint, implement login endpoint with JWT generation,
+    create refresh token mechanism, add JWT verification middleware, protect existing
+    routes with dependency injection, add token revocation
+  scoring_method: f1
+  scoring_config:
+    threshold: 0.5
+  source_suite: skill_transfer
+  source_question_id: st_plan_code_002
+  real_task_id: chat-253e5155
+  real_task_class: planning_architecture_review
+  real_task_outcome: success
+- id: real_suite_v1_0047
+  tier: 3
+  prompt: 'Planet hunters decided to conduct follow-up observations of an Earth-mass
+    planet initially detected using the Transit method around a star with the same
+    radius and mass as our Sun. They consistently obtained one spectrum of the star
+    every night for approximately six months. Spectroscopic observations revealed
+    that the star''s projected rotational velocity vsin(i) was 0.9 km/s. Certain asteroseismic
+    observations suggested that the star''s rotational axis is inclined by 90 degrees.
+    EW method was used to determine the temperature of the star Teff = 5600 K.
+
+
+    Upon examining the GLS periodogram of the radial velocity (RV) data, they identified
+    significant peaks at around 71.1 days, 56.2 days, and 18.7 days. They also analyzed
+    the GLS periodogram of the Ha and CaII (H and K) lines and identified a peak at
+    approximately 28.1 days.
+
+
+    Which of these signals most likely corresponds to the planet?
+
+
+    A) ~ 28.1 days
+
+    B) ~ 71.1 days
+
+    C) ~ 18.7 days
+
+    D) ~ 56.2 days
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: B
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: gpqa
+  source_question_id: gpqa_Astrophysics_0443
+  real_task_id: chat-4541e9e2
+  real_task_class: planning_architecture_review
+  real_task_outcome: success
+- id: real_suite_v1_0048
+  tier: 1
+  prompt: "You have access to the following function:\n\n```\ndef calculate(expression:\
+    \ str) -> float:\n    \"\"\"Evaluate a mathematical expression.\n    Args:\n \
+    \       expression: Math expression as string (e.g., \"2 + 3 * 4\")\n    \"\"\"\
+    \n```\n\nCalculate (15 + 7) * 3 - 10.\nRespond with ONLY a JSON function call."
+  expected: calculate
+  scoring_method: substring
+  scoring_config:
+    case_sensitive: false
+  source_suite: agentic
+  source_question_id: bfcl_003
+  real_task_id: chat-5b3a23b2
+  real_task_class: benchmark_eval_measurement
+  real_task_outcome: success
+- id: real_suite_v1_0049
+  tier: 3
+  prompt: 'A matrix $\mathbf{M}$ takes $\begin{pmatrix} 2 \\ -1 \end{pmatrix}$ to
+    $\begin{pmatrix} 9 \\ 3 \end{pmatrix},$ and $\begin{pmatrix} 1 \\ -3 \end{pmatrix}$
+    to $\begin{pmatrix} 7 \\ -1 \end{pmatrix}.$  Find the image of the line $y = 2x
+    + 1$ under $\mathbf{M}.$  Express your answer in the form "$y = mx + b$".
+
+
+    Put your final answer in \boxed{}.'
+  expected: y = 2x + 3
+  scoring_method: substring
+  scoring_config:
+    case_sensitive: false
+  source_suite: math
+  source_question_id: math500_Precalculus_00454
+  real_task_id: chat-5eb0cc1a
+  real_task_class: benchmark_eval_measurement
+  real_task_outcome: success
+- id: real_suite_v1_0050
+  tier: 1
+  prompt: 'Choose the most plausible continuation:
+
+
+    Context: [header] How to record streaming [title] Navigate to the site offering
+    streaming video you want to download. [step] Thousands of websites stream media.
+    [title] Call up the video.
+
+
+    A) [step] If you live in a rural area, call the number 800-867-4427. [substeps]
+    If you live in a large metropolitan area, call 800-467-4740.
+
+    B) [step] You can chat with a video manager at any time and it will automatically
+    record streaming video. [substeps] These video managers are very similar to a
+    commercial trial, which will send streaming videos on request from the creators.
+
+    C) [step] Position the cursor over the address bar of your browser and click once
+    to highlight the url. In the edit pull-down menu in your browser click copy to
+    copy the url.
+
+    D) [step] Set it on a flat surface near a computer. [title] Note down anything
+    your computer may not be able to capture.
+
+
+    Answer with the letter only (A, B, C, or D).'
+  expected: C
+  scoring_method: multiple_choice
+  scoring_config: {}
+  source_suite: thinking
+  source_question_id: hellaswag_38639
+  real_task_id: chat-658836da
+  real_task_class: benchmark_eval_measurement
+  real_task_outcome: success
