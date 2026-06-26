@@ -590,10 +590,16 @@ server_mode:
     draft_model: Qwen3.5-0.8B-Q8_0.gguf  # 0.8B Qwen3.5 draft (moe8+spec_q8_k8+lu = 12.6 t/s)
     memory_gb: 69
     tier: hot  # promoted from warm — half the RAM, fits NUMA node0
-    # acceleration block REMOVED 2026-05-11 — moved to roles.architect_general
+    # acceleration block was REMOVED 2026-05-11 — moved to roles.architect_general
     # (single source of truth). RegistryLoader reads from roles.X.acceleration;
     # keeping a duplicate here silently no-op'd until the validator caught it
     # on 2026-05-09.
+    # 2026-06-26 v6 cutover: re-added a minimal acceleration block here for record
+    # consistency with roles.architect_general (deferred --compile-registry work).
+    # type/spec_type must match the roles block: native draft-mtp on v6, ik_llama deprecated.
+    acceleration:
+      type: speculative_decoding   # 2026-06-26 v6 cutover: matches roles.architect_general
+      spec_type: draft-mtp          # 2026-06-26 v6 cutover: native MTP via NEXTN Qwen3.5-122B variant (-md == -m)
     throughput: 12.19  # t/s at 96t NUMA single-instance canonical (Probe B 2026-05-04, n=5).
                        # Old 4.3 was 2× cross-NUMA wiring (pre-2026-05-04). Bundle:
                        # epyc-inference-research/data/cpu_optimization/2026-05-04-qwen35-122b-arch-probe/
@@ -1252,23 +1258,22 @@ roles:
     - architect
     - general
     acceleration:
-      type: moe_expert_reduction
-      experts: 8                                  # full experts for quality
-      override_key: qwen35moe.expert_used_count
-      draft_role: draft_qwen35_0_8b_q8_0          # in-house 0.8B Qwen3.5 Q8_0 draft
-      draft_max: 24                               # sweep-verified 2026-03-21
-      k: 24                                       # alias for draft_max (RegistryLoader)
+      # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6, ik_llama deprecated.
+      # MTP via NEXTN-embedded Qwen3.5-122B variant (-md == -m, same file).
+      # Dropped the no-op expert_used_count override (experts=8 == GGUF default == no reduction).
+      type: speculative_decoding                  # 2026-06-26 v6 cutover: was moe_expert_reduction
+      spec_type: draft-mtp                         # 2026-06-26 v6 cutover: native MTP on v6 (NEXTN variant)
+      draft_role: draft_qwen35_0_8b_q8_0          # in-house 0.8B Qwen3.5 Q8_0 draft (legacy ref; NEXTN -md==-m on v6)
+      draft_max: 4                                # 2026-06-26 v6 cutover: architect n-max=4 (emitted as --spec-draft-n-max)
+      k: 4                                         # alias for draft_max (RegistryLoader)
       p_split: 0                                  # linear only — tree harmful on hybrid
       lookup: false                               # DISABLED: segfaults on Qwen3.5 hybrids (2026-03-24)
       notes: >
-        Combined moe-expert-reduction (experts=8) + speculative decode
-        (0.8B draft, dm=24). moe8+spec_q8_k8+lu historically = 12.6 t/s
-        single-instance. Spec decode currently gated off at launch via
-        orchestrator _NO_SPEC_DECODE (M-RoPE rollback bug in production
-        llama.cpp build b8957 — Qwen3.5 hybrids refuse position rewind
-        when speculative draft tokens rejected). MoE-expert-reduction
-        fires alone. Re-enable spec when M-RoPE rollback is patched
-        upstream.
+        # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6, ik_llama deprecated.
+        Architect MTP via NEXTN-embedded Qwen3.5-122B variant (draft = same GGUF as model).
+        Dropped the no-op moe expert_used_count override (8 == GGUF default == no reduction).
+        moe8+spec historically = 12.6 t/s single-instance. Earlier _NO_SPEC_DECODE gate
+        (M-RoPE rollback bug, pre-v6 build b8957) is superseded by v6 native MTP.
       benchmarked: 2026-05-04                     # Probe B canonical re-bench
     performance:
       baseline_tps: 5.30                          # Qwen3-235B canonical (pre-2026-03-19, kept for history)
@@ -3066,18 +3071,18 @@ roles:
     model:
       name: gemma-4-31B-it-assistant
       huggingface_id: Radamanthys11/Gemma-4-31B-it-assistant-GGUF
-      path: /mnt/raid0/llm/models/gemma-4-31B-it-assistant-Q8_0.gguf
+      path: /mnt/raid0/llm/models/gemma-4-31B-it-assistant-v6-Q8_0.gguf  # 2026-06-26 v6 cutover: v6 head format
       quant: Q8_0
       size_gb: 0.49  # 491 MB
-      architecture: gemma4_mtp
+      architecture: gemma4-assistant  # 2026-06-26 v6 cutover: was gemma4_mtp (ik format); v6 native arch
     candidate_roles:
     - draft
     memory:
       residency: cold
     notes: >
-      MTP drafter for gemma4_31b_q4km_mtp target. REQUIRES PR #1744-patched ik_llama.cpp
-      (LLM_ARCH_GEMMA4_MTP). Standard llama.cpp does not support gemma4_mtp arch.
-      Loaded via -mtp -md <path> on the target server. See handoffs/active/gemma4-mtp-drafter-evaluation.md.
+      # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6, ik_llama deprecated.
+      MTP drafter for gemma4_31b_q4km_mtp target (gemma4-assistant arch, v6 native).
+      Loaded via -md <path> on the target server. See handoffs/active/gemma4-mtp-drafter-evaluation.md.
 
   gemma4_31b_q4km_mtp:
     tier: B  # eval phase — promote based on quality runs
@@ -3123,7 +3128,7 @@ roles:
     - thinking
     acceleration:
       type: speculative_decoding
-      spec_type: mtp  # ik_llama.cpp PR #1744 + 1-line gate fix; see deep-dives/gemma4-mtp-drafter-deep-dive.md
+      spec_type: draft-mtp  # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6 (was 'mtp', ik_llama deprecated)
       draft_role: draft_gemma4_31b_assistant_q8
       draft_max: 2        # 2026-05-08: lowered from 3. At 51% acceptance on bench-realistic tier-3 prompts,
                           # 2-token chains have less wasted verifier work than 3-token chains.
@@ -3137,13 +3142,8 @@ roles:
     constraints:
       forbid:
       - prompt_lookup       # MTP-only model; --spec-type ngram-simple conflicts with -md MTP draft
-      reason: MTP speculative decoding (ik_llama.cpp PR #1744) cannot coexist with ngram-simple lookup — both consume the spec-decode slot. Speed test would launch ik_llama.cpp with both `-md mtp_draft` and `--spec-type ngram-simple`, producing inference failures.
-    runtime_requirements:
-      binary_dir: /mnt/raid0/llm/ik_llama.cpp/build/bin  # patched PR #1744 branch (pr-1744 / 0f728f380d) + 1-line fix in server-context.cpp
-      ld_library_path:
-      - /mnt/raid0/llm/ik_llama.cpp/build/src
-      - /mnt/raid0/llm/ik_llama.cpp/build/ggml/src
-      - /mnt/raid0/llm/ik_llama.cpp/build/examples/mtmd
+      reason: "draft-mtp cannot coexist with ngram-simple lookup — both consume the spec-decode slot."  # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6, ik_llama deprecated
+    # 2026-06-26 v6 cutover: runtime_requirements (ik_llama binary_dir + ld_library_path) removed — native draft-mtp on production-consolidated-v6.
     performance:
       baseline_tps: 7.05    # measured 2026-05-06, EPYC canonical (96 threads, fa=1, no-mmap, OMP env stack)
       mtp_tps: 21.02        # measured 2026-05-06, draft-max=3, 84.3% per-token acceptance (91/108)
@@ -3153,8 +3153,8 @@ roles:
       Pure-CPU EPYC MTP measurement: 21.02 t/s with 84% per-token acceptance, 2.98x over 7.05 t/s baseline.
       Quality benchmark NOT YET RUN — Leviathan (arxiv:2211.17192) verifier-rejects guarantees byte-exact
       output, but worth confirming on standard suite before promoting beyond tier B.
-      Required runtime: PR #1744-patched ik_llama.cpp (binary_dir + ld_library_path above) — standard
-      /mnt/raid0/llm/llama.cpp does NOT support gemma4_mtp arch.
+      # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6 (canonical /mnt/raid0/llm/llama.cpp),
+      ik_llama deprecated. gemma4-assistant arch supported natively; no separate binary/ld_library_path needed.
 
   draft_gemma4_26b_a4b_assistant_q8:
     tier: D
@@ -3162,17 +3162,18 @@ roles:
     model:
       name: gemma-4-26B-A4B-it-assistant
       huggingface_id: google/gemma-4-26B-A4B-it-assistant
-      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-Q8_0.gguf
+      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf  # 2026-06-26 v6 cutover: v6 head format
       quant: Q8_0
       size_gb: 0.44  # 441 MB
-      architecture: gemma4_mtp
-      converted_by: in-house  # google did not publish GGUF; converted 2026-05-06 from HF safetensors via PR #1744 convert_hf_to_gguf.py + llama-quantize Q8_0
+      architecture: gemma4-assistant  # 2026-06-26 v6 cutover: was gemma4_mtp (ik format); v6 native arch
+      converted_by: in-house  # google did not publish GGUF; converted from HF safetensors + llama-quantize Q8_0
     candidate_roles:
     - draft
     memory:
       residency: cold
     notes: >
-      MTP drafter for gemma4_26b_a4b_q4km_mtp target. REQUIRES PR #1744-patched ik_llama.cpp.
+      # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6, ik_llama deprecated.
+      MTP drafter for gemma4_26b_a4b_q4km_mtp target (gemma4-assistant arch, v6 native).
       Acceptance is materially LOWER than the 31B Dense drafter (58.7% vs 84.3%) because the
       smaller 16/8-head drafter struggles to predict MoE expert routing on the 26B-A4B target.
 
@@ -3212,7 +3213,7 @@ roles:
     - thinking
     acceleration:
       type: speculative_decoding
-      spec_type: mtp
+      spec_type: draft-mtp  # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6 (was 'mtp', ik_llama deprecated)
       draft_role: draft_gemma4_26b_a4b_assistant_q8
       draft_max: 2          # 2026-05-08: matches 31B sibling tuning (lowered from 3 for realistic acceptance)
       draft_p_min: 0.0
@@ -3221,13 +3222,8 @@ roles:
     constraints:
       forbid:
       - prompt_lookup       # MTP-only model; --spec-type ngram-simple conflicts with -md MTP draft
-      reason: MTP speculative decoding (ik_llama.cpp PR #1744) cannot coexist with ngram-simple lookup — both consume the spec-decode slot. Speed test would launch ik_llama.cpp with both `-md mtp_draft` and `--spec-type ngram-simple`, producing inference failures.
-    runtime_requirements:
-      binary_dir: /mnt/raid0/llm/ik_llama.cpp/build/bin
-      ld_library_path:
-      - /mnt/raid0/llm/ik_llama.cpp/build/src
-      - /mnt/raid0/llm/ik_llama.cpp/build/ggml/src
-      - /mnt/raid0/llm/ik_llama.cpp/build/examples/mtmd
+      reason: "draft-mtp cannot coexist with ngram-simple lookup — both consume the spec-decode slot."  # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6, ik_llama deprecated
+    # 2026-06-26 v6 cutover: runtime_requirements (ik_llama binary_dir + ld_library_path) removed — native draft-mtp on production-consolidated-v6.
     performance:
       baseline_tps: 41.49     # measured 2026-05-06, EPYC canonical
       mtp_tps: 44.12          # measured 2026-05-06, draft-max=3, 58.7% acceptance (81/138)
@@ -3445,7 +3441,7 @@ roles:
     description: General worker — gemma4-26B-A4B Q4_K_M (MTP) — swapped 2026-05-08 from Meta-Llama-3-8B / Qwen3-Coder-30B-A3B lineage. Mirrors the live orchestrator worker_general target for benchmark correctness.
     model:
       name: gemma-4-26B-A4B-it-Q4_K_M
-      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf
+      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf  # 2026-06-26 v6 cutover: ORIG base — old gemma-4-26B-A4B-it-Q4_K_M.gguf GARBLES on v6
       quant: Q4_K_M
       size_gb: 16
       architecture: gemma4
@@ -3472,7 +3468,7 @@ roles:
     - coder
     acceleration:
       type: speculative_decoding
-      spec_type: mtp
+      spec_type: draft-mtp  # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6 (was 'mtp', ik_llama deprecated)
       draft_role: draft_gemma4_26b_a4b_assistant_q8
       draft_max: 2
       draft_p_min: 0.0
@@ -3481,13 +3477,8 @@ roles:
     constraints:
       forbid:
       - prompt_lookup
-      reason: MTP and ngram-simple lookup both consume the spec-decode slot; ik_llama.cpp cannot hold both.
-    runtime_requirements:
-      binary_dir: /mnt/raid0/llm/ik_llama.cpp/build/bin
-      ld_library_path:
-      - /mnt/raid0/llm/ik_llama.cpp/build/src
-      - /mnt/raid0/llm/ik_llama.cpp/build/ggml/src
-      - /mnt/raid0/llm/ik_llama.cpp/build/examples/mtmd
+      reason: "draft-mtp and ngram-simple lookup both consume the spec-decode slot."  # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6, ik_llama deprecated
+    # 2026-06-26 v6 cutover: runtime_requirements (ik_llama binary_dir + ld_library_path) removed — native draft-mtp on production-consolidated-v6.
     performance:
       baseline_tps: 44.7
       optimized_tps: 60.7

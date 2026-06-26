@@ -71,6 +71,11 @@ CANONICAL_OMP_ENV: dict[str, str] = {
     "OMP_PLACES": "cores",
     "OMP_WAIT_POLICY": "active",
     "OMP_DYNAMIC": "false",
+    # 2026-06-26 v6 cutover: the v6 binary has ik_llama's iqk AVX-512 GEMM
+    # kernels compiled-in but RUNTIME-GATED by GGML_IQK. Without this var the
+    # bench measures the v6-clean codepath (no iqk), not the production kernel.
+    # Must be present in every role's launch env per the cutover grammar.
+    "GGML_IQK": "1",
 }
 
 # V4 §Throughput-gate-specific env additions. NOT applied by the orchestrator
@@ -285,6 +290,20 @@ EXPECTED_LIBS_V5_CLEAN: list[str] = [
     "/mnt/raid0/llm/llama.cpp/build/bin/libggml.so",
 ]
 
+# 2026-06-26 v6 cutover: production-consolidated-v6 is the canonical tree
+# (/mnt/raid0/llm/llama.cpp), which becomes v6 at cutover: upstream framework +
+# native MTP/NEXTN + our CPU kernels + ik_llama's iqk AVX-512 GEMM kernels gated
+# at runtime by GGML_IQK=1. This single kernel REPLACES the two-kernel setup
+# (v5 llama.cpp + a separate ik_llama for the gemma worker). ik_llama is fully
+# deprecated; the IK_LLAMA_* constants above are retained ONLY as historical
+# fallbacks. v6-iqk is the SELECTED canonical bench binary so the gate measures
+# the production kernel (iqk-ON) — NOT v5-clean and NOT a stale ik_llama build.
+V6_IQK_BENCH: str = "/mnt/raid0/llm/llama.cpp/build/bin/llama-bench"
+V6_IQK_SERVER: str = "/mnt/raid0/llm/llama.cpp/build/bin/llama-server"
+EXPECTED_LIBS_V6_IQK: list[str] = [
+    "/mnt/raid0/llm/llama.cpp/build/bin/libggml-cpu.so.0.15.2",
+]
+
 # Strategy-B fork for DeepSeek-V4 (antirez/llama.cpp-deepseek-v4-flash). Cloned
 # 2026-05-28 into /mnt/raid0/llm/llama.cpp-deepseek-v4 and built with the same
 # canonical hardening as ik_llama (-Wl,--disable-new-dtags so DT_RPATH wins
@@ -404,15 +423,26 @@ def discover_v4_fork_bench() -> tuple[str, list[str]]:
     return V4_FORK_BENCH, EXPECTED_LIBS_V4_FORK
 
 
-def discover_canonical_bench_binary(prefer_ik_llama: bool = True) -> tuple[str, list[str]]:
-    """Return (binary_path, expected_libs_list) preferring ik_llama.
+def discover_canonical_bench_binary(
+    prefer_v6: bool = True, prefer_ik_llama: bool = False
+) -> tuple[str, list[str]]:
+    """Return (binary_path, expected_libs_list), preferring the v6-iqk binary.
 
     Verifies via assert_binary_resolves_correctly that the chosen binary resolves
-    to ITS OWN libllama/libggml, not someone else's. If ik_llama is broken (the
-    pre-2026-05-28 RUNPATH state), falls back to v5_clean with a stderr warning.
+    to ITS OWN libggml(-cpu)/libllama, not someone else's. Candidate order:
 
-    Production gemma4 MTP runs on ik_llama; bench reproducibility requires the
-    same binary or numbers are not comparable.
+      prefer_v6 (DEFAULT, 2026-06-26 cutover):
+          v6-iqk -> ik_llama -> v5_clean
+      prefer_ik_llama (legacy two-kernel behavior, retained as a fallback knob):
+          ik_llama -> v6-iqk -> v5_clean
+      neither (force v5_clean first):
+          v5_clean -> v6-iqk -> ik_llama
+
+    2026-06-26 v6 cutover: production runs ONE kernel — production-consolidated-v6
+    with iqk gated by GGML_IQK=1. The canonical bench MUST measure that binary, so
+    v6-iqk is the SELECTED candidate by default. ik_llama is deprecated and kept
+    ONLY as a historical fallback; reproducibility now requires the v6 binary +
+    GGML_IQK=1 (threaded in via build_canonical_env), not ik_llama.
 
     NOTE: this function does NOT consider V4_FORK_BENCH; that binary supports
     ONLY DeepSeek-V4 and is selected explicitly via discover_v4_fork_bench()
@@ -420,13 +450,24 @@ def discover_canonical_bench_binary(prefer_ik_llama: bool = True) -> tuple[str, 
     """
     candidates: list[tuple[str, list[str]]] = []
     if prefer_ik_llama:
+        # Legacy two-kernel preference. Retained as an explicit fallback knob;
+        # v6-iqk still ranks above v5_clean.
         candidates = [
+            (IK_LLAMA_BENCH, EXPECTED_LIBS_IK_LLAMA),
+            (V6_IQK_BENCH, EXPECTED_LIBS_V6_IQK),
+            (V5_CLEAN_BENCH, EXPECTED_LIBS_V5_CLEAN),
+        ]
+    elif prefer_v6:
+        # 2026-06-26 v6 cutover: v6-iqk is the selected canonical candidate.
+        candidates = [
+            (V6_IQK_BENCH, EXPECTED_LIBS_V6_IQK),
             (IK_LLAMA_BENCH, EXPECTED_LIBS_IK_LLAMA),
             (V5_CLEAN_BENCH, EXPECTED_LIBS_V5_CLEAN),
         ]
     else:
         candidates = [
             (V5_CLEAN_BENCH, EXPECTED_LIBS_V5_CLEAN),
+            (V6_IQK_BENCH, EXPECTED_LIBS_V6_IQK),
             (IK_LLAMA_BENCH, EXPECTED_LIBS_IK_LLAMA),
         ]
 
@@ -451,8 +492,9 @@ def discover_canonical_bench_binary(prefer_ik_llama: bool = True) -> tuple[str, 
         )
     raise FileNotFoundError(
         f"No llama-bench binary found at any candidate path:\n"
-        f"  {IK_LLAMA_BENCH}\n  {V5_CLEAN_BENCH}\n"
-        f"Check that ik_llama.cpp is built (cmake --build).\n"
+        f"  {V6_IQK_BENCH}\n  {IK_LLAMA_BENCH}\n  {V5_CLEAN_BENCH}\n"
+        f"Check that the v6 canonical tree is built (cmake --build "
+        f"/mnt/raid0/llm/llama.cpp/build).\n"  # 2026-06-26 v6 cutover
     )
 
 
@@ -629,7 +671,8 @@ def build_canonical_bench_command(
     n_gen: int = 512,
     reps: int = 2,
     extra_flags: Optional[list[str]] = None,
-    prefer_ik_llama: bool = True,
+    prefer_v6: bool = True,  # 2026-06-26 v6 cutover: select v6-iqk by default
+    prefer_ik_llama: bool = False,
     use_v4_fork: bool = False,
 ) -> tuple[str, list[str], dict[str, str]]:
     """Build (binary_path, cmd_list, env_dict) for the canonical llama-bench run.
@@ -646,8 +689,12 @@ def build_canonical_bench_command(
         extra_flags: optional list of additional flags to pass to llama-bench
             (e.g. ['-ctk', 'q8_0', '-ctv', 'q8_0']). Do NOT include flags that
             are already in CANONICAL_BENCH_FLAGS_LLAMA_BENCH.
-        prefer_ik_llama: prefer ik_llama llama-bench (matches production server).
-            Falls back to v5_clean if ik_llama is broken; emits a stderr warning.
+        prefer_v6: 2026-06-26 v6 cutover — prefer the v6-iqk llama-bench (the
+            production-consolidated-v6 kernel, iqk gated by GGML_IQK=1 which
+            build_canonical_env threads in). DEFAULT. Falls back to ik_llama
+            then v5_clean. Ignored when use_v4_fork=True.
+        prefer_ik_llama: legacy two-kernel preference (ik_llama first). Retained
+            only as a fallback knob; ik_llama is deprecated post-cutover.
             Ignored when use_v4_fork=True.
         use_v4_fork: select the DeepSeek-V4 fork binary (V4_FORK_BENCH). The
             V4 fork is the ONLY way to run V4 GGUFs; it doesn't support other
@@ -666,7 +713,10 @@ def build_canonical_bench_command(
     if use_v4_fork:
         binary, _expected_libs = discover_v4_fork_bench()
     else:
-        binary, _expected_libs = discover_canonical_bench_binary(prefer_ik_llama=prefer_ik_llama)
+        # 2026-06-26 v6 cutover: default selection is the v6-iqk candidate.
+        binary, _expected_libs = discover_canonical_bench_binary(
+            prefer_v6=prefer_v6, prefer_ik_llama=prefer_ik_llama
+        )
 
     bench_args: list[str] = (
         list(CANONICAL_BENCH_FLAGS_LLAMA_BENCH)
@@ -700,13 +750,17 @@ def _emit_bench_command_json(args) -> int:
     import json
 
     try:
+        # 2026-06-26 v6 cutover: default to the v6-iqk candidate. --ik-llama
+        # restores the legacy two-kernel preference (ik_llama first).
+        prefer_ik = getattr(args, "ik_llama", False)
         binary, cmd, env = build_canonical_bench_command(
             model=args.model,
             n_prompt=args.n_prompt,
             n_gen=args.n_gen,
             reps=args.reps,
             extra_flags=args.extra,
-            prefer_ik_llama=not args.no_ik_llama,
+            prefer_v6=not prefer_ik,
+            prefer_ik_llama=prefer_ik,
             use_v4_fork=args.v4_fork,
         )
     except (FileNotFoundError, CanonicalRecipeViolation) as e:
@@ -743,8 +797,10 @@ def _validate_only(args) -> int:
         if args.v4_fork:
             binary, expected_libs = discover_v4_fork_bench()
         else:
+            # 2026-06-26 v6 cutover: default to the v6-iqk candidate.
+            prefer_ik = getattr(args, "ik_llama", False)
             binary, expected_libs = discover_canonical_bench_binary(
-                prefer_ik_llama=not args.no_ik_llama
+                prefer_v6=not prefer_ik, prefer_ik_llama=prefer_ik
             )
         validate_canonical_env(
             binary=binary,
@@ -788,14 +844,16 @@ def _main() -> int:
         help="Validate host + binary linkage. Exits non-zero on drift.",
     )
     pv.add_argument(
-        "--no-ik-llama",
+        # 2026-06-26 v6 cutover: default is the v6-iqk binary; --ik-llama opts
+        # back into the deprecated legacy two-kernel preference (ik_llama first).
+        "--ik-llama",
         action="store_true",
-        help="Prefer v5_clean over ik_llama (default: prefer ik_llama).",
+        help="Legacy: prefer the deprecated ik_llama binary (default: prefer v6-iqk).",
     )
     pv.add_argument(
         "--v4-fork",
         action="store_true",
-        help="Validate the DeepSeek-V4 fork binary instead of ik_llama/v5_clean.",
+        help="Validate the DeepSeek-V4 fork binary instead of v6-iqk/ik_llama/v5_clean.",
     )
     pv.add_argument(
         "--with-perf",
@@ -817,9 +875,11 @@ def _main() -> int:
     # attached to args.extra below. Do not declare --extra as an argparse arg —
     # REMAINDER + subparsers + dash-prefixed extras is a known argparse failure.
     pe.add_argument(
-        "--no-ik-llama",
+        # 2026-06-26 v6 cutover: default is the v6-iqk binary; --ik-llama opts
+        # back into the deprecated legacy two-kernel preference (ik_llama first).
+        "--ik-llama",
         action="store_true",
-        help="Prefer v5_clean over ik_llama (default: prefer ik_llama).",
+        help="Legacy: prefer the deprecated ik_llama binary (default: prefer v6-iqk).",
     )
     pe.add_argument(
         "--v4-fork",
