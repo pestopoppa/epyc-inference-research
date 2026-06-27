@@ -866,9 +866,50 @@ server_mode:
 # Worker Pool Configuration (Heterogeneous parallel workers)
 # =============================================================================
 worker_pool:
-  enabled: true
-  description: "Heterogeneous worker pool for parallel task execution"
-  prompt_lookup: true  # Enable ngram lookup for all workers
+  # ============================================================================
+  # DEPRECATED 2026-05-06 — config dormant; not invoked by production stack.
+  # ============================================================================
+  # The heterogeneous worker pool was a 2025-Q4 / 2026-Q1 design predating the
+  # 2026-03-19 worker_general consolidation onto Qwen3-Coder-30B-A3B Q4 (NUMA
+  # 4×48t). It is no longer matched to the production stack.
+  #
+  # Three independent reasons for deprecation:
+  #
+  # 1. GGUF FILES NOT ON DISK. The two HOT workers reference paths that do not
+  #    exist:
+  #      - explore: Qwen/Qwen2.5-7B-Instruct-GGUF/Qwen2.5-7B-Instruct-Q4_K_M.gguf
+  #      - code:    Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
+  #    The WARM worker references Qwen2.5-Coder-1.5B-Instruct-Q8_0.gguf which is
+  #    also not on disk (only Q4_K_M and Q2_K of that family are available, in
+  #    QuantFactory/, not the path the registry references). If anyone enabled
+  #    this config, all 3 workers would fail with ENOENT at launch.
+  #
+  # 2. CANONICAL-RECIPE QUALITY DATA IS DECISIVE. From benchmarks/results/
+  #    reviews/summary.csv (May-2/4 sweep):
+  #      - explore proxy (Qwen2.5-7B Q4_K_S):    27/61 (44%) — −40pp vs worker_general
+  #      - code    (Qwen2.5-Coder-7B Q4):        UNTESTED (file missing)
+  #      - fast proxy (Qwen2.5-Coder-1.5B Q4_K_M): 4/20 (20%) on partial — −64pp+
+  #      - worker_general (Qwen3-Coder-30B-A3B Q4): 153/183 (84%) on full battery
+  #    Even the most generous estimate for Qwen2.5-Coder-7B (~60%) loses to
+  #    worker_general by ≥24pp on quality.
+  #
+  # 3. WORKER_GENERAL ALREADY SERVES THE PARALLEL-WORK USE CASE. NUMA 4×48t
+  #    deployment provides 4-way concurrency at ~156 t/s aggregate
+  #    (4 instances × 43.4 t/s). Sufficient for production worker traffic.
+  #    `fast`'s theoretical 4-slot 340 t/s aggregate (at 20% quality) is not a
+  #    real win.
+  #
+  # CODE STATUS: src/services/worker_pool.py is RETAINED as dormant
+  # infrastructure. It is gated by use_worker_pool=False default in
+  # src/llm_primitives/primitives.py. No code changes — only this config flip.
+  # If a future use case emerges (different small models, GPU tiering, etc.)
+  # the WorkerPoolManager can be revived by re-enabling here and adding active
+  # GGUFs.
+  #
+  # ============================================================================
+  enabled: false  # was true; deprecated 2026-05-06
+  description: "DEPRECATED 2026-05-06 — superseded by worker_general (Qwen3-Coder-30B-A3B Q4) NUMA 4×48t consolidation. See deprecation notes above."
+  prompt_lookup: true  # would enable ngram lookup for all workers if revived
 
   # Scaling parameters
   expansion_threshold: 4  # Concurrent tasks to trigger WARM expansion
@@ -879,39 +920,39 @@ worker_pool:
   model_base_path: /mnt/raid0/llm/lmstudio/models
 
   workers:
-    # === HOT WORKERS (Always resident, ~9GB total) ===
+    # === HOT WORKERS (DEPRECATED — GGUFs not on disk; canonical-recipe quality 44% << worker_general 84%) ===
     explore:
       port: 8082
-      model: Qwen/Qwen2.5-7B-Instruct-GGUF/Qwen2.5-7B-Instruct-Q4_K_M.gguf
+      model: Qwen/Qwen2.5-7B-Instruct-GGUF/Qwen2.5-7B-Instruct-Q4_K_M.gguf  # NOT ON DISK
       tier: hot
       threads: 24
       slots: 2
       memory_gb: 4.4
       task_types: [explore, summarize, understand]
-      description: "Directory crawling, file summaries, codebase understanding"
+      description: "DEPRECATED 2026-05-06 — Directory crawling, file summaries, codebase understanding. Canonical-recipe quality 27/61 (44%) on Qwen2.5-7B Q4_K_S; underperforms worker_general by 40pp."
       expected_tps: 15
 
     code:
       port: 8092
-      model: Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
+      model: Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf  # NOT ON DISK
       tier: hot
       threads: 24
       slots: 2
       memory_gb: 4.4
       task_types: [code_impl, refactor, test_gen]
-      description: "Code implementation, following architect instructions"
+      description: "DEPRECATED 2026-05-06 — Code implementation. UNTESTED — GGUF file missing on disk. Family-scaling estimate puts quality below worker_general (Qwen3-Coder-30B-A3B Q4, 84% / 77% on coder)."
       expected_tps: 18
 
-    # === WARM WORKER (Load on demand, ~1GB) ===
+    # === WARM WORKER (DEPRECATED — Q8 GGUF not on disk; Q4_K_M proxy 20% on partial) ===
     fast:
       port: 8102
-      model: Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/Qwen2.5-Coder-1.5B-Instruct-Q8_0.gguf
+      model: Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/Qwen2.5-Coder-1.5B-Instruct-Q8_0.gguf  # NOT ON DISK
       tier: warm
       threads: 16
       slots: 4
       memory_gb: 1.0
       task_types: [boilerplate, transform, parallel_burst]
-      description: "Simple transformations, boilerplate, high-volume parallel (4 concurrent slots)"
+      description: "DEPRECATED 2026-05-06 — Simple transformations, boilerplate, parallel-burst. Canonical-recipe Q4 proxy: 4/20 (20%) on think+gen; too weak even for trivial tasks. Q8 GGUF not on disk."
       expected_tps: 60
 
   launch_flags:
@@ -919,19 +960,27 @@ worker_pool:
     - "--lookup-ngram-min 3"
 
   resource_summary:
-    hot_memory_gb: 8.8  # 2 × 4.4GB
+    hot_memory_gb: 8.8  # 2 × 4.4GB (would have been; not actually allocated since deprecation)
     warm_memory_gb: 2.0  # 2 × 1.0GB
     hot_threads: 48  # 2 × 24
     warm_threads: 24  # 2 × 12
     total_slots: 8  # 4 workers × 2 slots
+    deprecation_savings: "9.8 GB hot tier reclaimed (vs hypothetical active deployment); production already running without worker_pool enabled."
 
   notes: |
-    Heterogeneous pool design:
+    DEPRECATED 2026-05-06.
+    Original design (2025-Q4 / 2026-Q1):
     - HOT workers (7B) provide quality for complex tasks
     - WARM workers (1.5B) provide 4x speed for simple tasks
     - WARM workers spin up automatically when parallelism > 4
     - Prompt lookup enabled by default for all workers
-    Integration: src/services/worker_pool.py
+
+    Superseded by worker_general consolidation (2026-03-19 onto Qwen3-Coder-30B-A3B
+    Q4_K_M, NUMA 4×48t, 84% canonical-recipe quality at ~156 t/s aggregate
+    throughput).
+
+    Integration code retained: src/services/worker_pool.py (gated off via
+    use_worker_pool=False default in primitives.py).
 
 roles:
   # =============================================================================
