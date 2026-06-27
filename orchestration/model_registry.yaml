@@ -3686,6 +3686,12 @@ roles:
       quant: Q4_K_M
       size_gb: 18.0
       architecture: qwen3vlmoe
+      ctx_max: 262144
+    thinking_control:
+      mode: native_no_thinking_toggle
+      effective_mode: native_no_think_tags
+      evidence_strength: model_variant_inferred
+      evidence: Qwen3-VL-30B-A3B-Instruct is the non-thinking VL variant; multimodal role follows native VL chat behavior rather than a text-model enable_thinking toggle.
     candidate_roles:
     - vision
     acceleration:
