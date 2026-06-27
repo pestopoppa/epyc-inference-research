@@ -189,6 +189,13 @@ runtime_defaults:
     parallel_slots: 4
     flash_attention: true
     ubatch_size: 8192
+    # KV cache quantization (updated 2026-03-28):
+    # CRITICAL: V=q4_0 causes 71% prefill regression on pure-attention models.
+    # q4_0 K / f16 V = quality-neutral (PPL +0.017 with Hadamard), zero prefill cost, 37% KV savings.
+    # q4_0 / q4_0 = max compression but 71% prefill hit. OK for hybrid SSM models only.
+    # Per-role overrides in orchestrator_stack.py _KV_QUANT_CONFIGS
+    kv_cache_type_k: q4_0
+    kv_cache_type_v: f16
   # Per-model compression-tolerance for agent files (handoffs/active/agent-file-prose-compression.md).
   # `none` = model has not been probed; production roles MUST upgrade to `mild` or higher.
   # `mild` ~20% reduction, `medium` ~40%, `aggressive` ~60% (per .claude/skills/agent-file-compress/SKILL.md).
@@ -235,7 +242,6 @@ runtime_defaults:
       worker_summarize: 120    # 32B summarization, longer outputs
       worker_general: 60
       worker_coder: 30         # semantic alias for fast coding worker (port 8102)
-      worker_code: 60
       worker_fast: 30          # 1.5B — expected <2s, 30s = 15x headroom
       frontdoor: 180           # 30B MoE @ 18 t/s — raised from 90 to accommodate pipeline stages
       coder_escalation: 120    # 32B Q4KM @ 10.8 t/s — 500 tok ~46s. 120s = 2.6x headroom
@@ -417,8 +423,21 @@ runtime_defaults:
     threshold_tokens: 5000         # Minimum tokens to trigger (estimated from chars/4)
     multi_doc_discount: 0.7        # Lower threshold for multi-document tasks
     context_reduction_target: 0.15 # Stage 2 receives ~15% of original context
-    stage1_role: frontdoor         # Fast draft generation
-    stage2_role: ingest_long_context  # Quality review with large model
+    # Stage roles inverted 2026-05-06 - better matches each model to its stage's
+    # demand profile. Pre-2026-05-06: stage1=frontdoor, stage2=ingest_long_context.
+    # Rationale per long_context bench (May 4-6):
+    #   - Stage 1 demand: SPEED at full long context (every token costs).
+    #     Qwen3-Next-80B's SSM-hybrid linear attention scales O(n) per token,
+    #     beating Qwen3.6-35B-A3B's pure-attention scaling at extreme contexts.
+    #     Bench: ingest 14.4-20.8 t/s @ 12K vs frontdoor 6.5-16.6 t/s.
+    #   - Stage 2 demand: QUALITY on reduced context (~15% of original ~= 7-8K).
+    #     Qwen3.6-35B-A3B Q8 scored 27/27 (100%) on long_context suite vs
+    #     Qwen3-Next-80B's 25/27 (93%). At 7-8K context, frontdoor's lower
+    #     long-context throughput is acceptable for the quality-review pass.
+    # Architectural diversity preserved: SSM-hybrid (stage 1) + MoE-attention
+    # (stage 2). Three_stage_summarization design intent unchanged.
+    stage1_role: ingest_long_context  # SSM-hybrid linear attention; fast draft on full context
+    stage2_role: frontdoor             # Higher quality review on reduced context (~15%)
     compression:  # Stage 0: LLMLingua-2 extractive compression
       enabled: false               # DISABLED - causes quality regression
       model: microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank
