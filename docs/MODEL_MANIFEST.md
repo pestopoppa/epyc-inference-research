@@ -7,7 +7,7 @@ launch manifest, and generated stack priors.
 
 **Live snapshot source**:
 `/mnt/raid0/llm/epyc-orchestrator/orchestration/derived/stack_priors.yaml`
-compiled at `2026-06-27T13:42:28Z` with `stack_priors_version: 4`.
+compiled at `2026-06-27T18:56:04Z` with `stack_priors_version: 4`.
 
 ## Live Server Topology
 

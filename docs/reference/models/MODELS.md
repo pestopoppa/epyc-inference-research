@@ -4,7 +4,7 @@ Comprehensive model reference for the orchestration system.
 
 **Last live-stack verification:** 2026-06-27 against
 `/mnt/raid0/llm/epyc-orchestrator/orchestration/derived/stack_priors.yaml`
-compiled at `2026-06-27T13:42:28Z`.
+compiled at `2026-06-27T18:56:04Z`.
 
 This document is a research-facing snapshot. The current live stack is governed
 by orchestrator generated stack priors; historical benchmark rows in this repo
