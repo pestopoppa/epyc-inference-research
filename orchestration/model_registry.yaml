@@ -462,23 +462,26 @@ server_mode:
 
   # HOT tier - always resident (~40GB total)
   frontdoor:
-    url: http://localhost:8080
-    port: 8080
-    slots: 1  # NUMA 4-way: 4×48t instances, 1 slot each (round-robin routing)
+    url: http://localhost:8070
+    port: 8070
+    slots: 2  # v6 shared MTP process; logical role still advertises NUMA quarter fanout below
     chat_template_kwargs:
       enable_thinking: false  # Qwen3.6 thinking OFF for task suites (lean parity; +33pp empirically)
     model_role: qwen36_q8_0
     shared_with: []
-    description: Root LM — Qwen3.6-35B-A3B Q8 (quality 93%, May-4 Claude-as-Judge 170/183; aligned to lean 2026-05-27)
-    model: Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
-    # No draft model — spec decode net-negative on Qwen3.x MoE hybrids (GDN verification wall on CPU)
+    description: Root LM — Qwen3.6-35B-A3B MTP Q8 (quality 93%, May-4 Claude-as-Judge 170/183; v6 NEXTN self-draft)
+    model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+    model_path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+    draft_model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
     kv_quant: {k: q8_0, v: q8_0}  # Q8 KV (lean parity)
     memory_gb: 37
     tier: hot
     numa_instances: 4  # 4×48t NUMA-quarter instances
     numa_ports: [8080, 8180, 8280, 8380]
     acceleration:
-      type: none  # Qwen3.6 Q8 runs full — no MoE expert reduction / spec-dec (GDN verification wall)
+      type: speculative_decoding
+      spec_type: draft-mtp
+      draft_max: 4
       lookup: false
       corpus_retrieval: true
     throughput: 24.3  # t/s, Qwen3.6 Q8 full (lean registry, May-4)
@@ -505,15 +508,15 @@ server_mode:
     throughput: 10.8   # t/s at 48t NUMA deployment (sweep 2026-03-21). 192t ref: 12.2. Old 39.44 was inflated.
 
   coder_escalation:
-    url: http://localhost:8080
-    port: 8080
+    url: http://localhost:8070
+    port: 8070
     slots: 1
     chat_template_kwargs:
       enable_thinking: false
     model_role: qwen36_q8_0
-    shared_with: [frontdoor]  # same GGUF as frontdoor, mmap-shared (matches live :8070 shared design)
     description: Coding escalation — Qwen3.6-35B-A3B Q8 (shares frontdoor GGUF; 97% coder vs 77% Qwen3-Coder-30B; absorbs eliminated architect_coding). Predecessor Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km.
-    model: Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
+    model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+    model_path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
     kv_quant: {k: q8_0, v: q8_0}
     memory_gb: 37
     tier: hot
@@ -580,14 +583,16 @@ server_mode:
   architect_general:
     url: http://localhost:8083
     port: 8083
-    slots: 1  # Serial — admission=1, no wasted KV
+    slots: 2  # Serial admission with -np 2 to keep draft-mtp KV slot semantics valid
+    chat_template_kwargs:
+      enable_thinking: false
     model_role: qwen35_122b_q4km
     description: System architecture — Qwen3.5-122B-A10B MoE (quality 2.57/3, -64GB vs 235B)
     # Phase 3 compliance gate (2026-05-07): aggressive passes (117% baseline compliance,
     # 110% procedure, recall 0.93). Compression actively helps this model.
     agent_file_compression_operating_point: aggressive
-    model: Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf
-    draft_model: Qwen3.5-0.8B-Q8_0.gguf  # 0.8B Qwen3.5 draft (moe8+spec_q8_k8+lu = 12.6 t/s)
+    model: /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf
+    draft_model: /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf  # NEXTN self-draft = same file
     memory_gb: 69
     tier: hot  # promoted from warm — half the RAM, fits NUMA node0
     # acceleration block was REMOVED 2026-05-11 — moved to roles.architect_general
@@ -600,6 +605,11 @@ server_mode:
     acceleration:
       type: speculative_decoding   # 2026-06-26 v6 cutover: matches roles.architect_general
       spec_type: draft-mtp          # 2026-06-26 v6 cutover: native MTP via NEXTN Qwen3.5-122B variant (-md == -m)
+      draft_max: 4
+      draft_model: /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf
+      lookup: false
+    numa_instances: 1
+    numa_ports: [8083]
     throughput: 12.19  # t/s at 96t NUMA single-instance canonical (Probe B 2026-05-04, n=5).
                        # Old 4.3 was 2× cross-NUMA wiring (pre-2026-05-04). Bundle:
                        # epyc-inference-research/data/cpu_optimization/2026-05-04-qwen35-122b-arch-probe/
@@ -917,12 +927,14 @@ roles:
     backend:
       type: local
     model:
-      name: Qwen3.6-35B-A3B-Q8_0
-      path: /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
+      name: Qwen3.6-35B-A3B-MTP-Q8_0
+      path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
       quant: Q8_0
       size_gb: 37
       architecture: qwen35moe  # MoE variant, arch=qwen35moe in GGUF metadata
-      previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M (frontdoor swap 2026-05; bench data under coder_qwen3_coder_30b_a3b)
+      ctx_max: 262144
+      attention_layers: 28
+      previous_model: Qwen3.5-35B-A3B-UD-Q4_K_M (swapped 2026-05-04; +11pp, +80% t/s under canonical)
       use_chat_api: true
       disable_thinking: true
       reasoning: auto
@@ -933,7 +945,10 @@ roles:
     - general
     - ingest
     acceleration:
-      type: none  # Qwen3.6 Q8 runs full; the Qwen3-Coder-30B MoE6+spec recipe (47.11 t/s) lives in coder_qwen3_coder_30b_a3b
+      type: speculative_decoding
+      spec_type: draft-mtp
+      draft_max: 4
+      draft_model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
       lookup: false
     performance:
       baseline_tps: 24.3
@@ -1080,12 +1095,14 @@ roles:
     tier: B
     description: Coding escalation — Qwen3.6-35B-A3B Q8 MoE (May-6 swap; same model as frontdoor, shares GGUF mmap; absorbs eliminated architect_coding role). Predecessor Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km.
     model:
-      name: Qwen3.6-35B-A3B-Q8_0
-      path: /mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf
+      name: Qwen3.6-35B-A3B-MTP-Q8_0
+      path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
       quant: Q8_0
       size_gb: 37
       architecture: qwen35moe
-      previous_model: Qwen2.5-Coder-32B-Instruct-Q4_K_M (realigned 2026-05-27; predecessor bench under qwen25_coder_32b_q4km)
+      ctx_max: 262144
+      attention_layers: 28
+      previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M (swapped 2026-05-06; +20pp coder, beats REAP-246B by 27pp)
       use_chat_api: true
       disable_thinking: true
       reasoning: auto
@@ -1248,12 +1265,14 @@ roles:
     model:
       name: Qwen3.5-122B-A10B
       huggingface_id: unsloth/Qwen3.5-122B-A10B-GGUF
-      path: unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf
+      path: /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf
       quant: Q4_K_M
       size_gb: 69
       split_count: 3
       architecture: moe_hybrid
-      previous_model: Qwen3-235B-A22B (swapped 2026-03-19; 122B = quality 2.57/3, -64GB)
+      attention_layers: 64
+      ctx_max: 262144
+      previous_model: Qwen3-235B-A22B-Q4_K_M (swapped 2026-03-19, 122B = quality 2.57/3, -64GB)
     candidate_roles:
     - architect
     - general
@@ -1263,7 +1282,7 @@ roles:
       # Dropped the no-op expert_used_count override (experts=8 == GGUF default == no reduction).
       type: speculative_decoding                  # 2026-06-26 v6 cutover: was moe_expert_reduction
       spec_type: draft-mtp                         # 2026-06-26 v6 cutover: native MTP on v6 (NEXTN variant)
-      draft_role: draft_qwen35_0_8b_q8_0          # in-house 0.8B Qwen3.5 Q8_0 draft (legacy ref; NEXTN -md==-m on v6)
+      draft_model: /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf  # NEXTN self-draft = same file
       draft_max: 4                                # 2026-06-26 v6 cutover: architect n-max=4 (emitted as --spec-draft-n-max)
       k: 4                                         # alias for draft_max (RegistryLoader)
       p_split: 0                                  # linear only — tree harmful on hybrid
@@ -3614,41 +3633,42 @@ roles:
       WARNING: 0% agentic - cannot do tool calls.
   worker_summarize:
     tier: C
-    description: Document summarization (96% quality) - fastest with spec decode or
-      prompt lookup
+    description: Document summarization / synthesis alias — Qwen3.6-35B-A3B MTP Q8 shared with frontdoor
     model:
-      name: Qwen2.5-Coder-32B-Instruct
-      path: lmstudio-community/Qwen2.5-Coder-32B-Instruct-GGUF/Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf
-      quant: Q4_K_M
-      size_gb: 18.5
-      architecture: dense
+      name: Qwen3.6-35B-A3B-MTP-Q8_0
+      path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 37
+      architecture: qwen35moe
+      ctx_max: 262144
+      attention_layers: 28
+      previous_model: Qwen2.5-Coder-32B-Instruct-Q4_K_M (swapped 2026-05-06; +16pp canonical quality, shared mmap with frontdoor/coder_escalation)
+      use_chat_api: true
+      disable_thinking: true
+      reasoning: auto
+      max_tokens_multiplier: 4
     candidate_roles:
     - coder
     - frontdoor
     - ingest
     - general
     acceleration:
-      type: speculative_decoding
-      draft_role: draft_qwen25_coder
-      k: 8
-      alternative:
-        type: prompt_lookup
-        ngram_min: 3
-        optimized_tps: 95.18
-        best_for: Document QA, summarization where output contains source excerpts
+      type: none
+      lookup: false
     performance:
-      baseline_tps: 3.1
-      optimized_tps: 172.4
-      speedup: 55.9x
-      quality_score: {pct: 96.0, raw: "66/69"}
-      lookup_tps: 95.18
-      lookup_speedup: 12.7x
+      baseline_tps: 24.3
+      optimized_tps: 24.3
+      quality_pct: 93
+      general_suite: "30/30 (100%)"
+      coder_suite: "29/30 (97%)"
+      thinking_suite: "28/30 (93%)"
+      long_context: "27/27 (100%) — beats prior worker_summarize on every dimension"
+      speedup: shares_frontdoor_gguf
     memory:
-      residency: warm
-      pinned: false
-    benchmark_date: 2026-01-06
-    notes: Spec decode 172 t/s for general tasks; prompt lookup 95 t/s for document
-      QA with source material
+      residency: hot
+      pinned: true
+    benchmark_date: 2026-05-04
+    notes: Preserves the summarization alias while using the consolidated Qwen3.6 shared process.
     generation_defaults:
       n_tokens: -1
       temperature: 0.2
@@ -3659,21 +3679,26 @@ roles:
     tier: C
     description: Summarize tool outputs, triage logs, propose next commands
     model:
-      name: Meta-Llama-3-8B-Instruct
-      path: lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-Q4_K_M.gguf
+      name: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M
+      huggingface_id: unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF
+      path: unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
       quant: Q4_K_M
-      size_gb: 4.7
-      architecture: dense
+      size_gb: 16
+      architecture: moe
+      previous_model: Meta-Llama-3-8B-Instruct-Q4_K_M (swapped 2026-05-04; agentic 87% > Llama 38%, +214% t/s)
     candidate_roles:
     - worker
     - general
-    constraints:
-      forbid:
-      - speculative_decoding
     acceleration:
-      type: none
+      type: speculative_decoding
+      draft_role: draft_qwen3_coder_0_75b
+      k: 8
+      p_split: 0
+      lookup: true
     performance:
-      baseline_tps: 17.52
+      baseline_tps: 43.4
+      optimized_tps: 43.4
+      agentic_suite: "26/30 (87%)"
     memory:
       residency: hot
       pinned: true
@@ -5515,16 +5540,16 @@ roles:
 process_layout:
   hot_resident:
   - frontdoor
-  - draft_qwen25_coder
-  - draft_qwen25
+  - coder_escalation
+  - worker_summarize
   - worker_general
   - worker_math
   - toolrunner
-  warm_mmap:
   - ingest_long_context
-  - architect_general
   - worker_vision
-  - worker_summarize
+  - vision_escalation
+  warm_mmap:
+  - architect_general
   # architect_coding removed 2026-05-27 — role deprecated (2026-05 stack consolidation; model deleted)
 escalation_chains:
   coder:
