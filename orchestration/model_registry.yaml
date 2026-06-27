@@ -528,24 +528,29 @@ server_mode:
     previous_model: Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf  # realigned to Qwen3.6 2026-05-27
 
   worker:
-    url: http://localhost:8082
-    port: 8082
+    url: http://localhost:8072
+    port: 8072
     slots: 1
     model_role: worker_general
     shared_with: [worker_math, toolrunner]
-    description: Try-cheap-first worker — Qwen3-Coder-30B-A3B MoE (freed from frontdoor 2026-03-19)
-    model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
-    draft_model: Qwen3-Coder-Instruct-DRAFT-0.75B-32k-Q4_0.gguf
+    description: Try-cheap-first worker — gemma4-26B-A4B Q4_K_M MTP (swapped 2026-05-08 from Qwen3-Coder-30B-A3B; tool_compliance 96% vs 78%, full suite 90% vs 84%)
+    model: gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf
+    draft_model: gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf
     memory_gb: 16
     tier: hot
-    previous_model: Qwen2.5-7B-Instruct-f16.gguf  # swapped 2026-03-21 (30B-A3B 2x faster, better quality)
+    previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
     acceleration:
       type: speculative_decoding
-      draft_max: 8    # sweep-verified 2026-03-21 (dm nearly irrelevant: 38-39 t/s across all values)
-      p_split: 0      # linear only, tree is net-negative at 48t (sweep-verified)
-      lookup: true
+      spec_type: draft-mtp
+      draft_max: 2
+      draft_p_min: 0.0
+      threads_draft: 16
+      ubatch: 512
+      lookup: false
       corpus_retrieval: false
-    throughput: 39.1   # t/s at 48t NUMA deployment (sweep 2026-03-21). 4×48t agg: ~156 t/s.
+    numa_instances: 4
+    numa_ports: [8082, 8182, 8282, 8382]
+    throughput: 60.7
 
   # REAP-25B: Permanently pruned Qwen3-Coder-30B-A3B (25% experts removed by Cerebras REAP)
   # Pure MoE — speculative decoding IS viable (unlike Qwen3.5 hybrids)
