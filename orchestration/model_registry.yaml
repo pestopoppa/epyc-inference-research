@@ -489,6 +489,8 @@ server_mode:
     model_role: qwen36_q8_0
     shared_with: []
     description: Root LM — Qwen3.6-35B-A3B MTP Q8 (quality 93%, May-4 Claude-as-Judge 170/183; v6 NEXTN self-draft)
+    benchmark_date: 2026-05-04
+    benchmark_score: 170/183 (92.9%)
     model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
     model_path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
     draft_model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
@@ -533,7 +535,9 @@ server_mode:
     chat_template_kwargs:
       enable_thinking: false
     model_role: qwen36_q8_0
-    description: Coding escalation — Qwen3.6-35B-A3B Q8 (shares frontdoor GGUF; 97% coder vs 77% Qwen3-Coder-30B; absorbs eliminated architect_coding). Predecessor Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km.
+    description: Coding escalation — Qwen3.6-35B-A3B Q8 (shares frontdoor GGUF; 97% coder vs 77% Qwen3-Coder-30B; absorbs eliminated architect_coding). Former Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km.
+    benchmark_date: 2026-05-04
+    benchmark_score: 170/183 (93%)
     model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
     model_path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
     kv_quant: {k: q8_0, v: q8_0}
@@ -544,7 +548,7 @@ server_mode:
       lookup: false
       corpus_retrieval: true
     throughput: 24.3  # t/s, shares frontdoor Qwen3.6 Q8 (lean, May-4)
-    previous_model: Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf  # realigned to Qwen3.6 2026-05-27
+    previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf  # swapped 2026-05-06 (frontdoor model dominates: +20pp coder vs Qwen3-Coder, +27pp coder vs REAP-246B; shares mmap with frontdoor)
 
   worker:
     url: http://localhost:8072
@@ -612,6 +616,7 @@ server_mode:
       enable_thinking: false
     model_role: qwen35_122b_q4km
     description: System architecture — Qwen3.5-122B-A10B MoE (quality 2.57/3, -64GB vs 235B)
+    previous_wiring: 2x_cross_numa_8083_8183
     # Phase 3 compliance gate (2026-05-07): aggressive passes (117% baseline compliance,
     # 110% procedure, recall 0.93). Compression actively helps this model.
     agent_file_compression_operating_point: aggressive
@@ -1171,7 +1176,7 @@ roles:
       Handle edge cases explicitly.
   coder_escalation:
     tier: B
-    description: Coding escalation — Qwen3.6-35B-A3B Q8 MoE (May-6 swap; same model as frontdoor, shares GGUF mmap; absorbs eliminated architect_coding role). Predecessor Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km.
+    description: Coding escalation — Qwen3.6-35B-A3B Q8 MoE (May-6 swap; same model as frontdoor, shares GGUF mmap; absorbs eliminated architect_coding role). Former Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km.
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
@@ -1343,6 +1348,7 @@ roles:
     # is enabled in production).
     tier: B
     description: System architecture, invariants, acceptance tests - emits IR only
+    agent_file_compression_operating_point: aggressive
     model:
       name: Qwen3.5-122B-A10B
       huggingface_id: unsloth/Qwen3.5-122B-A10B-GGUF
@@ -1382,11 +1388,12 @@ roles:
       full_spec_tps: 6.08
       qwen35_122b_probe_b_tps: 12.19              # 2026-05-04 single-instance canonical (n=5, σ ~0.4%, z ~3)
       optimized_tps: 12.19
+      quality_score: 2.57/3
       speedup: 2.30x                              # 12.19 / 5.30
       spec_acceptance_moe4: 54.8%                 # historical Qwen3-235B
       spec_acceptance_full: 52.7%
     memory:
-      residency: hot                              # promoted 2026-05-04 — half the RAM, fits NUMA node0
+      residency: warm                             # warm mmap per process_layout; active use remains explicit escalation
       pinned: false
     paged_attention:
       recommended: true
