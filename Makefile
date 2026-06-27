@@ -1,16 +1,18 @@
-.PHONY: help setup lint test health docs docs-check analysis analysis-check
+.PHONY: help setup lint test health docs docs-check analysis analysis-check security-check
 
 UV ?= uv
 PYTHON_SMOKE := scripts/research/xmas_winner_table.py \
 	scripts/research/xmas_function_axis_sweep.py \
 	scripts/docs/generate_docs_index.py \
-	scripts/analysis/generate_analysis_reports_index.py
+	scripts/analysis/generate_analysis_reports_index.py \
+	scripts/security/audit_repository.py
 PYTEST_SMOKE := scripts/research/test_xmas_winner_table.py
 PYTEST_SMOKE += scripts/docs/test_generate_docs_index.py
 PYTEST_SMOKE += scripts/analysis/test_generate_analysis_reports_index.py
+PYTEST_SMOKE += scripts/security/test_audit_repository.py
 
 help:
-	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check'
+	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check'
 
 setup:
 	scripts/setup.sh
@@ -35,3 +37,6 @@ analysis:
 
 analysis-check:
 	$(UV) run python scripts/analysis/generate_analysis_reports_index.py --check
+
+security-check:
+	$(UV) run python scripts/security/audit_repository.py
