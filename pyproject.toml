@@ -17,6 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 benchmark = [
     "datasets>=2.16.0",
+    "gguf>=0.17.0",
     "pandas>=3.0.0",
     "pyarrow>=24.0.0",
 ]

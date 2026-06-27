@@ -16,7 +16,11 @@ SAFETY_COMMIT="${SAFETY_COMMIT:-53e9a6550}"
 TARGET_MODEL="${TARGET_MODEL:-/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf}"
 DRAFT_MODEL="${DRAFT_MODEL:-/mnt/raid0/llm/scratch/n5/Qwen3.5-0.8B-Q8_0.frontdoor-specials.gguf}"
 COMPAT_CHECK="${COMPAT_CHECK:-${RESEARCH_ROOT}/scripts/utils/check_draft_compatibility.py}"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+if [[ -z "${PYTHON_BIN:-}" && -x "${RESEARCH_ROOT}/.venv/bin/python" ]]; then
+  PYTHON_BIN="${RESEARCH_ROOT}/.venv/bin/python"
+else
+  PYTHON_BIN="${PYTHON_BIN:-python3}"
+fi
 OUTPUT_DIR="${OUTPUT_DIR:-${RESEARCH_ROOT}/data/specdec_frontdoor_alpha/n5_retest_$(date -u +%Y%m%dT%H%M%SZ)}"
 PORT="${PORT:-19087}"
 THREADS="${THREADS:-96}"
@@ -277,7 +281,8 @@ if [[ -f "$TARGET_MODEL" && -f "$DRAFT_MODEL" && -f "$COMPAT_CHECK" ]]; then
   if ! "$PYTHON_BIN" -c 'import gguf' >/dev/null 2>&1; then
     {
       echo "ERROR: Python package 'gguf' is not installed for ${PYTHON_BIN}."
-      echo "Install gguf in the retest environment or rerun with PYTHON_BIN pointing to a python that can import gguf."
+      echo "Install the benchmark extras or rerun with PYTHON_BIN pointing to a python that can import gguf."
+      echo "Suggested repo-local setup: cd ${RESEARCH_ROOT} && uv sync --extra benchmark"
     } >"$COMPAT_LOG"
     add_blocker "compatibility checker dependency missing: ${PYTHON_BIN} cannot import gguf"
   elif ! run_compatibility_check; then
