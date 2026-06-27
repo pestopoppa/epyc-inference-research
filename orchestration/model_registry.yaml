@@ -3547,7 +3547,7 @@ roles:
     tier: C
     description: General worker — gemma4-26B-A4B Q4_K_M (MTP) — swapped 2026-05-08 from Meta-Llama-3-8B / Qwen3-Coder-30B-A3B lineage. Mirrors the live orchestrator worker_general target for benchmark correctness.
     model:
-      name: gemma-4-26B-A4B-it-Q4_K_M
+      name: gemma-4-26B-A4B-it-ORIG-Q4_K_M
       path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf  # 2026-06-26 v6 cutover: ORIG base — old gemma-4-26B-A4B-it-Q4_K_M.gguf GARBLES on v6
       quant: Q4_K_M
       size_gb: 16
