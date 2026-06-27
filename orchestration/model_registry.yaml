@@ -3623,7 +3623,6 @@ roles:
       n_tokens: -1
       temperature: 0.0
     system_prompt_suffix: |
-      Show work step by step.
       Output final answer on last line.
   worker_vision:
     tier: C
@@ -3636,6 +3635,12 @@ roles:
       quant: Q4_K_M
       size_gb: 4.4
       architecture: dense
+      ctx_max: 128000
+    thinking_control:
+      mode: native_no_thinking_toggle
+      effective_mode: native_no_think_tags
+      evidence_strength: model_family_inferred
+      evidence: Qwen2.5-VL Instruct predates Qwen3 thinking controls; multimodal role has no chat-template thinking toggle.
     candidate_roles:
     - vision
     - agentic_vision  # Only model that supports tool calls
@@ -3650,7 +3655,7 @@ roles:
       baseline_tps: 15.28
       optimized_tps: 20.0
       speedup: 1.3x
-      vl_score: {pct: 92.0, raw: "11/12"}  # rescored 2026-03-04 (was 29/36=81%)
+      vl_score: 11/12 (92%)  # rescored 2026-03-04 (was 29/36=81%)
       benchmark_date: 2026-03-04
     memory:
       residency: hot
@@ -3714,7 +3719,7 @@ roles:
       WARNING: 0% agentic - cannot do tool calls.
   worker_summarize:
     tier: C
-    description: Document summarization / synthesis alias — Qwen3.6-35B-A3B MTP Q8 shared with frontdoor
+    description: Short-context document summarization (sub-5000 tokens; longer inputs trigger three_stage_summarization). Qwen3.6-35B-A3B Q8 — same model as frontdoor, shared GGUF mmap.
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
@@ -3749,7 +3754,13 @@ roles:
       residency: hot
       pinned: true
     benchmark_date: 2026-05-04
-    notes: Preserves the summarization alias while using the consolidated Qwen3.6 shared process.
+    notes: |
+      Replaces Qwen2.5-Coder-32B-Instruct Q4_K_M (was 77% canonical, 3.1 t/s baseline).
+      Long-document summarization (>=5000 tokens, or >=3500 multi-doc) is handled
+      by three_stage_summarization which routes Stage 1 to ingest_long_context
+      (Qwen3-Next-80B-A3B Q4, SSM-hybrid linear attention) and Stage 2 back to
+      frontdoor (this same model). worker_summarize handles the short-context
+      single-pass summarization cases that don't trigger the three-stage pipeline.
     generation_defaults:
       n_tokens: -1
       temperature: 0.2
