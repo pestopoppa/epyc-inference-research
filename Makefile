@@ -1,4 +1,4 @@
-.PHONY: help setup lint test
+.PHONY: help setup lint test health
 
 UV ?= uv
 PYTHON_SMOKE := scripts/research/xmas_winner_table.py \
@@ -6,7 +6,7 @@ PYTHON_SMOKE := scripts/research/xmas_winner_table.py \
 PYTEST_SMOKE := scripts/research/test_xmas_winner_table.py
 
 help:
-	@printf '%s\n' 'Targets: setup lint test'
+	@printf '%s\n' 'Targets: setup lint test health'
 
 setup:
 	scripts/setup.sh
@@ -16,3 +16,6 @@ lint:
 
 test:
 	$(UV) run --with pytest --with pyyaml pytest -q $(PYTEST_SMOKE)
+
+health:
+	scripts/session/health_check.sh
