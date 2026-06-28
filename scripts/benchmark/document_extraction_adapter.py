@@ -32,8 +32,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-# Default location for cloned OmniDocBench repo
-# Clone: git clone https://github.com/opendatalab/OmniDocBench /mnt/raid0/llm/opendataloader-bench
+# Default location for cloned OpenDataLoader-bench repo
+# Clone: git clone https://github.com/opendataloader-project/opendataloader-bench /mnt/raid0/llm/opendataloader-bench
 ODL_BENCH_DIR = Path("/mnt/raid0/llm/opendataloader-bench")
 
 
@@ -62,32 +62,32 @@ class DocumentExtractionAdapter:
 
     def __init__(self, bench_dir: Path = ODL_BENCH_DIR):
         self.bench_dir = bench_dir
-        # OmniDocBench structure: demo_data/omnidocbench_demo/{images/, mds/}
-        self.images_dir = bench_dir / "demo_data" / "omnidocbench_demo" / "images"
-        self.gt_dir = bench_dir / "demo_data" / "omnidocbench_demo" / "mds"
+        self.pdf_dir = bench_dir / "pdfs"
+        self.gt_dir = bench_dir / "ground-truth"
 
     def is_available(self) -> bool:
         """Check if the benchmark dataset is cloned and accessible."""
-        return self.gt_dir.exists()
+        return self.pdf_dir.is_dir() and self.gt_dir.is_dir()
 
     def load_all(self) -> list[DocumentProblem]:
         """Load all document extraction problems.
 
-        OmniDocBench uses page images + ground-truth markdown.
+        OpenDataLoader-bench uses local PDFs + ground-truth markdown.
         Returns:
-            List of DocumentProblem with pdf_path (image) and ground_truth.
+            List of DocumentProblem with pdf_path (PDF) and ground_truth.
         """
         if not self.is_available():
             return []
 
         problems = []
         for gt_path in sorted(self.gt_dir.glob("*.md")):
-            # Image has same stem as markdown
-            image_path = self.images_dir / f"{gt_path.stem}.jpg"
+            pdf_path = self.pdf_dir / f"{gt_path.stem}.pdf"
+            if not pdf_path.exists():
+                continue
 
             problems.append(DocumentProblem(
                 id=gt_path.stem,
-                pdf_path=image_path if image_path.exists() else gt_path,
+                pdf_path=pdf_path,
                 ground_truth=gt_path.read_text(encoding="utf-8"),
             ))
 
@@ -256,7 +256,11 @@ if __name__ == "__main__":
 
     if not adapter.is_available():
         print(f"Dataset not found at {ODL_BENCH_DIR}")
-        print(f"Clone with: git clone https://github.com/opendataloader/opendataloader-bench {ODL_BENCH_DIR}")
+        print(
+            "Clone with: git clone "
+            "https://github.com/opendataloader-project/opendataloader-bench "
+            f"{ODL_BENCH_DIR}"
+        )
     else:
         problems = adapter.load_all()
         print(f"Loaded {len(problems)} document extraction problems")
