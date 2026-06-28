@@ -112,6 +112,15 @@ def _get_tulving_episodic_adapter():
         return None
 
 
+def _get_document_extraction_adapter():
+    """Lazy-import OpenDataLoader-bench document extraction adapter."""
+    try:
+        from document_extraction_adapter import DocumentExtractionDatasetAdapter
+        return DocumentExtractionDatasetAdapter
+    except ImportError:
+        return None
+
+
 def get_adapter(suite: str) -> Optional["BaseAdapter"]:
     """Get the dataset adapter for a suite, or None if YAML-only."""
     adapters = {
@@ -142,6 +151,8 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         "omniscience": AAOmniscienceAdapter,
         # Phase 6: long-context multi-document reasoning
         "aa_lcr": AALCRAdapter,
+        # Phase 7: document extraction quality
+        "document_extraction": _get_document_extraction_adapter(),
         # Phase 5: long-context evaluation datasets
         "longbench": _get_long_context_adapter("LongBenchAdapter"),
         "zeroscrolls": _get_long_context_adapter("ZeroSCROLLSAdapter"),

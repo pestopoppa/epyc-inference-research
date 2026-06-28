@@ -103,6 +103,53 @@ class DocumentExtractionAdapter:
         return rng.sample(all_problems, min(n, len(all_problems)))
 
 
+class DocumentExtractionDatasetAdapter(DocumentExtractionAdapter):
+    """Benchmark-suite adapter that emits prompt dictionaries.
+
+    The base adapter intentionally exposes local PDF + ground-truth objects for
+    document runners. The generic benchmark registry expects dict prompts, so
+    this wrapper keeps that compatibility layer explicit.
+    """
+
+    suite_name = "document_extraction"
+    has_real_tiers = False
+
+    @property
+    def total_available(self) -> int:
+        return len(self.load_all())
+
+    def _problem_to_prompt(self, problem: DocumentProblem) -> dict[str, Any]:
+        return {
+            "id": problem.id,
+            "suite": self.suite_name,
+            "name": problem.id,
+            "prompt": (
+                "Extract the content of the PDF at "
+                f"{problem.pdf_path} as Markdown. Preserve reading order, "
+                "tables, and heading hierarchy."
+            ),
+            "expected": problem.ground_truth,
+            "scoring_method": "document_extraction",
+            "scoring_config": {
+                "pdf_path": str(problem.pdf_path),
+                "metrics": ["nid", "teds", "mhs", "aggregate"],
+            },
+            "tier": 2,
+        }
+
+    def extract_all(self) -> list[dict[str, Any]]:
+        return [self._problem_to_prompt(problem) for problem in self.load_all()]
+
+    def sample(
+        self,
+        n: int = 20,
+        seed: int = 42,
+        stratify: bool = False,
+    ) -> list[dict[str, Any]]:
+        del stratify
+        return [self._problem_to_prompt(problem) for problem in super().sample(n=n, seed=seed)]
+
+
 # ── Scoring Metrics ────────────────────────────────────────────
 
 

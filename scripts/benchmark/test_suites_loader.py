@@ -77,3 +77,37 @@ def test_get_all_suite_names_can_include_adapter_suites(tmp_path):
     assert "yaml_only" in names
     assert "omniscience" in names
     assert "tulving_episodic" in names
+
+
+def test_load_suite_uses_document_extraction_adapter(monkeypatch, tmp_path):
+    class FakeDocumentAdapter:
+        def extract_all(self):
+            return [
+                {
+                    "id": "doc-1",
+                    "suite": "document_extraction",
+                    "name": "doc-1",
+                    "prompt": "Extract PDF",
+                    "expected": "# Title",
+                    "scoring_method": "document_extraction",
+                    "scoring_config": {"pdf_path": "/tmp/doc.pdf"},
+                    "tier": 2,
+                }
+            ]
+
+    import dataset_adapters
+
+    monkeypatch.setattr(
+        dataset_adapters,
+        "get_adapter",
+        lambda name: FakeDocumentAdapter() if name == "document_extraction" else None,
+    )
+
+    suite = load_suite("document_extraction", prompts_dir=str(tmp_path))
+
+    assert suite is not None
+    assert suite.name == "document_extraction"
+    assert suite.questions[0].id == "doc-1"
+    assert suite.questions[0].prompt == "Extract PDF"
+    assert suite.questions[0].expected == "# Title"
+    assert suite.questions[0].scoring == []
