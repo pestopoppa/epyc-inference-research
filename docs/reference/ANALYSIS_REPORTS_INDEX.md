@@ -63,6 +63,8 @@ It indexes deterministic Markdown and JSON report artifacts that already exist i
 - [data/package_g/omniscience/frontdoor_20260620_035613_factual_risk_report.json](../../data/package_g/omniscience/frontdoor_20260620_035613_factual_risk_report.json)
 - [data/package_g/omniscience/worker_general_20260620_062750_aa_omniscience_summary.json](../../data/package_g/omniscience/worker_general_20260620_062750_aa_omniscience_summary.json)
 - [data/package_g/omniscience/worker_general_20260620_062750_factual_risk_report.json](../../data/package_g/omniscience/worker_general_20260620_062750_factual_risk_report.json)
+- [data/package_g/omniscience/worker_general_20260628_042905_iqk_off_full206_aa_omniscience_summary.json](../../data/package_g/omniscience/worker_general_20260628_042905_iqk_off_full206_aa_omniscience_summary.json)
+- [data/package_g/omniscience/worker_general_20260628_044706_iqk_on_full210_aa_omniscience_summary.json](../../data/package_g/omniscience/worker_general_20260628_044706_iqk_on_full210_aa_omniscience_summary.json)
 - [data/package_k/tulving_followup_20260619_141212_summary.md](../../data/package_k/tulving_followup_20260619_141212_summary.md)
 - [data/research/2026-06-16-xmas-function-axis-code-cruxeval0000-012817/summary.json](../../data/research/2026-06-16-xmas-function-axis-code-cruxeval0000-012817/summary.json)
 - [data/research/2026-06-16-xmas-function-axis-code-cruxeval0001-014123/summary.json](../../data/research/2026-06-16-xmas-function-axis-code-cruxeval0001-014123/summary.json)
