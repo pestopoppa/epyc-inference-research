@@ -36,7 +36,12 @@ uv run python -m py_compile \
   scripts/research/xmas_function_axis_sweep.py \
   scripts/benchmark/aa_omniscience_manifest.py \
   scripts/benchmark/clean_window_manifest.py \
-  scripts/validate_model_registry.py
+  scripts/validate_model_registry.py \
+  scripts/autopilot/candidate_eval_gate.py \
+  scripts/halo/closed_loop_observation_surface.py \
+  scripts/halo/convert_tap_to_otel.py
+
+bash -n scripts/session/emergency_cleanup.sh
 
 echo
 echo "== no-inference manifest dry-runs =="
