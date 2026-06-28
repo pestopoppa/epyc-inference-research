@@ -1,0 +1,82 @@
+{
+  "comparison": "v6_iqk_on_vs_off_full_port_matched_aa_omniscience",
+  "date_utc": "2026-06-28",
+  "deltas_on_minus_off": {
+    "accuracy": 0.0,
+    "avg_f1": 0.008365121040584705,
+    "avg_tokens_per_second": 10.688689320388352,
+    "hallucination_rate": -0.010928961748633892,
+    "omniscience_index": 0.005464480874316946
+  },
+  "label_transitions": {
+    "CORRECT->CORRECT": 17,
+    "CORRECT->INCORRECT": 3,
+    "CORRECT->PARTIAL_ANSWER": 3,
+    "INCORRECT->CORRECT": 4,
+    "INCORRECT->INCORRECT": 98,
+    "INCORRECT->NOT_ATTEMPTED": 3,
+    "INCORRECT->PARTIAL_ANSWER": 5,
+    "NOT_ATTEMPTED->CORRECT": 1,
+    "NOT_ATTEMPTED->INCORRECT": 2,
+    "NOT_ATTEMPTED->NOT_ATTEMPTED": 12,
+    "PARTIAL_ANSWER->CORRECT": 1,
+    "PARTIAL_ANSWER->INCORRECT": 5,
+    "PARTIAL_ANSWER->NOT_ATTEMPTED": 1,
+    "PARTIAL_ANSWER->PARTIAL_ANSWER": 51
+  },
+  "matched_question_count": 206,
+  "notes": [
+    "Both arms were interrupted after crossing the N>=200 formal floor; comparison uses common question IDs only.",
+    "Higher accuracy, avg_f1, omniscience_index, and tokens_per_second are better; lower hallucination_rate is better.",
+    "Attestation warnings unrelated to the arm witness remain: registry gaps for auxiliary ports, missing AUTOPILOT_TOOL_SENTINELS, stale llama.cpp GitNexus index."
+  ],
+  "off": {
+    "accuracy": 0.11165048543689321,
+    "attestation": "/mnt/raid0/llm/tmp/attest_armB_full_iqk_off_20260628T042726Z.json",
+    "avg_f1": 0.23600545080977314,
+    "avg_tokens_per_second": 27.775339805825244,
+    "ggml_iqk": 0,
+    "hallucination_rate": 0.6010928961748634,
+    "label_counts": {
+      "CORRECT": 23,
+      "INCORRECT": 110,
+      "NOT_ATTEMPTED": 15,
+      "PARTIAL_ANSWER": 58
+    },
+    "n": 206,
+    "omniscience_index": 0.2552787946310149,
+    "run_id": "20260628_042905"
+  },
+  "on": {
+    "accuracy": 0.11165048543689321,
+    "attestation": "/mnt/raid0/llm/tmp/attest_armC_full_iqk_on_20260628T044652Z.json",
+    "avg_f1": 0.24437057185035785,
+    "avg_tokens_per_second": 38.464029126213596,
+    "ggml_iqk": 1,
+    "hallucination_rate": 0.5901639344262295,
+    "label_counts": {
+      "CORRECT": 23,
+      "INCORRECT": 108,
+      "NOT_ATTEMPTED": 16,
+      "PARTIAL_ANSWER": 59
+    },
+    "n": 206,
+    "omniscience_index": 0.26074327550533183,
+    "run_id": "20260628_044706"
+  },
+  "paired_correctness": {
+    "both_correct": 17,
+    "both_not_correct": 177,
+    "discordant_pairs": 12,
+    "exact_two_sided_binomial_p": 1.0,
+    "off_only_correct": 6,
+    "on_only_correct": 6
+  },
+  "paired_speed_ratio_max": 2.2952182952182953,
+  "paired_speed_ratio_mean": 1.3977568871446906,
+  "paired_speed_ratio_min": 0.9273246588384639,
+  "port": 8072,
+  "role": "worker_general",
+  "scoring_method": "aa_omniscience_deterministic_f1",
+  "speedup_avg_tps_ratio": 1.384826590605622
+}

@@ -1,0 +1,96 @@
+{
+  "configs": {
+    "baseline": {
+      "accuracy": 0.11165048543689321,
+      "avg_f1": 0.23600545080977314,
+      "avg_tokens_per_second": 27.775339805825244,
+      "hallucination_rate": 0.6010928961748634,
+      "label_counts": {
+        "CORRECT": 23,
+        "INCORRECT": 110,
+        "NOT_ATTEMPTED": 15,
+        "PARTIAL_ANSWER": 58
+      },
+      "omniscience_index": 0.2552787946310149,
+      "total": 206
+    }
+  },
+  "configs_scored": [
+    "baseline"
+  ],
+  "domains": {
+    "Finance": {
+      "accuracy": 0.15151515151515152,
+      "hallucination_rate": 0.6964285714285714,
+      "label_counts": {
+        "CORRECT": 10,
+        "INCORRECT": 39,
+        "PARTIAL_ANSWER": 17
+      },
+      "omniscience_index": 0.22754329004329005,
+      "total": 66
+    },
+    "Health": {
+      "accuracy": 0.14285714285714285,
+      "hallucination_rate": 0.75,
+      "label_counts": {
+        "CORRECT": 2,
+        "INCORRECT": 9,
+        "PARTIAL_ANSWER": 3
+      },
+      "omniscience_index": 0.19642857142857142,
+      "total": 14
+    },
+    "Humanities and Social Sciences": {
+      "accuracy": 0.5,
+      "hallucination_rate": 1.0,
+      "label_counts": {
+        "CORRECT": 1,
+        "INCORRECT": 1
+      },
+      "omniscience_index": 0.25,
+      "total": 2
+    },
+    "Law": {
+      "accuracy": 0.0625,
+      "hallucination_rate": 0.55,
+      "label_counts": {
+        "CORRECT": 4,
+        "INCORRECT": 33,
+        "NOT_ATTEMPTED": 13,
+        "PARTIAL_ANSWER": 14
+      },
+      "omniscience_index": 0.25625,
+      "total": 64
+    },
+    "Science Engineering and Mathematics": {
+      "accuracy": 0.09090909090909091,
+      "hallucination_rate": 0.55,
+      "label_counts": {
+        "CORRECT": 4,
+        "INCORRECT": 22,
+        "NOT_ATTEMPTED": 1,
+        "PARTIAL_ANSWER": 17
+      },
+      "omniscience_index": 0.27045454545454545,
+      "total": 44
+    },
+    "Software Engineering": {
+      "accuracy": 0.125,
+      "hallucination_rate": 0.42857142857142855,
+      "label_counts": {
+        "CORRECT": 2,
+        "INCORRECT": 6,
+        "NOT_ATTEMPTED": 1,
+        "PARTIAL_ANSWER": 7
+      },
+      "omniscience_index": 0.3482142857142857,
+      "total": 16
+    }
+  },
+  "jsonl_path": "/mnt/raid0/llm/epyc-inference-research/data/package_g/omniscience/worker_general_20260628_042905_iqk_off_full206_aa_omniscience.jsonl",
+  "role": "worker_general",
+  "row_count": 206,
+  "run_dir": "benchmarks/results/runs/20260628_042905",
+  "scoring_method": "deterministic_f1"
+}
