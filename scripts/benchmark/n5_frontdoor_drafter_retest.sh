@@ -376,6 +376,8 @@ with open(out, "w", encoding="utf-8") as handle:
 PY
 
 echo "N5 frontdoor drafter retest preflight: ${status}"
+echo "mode: ${execution_mode}"
+echo "purpose: N5 qwen35-compatible frontdoor drafter alpha retest preflight"
 echo "preflight: ${PREFLIGHT_JSON}"
 echo "commands:  ${COMMANDS_SH}"
 if [[ "${#blockers[@]}" -gt 0 ]]; then
@@ -383,6 +385,7 @@ if [[ "${#blockers[@]}" -gt 0 ]]; then
 fi
 if [[ "$EXECUTE" -ne 1 ]]; then
   echo "Dry-run only. No inference was launched."
+  echo "Review ${PREFLIGHT_JSON} and ${COMMANDS_SH} for the clean-window launch package."
   echo "Re-run with --strict --execute in a coordinated clean window to launch the smoke."
 fi
 

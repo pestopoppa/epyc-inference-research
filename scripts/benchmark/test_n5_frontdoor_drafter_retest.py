@@ -24,7 +24,13 @@ def test_n5_frontdoor_drafter_retest_dry_run_emits_clear_footer(tmp_path):
     )
 
     assert "N5 frontdoor drafter retest preflight:" in result.stdout
+    assert "mode: dry_run" in result.stdout
+    assert "purpose: N5 qwen35-compatible frontdoor drafter alpha retest preflight" in result.stdout
     assert "Dry-run only. No inference was launched." in result.stdout
+    assert (
+        f"Review {output_dir / 'preflight.json'} and {output_dir / 'commands.sh'} for the clean-window launch package."
+        in result.stdout
+    )
     assert "Re-run with --strict --execute in a coordinated clean window to launch the smoke." in result.stdout
 
     preflight = json.loads((output_dir / "preflight.json").read_text())
