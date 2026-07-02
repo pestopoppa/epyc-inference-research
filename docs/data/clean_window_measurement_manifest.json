@@ -810,7 +810,7 @@
       },
       "notes": [
         "requires attested quiet window; runner refuses AutoPilot and competing benchmark coordinators",
-        "summary.json must carry xmas_policy=incumbent_constrained_v1 and decision.status=promote_candidate",
+        "summary.json must carry xmas_policy=incumbent_constrained_cheapfirst_v2 and decision.status=promote_candidate",
         "writes benchmarks/results/runs/xmas_live_ab/<timestamp>-constrained-policy/{meta.json,results.jsonl,summary.json,report.md}"
       ],
       "package": "X-MAS",
@@ -1718,7 +1718,7 @@
           },
           "notes": [
             "requires attested quiet window; runner refuses AutoPilot and competing benchmark coordinators",
-            "summary.json must carry xmas_policy=incumbent_constrained_v1 and decision.status=promote_candidate",
+            "summary.json must carry xmas_policy=incumbent_constrained_cheapfirst_v2 and decision.status=promote_candidate",
             "writes benchmarks/results/runs/xmas_live_ab/<timestamp>-constrained-policy/{meta.json,results.jsonl,summary.json,report.md}"
           ],
           "package": "X-MAS",

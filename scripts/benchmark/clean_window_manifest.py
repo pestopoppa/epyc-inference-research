@@ -569,7 +569,7 @@ def _e2_eval_driver_ab_entry() -> dict[str, Any]:
 def _xmas_live_ab_entry() -> dict[str, Any]:
     notes = [
         "requires attested quiet window; runner refuses AutoPilot and competing benchmark coordinators",
-        "summary.json must carry xmas_policy=incumbent_constrained_v1 and decision.status=promote_candidate",
+        "summary.json must carry xmas_policy=incumbent_constrained_cheapfirst_v2 and decision.status=promote_candidate",
         "writes benchmarks/results/runs/xmas_live_ab/<timestamp>-constrained-policy/{meta.json,results.jsonl,summary.json,report.md}",
     ]
     if not XMAS_LIVE_AB_SCRIPT.exists():

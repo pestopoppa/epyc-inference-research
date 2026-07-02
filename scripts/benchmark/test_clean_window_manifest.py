@@ -167,7 +167,7 @@ def test_xmas_entry_records_constrained_policy_command(monkeypatch, tmp_path):
     assert "--host-quiet-confirmed" in entry["command"]
     assert "--reps 2" in entry["command"]
     assert "$(date -u +%Y%m%dT%H%M%SZ)-constrained-policy" in entry["command"]
-    assert any("incumbent_constrained_v1" in note for note in entry["notes"])
+    assert any("incumbent_constrained_cheapfirst_v2" in note for note in entry["notes"])
 
 
 def test_xmas_entry_blocks_when_prompt_manifest_missing(monkeypatch, tmp_path):
