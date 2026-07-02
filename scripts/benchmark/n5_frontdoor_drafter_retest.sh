@@ -303,7 +303,11 @@ fi
 write_commands
 
 server_cmd=$(server_cmd_json)
-python3 - "$PREFLIGHT_JSON" "$status" "$(json_array "${blockers[@]}")" "$LLAMA_CPP_DIR" "$(git_head)" "$EXPECTED_COMMIT" "$SAFETY_COMMIT" "$LLAMA_SERVER" "$TARGET_MODEL" "$DRAFT_MODEL" "$PYTHON_BIN" "$PORT" "$THREADS" "$CONTEXT" "$UBATCH" "$N_PREDICT" "$DRAFT_MAX" "$COMMANDS_SH" "$COMPAT_LOG" "$server_cmd" <<'PY'
+execution_mode="dry_run"
+if [[ "$EXECUTE" -eq 1 ]]; then
+  execution_mode="execute"
+fi
+python3 - "$PREFLIGHT_JSON" "$status" "$execution_mode" "$(json_array "${blockers[@]}")" "$LLAMA_CPP_DIR" "$(git_head)" "$EXPECTED_COMMIT" "$SAFETY_COMMIT" "$LLAMA_SERVER" "$TARGET_MODEL" "$DRAFT_MODEL" "$PYTHON_BIN" "$PORT" "$THREADS" "$CONTEXT" "$UBATCH" "$N_PREDICT" "$DRAFT_MAX" "$COMMANDS_SH" "$COMPAT_LOG" "$server_cmd" <<'PY'
 import json
 import sys
 from datetime import datetime, timezone
@@ -312,6 +316,7 @@ from pathlib import Path
 (
     out,
     status,
+    execution_mode,
     blockers_json,
     llama_cpp_dir,
     llama_head,
@@ -335,6 +340,7 @@ from pathlib import Path
 payload = {
     "created_at": datetime.now(timezone.utc).isoformat(),
     "status": status,
+    "execution_mode": execution_mode,
     "blockers": json.loads(blockers_json),
     "purpose": "N5 qwen35-compatible frontdoor drafter alpha retest preflight",
     "acceptance_contract": "Only runs that reach draft/verify and emit draft_n/draft_n_accepted are alpha evidence.",
@@ -374,6 +380,10 @@ echo "preflight: ${PREFLIGHT_JSON}"
 echo "commands:  ${COMMANDS_SH}"
 if [[ "${#blockers[@]}" -gt 0 ]]; then
   printf '  - %s\n' "${blockers[@]}"
+fi
+if [[ "$EXECUTE" -ne 1 ]]; then
+  echo "Dry-run only. No inference was launched."
+  echo "Re-run with --strict --execute in a coordinated clean window to launch the smoke."
 fi
 
 if [[ "$STRICT" -eq 1 && "$status" != "ready" ]]; then
