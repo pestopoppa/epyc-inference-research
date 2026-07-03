@@ -1,0 +1,1 @@
+{"event": "server_stopped", "model": "qwen36_q8_0", "np": 8, "port": 18070, "result": {"killed": false, "pid": 2070408, "ps_verified_dead": true, "returncode": 0, "signal": "SIGTERM"}, "timestamp": "2026-07-03T19:40:25.258253+00:00"}

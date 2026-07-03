@@ -1,0 +1,17 @@
+{
+  "created_at": "2026-07-03T19:40:25.258715+00:00",
+  "protocol_id": "P-BENCH-3",
+  "recommendations": [
+    {
+      "best_np": 8,
+      "best_p95_latency_ms": 49009.6,
+      "best_tasks_per_hour": 1142.612,
+      "model": "qwen36_q8_0",
+      "saturation_np_95pct": 8,
+      "saturation_p95_latency_ms": 49009.6,
+      "saturation_tasks_per_hour": 1142.612,
+      "status": "ok"
+    }
+  ],
+  "summary_csv": "data/batched_decode/e2-pbench3-clean-20260703T1940Z/serving/e2-pbench3-clean-20260703T1940Z-batch-np8/summary.csv"
+}

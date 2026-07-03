@@ -1,0 +1,2 @@
+{"error": "", "http_status": 200, "latency_ms": 4406.6009930102155, "model": "qwen36_q8_0", "np_level": 8, "predicted_tokens": 32, "predicted_tps": 18.646964594658694, "prompt_tokens": 321, "qid": "debugbench_fizz-buzz_python", "request_index": 0, "success": true, "suite": "debugbench"}
+{"error": "", "http_status": 200, "latency_ms": 4448.2252599991625, "model": "qwen36_q8_0", "np_level": 8, "predicted_tokens": 32, "predicted_tps": 19.42818008951534, "prompt_tokens": 282, "qid": "bcb_BigCodeBench/819", "request_index": 1, "success": true, "suite": "bigcodebench"}

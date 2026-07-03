@@ -1,0 +1,1620 @@
+0.00.001.425 I log_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.427 I device_info:
+0.00.001.441 I   - CPU     : AMD EPYC 9655 96-Core Processor (1160617 MiB, 1160617 MiB free)
+0.00.001.477 I system_info: n_threads = 96 (n_threads_batch = 96) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.001.507 I srv          init: running without SSL
+0.00.001.538 I srv          init: using 191 threads for HTTP server
+0.00.001.716 I srv         start: binding port with default address family
+0.00.002.854 I srv  llama_server: loading model
+0.00.002.884 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf'
+0.00.002.893 I common_init_result: fitting params to device memory ...
+0.00.002.894 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)
+0.00.284.043 I common_params_fit_impl: projected to use 36012 MiB of host memory vs. 1160617 MiB of total host memory
+0.02.404.339 W llama_context: n_ctx_seq (16384) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+0.02.439.809 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+0.02.551.825 I srv    load_model: initializing slots, n_slots = 2
+0.02.639.384 W srv    load_model: speculative decoding will use checkpoints
+0.02.639.406 W common_speculative_init: no implementations specified for speculative decoding
+0.02.639.408 I slot   load_model: id  0 | task -1 | new slot, n_ctx = 16384
+0.02.639.415 I slot   load_model: id  1 | task -1 | new slot, n_ctx = 16384
+0.02.639.499 I srv    load_model: prompt cache is enabled, size limit: 8192 MiB
+0.02.639.500 I srv    load_model: use `--cache-ram 0` to disable the prompt cache
+0.02.639.501 I srv    load_model: for more info see https://github.com/ggml-org/llama.cpp/pull/16391
+0.02.639.502 I srv    load_model: context checkpoints enabled, max = 32, min spacing = 256
+0.02.639.520 I srv          init: idle slots will be saved to prompt cache upon starting a new task
+0.02.649.584 I init: chat template, example_format: '<|im_start|>system
+You are a helpful assistant<|im_end|>
+<|im_start|>user
+Hello<|im_end|>
+<|im_start|>assistant
+Hi there<|im_end|>
+<|im_start|>user
+How are you?<|im_end|>
+<|im_start|>assistant
+<think>
+'
+0.02.656.942 I srv          init: init: chat template, thinking = 1
+0.02.656.985 I srv  llama_server: model loaded
+0.02.656.990 I srv  llama_server: server is listening on http://127.0.0.1:18071
+0.02.656.995 I srv  update_slots: all slots are idle
+0.04.011.381 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = -1
+0.04.011.383 I srv  get_availabl: updating prompt cache
+0.04.011.391 I srv          load:  - looking for better prompt, base f_keep = -1.000, sim = 0.000
+0.04.011.398 I srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 32768 tokens, 8589934592 est)
+0.04.011.399 I srv  get_availabl: prompt cache update took 0.01 ms
+0.04.011.429 I slot launch_slot_: id  1 | task 0 | processing task, is_child = 0
+0.04.011.433 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache
+0.05.371.462 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.05.371.470 I srv  get_availabl: updating prompt cache
+0.05.371.475 I srv          load:  - looking for better prompt, base f_keep = -1.000, sim = 0.000
+0.05.371.479 I srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 32768 tokens, 8589934592 est)
+0.05.371.480 I srv  get_availabl: prompt cache update took 0.01 ms
+0.05.371.506 I slot launch_slot_: id  0 | task 2 | processing task, is_child = 0
+0.05.379.380 I slot create_check: id  1 | task 0 | created context checkpoint 1 of 32 (pos_min = 316, pos_max = 316, n_tokens = 317, size = 62.813 MiB)
+0.06.608.150 I slot create_check: id  0 | task 2 | created context checkpoint 1 of 32 (pos_min = 277, pos_max = 277, n_tokens = 278, size = 62.813 MiB)
+0.08.305.848 I slot print_timing: id  1 | task 0 | prompt eval time =    2589.05 ms /   321 tokens (    8.07 ms per token,   123.98 tokens per second)
+0.08.305.855 I slot print_timing: id  1 | task 0 |        eval time =    1705.33 ms /    32 tokens (   53.29 ms per token,    18.76 tokens per second)
+0.08.305.855 I slot print_timing: id  1 | task 0 |       total time =    4294.39 ms /   353 tokens
+0.08.305.861 I slot print_timing: id  1 | task 0 |    graphs reused =         30
+0.08.305.913 I slot      release: id  1 | task 0 | stop processing: n_tokens = 352, truncated = 0
+0.08.348.283 I slot print_timing: id  0 | task 2 | prompt eval time =    1340.53 ms /   282 tokens (    4.75 ms per token,   210.37 tokens per second)
+0.08.348.288 I slot print_timing: id  0 | task 2 |        eval time =    1636.23 ms /    32 tokens (   51.13 ms per token,    19.56 tokens per second)
+0.08.348.288 I slot print_timing: id  0 | task 2 |       total time =    2976.76 ms /   314 tokens
+0.08.348.290 I slot print_timing: id  0 | task 2 |    graphs reused =         30
+0.08.348.314 I slot      release: id  0 | task 2 | stop processing: n_tokens = 313, truncated = 0
+0.08.348.323 I srv  update_slots: all slots are idle
+0.08.350.652 I slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.912
+0.08.350.686 I slot launch_slot_: id  1 | task 36 | processing task, is_child = 0
+0.08.350.688 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache
+0.08.350.733 W srv   prompt_save:  - saving prompt with length 313, total state size = 66.067 MiB (draft: 0.000 MiB)
+0.08.364.959 I srv        update:  - cache state: 1 prompts, 128.880 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.08.364.963 I srv        update:    - prompt 0x571a2e0c4cc0:     313 tokens, checkpoints:  1,   128.880 MiB
+0.08.364.976 W slot   operator(): id  1 | task 36 | erased invalidated context checkpoint (pos_min = 316, pos_max = 316, n_tokens = 317, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.09.685.462 I slot create_check: id  1 | task 36 | created context checkpoint 1 of 32 (pos_min = 316, pos_max = 316, n_tokens = 317, size = 62.813 MiB)
+0.09.746.027 I slot print_timing: id  1 | task 36 | prompt eval time =    1381.03 ms /   321 tokens (    4.30 ms per token,   232.44 tokens per second)
+0.09.746.032 I slot print_timing: id  1 | task 36 |        eval time =       0.00 ms /     1 tokens (    0.00 ms per token, 1000000.00 tokens per second)
+0.09.746.033 I slot print_timing: id  1 | task 36 |       total time =    1381.03 ms /   322 tokens
+0.09.746.034 I slot print_timing: id  1 | task 36 |    graphs reused =         30
+0.09.746.061 I slot      release: id  1 | task 36 | stop processing: n_tokens = 321, truncated = 0
+0.09.746.073 I srv  update_slots: all slots are idle
+0.09.748.662 I slot get_availabl: id  1 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 1.000
+0.09.748.693 I slot launch_slot_: id  1 | task 39 | processing task, is_child = 0
+0.09.748.695 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache
+0.09.748.745 W srv   prompt_save:  - saving prompt with length 313, total state size = 66.067 MiB (draft: 0.000 MiB)
+0.09.748.747 I srv         alloc:  - prompt is already in the cache, skipping
+0.09.748.756 W slot   operator(): id  1 | task 39 | erased invalidated context checkpoint (pos_min = 316, pos_max = 316, n_tokens = 317, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.11.072.586 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.901
+0.11.072.634 I slot launch_slot_: id  0 | task 40 | processing task, is_child = 0
+0.11.072.646 W slot   operator(): id  0 | task 40 | erased invalidated context checkpoint (pos_min = 277, pos_max = 277, n_tokens = 278, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.11.080.719 I slot create_check: id  1 | task 39 | created context checkpoint 1 of 32 (pos_min = 316, pos_max = 316, n_tokens = 317, size = 62.813 MiB)
+0.12.311.122 I slot create_check: id  0 | task 40 | created context checkpoint 1 of 32 (pos_min = 277, pos_max = 277, n_tokens = 278, size = 62.813 MiB)
+0.17.670.736 I slot print_timing: id  1 | task 39 | n_decoded =    100, tg =  18.63 t/s, tg_3s =  18.63 t/s
+0.17.724.490 I slot print_timing: id  0 | task 40 | n_decoded =    100, tg =  18.83 t/s, tg_3s =  18.83 t/s
+0.18.475.149 I slot print_timing: id  1 | task 39 | prompt eval time =    2554.53 ms /   321 tokens (    7.96 ms per token,   125.66 tokens per second)
+0.18.475.153 I slot print_timing: id  1 | task 39 |        eval time =    6171.85 ms /   115 tokens (   53.67 ms per token,    18.63 tokens per second)
+0.18.475.154 I slot print_timing: id  1 | task 39 |       total time =    8726.38 ms /   436 tokens
+0.18.475.155 I slot print_timing: id  1 | task 39 |    graphs reused =        142
+0.18.475.186 I slot      release: id  1 | task 39 | stop processing: n_tokens = 435, truncated = 0
+0.18.517.843 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 90933714954
+0.18.517.846 I srv  get_availabl: updating prompt cache
+0.18.517.889 W srv   prompt_save:  - saving prompt with length 435, total state size = 67.335 MiB (draft: 0.000 MiB)
+0.18.532.907 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+0.18.532.914 I srv        update:  - cache state: 2 prompts, 259.029 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.18.532.917 I srv        update:    - prompt 0x571a2e0c4cc0:     313 tokens, checkpoints:  1,   128.880 MiB
+0.18.532.917 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.18.532.920 I srv  get_availabl: prompt cache update took 15.07 ms
+0.18.532.953 I slot launch_slot_: id  1 | task 158 | processing task, is_child = 0
+0.18.532.966 W slot   operator(): id  1 | task 158 | erased invalidated context checkpoint (pos_min = 316, pos_max = 316, n_tokens = 317, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.18.766.893 I slot create_check: id  1 | task 158 | created context checkpoint 1 of 32 (pos_min = 35, pos_max = 35, n_tokens = 36, size = 62.813 MiB)
+0.19.476.608 I slot print_timing: id  1 | task 158 | prompt eval time =     344.89 ms /    40 tokens (    8.62 ms per token,   115.98 tokens per second)
+0.19.476.613 I slot print_timing: id  1 | task 158 |        eval time =     598.75 ms /    12 tokens (   49.90 ms per token,    20.04 tokens per second)
+0.19.476.613 I slot print_timing: id  1 | task 158 |       total time =     943.63 ms /    52 tokens
+0.19.476.614 I slot print_timing: id  1 | task 158 |    graphs reused =        152
+0.19.476.638 I slot      release: id  1 | task 158 | stop processing: n_tokens = 51, truncated = 0
+0.19.519.435 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 90934716405
+0.19.519.438 I srv  get_availabl: updating prompt cache
+0.19.519.474 W srv   prompt_save:  - saving prompt with length 51, total state size = 63.344 MiB (draft: 0.000 MiB)
+0.19.533.272 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+0.19.533.281 I srv        update:  - cache state: 3 prompts, 385.186 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.19.533.285 I srv        update:    - prompt 0x571a2e0c4cc0:     313 tokens, checkpoints:  1,   128.880 MiB
+0.19.533.286 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.19.533.287 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.19.533.290 I srv  get_availabl: prompt cache update took 13.85 ms
+0.19.533.328 I slot launch_slot_: id  1 | task 173 | processing task, is_child = 0
+0.19.533.345 W slot   operator(): id  1 | task 173 | erased invalidated context checkpoint (pos_min = 35, pos_max = 35, n_tokens = 36, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.19.878.317 I slot create_check: id  1 | task 173 | created context checkpoint 1 of 32 (pos_min = 61, pos_max = 61, n_tokens = 62, size = 62.813 MiB)
+0.20.689.757 I slot print_timing: id  1 | task 173 | prompt eval time =     456.78 ms /    66 tokens (    6.92 ms per token,   144.49 tokens per second)
+0.20.689.764 I slot print_timing: id  1 | task 173 |        eval time =     699.62 ms /    14 tokens (   49.97 ms per token,    20.01 tokens per second)
+0.20.689.764 I slot print_timing: id  1 | task 173 |       total time =    1156.40 ms /    80 tokens
+0.20.689.766 I slot print_timing: id  1 | task 173 |    graphs reused =        164
+0.20.689.788 I slot      release: id  1 | task 173 | stop processing: n_tokens = 79, truncated = 0
+0.20.732.106 I slot print_timing: id  0 | task 40 | n_decoded =    145, tg =  17.43 t/s, tg_3s =  14.96 t/s
+0.20.732.118 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 90935929556
+0.20.732.119 I srv  get_availabl: updating prompt cache
+0.20.732.153 W srv   prompt_save:  - saving prompt with length 79, total state size = 63.635 MiB (draft: 0.000 MiB)
+0.20.746.092 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+0.20.746.100 I srv        update:  - cache state: 4 prompts, 511.634 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.20.746.102 I srv        update:    - prompt 0x571a2e0c4cc0:     313 tokens, checkpoints:  1,   128.880 MiB
+0.20.746.103 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.20.746.104 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.20.746.105 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+0.20.746.106 I srv  get_availabl: prompt cache update took 13.98 ms
+0.20.746.139 I slot launch_slot_: id  1 | task 190 | processing task, is_child = 0
+0.20.746.154 W slot   operator(): id  1 | task 190 | erased invalidated context checkpoint (pos_min = 61, pos_max = 61, n_tokens = 62, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.21.036.818 I slot create_check: id  1 | task 190 | created context checkpoint 1 of 32 (pos_min = 52, pos_max = 52, n_tokens = 53, size = 62.813 MiB)
+0.23.770.890 I slot print_timing: id  0 | task 40 | n_decoded =    196, tg =  17.26 t/s, tg_3s =  16.78 t/s
+0.26.446.624 I slot print_timing: id  1 | task 190 | n_decoded =    100, tg =  18.87 t/s, tg_3s =  18.87 t/s
+0.26.770.948 I slot print_timing: id  0 | task 40 | n_decoded =    252, tg =  17.55 t/s, tg_3s =  18.67 t/s
+0.26.987.317 I slot print_timing: id  0 | task 40 | prompt eval time =    1341.39 ms /   282 tokens (    4.76 ms per token,   210.23 tokens per second)
+0.26.987.325 I slot print_timing: id  0 | task 40 |        eval time =   14573.28 ms /   256 tokens (   56.93 ms per token,    17.57 tokens per second)
+0.26.987.325 I slot print_timing: id  0 | task 40 |       total time =   15914.66 ms /   538 tokens
+0.26.987.326 I slot print_timing: id  0 | task 40 |    graphs reused =        271
+0.26.987.358 I slot      release: id  0 | task 40 | stop processing: n_tokens = 537, truncated = 0
+0.27.029.440 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 90942227126
+0.27.029.443 I srv  get_availabl: updating prompt cache
+0.27.029.486 W srv   prompt_save:  - saving prompt with length 537, total state size = 68.396 MiB (draft: 0.000 MiB)
+0.27.029.489 W srv         alloc:  - removing obsolete cached prompt with length 313
+0.27.044.355 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+0.27.044.362 I srv        update:  - cache state: 4 prompts, 513.962 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.27.044.363 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.27.044.366 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.27.044.366 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+0.27.044.366 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+0.27.044.368 I srv  get_availabl: prompt cache update took 14.92 ms
+0.27.044.400 I slot launch_slot_: id  0 | task 303 | processing task, is_child = 0
+0.27.044.414 W slot   operator(): id  0 | task 303 | erased invalidated context checkpoint (pos_min = 277, pos_max = 277, n_tokens = 278, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.27.300.245 I slot create_check: id  0 | task 303 | created context checkpoint 1 of 32 (pos_min = 46, pos_max = 46, n_tokens = 47, size = 62.813 MiB)
+0.27.728.487 I slot print_timing: id  0 | task 303 | prompt eval time =     360.04 ms /    51 tokens (    7.06 ms per token,   141.65 tokens per second)
+0.27.728.493 I slot print_timing: id  0 | task 303 |        eval time =     324.02 ms /     7 tokens (   46.29 ms per token,    21.60 tokens per second)
+0.27.728.493 I slot print_timing: id  0 | task 303 |       total time =     684.06 ms /    58 tokens
+0.27.728.495 I slot print_timing: id  0 | task 303 |    graphs reused =        277
+0.27.728.516 I slot      release: id  0 | task 303 | stop processing: n_tokens = 57, truncated = 0
+0.27.770.695 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 90942968284
+0.27.770.699 I srv  get_availabl: updating prompt cache
+0.27.770.741 W srv   prompt_save:  - saving prompt with length 57, total state size = 63.406 MiB (draft: 0.000 MiB)
+0.27.784.838 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+0.27.784.845 I srv        update:  - cache state: 5 prompts, 640.181 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.27.784.849 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.27.784.849 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.27.784.849 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+0.27.784.850 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+0.27.784.850 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+0.27.784.852 I srv  get_availabl: prompt cache update took 14.15 ms
+0.27.784.884 I slot launch_slot_: id  0 | task 313 | processing task, is_child = 0
+0.27.784.896 W slot   operator(): id  0 | task 313 | erased invalidated context checkpoint (pos_min = 46, pos_max = 46, n_tokens = 47, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.29.751.148 I slot print_timing: id  1 | task 190 | n_decoded =    121, tg =  14.06 t/s, tg_3s =   6.35 t/s
+0.29.759.046 I slot create_check: id  0 | task 313 | created context checkpoint 1 of 32 (pos_min = 452, pos_max = 452, n_tokens = 453, size = 62.813 MiB)
+0.32.771.172 I slot print_timing: id  1 | task 190 | n_decoded =    176, tg =  15.14 t/s, tg_3s =  18.21 t/s
+0.35.200.200 I slot print_timing: id  0 | task 313 | n_decoded =    100, tg =  18.74 t/s, tg_3s =  18.74 t/s
+0.35.793.310 I slot print_timing: id  1 | task 190 | n_decoded =    232, tg =  15.84 t/s, tg_3s =  18.53 t/s
+0.36.604.071 I slot print_timing: id  0 | task 313 | prompt eval time =    2078.92 ms /   457 tokens (    4.55 ms per token,   219.83 tokens per second)
+0.36.604.080 I slot print_timing: id  0 | task 313 |        eval time =    6740.24 ms /   126 tokens (   53.49 ms per token,    18.69 tokens per second)
+0.36.604.080 I slot print_timing: id  0 | task 313 |       total time =    8819.16 ms /   583 tokens
+0.36.604.082 I slot print_timing: id  0 | task 313 |    graphs reused =        401
+0.36.604.120 I slot      release: id  0 | task 313 | stop processing: n_tokens = 582, truncated = 0
+0.36.646.593 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 90951843888
+0.36.646.596 I srv  get_availabl: updating prompt cache
+0.36.646.645 W srv   prompt_save:  - saving prompt with length 582, total state size = 68.863 MiB (draft: 0.000 MiB)
+0.36.661.027 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+0.36.661.035 I srv        update:  - cache state: 6 prompts, 771.858 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.36.661.038 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.36.661.039 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.36.661.039 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+0.36.661.040 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+0.36.661.041 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+0.36.661.041 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+0.36.661.043 I srv  get_availabl: prompt cache update took 14.45 ms
+0.36.661.078 I slot launch_slot_: id  0 | task 442 | processing task, is_child = 0
+0.36.661.090 W slot   operator(): id  0 | task 442 | erased invalidated context checkpoint (pos_min = 452, pos_max = 452, n_tokens = 453, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.37.958.563 I slot create_check: id  0 | task 442 | created context checkpoint 1 of 32 (pos_min = 304, pos_max = 304, n_tokens = 305, size = 62.813 MiB)
+0.38.392.372 I slot print_timing: id  0 | task 442 | prompt eval time =    1404.62 ms /   309 tokens (    4.55 ms per token,   219.99 tokens per second)
+0.38.392.380 I slot print_timing: id  0 | task 442 |        eval time =     326.65 ms /     7 tokens (   46.66 ms per token,    21.43 tokens per second)
+0.38.392.380 I slot print_timing: id  0 | task 442 |       total time =    1731.27 ms /   316 tokens
+0.38.392.382 I slot print_timing: id  0 | task 442 |    graphs reused =        407
+0.38.392.422 I slot      release: id  0 | task 442 | stop processing: n_tokens = 315, truncated = 0
+0.38.392.603 I slot print_timing: id  1 | task 190 | prompt eval time =     400.42 ms /    57 tokens (    7.02 ms per token,   142.35 tokens per second)
+0.38.392.606 I slot print_timing: id  1 | task 190 |        eval time =   17246.03 ms /   256 tokens (   67.37 ms per token,    14.84 tokens per second)
+0.38.392.606 I slot print_timing: id  1 | task 190 |       total time =   17646.45 ms /   313 tokens
+0.38.392.606 I slot print_timing: id  1 | task 190 |    graphs reused =        407
+0.38.392.614 I slot      release: id  1 | task 190 | stop processing: n_tokens = 312, truncated = 0
+0.38.392.621 I srv  update_slots: all slots are idle
+0.38.394.919 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 90953632190
+0.38.394.920 I srv  get_availabl: updating prompt cache
+0.38.394.959 W srv   prompt_save:  - saving prompt with length 315, total state size = 66.088 MiB (draft: 0.000 MiB)
+0.38.409.577 I srv          load:  - looking for better prompt, base f_keep = 0.044, sim = 0.063
+0.38.409.583 I srv        update:  - cache state: 7 prompts, 900.759 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.38.409.584 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.38.409.585 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.38.409.587 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+0.38.409.587 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+0.38.409.588 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+0.38.409.588 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+0.38.409.588 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+0.38.409.589 I srv  get_availabl: prompt cache update took 14.67 ms
+0.38.409.620 I slot launch_slot_: id  0 | task 451 | processing task, is_child = 0
+0.38.409.623 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache
+0.38.409.658 W srv   prompt_save:  - saving prompt with length 312, total state size = 66.057 MiB (draft: 0.000 MiB)
+0.38.423.794 I srv        update:  - cache state: 8 prompts, 1029.629 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.38.423.796 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.38.423.796 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.38.423.797 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+0.38.423.797 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+0.38.423.798 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+0.38.423.798 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+0.38.423.798 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+0.38.423.799 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+0.38.423.804 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 90953632382
+0.38.423.805 I srv  get_availabl: updating prompt cache
+0.38.423.840 W srv   prompt_save:  - saving prompt with length 312, total state size = 66.057 MiB (draft: 0.000 MiB)
+0.38.423.841 I srv         alloc:  - prompt is already in the cache, skipping
+0.38.423.842 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+0.38.423.843 I srv        update:  - cache state: 8 prompts, 1029.629 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.38.423.843 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.38.423.844 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.38.423.844 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+0.38.423.844 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+0.38.423.845 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+0.38.423.845 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+0.38.423.845 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+0.38.423.846 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+0.38.423.848 I srv  get_availabl: prompt cache update took 0.04 ms
+0.38.423.867 I slot launch_slot_: id  1 | task 452 | processing task, is_child = 0
+0.38.423.875 W slot   operator(): id  0 | task 451 | erased invalidated context checkpoint (pos_min = 304, pos_max = 304, n_tokens = 305, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.38.424.119 W slot   operator(): id  1 | task 452 | erased invalidated context checkpoint (pos_min = 52, pos_max = 52, n_tokens = 53, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.40.743.477 I slot create_check: id  0 | task 451 | created context checkpoint 1 of 32 (pos_min = 218, pos_max = 218, n_tokens = 219, size = 62.813 MiB)
+0.40.750.945 I slot create_check: id  1 | task 452 | created context checkpoint 1 of 32 (pos_min = 447, pos_max = 447, n_tokens = 448, size = 62.813 MiB)
+0.41.147.845 I slot print_timing: id  0 | task 451 | prompt eval time =    2414.98 ms /   223 tokens (   10.83 ms per token,    92.34 tokens per second)
+0.41.147.851 I slot print_timing: id  0 | task 451 |        eval time =     308.98 ms /     7 tokens (   44.14 ms per token,    22.66 tokens per second)
+0.41.147.852 I slot print_timing: id  0 | task 451 |       total time =    2723.96 ms /   230 tokens
+0.41.147.853 I slot print_timing: id  0 | task 451 |    graphs reused =        412
+0.41.147.883 I slot      release: id  0 | task 451 | stop processing: n_tokens = 229, truncated = 0
+0.41.190.543 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 90956387651
+0.41.190.548 I srv  get_availabl: updating prompt cache
+0.41.190.592 W srv   prompt_save:  - saving prompt with length 229, total state size = 65.194 MiB (draft: 0.000 MiB)
+0.41.204.422 I srv          load:  - looking for better prompt, base f_keep = 0.061, sim = 0.056
+0.41.204.429 I srv        update:  - cache state: 9 prompts, 1157.636 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.41.204.430 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.41.204.432 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.41.204.432 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+0.41.204.433 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+0.41.204.433 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+0.41.204.433 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+0.41.204.434 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+0.41.204.435 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+0.41.204.436 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+0.41.204.437 I srv  get_availabl: prompt cache update took 13.89 ms
+0.41.204.470 I slot launch_slot_: id  0 | task 462 | processing task, is_child = 0
+0.41.204.487 W slot   operator(): id  0 | task 462 | erased invalidated context checkpoint (pos_min = 218, pos_max = 218, n_tokens = 219, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.42.245.634 I slot create_check: id  0 | task 462 | created context checkpoint 1 of 32 (pos_min = 246, pos_max = 246, n_tokens = 247, size = 62.813 MiB)
+0.42.676.694 I slot print_timing: id  0 | task 462 | prompt eval time =    1147.90 ms /   251 tokens (    4.57 ms per token,   218.66 tokens per second)
+0.42.676.700 I slot print_timing: id  0 | task 462 |        eval time =     324.29 ms /     7 tokens (   46.33 ms per token,    21.59 tokens per second)
+0.42.676.701 I slot print_timing: id  0 | task 462 |       total time =    1472.20 ms /   258 tokens
+0.42.676.702 I slot print_timing: id  0 | task 462 |    graphs reused =        418
+0.42.676.737 I slot      release: id  0 | task 462 | stop processing: n_tokens = 257, truncated = 0
+0.42.719.448 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 90957916505
+0.42.719.452 I srv  get_availabl: updating prompt cache
+0.42.719.494 W srv   prompt_save:  - saving prompt with length 257, total state size = 65.485 MiB (draft: 0.000 MiB)
+0.42.734.982 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+0.42.734.989 I srv        update:  - cache state: 10 prompts, 1285.934 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.42.734.991 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.42.734.994 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.42.734.994 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+0.42.734.994 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+0.42.734.995 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+0.42.734.995 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+0.42.734.995 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+0.42.734.996 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+0.42.734.996 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+0.42.734.997 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+0.42.734.998 I srv  get_availabl: prompt cache update took 15.54 ms
+0.42.735.031 I slot launch_slot_: id  0 | task 472 | processing task, is_child = 0
+0.42.735.043 W slot   operator(): id  0 | task 472 | erased invalidated context checkpoint (pos_min = 246, pos_max = 246, n_tokens = 247, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.43.376.100 I slot create_check: id  0 | task 472 | created context checkpoint 1 of 32 (pos_min = 138, pos_max = 138, n_tokens = 139, size = 62.813 MiB)
+0.47.806.544 I slot print_timing: id  1 | task 452 | n_decoded =    100, tg =  14.35 t/s, tg_3s =  14.35 t/s
+0.48.770.527 I slot print_timing: id  0 | task 472 | n_decoded =    100, tg =  18.90 t/s, tg_3s =  18.90 t/s
+0.50.809.773 I slot print_timing: id  1 | task 452 | n_decoded =    156, tg =  15.65 t/s, tg_3s =  18.65 t/s
+0.51.824.359 I slot print_timing: id  0 | task 472 | n_decoded =    157, tg =  18.81 t/s, tg_3s =  18.67 t/s
+0.53.820.389 I slot print_timing: id  1 | task 452 | n_decoded =    212, tg =  16.33 t/s, tg_3s =  18.60 t/s
+0.54.836.996 I slot print_timing: id  0 | task 472 | n_decoded =    213, tg =  18.75 t/s, tg_3s =  18.59 t/s
+0.56.189.226 I slot print_timing: id  1 | task 452 | prompt eval time =    2415.01 ms /   452 tokens (    5.34 ms per token,   187.16 tokens per second)
+0.56.189.237 I slot print_timing: id  1 | task 452 |        eval time =   15350.09 ms /   256 tokens (   59.96 ms per token,    16.68 tokens per second)
+0.56.189.238 I slot print_timing: id  1 | task 452 |       total time =   17765.10 ms /   708 tokens
+0.56.189.239 I slot print_timing: id  1 | task 452 |    graphs reused =        654
+0.56.189.290 I slot      release: id  1 | task 452 | stop processing: n_tokens = 707, truncated = 0
+0.56.231.759 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 90971429059
+0.56.231.763 I srv  get_availabl: updating prompt cache
+0.56.231.809 W srv   prompt_save:  - saving prompt with length 707, total state size = 70.163 MiB (draft: 0.000 MiB)
+0.56.246.331 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+0.56.246.338 I srv        update:  - cache state: 11 prompts, 1418.910 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.56.246.340 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.56.246.342 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.56.246.342 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+0.56.246.342 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+0.56.246.343 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+0.56.246.344 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+0.56.246.344 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+0.56.246.345 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+0.56.246.345 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+0.56.246.346 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+0.56.246.347 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+0.56.246.348 I srv  get_availabl: prompt cache update took 14.58 ms
+0.56.246.381 I slot launch_slot_: id  1 | task 713 | processing task, is_child = 0
+0.56.246.393 W slot   operator(): id  1 | task 713 | erased invalidated context checkpoint (pos_min = 447, pos_max = 447, n_tokens = 448, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.57.057.346 I slot create_check: id  1 | task 713 | created context checkpoint 1 of 32 (pos_min = 182, pos_max = 182, n_tokens = 183, size = 62.813 MiB)
+0.57.868.868 I slot print_timing: id  0 | task 472 | n_decoded =    254, tg =  17.65 t/s, tg_3s =  13.52 t/s
+0.57.975.776 I slot print_timing: id  0 | task 472 | prompt eval time =     744.87 ms /   143 tokens (    5.21 ms per token,   191.98 tokens per second)
+0.57.975.782 I slot print_timing: id  0 | task 472 |        eval time =   14495.86 ms /   256 tokens (   56.62 ms per token,    17.66 tokens per second)
+0.57.975.783 I slot print_timing: id  0 | task 472 |       total time =   15240.73 ms /   399 tokens
+0.57.975.784 I slot print_timing: id  0 | task 472 |    graphs reused =        668
+0.57.975.810 I slot      release: id  0 | task 472 | stop processing: n_tokens = 398, truncated = 0
+0.58.017.926 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 90973215578
+0.58.017.928 I srv  get_availabl: updating prompt cache
+0.58.017.975 W srv   prompt_save:  - saving prompt with length 398, total state size = 66.951 MiB (draft: 0.000 MiB)
+0.58.032.152 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+0.58.032.161 I srv        update:  - cache state: 12 prompts, 1548.674 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+0.58.032.162 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+0.58.032.164 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+0.58.032.164 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+0.58.032.165 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+0.58.032.165 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+0.58.032.165 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+0.58.032.165 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+0.58.032.167 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+0.58.032.167 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+0.58.032.167 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+0.58.032.168 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+0.58.032.168 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+0.58.032.170 I srv  get_availabl: prompt cache update took 14.24 ms
+0.58.032.201 I slot launch_slot_: id  0 | task 732 | processing task, is_child = 0
+0.58.032.213 W slot   operator(): id  0 | task 732 | erased invalidated context checkpoint (pos_min = 138, pos_max = 138, n_tokens = 139, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+0.59.724.976 I slot create_check: id  0 | task 732 | created context checkpoint 1 of 32 (pos_min = 387, pos_max = 387, n_tokens = 388, size = 62.813 MiB)
+1.04.152.129 I slot print_timing: id  1 | task 713 | n_decoded =    100, tg =  14.32 t/s, tg_3s =  14.32 t/s
+1.05.112.027 I slot print_timing: id  0 | task 732 | n_decoded =    100, tg =  18.93 t/s, tg_3s =  18.93 t/s
+1.07.193.687 I slot print_timing: id  1 | task 713 | n_decoded =    157, tg =  15.66 t/s, tg_3s =  18.74 t/s
+1.08.153.745 I slot print_timing: id  0 | task 732 | n_decoded =    157, tg =  18.86 t/s, tg_3s =  18.74 t/s
+1.10.246.545 I slot print_timing: id  1 | task 713 | n_decoded =    214, tg =  16.36 t/s, tg_3s =  18.67 t/s
+1.11.202.841 I slot print_timing: id  0 | task 732 | n_decoded =    214, tg =  18.82 t/s, tg_3s =  18.69 t/s
+1.12.476.543 I slot print_timing: id  1 | task 713 | prompt eval time =     921.66 ms /   187 tokens (    4.93 ms per token,   202.90 tokens per second)
+1.12.476.549 I slot print_timing: id  1 | task 713 |        eval time =   15308.49 ms /   256 tokens (   59.80 ms per token,    16.72 tokens per second)
+1.12.476.550 I slot print_timing: id  1 | task 713 |       total time =   16230.14 ms /   443 tokens
+1.12.476.552 I slot print_timing: id  1 | task 713 |    graphs reused =        904
+1.12.476.583 I slot      release: id  1 | task 713 | stop processing: n_tokens = 442, truncated = 0
+1.12.519.320 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 90987716351
+1.12.519.324 I srv  get_availabl: updating prompt cache
+1.12.519.367 W srv   prompt_save:  - saving prompt with length 442, total state size = 67.408 MiB (draft: 0.000 MiB)
+1.12.533.162 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+1.12.533.170 I srv        update:  - cache state: 13 prompts, 1678.895 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.12.533.172 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.12.533.173 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.12.533.173 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.12.533.173 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.12.533.174 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.12.533.175 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.12.533.175 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.12.533.176 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.12.533.177 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.12.533.177 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.12.533.177 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.12.533.178 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.12.533.178 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.12.533.179 I srv  get_availabl: prompt cache update took 13.86 ms
+1.12.533.212 I slot launch_slot_: id  1 | task 973 | processing task, is_child = 0
+1.12.533.223 W slot   operator(): id  1 | task 973 | erased invalidated context checkpoint (pos_min = 182, pos_max = 182, n_tokens = 183, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.12.853.311 I slot create_check: id  1 | task 973 | created context checkpoint 1 of 32 (pos_min = 58, pos_max = 58, n_tokens = 59, size = 62.813 MiB)
+1.13.781.387 I slot print_timing: id  0 | task 732 | prompt eval time =    1797.03 ms /   392 tokens (    4.58 ms per token,   218.14 tokens per second)
+1.13.781.396 I slot print_timing: id  0 | task 732 |        eval time =   13952.13 ms /   256 tokens (   54.50 ms per token,    18.35 tokens per second)
+1.13.781.397 I slot print_timing: id  0 | task 732 |       total time =   15749.16 ms /   648 tokens
+1.13.781.398 I slot print_timing: id  0 | task 732 |    graphs reused =        918
+1.13.781.434 I slot      release: id  0 | task 732 | stop processing: n_tokens = 647, truncated = 0
+1.13.823.807 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 90989021202
+1.13.823.810 I srv  get_availabl: updating prompt cache
+1.13.823.858 W srv   prompt_save:  - saving prompt with length 647, total state size = 69.539 MiB (draft: 0.000 MiB)
+1.13.837.964 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+1.13.837.972 I srv        update:  - cache state: 14 prompts, 1811.248 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.13.837.974 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.13.837.976 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.13.837.976 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.13.837.977 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.13.837.977 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.13.837.978 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.13.837.979 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.13.837.979 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.13.837.980 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.13.837.980 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.13.837.981 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.13.837.981 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.13.837.982 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.13.837.982 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.13.837.983 I srv  get_availabl: prompt cache update took 14.17 ms
+1.13.838.015 I slot launch_slot_: id  0 | task 992 | processing task, is_child = 0
+1.13.838.028 W slot   operator(): id  0 | task 992 | erased invalidated context checkpoint (pos_min = 387, pos_max = 387, n_tokens = 388, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.14.080.107 I slot create_check: id  0 | task 992 | created context checkpoint 1 of 32 (pos_min = 40, pos_max = 40, n_tokens = 41, size = 62.813 MiB)
+1.14.937.743 I slot print_timing: id  0 | task 992 | prompt eval time =     344.81 ms /    45 tokens (    7.66 ms per token,   130.51 tokens per second)
+1.14.937.750 I slot print_timing: id  0 | task 992 |        eval time =     754.89 ms /    15 tokens (   50.33 ms per token,    19.87 tokens per second)
+1.14.937.751 I slot print_timing: id  0 | task 992 |       total time =    1099.70 ms /    60 tokens
+1.14.937.753 I slot print_timing: id  0 | task 992 |    graphs reused =        932
+1.14.937.777 I slot      release: id  0 | task 992 | stop processing: n_tokens = 59, truncated = 0
+1.14.979.762 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 90990177545
+1.14.979.766 I srv  get_availabl: updating prompt cache
+1.14.979.809 W srv   prompt_save:  - saving prompt with length 59, total state size = 63.427 MiB (draft: 0.000 MiB)
+1.14.993.926 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+1.14.993.934 I srv        update:  - cache state: 15 prompts, 1937.488 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.14.993.935 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.14.993.936 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.14.993.936 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.14.993.937 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.14.993.938 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.14.993.938 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.14.993.939 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.14.993.939 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.14.993.940 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.14.993.941 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.14.993.941 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.14.993.941 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.14.993.942 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.14.993.943 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.14.993.943 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.14.993.944 I srv  get_availabl: prompt cache update took 14.18 ms
+1.14.993.975 I slot launch_slot_: id  0 | task 1010 | processing task, is_child = 0
+1.14.993.989 W slot   operator(): id  0 | task 1010 | erased invalidated context checkpoint (pos_min = 40, pos_max = 40, n_tokens = 41, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.16.222.219 I slot create_check: id  0 | task 1010 | created context checkpoint 1 of 32 (pos_min = 279, pos_max = 279, n_tokens = 280, size = 62.813 MiB)
+1.16.648.724 I slot print_timing: id  0 | task 1010 | prompt eval time =    1334.93 ms /   284 tokens (    4.70 ms per token,   212.75 tokens per second)
+1.16.648.731 I slot print_timing: id  0 | task 1010 |        eval time =     319.79 ms /     7 tokens (   45.68 ms per token,    21.89 tokens per second)
+1.16.648.731 I slot print_timing: id  0 | task 1010 |       total time =    1654.72 ms /   291 tokens
+1.16.648.733 I slot print_timing: id  0 | task 1010 |    graphs reused =        938
+1.16.648.770 I slot      release: id  0 | task 1010 | stop processing: n_tokens = 290, truncated = 0
+1.16.690.919 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 90991888538
+1.16.690.922 I srv  get_availabl: updating prompt cache
+1.16.690.976 W srv   prompt_save:  - saving prompt with length 290, total state size = 65.828 MiB (draft: 0.000 MiB)
+1.16.705.590 I srv          load:  - looking for better prompt, base f_keep = 0.048, sim = 0.047
+1.16.705.598 I srv        update:  - cache state: 16 prompts, 2066.129 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.16.705.600 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.16.705.601 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.16.705.601 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.16.705.602 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.16.705.603 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.16.705.603 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.16.705.604 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.16.705.605 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.16.705.606 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.16.705.606 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.16.705.607 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.16.705.607 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.16.705.608 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.16.705.608 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.16.705.609 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.16.705.609 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+1.16.705.610 I srv  get_availabl: prompt cache update took 14.69 ms
+1.16.705.645 I slot launch_slot_: id  0 | task 1020 | processing task, is_child = 0
+1.16.705.659 W slot   operator(): id  0 | task 1020 | erased invalidated context checkpoint (pos_min = 279, pos_max = 279, n_tokens = 280, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.17.965.769 I slot create_check: id  0 | task 1020 | created context checkpoint 1 of 32 (pos_min = 290, pos_max = 290, n_tokens = 291, size = 62.813 MiB)
+1.18.397.498 I slot print_timing: id  0 | task 1020 | prompt eval time =    1367.16 ms /   295 tokens (    4.63 ms per token,   215.78 tokens per second)
+1.18.397.504 I slot print_timing: id  0 | task 1020 |        eval time =     324.67 ms /     7 tokens (   46.38 ms per token,    21.56 tokens per second)
+1.18.397.505 I slot print_timing: id  0 | task 1020 |       total time =    1691.82 ms /   302 tokens
+1.18.397.506 I slot print_timing: id  0 | task 1020 |    graphs reused =        944
+1.18.397.543 I slot      release: id  0 | task 1020 | stop processing: n_tokens = 301, truncated = 0
+1.18.439.815 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 90993637311
+1.18.439.819 I srv  get_availabl: updating prompt cache
+1.18.439.864 W srv   prompt_save:  - saving prompt with length 301, total state size = 65.942 MiB (draft: 0.000 MiB)
+1.18.453.298 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+1.18.453.306 I srv        update:  - cache state: 17 prompts, 2194.884 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.18.453.309 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.18.453.309 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.18.453.310 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.18.453.311 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.18.453.311 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.18.453.311 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.18.453.312 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.18.453.312 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.18.453.313 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.18.453.314 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.18.453.314 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.18.453.314 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.18.453.315 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.18.453.315 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.18.453.316 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.18.453.316 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+1.18.453.317 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+1.18.453.319 I srv  get_availabl: prompt cache update took 13.50 ms
+1.18.453.351 I slot launch_slot_: id  0 | task 1030 | processing task, is_child = 0
+1.18.453.363 W slot   operator(): id  0 | task 1030 | erased invalidated context checkpoint (pos_min = 290, pos_max = 290, n_tokens = 291, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.19.505.293 I slot create_check: id  0 | task 1030 | created context checkpoint 1 of 32 (pos_min = 245, pos_max = 245, n_tokens = 246, size = 62.813 MiB)
+1.22.071.609 I slot print_timing: id  1 | task 973 | n_decoded =    100, tg =  10.98 t/s, tg_3s =  10.98 t/s
+1.24.900.691 I slot print_timing: id  0 | task 1030 | n_decoded =    100, tg =  18.89 t/s, tg_3s =  18.89 t/s
+1.25.114.926 I slot print_timing: id  1 | task 973 | n_decoded =    157, tg =  12.92 t/s, tg_3s =  18.73 t/s
+1.27.901.954 I slot print_timing: id  0 | task 1030 | n_decoded =    156, tg =  18.81 t/s, tg_3s =  18.66 t/s
+1.28.117.150 I slot print_timing: id  1 | task 973 | n_decoded =    213, tg =  14.06 t/s, tg_3s =  18.65 t/s
+1.30.426.228 I slot print_timing: id  1 | task 973 | prompt eval time =     431.46 ms /    63 tokens (    6.85 ms per token,   146.01 tokens per second)
+1.30.426.240 I slot print_timing: id  1 | task 973 |        eval time =   17461.53 ms /   256 tokens (   68.21 ms per token,    14.66 tokens per second)
+1.30.426.241 I slot print_timing: id  1 | task 973 |       total time =   17892.99 ms /   319 tokens
+1.30.426.242 I slot print_timing: id  1 | task 973 |    graphs reused =       1145
+1.30.426.274 I slot      release: id  1 | task 973 | stop processing: n_tokens = 318, truncated = 0
+1.30.468.717 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91005666042
+1.30.468.719 I srv  get_availabl: updating prompt cache
+1.30.468.760 W srv   prompt_save:  - saving prompt with length 318, total state size = 66.119 MiB (draft: 0.000 MiB)
+1.30.483.320 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+1.30.483.330 I srv        update:  - cache state: 18 prompts, 2323.817 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.30.483.331 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.30.483.331 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.30.483.332 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.30.483.332 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.30.483.332 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.30.483.333 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.30.483.333 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.30.483.333 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.30.483.334 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.30.483.334 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.30.483.334 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.30.483.334 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.30.483.335 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.30.483.335 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.30.483.335 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.30.483.336 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+1.30.483.336 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+1.30.483.336 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+1.30.483.337 I srv  get_availabl: prompt cache update took 14.62 ms
+1.30.483.371 I slot launch_slot_: id  1 | task 1236 | processing task, is_child = 0
+1.30.483.383 W slot   operator(): id  1 | task 1236 | erased invalidated context checkpoint (pos_min = 58, pos_max = 58, n_tokens = 59, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.31.650.852 I slot print_timing: id  0 | task 1030 | n_decoded =    205, tg =  17.02 t/s, tg_3s =  13.07 t/s
+1.31.658.568 I slot create_check: id  1 | task 1236 | created context checkpoint 1 of 32 (pos_min = 265, pos_max = 265, n_tokens = 266, size = 62.813 MiB)
+1.32.096.327 I slot print_timing: id  1 | task 1236 | prompt eval time =    1287.94 ms /   270 tokens (    4.77 ms per token,   209.64 tokens per second)
+1.32.096.331 I slot print_timing: id  1 | task 1236 |        eval time =     324.99 ms /     7 tokens (   46.43 ms per token,    21.54 tokens per second)
+1.32.096.332 I slot print_timing: id  1 | task 1236 |       total time =    1612.93 ms /   277 tokens
+1.32.096.333 I slot print_timing: id  1 | task 1236 |    graphs reused =       1150
+1.32.096.364 I slot      release: id  1 | task 1236 | stop processing: n_tokens = 276, truncated = 0
+1.32.138.863 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91007336132
+1.32.138.867 I srv  get_availabl: updating prompt cache
+1.32.138.913 W srv   prompt_save:  - saving prompt with length 276, total state size = 65.682 MiB (draft: 0.000 MiB)
+1.32.153.187 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+1.32.153.197 I srv        update:  - cache state: 19 prompts, 2452.312 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.32.153.199 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.32.153.200 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.32.153.201 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.32.153.201 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.32.153.201 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.32.153.202 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.32.153.203 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.32.153.203 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.32.153.205 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.32.153.205 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.32.153.206 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.32.153.206 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.32.153.207 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.32.153.207 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.32.153.207 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.32.153.208 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+1.32.153.208 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+1.32.153.208 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+1.32.153.209 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+1.32.153.210 I srv  get_availabl: prompt cache update took 14.34 ms
+1.32.153.248 I slot launch_slot_: id  1 | task 1246 | processing task, is_child = 0
+1.32.153.262 W slot   operator(): id  1 | task 1246 | erased invalidated context checkpoint (pos_min = 265, pos_max = 265, n_tokens = 266, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.32.430.229 I slot create_check: id  1 | task 1246 | created context checkpoint 1 of 32 (pos_min = 49, pos_max = 49, n_tokens = 50, size = 62.813 MiB)
+1.34.691.092 I slot print_timing: id  0 | task 1030 | n_decoded =    255, tg =  16.90 t/s, tg_3s =  16.45 t/s
+1.34.745.332 I slot print_timing: id  0 | task 1030 | prompt eval time =    1153.37 ms /   250 tokens (    4.61 ms per token,   216.76 tokens per second)
+1.34.745.337 I slot print_timing: id  0 | task 1030 |        eval time =   15138.59 ms /   256 tokens (   59.14 ms per token,    16.91 tokens per second)
+1.34.745.337 I slot print_timing: id  0 | task 1030 |       total time =   16291.96 ms /   506 tokens
+1.34.745.339 I slot print_timing: id  0 | task 1030 |    graphs reused =       1190
+1.34.745.371 I slot      release: id  0 | task 1030 | stop processing: n_tokens = 505, truncated = 0
+1.34.787.546 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91009985138
+1.34.787.550 I srv  get_availabl: updating prompt cache
+1.34.787.594 W srv   prompt_save:  - saving prompt with length 505, total state size = 68.063 MiB (draft: 0.000 MiB)
+1.34.802.659 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+1.34.802.668 I srv        update:  - cache state: 20 prompts, 2583.189 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.34.802.670 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.34.802.670 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.34.802.670 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.34.802.671 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.34.802.671 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.34.802.671 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.34.802.672 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.34.802.672 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.34.802.672 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.34.802.673 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.34.802.673 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.34.802.673 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.34.802.673 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.34.802.673 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.34.802.674 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.34.802.674 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+1.34.802.674 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+1.34.802.674 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+1.34.802.675 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+1.34.802.676 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+1.34.802.677 I srv  get_availabl: prompt cache update took 15.13 ms
+1.34.802.709 I slot launch_slot_: id  0 | task 1291 | processing task, is_child = 0
+1.34.802.719 W slot   operator(): id  0 | task 1291 | erased invalidated context checkpoint (pos_min = 245, pos_max = 245, n_tokens = 246, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.35.892.206 I slot create_check: id  0 | task 1291 | created context checkpoint 1 of 32 (pos_min = 247, pos_max = 247, n_tokens = 248, size = 62.813 MiB)
+1.38.923.806 I slot print_timing: id  1 | task 1246 | n_decoded =    100, tg =  15.67 t/s, tg_3s =  15.67 t/s
+1.41.271.377 I slot print_timing: id  0 | task 1291 | n_decoded =    100, tg =  18.97 t/s, tg_3s =  18.97 t/s
+1.41.968.997 I slot print_timing: id  1 | task 1246 | n_decoded =    157, tg =  16.65 t/s, tg_3s =  18.72 t/s
+1.44.323.976 I slot print_timing: id  0 | task 1291 | n_decoded =    157, tg =  18.86 t/s, tg_3s =  18.67 t/s
+1.45.020.801 I slot print_timing: id  1 | task 1246 | n_decoded =    214, tg =  17.15 t/s, tg_3s =  18.68 t/s
+1.47.262.724 I slot print_timing: id  1 | task 1246 | prompt eval time =     387.01 ms /    54 tokens (    7.17 ms per token,   139.53 tokens per second)
+1.47.262.729 I slot print_timing: id  1 | task 1246 |        eval time =   14722.44 ms /   256 tokens (   57.51 ms per token,    17.39 tokens per second)
+1.47.262.730 I slot print_timing: id  1 | task 1246 |       total time =   15109.45 ms /   310 tokens
+1.47.262.731 I slot print_timing: id  1 | task 1246 |    graphs reused =       1400
+1.47.262.756 I slot      release: id  1 | task 1246 | stop processing: n_tokens = 309, truncated = 0
+1.47.305.333 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91022502524
+1.47.305.337 I srv  get_availabl: updating prompt cache
+1.47.305.378 W srv   prompt_save:  - saving prompt with length 309, total state size = 66.026 MiB (draft: 0.000 MiB)
+1.47.319.294 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+1.47.319.303 I srv        update:  - cache state: 21 prompts, 2712.027 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.47.319.305 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.47.319.306 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.47.319.306 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.47.319.307 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.47.319.307 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.47.319.307 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.47.319.307 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.47.319.308 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.47.319.308 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.47.319.308 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.47.319.309 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.47.319.309 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.47.319.309 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.47.319.310 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.47.319.311 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.47.319.311 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+1.47.319.311 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+1.47.319.312 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+1.47.319.312 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+1.47.319.312 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+1.47.319.312 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+1.47.319.314 I srv  get_availabl: prompt cache update took 13.98 ms
+1.47.319.347 I slot launch_slot_: id  1 | task 1506 | processing task, is_child = 0
+1.47.319.359 W slot   operator(): id  1 | task 1506 | erased invalidated context checkpoint (pos_min = 49, pos_max = 49, n_tokens = 50, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.48.529.027 I slot print_timing: id  0 | task 1291 | n_decoded =    214, tg =  17.08 t/s, tg_3s =  13.56 t/s
+1.48.536.826 I slot create_check: id  1 | task 1506 | created context checkpoint 1 of 32 (pos_min = 276, pos_max = 276, n_tokens = 277, size = 62.813 MiB)
+1.48.977.732 I slot print_timing: id  1 | task 1506 | prompt eval time =    1329.29 ms /   281 tokens (    4.73 ms per token,   211.39 tokens per second)
+1.48.977.737 I slot print_timing: id  1 | task 1506 |        eval time =     329.08 ms /     7 tokens (   47.01 ms per token,    21.27 tokens per second)
+1.48.977.738 I slot print_timing: id  1 | task 1506 |       total time =    1658.36 ms /   288 tokens
+1.48.977.739 I slot print_timing: id  1 | task 1506 |    graphs reused =       1405
+1.48.977.770 I slot      release: id  1 | task 1506 | stop processing: n_tokens = 287, truncated = 0
+1.49.020.349 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91024217538
+1.49.020.353 I srv  get_availabl: updating prompt cache
+1.49.020.393 W srv   prompt_save:  - saving prompt with length 287, total state size = 65.797 MiB (draft: 0.000 MiB)
+1.49.035.279 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+1.49.035.291 I srv        update:  - cache state: 22 prompts, 2840.637 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.49.035.294 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.49.035.295 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.49.035.295 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.49.035.296 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.49.035.297 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.49.035.297 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.49.035.298 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.49.035.298 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.49.035.299 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.49.035.299 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.49.035.300 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.49.035.300 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.49.035.301 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.49.035.301 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.49.035.302 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.49.035.302 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+1.49.035.302 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+1.49.035.302 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+1.49.035.303 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+1.49.035.303 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+1.49.035.303 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+1.49.035.303 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+1.49.035.305 I srv  get_availabl: prompt cache update took 14.95 ms
+1.49.035.334 I slot launch_slot_: id  1 | task 1516 | processing task, is_child = 0
+1.49.035.345 W slot   operator(): id  1 | task 1516 | erased invalidated context checkpoint (pos_min = 276, pos_max = 276, n_tokens = 277, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.49.304.316 I slot create_check: id  1 | task 1516 | created context checkpoint 1 of 32 (pos_min = 48, pos_max = 48, n_tokens = 49, size = 62.813 MiB)
+1.51.128.425 I slot print_timing: id  0 | task 1291 | prompt eval time =    1196.13 ms /   252 tokens (    4.75 ms per token,   210.68 tokens per second)
+1.51.128.434 I slot print_timing: id  0 | task 1291 |        eval time =   15129.56 ms /   256 tokens (   59.10 ms per token,    16.92 tokens per second)
+1.51.128.434 I slot print_timing: id  0 | task 1291 |       total time =   16325.69 ms /   508 tokens
+1.51.128.436 I slot print_timing: id  0 | task 1291 |    graphs reused =       1436
+1.51.128.468 I slot      release: id  0 | task 1291 | stop processing: n_tokens = 507, truncated = 0
+1.51.170.317 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91026368236
+1.51.170.320 I srv  get_availabl: updating prompt cache
+1.51.170.368 W srv   prompt_save:  - saving prompt with length 507, total state size = 68.084 MiB (draft: 0.000 MiB)
+1.51.184.478 I srv          load:  - looking for better prompt, base f_keep = 0.028, sim = 0.065
+1.51.184.488 I srv        update:  - cache state: 23 prompts, 2971.534 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.51.184.490 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.51.184.491 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.51.184.492 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.51.184.492 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.51.184.493 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.51.184.493 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.51.184.494 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.51.184.495 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.51.184.495 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.51.184.496 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.51.184.496 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.51.184.497 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.51.184.498 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.51.184.498 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.51.184.498 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.51.184.499 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+1.51.184.499 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+1.51.184.500 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+1.51.184.501 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+1.51.184.501 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+1.51.184.502 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+1.51.184.503 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+1.51.184.503 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+1.51.184.505 I srv  get_availabl: prompt cache update took 14.18 ms
+1.51.184.538 I slot launch_slot_: id  0 | task 1552 | processing task, is_child = 0
+1.51.184.551 W slot   operator(): id  0 | task 1552 | erased invalidated context checkpoint (pos_min = 247, pos_max = 247, n_tokens = 248, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.52.134.239 I slot create_check: id  0 | task 1552 | created context checkpoint 1 of 32 (pos_min = 211, pos_max = 211, n_tokens = 212, size = 62.813 MiB)
+1.52.562.673 I slot print_timing: id  0 | task 1552 | prompt eval time =    1055.12 ms /   216 tokens (    4.88 ms per token,   204.72 tokens per second)
+1.52.562.677 I slot print_timing: id  0 | task 1552 |        eval time =     322.99 ms /     7 tokens (   46.14 ms per token,    21.67 tokens per second)
+1.52.562.677 I slot print_timing: id  0 | task 1552 |       total time =    1378.11 ms /   223 tokens
+1.52.562.678 I slot print_timing: id  0 | task 1552 |    graphs reused =       1442
+1.52.562.711 I slot      release: id  0 | task 1552 | stop processing: n_tokens = 222, truncated = 0
+1.52.604.864 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91027802479
+1.52.604.867 I srv  get_availabl: updating prompt cache
+1.52.604.911 W srv   prompt_save:  - saving prompt with length 222, total state size = 65.121 MiB (draft: 0.000 MiB)
+1.52.618.856 I srv          load:  - looking for better prompt, base f_keep = 0.063, sim = 0.064
+1.52.618.865 I srv        update:  - cache state: 24 prompts, 3099.469 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.52.618.866 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.52.618.867 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.52.618.867 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.52.618.867 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.52.618.868 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.52.618.868 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.52.618.868 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.52.618.869 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.52.618.869 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.52.618.869 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.52.618.869 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.52.618.870 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.52.618.870 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.52.618.870 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.52.618.870 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.52.618.871 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+1.52.618.871 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+1.52.618.871 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+1.52.618.871 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+1.52.618.872 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+1.52.618.872 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+1.52.618.872 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+1.52.618.873 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+1.52.618.873 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+1.52.618.874 I srv  get_availabl: prompt cache update took 14.01 ms
+1.52.618.907 I slot launch_slot_: id  0 | task 1562 | processing task, is_child = 0
+1.52.618.920 W slot   operator(): id  0 | task 1562 | erased invalidated context checkpoint (pos_min = 211, pos_max = 211, n_tokens = 212, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.53.581.830 I slot create_check: id  0 | task 1562 | created context checkpoint 1 of 32 (pos_min = 213, pos_max = 213, n_tokens = 214, size = 62.813 MiB)
+1.54.009.286 I slot print_timing: id  0 | task 1562 | prompt eval time =    1068.23 ms /   218 tokens (    4.90 ms per token,   204.08 tokens per second)
+1.54.009.292 I slot print_timing: id  0 | task 1562 |        eval time =     322.13 ms /     7 tokens (   46.02 ms per token,    21.73 tokens per second)
+1.54.009.292 I slot print_timing: id  0 | task 1562 |       total time =    1390.36 ms /   225 tokens
+1.54.009.294 I slot print_timing: id  0 | task 1562 |    graphs reused =       1448
+1.54.009.328 I slot      release: id  0 | task 1562 | stop processing: n_tokens = 224, truncated = 0
+1.54.051.318 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91029249095
+1.54.051.320 I srv  get_availabl: updating prompt cache
+1.54.051.364 W srv   prompt_save:  - saving prompt with length 224, total state size = 65.142 MiB (draft: 0.000 MiB)
+1.54.065.572 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+1.54.065.582 I srv        update:  - cache state: 25 prompts, 3227.424 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.54.065.584 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.54.065.585 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.54.065.586 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.54.065.586 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.54.065.587 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.54.065.587 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.54.065.588 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.54.065.588 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.54.065.589 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.54.065.589 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.54.065.589 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.54.065.590 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.54.065.590 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.54.065.591 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.54.065.591 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.54.065.592 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+1.54.065.593 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+1.54.065.593 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+1.54.065.593 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+1.54.065.594 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+1.54.065.594 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+1.54.065.595 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+1.54.065.595 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+1.54.065.596 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+1.54.065.596 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+1.54.065.597 I srv  get_availabl: prompt cache update took 14.28 ms
+1.54.065.628 I slot launch_slot_: id  0 | task 1572 | processing task, is_child = 0
+1.54.065.638 W slot   operator(): id  0 | task 1572 | erased invalidated context checkpoint (pos_min = 213, pos_max = 213, n_tokens = 214, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.54.303.291 I slot create_check: id  0 | task 1572 | created context checkpoint 1 of 32 (pos_min = 40, pos_max = 40, n_tokens = 41, size = 62.813 MiB)
+1.55.205.610 I slot print_timing: id  0 | task 1572 | prompt eval time =     339.16 ms /    45 tokens (    7.54 ms per token,   132.68 tokens per second)
+1.55.205.618 I slot print_timing: id  0 | task 1572 |        eval time =     800.80 ms /    16 tokens (   50.05 ms per token,    19.98 tokens per second)
+1.55.205.618 I slot print_timing: id  0 | task 1572 |       total time =    1139.96 ms /    61 tokens
+1.55.205.619 I slot print_timing: id  0 | task 1572 |    graphs reused =       1463
+1.55.205.644 I slot      release: id  0 | task 1572 | stop processing: n_tokens = 60, truncated = 0
+1.55.247.888 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91030445412
+1.55.247.892 I srv  get_availabl: updating prompt cache
+1.55.247.933 W srv   prompt_save:  - saving prompt with length 60, total state size = 63.437 MiB (draft: 0.000 MiB)
+1.55.262.129 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+1.55.262.140 I srv        update:  - cache state: 26 prompts, 3353.674 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+1.55.262.142 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+1.55.262.142 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+1.55.262.143 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+1.55.262.143 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+1.55.262.144 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+1.55.262.144 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+1.55.262.145 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+1.55.262.146 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+1.55.262.146 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+1.55.262.147 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+1.55.262.147 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+1.55.262.148 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+1.55.262.148 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+1.55.262.149 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+1.55.262.149 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+1.55.262.150 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+1.55.262.150 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+1.55.262.151 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+1.55.262.152 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+1.55.262.152 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+1.55.262.152 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+1.55.262.153 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+1.55.262.153 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+1.55.262.154 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+1.55.262.154 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+1.55.262.154 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+1.55.262.156 I srv  get_availabl: prompt cache update took 14.26 ms
+1.55.262.186 I slot launch_slot_: id  0 | task 1591 | processing task, is_child = 0
+1.55.262.197 W slot   operator(): id  0 | task 1591 | erased invalidated context checkpoint (pos_min = 40, pos_max = 40, n_tokens = 41, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+1.55.833.326 I slot create_check: id  0 | task 1591 | created context checkpoint 1 of 32 (pos_min = 121, pos_max = 121, n_tokens = 122, size = 62.813 MiB)
+1.57.430.701 I slot print_timing: id  1 | task 1516 | n_decoded =    100, tg =  12.47 t/s, tg_3s =  12.47 t/s
+2.00.455.710 I slot print_timing: id  1 | task 1516 | n_decoded =    157, tg =  14.22 t/s, tg_3s =  18.84 t/s
+2.01.199.652 I slot print_timing: id  0 | task 1591 | n_decoded =    100, tg =  19.00 t/s, tg_3s =  19.00 t/s
+2.03.492.412 I slot print_timing: id  1 | task 1516 | n_decoded =    214, tg =  15.20 t/s, tg_3s =  18.77 t/s
+2.04.238.177 I slot print_timing: id  0 | task 1591 | n_decoded =    157, tg =  18.91 t/s, tg_3s =  18.76 t/s
+2.05.734.309 I slot print_timing: id  1 | task 1516 | prompt eval time =     378.99 ms /    53 tokens (    7.15 ms per token,   139.84 tokens per second)
+2.05.734.317 I slot print_timing: id  1 | task 1516 |        eval time =   16319.96 ms /   256 tokens (   63.75 ms per token,    15.69 tokens per second)
+2.05.734.317 I slot print_timing: id  1 | task 1516 |       total time =   16698.95 ms /   309 tokens
+2.05.734.319 I slot print_timing: id  1 | task 1516 |    graphs reused =       1646
+2.05.734.343 I slot      release: id  1 | task 1516 | stop processing: n_tokens = 308, truncated = 0
+2.05.776.631 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91040974111
+2.05.776.634 I srv  get_availabl: updating prompt cache
+2.05.776.679 W srv   prompt_save:  - saving prompt with length 308, total state size = 66.015 MiB (draft: 0.000 MiB)
+2.05.790.577 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+2.05.790.588 I srv        update:  - cache state: 27 prompts, 3482.503 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+2.05.790.590 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+2.05.790.591 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+2.05.790.591 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+2.05.790.591 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+2.05.790.592 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+2.05.790.592 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+2.05.790.593 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+2.05.790.594 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+2.05.790.594 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+2.05.790.595 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+2.05.790.595 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+2.05.790.595 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+2.05.790.596 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+2.05.790.596 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+2.05.790.597 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+2.05.790.597 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+2.05.790.597 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+2.05.790.597 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+2.05.790.598 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+2.05.790.598 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+2.05.790.598 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+2.05.790.599 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+2.05.790.600 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+2.05.790.601 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+2.05.790.601 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+2.05.790.602 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+2.05.790.602 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+2.05.790.604 I srv  get_availabl: prompt cache update took 13.97 ms
+2.05.790.638 I slot launch_slot_: id  1 | task 1779 | processing task, is_child = 0
+2.05.790.650 W slot   operator(): id  1 | task 1779 | erased invalidated context checkpoint (pos_min = 48, pos_max = 48, n_tokens = 49, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+2.06.424.666 I slot create_check: id  1 | task 1779 | created context checkpoint 1 of 32 (pos_min = 132, pos_max = 132, n_tokens = 133, size = 62.813 MiB)
+2.07.287.369 I slot print_timing: id  0 | task 1591 | n_decoded =    202, tg =  17.80 t/s, tg_3s =  14.76 t/s
+2.10.182.889 I slot print_timing: id  0 | task 1591 | prompt eval time =     673.85 ms /   126 tokens (    5.35 ms per token,   186.98 tokens per second)
+2.10.182.895 I slot print_timing: id  0 | task 1591 |        eval time =   14246.82 ms /   256 tokens (   55.65 ms per token,    17.97 tokens per second)
+2.10.182.896 I slot print_timing: id  0 | task 1591 |       total time =   14920.67 ms /   382 tokens
+2.10.182.897 I slot print_timing: id  0 | task 1591 |    graphs reused =       1713
+2.10.182.921 I slot      release: id  0 | task 1591 | stop processing: n_tokens = 381, truncated = 0
+2.10.225.274 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91045422689
+2.10.225.277 I srv  get_availabl: updating prompt cache
+2.10.225.339 W srv   prompt_save:  - saving prompt with length 381, total state size = 66.774 MiB (draft: 0.000 MiB)
+2.10.239.375 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+2.10.239.386 I srv        update:  - cache state: 28 prompts, 3612.090 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+2.10.239.388 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+2.10.239.389 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+2.10.239.390 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+2.10.239.390 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+2.10.239.391 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+2.10.239.391 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+2.10.239.391 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+2.10.239.392 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+2.10.239.393 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+2.10.239.393 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+2.10.239.394 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+2.10.239.394 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+2.10.239.395 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+2.10.239.396 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+2.10.239.396 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+2.10.239.397 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+2.10.239.397 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+2.10.239.398 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+2.10.239.399 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+2.10.239.399 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+2.10.239.399 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+2.10.239.400 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+2.10.239.401 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+2.10.239.401 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+2.10.239.402 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+2.10.239.402 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+2.10.239.403 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+2.10.239.403 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+2.10.239.405 I srv  get_availabl: prompt cache update took 14.13 ms
+2.10.239.437 I slot launch_slot_: id  0 | task 1851 | processing task, is_child = 0
+2.10.239.450 W slot   operator(): id  0 | task 1851 | erased invalidated context checkpoint (pos_min = 121, pos_max = 121, n_tokens = 122, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+2.11.273.267 I slot create_check: id  0 | task 1851 | created context checkpoint 1 of 32 (pos_min = 237, pos_max = 237, n_tokens = 238, size = 62.813 MiB)
+2.12.863.582 I slot print_timing: id  1 | task 1779 | n_decoded =    100, tg =  15.81 t/s, tg_3s =  15.81 t/s
+2.15.903.022 I slot print_timing: id  1 | task 1779 | n_decoded =    157, tg =  16.76 t/s, tg_3s =  18.75 t/s
+2.16.650.353 I slot print_timing: id  0 | task 1851 | n_decoded =    100, tg =  18.97 t/s, tg_3s =  18.97 t/s
+2.18.945.422 I slot print_timing: id  1 | task 1779 | n_decoded =    214, tg =  17.25 t/s, tg_3s =  18.74 t/s
+2.19.698.154 I slot print_timing: id  0 | task 1851 | n_decoded =    157, tg =  18.87 t/s, tg_3s =  18.70 t/s
+2.21.185.685 I slot print_timing: id  1 | task 1779 | prompt eval time =     746.60 ms /   137 tokens (    5.45 ms per token,   183.50 tokens per second)
+2.21.185.692 I slot print_timing: id  1 | task 1779 |        eval time =   14648.43 ms /   256 tokens (   57.22 ms per token,    17.48 tokens per second)
+2.21.185.693 I slot print_timing: id  1 | task 1779 |       total time =   15395.03 ms /   393 tokens
+2.21.185.695 I slot print_timing: id  1 | task 1779 |    graphs reused =       1896
+2.21.185.724 I slot      release: id  1 | task 1779 | stop processing: n_tokens = 392, truncated = 0
+2.21.228.378 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91056425491
+2.21.228.385 I srv  get_availabl: updating prompt cache
+2.21.228.429 W srv   prompt_save:  - saving prompt with length 392, total state size = 66.888 MiB (draft: 0.000 MiB)
+2.21.242.819 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+2.21.242.831 I srv        update:  - cache state: 29 prompts, 3741.791 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+2.21.242.833 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+2.21.242.834 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+2.21.242.834 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+2.21.242.835 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+2.21.242.835 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+2.21.242.836 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+2.21.242.837 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+2.21.242.837 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+2.21.242.838 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+2.21.242.838 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+2.21.242.839 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+2.21.242.840 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+2.21.242.840 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+2.21.242.841 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+2.21.242.841 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+2.21.242.842 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+2.21.242.843 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+2.21.242.843 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+2.21.242.844 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+2.21.242.844 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+2.21.242.845 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+2.21.242.846 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+2.21.242.847 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+2.21.242.847 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+2.21.242.848 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+2.21.242.849 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+2.21.242.850 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+2.21.242.850 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+2.21.242.850 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+2.21.242.852 I srv  get_availabl: prompt cache update took 14.47 ms
+2.21.242.888 I slot launch_slot_: id  1 | task 2039 | processing task, is_child = 0
+2.21.242.903 W slot   operator(): id  1 | task 2039 | erased invalidated context checkpoint (pos_min = 132, pos_max = 132, n_tokens = 133, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+2.21.942.588 I slot create_check: id  1 | task 2039 | created context checkpoint 1 of 32 (pos_min = 146, pos_max = 146, n_tokens = 147, size = 62.813 MiB)
+2.22.380.775 I slot print_timing: id  1 | task 2039 | prompt eval time =     811.34 ms /   151 tokens (    5.37 ms per token,   186.11 tokens per second)
+2.22.380.784 I slot print_timing: id  1 | task 2039 |        eval time =     326.52 ms /     7 tokens (   46.65 ms per token,    21.44 tokens per second)
+2.22.380.785 I slot print_timing: id  1 | task 2039 |       total time =    1137.86 ms /   158 tokens
+2.22.380.786 I slot print_timing: id  1 | task 2039 |    graphs reused =       1901
+2.22.380.815 I slot      release: id  1 | task 2039 | stop processing: n_tokens = 157, truncated = 0
+2.22.423.509 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91057620583
+2.22.423.515 I srv  get_availabl: updating prompt cache
+2.22.423.553 W srv   prompt_save:  - saving prompt with length 157, total state size = 64.445 MiB (draft: 0.000 MiB)
+2.22.438.194 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+2.22.438.205 I srv        update:  - cache state: 30 prompts, 3869.050 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+2.22.438.207 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+2.22.438.207 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+2.22.438.208 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+2.22.438.209 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+2.22.438.210 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+2.22.438.210 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+2.22.438.211 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+2.22.438.211 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+2.22.438.212 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+2.22.438.212 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+2.22.438.212 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+2.22.438.213 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+2.22.438.213 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+2.22.438.213 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+2.22.438.214 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+2.22.438.214 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+2.22.438.215 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+2.22.438.215 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+2.22.438.216 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+2.22.438.216 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+2.22.438.216 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+2.22.438.217 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+2.22.438.217 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+2.22.438.218 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+2.22.438.218 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+2.22.438.219 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+2.22.438.219 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+2.22.438.219 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+2.22.438.220 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+2.22.438.220 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+2.22.438.221 I srv  get_availabl: prompt cache update took 14.71 ms
+2.22.438.261 I slot launch_slot_: id  1 | task 2049 | processing task, is_child = 0
+2.22.438.274 W slot   operator(): id  1 | task 2049 | erased invalidated context checkpoint (pos_min = 146, pos_max = 146, n_tokens = 147, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+2.22.658.230 I slot create_check: id  1 | task 2049 | created context checkpoint 1 of 32 (pos_min = 30, pos_max = 30, n_tokens = 31, size = 62.813 MiB)
+2.22.770.506 I slot print_timing: id  0 | task 1851 | n_decoded =    197, tg =  17.29 t/s, tg_3s =  13.02 t/s
+2.23.366.032 I slot print_timing: id  1 | task 2049 | prompt eval time =     332.49 ms /    35 tokens (    9.50 ms per token,   105.27 tokens per second)
+2.23.366.040 I slot print_timing: id  1 | task 2049 |        eval time =     595.26 ms /    12 tokens (   49.61 ms per token,    20.16 tokens per second)
+2.23.366.040 I slot print_timing: id  1 | task 2049 |       total time =     927.75 ms /    47 tokens
+2.23.366.041 I slot print_timing: id  1 | task 2049 |    graphs reused =       1911
+2.23.366.064 I slot      release: id  1 | task 2049 | stop processing: n_tokens = 46, truncated = 0
+2.23.408.516 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91058605832
+2.23.408.519 I srv  get_availabl: updating prompt cache
+2.23.408.557 W srv   prompt_save:  - saving prompt with length 46, total state size = 63.292 MiB (draft: 0.000 MiB)
+2.23.422.879 I srv          load:  - looking for better prompt, base f_keep = 0.022, sim = 0.016
+2.23.422.889 I srv        update:  - cache state: 31 prompts, 3995.155 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+2.23.422.891 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+2.23.422.891 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+2.23.422.892 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+2.23.422.892 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+2.23.422.892 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+2.23.422.892 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+2.23.422.893 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+2.23.422.894 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+2.23.422.894 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+2.23.422.894 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+2.23.422.895 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+2.23.422.895 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+2.23.422.895 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+2.23.422.896 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+2.23.422.896 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+2.23.422.896 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+2.23.422.896 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+2.23.422.897 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+2.23.422.897 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+2.23.422.897 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+2.23.422.897 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+2.23.422.898 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+2.23.422.898 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+2.23.422.898 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+2.23.422.899 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+2.23.422.899 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+2.23.422.899 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+2.23.422.900 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+2.23.422.900 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+2.23.422.900 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+2.23.422.900 I srv        update:    - prompt 0x571a2e0c1950:      46 tokens, checkpoints:  1,   126.105 MiB
+2.23.422.901 I srv  get_availabl: prompt cache update took 14.38 ms
+2.23.422.931 I slot launch_slot_: id  1 | task 2064 | processing task, is_child = 0
+2.23.422.942 W slot   operator(): id  1 | task 2064 | erased invalidated context checkpoint (pos_min = 30, pos_max = 30, n_tokens = 31, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+2.23.741.642 I slot create_check: id  1 | task 2064 | created context checkpoint 1 of 32 (pos_min = 57, pos_max = 57, n_tokens = 58, size = 62.813 MiB)
+2.25.778.743 I slot print_timing: id  0 | task 1851 | n_decoded =    247, tg =  17.15 t/s, tg_3s =  16.62 t/s
+2.26.260.248 I slot print_timing: id  0 | task 1851 | prompt eval time =    1140.44 ms /   242 tokens (    4.71 ms per token,   212.20 tokens per second)
+2.26.260.259 I slot print_timing: id  0 | task 1851 |        eval time =   14880.34 ms /   256 tokens (   58.13 ms per token,    17.20 tokens per second)
+2.26.260.260 I slot print_timing: id  0 | task 1851 |       total time =   16020.78 ms /   498 tokens
+2.26.260.262 I slot print_timing: id  0 | task 1851 |    graphs reused =       1955
+2.26.260.303 I slot      release: id  0 | task 1851 | stop processing: n_tokens = 497, truncated = 0
+2.26.302.381 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91061500071
+2.26.302.384 I srv  get_availabl: updating prompt cache
+2.26.302.432 W srv   prompt_save:  - saving prompt with length 497, total state size = 67.980 MiB (draft: 0.000 MiB)
+2.26.317.270 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+2.26.317.281 I srv        update:  - cache state: 32 prompts, 4125.948 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+2.26.317.283 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+2.26.317.283 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+2.26.317.284 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+2.26.317.284 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+2.26.317.284 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+2.26.317.285 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+2.26.317.285 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+2.26.317.286 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+2.26.317.286 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+2.26.317.287 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+2.26.317.288 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+2.26.317.288 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+2.26.317.289 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+2.26.317.289 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+2.26.317.290 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+2.26.317.290 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+2.26.317.291 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+2.26.317.292 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+2.26.317.292 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+2.26.317.292 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+2.26.317.293 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+2.26.317.293 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+2.26.317.294 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+2.26.317.294 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+2.26.317.295 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+2.26.317.295 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+2.26.317.296 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+2.26.317.296 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+2.26.317.297 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+2.26.317.297 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+2.26.317.297 I srv        update:    - prompt 0x571a2e0c1950:      46 tokens, checkpoints:  1,   126.105 MiB
+2.26.317.298 I srv        update:    - prompt 0x571a2e0c84c0:     497 tokens, checkpoints:  1,   130.793 MiB
+2.26.317.299 I srv  get_availabl: prompt cache update took 14.91 ms
+2.26.317.332 I slot launch_slot_: id  0 | task 2113 | processing task, is_child = 0
+2.26.317.343 W slot   operator(): id  0 | task 2113 | erased invalidated context checkpoint (pos_min = 237, pos_max = 237, n_tokens = 238, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+2.26.807.392 I slot create_check: id  0 | task 2113 | created context checkpoint 1 of 32 (pos_min = 95, pos_max = 95, n_tokens = 96, size = 62.813 MiB)
+2.29.621.714 I slot print_timing: id  1 | task 2064 | n_decoded =    100, tg =  17.34 t/s, tg_3s =  17.34 t/s
+2.32.184.492 I slot print_timing: id  0 | task 2113 | n_decoded =    100, tg =  18.96 t/s, tg_3s =  18.96 t/s
+2.32.665.929 I slot print_timing: id  1 | task 2064 | n_decoded =    157, tg =  17.82 t/s, tg_3s =  18.72 t/s
+2.35.234.199 I slot print_timing: id  0 | task 2113 | n_decoded =    157, tg =  18.86 t/s, tg_3s =  18.69 t/s
+2.35.715.940 I slot print_timing: id  1 | task 2064 | n_decoded =    214, tg =  18.04 t/s, tg_3s =  18.69 t/s
+2.37.959.637 I slot print_timing: id  1 | task 2064 | prompt eval time =     430.34 ms /    62 tokens (    6.94 ms per token,   144.07 tokens per second)
+2.37.959.645 I slot print_timing: id  1 | task 2064 |        eval time =   14106.35 ms /   256 tokens (   55.10 ms per token,    18.15 tokens per second)
+2.37.959.646 I slot print_timing: id  1 | task 2064 |       total time =   14536.68 ms /   318 tokens
+2.37.959.647 I slot print_timing: id  1 | task 2064 |    graphs reused =       2161
+2.37.959.670 I slot      release: id  1 | task 2064 | stop processing: n_tokens = 317, truncated = 0
+2.38.001.879 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91073199438
+2.38.001.882 I srv  get_availabl: updating prompt cache
+2.38.001.925 W srv   prompt_save:  - saving prompt with length 317, total state size = 66.109 MiB (draft: 0.000 MiB)
+2.38.016.007 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+2.38.016.018 I srv        update:  - cache state: 33 prompts, 4254.870 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+2.38.016.020 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+2.38.016.020 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+2.38.016.021 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+2.38.016.022 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+2.38.016.022 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+2.38.016.022 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+2.38.016.023 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+2.38.016.024 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+2.38.016.025 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+2.38.016.025 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+2.38.016.025 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+2.38.016.026 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+2.38.016.026 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+2.38.016.026 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+2.38.016.027 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+2.38.016.027 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+2.38.016.027 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+2.38.016.027 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+2.38.016.028 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+2.38.016.028 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+2.38.016.028 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+2.38.016.029 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+2.38.016.029 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+2.38.016.029 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+2.38.016.029 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+2.38.016.030 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+2.38.016.030 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+2.38.016.030 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+2.38.016.031 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+2.38.016.031 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+2.38.016.031 I srv        update:    - prompt 0x571a2e0c1950:      46 tokens, checkpoints:  1,   126.105 MiB
+2.38.016.031 I srv        update:    - prompt 0x571a2e0c84c0:     497 tokens, checkpoints:  1,   130.793 MiB
+2.38.016.032 I srv        update:    - prompt 0x571a2bded210:     317 tokens, checkpoints:  1,   128.922 MiB
+2.38.016.033 I srv  get_availabl: prompt cache update took 14.15 ms
+2.38.016.064 I slot launch_slot_: id  1 | task 2324 | processing task, is_child = 0
+2.38.016.076 W slot   operator(): id  1 | task 2324 | erased invalidated context checkpoint (pos_min = 57, pos_max = 57, n_tokens = 58, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+2.38.579.694 I slot print_timing: id  0 | task 2113 | n_decoded =    210, tg =  18.00 t/s, tg_3s =  15.84 t/s
+2.38.587.332 I slot create_check: id  1 | task 2324 | created context checkpoint 1 of 32 (pos_min = 121, pos_max = 121, n_tokens = 122, size = 62.813 MiB)
+2.39.025.424 I slot print_timing: id  1 | task 2324 | prompt eval time =     682.78 ms /   126 tokens (    5.42 ms per token,   184.54 tokens per second)
+2.39.025.431 I slot print_timing: id  1 | task 2324 |        eval time =     326.56 ms /     7 tokens (   46.65 ms per token,    21.44 tokens per second)
+2.39.025.432 I slot print_timing: id  1 | task 2324 |       total time =    1009.34 ms /   133 tokens
+2.39.025.433 I slot print_timing: id  1 | task 2324 |    graphs reused =       2166
+2.39.025.458 I slot      release: id  1 | task 2324 | stop processing: n_tokens = 132, truncated = 0
+2.39.067.830 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91074265226
+2.39.067.835 I srv  get_availabl: updating prompt cache
+2.39.067.873 W srv   prompt_save:  - saving prompt with length 132, total state size = 64.186 MiB (draft: 0.000 MiB)
+2.39.082.216 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+2.39.082.228 I srv        update:  - cache state: 34 prompts, 4381.869 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+2.39.082.230 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+2.39.082.230 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+2.39.082.231 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+2.39.082.231 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+2.39.082.232 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+2.39.082.237 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+2.39.082.237 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+2.39.082.238 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+2.39.082.238 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+2.39.082.239 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+2.39.082.239 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+2.39.082.240 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+2.39.082.241 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+2.39.082.241 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+2.39.082.242 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+2.39.082.242 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+2.39.082.243 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+2.39.082.244 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+2.39.082.244 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+2.39.082.245 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+2.39.082.245 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+2.39.082.246 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+2.39.082.246 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+2.39.082.247 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+2.39.082.247 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+2.39.082.247 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+2.39.082.248 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+2.39.082.248 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+2.39.082.249 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+2.39.082.249 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+2.39.082.250 I srv        update:    - prompt 0x571a2e0c1950:      46 tokens, checkpoints:  1,   126.105 MiB
+2.39.082.251 I srv        update:    - prompt 0x571a2e0c84c0:     497 tokens, checkpoints:  1,   130.793 MiB
+2.39.082.251 I srv        update:    - prompt 0x571a2bded210:     317 tokens, checkpoints:  1,   128.922 MiB
+2.39.082.252 I srv        update:    - prompt 0x571a2e95c870:     132 tokens, checkpoints:  1,   126.999 MiB
+2.39.082.253 I srv  get_availabl: prompt cache update took 14.42 ms
+2.39.082.289 I slot launch_slot_: id  1 | task 2334 | processing task, is_child = 0
+2.39.082.303 W slot   operator(): id  1 | task 2334 | erased invalidated context checkpoint (pos_min = 121, pos_max = 121, n_tokens = 122, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+2.41.513.761 I slot create_check: id  1 | task 2334 | created context checkpoint 1 of 32 (pos_min = 552, pos_max = 552, n_tokens = 553, size = 62.813 MiB)
+2.41.627.347 I slot print_timing: id  0 | task 2113 | n_decoded =    220, tg =  14.95 t/s, tg_3s =   3.28 t/s
+2.43.567.687 I slot print_timing: id  0 | task 2113 | prompt eval time =     593.02 ms /   100 tokens (    5.93 ms per token,   168.63 tokens per second)
+2.43.567.697 I slot print_timing: id  0 | task 2113 |        eval time =   16657.31 ms /   256 tokens (   65.07 ms per token,    15.37 tokens per second)
+2.43.567.698 I slot print_timing: id  0 | task 2113 |       total time =   17250.33 ms /   356 tokens
+2.43.567.700 I slot print_timing: id  0 | task 2113 |    graphs reused =       2201
+2.43.567.725 I slot      release: id  0 | task 2113 | stop processing: n_tokens = 355, truncated = 0
+2.43.610.551 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91078807493
+2.43.610.557 I srv  get_availabl: updating prompt cache
+2.43.610.604 W srv   prompt_save:  - saving prompt with length 355, total state size = 66.504 MiB (draft: 0.000 MiB)
+2.43.625.279 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+2.43.625.290 I srv        update:  - cache state: 35 prompts, 4511.186 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+2.43.625.291 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+2.43.625.292 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+2.43.625.293 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+2.43.625.293 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+2.43.625.294 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+2.43.625.294 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+2.43.625.295 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+2.43.625.295 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+2.43.625.295 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+2.43.625.296 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+2.43.625.296 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+2.43.625.296 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+2.43.625.297 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+2.43.625.297 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+2.43.625.298 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+2.43.625.298 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+2.43.625.298 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+2.43.625.299 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+2.43.625.299 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+2.43.625.299 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+2.43.625.299 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+2.43.625.300 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+2.43.625.300 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+2.43.625.301 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+2.43.625.301 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+2.43.625.301 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+2.43.625.302 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+2.43.625.302 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+2.43.625.303 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+2.43.625.303 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+2.43.625.303 I srv        update:    - prompt 0x571a2e0c1950:      46 tokens, checkpoints:  1,   126.105 MiB
+2.43.625.304 I srv        update:    - prompt 0x571a2e0c84c0:     497 tokens, checkpoints:  1,   130.793 MiB
+2.43.625.304 I srv        update:    - prompt 0x571a2bded210:     317 tokens, checkpoints:  1,   128.922 MiB
+2.43.625.304 I srv        update:    - prompt 0x571a2e95c870:     132 tokens, checkpoints:  1,   126.999 MiB
+2.43.625.304 I srv        update:    - prompt 0x571a2e0b85f0:     355 tokens, checkpoints:  1,   129.317 MiB
+2.43.625.306 I srv  get_availabl: prompt cache update took 14.75 ms
+2.43.625.337 I slot launch_slot_: id  0 | task 2374 | processing task, is_child = 0
+2.43.625.349 W slot   operator(): id  0 | task 2374 | erased invalidated context checkpoint (pos_min = 95, pos_max = 95, n_tokens = 96, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+2.45.536.318 I slot create_check: id  0 | task 2374 | created context checkpoint 1 of 32 (pos_min = 448, pos_max = 448, n_tokens = 449, size = 62.813 MiB)
+2.48.886.702 I slot print_timing: id  1 | task 2334 | n_decoded =    100, tg =  13.78 t/s, tg_3s =  13.78 t/s
+2.50.999.028 I slot print_timing: id  0 | task 2374 | n_decoded =    100, tg =  18.66 t/s, tg_3s =  18.66 t/s
+2.51.918.237 I slot print_timing: id  1 | task 2334 | n_decoded =    156, tg =  15.16 t/s, tg_3s =  18.47 t/s
+2.54.030.595 I slot print_timing: id  0 | task 2374 | n_decoded =    156, tg =  18.60 t/s, tg_3s =  18.47 t/s
+2.54.952.858 I slot print_timing: id  1 | task 2334 | n_decoded =    212, tg =  15.91 t/s, tg_3s =  18.45 t/s
+2.57.075.123 I slot print_timing: id  0 | task 2374 | n_decoded =    212, tg =  18.54 t/s, tg_3s =  18.39 t/s
+2.57.346.332 I slot print_timing: id  1 | task 2334 | prompt eval time =    2545.32 ms /   557 tokens (    4.57 ms per token,   218.83 tokens per second)
+2.57.346.337 I slot print_timing: id  1 | task 2334 |        eval time =   15718.70 ms /   256 tokens (   61.40 ms per token,    16.29 tokens per second)
+2.57.346.338 I slot print_timing: id  1 | task 2334 |       total time =   18264.02 ms /   813 tokens
+2.57.346.339 I slot print_timing: id  1 | task 2334 |    graphs reused =       2416
+2.57.346.381 I slot      release: id  1 | task 2334 | stop processing: n_tokens = 812, truncated = 0
+2.57.389.418 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91092586149
+2.57.389.421 I srv  get_availabl: updating prompt cache
+2.57.389.470 W srv   prompt_save:  - saving prompt with length 812, total state size = 71.254 MiB (draft: 0.000 MiB)
+2.57.404.103 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+2.57.404.114 I srv        update:  - cache state: 36 prompts, 4645.253 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+2.57.404.116 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+2.57.404.116 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+2.57.404.117 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+2.57.404.118 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+2.57.404.118 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+2.57.404.118 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+2.57.404.118 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+2.57.404.119 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+2.57.404.119 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+2.57.404.119 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+2.57.404.120 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+2.57.404.120 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+2.57.404.120 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+2.57.404.120 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+2.57.404.121 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+2.57.404.122 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+2.57.404.122 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+2.57.404.123 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+2.57.404.123 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+2.57.404.123 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+2.57.404.124 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+2.57.404.124 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+2.57.404.125 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+2.57.404.125 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+2.57.404.126 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+2.57.404.126 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+2.57.404.126 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+2.57.404.127 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+2.57.404.128 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+2.57.404.128 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+2.57.404.128 I srv        update:    - prompt 0x571a2e0c1950:      46 tokens, checkpoints:  1,   126.105 MiB
+2.57.404.129 I srv        update:    - prompt 0x571a2e0c84c0:     497 tokens, checkpoints:  1,   130.793 MiB
+2.57.404.129 I srv        update:    - prompt 0x571a2bded210:     317 tokens, checkpoints:  1,   128.922 MiB
+2.57.404.129 I srv        update:    - prompt 0x571a2e95c870:     132 tokens, checkpoints:  1,   126.999 MiB
+2.57.404.130 I srv        update:    - prompt 0x571a2e0b85f0:     355 tokens, checkpoints:  1,   129.317 MiB
+2.57.404.130 I srv        update:    - prompt 0x571a2e0c1870:     812 tokens, checkpoints:  1,   134.067 MiB
+2.57.404.131 I srv  get_availabl: prompt cache update took 14.71 ms
+2.57.404.165 I slot launch_slot_: id  1 | task 2594 | processing task, is_child = 0
+2.57.404.177 W slot   operator(): id  1 | task 2594 | erased invalidated context checkpoint (pos_min = 552, pos_max = 552, n_tokens = 553, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+2.58.118.187 I slot create_check: id  1 | task 2594 | created context checkpoint 1 of 32 (pos_min = 151, pos_max = 151, n_tokens = 152, size = 62.813 MiB)
+2.58.559.272 I slot print_timing: id  1 | task 2594 | prompt eval time =     826.13 ms /   156 tokens (    5.30 ms per token,   188.83 tokens per second)
+2.58.559.278 I slot print_timing: id  1 | task 2594 |        eval time =     328.95 ms /     7 tokens (   46.99 ms per token,    21.28 tokens per second)
+2.58.559.279 I slot print_timing: id  1 | task 2594 |       total time =    1155.08 ms /   163 tokens
+2.58.559.281 I slot print_timing: id  1 | task 2594 |    graphs reused =       2421
+2.58.559.310 I slot      release: id  1 | task 2594 | stop processing: n_tokens = 162, truncated = 0
+2.58.602.341 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = 91093799078
+2.58.602.344 I srv  get_availabl: updating prompt cache
+2.58.602.383 W srv   prompt_save:  - saving prompt with length 162, total state size = 64.497 MiB (draft: 0.000 MiB)
+2.58.616.719 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+2.58.616.731 I srv        update:  - cache state: 37 prompts, 4772.564 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+2.58.616.733 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+2.58.616.734 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+2.58.616.734 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+2.58.616.735 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+2.58.616.735 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+2.58.616.735 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+2.58.616.736 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+2.58.616.736 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+2.58.616.736 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+2.58.616.737 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+2.58.616.737 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+2.58.616.737 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+2.58.616.737 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+2.58.616.738 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+2.58.616.738 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+2.58.616.738 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+2.58.616.739 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+2.58.616.739 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+2.58.616.740 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+2.58.616.740 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+2.58.616.741 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+2.58.616.741 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+2.58.616.741 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+2.58.616.742 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+2.58.616.742 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+2.58.616.742 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+2.58.616.743 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+2.58.616.743 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+2.58.616.743 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+2.58.616.743 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+2.58.616.744 I srv        update:    - prompt 0x571a2e0c1950:      46 tokens, checkpoints:  1,   126.105 MiB
+2.58.616.744 I srv        update:    - prompt 0x571a2e0c84c0:     497 tokens, checkpoints:  1,   130.793 MiB
+2.58.616.744 I srv        update:    - prompt 0x571a2bded210:     317 tokens, checkpoints:  1,   128.922 MiB
+2.58.616.745 I srv        update:    - prompt 0x571a2e95c870:     132 tokens, checkpoints:  1,   126.999 MiB
+2.58.616.745 I srv        update:    - prompt 0x571a2e0b85f0:     355 tokens, checkpoints:  1,   129.317 MiB
+2.58.616.745 I srv        update:    - prompt 0x571a2e0c1870:     812 tokens, checkpoints:  1,   134.067 MiB
+2.58.616.745 I srv        update:    - prompt 0x571a2e0b4710:     162 tokens, checkpoints:  1,   127.311 MiB
+2.58.616.746 I srv  get_availabl: prompt cache update took 14.40 ms
+2.58.616.778 I slot launch_slot_: id  1 | task 2604 | processing task, is_child = 0
+2.58.616.789 W slot   operator(): id  1 | task 2604 | erased invalidated context checkpoint (pos_min = 151, pos_max = 151, n_tokens = 152, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+3.00.036.796 I slot create_check: id  1 | task 2604 | created context checkpoint 1 of 32 (pos_min = 324, pos_max = 324, n_tokens = 325, size = 62.813 MiB)
+3.00.149.519 I slot print_timing: id  0 | task 2374 | n_decoded =    229, tg =  15.78 t/s, tg_3s =   5.53 t/s
+3.01.613.848 I slot print_timing: id  0 | task 2374 | prompt eval time =    2016.00 ms /   453 tokens (    4.45 ms per token,   224.70 tokens per second)
+3.01.613.855 I slot print_timing: id  0 | task 2374 |        eval time =   15972.49 ms /   256 tokens (   62.39 ms per token,    16.03 tokens per second)
+3.01.613.856 I slot print_timing: id  0 | task 2374 |       total time =   17988.49 ms /   709 tokens
+3.01.613.857 I slot print_timing: id  0 | task 2374 |    graphs reused =       2447
+3.01.613.896 I slot      release: id  0 | task 2374 | stop processing: n_tokens = 708, truncated = 0
+3.01.656.183 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91096853664
+3.01.656.186 I srv  get_availabl: updating prompt cache
+3.01.656.241 W srv   prompt_save:  - saving prompt with length 708, total state size = 70.173 MiB (draft: 0.000 MiB)
+3.01.670.841 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+3.01.670.853 I srv        update:  - cache state: 38 prompts, 4905.550 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+3.01.670.855 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+3.01.670.855 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+3.01.670.855 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+3.01.670.856 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+3.01.670.858 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+3.01.670.858 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+3.01.670.859 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+3.01.670.860 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+3.01.670.860 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+3.01.670.862 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+3.01.670.862 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+3.01.670.863 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+3.01.670.864 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+3.01.670.865 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+3.01.670.865 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+3.01.670.866 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+3.01.670.866 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+3.01.670.866 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+3.01.670.868 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+3.01.670.868 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+3.01.670.869 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+3.01.670.870 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+3.01.670.870 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+3.01.670.871 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+3.01.670.872 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+3.01.670.872 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+3.01.670.873 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+3.01.670.874 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+3.01.670.874 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+3.01.670.875 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+3.01.670.875 I srv        update:    - prompt 0x571a2e0c1950:      46 tokens, checkpoints:  1,   126.105 MiB
+3.01.670.876 I srv        update:    - prompt 0x571a2e0c84c0:     497 tokens, checkpoints:  1,   130.793 MiB
+3.01.670.877 I srv        update:    - prompt 0x571a2bded210:     317 tokens, checkpoints:  1,   128.922 MiB
+3.01.670.877 I srv        update:    - prompt 0x571a2e95c870:     132 tokens, checkpoints:  1,   126.999 MiB
+3.01.670.878 I srv        update:    - prompt 0x571a2e0b85f0:     355 tokens, checkpoints:  1,   129.317 MiB
+3.01.670.878 I srv        update:    - prompt 0x571a2e0c1870:     812 tokens, checkpoints:  1,   134.067 MiB
+3.01.670.879 I srv        update:    - prompt 0x571a2e0b4710:     162 tokens, checkpoints:  1,   127.311 MiB
+3.01.670.879 I srv        update:    - prompt 0x571a2e0c4720:     708 tokens, checkpoints:  1,   132.986 MiB
+3.01.670.880 I srv  get_availabl: prompt cache update took 14.69 ms
+3.01.670.914 I slot launch_slot_: id  0 | task 2635 | processing task, is_child = 0
+3.01.670.925 W slot   operator(): id  0 | task 2635 | erased invalidated context checkpoint (pos_min = 448, pos_max = 448, n_tokens = 449, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+3.02.296.357 I slot create_check: id  0 | task 2635 | created context checkpoint 1 of 32 (pos_min = 130, pos_max = 130, n_tokens = 131, size = 62.813 MiB)
+3.02.728.988 I slot print_timing: id  0 | task 2635 | prompt eval time =     731.59 ms /   135 tokens (    5.42 ms per token,   184.53 tokens per second)
+3.02.728.995 I slot print_timing: id  0 | task 2635 |        eval time =     326.47 ms /     7 tokens (   46.64 ms per token,    21.44 tokens per second)
+3.02.728.996 I slot print_timing: id  0 | task 2635 |       total time =    1058.05 ms /   142 tokens
+3.02.728.997 I slot print_timing: id  0 | task 2635 |    graphs reused =       2453
+3.02.729.026 I slot      release: id  0 | task 2635 | stop processing: n_tokens = 141, truncated = 0
+3.02.771.678 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91097968794
+3.02.771.682 I srv  get_availabl: updating prompt cache
+3.02.771.724 W srv   prompt_save:  - saving prompt with length 141, total state size = 64.279 MiB (draft: 0.000 MiB)
+3.02.786.421 I srv          load:  - looking for better prompt, base f_keep = 0.064, sim = 0.086
+3.02.786.434 I srv        update:  - cache state: 39 prompts, 5032.642 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+3.02.786.436 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+3.02.786.437 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+3.02.786.438 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+3.02.786.439 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+3.02.786.439 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+3.02.786.440 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+3.02.786.440 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+3.02.786.441 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+3.02.786.441 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+3.02.786.442 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+3.02.786.442 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+3.02.786.443 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+3.02.786.443 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+3.02.786.444 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+3.02.786.444 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+3.02.786.444 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+3.02.786.445 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+3.02.786.446 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+3.02.786.446 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+3.02.786.447 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+3.02.786.447 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+3.02.786.447 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+3.02.786.448 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+3.02.786.448 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+3.02.786.448 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+3.02.786.449 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+3.02.786.449 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+3.02.786.449 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+3.02.786.450 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+3.02.786.450 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+3.02.786.450 I srv        update:    - prompt 0x571a2e0c1950:      46 tokens, checkpoints:  1,   126.105 MiB
+3.02.786.450 I srv        update:    - prompt 0x571a2e0c84c0:     497 tokens, checkpoints:  1,   130.793 MiB
+3.02.786.451 I srv        update:    - prompt 0x571a2bded210:     317 tokens, checkpoints:  1,   128.922 MiB
+3.02.786.451 I srv        update:    - prompt 0x571a2e95c870:     132 tokens, checkpoints:  1,   126.999 MiB
+3.02.786.451 I srv        update:    - prompt 0x571a2e0b85f0:     355 tokens, checkpoints:  1,   129.317 MiB
+3.02.786.452 I srv        update:    - prompt 0x571a2e0c1870:     812 tokens, checkpoints:  1,   134.067 MiB
+3.02.786.452 I srv        update:    - prompt 0x571a2e0b4710:     162 tokens, checkpoints:  1,   127.311 MiB
+3.02.786.452 I srv        update:    - prompt 0x571a2e0c4720:     708 tokens, checkpoints:  1,   132.986 MiB
+3.02.786.452 I srv        update:    - prompt 0x571a2e0c56f0:     141 tokens, checkpoints:  1,   127.092 MiB
+3.02.786.454 I srv  get_availabl: prompt cache update took 14.77 ms
+3.02.786.488 I slot launch_slot_: id  0 | task 2645 | processing task, is_child = 0
+3.02.786.499 W slot   operator(): id  0 | task 2645 | erased invalidated context checkpoint (pos_min = 130, pos_max = 130, n_tokens = 131, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+3.03.287.622 I slot create_check: id  0 | task 2645 | created context checkpoint 1 of 32 (pos_min = 100, pos_max = 100, n_tokens = 101, size = 62.813 MiB)
+3.03.720.166 I slot print_timing: id  0 | task 2645 | prompt eval time =     606.83 ms /   105 tokens (    5.78 ms per token,   173.03 tokens per second)
+3.03.720.172 I slot print_timing: id  0 | task 2645 |        eval time =     326.83 ms /     7 tokens (   46.69 ms per token,    21.42 tokens per second)
+3.03.720.172 I slot print_timing: id  0 | task 2645 |       total time =     933.66 ms /   112 tokens
+3.03.720.174 I slot print_timing: id  0 | task 2645 |    graphs reused =       2459
+3.03.720.197 I slot      release: id  0 | task 2645 | stop processing: n_tokens = 111, truncated = 0
+3.03.762.901 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91098959965
+3.03.762.905 I srv  get_availabl: updating prompt cache
+3.03.762.950 W srv   prompt_save:  - saving prompt with length 111, total state size = 63.967 MiB (draft: 0.000 MiB)
+3.03.777.722 I srv          load:  - looking for better prompt, base f_keep = 0.081, sim = 0.038
+3.03.777.735 I srv        update:  - cache state: 40 prompts, 5159.423 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+3.03.777.737 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+3.03.777.738 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+3.03.777.738 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+3.03.777.739 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+3.03.777.740 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+3.03.777.740 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+3.03.777.741 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+3.03.777.741 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+3.03.777.741 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+3.03.777.742 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+3.03.777.742 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+3.03.777.742 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+3.03.777.743 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+3.03.777.743 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+3.03.777.743 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+3.03.777.743 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+3.03.777.744 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+3.03.777.744 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+3.03.777.744 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+3.03.777.744 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+3.03.777.745 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+3.03.777.745 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+3.03.777.745 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+3.03.777.745 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+3.03.777.746 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+3.03.777.747 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+3.03.777.747 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+3.03.777.747 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+3.03.777.748 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+3.03.777.749 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+3.03.777.749 I srv        update:    - prompt 0x571a2e0c1950:      46 tokens, checkpoints:  1,   126.105 MiB
+3.03.777.749 I srv        update:    - prompt 0x571a2e0c84c0:     497 tokens, checkpoints:  1,   130.793 MiB
+3.03.777.750 I srv        update:    - prompt 0x571a2bded210:     317 tokens, checkpoints:  1,   128.922 MiB
+3.03.777.750 I srv        update:    - prompt 0x571a2e95c870:     132 tokens, checkpoints:  1,   126.999 MiB
+3.03.777.750 I srv        update:    - prompt 0x571a2e0b85f0:     355 tokens, checkpoints:  1,   129.317 MiB
+3.03.777.751 I srv        update:    - prompt 0x571a2e0c1870:     812 tokens, checkpoints:  1,   134.067 MiB
+3.03.777.751 I srv        update:    - prompt 0x571a2e0b4710:     162 tokens, checkpoints:  1,   127.311 MiB
+3.03.777.751 I srv        update:    - prompt 0x571a2e0c4720:     708 tokens, checkpoints:  1,   132.986 MiB
+3.03.777.752 I srv        update:    - prompt 0x571a2e0c56f0:     141 tokens, checkpoints:  1,   127.092 MiB
+3.03.777.752 I srv        update:    - prompt 0x571a2e9665b0:     111 tokens, checkpoints:  1,   126.781 MiB
+3.03.777.753 I srv  get_availabl: prompt cache update took 14.85 ms
+3.03.777.786 I slot launch_slot_: id  0 | task 2655 | processing task, is_child = 0
+3.03.777.798 W slot   operator(): id  0 | task 2655 | erased invalidated context checkpoint (pos_min = 100, pos_max = 100, n_tokens = 101, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+3.04.786.709 I slot create_check: id  0 | task 2655 | created context checkpoint 1 of 32 (pos_min = 231, pos_max = 231, n_tokens = 232, size = 62.813 MiB)
+3.05.220.265 I slot print_timing: id  0 | task 2655 | prompt eval time =    1115.79 ms /   236 tokens (    4.73 ms per token,   211.51 tokens per second)
+3.05.220.270 I slot print_timing: id  0 | task 2655 |        eval time =     326.67 ms /     7 tokens (   46.67 ms per token,    21.43 tokens per second)
+3.05.220.271 I slot print_timing: id  0 | task 2655 |       total time =    1442.45 ms /   243 tokens
+3.05.220.273 I slot print_timing: id  0 | task 2655 |    graphs reused =       2465
+3.05.220.305 I slot      release: id  0 | task 2655 | stop processing: n_tokens = 242, truncated = 0
+3.05.263.095 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = 91100460073
+3.05.263.099 I srv  get_availabl: updating prompt cache
+3.05.263.145 W srv   prompt_save:  - saving prompt with length 242, total state size = 65.329 MiB (draft: 0.000 MiB)
+3.05.277.758 I srv          load:  - looking for better prompt, base f_keep = 0.000, sim = 0.000
+3.05.277.771 I srv        update:  - cache state: 41 prompts, 5287.565 MiB (limits: 8192.000 MiB, 32768 tokens, 32768 est)
+3.05.277.773 I srv        update:    - prompt 0x571a2bdf2ee0:     435 tokens, checkpoints:  1,   130.149 MiB
+3.05.277.774 I srv        update:    - prompt 0x571a2bdf7090:      51 tokens, checkpoints:  1,   126.157 MiB
+3.05.277.775 I srv        update:    - prompt 0x7bbeb0002440:      79 tokens, checkpoints:  1,   126.448 MiB
+3.05.277.775 I srv        update:    - prompt 0x571a2e0c4cc0:     537 tokens, checkpoints:  1,   131.209 MiB
+3.05.277.775 I srv        update:    - prompt 0x571a2bdecdd0:      57 tokens, checkpoints:  1,   126.219 MiB
+3.05.277.775 I srv        update:    - prompt 0x571a2bdf7140:     582 tokens, checkpoints:  1,   131.677 MiB
+3.05.277.776 I srv        update:    - prompt 0x571a2bdea4e0:     315 tokens, checkpoints:  1,   128.901 MiB
+3.05.277.776 I srv        update:    - prompt 0x571a2e0ae3b0:     312 tokens, checkpoints:  1,   128.870 MiB
+3.05.277.777 I srv        update:    - prompt 0x571a2bde9eb0:     229 tokens, checkpoints:  1,   128.007 MiB
+3.05.277.778 I srv        update:    - prompt 0x571a2bdec260:     257 tokens, checkpoints:  1,   128.298 MiB
+3.05.277.778 I srv        update:    - prompt 0x571a2bdf7cc0:     707 tokens, checkpoints:  1,   132.976 MiB
+3.05.277.779 I srv        update:    - prompt 0x571a2bdf4c00:     398 tokens, checkpoints:  1,   129.764 MiB
+3.05.277.779 I srv        update:    - prompt 0x571a2e0be600:     442 tokens, checkpoints:  1,   130.221 MiB
+3.05.277.780 I srv        update:    - prompt 0x571a2bdf2250:     647 tokens, checkpoints:  1,   132.352 MiB
+3.05.277.781 I srv        update:    - prompt 0x571a2e0b43b0:      59 tokens, checkpoints:  1,   126.240 MiB
+3.05.277.781 I srv        update:    - prompt 0x571a2bdf1fe0:     290 tokens, checkpoints:  1,   128.641 MiB
+3.05.277.781 I srv        update:    - prompt 0x571a2e0aee00:     301 tokens, checkpoints:  1,   128.756 MiB
+3.05.277.782 I srv        update:    - prompt 0x571a2bdf8fd0:     318 tokens, checkpoints:  1,   128.932 MiB
+3.05.277.783 I srv        update:    - prompt 0x571a2bdd9010:     276 tokens, checkpoints:  1,   128.496 MiB
+3.05.277.783 I srv        update:    - prompt 0x571a2bdf3b90:     505 tokens, checkpoints:  1,   130.876 MiB
+3.05.277.784 I srv        update:    - prompt 0x571a2e0c8ed0:     309 tokens, checkpoints:  1,   128.839 MiB
+3.05.277.784 I srv        update:    - prompt 0x571a2bdd9330:     287 tokens, checkpoints:  1,   128.610 MiB
+3.05.277.785 I srv        update:    - prompt 0x571a2e0bffb0:     507 tokens, checkpoints:  1,   130.897 MiB
+3.05.277.785 I srv        update:    - prompt 0x571a2bdfaf50:     222 tokens, checkpoints:  1,   127.934 MiB
+3.05.277.785 I srv        update:    - prompt 0x571a2e0b7b70:     224 tokens, checkpoints:  1,   127.955 MiB
+3.05.277.786 I srv        update:    - prompt 0x571a2bdd3020:      60 tokens, checkpoints:  1,   126.250 MiB
+3.05.277.786 I srv        update:    - prompt 0x571a2bdf1f30:     308 tokens, checkpoints:  1,   128.828 MiB
+3.05.277.786 I srv        update:    - prompt 0x571a2bdda0f0:     381 tokens, checkpoints:  1,   129.587 MiB
+3.05.277.787 I srv        update:    - prompt 0x571a2e95de50:     392 tokens, checkpoints:  1,   129.702 MiB
+3.05.277.787 I srv        update:    - prompt 0x571a2e95df00:     157 tokens, checkpoints:  1,   127.259 MiB
+3.05.277.788 I srv        update:    - prompt 0x571a2e0c1950:      46 tokens, checkpoints:  1,   126.105 MiB
+3.05.277.788 I srv        update:    - prompt 0x571a2e0c84c0:     497 tokens, checkpoints:  1,   130.793 MiB
+3.05.277.788 I srv        update:    - prompt 0x571a2bded210:     317 tokens, checkpoints:  1,   128.922 MiB
+3.05.277.789 I srv        update:    - prompt 0x571a2e95c870:     132 tokens, checkpoints:  1,   126.999 MiB
+3.05.277.789 I srv        update:    - prompt 0x571a2e0b85f0:     355 tokens, checkpoints:  1,   129.317 MiB
+3.05.277.789 I srv        update:    - prompt 0x571a2e0c1870:     812 tokens, checkpoints:  1,   134.067 MiB
+3.05.277.790 I srv        update:    - prompt 0x571a2e0b4710:     162 tokens, checkpoints:  1,   127.311 MiB
+3.05.277.790 I srv        update:    - prompt 0x571a2e0c4720:     708 tokens, checkpoints:  1,   132.986 MiB
+3.05.277.790 I srv        update:    - prompt 0x571a2e0c56f0:     141 tokens, checkpoints:  1,   127.092 MiB
+3.05.277.791 I srv        update:    - prompt 0x571a2e9665b0:     111 tokens, checkpoints:  1,   126.781 MiB
+3.05.277.791 I srv        update:    - prompt 0x571a2e0c2c50:     242 tokens, checkpoints:  1,   128.142 MiB
+3.05.277.793 I srv  get_availabl: prompt cache update took 14.69 ms
+3.05.277.824 I slot launch_slot_: id  0 | task 2665 | processing task, is_child = 0
+3.05.277.835 W slot   operator(): id  0 | task 2665 | erased invalidated context checkpoint (pos_min = 231, pos_max = 231, n_tokens = 232, n_swa = 0, pos_next = 0, size = 62.813 MiB)
+3.05.489.587 I slot create_check: id  0 | task 2665 | created context checkpoint 1 of 32 (pos_min = 31, pos_max = 31, n_tokens = 32, size = 62.813 MiB)
+3.07.800.201 I slot print_timing: id  0 | task 2665 | prompt eval time =     314.16 ms /    36 tokens (    8.73 ms per token,   114.59 tokens per second)
+3.07.800.206 I slot print_timing: id  0 | task 2665 |        eval time =    2208.20 ms /    42 tokens (   52.58 ms per token,    19.02 tokens per second)
+3.07.800.207 I slot print_timing: id  0 | task 2665 |       total time =    2522.36 ms /    78 tokens
+3.07.800.209 I slot print_timing: id  0 | task 2665 |    graphs reused =       2506
+3.07.800.236 I slot      release: id  0 | task 2665 | stop processing: n_tokens = 77, truncated = 0
+3.07.842.965 I slot print_timing: id  1 | task 2604 | n_decoded =    100, tg =  13.00 t/s, tg_3s =  13.00 t/s
+3.10.869.124 I slot print_timing: id  1 | task 2604 | n_decoded =    174, tg =  16.23 t/s, tg_3s =  24.45 t/s
+3.13.904.547 I slot print_timing: id  1 | task 2604 | n_decoded =    248, tg =  18.03 t/s, tg_3s =  24.38 t/s
+3.14.232.484 I slot print_timing: id  1 | task 2604 | prompt eval time =    1533.00 ms /   329 tokens (    4.66 ms per token,   214.61 tokens per second)
+3.14.232.491 I slot print_timing: id  1 | task 2604 |        eval time =   14082.69 ms /   256 tokens (   55.01 ms per token,    18.18 tokens per second)
+3.14.232.492 I slot print_timing: id  1 | task 2604 |       total time =   15615.68 ms /   585 tokens
+3.14.232.494 I slot print_timing: id  1 | task 2604 |    graphs reused =       2661
+3.14.232.527 I slot      release: id  1 | task 2604 | stop processing: n_tokens = 584, truncated = 0
+3.14.232.538 I srv  update_slots: all slots are idle
+3.14.233.916 I srv    operator(): operator(): cleaning up before exit...

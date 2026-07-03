@@ -93,6 +93,8 @@ def build_batch_command(args: argparse.Namespace, output_dir: Path) -> str:
 def build_current_command(args: argparse.Namespace, output_dir: Path) -> str:
     calibration_id = args.calibration_id or f"{args.run_id}-current-quarters"
     out_jsonl = output_dir / "current_quarters.jsonl"
+    if not out_jsonl.is_absolute():
+        out_jsonl = args.research_root / out_jsonl
     env = {
         "AUTOPILOT_EVAL_CONCURRENCY": str(args.current_concurrency),
     }

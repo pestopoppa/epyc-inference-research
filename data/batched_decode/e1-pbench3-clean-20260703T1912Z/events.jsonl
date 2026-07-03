@@ -1,0 +1,5 @@
+{"event": "server_stopped", "model": "qwen36_q8_0", "np": 1, "port": 18070, "result": {"killed": false, "pid": 2059385, "ps_verified_dead": true, "returncode": 0, "signal": "SIGTERM"}, "timestamp": "2026-07-03T19:16:27.878577+00:00"}
+{"event": "server_stopped", "model": "qwen36_q8_0", "np": 2, "port": 18071, "result": {"killed": false, "pid": 2061275, "ps_verified_dead": true, "returncode": 0, "signal": "SIGTERM"}, "timestamp": "2026-07-03T19:19:43.319147+00:00"}
+{"event": "server_stopped", "model": "qwen36_q8_0", "np": 4, "port": 18072, "result": {"killed": false, "pid": 2062701, "ps_verified_dead": true, "returncode": 0, "signal": "SIGTERM"}, "timestamp": "2026-07-03T19:23:08.151481+00:00"}
+{"event": "server_stopped", "model": "qwen36_q8_0", "np": 8, "port": 18073, "result": {"killed": false, "pid": 2064189, "ps_verified_dead": true, "returncode": 0, "signal": "SIGTERM"}, "timestamp": "2026-07-03T19:26:33.463230+00:00"}
+{"event": "server_stopped", "model": "qwen36_q8_0", "np": 16, "port": 18074, "result": {"killed": false, "pid": 2065682, "ps_verified_dead": true, "returncode": 0, "signal": "SIGTERM"}, "timestamp": "2026-07-03T19:29:47.901970+00:00"}

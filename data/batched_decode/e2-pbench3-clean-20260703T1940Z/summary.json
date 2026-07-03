@@ -1,0 +1,45 @@
+{
+  "batch_arm": {
+    "error_rate": 0.0,
+    "model": "qwen36_q8_0",
+    "np": 8,
+    "p95_latency_ms": 49009.63427100214,
+    "path": "data/batched_decode/e2-pbench3-clean-20260703T1940Z/serving/e2-pbench3-clean-20260703T1940Z-batch-np8/summary.csv",
+    "success_count": 43,
+    "tasks_per_hour": 1142.6118644798453,
+    "total_count": 43,
+    "wall_minutes_per_eval": 2.2579846054499892,
+    "wall_seconds": 135.47907632699935
+  },
+  "comparison": {
+    "batch_wall_delta_s": -522.7134736169246,
+    "max_error_rate": 0.0,
+    "min_speedup": 1.05,
+    "speedup_current_over_batch": 4.858259797662601
+  },
+  "created_at": "2026-07-03T19:58:07.839674+00:00",
+  "current_arm": {
+    "eval_concurrency": 3,
+    "mean_eval_wall_s": 658.192549943924,
+    "mean_n_questions": 43,
+    "path": "data/batched_decode/e2-pbench3-clean-20260703T1940Z/current_quarters.jsonl",
+    "rows": 1,
+    "wall_minutes_per_eval": 10.969875832398733
+  },
+  "decision_grade": true,
+  "manifest": {
+    "path": "data/batched_decode/e2-pbench3-clean-20260703T1940Z/manifest.json",
+    "run_id": "e2-pbench3-clean-20260703T1940Z",
+    "source_decision_grade": true,
+    "source_status": "runnable"
+  },
+  "protocol_id": "P-BENCH-3/E2",
+  "recommendation": {
+    "reasons": [
+      "batch arm is 4.858x faster than current arm"
+    ],
+    "status": "keep_candidate"
+  },
+  "run_dir": "data/batched_decode/e2-pbench3-clean-20260703T1940Z",
+  "status": "keep_candidate"
+}

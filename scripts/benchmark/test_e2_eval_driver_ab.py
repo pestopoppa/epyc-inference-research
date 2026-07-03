@@ -116,6 +116,37 @@ def test_clean_manifest_records_two_e2_arms(monkeypatch, tmp_path):
     assert manifest["comparison"]["metric"] == "wall_minutes_per_eval"
 
 
+def test_current_arm_command_uses_absolute_research_artifact_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(e2, "load_prompt_batch", _fake_prompts)
+    monkeypatch.setattr(e2, "collect_attestation", lambda: {"host": "test-host"})
+    monkeypatch.setattr(e2, "host_health_warnings", lambda attestation: [])
+    monkeypatch.chdir(tmp_path)
+
+    args = e2.parse_args(
+        [
+            "--run-id",
+            "e2-paths",
+            "--output-root",
+            "relative-output",
+            "--prompt-limit",
+            "1",
+        ]
+    )
+    args.research_root = tmp_path / "research"
+    args.orchestrator_root = tmp_path / "orchestrator"
+    output_dir = e2.write_outputs(args)
+
+    commands = (output_dir / "commands.sh").read_text()
+
+    expected = (
+        args.research_root
+        / "relative-output"
+        / "e2-paths"
+        / "current_quarters.jsonl"
+    )
+    assert f"--out-jsonl {expected}" in commands
+
+
 def _write_completed_e2_run(tmp_path: Path, *, decision_grade: bool = True) -> Path:
     run_dir = tmp_path / "e2-complete"
     batch_dir = run_dir / "serving" / "e2-complete-batch-np8"
