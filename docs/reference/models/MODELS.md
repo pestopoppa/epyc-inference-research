@@ -2,9 +2,9 @@
 
 Comprehensive model reference for the orchestration system.
 
-**Last live-stack verification:** 2026-06-27 against
+**Last live-stack verification:** 2026-07-03 against
 `/mnt/raid0/llm/epyc-orchestrator/orchestration/derived/stack_priors.yaml`
-compiled at `2026-06-27T18:56:04Z`.
+compiled at `2026-07-03T21:15:54Z`.
 
 This document is a research-facing snapshot. The current live stack is governed
 by orchestrator generated stack priors; historical benchmark rows in this repo
@@ -16,14 +16,14 @@ are evidence, not launch truth.
 
 | Role | Model | Quant | Endpoint / Ports | Prior TPS | Acceleration |
 |------|-------|-------|------------------|-----------|--------------|
-| `frontdoor` | Qwen3.6-35B-A3B-Q8_0 | Q8_0 | `8070` primary; `8070/8080/8180/8280/8380` launch ports | 24.3 | none |
-| `coder_escalation` | Qwen3.6-35B-A3B-Q8_0, shared with `frontdoor` | Q8_0 | `8070` | 24.3 | none |
+| `frontdoor` | Qwen3.6-35B-A3B-MTP-Q8_0 | Q8_0 | `8070` primary; `8070/8080/8180/8280/8380` launch ports | 24.3 | embedded NEXTN/MTP |
+| `coder_escalation` | Qwen3.6-35B-A3B-MTP-Q8_0, shared with `frontdoor` | Q8_0 | `8070` | 24.3 | generated per-role flags |
 
 ### Workers And Tools
 
 | Role | Model | Quant | Endpoint / Ports | Prior TPS | Acceleration |
 |------|-------|-------|------------------|-----------|--------------|
-| `worker_general` | gemma-4-26B-A4B-it-Q4_K_M | Q4_K_M | `8072` primary; `8072/8082/8182/8282/8382` launch ports | 60.7 | MTP |
+| `worker_general` | gemma-4-26B-A4B-it-ORIG-Q4_K_M | Q4_K_M | `8072` primary; `8072/8082/8182/8282/8382` launch ports | 60.7 | MTP |
 | `worker_math` | shared with `worker_general` | Q4_K_M | `8072/8082` | 60.7 | MTP |
 | `toolrunner` | shared with `worker_general` | Q4_K_M | `8072/8082` | 60.7 | MTP |
 | `worker_summarize` | shared with `frontdoor` | Q8_0 | `8070` | 24.3 | none |
@@ -39,7 +39,7 @@ are evidence, not launch truth.
 
 | Role | Model | Quant | Endpoint / Ports | Prior TPS | Acceleration |
 |------|-------|-------|------------------|-----------|--------------|
-| `architect_general` | Qwen3.5-122B-A10B | Q4_K_M | `8083` | 12.19 | MoE expert reduction |
+| `architect_general` | Qwen3.5-122B-A10B | Q4_K_M | `8083` | 12.19 | embedded NEXTN/MTP |
 | `ingest_long_context` | Qwen3-Next-80B-A3B-Instruct | Q4_K_M | `8085` primary; `8085/8185/8285/8385/8485` launch ports | 20.8 | MoE expert reduction |
 
 ### Auxiliary Services
@@ -72,8 +72,8 @@ each role owned a separate model.
 
 | Physical Runtime | Roles | Descriptor Memory |
 |------------------|-------|-------------------|
-| Qwen3.6-35B-A3B-Q8_0 | `frontdoor`, `coder_escalation`, `worker_summarize` | 37 GB |
-| gemma-4-26B-A4B-it-Q4_K_M | `worker_general`, `worker_math`, `toolrunner` | 16 GB |
+| Qwen3.6-35B-A3B-MTP-Q8_0 | `frontdoor`, `coder_escalation`, `worker_summarize` | 37 GB |
+| gemma-4-26B-A4B-it-ORIG-Q4_K_M | `worker_general`, `worker_math`, `toolrunner` | 16 GB |
 | Qwen2.5-VL-7B-Instruct | `worker_vision` | 4.4 GB |
 | Qwen3-VL-30B-A3B-Instruct | `vision_escalation` | 18 GB |
 | Qwen3.5-122B-A10B | `architect_general` | 69 GB |
@@ -85,6 +85,8 @@ each role owned a separate model.
 
 | Target Family | Compatible Drafts | Notes |
 |---------------|-------------------|-------|
+| Qwen3.6 frontdoor | same-file Qwen3.6-35B-A3B-MTP-Q8_0 | Embedded NEXTN/draft-MTP; use generated stack-prior launch requirements |
+| Qwen3.5 architect | same-file Qwen3.5-122B-A10B MTP GGUF | Embedded NEXTN/draft-MTP; generated `draft_max=4` |
 | Gemma worker | generated MTP requirements | Use orchestrator stack-prior launch requirements |
 | Qwen2.5 | Qwen2.5-0.5B / Qwen2.5-Coder-0.5B | Historical compatibility row |
 | Qwen3 non-Coder | Qwen3-0.6B | Historical compatibility row |

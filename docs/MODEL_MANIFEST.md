@@ -7,15 +7,15 @@ launch manifest, and generated stack priors.
 
 **Live snapshot source**:
 `/mnt/raid0/llm/epyc-orchestrator/orchestration/derived/stack_priors.yaml`
-compiled at `2026-06-27T18:56:04Z` with `stack_priors_version: 4`.
+compiled at `2026-07-03T21:15:54Z` with `stack_priors_version: 4`.
 
 ## Live Server Topology
 
 | Role | Endpoint | Model | Model RAM | Tier | Prior TPS | Context |
 |------|----------|-------|-----------|------|-----------|---------|
-| `frontdoor` | `8070` primary; launch ports `8070/8080/8180/8280/8380` | Qwen3.6-35B-A3B-Q8_0 | 37 GB | HOT | 24.3 | 32K effective / 262K max |
-| `coder_escalation` | `8070` | Qwen3.6-35B-A3B-Q8_0, shared with `frontdoor` | 37 GB shared | HOT | 24.3 | 32K effective / 262K max |
-| `worker_general` | `8072` primary; launch ports `8072/8082/8182/8282/8382` | gemma-4-26B-A4B-it-Q4_K_M | 16 GB | HOT | 60.7 | 16K |
+| `frontdoor` | `8070` primary; launch ports `8070/8080/8180/8280/8380` | Qwen3.6-35B-A3B-MTP-Q8_0 | 37 GB | HOT | 24.3 | 32K effective / 262K max |
+| `coder_escalation` | `8070` | Qwen3.6-35B-A3B-MTP-Q8_0, shared with `frontdoor` | 37 GB shared | HOT | 24.3 | 32K effective / 262K max |
+| `worker_general` | `8072` primary; launch ports `8072/8082/8182/8282/8382` | gemma-4-26B-A4B-it-ORIG-Q4_K_M | 16 GB | HOT | 60.7 | 16K |
 | `worker_math` | `8072/8082` | shared with `worker_general` | 16 GB shared | HOT | 60.7 | 16K |
 | `worker_summarize` | `8070` | shared with `frontdoor` | 37 GB shared | HOT | 24.3 | 32K effective / 262K max |
 | `toolrunner` | `8072/8082` | shared with `worker_general` | 16 GB shared | HOT | 60.7 | 16K |
@@ -74,9 +74,10 @@ Routes requests, writes code, and handles escalation paths through the shared
 Qwen3.6 server.
 
 - **Needs**: Fast MoE model with strong instruction following and code ability.
-- **Acceleration**: Current live stack records no speculative decoding for this
-  server; use generated launch requirements rather than copying old draft
-  settings.
+- **Acceleration**: The frontdoor launch uses embedded NEXTN/draft-MTP from the
+  same GGUF (`draft_model_path == model_path`). Logical aliases such as
+  `coder_escalation` and `worker_summarize` still follow their generated
+  per-role runtime flags; do not infer launch flags from handwritten docs.
 - **Compatibility risk**: Frontdoor and coder escalation share a physical model
   and endpoint, so cost, memory, and health accounting must be alias-aware.
 
@@ -96,8 +97,9 @@ paths use the Gemma worker runtime or a shared frontdoor summarization path.
 System architecture, deep multi-step reasoning, and high-stakes planning.
 
 - **Needs**: Largest available high-quality reasoning MoE model.
-- **Acceleration**: Current stack uses MoE expert reduction; generated runtime
-  witness disables speculative decoding for this role.
+- **Acceleration**: Current stack uses embedded NEXTN/draft-MTP from the same
+  Qwen3.5-122B MTP GGUF with generated `draft_max=4`; historical external-draft
+  settings do not apply.
 - **Compatibility risk**: Do not reintroduce a distinct `architect_coding`
   server without a full stack-change update and guard pass.
 
@@ -118,6 +120,8 @@ not a statement of what is currently enabled in production.
 
 | Target Family | Compatible Draft | Notes |
 |---------------|------------------|-------|
+| Qwen3.6 frontdoor | Same-file Qwen3.6-35B-A3B-MTP-Q8_0 | Embedded NEXTN/draft-MTP; use generated stack-prior launch requirements |
+| Qwen3.5 architect | Same-file Qwen3.5-122B-A10B MTP GGUF | Embedded NEXTN/draft-MTP; generated `draft_max=4` |
 | Qwen2.5 | Qwen2.5-0.5B / Qwen2.5-Coder-0.5B | Standard vocab match |
 | Qwen3 non-Coder | Qwen3-0.6B | Standard Qwen3 vocab |
 | Qwen3-Coder | jukofyork-Qwen3-Coder-0.75B | Vocab-transplant draft; BOS=comma |
