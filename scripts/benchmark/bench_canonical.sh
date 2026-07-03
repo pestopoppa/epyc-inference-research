@@ -51,7 +51,11 @@ fi
 # See cpu-decode-flops-roofline-audit.md §0.7 Phase 0 Calibration Results
 # for the discovery story (this Zen 5 host exposes these events; Intel-named
 # fp_arith_inst_retired.* / uncore_imc/cas_count_* do NOT exist here).
-CANONICAL_PERF_EVENTS="fp_ops_retired_by_type.vector_mac,fp_ops_retired_by_type.vector_all,fp_ops_retired_by_type.scalar_all,ls_dmnd_fills_from_sys.dram_io_all,ls_hw_pf_dc_fills.dram_io_all,cycles,instructions,task-clock"
+PERF_PREFLIGHT="${REPO_DIR}/scripts/benchmark/perf_counter_preflight.py"
+CANONICAL_PERF_EVENTS="$(
+    python3 "$PERF_PREFLIGHT" --print-event-csv 2>/dev/null || \
+    echo "fp_ops_retired_by_type.vector_mac,fp_ops_retired_by_type.vector_all,fp_ops_retired_by_type.scalar_all,ls_dmnd_fills_from_sys.dram_io_all,ls_hw_pf_dc_fills.dram_io_all,cycles,instructions,task-clock"
+)"
 
 # Defaults (match canonical_recipe.py)
 MODEL=""
@@ -171,9 +175,16 @@ fi
 
 # Execute
 if [[ "$USE_PERF" -eq 1 ]]; then
+    PERF_BIN="${PERF_BIN:-perf}"
+    if ! command -v "$PERF_BIN" >/dev/null 2>&1; then
+        echo "ERROR: perf binary not found: $PERF_BIN" >&2
+        echo "Run: python3 $PERF_PREFLIGHT --strict" >&2
+        echo "Fix: install or expose linux-tools/perf for the running kernel before --perf." >&2
+        exit 1
+    fi
     # sudo perf stat needs env preserved across the sudo boundary; pass via env(1)
     # AFTER perf's -- (so perf sees the env-prefix, not its own argv).
-    eval "sudo perf stat -e $CANONICAL_PERF_EVENTS -- env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
+    eval "sudo $PERF_BIN stat -e $CANONICAL_PERF_EVENTS -- env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
 else
     eval "env $ENV_EXPORTS ${CMD_ARGS[*]@Q}"
 fi
