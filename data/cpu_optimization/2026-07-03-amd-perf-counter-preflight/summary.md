@@ -1,7 +1,7 @@
 # AMD Perf Counter Preflight
 
-Generated: `2026-07-03T17:35:37.942398+00:00`
-Status: **blocked**
+Generated: `2026-07-03T18:15:48.051414+00:00`
+Status: **ok**
 
 ## Host
 
@@ -12,28 +12,28 @@ Status: **blocked**
 
 ## Perf
 
-- Binary: `None`
-- Found: `False`
-- perf list ok: `None`
+- Binary: `/usr/bin/perf`
+- Found: `True`
+- perf list ok: `True`
 
 ## Canonical Events
 
 | Event | Status |
 |---|---|
-| `fp_ops_retired_by_type.vector_mac` | missing |
-| `fp_ops_retired_by_type.vector_all` | missing |
-| `fp_ops_retired_by_type.scalar_all` | missing |
-| `ls_dmnd_fills_from_sys.dram_io_all` | missing |
-| `ls_hw_pf_dc_fills.dram_io_all` | missing |
-| `cycles` | missing |
-| `instructions` | missing |
-| `task-clock` | missing |
+| `fp_ops_retired_by_type.vector_mac` | present |
+| `fp_ops_retired_by_type.vector_all` | present |
+| `fp_ops_retired_by_type.scalar_all` | present |
+| `ls_dmnd_fills_from_sys.dram_io_all` | present |
+| `ls_hw_pf_dc_fills.dram_io_all` | present |
+| `cycles` | present |
+| `instructions` | present |
+| `task-clock` | present |
 
 ## Probe
 
-- Attempted: `False`
-- OK: `None`
+- Attempted: `True`
+- OK: `True`
 
 ## Recommendation
 
-Install or expose linux-tools/perf for the running kernel before using bench_canonical.sh --perf or accepting roofline evidence.
+Canonical AMD perf events are visible and the smoke probe passed.

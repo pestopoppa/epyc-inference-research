@@ -59,8 +59,15 @@ def collect_host_info() -> dict[str, Any]:
 
 
 def _event_present(perf_list_text: str, event: str) -> bool:
-    pattern = re.compile(rf"(^|\n)\s*{re.escape(event)}(?:\s|$|\[)")
-    return bool(pattern.search(perf_list_text))
+    # `perf list` can expose canonical aliases mid-line, e.g.
+    # `cpu-cycles OR cycles [Hardware event]`. Treat each `OR` segment as an
+    # exact alias rather than requiring the requested event at line start.
+    for line in perf_list_text.splitlines():
+        alias_text = line.split("[", 1)[0].strip()
+        for alias in re.split(r"\s+OR\s+|\s+", alias_text):
+            if alias.strip().strip("/") == event:
+                return True
+    return False
 
 
 def inspect_perf_list(perf_binary: str) -> dict[str, Any]:

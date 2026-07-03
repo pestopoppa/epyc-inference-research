@@ -10,7 +10,8 @@
       "instructions",
       "task-clock"
     ],
-    "missing": [
+    "missing": [],
+    "present": [
       "fp_ops_retired_by_type.vector_mac",
       "fp_ops_retired_by_type.vector_all",
       "fp_ops_retired_by_type.scalar_all",
@@ -19,10 +20,9 @@
       "cycles",
       "instructions",
       "task-clock"
-    ],
-    "present": []
+    ]
   },
-  "generated_at": "2026-07-03T17:35:37.942398+00:00",
+  "generated_at": "2026-07-03T18:15:48.051414+00:00",
   "host": {
     "cpu_count": 192,
     "kernel": "6.14.0-37-generic",
@@ -32,13 +32,18 @@
     "vendor_id": "AuthenticAMD"
   },
   "perf": {
-    "binary": null,
-    "found": false
+    "binary": "/usr/bin/perf",
+    "found": true,
+    "list_ok": true,
+    "list_returncode": 0
   },
   "probe": {
-    "attempted": false
+    "attempted": true,
+    "ok": true,
+    "returncode": 0,
+    "stderr": "5111524,,cycles,1160691,100.00,4.404,GHz\n5419878,,instructions,1160691,100.00,1.06,insn per cycle\n1160691,,task-clock,1160691,100.00,0.011,CPUs utilized\n"
   },
-  "recommendation": "Install or expose linux-tools/perf for the running kernel before using bench_canonical.sh --perf or accepting roofline evidence.",
+  "recommendation": "Canonical AMD perf events are visible and the smoke probe passed.",
   "schema": "amd_perf_counter_preflight.v1",
-  "status": "blocked"
+  "status": "ok"
 }

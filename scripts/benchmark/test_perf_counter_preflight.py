@@ -47,6 +47,32 @@ def test_perf_list_missing_canonical_event_blocks(monkeypatch):
     assert "fp_ops_retired_by_type.vector_mac" in report["events"]["missing"]
 
 
+def test_perf_list_alias_rows_count_as_present(monkeypatch):
+    monkeypatch.setattr(p.shutil, "which", lambda name: "/usr/bin/perf")
+    lines = [
+        "  cpu-cycles OR cycles                               [Hardware event]",
+        "  instructions                                       [Hardware event]",
+        "  task-clock",
+    ]
+    alias_provided = {"cycles", "instructions", "task-clock"}
+    lines.extend(f"  {event}" for event in p.CANONICAL_PERF_EVENTS if event not in alias_provided)
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout="\n".join(lines),
+            stderr="",
+        )
+
+    monkeypatch.setattr(p.subprocess, "run", fake_run)
+
+    report = p.build_report()
+
+    assert "cycles" in report["events"]["present"]
+    assert "cycles" not in report["events"]["missing"]
+
+
 def test_all_events_visible_with_probe_passes(monkeypatch):
     monkeypatch.setattr(p.shutil, "which", lambda name: "/usr/bin/perf")
     events_text = "\n".join(f"  {event}" for event in p.CANONICAL_PERF_EVENTS)
