@@ -23,6 +23,7 @@ ROLE_FILTER=""
 CTX_FILTER=""
 ALLOW_ACTIVE_AUTOPILOT=0
 ALLOW_LIVE_LLAMA=0
+WRITE_PLAN=0
 
 # role|model_id|model_path|max_ctx
 TARGETS=(
@@ -35,7 +36,7 @@ CONTEXTS=(2048 8192 32768)
 
 usage() {
   cat <<'EOF'
-Usage: ds_e1_kv_measurements.sh [--execute] [--role ROLE] [--ctx TOKENS]
+Usage: ds_e1_kv_measurements.sh [--execute] [--role ROLE] [--ctx TOKENS] [--write-plan]
 
 Default mode is dry-run. The execute mode starts one production-configured
 llama-server at a time, measures RSS and server-reported KV allocation, and
@@ -49,6 +50,11 @@ live. Override only for an intentional coordinated window:
 
 Environment overrides:
   LLAMA_SERVER, OUTPUT_DIR, PORT, THREADS, UBATCH, N_PREDICT
+
+Planning:
+  --write-plan writes measurement_plan.json and run_clean_window.sh under
+  OUTPUT_DIR without starting inference. The runner preserves the timestamp,
+  output path, role/context filters, and measurement knobs for the clean window.
 EOF
 }
 
@@ -59,6 +65,7 @@ while [[ $# -gt 0 ]]; do
     --ctx) CTX_FILTER="$2"; shift 2 ;;
     --allow-active-autopilot) ALLOW_ACTIVE_AUTOPILOT=1; shift ;;
     --allow-live-llama) ALLOW_LIVE_LLAMA=1; shift ;;
+    --write-plan) WRITE_PLAN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage; exit 2 ;;
   esac
@@ -160,6 +167,102 @@ stop_server() {
   sleep 3
 }
 
+write_plan_artifacts() {
+  local plan_file="${OUTPUT_DIR}/measurement_plan.json"
+  local runner_file="${OUTPUT_DIR}/run_clean_window.sh"
+  mkdir -p "$OUTPUT_DIR"
+  python3 - "$plan_file" "$runner_file" "$RESEARCH_ROOT" "$TIMESTAMP" "$OUTPUT_DIR" \
+    "$RESULTS_FILE" "$LLAMA_SERVER" "$PORT" "$THREADS" "$UBATCH" "$N_PREDICT" \
+    "$ROLE_FILTER" "$CTX_FILTER" "${planned_rows[@]}" <<'PY'
+import json
+from pathlib import Path
+import shlex
+import sys
+
+(
+    plan_file,
+    runner_file,
+    research_root,
+    timestamp,
+    output_dir,
+    results_file,
+    llama_server,
+    port,
+    threads,
+    ubatch,
+    n_predict,
+    role_filter,
+    ctx_filter,
+    *rows,
+) = sys.argv[1:]
+
+parsed_rows = []
+for raw in rows:
+    role, model_id, model_path, max_ctx, ctx = raw.split("|", 4)
+    parsed_rows.append({
+        "role": role,
+        "model_id": model_id,
+        "model_path": model_path,
+        "context_length": int(ctx),
+        "max_context": int(max_ctx),
+    })
+
+execute_parts = [
+    "DS_E1_KV_TIMESTAMP=" + shlex.quote(timestamp),
+    "OUTPUT_DIR=" + shlex.quote(output_dir),
+    "LLAMA_SERVER=" + shlex.quote(llama_server),
+    "PORT=" + shlex.quote(port),
+    "THREADS=" + shlex.quote(threads),
+    "UBATCH=" + shlex.quote(ubatch),
+    "N_PREDICT=" + shlex.quote(n_predict),
+    "bash",
+    "scripts/benchmark/ds_e1_kv_measurements.sh",
+    "--execute",
+]
+if role_filter:
+    execute_parts.extend(["--role", shlex.quote(role_filter)])
+if ctx_filter:
+    execute_parts.extend(["--ctx", shlex.quote(ctx_filter)])
+execute_command = " ".join(execute_parts)
+
+plan = {
+    "schema": "ds_e1_kv_measurement_plan.v1",
+    "timestamp": timestamp,
+    "output_dir": output_dir,
+    "results_file": results_file,
+    "execute_command": f"cd {shlex.quote(research_root)} && {execute_command}",
+    "role_filter": role_filter,
+    "ctx_filter": int(ctx_filter) if ctx_filter else None,
+    "measurement_knobs": {
+        "llama_server": llama_server,
+        "port": int(port),
+        "threads": int(threads),
+        "ubatch": int(ubatch),
+        "n_predict": int(n_predict),
+    },
+    "rows": parsed_rows,
+    "clean_window_required": True,
+    "contamination_overrides_excluded": [
+        "--allow-active-autopilot",
+        "--allow-live-llama",
+    ],
+}
+Path(plan_file).write_text(json.dumps(plan, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+runner = "\n".join([
+    "#!/bin/bash",
+    "set -euo pipefail",
+    f"cd {shlex.quote(research_root)}",
+    execute_command,
+    "",
+])
+Path(runner_file).write_text(runner, encoding="utf-8")
+Path(runner_file).chmod(0o755)
+PY
+  echo "Wrote DS-E1 plan artifacts:"
+  printf '  plan: %s\n' "$plan_file"
+  printf '  runner: %s\n' "$runner_file"
+}
+
 run_prefill() {
   local prompt=$1
   curl -fsS --max-time 900 "http://127.0.0.1:${PORT}/v1/chat/completions" \
@@ -211,6 +314,10 @@ for row in "${planned_rows[@]}"; do
   IFS='|' read -r role model_id model_path max_ctx ctx <<< "$row"
   printf '  - role=%s model=%s ctx=%s max_ctx=%s\n' "$role" "$model_id" "$ctx" "$max_ctx"
 done
+
+if [[ "$WRITE_PLAN" -eq 1 ]]; then
+  write_plan_artifacts
+fi
 
 if [[ "$EXECUTE" -ne 1 ]]; then
   echo
