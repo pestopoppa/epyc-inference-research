@@ -51,6 +51,7 @@ DEFAULT_ENV = {
     "KMP_BLOCKTIME": "10",
 }
 LLVM20_LIBDIR = Path("/usr/lib/llvm-20/lib")
+REQUIRED_NUMA_BALANCING = "0"
 
 
 @dataclass(frozen=True)
@@ -282,10 +283,10 @@ def host_health_warnings(attestation: dict[str, Any]) -> list[str]:
             "before decision-grade claims"
         )
     numa_balancing = attestation.get("numa_balancing")
-    if numa_balancing != "1":
+    if numa_balancing != REQUIRED_NUMA_BALANCING:
         warnings.append(
-            f"kernel.numa_balancing={numa_balancing!r}; checked and recorded, but not in the "
-            "historically preferred state"
+            f"kernel.numa_balancing={numa_balancing!r}; expected {REQUIRED_NUMA_BALANCING!r} "
+            "for canonical NUMA-interleave CPU benchmarking"
         )
     existing = attestation.get("existing_llama_processes")
     if existing:
