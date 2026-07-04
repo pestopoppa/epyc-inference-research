@@ -1,0 +1,93 @@
+{
+  "clean_window_required": true,
+  "contamination_overrides_excluded": [
+    "--allow-active-autopilot",
+    "--allow-live-llama"
+  ],
+  "ctx_filter": null,
+  "execute_command": "cd /mnt/raid0/llm/epyc-inference-research && DS_E1_KV_TIMESTAMP=20260704T040842Z OUTPUT_DIR=/mnt/raid0/llm/epyc-inference-research/data/dynamic_stack/ds_e1_kv_measurements_20260704T040842Z LLAMA_SERVER=/mnt/raid0/llm/llama.cpp/build/bin/llama-server PORT=8194 THREADS=96 UBATCH=8192 N_PREDICT=32 bash scripts/benchmark/ds_e1_kv_measurements.sh --execute",
+  "measurement_knobs": {
+    "llama_server": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server",
+    "n_predict": 32,
+    "port": 8194,
+    "threads": 96,
+    "ubatch": 8192
+  },
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/dynamic_stack/ds_e1_kv_measurements_20260704T040842Z",
+  "results_file": "/mnt/raid0/llm/epyc-inference-research/data/dynamic_stack/ds_e1_kv_measurements_20260704T040842Z/kv_measurements.csv",
+  "role_filter": "",
+  "rows": [
+    {
+      "context_length": 2048,
+      "max_context": 32768,
+      "model_id": "qwen3.6-35b-a3b-q8_0",
+      "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+      "role": "frontdoor"
+    },
+    {
+      "context_length": 8192,
+      "max_context": 32768,
+      "model_id": "qwen3.6-35b-a3b-q8_0",
+      "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+      "role": "frontdoor"
+    },
+    {
+      "context_length": 32768,
+      "max_context": 32768,
+      "model_id": "qwen3.6-35b-a3b-q8_0",
+      "model_path": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+      "role": "frontdoor"
+    },
+    {
+      "context_length": 2048,
+      "max_context": 32768,
+      "model_id": "qwen3-next-80b-a3b-q4_k_m",
+      "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+      "role": "ingest_long_context"
+    },
+    {
+      "context_length": 8192,
+      "max_context": 32768,
+      "model_id": "qwen3-next-80b-a3b-q4_k_m",
+      "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+      "role": "ingest_long_context"
+    },
+    {
+      "context_length": 32768,
+      "max_context": 32768,
+      "model_id": "qwen3-next-80b-a3b-q4_k_m",
+      "model_path": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf",
+      "role": "ingest_long_context"
+    },
+    {
+      "context_length": 2048,
+      "max_context": 16384,
+      "model_id": "gemma4-26b-a4b-q4_k_m",
+      "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+      "role": "worker_general"
+    },
+    {
+      "context_length": 8192,
+      "max_context": 16384,
+      "model_id": "gemma4-26b-a4b-q4_k_m",
+      "model_path": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M.gguf",
+      "role": "worker_general"
+    },
+    {
+      "context_length": 2048,
+      "max_context": 16384,
+      "model_id": "qwen3.5-122b-a10b-q4_k_m",
+      "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+      "role": "architect_general"
+    },
+    {
+      "context_length": 8192,
+      "max_context": 16384,
+      "model_id": "qwen3.5-122b-a10b-q4_k_m",
+      "model_path": "/mnt/raid0/llm/lmstudio/models/unsloth/Qwen3.5-122B-A10B-GGUF/Q4_K_M/Qwen3.5-122B-A10B-Q4_K_M-00001-of-00003.gguf",
+      "role": "architect_general"
+    }
+  ],
+  "schema": "ds_e1_kv_measurement_plan.v1",
+  "timestamp": "20260704T040842Z"
+}
