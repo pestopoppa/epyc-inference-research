@@ -1,0 +1,101 @@
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.001.344 I log_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.001.347 I device_info:
+0.00.001.355 I   - CPU     : AMD EPYC 9655 96-Core Processor (1160617 MiB, 1160617 MiB free)
+0.00.001.393 I system_info: n_threads = 96 (n_threads_batch = 96) / 192 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 | 
+0.00.001.420 I srv          init: running without SSL
+0.00.001.451 I srv          init: using 191 threads for HTTP server
+0.00.001.627 I srv         start: binding port with default address family
+0.00.002.763 I srv  llama_server: loading model
+0.00.002.802 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf'
+0.00.002.811 I common_init_result: fitting params to device memory ...
+0.00.002.812 I common_init_result: (for bugs during this step try to reproduce them with -fit off, or provide --verbose logs if the bug only occurs with -fit on)
+0.00.276.501 I common_params_fit_impl: projected to use 36099 MiB of host memory vs. 1160617 MiB of total host memory
+0.01.262.342 W llama_context: n_ctx_seq (32768) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+0.01.298.110 I common_init_from_params: warming up the model with an empty run - please wait ... (--no-warmup to disable)
+0.01.399.568 I srv    load_model: initializing slots, n_slots = 1
+0.01.492.148 W srv    load_model: speculative decoding will use checkpoints
+0.01.492.160 W common_speculative_init: no implementations specified for speculative decoding
+0.01.492.162 I slot   load_model: id  0 | task -1 | new slot, n_ctx = 32768
+0.01.492.221 I srv    load_model: prompt cache is enabled, size limit: 8192 MiB
+0.01.492.223 I srv    load_model: use `--cache-ram 0` to disable the prompt cache
+0.01.492.223 I srv    load_model: for more info see https://github.com/ggml-org/llama.cpp/pull/16391
+0.01.492.223 I srv    load_model: context checkpoints enabled, max = 32, min spacing = 256
+0.01.492.240 I srv          init: idle slots will be saved to prompt cache upon starting a new task
+0.01.502.103 I init: chat template, example_format: '<|im_start|>system
+You are a helpful assistant<|im_end|>
+<|im_start|>user
+Hello<|im_end|>
+<|im_start|>assistant
+Hi there<|im_end|>
+<|im_start|>user
+How are you?<|im_end|>
+<|im_start|>assistant
+<think>
+'
+0.01.509.287 I srv          init: init: chat template, thinking = 1
+0.01.509.330 I srv  llama_server: model loaded
+0.01.509.339 I srv  llama_server: server is listening on http://127.0.0.1:8194
+0.01.509.345 I srv  update_slots: all slots are idle
+0.01.510.171 I srv  update_slots: all slots are idle
+0.02.096.144 I srv    operator(): Chat format: peg-native
+0.02.096.283 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.02.096.285 I srv  get_availabl: updating prompt cache
+0.02.096.294 I srv          load:  - looking for better prompt, base f_keep = -1.000, sim = 0.000
+0.02.096.301 I srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 32768 tokens, 8589934592 est)
+0.02.096.303 I srv  get_availabl: prompt cache update took 0.01 ms
+0.02.096.406 I slot launch_slot_: id  0 | task 1 | processing task, is_child = 0
+0.04.101.446 W srv          stop: cancel task, id_task = 3
+0.06.500.824 W srv          stop: cancel task, id_task = 5
+0.06.701.546 W srv          stop: cancel task, id_task = 6
+0.09.181.492 W srv          stop: cancel task, id_task = 9
+0.09.565.358 W srv          stop: cancel task, id_task = 10
+0.10.800.558 I slot print_timing: id  0 | task 1 | prompt processing, n_tokens =   2048, progress = 0.17, t =   8.70 s / 235.29 tokens per second
+0.12.926.297 W srv          stop: cancel task, id_task = 15
+0.13.717.622 W srv          stop: cancel task, id_task = 16
+0.15.600.294 W srv          stop: cancel task, id_task = 18
+0.16.341.577 W srv          stop: cancel task, id_task = 20
+0.18.598.889 W srv          stop: cancel task, id_task = 23
+0.18.844.211 W srv          stop: cancel task, id_task = 24
+0.19.943.037 I slot print_timing: id  0 | task 1 | prompt processing, n_tokens =   4096, progress = 0.33, t =  17.85 s / 229.51 tokens per second
+0.22.892.098 W srv          stop: cancel task, id_task = 30
+0.24.696.773 W srv          stop: cancel task, id_task = 31
+0.25.441.133 W srv          stop: cancel task, id_task = 33
+0.27.804.189 W srv          stop: cancel task, id_task = 36
+0.27.856.275 W srv          stop: cancel task, id_task = 37
+0.29.636.687 I slot print_timing: id  0 | task 1 | prompt processing, n_tokens =   6144, progress = 0.50, t =  27.54 s / 223.09 tokens per second
+0.32.589.463 W srv          stop: cancel task, id_task = 43
+0.33.863.622 W srv          stop: cancel task, id_task = 44
+0.35.107.338 W srv          stop: cancel task, id_task = 46
+0.36.758.416 W srv          stop: cancel task, id_task = 48
+0.37.558.004 W srv          stop: cancel task, id_task = 50
+0.39.728.606 W srv          stop: cancel task, id_task = 53
+0.39.878.479 I slot print_timing: id  0 | task 1 | prompt processing, n_tokens =   8192, progress = 0.67, t =  37.78 s / 216.82 tokens per second
+0.42.519.997 W srv          stop: cancel task, id_task = 57
+0.42.779.037 W srv          stop: cancel task, id_task = 58
+0.45.094.276 W srv          stop: cancel task, id_task = 61
+0.45.755.736 W srv          stop: cancel task, id_task = 62
+0.47.544.390 W srv          stop: cancel task, id_task = 64
+0.48.765.131 W srv          stop: cancel task, id_task = 66
+0.50.092.603 W srv          stop: cancel task, id_task = 68
+0.50.322.295 I slot print_timing: id  0 | task 1 | prompt processing, n_tokens =  10240, progress = 0.83, t =  48.23 s / 212.33 tokens per second
+0.50.514.511 I slot print_timing: id  0 | task 1 | prompt processing, n_tokens =  10258, progress = 0.83, t =  48.42 s / 211.86 tokens per second
+0.50.522.339 I slot create_check: id  0 | task 1 | created context checkpoint 1 of 32 (pos_min = 10257, pos_max = 10257, n_tokens = 10258, size = 62.813 MiB)
+0.52.520.041 W srv          stop: cancel task, id_task = 74
+0.54.830.706 W srv          stop: cancel task, id_task = 76
+0.55.047.453 W srv          stop: cancel task, id_task = 77
+0.57.498.352 W srv          stop: cancel task, id_task = 80
+0.57.851.048 W srv          stop: cancel task, id_task = 81
+1.00.022.924 W srv          stop: cancel task, id_task = 84
+1.00.913.785 W srv          stop: cancel task, id_task = 85
+1.01.393.514 I slot print_timing: id  0 | task 1 | prompt processing, n_tokens =  12302, progress = 1.00, t =  59.30 s / 207.46 tokens per second
+1.01.403.023 I slot create_check: id  0 | task 1 | created context checkpoint 2 of 32 (pos_min = 12301, pos_max = 12301, n_tokens = 12302, size = 62.813 MiB)
+1.03.548.151 I slot print_timing: id  0 | task 1 | prompt eval time =   59395.10 ms / 12306 tokens (    4.83 ms per token,   207.19 tokens per second)
+1.03.548.156 I slot print_timing: id  0 | task 1 |        eval time =    2056.61 ms /    32 tokens (   64.27 ms per token,    15.56 tokens per second)
+1.03.548.157 I slot print_timing: id  0 | task 1 |       total time =   61451.71 ms / 12338 tokens
+1.03.548.164 I slot print_timing: id  0 | task 1 |    graphs reused =         31
+1.03.548.342 I slot      release: id  0 | task 1 | stop processing: n_tokens = 12337, truncated = 0
+1.03.548.352 I srv  update_slots: all slots are idle
+1.03.595.315 I srv    operator(): operator(): cleaning up before exit...

@@ -136,10 +136,14 @@ PY
 
 wait_for_server() {
   local port=$1
+  local pid=${2:-}
   local elapsed=0
   while true; do
     if curl -fsS "http://127.0.0.1:${port}/health" 2>/dev/null | grep -q '"status":"ok"'; then
       return 0
+    fi
+    if [[ -n "$pid" ]] && ! kill -0 "$pid" 2>/dev/null; then
+      return 1
     fi
     sleep 2
     elapsed=$((elapsed + 2))
@@ -336,7 +340,7 @@ for row in "${planned_rows[@]}"; do
   notes=""
   if [[ ! -f "$model_path" ]]; then
     notes="model_path_missing"
-    echo "$role,$model_id,$model_path,$ctx,$max_ctx,q4_0,f16,yes,missing_model,0,0,0,0,0,$log_file,$notes" >> "$RESULTS_FILE"
+    echo "$role,$model_id,$model_path,$ctx,$max_ctx,q4_0,f16,no,missing_model,0,0,0,0,0,$log_file,$notes" >> "$RESULTS_FILE"
     continue
   fi
 
@@ -353,31 +357,30 @@ for row in "${planned_rows[@]}"; do
     -ub "$UBATCH"
     -ctk q4_0
     -ctv f16
-    --kv-hadamard
   )
 
   echo "Measuring $role ctx=$ctx"
   numactl --interleave=all "${server_args[@]}" > "$log_file" 2>&1 &
   pid=$!
-  if ! wait_for_server "$PORT"; then
+  if ! wait_for_server "$PORT" "$pid"; then
     stop_server "$pid"
-    echo "$role,$model_id,$model_path,$ctx,$max_ctx,q4_0,f16,yes,start_failed,0,0,0,0,0,$log_file,server_health_timeout" >> "$RESULTS_FILE"
+    echo "$role,$model_id,$model_path,$ctx,$max_ctx,q4_0,f16,no,start_failed,0,0,0,0,0,$log_file,server_health_timeout" >> "$RESULTS_FILE"
     continue
   fi
 
   rss_load=$(rss_mb "$pid")
-  kv_mb=$(grep -oP 'llama_kv_cache: size =\s*\K[0-9.]+' "$log_file" 2>/dev/null | tail -1 || true)
-  [[ -z "$kv_mb" ]] && kv_mb=$(grep -oP 'KV buffer size\s*=\s*\K[0-9.]+' "$log_file" 2>/dev/null | tail -1 || true)
-  [[ -z "$kv_mb" ]] && kv_mb="0"
-
   prompt=$(generate_prompt $((ctx * 3 / 4)))
   prefill=$(run_prefill "$prompt" || echo "0,0.00")
   prompt_tokens=$(echo "$prefill" | cut -d, -f1)
   prompt_tps=$(echo "$prefill" | cut -d, -f2)
   rss_after=$(rss_mb "$pid")
-
-  echo "$role,$model_id,$model_path,$ctx,$max_ctx,q4_0,f16,yes,ok,$rss_load,$rss_after,$kv_mb,$prompt_tokens,$prompt_tps,$log_file,$notes" >> "$RESULTS_FILE"
   stop_server "$pid"
+
+  kv_mb=$(grep -oP 'llama_kv_cache: size =\s*\K[0-9.]+' "$log_file" 2>/dev/null | tail -1 || true)
+  [[ -z "$kv_mb" ]] && kv_mb=$(grep -oP 'KV buffer size\s*=\s*\K[0-9.]+' "$log_file" 2>/dev/null | tail -1 || true)
+  [[ -z "$kv_mb" ]] && kv_mb=$(grep -oP 'created context checkpoint .* size =\s*\K[0-9.]+' "$log_file" 2>/dev/null | tail -1 || true)
+  [[ -z "$kv_mb" ]] && kv_mb="0"
+  echo "$role,$model_id,$model_path,$ctx,$max_ctx,q4_0,f16,no,ok,$rss_load,$rss_after,$kv_mb,$prompt_tokens,$prompt_tps,$log_file,$notes" >> "$RESULTS_FILE"
 done
 
 echo "Done: $RESULTS_FILE"
