@@ -27,6 +27,15 @@ from pathlib import Path
 from typing import Any
 
 
+def _as_number(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def score_answer(
     answer: str,
     expected: str,
@@ -389,6 +398,7 @@ def _score_programmatic(
     # IFEval adapter uses "count" and "relation" instead of threshold/min_val/max_val
     count = config.get("count", threshold)
     relation = config.get("relation", "at_least")
+    required_count = _as_number(count)
 
     answer_stripped = answer.strip()
     words = answer_stripped.split()
@@ -397,23 +407,27 @@ def _score_programmatic(
 
     def _word_count_by_relation() -> bool:
         """Handle word_count/sentence_count with 'relation' from IFEval adapter."""
+        if required_count is None:
+            return False
         if relation == "at_least":
-            return wc >= count
+            return wc >= required_count
         elif relation == "at_most":
-            return wc <= count
+            return wc <= required_count
         elif relation == "exactly":
-            return wc == count
-        return wc >= count  # default: at_least
+            return wc == required_count
+        return wc >= required_count  # default: at_least
 
     def _sentence_count_by_relation() -> bool:
+        if required_count is None:
+            return False
         sc = len(re.findall(r"[.!?]+", answer_stripped))
         if relation == "at_least":
-            return sc >= count
+            return sc >= required_count
         elif relation == "at_most":
-            return sc <= count
+            return sc <= required_count
         elif relation == "exactly":
-            return sc == count
-        return sc >= count
+            return sc == required_count
+        return sc >= required_count
 
     verifiers = {
         # Original verifiers (YAML prompts use these names)
