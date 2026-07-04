@@ -208,6 +208,7 @@ runtime_defaults:
     index_path: /mnt/raid0/llm/cache/corpus/v3_sharded  # Sharded SQLite v3 (in-progress build, falls back gracefully). mvp_index kept as backup.
     max_snippets: 3
     max_chars: 3000
+    min_score: 0.0
     # rag_enabled: ABANDONED. Prompt-level RAG hurts quality on 7B (-0.96) AND 32B (-1.38).
   prefix_cache:
     enabled: true
@@ -1033,6 +1034,7 @@ roles:
       draft_max: 4
       draft_model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
       lookup: false
+      corpus_retrieval: true
     performance:
       baseline_tps: 24.3
       optimized_tps: 24.3
@@ -1196,6 +1198,7 @@ roles:
     acceleration:
       type: none  # Qwen3.6 Q8 runs full; GDN verification wall makes spec-dec net-negative
       lookup: false
+      corpus_retrieval: true
     performance:
       baseline_tps: 24.3
       optimized_tps: 24.3
