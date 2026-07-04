@@ -74,10 +74,12 @@ Routes requests, writes code, and handles escalation paths through the shared
 Qwen3.6 server.
 
 - **Needs**: Fast MoE model with strong instruction following and code ability.
-- **Acceleration**: The frontdoor launch uses embedded NEXTN/draft-MTP from the
-  same GGUF (`draft_model_path == model_path`). Logical aliases such as
-  `coder_escalation` and `worker_summarize` still follow their generated
-  per-role runtime flags; do not infer launch flags from handwritten docs.
+- **Acceleration**: The frontdoor uses embedded NEXTN/draft-MTP from the same
+  GGUF (`draft_model_path == model_path` in generated truth), but live launch
+  omits literal `-md` when the target and draft resolve to the same file.
+  Logical aliases such as `coder_escalation` and `worker_summarize` still follow
+  their generated per-role runtime flags; do not infer launch flags from
+  handwritten docs.
 - **Compatibility risk**: Frontdoor and coder escalation share a physical model
   and endpoint, so cost, memory, and health accounting must be alias-aware.
 
@@ -98,8 +100,9 @@ System architecture, deep multi-step reasoning, and high-stakes planning.
 
 - **Needs**: Largest available high-quality reasoning MoE model.
 - **Acceleration**: Current stack uses embedded NEXTN/draft-MTP from the same
-  Qwen3.5-122B MTP GGUF with generated `draft_max=4`; historical external-draft
-  settings do not apply.
+  Qwen3.5-122B MTP GGUF with generated `draft_max=4`; the live launcher omits
+  `-md` for the same-realpath self-draft. Historical external-draft settings do
+  not apply.
 - **Compatibility risk**: Do not reintroduce a distinct `architect_coding`
   server without a full stack-change update and guard pass.
 
