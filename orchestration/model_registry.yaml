@@ -248,7 +248,7 @@ runtime_defaults:
       coder_escalation: 120    # 32B Q4KM @ 10.8 t/s — 500 tok ~46s. 120s = 2.6x headroom
       vision_escalation: 120   # 30B MoE VL, multimodal processing
       ingest_long_context: 300 # 80B SSM, long document ingestion
-      architect_general: 600   # 122B MoE hybrid @ 4.3 t/s, complex multi-step reasoning
+      architect_general: 600   # 122B MoE hybrid; ~12.19 t/s no-MTP canonical (Probe B 2026-05-04), ~20.75 t/s v6 MTP-on (2026-06-26). Old "4.3 t/s" = pre-2026-05-04 2x cross-NUMA artifact. Complex multi-step reasoning.
 
     # Server/connection timeouts
     server:
@@ -640,7 +640,11 @@ server_mode:
       lookup: false
     numa_instances: 1
     numa_ports: [8083]
-    throughput: 12.19  # t/s at 96t NUMA single-instance canonical (Probe B 2026-05-04, n=5).
+    throughput: 12.19  # t/s at 96t NUMA single-instance canonical, NO MTP (Probe B 2026-05-04, n=5).
+                       # Scalar kept at the attested no-MTP protocol figure (MEASUREMENT.md: append, don't overwrite the historical record).
+                       # v6 MTP-on era (NEXTN self-draft): ~20.75 t/s single-instance, +89% vs base (measured 2026-06-25/26; progress/2026-06/2026-06-26.md).
+                       # Live production (2026-07-05, port 8083 telemetry, n=287 req): median ~16 t/s; single-stream bulk 17-22; 2-slot concurrent ~8.5/slot.
+                       # Deployed quant: UD-Q4_K_M (Qwen3.5-122B-A10B). No other-quant 122B speed on record.
                        # Old 4.3 was 2× cross-NUMA wiring (pre-2026-05-04). Bundle:
                        # epyc-inference-research/data/cpu_optimization/2026-05-04-qwen35-122b-arch-probe/
     previous_model: Qwen3-235B-A22B-Q4_K_M.gguf  # swapped 2026-03-19
