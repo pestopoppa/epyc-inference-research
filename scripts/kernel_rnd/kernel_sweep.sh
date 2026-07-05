@@ -60,3 +60,5 @@ echo "=== sweep done: $ran ok, $failed failed/observation; ingesting -> store ==
 python3 "$HERE/kernel_store.py" ingest "$OUT" --db "$DB"
 echo "=== current Pareto frontier (CORRECT runs only) ==="
 python3 "$HERE/kernel_store.py" pareto --db "$DB" --model "$(basename "$MODEL")"
+echo "=== refreshing dashboard-hub contract (kernel_dashboard.json) ==="
+python3 "$HERE/kernel_store.py" export --db "$DB"

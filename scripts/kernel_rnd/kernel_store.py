@@ -21,7 +21,7 @@ Usage:
   kernel_store.py best   [--model NAME] [--db PATH]
   kernel_store.py list   [--model NAME] [--db PATH]
 """
-import argparse, json, os, sqlite3, sys
+import argparse, datetime, json, os, sqlite3, sys
 
 DEFAULT_DB = os.environ.get(
     "KERNEL_STORE_DB",
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS runs (
 
 
 def _connect(db):
-    os.makedirs(os.path.dirname(db), exist_ok=True)
+    os.makedirs(os.path.dirname(db) or ".", exist_ok=True)
     c = sqlite3.connect(db)
     c.executescript(SCHEMA)
     return c
@@ -154,12 +154,103 @@ def _list(db, model):
         print(f"  [{flag}] {r[3]} {r[0]} v={v} Δ{r[6]}% tbo={r[9]} coh={r[10]} ({r[1]} {r[2]})")
 
 
+DEFAULT_DASHBOARD_JSON = os.environ.get(
+    "KERNEL_DASHBOARD_JSON",
+    "/mnt/raid0/llm/tmp/mi210-build/campaign/kernel_dashboard.json",
+)
+
+OBSERVATION_NOTICE = (
+    "Every number here is an OBSERVATION (MEASUREMENT.md) — it has no protocol id "
+    "and NEVER gates a keep/revert/deploy/promote decision. Correctness is "
+    "lexicographic-first: a fast-but-wrong variant is never a frontier win. "
+    "Operator-only authorizes any production push."
+)
+
+
+def _mech(mechanism_json):
+    """Extract dominant-kernel MemUnitStalled/Busy/VALUBusy deltas, or None."""
+    try:
+        m = json.loads(mechanism_json) if mechanism_json else {}
+    except Exception:
+        return None
+    dom = (m.get("delta_pct_dominant") or {}) if isinstance(m, dict) else {}
+    out = {k: dom[k] for k in ("MemUnitStalled", "MemUnitBusy", "VALUBusy") if k in dom}
+    return out or None
+
+
+def export(db, out):
+    """Write a self-contained JSON dashboard contract from the store.
+
+    Reuses the exact correctness/Pareto discipline of the CLI (`_rows`/`_pareto`,
+    `correct==1`) so the dashboard mirrors `kernel_store.py pareto`. Safe when the
+    store does not exist yet (emits an empty, db_present=False contract).
+    """
+    present = os.path.exists(db)
+    runs, front, best_rows = [], [], []
+    if present:
+        rows = _rows(db, None)  # (label,ts,git_sha,model,single_v,agg_v,delta,correct,status,tbo,coh)
+        c = _connect(db)
+        mech, base = {}, {}
+        for r in c.execute("SELECT label,ts,git_sha,single_tps_baseline,mechanism FROM runs"):
+            mech[(r[0], r[1], r[2])] = _mech(r[4])
+            base[(r[0], r[1], r[2])] = r[3]
+        for r in rows:
+            k = (r[0], r[1], r[2])
+            runs.append({
+                "label": r[0], "ts": r[1], "git_sha": r[2], "model": r[3],
+                "single_tps_baseline": base.get(k), "single_tps_variant": r[4],
+                "aggregate_tps_variant": r[5], "delta_pct": r[6],
+                "correct": bool(r[7]), "status": r[8], "tbo": r[9],
+                "coherence": r[10], "mechanism": mech.get(k),
+            })
+        runs.sort(key=lambda x: (x["ts"] or ""), reverse=True)
+        front = [
+            {"label": r[0], "ts": r[1], "git_sha": r[2], "model": r[3],
+             "single_tps": r[4], "aggregate_tps": r[5], "delta_pct": r[6],
+             "mechanism": mech.get((r[0], r[1], r[2]))}
+            for r in sorted(_pareto(rows), key=lambda x: -(x[4] or 0))
+        ]
+        by_model = {}
+        for r in (r for r in rows if r[7] == 1 and r[4] is not None):
+            if r[4] > (by_model.get(r[3], (None,) * 5)[4] or -1):
+                by_model[r[3]] = r
+        best_rows = [
+            {"model": m, "single_tps": r[4], "delta_pct": r[6],
+             "label": r[0], "git_sha": r[2]}
+            for m, r in by_model.items()
+        ]
+    contract = {
+        "generated_at": datetime.datetime.now(datetime.timezone.utc)
+                        .strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "db": db,
+        "db_present": present,
+        "observation_notice": OBSERVATION_NOTICE,
+        "totals": {
+            "runs": len(runs),
+            "correct": sum(1 for x in runs if x["correct"]),
+            "failed": sum(1 for x in runs if x["status"] != "OK"),
+            "models": len({x["model"] for x in runs if x["model"]}),
+        },
+        "pareto": front,
+        "best_per_model": best_rows,
+        "runs": runs,
+    }
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    tmp = f"{out}.tmp.{os.getpid()}"
+    with open(tmp, "w") as f:
+        json.dump(contract, f, indent=1)
+    os.replace(tmp, out)
+    print(f"exported {len(runs)} runs ({contract['totals']['correct']} correct) -> {out}")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["ingest", "pareto", "best", "list"])
+    ap.add_argument("cmd", choices=["ingest", "pareto", "best", "list", "export"])
     ap.add_argument("path", nargs="?")
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--model", default=None)
+    ap.add_argument("--out", default=DEFAULT_DASHBOARD_JSON,
+                    help="export: dashboard JSON contract path")
     a = ap.parse_args()
     if a.cmd == "ingest":
         if not a.path:
@@ -171,6 +262,8 @@ def main():
         best(a.db, a.model)
     elif a.cmd == "list":
         _list(a.db, a.model)
+    elif a.cmd == "export":
+        export(a.db, a.out)
 
 
 if __name__ == "__main__":
