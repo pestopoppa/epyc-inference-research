@@ -1,0 +1,225 @@
+{
+  "allow_host_health_warning": false,
+  "arms": [
+    {
+      "command": "cd /mnt/raid0/llm/epyc-inference-research\nuv run --extra benchmark python scripts/benchmark/server_np_sweep.py --run-id e2-pbench3-plan-20260706T032647Z-batch-np8 --output-root /mnt/raid0/llm/epyc-inference-research/data/batched_decode/e2-pbench3-plan-20260706T032647Z/serving --model-key qwen36_q8_0 --np-levels 8 --prompt-limit 43 --prompt-seed 42 --tier 1 --n-predict 256 --port-base 18070",
+      "kind": "server_np_sweep",
+      "metric": "wall_minutes_per_eval_proxy",
+      "name": "batch_np8_single_full_instance",
+      "primary_artifacts": [
+        "/mnt/raid0/llm/epyc-inference-research/data/batched_decode/e2-pbench3-plan-20260706T032647Z/serving/e2-pbench3-plan-20260706T032647Z-batch-np8/summary.csv",
+        "/mnt/raid0/llm/epyc-inference-research/data/batched_decode/e2-pbench3-plan-20260706T032647Z/serving/e2-pbench3-plan-20260706T032647Z-batch-np8/recommendations.json"
+      ]
+    },
+    {
+      "command": "cd /mnt/raid0/llm/epyc-orchestrator\nAUTOPILOT_EVAL_CONCURRENCY=3 uv run python scripts/autopilot/core_v2_calibrate.py --calibration-id e2-pbench3-plan-20260706T032647Z-current-quarters --out-jsonl /mnt/raid0/llm/epyc-inference-research/data/batched_decode/e2-pbench3-plan-20260706T032647Z/current_quarters.jsonl --n 43 --repeats 1 --seed 42 --trial-id-base 920000 --overwrite",
+      "kind": "core_v2_calibrate",
+      "metric": "eval_wall_s",
+      "name": "current_three_concurrent_quarters",
+      "primary_artifacts": [
+        "/mnt/raid0/llm/epyc-inference-research/data/batched_decode/e2-pbench3-plan-20260706T032647Z/current_quarters.jsonl"
+      ]
+    }
+  ],
+  "attestation": {
+    "created_at": "2026-07-06T03:26:47.651482+00:00",
+    "existing_llama_processes": [
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 8080 -np 1 -c 32768 -t 48 -ub 8192 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --mlock --spec-type draft-mtp --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/frontdoor",
+        "pid": "1870477"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 8180 -np 1 -c 32768 -t 48 -ub 8192 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --mlock --spec-type draft-mtp --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/frontdoor",
+        "pid": "1870837"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 8280 -np 1 -c 32768 -t 48 -ub 8192 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --mlock --spec-type draft-mtp --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/frontdoor",
+        "pid": "1871111"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 8380 -np 1 -c 32768 -t 48 -ub 8192 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --mlock --spec-type draft-mtp --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/frontdoor",
+        "pid": "1871389"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf -md /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 2 --draft-p-min 0.0 --threads-draft 16 -ub 512 --no-mmap --reasoning off --jinja --host 127.0.0.1 --port 8082 -np 1 -c 16384 -t 48 -ctk q8_0 -ctv q8_0 --flash-attn on",
+        "pid": "1871717"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf -md /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 2 --draft-p-min 0.0 --threads-draft 16 -ub 512 --no-mmap --reasoning off --jinja --host 127.0.0.1 --port 8182 -np 1 -c 16384 -t 48 -ctk q8_0 -ctv q8_0 --flash-attn on",
+        "pid": "1872042"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf -md /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 2 --draft-p-min 0.0 --threads-draft 16 -ub 512 --no-mmap --reasoning off --jinja --host 127.0.0.1 --port 8282 -np 1 -c 16384 -t 48 -ctk q8_0 -ctv q8_0 --flash-attn on",
+        "pid": "1872348"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf -md /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 2 --draft-p-min 0.0 --threads-draft 16 -ub 512 --no-mmap --reasoning off --jinja --host 127.0.0.1 --port 8382 -np 1 -c 16384 -t 48 -ctk q8_0 -ctv q8_0 --flash-attn on",
+        "pid": "1872665"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf --host 127.0.0.1 --port 8083 -np 2 -c 16384 -t 96 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv f16 --mlock --spec-type draft-mtp --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_general",
+        "pid": "1873010"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 8185 -np 1 -c 32768 -t 48 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv q4_0 --mlock --override-kv qwen3next.expert_used_count=int:4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/ingest_long_context",
+        "pid": "1873356"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 8285 -np 1 -c 32768 -t 48 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv q4_0 --mlock --override-kv qwen3next.expert_used_count=int:4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/ingest_long_context",
+        "pid": "1873687"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 8385 -np 1 -c 32768 -t 48 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv q4_0 --mlock --override-kv qwen3next.expert_used_count=int:4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/ingest_long_context",
+        "pid": "1874419"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 8485 -np 1 -c 32768 -t 48 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv q4_0 --mlock --override-kv qwen3next.expert_used_count=int:4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/ingest_long_context",
+        "pid": "1874713"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf --mmproj /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-model-f16.gguf --host 127.0.0.1 --port 8086 -np 2 -c 8192 -t 24 --flash-attn on",
+        "pid": "1875016"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf --mmproj /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf --override-kv qwen3vlmoe.expert_used_count=int:4 --host 127.0.0.1 --port 8187 -np 1 -c 16384 -t 48 --flash-attn on",
+        "pid": "1875248"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf --mmproj /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf --override-kv qwen3vlmoe.expert_used_count=int:4 --host 127.0.0.1 --port 8287 -np 1 -c 16384 -t 48 --flash-attn on",
+        "pid": "1875516"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf --mmproj /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf --override-kv qwen3vlmoe.expert_used_count=int:4 --host 127.0.0.1 --port 8387 -np 1 -c 16384 -t 48 --flash-attn on",
+        "pid": "1875845"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf --mmproj /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf --override-kv qwen3vlmoe.expert_used_count=int:4 --host 127.0.0.1 --port 8487 -np 1 -c 16384 -t 48 --flash-attn on",
+        "pid": "1876186"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8090 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on",
+        "pid": "1876636"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8091 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on",
+        "pid": "1876855"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8092 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on",
+        "pid": "1877085"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8093 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on",
+        "pid": "1877382"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8094 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on",
+        "pid": "1877614"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/bge-large-en-v1.5-f16.gguf --host 127.0.0.1 --port 8095 -np 4 -c 512 -t 4 --embeddings --pooling cls --flash-attn on",
+        "pid": "1877829"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 8070 -np 1 -c 32768 -t 96 -ub 8192 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --mlock --spec-type draft-mtp --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/frontdoor",
+        "pid": "2007622"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf -md /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 2 --draft-p-min 0.0 --threads-draft 16 -ub 512 --no-mmap --reasoning off --jinja --host 127.0.0.1 --port 8072 -np 1 -c 16384 -t 96 -ctk q8_0 -ctv q8_0 --flash-attn on",
+        "pid": "2007940"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 8085 -np 1 -c 32768 -t 96 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv q4_0 --mlock --override-kv qwen3next.expert_used_count=int:4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/ingest_long_context",
+        "pid": "2008332"
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf --mmproj /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf --override-kv qwen3vlmoe.expert_used_count=int:4 --host 127.0.0.1 --port 8087 -np 1 -c 16384 -t 96 --flash-attn on",
+        "pid": "2009392"
+      }
+    ],
+    "host": "Beelzebub",
+    "kernel": "Linux Beelzebub 6.14.0-37-generic #37~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Nov 20 10:25:38 UTC 2 x86_64 GNU/Linux",
+    "loadavg": "55.92 58.07 62.41 99/14137 3574766",
+    "lscpu_summary": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           52 bits physical, 57 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  192\nOn-line CPU(s) list:                     0-191\nVendor ID:                               AuthenticAMD\nModel name:                              AMD EPYC 9655 96-Core Processor\nCPU family:                              26\nModel:                                   2\nThread(s) per core:                      2\nCore(s) per socket:                      96\nSocket(s):                               1\nStepping:                                1\nFrequency boost:                         enabled\nCPU(s) scaling MHz:                      57%\nCPU max MHz:                             4510.0000\nCPU min MHz:                             1200.0000\nBogoMIPS:                                5199.84\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good amd_lbr_v2 nopl xtopology nonstop_tsc cpuid extd_apicid aperfmperf rapl pni pclmulqdq monitor ssse3 fma cx16 pcid sse4_1 sse4_2 x2apic movbe popcnt aes xsave avx f16c rdrand lahf_lm cmp_legacy svm extapic cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw ibs skinit wdt tce topoext perfctr_core perfctr_nb bpext perfctr_llc mwaitx cpb cat_l3 cdp_l3 hw_pstate ssbd mba perfmon_v2 ibrs ibpb stibp ibrs_enhanced vmmcall fsgsbase tsc_adjust bmi1 avx2 smep bmi2 erms invpcid cqm rdt_a avx512f avx512dq rdseed adx smap avx512ifma clflushopt clwb avx512cd sha_ni avx512bw avx512vl xsaveopt xsavec xgetbv1 xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local user_shstk avx_vnni avx512_bf16 clzero irperf xsaveerptr rdpru wbnoinvd amd_ppin cppc arat npt lbrv svm_lock nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold avic v_vmsave_vmload vgif x2avic v_spec_ctrl vnmi avx512vbmi umip pku ospke avx512_vbmi2 gfni vaes vpclmulqdq avx512_vnni avx512_bitalg avx512_vpopcntdq la57 rdpid bus_lock_detect movdiri movdir64b overflow_recov succor smca fsrm avx512_vp2intersect flush_l1d debug_swap amd_lbr_pmc_freeze\nVirtualization:                          AMD-V\nL1d cache:                               4.5 MiB (96 instances)\nL1i cache:                               3 MiB (96 instances)\nL2 cache:                                96 MiB (96 instances)\nL3 cache:                                384 MiB (12 instances)\nNUMA node(s):                            4\nNUMA node0 CPU(s):                       0-23,96-119\nNUMA node1 CPU(s):                       24-47,120-143\nNUMA node2 CPU(s):                       48-71,144-167\nNUMA node3 CPU(s):                       72-95,168-191\nVulnerability Gather data sampling:      Not affected\nVulnerability Ghostwrite:                Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Mitigation; IBPB on VMEXIT only\nVulnerability Spec store bypass:         Mitigation; Speculative Store Bypass disabled via prctl\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Enhanced / Automatic IBRS; IBPB conditional; STIBP always-on; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Not affected\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Mitigation; IBPB on VMEXIT",
+    "meminfo_head": "MemTotal:       1188472484 kB\nMemFree:        60430268 kB\nMemAvailable:   770589084 kB\nBuffers:         2531660 kB\nCached:         860239536 kB\nSwapCached:       237248 kB\nActive:         395403472 kB\nInactive:       547239924 kB",
+    "numa_balancing": "0",
+    "scaling_governors": [
+      "performance"
+    ],
+    "uptime_seconds": 293135.0
+  },
+  "comparison": {
+    "acceptance": "record keep-or-kill recommendation for an eval-batch instance set",
+    "batch_arm": "single full instance with -np 8",
+    "current_arm": "EvalTower fan-out with AUTOPILOT_EVAL_CONCURRENCY=3",
+    "metric": "wall_minutes_per_eval",
+    "purpose": "Price a single continuous-batching eval serving class against current EvalTower fan-out."
+  },
+  "created_at": "2026-07-06T03:26:47.786667+00:00",
+  "decision_grade": false,
+  "host_health_warnings": [
+    "existing llama processes present during attestation"
+  ],
+  "notes": [
+    "Run arms sequentially, not concurrently.",
+    "The batch arm uses the E1 serving primitive as the single-instance continuous-batching arm.",
+    "The current arm records EvalTower eval_wall_s for the live fan-out path."
+  ],
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/batched_decode/e2-pbench3-plan-20260706T032647Z",
+  "prompt_batch": {
+    "limit": 43,
+    "qids": [
+      "debugbench_fizz-buzz_python",
+      "bcb_BigCodeBench/819",
+      "simpleqa_general_02785",
+      "simpleqa_general_01165",
+      "gsm8k_01291",
+      "mmlu_miscellaneous_07724",
+      "debugbench_final-prices-with-a-special-discount-in-a-shop_java",
+      "hellaswag_34416",
+      "debugbench_plus-one_cpp",
+      "hellaswag_45409",
+      "hellaswag_04688",
+      "bcb_BigCodeBench/1041",
+      "bcb_BigCodeBench/976",
+      "debugbench_transpose-matrix_java",
+      "gsm8k_01141",
+      "simpleqa_general_00501",
+      "hellaswag_24725",
+      "hellaswag_48346",
+      "bcb_BigCodeBench/869",
+      "hellaswag_38109",
+      "gsm8k_00492",
+      "hellaswag_34292",
+      "hellaswag_04032",
+      "gsm8k_01200",
+      "hellaswag_11520",
+      "hellaswag_45031",
+      "simpleqa_general_02940",
+      "bcb_BigCodeBench/212",
+      "ifeval_1592",
+      "hellaswag_04893",
+      "hellaswag_16769",
+      "simpleqa_general_02925",
+      "mmlu_us_foreign_policy_13684",
+      "gsm8k_01032",
+      "hellaswag_15114",
+      "debugbench_increasing-decreasing-string_java",
+      "debugbench_maximum-number-of-balloons_java",
+      "hellaswag_38184",
+      "debugbench_remove-palindromic-subsequences_java",
+      "hellaswag_27524",
+      "hellaswag_18832",
+      "hellaswag_48793",
+      "simpleqa_general_02228"
+    ],
+    "seed": 42,
+    "selected_prompts_jsonl": "/mnt/raid0/llm/epyc-inference-research/data/batched_decode/e2-pbench3-plan-20260706T032647Z/selected_prompts.jsonl",
+    "source": "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/question_pool.jsonl",
+    "tier": 1
+  },
+  "protocol_id": "P-BENCH-3/E2",
+  "run_id": "e2-pbench3-plan-20260706T032647Z",
+  "scout_skip_clean_check": false,
+  "status": "blocked"
+}
