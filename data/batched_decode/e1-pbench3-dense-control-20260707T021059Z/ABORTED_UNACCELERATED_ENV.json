@@ -1,0 +1,7 @@
+{
+  "created_at": "2026-07-07T02:29:02.514156+00:00",
+  "partial_requests_jsonl": "requests.jsonl",
+  "reason": "Dense-control E1 run launched without GGML_IQK=1; observed ~1.08 t/s at np=1, matching prior stopped unaccelerated tail. Preserved partial rows but excluded from claims.",
+  "status": "aborted_unaccelerated_env",
+  "warmup_requests_jsonl": "warmup_requests.jsonl"
+}
