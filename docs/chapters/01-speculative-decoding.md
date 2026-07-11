@@ -1,6 +1,6 @@
 # Chapter 01: Speculative Decoding (Track 1)
 
-> **Current Status (May 2026)**: This chapter documents the 2026-02 baseline foundations. On EPYC 9655 with the current production stack, **NUMA 4-way parallel serving is the primary acceleration lever (6.7x aggregate)**; speculative decoding contributes an incremental +17–21% on top of that. The "11x" headline below is a 2025 Qwen2.5-Coder-32B + 0.5B-draft measurement; current production worker (Gemma4-26B-A4B MTP, swapped in 2026-05-08) achieves only 1.06x via MTP on MoE batch=1 (2.98x on dense Gemma4-31B). For 2026-04+ findings see [Chapter 10](10-advanced-speculative-decoding.md) and the production wiki on [speculative decoding](../../wiki/speculative-decoding.md).
+> **Current Status (July 2026)**: This chapter preserves the 2026-02 baseline foundations. Current production runs on the single `production-consolidated-v6` llama.cpp tree: upstream native MTP/NEXTN speculative decoding plus EPYC CPU forward-ports and iqk AVX-512 GEMM kernels, with `ik_llama.cpp` deprecated as a separate binary. On EPYC 9655, **NUMA 4-way parallel serving remains the primary acceleration lever (6.7x aggregate)**; speculative decoding is an incremental lever whose effect depends strongly on model family and batch shape. The "11x" headline below is a 2025 Qwen2.5-Coder-32B + 0.5B-draft measurement, not a current production result. The active production worker uses Gemma4-26B-A4B with native v6 MTP; dense Gemma4-31B rebenching is materially stronger than the early May note (~1.84x generic prose, ~2.5-3.2x structured/code), while the 26B-A4B MoE worker still needs model-specific draft-depth and sampling sweeps. For 2026-04+ findings see [Chapter 10](10-advanced-speculative-decoding.md) and the production wiki on [speculative decoding](../../wiki/speculative-decoding.md).
 
 ## Introduction
 
@@ -43,7 +43,7 @@ The headline numbers speak for themselves — an 11x speedup on code generation 
 | Qwen2.5-Math-72B | Qwen2.5-Coder-0.5B | 16 (temp=0.5) | 60.3% | **7.3x** |
 | Meta-Llama-70B | PARD-Llama-3.2-1B | 8 | 79% | **5.0x** |
 
-**Scope caveat**: Qwen2.5-Coder-32B was replaced in production by **Gemma4-26B-A4B-Q4_K_M** (worker_general) on 2026-05-08. The current production speculative-decoding mechanism is MTP (Multi-Token Prediction) integrated into the worker model itself, not an external 0.5B draft — and on Gemma4's MoE architecture the measured speedup is only **1.06x** at batch=1 due to MoE-batch-cancellation effects (dense Gemma4-31B sees 2.98x). The 11x figure is therefore historical context, not a current production benchmark.
+**Scope caveat**: Qwen2.5-Coder-32B was replaced in production by **Gemma4-26B-A4B-Q4_K_M** (worker_general) on 2026-05-08, and the July 2026 production kernel is now `production-consolidated-v6`, not a two-binary mainline/ik split. The current production speculative-decoding mechanism is native llama.cpp MTP using the Gemma assistant head via `--spec-type draft-mtp` / `--spec-draft-n-max`, not the historical external 0.5B Qwen draft. The 11x figure is therefore historical context, not a current production benchmark; current speedups must be read from the v6 Gemma/Qwen sweeps in Chapter 10 and the production wiki.
 
 </details>
 
@@ -194,9 +194,9 @@ External speculative decoding with a separate draft model **remains incompatible
 
 10. *DFlash: O(1) Block-Diffusion Speculative Drafting* (Feb 2026). See `handoffs/completed/dflash-block-diffusion-speculation.md` for the EPYC port and the Q4_K_M NO-GO finding. The technique remains a foundational reference for unified-model self-speculation directions (Nemotron-Labs-Diffusion, May 2026).
 
-### MTP Drafting (Production, May 2026)
+### MTP Drafting (Production, May-July 2026)
 
-11. *Gemma4 MTP via ik_llama.cpp PR #1744* (2026-05-08). Production speculative-decoding mechanism for `worker_general`; see `progress/2026-05/2026-05-08.md` and `wiki/speculative-decoding.md` § "Gemma 4 MTP Drafter."
+11. *Gemma4 MTP via ik_llama.cpp PR #1744* (2026-05-08) is the historical source of the Gemma assistant-head path. Current production uses the consolidated v6 llama.cpp native MTP/NEXTN implementation; see `progress/2026-05/2026-05-08.md`, `/workspace/wiki/speculative-decoding.md` § "Gemma 4 MTP Drafter", and the July 2026 v6 cutover notes in the same wiki.
 
 ### Curated Literature
 
@@ -217,15 +217,16 @@ Large architect models historically used full experts + spec decode (quality ove
 - 0.6B Q8_0 draft dramatically outperforms 1.7B: 55% vs 21% acceptance. Smaller draft wins on CPU due to faster proposal generation.
 - Historical config: Full experts + 0.6B spec (K=16) = 6.08 t/s (1.15x). MoE4+spec was 8.21 t/s but sacrifices quality.
 
-**Historical policy**: Architect roles prioritized quality. Full experts + spec decode was the production config. Frontdoor/coder roles used MoE + spec + lookup (speed matters more). This policy has been superseded by the May 2026 stack consolidation — see Production Update below.
+**Historical policy**: Architect roles prioritized quality. Full experts + spec decode was the production config. Frontdoor/coder roles used MoE + spec + lookup (speed matters more). This policy has been superseded by the May-July 2026 stack consolidation — see Production Update below.
 
 ---
 
-## Production Update (May 2026) — Gemma4 MTP, REAP, DFlash
+## Production Update (May-July 2026) — v6 Native MTP, Gemma4, REAP, DFlash
 
 The 2025-baseline configurations above no longer reflect production. Headline changes:
 
-- **Gemma4-26B-A4B MTP (DEPLOYED, 2026-05-08)**: Replaced Qwen2.5-Coder-32B as `worker_general`. MTP (Multi-Token Prediction) drafting is integrated into the model itself via ik_llama.cpp PR #1744 — no external 0.5B draft. Measured **1.06x** on the 26B-A4B MoE at batch=1 (MoE expert-routing cancels most of the speculation gain), **2.98x on dense Gemma4-31B**, +18pp tool_compliance, +36% tps end-to-end. Production launch requires `KMP_BLOCKTIME=10` and the 8 MTP-specific flags wired into `orchestrator_stack.py`; see `progress/2026-05/2026-05-08.md`.
+- **production-consolidated-v6 (DEPLOYED, July 2026)**: Production now runs on one llama.cpp tree with upstream native MTP/NEXTN, EPYC CPU forward-ports, and iqk AVX-512 GEMM kernels. `ik_llama.cpp` is deprecated; there is no second production binary.
+- **Gemma4-26B-A4B MTP (DEPLOYED, 2026-05-08; v6-native by July)**: Replaced Qwen2.5-Coder-32B as `worker_general`. The current production path uses the Gemma assistant head through native v6 MTP flags (`--spec-type draft-mtp`, `--spec-draft-n-max`) rather than ik-specific launch flags. Early 26B-A4B MoE speedup was modest at batch=1 because expert routing cancels much of the speculation gain; dense Gemma4-31B rebenching is stronger (~1.84x generic prose, ~2.5-3.2x structured/code). Continue to gate worker changes on model-specific draft-depth, sampling-temperature, and quality sweeps.
 - **REAP-pruned pure-MoE targets (DEPLOYED)**: REAP-25B (15GB, pure MoE — no SSM) achieves 39.62 t/s at `dm=24` (+101% vs baseline), and REAP-246B (pure MoE from Qwen3-Next-235B) re-enables standard `--draft` speculation on what would otherwise be a hybrid-SSM target. REAP pruning is the most impactful single intervention enabling speculation on the Qwen3-Next family. See `handoffs/completed/reap-moe-expert-pruning.md`.
 - **DFlash block diffusion (NO-GO on Q4_K_M, 2026-02)**: Frontier O(1)-draft technique. On GPU/f16 hits 6.49 accepted tokens per round; on EPYC Q4_K_M, quantization noise in hidden-state extraction degrades acceptance to 27% per token (13.0 t/s vs 36.5 t/s autoregressive). Documented in Chapter 05 as deprecated for CPU Q4_K_M; remains a foundational paper worth citing in the references section.
 - **MoE-Spec verification-budget mechanism (DEPLOYABLE)**: Independent expert union reduction during verification batches; +15.2% on REAP-246B forward-pass, +3% e2e. Orthogonal to MTP/draft selection.
