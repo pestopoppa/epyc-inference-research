@@ -5718,13 +5718,21 @@ roles:
       observed_date: 2026-07-16
       file_bytes: 91756066624
       runtime_build:
-        status: experimental_v7_load_smoke_pass
+        status: experimental_v7_load_smoke_and_mtp_closure_pass
         observed_date: 2026-07-16
         path: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin
         commit: 98a1ad8cf
         binaries:
         - llama-cli
-        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Capped CPU smoke on 2026-07-16 loaded the model and returned `OK` with `llama-cli` version `10077 (da1bf5e2f)`. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
+        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
+      runtime_observations:
+        evidence_dir: /mnt/raid0/llm/tmp/hy3-mtp-closure-20260716T234610Z
+        cpu_no_spec_generation_tps: 3.9
+        cpu_draft_mtp_generation_tps: 3.6
+        mi210_hybrid_no_spec_generation_tps: 9.2
+        mi210_hybrid_draft_mtp_generation_tps: 5.9
+        mi210_hybrid_recipe: "--device ROCm0 -ngl 99 --cpu-moe --fit on"
+        classification: "draft-mtp functional but slower than no-spec; full MI210 residency is not feasible for the 91.8GB artifact."
       hf_metadata:
         path: /mnt/raid0/llm/models/hy3-angelslim/.cache/huggingface/download/Hy3-IQ1_M-mtp.gguf.metadata
         revision: 218c93f0fb5227553b67e556b01dfe70fb70cf30
@@ -5741,7 +5749,7 @@ roles:
     acceleration:
       type: speculative_decoding
       spec_type: draft-mtp
-      notes: "Requires experimental v7 commit 98a1ad8cf or newer for AngelSlim GGUF loading; MTP-on/off correctness and throughput closure still pending."
+      notes: "Requires experimental v7 commit 98a1ad8cf or newer for AngelSlim GGUF loading. MTP-on/off functional closure passed, but draft-mtp regressed vs no-spec in both CPU and MI210-hybrid samples; keep disabled unless a later representative benchmark reverses this."
     constraints:
       forbid:
       - production_stack_registration_without_load_gate

@@ -13,7 +13,7 @@ This checkpoint records local artifact admission for the quiet-window model back
 | Candidate | Local artifact state | Manifest/source evidence | First runnable gate |
 |---|---:|---|---|
 | GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement. True 64K+ long-context classification remains open. |
-| Hy3 AngelSlim IQ1_M-mtp | Complete: `Hy3-IQ1_M-mtp.gguf`, 91,756,066,624 bytes, plus license, README, chat template, recipes, and two Hy3 llama.cpp patches. Experimental v7 commit `98a1ad8cf` now loads it after the Hy3 router-bias tensor-name fix. | HF metadata sidecar revision `218c93f0fb5227553b67e556b01dfe70fb70cf30`, LFS hash `f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13`. Capped CPU smoke loaded the model and returned `OK` with v7 `llama-cli` `10077 (da1bf5e2f)`. | MTP-on/off correctness and throughput closure. |
+| Hy3 AngelSlim IQ1_M-mtp | Complete: `Hy3-IQ1_M-mtp.gguf`, 91,756,066,624 bytes, plus license, README, chat template, recipes, and two Hy3 llama.cpp patches. Experimental v7 commit `98a1ad8cf` now loads it after the Hy3 router-bias tensor-name fix. | HF metadata sidecar revision `218c93f0fb5227553b67e556b01dfe70fb70cf30`, LFS hash `f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13`. Capped CPU smoke loaded the model and returned `OK`; follow-up CPU and MI210-hybrid MTP/no-spec A/Bs both produced coherent output. | ✅ MTP-on/off functional closure recorded; no-spec is faster than `draft-mtp` in the measured CPU and MI210-hybrid samples. Next gate is task quality / architecture fit, not more first-load smoke. |
 | Bonsai-27B Q1_0 | Complete: `Bonsai-27B-Q1_0.gguf`, 3,803,452,480 bytes. | HF metadata sidecar revision `0cf7e3d21581b169b4df1de8bf01316000e2fbb7`, LFS hash `17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0`. | Text load smoke on production v6 is valid; public quality is contested, so quality gate before any role claim. |
 | Ternary Bonsai-27B Q2_0 | Complete: `Ternary-Bonsai-27B-Q2_0.gguf`, 7,165,121,600 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757`. | Runtime support check on refreshed v7/experimental before load smoke. Production v6 does not advertise Q2_0. |
 | Ternary Bonsai-27B Q2_g64 | Complete: `Ternary-Bonsai-27B-Q2_g64.gguf`, 7,585,330,240 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `59a45d1ecef702b14531b06d22949f33b25c1897da31a8c0b298e01e4d9138eb`. | Variant-specific runtime support check before load smoke. |
@@ -119,6 +119,25 @@ These are admission observations gathered 2026-07-16 while GLM-5.2 was still dow
 | Hy3 AngelSlim IQ1_M-mtp | PASS capped CPU load/decode on patched experimental v7. | Returned `OK`; prompt `20.2 t/s`. Generation t/s is not meaningful for the one-token cap. | `/mnt/raid0/llm/tmp/hy3-tensor-mismatch-20260716/patched-v7-hy3/smoke.stdout` |
 
 Follow-ups: investigate Ternary Bonsai Q2_0 artifact/runtime compatibility, Qwable JSON-schema sampler initialization, and model-specific prompting/template strategy for Qwable and Bonsai-27B. The Qwable speed/load observations do not invalidate earlier successful v7/GPU Qwable work; the failed CPU direct-CLI runs were harness failures.
+
+## Hy3 MTP / Hybrid Closure
+
+Evidence directory: `/mnt/raid0/llm/tmp/hy3-mtp-closure-20260716T234610Z/`.
+
+The patched experimental v7 build `b10078-98a1ad8cf` was used for bounded CLI A/Bs on a quiet host. CPU runs hid ROCm devices (`--device none --device-draft none`); hybrid runs used `--device ROCm0 -ngl 99 --cpu-moe --fit on` because the 91.8 GB IQ1_M GGUF cannot fully reside on a single 64 GB MI210.
+
+| Arm | Result | Prompt t/s | Generation t/s | Notes |
+|---|---|---:|---:|---|
+| CPU no-spec, short JSON | PASS | 21.6 | 4.3 | Returned exact `{"status":"ok","model":"hy3"}`. |
+| CPU `draft-mtp`, short JSON | PASS | 20.5 | 5.9 | Functional MTP smoke; too short for throughput verdict. |
+| CPU no-spec, 12-sentence sample | PASS | 22.7 | 3.9 | Coherent numbered output. |
+| CPU `draft-mtp`, 12-sentence sample | PASS | 22.0 | 3.6 | MTP works but is slower on this sample. |
+| MI210 hybrid no-spec, short JSON | PASS | 7.3 | 9.5 | CPU experts + MI210 non-expert offload; exact JSON. |
+| MI210 hybrid `draft-mtp`, short JSON | PASS | 6.9 | 8.4 | Functional MTP smoke; too short for throughput verdict. |
+| MI210 hybrid no-spec, 12-sentence sample | PASS | 8.1 | 9.2 | Best measured Hy3 lane so far. |
+| MI210 hybrid `draft-mtp`, 12-sentence sample | PASS | 7.8 | 5.9 | MTP is a clear regression in this hybrid configuration. |
+
+Classification: Hy3 admission should treat `draft-mtp` as functional but not beneficial on the current CPU/hybrid configurations. The useful serving candidate is MI210 hybrid no-spec with CPU experts, pending task-level quality and a larger representative benchmark. Full GPU residency is not feasible on a single MI210 for this artifact.
 
 ## Qwable Server/Chat Reasoning-Economics Smoke
 
@@ -252,7 +271,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 ## Next Queue
 
 1. Run true 64K+ GLM long-context DSA/indexer engagement and scaling; artifact integrity, short load/coherence, loader metadata, and the 4K/8K trace shakedown are now closed.
-2. Run Hy3 MTP-on/off correctness and throughput closure on experimental v7 commit `98a1ad8cf` or newer; the basic load/decode smoke is now closed.
+2. Run Hy3 task-level quality / architecture-fit probes if the 295B/21B-active candidate remains interesting. MTP-on/off functional closure is done, and `draft-mtp` regressed vs no-spec in both CPU and MI210-hybrid samples.
 3. Investigate Ternary Bonsai Q2_0 artifact/runtime compatibility before retrying; ordinary Q1_0 and Bonsai-8B load/decode are already smoke-passed, while dspark variants failed.
 4. Run Qwable IQ4_XS and Q8_0 standalone/scaffold gates with task-level quality acceptance; long MI210/CPU speed observations and the strict-IQ4 JSON prompt smoke are now recorded.
 5. Move beyond speed-only admission observations for MiniCPM-o, Qwen3-VL-8B, Qwen3.5-9B MTP, Bonsai, Qwable, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible.

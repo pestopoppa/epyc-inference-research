@@ -40,7 +40,7 @@ docs/data/model_admission_smoke_commands_20260716.sh registry_gap_status
 
 | Order | Case | Purpose | Resource risk |
 |---:|---|---|---|
-| 1 | `hy3_cpu_smoke` | ✅ 2026-07-16 basic load/decode smoke passed on experimental v7 commit `98a1ad8cf`; next Hy3 work is MTP-on/off correctness and throughput closure. | Heavy CPU + reads 86 GB artifact. |
+| 1 | `hy3_cpu_smoke` | ✅ 2026-07-16 basic load/decode smoke passed on experimental v7 commit `98a1ad8cf`; ✅ follow-up CPU and MI210-hybrid MTP/no-spec A/Bs passed functionally. `draft-mtp` regressed vs no-spec on the longer CPU and hybrid samples, so next Hy3 work is task-level quality / fit, not another first-load smoke. | Heavy CPU + reads 86 GB artifact. |
 | 2 | `bonsai_q1_cpu` | ✅ 2026-07-16 CPU smoke passed: exact `ok`, 6.8 t/s generation. | Low/medium CPU, small artifact. |
 | 3 | `bonsai_q1_mi210_v7` | ✅ 2026-07-16 MI210 smoke passed: load/decode, 11.3 t/s generation, but emitted reasoning preamble instead of exact `ok`. | GPU load, small artifact. |
 | 4 | `bonsai_dspark_cpu_v7` | ❌ 2026-07-16 CPU smoke failed: `unknown model architecture: 'dspark'`. | Low/medium CPU, small artifact. |
@@ -74,6 +74,7 @@ Qwable-specific caution: a 2026-07-16 CPU direct-CLI smoke loaded `Qwable-v1.IQ4
 Additional longer observations were recorded after the first smoke queue. They do not replace quality gates, but they should prevent redundant first-speed reruns:
 
 - `/mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/`: MI210 server runs completed for Nemotron-Labs-Diffusion via scratch buun loader (`29.04 t/s`), Nemotron-Nano Q8 (`82.78 t/s`), Qwable IQ4_XS (`98.32 t/s`), Qwable Q8 (`100.15 t/s`), Qwen3.5-9B MTP (`99.44 t/s`), MiniCPM-o Q4 (`107.20 t/s`), Qwen3-VL-8B text (`102.73 t/s`), Bonsai-8B (`38.00 t/s`), Bonsai-27B Q1_0 (`11.15 t/s`), and Qwen2.5-Coder-14B (`66.16 t/s`; deprioritized by operator).
+- `/mnt/raid0/llm/tmp/hy3-mtp-closure-20260716T234610Z/`: Hy3 IQ1_M MTP/no-spec closure completed on patched experimental v7. Longer CPU sample: no-spec `3.9 t/s`, `draft-mtp` `3.6 t/s`. Longer MI210 hybrid with CPU experts: no-spec `9.2 t/s`, `draft-mtp` `5.9 t/s`. Classification: MTP is functional but not beneficial in these configurations.
 - `/mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/`: MI210 context sweep completed for Nemotron-Labs-Diffusion via scratch buun loader, Nemotron-Nano Q8, and Qwable IQ4_XS at nominal 2048/8192/32768 contexts. Decode drops were modest rather than catastrophic.
 - `/mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/`: Bonsai-27B Q1_0 default KV vs `q4_0/q4_0` KV showed essentially no decode-speed improvement at short or long context, so KV quantization does not explain the local 11 t/s result.
 - `/mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/`: Qwable named-arm selector run completed under active GLM download and cleaned up. Q8 returned valid requested JSON inside fences at `103.63 t/s`; strict IQ4 returned exact minified JSON with no markdown at `99.24 t/s`.
