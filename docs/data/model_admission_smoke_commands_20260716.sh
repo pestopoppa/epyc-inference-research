@@ -38,12 +38,16 @@ glm_status() {
   local finalized incomplete avail
   du -sh "${root}" || true
   pgrep -af "hf download unsloth/GLM-5.2-GGUF" || true
-  finalized=$(find "${root}" -path '*/.cache/*' -prune -o -name '*.gguf' -type f | wc -l)
-  incomplete=$(find "${root}" \( -name '*.incomplete' -o -name '*.lock' \) | wc -l)
+  finalized=$(find "${root}" -type f -name '*.gguf' ! -path '*/.cache/*' | wc -l)
+  incomplete=$(find "${root}" -type f \( -name '*.incomplete' -o -name '*.lock' \) | wc -l)
   avail=$(df -h /mnt/raid0/llm/models | awk 'NR==2{print $4}')
   printf 'finalized_ggufs=%s incomplete_or_lock=%s avail=%s\n' "${finalized}" "${incomplete}" "${avail}"
-  find "${root}" \
-    -maxdepth 3 -type f -printf '%s %TY-%Tm-%TdT%TH:%TM:%TS %p\n' | sort -nr | head -20
+  echo "finalized shards:"
+  find "${root}" -type f -name '*.gguf' ! -path '*/.cache/*' \
+    -printf '%s %TY-%Tm-%TdT%TH:%TM:%TS %p\n' | sort -nr
+  echo "largest cache/incomplete markers:"
+  find "${root}" -type f \( -name '*.incomplete' -o -name '*.lock' \) \
+    -printf '%s %TY-%Tm-%TdT%TH:%TM:%TS %p\n' | sort -nr | head -20
 }
 
 registry_gap_status() {
@@ -80,6 +84,22 @@ bonsai_q1_mi210_v7() {
     -p 'Return exactly: ok'
 }
 
+bonsai_dspark_cpu_v7() {
+  require_no_glm_download
+  v7_cpu_llama \
+    -m /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-dspark-Q4_1.gguf \
+    -ngl 0 -t "${THREADS:-96}" -c 2048 -n 64 \
+    -p 'Return exactly: ok'
+}
+
+bonsai_dspark_mi210_v7() {
+  require_no_glm_download
+  v7_mi210_llama \
+    -m /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-dspark-Q4_1.gguf \
+    -ngl 99 -c 2048 -n 64 \
+    -p 'Return exactly: ok'
+}
+
 ternary_q2_0_mi210_v7() {
   require_no_glm_download
   v7_mi210_llama \
@@ -93,6 +113,38 @@ ternary_q2_0_cpu_v7() {
   v7_cpu_llama \
     -m /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-Q2_0.gguf \
     -ngl 0 -t "${THREADS:-96}" -c 2048 -n 64 \
+    -p 'Return exactly: ok'
+}
+
+ternary_bonsai_dspark_cpu_v7() {
+  require_no_glm_download
+  v7_cpu_llama \
+    -m /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-dspark-Q4_1.gguf \
+    -ngl 0 -t "${THREADS:-96}" -c 2048 -n 64 \
+    -p 'Return exactly: ok'
+}
+
+ternary_bonsai_dspark_mi210_v7() {
+  require_no_glm_download
+  v7_mi210_llama \
+    -m /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-dspark-Q4_1.gguf \
+    -ngl 99 -c 2048 -n 64 \
+    -p 'Return exactly: ok'
+}
+
+bonsai_8b_cpu_v7() {
+  require_no_glm_download
+  v7_cpu_llama \
+    -m /mnt/raid0/llm/models/Bonsai-8B.gguf \
+    -ngl 0 -t "${THREADS:-48}" -c 2048 -n 64 \
+    -p 'Return exactly: ok'
+}
+
+bonsai_8b_mi210_v7() {
+  require_no_glm_download
+  v7_mi210_llama \
+    -m /mnt/raid0/llm/models/Bonsai-8B.gguf \
+    -ngl 99 -c 2048 -n 64 \
     -p 'Return exactly: ok'
 }
 
@@ -231,8 +283,14 @@ case "${1:-}" in
   registry_gap_status) registry_gap_status ;;
   bonsai_q1_cpu) bonsai_q1_cpu ;;
   bonsai_q1_mi210_v7) bonsai_q1_mi210_v7 ;;
+  bonsai_dspark_cpu_v7) bonsai_dspark_cpu_v7 ;;
+  bonsai_dspark_mi210_v7) bonsai_dspark_mi210_v7 ;;
   ternary_q2_0_cpu_v7) ternary_q2_0_cpu_v7 ;;
   ternary_q2_0_mi210_v7) ternary_q2_0_mi210_v7 ;;
+  ternary_bonsai_dspark_cpu_v7) ternary_bonsai_dspark_cpu_v7 ;;
+  ternary_bonsai_dspark_mi210_v7) ternary_bonsai_dspark_mi210_v7 ;;
+  bonsai_8b_cpu_v7) bonsai_8b_cpu_v7 ;;
+  bonsai_8b_mi210_v7) bonsai_8b_mi210_v7 ;;
   qwable_iq4xs_cpu_v7) qwable_iq4xs_cpu_v7 ;;
   qwable_iq4xs_mi210_v7) qwable_iq4xs_mi210_v7 ;;
   qwable_q8_mi210_v7) qwable_q8_mi210_v7 ;;
@@ -250,7 +308,7 @@ case "${1:-}" in
   qwen3_4b_thinking_cpu_v7) qwen3_4b_thinking_cpu_v7 ;;
   qwen3_4b_thinking_mi210_v7) qwen3_4b_thinking_mi210_v7 ;;
   *)
-    echo "usage: $0 {glm_status|registry_gap_status|bonsai_q1_cpu|bonsai_q1_mi210_v7|ternary_q2_0_cpu_v7|ternary_q2_0_mi210_v7|qwable_iq4xs_cpu_v7|qwable_iq4xs_mi210_v7|qwable_q8_mi210_v7|hy3_build_cpu_runtime|hy3_cpu_smoke|deepseek_v4_flash_cpu_v7|minicpm_q4_cpu_text_v7|minicpm_q4_mi210_text_v7|qwen25_coder14_cpu_v7|qwen25_coder14_mi210_v7|qwen35_9b_mtp_cpu_v7|qwen35_9b_mtp_mi210_v7|qwen3_vl8_cpu_text_v7|qwen3_vl8_mi210_text_v7|qwen3_4b_thinking_cpu_v7|qwen3_4b_thinking_mi210_v7}" >&2
+    echo "usage: $0 {glm_status|registry_gap_status|bonsai_q1_cpu|bonsai_q1_mi210_v7|bonsai_dspark_cpu_v7|bonsai_dspark_mi210_v7|ternary_q2_0_cpu_v7|ternary_q2_0_mi210_v7|ternary_bonsai_dspark_cpu_v7|ternary_bonsai_dspark_mi210_v7|bonsai_8b_cpu_v7|bonsai_8b_mi210_v7|qwable_iq4xs_cpu_v7|qwable_iq4xs_mi210_v7|qwable_q8_mi210_v7|hy3_build_cpu_runtime|hy3_cpu_smoke|deepseek_v4_flash_cpu_v7|minicpm_q4_cpu_text_v7|minicpm_q4_mi210_text_v7|qwen25_coder14_cpu_v7|qwen25_coder14_mi210_v7|qwen35_9b_mtp_cpu_v7|qwen35_9b_mtp_mi210_v7|qwen3_vl8_cpu_text_v7|qwen3_vl8_mi210_text_v7|qwen3_4b_thinking_cpu_v7|qwen3_4b_thinking_mi210_v7}" >&2
     exit 64
     ;;
 esac

@@ -9,8 +9,14 @@ QUEUE=(
   hy3_cpu_smoke
   bonsai_q1_cpu
   bonsai_q1_mi210_v7
+  bonsai_dspark_cpu_v7
+  bonsai_dspark_mi210_v7
   ternary_q2_0_cpu_v7
   ternary_q2_0_mi210_v7
+  ternary_bonsai_dspark_cpu_v7
+  ternary_bonsai_dspark_mi210_v7
+  bonsai_8b_cpu_v7
+  bonsai_8b_mi210_v7
   qwable_iq4xs_cpu_v7
   qwable_iq4xs_mi210_v7
   qwable_q8_mi210_v7

@@ -41,17 +41,23 @@ docs/data/model_admission_smoke_commands_20260716.sh registry_gap_status
 | 1 | `hy3_cpu_smoke` | Highest-value Hy3 patched-load gate before MTP-on/off closure. | Heavy CPU + reads 86 GB artifact. |
 | 2 | `bonsai_q1_cpu` | Cheap Bonsai Q1_0 loader/coherence gate. | Low/medium CPU, small artifact. |
 | 3 | `bonsai_q1_mi210_v7` | Bonsai Q1_0 MI210 load/decode sanity if CPU is coherent. | GPU load, small artifact. |
-| 4 | `ternary_q2_0_cpu_v7` | Ternary Bonsai Q2_0 CPU runtime smoke after Q1_0 coherence. | Medium CPU, small artifact. |
-| 5 | `ternary_q2_0_mi210_v7` | v7 Q2_0 runtime-support smoke for Ternary Bonsai. | GPU load, small artifact. |
-| 6 | `qwable_iq4xs_cpu_v7` | Qwable IQ4_XS CPU baseline before GPU/co-residency evaluation. | Medium CPU, 18 GB artifact. |
-| 7 | `qwable_iq4xs_mi210_v7` | Qwable standalone reasoner/scaffold economics first arm. | GPU load, 18 GB artifact. |
-| 8 | `qwable_q8_mi210_v7` | Near-lossless Qwable quality/speed arm. | GPU load, 35 GB artifact. |
-| 9 | `qwen3_4b_thinking_cpu_v7` / `qwen3_4b_thinking_mi210_v7` | Small thinking/verifier candidate smoke. | Low CPU/GPU. |
-| 10 | `qwen25_coder14_cpu_v7` / `qwen25_coder14_mi210_v7` | Code-model niche check versus existing coder/frontdoor stack. | Medium CPU/GPU. |
-| 11 | `qwen35_9b_mtp_cpu_v7` / `qwen35_9b_mtp_mi210_v7` | MTP-on/off candidate; start with smoke before acceptance sweep. | Medium CPU/GPU; MTP behavior may fail fast. |
-| 12 | `minicpm_q4_cpu_text_v7` / `minicpm_q4_mi210_text_v7` | MiniCPM-o text loader gate before modality mapping. | Medium CPU/GPU. |
-| 13 | `qwen3_vl8_cpu_text_v7` / `qwen3_vl8_mi210_text_v7` | Local Qwen3-VL-8B text loader gate before image smoke. | Medium CPU/GPU; mmproj is loaded. |
-| 14 | `deepseek_v4_flash_cpu_v7` | DeepSeek-V4-Flash loader feasibility only. | Very high CPU/RAM + 154 GB read; schedule last. |
+| 4 | `bonsai_dspark_cpu_v7` | Bonsai dspark Q4_1 loader/coherence classification. | Low/medium CPU, small artifact. |
+| 5 | `bonsai_dspark_mi210_v7` | Bonsai dspark Q4_1 MI210 load/decode sanity if CPU is coherent. | GPU load, small artifact. |
+| 6 | `ternary_q2_0_cpu_v7` | Ternary Bonsai Q2_0 CPU runtime smoke after Q1_0 coherence. | Medium CPU, small artifact. |
+| 7 | `ternary_q2_0_mi210_v7` | v7 Q2_0 runtime-support smoke for Ternary Bonsai. | GPU load, small artifact. |
+| 8 | `ternary_bonsai_dspark_cpu_v7` | Ternary Bonsai dspark Q4_1 loader/coherence classification. | Low/medium CPU, small artifact. |
+| 9 | `ternary_bonsai_dspark_mi210_v7` | Ternary Bonsai dspark Q4_1 MI210 load/decode sanity if CPU is coherent. | GPU load, small artifact. |
+| 10 | `bonsai_8b_cpu_v7` | Orphan Bonsai-8B loader/provenance classification. | Low CPU, small artifact. |
+| 11 | `bonsai_8b_mi210_v7` | Optional MI210 smoke if Bonsai-8B CPU classification is coherent. | GPU load, small artifact. |
+| 12 | `qwable_iq4xs_cpu_v7` | Qwable IQ4_XS CPU baseline before GPU/co-residency evaluation. | Medium CPU, 18 GB artifact. |
+| 13 | `qwable_iq4xs_mi210_v7` | Qwable standalone reasoner/scaffold economics first arm. | GPU load, 18 GB artifact. |
+| 14 | `qwable_q8_mi210_v7` | Near-lossless Qwable quality/speed arm. | GPU load, 35 GB artifact. |
+| 15 | `qwen3_4b_thinking_cpu_v7` / `qwen3_4b_thinking_mi210_v7` | Small thinking/verifier candidate smoke. | Low CPU/GPU. |
+| 16 | `qwen25_coder14_cpu_v7` / `qwen25_coder14_mi210_v7` | Code-model niche check versus existing coder/frontdoor stack. | Medium CPU/GPU. |
+| 17 | `qwen35_9b_mtp_cpu_v7` / `qwen35_9b_mtp_mi210_v7` | MTP-on/off candidate; start with smoke before acceptance sweep. | Medium CPU/GPU; MTP behavior may fail fast. |
+| 18 | `minicpm_q4_cpu_text_v7` / `minicpm_q4_mi210_text_v7` | MiniCPM-o text loader gate before modality mapping. | Medium CPU/GPU. |
+| 19 | `qwen3_vl8_cpu_text_v7` / `qwen3_vl8_mi210_text_v7` | Local Qwen3-VL-8B text loader gate before image smoke. | Medium CPU/GPU; mmproj is loaded. |
+| 20 | `deepseek_v4_flash_cpu_v7` | DeepSeek-V4-Flash loader feasibility only. | Very high CPU/RAM + 154 GB read; schedule last. |
 
 ## GLM Follow-Up
 

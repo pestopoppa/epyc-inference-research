@@ -5603,7 +5603,7 @@ roles:
     artifact_status:
       download: incomplete
       observed_date: 2026-07-16
-      observed_state: "Live checkpoint snapshot: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M at 75G on disk, writer PID 3862528 alive, manager PID 3890751 alive, one finalized .gguf present, 15 incomplete/lock files remain, and /mnt/raid0/llm had 442G free."
+      observed_state: "Live checkpoint snapshot updated 2026-07-16T19:55Z: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M at 117G on disk, writer PID 3862528 alive, manager PID 3890751 alive, one finalized .gguf present, five large active .incomplete shard bodies plus stale zero-byte retry markers/locks remain, 15 incomplete/lock files total, and /mnt/raid0/llm had 400G free."
       next_step: "Resume/verify the 6-shard download before any load, smoke, benchmark, or quality gate."
     candidate_roles:
     - architect
@@ -5709,6 +5709,28 @@ roles:
         revision: 0cf7e3d21581b169b4df1de8bf01316000e2fbb7
         source_hash_kind: hf_lfs_etag_sha256
         source_hash: 17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0
+      related_artifacts:
+        dspark_q4_1:
+          path: /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-dspark-Q4_1.gguf
+          file_bytes: 1787468768
+          quant: Q4_1
+          role: distilled_sidecar_or_variant
+          hf_metadata:
+            path: /mnt/raid0/llm/models/bonsai-27b/.cache/huggingface/download/Bonsai-27B-dspark-Q4_1.gguf.metadata
+            revision: 0cf7e3d21581b169b4df1de8bf01316000e2fbb7
+            source_hash_kind: hf_lfs_etag_sha256
+            source_hash: 25e73f9f7ab5d1f7f1336711496dbc12da674e639ec88d579dc8683045befb1b
+        mmproj_q8_0:
+          path: /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-mmproj-Q8_0.gguf
+          file_bytes: 629246880
+          quant: Q8_0
+          role: multimodal_projector
+          standalone: false
+          hf_metadata:
+            path: /mnt/raid0/llm/models/bonsai-27b/.cache/huggingface/download/Bonsai-27B-mmproj-Q8_0.gguf.metadata
+            revision: 0cf7e3d21581b169b4df1de8bf01316000e2fbb7
+            source_hash_kind: hf_lfs_etag_sha256
+            source_hash: eb561d41a7bbeb0fcf04883c8af11078ef6cae0a66862a0b68443cfca495269d
     candidate_roles:
     - worker
     - reasoning
@@ -5751,6 +5773,28 @@ roles:
         revision: 20e435f518bd5b882795954aba81e80a91894321
         source_hash_kind: hf_lfs_etag_sha256
         source_hash: 868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757
+      related_artifacts:
+        dspark_q4_1:
+          path: /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-dspark-Q4_1.gguf
+          file_bytes: 1946393568
+          quant: Q4_1
+          role: distilled_sidecar_or_variant
+          hf_metadata:
+            path: /mnt/raid0/llm/models/ternary-bonsai-27b/.cache/huggingface/download/Ternary-Bonsai-27B-dspark-Q4_1.gguf.metadata
+            revision: 20e435f518bd5b882795954aba81e80a91894321
+            source_hash_kind: hf_lfs_etag_sha256
+            source_hash: c4810091d244eddc61a0cc4966e584b0959f141e3c66c0d371a6652d9f647da9
+        mmproj_q8_0:
+          path: /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-mmproj-Q8_0.gguf
+          file_bytes: 629246880
+          quant: Q8_0
+          role: multimodal_projector
+          standalone: false
+          hf_metadata:
+            path: /mnt/raid0/llm/models/ternary-bonsai-27b/.cache/huggingface/download/Ternary-Bonsai-27B-mmproj-Q8_0.gguf.metadata
+            revision: 20e435f518bd5b882795954aba81e80a91894321
+            source_hash_kind: hf_lfs_etag_sha256
+            source_hash: eb561d41a7bbeb0fcf04883c8af11078ef6cae0a66862a0b68443cfca495269d
     candidate_roles:
     - worker
     - reasoning
@@ -5815,6 +5859,42 @@ roles:
     benchmark_plan:
       cpu_only: "Run only after Q1_0 and Q2_0 baselines identify a reason to test this variant."
       gpu_only: "Run MI210 smoke/throughput after runtime-support check."
+      cpu_gpu_hybrid: "Not a primary path at this size."
+
+  bonsai_8b_local_orphan:
+    tier: D
+    description: Bonsai-8B local GGUF - orphaned pre-existing artifact without local HF sidecar; catalogue-only until provenance is resolved.
+    model:
+      name: Bonsai-8B
+      path: /mnt/raid0/llm/models/Bonsai-8B.gguf
+      quant: unknown
+      size_gb: 1.1
+      architecture: unknown
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-16
+      file_bytes: 1158654496
+      provenance: local_orphan_no_hf_sidecar
+    candidate_roles:
+    - research_smoke_only
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration_without_provenance
+      - benchmark_claim_without_loader_smoke
+      reason: "The local file predates the 2026-07-16 Bonsai download set and has no sidecar metadata; first step is loader/provenance classification."
+    performance:
+      benchmark_status: not_run_orphan
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+    benchmark_plan:
+      cpu_only: "Optional loader/provenance classification after primary Bonsai Q1/Q2 gates."
+      gpu_only: "Optional MI210 smoke only if CPU loader classification is coherent."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   qwable_v1_iq4xs:
