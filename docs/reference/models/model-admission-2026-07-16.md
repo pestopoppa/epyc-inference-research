@@ -12,7 +12,7 @@ This checkpoint records local artifact admission for the quiet-window model back
 
 | Candidate | Local artifact state | Manifest/source evidence | First runnable gate |
 |---|---:|---|---|
-| GLM-5.2 UD-IQ2_M | Incomplete; live snapshot updated 2026-07-16T21:01Z shows 155G on disk, writer PID `3862528` alive, manager PID `3890751` alive, one finalized `.gguf`, five large active `.incomplete` shard bodies, and 15 incomplete/lock files total. | HF cache locks and `.incomplete` files under `/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/download/UD-IQ2_M`; `/mnt/raid0/llm` had 363G free at the checkpoint. | Wait for all six shards, then integrity verification, load smoke, and long-context DSA-indexer probe. |
+| GLM-5.2 UD-IQ2_M | Incomplete; live snapshot updated 2026-07-16T22:50Z shows 218G on disk, writer PID `3862528` alive, manager PID `3890751` alive, shards 3-6 finalized, shard 2 still downloading as a ~43.9G `.incomplete` body, and shard 1 visible as a tiny 9.4 MB `.gguf` and therefore not integrity evidence. One lock file remained. | HF cache lock and `.incomplete` files under `/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/download/UD-IQ2_M`; `/mnt/raid0/llm` had ~298G free at the checkpoint. | Wait for all six shards, then integrity verification, load smoke, and long-context DSA-indexer probe. |
 | Hy3 AngelSlim IQ1_M-mtp | Complete: `Hy3-IQ1_M-mtp.gguf`, 91,756,066,624 bytes, plus license, README, chat template, recipes, and two Hy3 llama.cpp patches. Experimental v7 commit `98a1ad8cf` now loads it after the Hy3 router-bias tensor-name fix. | HF metadata sidecar revision `218c93f0fb5227553b67e556b01dfe70fb70cf30`, LFS hash `f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13`. Capped CPU smoke loaded the model and returned `OK` with v7 `llama-cli` `10077 (da1bf5e2f)`. | MTP-on/off correctness and throughput closure. |
 | Bonsai-27B Q1_0 | Complete: `Bonsai-27B-Q1_0.gguf`, 3,803,452,480 bytes. | HF metadata sidecar revision `0cf7e3d21581b169b4df1de8bf01316000e2fbb7`, LFS hash `17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0`. | Text load smoke on production v6 is valid; public quality is contested, so quality gate before any role claim. |
 | Ternary Bonsai-27B Q2_0 | Complete: `Ternary-Bonsai-27B-Q2_0.gguf`, 7,165,121,600 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757`. | Runtime support check on refreshed v7/experimental before load smoke. Production v6 does not advertise Q2_0. |
@@ -134,6 +134,70 @@ Additional bounded Bonsai smokes were gathered after the multi-`--only` runner f
 | Bonsai-27B dspark Q4_1 | FAIL on CPU and MI210. | FAIL on CPU and MI210. | v7 reports `unknown model architecture: 'dspark'`; treat as unsupported until dspark architecture support is added. |
 | Ternary Bonsai dspark Q4_1 | FAIL on CPU and MI210. | FAIL on CPU and MI210. | GGUF offset mismatch at `dspark.fc.weight`; likely artifact/runtime compatibility issue, separate from ordinary Q2_0 offset mismatch. |
 
+## Longer MI210 Throughput Evidence
+
+A longer single-owner MI210 server sweep was run at `/mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/` with per-case `health.json`, `request.json`, `response.json`, `server.stderr`, `summary.txt`, and `cleanup.log`. All cases exited cleanly and wrote cleanup logs. These are still admission observations because the GLM writer was active, but they are materially stronger than the earlier 1-64 token smokes.
+
+| Candidate | Prompt tokens | Completion tokens | Prompt t/s | Generation t/s | Notes |
+|---|---:|---:|---:|---:|---|
+| Nemotron-Labs-Diffusion-14B Q8_0 via scratch buun HIP server | 91 | 1195 | 697.44 | 29.04 | Fork-loader/server path, not stock v7 support. |
+| Nemotron-Nano-9B-v2 Q8_0 | 86 | 1536 | 415.06 | 82.78 | Hit length cap; emitted `<think>` despite reasoning-off flags. |
+| Qwable-v1 IQ4_XS | 84 | 1322 | 519.89 | 98.32 | Plain reasoner/server path. |
+| Qwable-v1 Q8_0 | 84 | 1087 | 497.75 | 100.15 | Near-lossless Qwable arm; similar decode speed to IQ4_XS in this prompt. |
+| Qwen3.5-9B MTP local Q4_K_M | 84 | 1197 | 487.56 | 99.44 | Needs MTP acceptance/quality gate before role claim. |
+| MiniCPM-o-4_5 local Q4 | 84 | 1472 | 1648.90 | 107.20 | Text-only path; modality mapping remains separate. |
+| Qwen3-VL-8B local text path | 80 | 1536 | 1569.12 | 102.73 | Text path with mmproj available; image smoke remains open. |
+| Bonsai-8B local orphan | 84 | 1073 | 950.75 | 38.00 | Provenance unresolved despite coherent decode. |
+| Bonsai-27B Q1_0 | 84 | 1259 | 136.62 | 11.15 | Confirms low MI210 decode speed; quality still unknown. |
+| Qwen2.5-Coder-14B local Q4_K_M | 101 | 1344 | 1095.25 | 66.16 | Recorded for completeness; operator later deprioritized further testing of this model. |
+
+## MI210 Context-Size Sweep
+
+The context sweep at `/mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/` measured prompt and decode behavior at short, mid, and long prompts for three representative candidates. All cases wrote cleanup logs. The measured prompt-token counts differ from nominal context sizes because the prompt body is tokenizer-dependent.
+
+| Candidate | Nominal context | Prompt tokens | Completion tokens | Prompt t/s | Generation t/s |
+|---|---:|---:|---:|---:|---:|
+| Nemotron-Labs-Diffusion-14B via scratch buun HIP server | 2048 | 1153 | 84 | 1674.05 | 29.93 |
+| Nemotron-Labs-Diffusion-14B via scratch buun HIP server | 8192 | 6433 | 107 | 1754.08 | 26.18 |
+| Nemotron-Labs-Diffusion-14B via scratch buun HIP server | 32768 | 22433 | 48 | 1456.36 | 25.82 |
+| Nemotron-Nano-9B-v2 Q8_0 | 2048 | 1148 | 256 | 1682.51 | 80.68 |
+| Nemotron-Nano-9B-v2 Q8_0 | 8192 | 6428 | 256 | 1964.08 | 79.85 |
+| Nemotron-Nano-9B-v2 Q8_0 | 32768 | 22428 | 256 | 1799.11 | 74.30 |
+| Qwable-v1 IQ4_XS | 2048 | 1146 | 113 | 1503.29 | 90.96 |
+| Qwable-v1 IQ4_XS | 8192 | 6426 | 98 | 2253.28 | 89.27 |
+| Qwable-v1 IQ4_XS | 32768 | 22426 | 102 | 2061.57 | 82.43 |
+
+Interpretation: long context reduces decode modestly for this trio rather than catastrophically. Nemotron-Nano and Qwable retain most of their short-context decode rate at roughly 22k prompt tokens; the fork-loader diffusion model is slower overall and drops from about 30 t/s to about 26 t/s.
+
+## Bonsai Q1_0 KV-Quant Sweep
+
+The Bonsai Q1_0 KV sweep at `/mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/` compared default KV against `q4_0/q4_0` KV at short and long prompts.
+
+| KV mode | Nominal context | Prompt tokens | Completion tokens | Prompt t/s | Generation t/s |
+|---|---:|---:|---:|---:|---:|
+| default KV | 2048 | 1285 | 81 | 607.02 | 10.97 |
+| q4_0/q4_0 KV | 2048 | 1285 | 81 | 603.67 | 10.93 |
+| default KV | 32768 | 25225 | 112 | 666.80 | 10.54 |
+| q4_0/q4_0 KV | 32768 | 25225 | 112 | 659.71 | 10.54 |
+
+Interpretation: KV quantization does not explain the local Bonsai Q1_0 speed gap. The likely remaining causes are the ROCm/gfx90a Q1_0 weight/dequant path, model artifact/build differences, or launch settings relative to external CUDA reports.
+
+## CPU Long-Decode Evidence
+
+CPU long-run observations now span the main non-GLM candidates that had MI210 long-run data. Evidence lives under `/mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/`, `/mnt/raid0/llm/tmp/model-long-cpu-remaining-20260716T223834/`, and `/mnt/raid0/llm/tmp/model-long-cpu-remaining2-20260716T224231/`. The first resume attempt used a stale Qwen3-VL filename and failed health for that case; the corrected Qwen3-VL run in the second resume directory passed. Qwen2.5-Coder-14B remains intentionally skipped per operator direction.
+
+| Candidate | Prompt tokens | Completion tokens | Prompt t/s | Generation t/s | Notes |
+|---|---:|---:|---:|---:|---|
+| Nemotron-Labs-Diffusion-14B via scratch buun CPU server | 72 | 768 | 109.94 | 4.82 | Fork loader only; not stock v7. |
+| Nemotron-Nano-9B-v2 Q8_0 | 67 | 768 | 97.46 | 5.44 | Emitted `<think>` despite reasoning-off flags. |
+| Qwable-v1 IQ4_XS | 66 | 616 | 88.90 | 13.71 | CPU baseline for IQ4_XS reasoner. |
+| Qwable-v1 Q8_0 | 66 | 706 | 87.99 | 10.00 | CPU baseline for Q8_0 reasoner. |
+| Qwen3.5-9B MTP local Q4_K_M | 64 | 768 | 108.23 | 10.25 | `draft-mtp` active; response had empty `message.content` despite 768 completion tokens, likely reasoning-only content. |
+| MiniCPM-o-4_5 Q4_K_M text path | 62 | 768 | 235.49 | 7.69 | Response had empty `message.content` despite 768 completion tokens; keep as throughput-only. |
+| Qwen3-VL-8B Q4_K_M text path | 62 | 768 | 229.37 | 7.69 | Corrected local model/mmproj path; text-only, image smoke still open. |
+| Bonsai-8B local orphan | 66 | 593 | 224.17 | 30.08 | Provenance unresolved, but longer CPU decode is coherent. |
+| Bonsai-27B Q1_0 | 64 | 768 | 54.04 | 8.86 | Response had empty `message.content`; confirms CPU is also slow, though less dramatically than MI210 Q1. |
+
 ## Deferred Low-Contention Manifest Work
 
 Do not hash the large GGUFs during active GLM download or benchmark windows. If a human-readable manifest is needed, first emit byte inventories and reuse HF sidecars:
@@ -157,9 +221,9 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 1. Keep the GLM-5.2 download watcher active and do not start duplicate HF downloads.
 2. During active GLM download, churn non-GLM smokes with explicit resource ownership: one MI210 owner, one bounded CPU-only owner, no GLM loads, no duplicate downloads, no full-stack/AutoPilot restart, and no disk-heavy DeepSeek/offload gates. Treat those results as admission observations until repeated cleanly if they become decision-gating.
 3. Run Hy3 MTP-on/off correctness and throughput closure on experimental v7 commit `98a1ad8cf` or newer; the basic load/decode smoke is now closed.
-4. Run Bonsai Q1_0 CPU smoke through v7 with `--device none`, then MI210 smoke if coherent; then classify Bonsai dspark and Bonsai-8B side artifacts.
-5. Run Ternary Bonsai Q2_0 smoke only on refreshed v7/experimental, then classify the Ternary Bonsai dspark side artifact.
-6. Run Qwable IQ4_XS and Q8_0 standalone/scaffold gates with task-level quality acceptance.
+4. Investigate Ternary Bonsai Q2_0 artifact/runtime compatibility before retrying; ordinary Q1_0 and Bonsai-8B load/decode are already smoke-passed, while dspark variants failed.
+5. Run Qwable IQ4_XS and Q8_0 standalone/scaffold gates with task-level quality acceptance; long MI210/CPU speed observations are now recorded.
+6. Move beyond speed-only admission observations for MiniCPM-o, Qwen3-VL-8B, Qwen3.5-9B MTP, Bonsai, Qwable, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible.
 7. After GLM finishes, run GLM shard integrity, load smoke, and DSA long-context probes; schedule exact-path DeepSeek/offload-style smokes only after download/cache contention clears.
 
 Opt-in command file: `docs/data/model_admission_smoke_commands_20260716.sh`.

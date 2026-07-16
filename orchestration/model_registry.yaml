@@ -3051,10 +3051,17 @@ roles:
       smoke_status: cpu_mi210_load_smoke_pass_observation
       cpu_observation: "2026-07-16 stock experimental v7 smoke passed during active GLM download: prompt 15.4 t/s, generation 5.1 t/s; emitted <think> preamble despite --reasoning off."
       mi210_observation: "2026-07-16 stock experimental v7 smoke passed during active GLM download: prompt 200.0 t/s, generation 83.7 t/s; emitted <think> preamble despite --reasoning off."
+      long_decode_observation: "2026-07-16 longer server runs during active GLM download: CPU 67 prompt / 768 completion tokens at prompt 97.46 t/s and generation 5.44 t/s; MI210 86 prompt / 1536 completion tokens at prompt 415.06 t/s and generation 82.78 t/s."
+      context_sweep_observation: "2026-07-16 MI210 context sweep: generation t/s 80.68 at 1148 prompt tokens, 79.85 at 6428 prompt tokens, and 74.30 at 22428 prompt tokens."
       evidence:
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/summary.tsv
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/nemotron_nano_9b_q8_cpu_v7.stdout
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/nemotron_nano_9b_q8_mi210_v7.stdout
+      - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/nemotron_nano_q8_cpu/summary.txt
+      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/nemotron_nano_q8_mi210/summary.txt
+      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_nano_q8-c2048/summary.txt
+      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_nano_q8-c8192/summary.txt
+      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_nano_q8-c32768/summary.txt
     benchmark_date: 2026-04-23
     notes: |
       Reasoning-mode toggle (default AUTO/ON per user preference):
@@ -5610,7 +5617,7 @@ roles:
     artifact_status:
       download: incomplete
       observed_date: 2026-07-16
-      observed_state: "Live checkpoint snapshot updated 2026-07-16T19:55Z: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M at 117G on disk, writer PID 3862528 alive, manager PID 3890751 alive, one finalized .gguf present, five large active .incomplete shard bodies plus stale zero-byte retry markers/locks remain, 15 incomplete/lock files total, and /mnt/raid0/llm had 400G free."
+      observed_state: "Live checkpoint snapshot updated 2026-07-16T22:50Z: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M at 218G on disk, writer PID 3862528 alive, manager PID 3890751 alive, shards 3-6 finalized, shard 2 still downloading as a ~43.9G .incomplete body, shard 1 visible as a tiny 9.4 MB .gguf and therefore not integrity evidence, one lock file remained, and /mnt/raid0/llm had about 298G free."
       next_step: "Resume/verify the 6-shard download before any load, smoke, benchmark, or quality gate."
     candidate_roles:
     - architect
@@ -5765,6 +5772,15 @@ roles:
         2026-07-16 scratch buun HIP llama-server auto-detected diffusion
         self-spec, returned chat content ok, and reported prompt eval 267.06
         t/s for 22 prompt tokens.
+      long_decode_observation: >
+        2026-07-16 longer server runs during active GLM download: scratch
+        buun CPU server generated 768 tokens at 4.82 t/s; scratch buun MI210
+        server generated 1195 tokens at 29.04 t/s. These are fork-loader
+        observations, not stock-v7 support.
+      context_sweep_observation: >
+        2026-07-16 scratch buun MI210 context sweep generated at 29.93 t/s
+        with 1153 prompt tokens, 26.18 t/s with 6433 prompt tokens, and
+        25.82 t/s with 22433 prompt tokens.
       evidence:
       - /mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716/nemotron_diff14_q8_cpu_v7.stderr
       - /mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716-mi210-confirm/nemotron_diff14_q8_mi210_v7.stderr
@@ -5772,6 +5788,11 @@ roles:
       - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_selfspec.stderr
       - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_server.stderr
       - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_server_response.json
+      - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/nemotron_diff14_buun_cpu/summary.txt
+      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/nemotron_diff14_q8_buun_mi210/summary.txt
+      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c2048/summary.txt
+      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c8192/summary.txt
+      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c32768/summary.txt
       scratch_loader:
         source: /mnt/raid0/llm/tmp/buun-llama-cpp-src
         branch: rocm-fused-turbo-port
@@ -5846,11 +5867,20 @@ roles:
       observed_date: 2026-07-16
       cpu_observation: "CPU smoke passed during active GLM download: prompt 12.6 t/s, generation 6.8 t/s, returned exact `ok`."
       mi210_observation: "MI210 smoke passed during active GLM download: prompt 29.5 t/s, generation 11.3 t/s, but emitted reasoning preamble instead of exact `ok`."
+      long_cpu_observation: "2026-07-16 longer CPU server run generated 768 completion tokens at 8.86 t/s after a 64-token prompt; response had empty message.content despite nonzero completion tokens, so treat as throughput-only."
+      long_mi210_observation: "2026-07-16 longer MI210 server run generated 1259 tokens at 11.15 t/s after an 84-token prompt; this confirms the local low decode rate is not a one-token artifact."
+      kv_quant_observation: "2026-07-16 MI210 default KV vs q4_0/q4_0 KV sweep showed no decode-speed improvement: 10.97 vs 10.93 t/s at 1285 prompt tokens, and 10.54 vs 10.54 t/s at 25225 prompt tokens."
       related_dspark_observation: "Bonsai-27B-dspark-Q4_1 failed on CPU and MI210 with `unknown model architecture: 'dspark'`; unsupported until dspark architecture support is added."
       evidence:
       - /mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_q1_cpu/bonsai_q1_cpu.stdout
       - /mnt/raid0/llm/tmp/bonsai-dspark-mi210-churn-20260716/bonsai_q1_mi210_v7.stdout
       - /mnt/raid0/llm/tmp/bonsai-dspark-mi210-churn-20260716/bonsai_dspark_mi210_v7.stderr
+      - /mnt/raid0/llm/tmp/model-long-cpu-remaining2-20260716T224231/bonsai_27b_q1_cpu/summary.txt
+      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/bonsai_27b_q1_mi210/summary.txt
+      - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/default_kv-c2048/summary.txt
+      - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/q4kv-c2048/summary.txt
+      - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/default_kv-c32768/summary.txt
+      - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/q4kv-c32768/summary.txt
     memory:
       residency: cold
       pinned: false
@@ -6004,9 +6034,13 @@ roles:
       observed_date: 2026-07-16
       cpu_observation: "CPU smoke passed during active GLM download: prompt 51.1 t/s, generation 52.6 t/s, returned exact `ok`."
       mi210_observation: "Prior MI210 smoke passed under experimental v7: output `OK`, generation 72.7 t/s."
+      long_cpu_observation: "2026-07-16 longer CPU server run generated 593 tokens at 30.08 t/s after a 66-token prompt."
+      long_mi210_observation: "2026-07-16 longer MI210 server run generated 1073 tokens at 38.00 t/s after an 84-token prompt; use this longer number for throughput hypotheses, while provenance remains unresolved."
       evidence:
       - /mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_8b_cpu_v7/bonsai_8b_cpu_v7.stdout
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716b/bonsai_8b_mi210_v7_final.log
+      - /mnt/raid0/llm/tmp/model-long-cpu-remaining2-20260716T224231/bonsai_8b_cpu/summary.txt
+      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/bonsai_8b_mi210/summary.txt
     memory:
       residency: cold
       pinned: false
@@ -6057,10 +6091,22 @@ roles:
         values inside a fenced JSON block. Prompt 298.88 t/s over 46 tokens;
         generation 97.82 t/s over 42 tokens. Treat as harness-safe MI210 smoke,
         not strict schema acceptance.
+      long_decode_observation: >
+        2026-07-16 longer server runs during active GLM download: CPU generated
+        616 tokens at 13.71 t/s; MI210 generated 1322 tokens at 98.32 t/s.
+      context_sweep_observation: >
+        2026-07-16 MI210 context sweep generated at 90.96 t/s with 1146
+        prompt tokens, 89.27 t/s with 6426 prompt tokens, and 82.43 t/s
+        with 22426 prompt tokens.
       evidence:
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/summary.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/responses/standalone_iq4_gpu.raw.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/logs/standalone_iq4_gpu.server.log
+      - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_iq4xs_cpu/summary.txt
+      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_iq4xs_mi210/summary.txt
+      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c2048/summary.txt
+      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c8192/summary.txt
+      - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c32768/summary.txt
     memory:
       residency: cold
       pinned: false
@@ -6105,6 +6151,10 @@ roles:
     performance:
       benchmark_status: observation_only
       study_summary: "Use as near-lossless quality arm for Qwable; compare against IQ4_XS where memory permits."
+      long_decode_observation: "2026-07-16 longer server runs during active GLM download: CPU generated 706 tokens at 10.00 t/s; MI210 generated 1087 tokens at 100.15 t/s."
+      evidence:
+      - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_q8_cpu/summary.txt
+      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_q8_mi210/summary.txt
     memory:
       residency: cold
       pinned: false
@@ -6215,9 +6265,13 @@ roles:
       observed_date: 2026-07-16
       cpu_observation: "Text smoke passed during active GLM download: prompt 67.6 t/s, generation 9.5 t/s, returned `ok`."
       mi210_observation: "Text smoke passed during active GLM download: prompt 423.3 t/s, generation 107.2 t/s, returned `ok` plus stray `</think>`."
+      long_cpu_observation: "2026-07-16 longer CPU server run generated 768 completion tokens at 7.69 t/s after a 62-token prompt; response had empty message.content despite nonzero completion tokens, so treat as throughput-only."
+      long_mi210_observation: "2026-07-16 longer MI210 server run generated 1472 tokens at 107.20 t/s after an 84-token prompt."
       evidence:
       - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/minicpm_q4_cpu_text_v7/minicpm_q4_cpu_text_v7.stdout
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-minicpm_q4_mi210_text_v7/minicpm_q4_mi210_text_v7.stdout
+      - /mnt/raid0/llm/tmp/model-long-cpu-remaining-20260716T223834/minicpm_q4_cpu/summary.txt
+      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/minicpm_q4_mi210/summary.txt
     memory:
       residency: cold
       pinned: false
@@ -6304,9 +6358,13 @@ roles:
       observed_date: 2026-07-16
       cpu_observation: "MTP smoke passed during active GLM download: prompt 35.8 t/s, generation 11.4 t/s; exact-output prompt emitted reasoning text."
       mi210_observation: "MTP smoke passed during active GLM download: prompt 114.6 t/s, generation 113.7 t/s; exact-output prompt emitted reasoning text."
+      long_cpu_observation: "2026-07-16 longer CPU server run with draft-mtp generated 768 completion tokens at 10.25 t/s after a 64-token prompt; response had empty message.content despite nonzero completion tokens, likely reasoning-only content."
+      long_mi210_observation: "2026-07-16 longer MI210 server run with draft-mtp generated 1197 tokens at 99.44 t/s after an 84-token prompt; server reported draft acceptance 632/1128 (0.56028), mean length 2.12."
       evidence:
       - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen35_9b_mtp_cpu_v7/qwen35_9b_mtp_cpu_v7.stdout
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-qwen35_9b_mtp_mi210_v7/qwen35_9b_mtp_mi210_v7.stdout
+      - /mnt/raid0/llm/tmp/model-long-cpu-remaining-20260716T223834/qwen35_9b_mtp_cpu/summary.txt
+      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwen35_9b_mtp_mi210/summary.txt
     memory:
       residency: cold
       pinned: false
@@ -6353,9 +6411,13 @@ roles:
       observed_date: 2026-07-16
       cpu_observation: "Text smoke passed during active GLM download: prompt 64.9 t/s, generation 15.4 t/s, returned `ok`."
       mi210_observation: "Text smoke passed during active GLM download: prompt 415.2 t/s, generation 192.3 t/s, returned `ok`."
+      long_cpu_observation: "2026-07-16 corrected local-path longer CPU server run generated 768 tokens at 7.69 t/s after a 62-token prompt; an earlier resume attempt failed health because it used stale Qwen3-VL filenames."
+      long_mi210_observation: "2026-07-16 longer MI210 server run generated 1536 tokens at 102.73 t/s after an 80-token prompt."
       evidence:
       - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen3_vl8_cpu_text_v7/qwen3_vl8_cpu_text_v7.stdout
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-remaining/qwen3_vl8_mi210_text_v7.stdout
+      - /mnt/raid0/llm/tmp/model-long-cpu-remaining2-20260716T224231/qwen3_vl8_text_cpu/summary.txt
+      - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwen3_vl8_text_mi210/summary.txt
     memory:
       residency: cold
       pinned: false
