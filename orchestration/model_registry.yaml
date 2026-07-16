@@ -3048,6 +3048,13 @@ roles:
       baseline_tps: 8.91  # sweep-measured 2026-04-23
       optimized_tps: 8.91  # no ngram benefit (SSM hybrid)
       quality_score: null
+      smoke_status: cpu_mi210_load_smoke_pass_observation
+      cpu_observation: "2026-07-16 stock experimental v7 smoke passed during active GLM download: prompt 15.4 t/s, generation 5.1 t/s; emitted <think> preamble despite --reasoning off."
+      mi210_observation: "2026-07-16 stock experimental v7 smoke passed during active GLM download: prompt 200.0 t/s, generation 83.7 t/s; emitted <think> preamble despite --reasoning off."
+      evidence:
+      - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/summary.tsv
+      - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/nemotron_nano_9b_q8_cpu_v7.stdout
+      - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/nemotron_nano_9b_q8_mi210_v7.stdout
     benchmark_date: 2026-04-23
     notes: |
       Reasoning-mode toggle (default AUTO/ON per user preference):
@@ -5690,6 +5697,99 @@ roles:
       cpu_only: "Use /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-cli from commit 98a1ad8cf or newer for load/decode smoke, then greedy MTP-on vs no-MTP and correctness probe."
       gpu_only: "Not expected to fit on MI210."
       cpu_gpu_hybrid: "Only after CPU load gate; test op/offload coverage and expert-residency feasibility."
+
+  nemotron_labs_diffusion_14b_q8:
+    tier: B
+    description: Nemotron-Labs-Diffusion-14B Q8_0 - tri-mode dense LM research candidate; local GGUF is third-party and diffusion/self-spec requires a supporting fork/runtime.
+    model:
+      name: Nemotron-Labs-Diffusion-14B-Q8_0
+      huggingface_id: spiritbuun/Nemotron-Labs-Diffusion-14B-Q8_0-GGUF
+      upstream_hf_model: nvidia/Nemotron-Labs-Diffusion-14B
+      path: /mnt/raid0/llm/models/Nemotron-Labs-Diffusion-14B-Q8_0-GGUF/nemotron-diffusion-14b-Q8_0.gguf
+      hf_weights_path: /mnt/raid0/llm/hf-models/Nemotron-Labs-Diffusion-14B
+      quant: Q8_0
+      size_gb: 13.4
+      architecture: nemotron_labs_diffusion
+      base_backbone: ministral3_dense
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-16
+      file_bytes: 14359313600
+      hf_weights_bytes: 27012190712
+      license: nvidia-nemotron-open-model-license
+      hf_metadata:
+        path: /mnt/raid0/llm/models/Nemotron-Labs-Diffusion-14B-Q8_0-GGUF/.cache/huggingface/download/nemotron-diffusion-14b-Q8_0.gguf.metadata
+        revision: 7ec2bb277055ffbbcc8cb7e56e179216d3f4952d
+        source_hash_kind: hf_lfs_etag_sha256
+        source_hash: d25119a965e4781b5f1d4b5b2cf446e4102d949d9752d86144b94820368fa4d1
+      support_files:
+      - /mnt/raid0/llm/hf-models/Nemotron-Labs-Diffusion-14B/modeling_nemotron_labs_diffusion.py
+      - /mnt/raid0/llm/hf-models/Nemotron-Labs-Diffusion-14B/configuration_nemotron_labs_diffusion.py
+      - /mnt/raid0/llm/hf-models/Nemotron-Labs-Diffusion-14B/chat_template.jinja
+      - /mnt/raid0/llm/hf-models/Nemotron-Labs-Diffusion-14B/linear_spec_lora/adapter_model.safetensors
+    candidate_roles:
+    - diffusion_self_spec_research
+    - gpu_research
+    - ar_mode_quality_probe
+    acceleration:
+      type: unified_diffusion_self_spec_fork_verified
+      notes: >
+        Stock experimental v7 cannot load this GGUF. Scratch buun-llama-cpp
+        builds from rocm-fused-turbo-port can run diffusion self-spec on CPU
+        and MI210 after a local ROCm 6.2/gfx90a FP8 guard in vendors/hip.h.
+    constraints:
+      forbid:
+      - production_stack_registration_without_fork_loader_quality_gate
+      - decision_grade_speed_claim_from_single_token_smoke
+      - self_spec_production_claim_without_quality_throughput_gate
+      reason: >
+        Downloaded artifact is research-only. Fork loader support is now smoke
+        verified, but stock v7 support, maintained loader path, task quality,
+        and throughput gates are still open.
+    performance:
+      benchmark_status: fork_selfspec_smoke_pass_stock_v7_loader_fail
+      prior_context: "July 11 download note says the 14B HF and Q8_0 GGUF downloads completed, but load/correctness remained deferred."
+      stock_v7_observation: >
+        2026-07-16 CPU and MI210 stock experimental v7 load smokes failed at
+        check_tensor_dims for blk.0.attn_q.weight: expected 5120 x 5120, got
+        5120 x 4096.
+      fork_cpu_observation: >
+        2026-07-16 scratch buun CPU llama-diffusion-cli self-spec smoke passed:
+        one cycle, average 5.0 tokens/cycle, 100.0% draft accept, output ok,
+        observed one-token generation 0.8 t/s.
+      fork_mi210_cli_observation: >
+        2026-07-16 scratch buun HIP llama-diffusion-cli self-spec smoke passed:
+        one cycle, average 5.0 tokens/cycle, 100.0% draft accept, output ok,
+        observed one-token generation 6.2 t/s.
+      fork_mi210_server_observation: >
+        2026-07-16 scratch buun HIP llama-server auto-detected diffusion
+        self-spec, returned chat content ok, and reported prompt eval 267.06
+        t/s for 22 prompt tokens.
+      evidence:
+      - /mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716/nemotron_diff14_q8_cpu_v7.stderr
+      - /mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716-mi210-confirm/nemotron_diff14_q8_mi210_v7.stderr
+      - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/cpu_selfspec.stderr
+      - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_selfspec.stderr
+      - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_server.stderr
+      - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_server_response.json
+      scratch_loader:
+        source: /mnt/raid0/llm/tmp/buun-llama-cpp-src
+        branch: rocm-fused-turbo-port
+        cpu_cli: /mnt/raid0/llm/tmp/buun-llama-cpp-src/build-cpu/bin/llama-diffusion-cli
+        hip_cli: /mnt/raid0/llm/tmp/buun-llama-cpp-src/build-hip/bin/llama-diffusion-cli
+        hip_server: /mnt/raid0/llm/tmp/buun-llama-cpp-src/build-hip/bin/llama-server
+        local_patch: "Gate HIP FP8 aliases in ggml/src/ggml-cuda/vendors/hip.h behind defined(CDNA3) for ROCm 6.2/gfx90a."
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+      notes: "Q8_0 GGUF fits comfortably on MI210; CPU smoke is acceptable during active GLM download. Self-spec runtime remains a separate GPU/fork gate."
+    benchmark_plan:
+      cpu_only: "Fork self-spec smoke passed; next gate is maintained loader path plus task-level quality/throughput."
+      gpu_only: "Scratch buun HIP server smoke passed; next gate is upstreamable ROCm guard plus task-level quality/throughput."
+      cpu_gpu_hybrid: "Not a primary path at this size."
 
   bonsai_27b_q1_0:
     tier: C

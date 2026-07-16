@@ -19,6 +19,7 @@ This checkpoint records local artifact admission for the quiet-window model back
 | Ternary Bonsai-27B Q2_g64 | Complete: `Ternary-Bonsai-27B-Q2_g64.gguf`, 7,585,330,240 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `59a45d1ecef702b14531b06d22949f33b25c1897da31a8c0b298e01e4d9138eb`. | Variant-specific runtime support check before load smoke. |
 | Qwable-v1 IQ4_XS | Complete: `Qwable-v1.IQ4_XS.gguf`, 18,939,313,056 bytes. | HF metadata/tree revision `f35ea1502056a2886dd88fb8a29272f8f3c9c3a5`, LFS hash `3921bb8f1fc26ddd80ee97d0f48ccf507bd1dab04dbe4fc475e2eae65a05f460`. | Standalone/scaffold reasoning-economics smoke; use as plain reasoner, not as MTP/draft model. |
 | Qwable-v1 Q8_0 | Complete: `Qwable-v1.Q8_0.gguf`, 36,903,140,256 bytes. | HF metadata/tree revision `f35ea1502056a2886dd88fb8a29272f8f3c9c3a5`, LFS hash `d7420a49e8c2c7adabafe199f20cac27a5b291173604cc758bf3d2f29a2334c0`. | Near-lossless Qwable quality arm; sequential or smaller-beneficiary MI210 use because it does not co-reside with a 35B beneficiary. |
+| Nemotron-Labs-Diffusion-14B Q8_0 | Complete: GGUF `nemotron-diffusion-14b-Q8_0.gguf`, 14,359,313,600 bytes, plus HF reference weights under `/mnt/raid0/llm/hf-models/Nemotron-Labs-Diffusion-14B/`, 27,012,190,712 bytes. | GGUF HF metadata revision `7ec2bb277055ffbbcc8cb7e56e179216d3f4952d`, LFS hash `d25119a965e4781b5f1d4b5b2cf446e4102d949d9752d86144b94820368fa4d1`; HF reference includes `modeling_nemotron_labs_diffusion.py`, config, chat template, and `linear_spec_lora/adapter_model.safetensors`. | Stock experimental v7 loader fails this GGUF; scratch buun fork loader passes CPU/MI210 self-spec smoke. Next gate is maintained/upstreamable loader path plus task-level quality/throughput. |
 
 ## Additional Local Registry Gap Audit
 
@@ -44,6 +45,33 @@ The same sweep found stale zero-byte Hugging Face `.lock` files in Qwable, MiniC
 - Experimental v7 has `Q2_0` model-loader support; use v7 for Ternary Bonsai Q2_0 smoke after the v7 worktree is the intended candidate. The `build-hip` CLI was relinked on 2026-07-16 after a stale `libllama-cli-impl.so` caused `--version` to segfault; after the N5/K4 output-capacity fix it reports `10077 (da1bf5e2f)` **only when** `LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin` is set. Direct invocation without that library path resolves production v6 libraries and can report `9774 (91745611f)`, so direct `--version` output without the candidate library path is not v7 evidence. Current N5 evidence artifacts: strict dry preflight `/mnt/raid0/llm/epyc-inference-research/data/specdec_frontdoor_alpha/n5_retest_v7_semantic_preflight_20260716T190817Z/preflight.json`; execute summary `/mnt/raid0/llm/epyc-inference-research/data/specdec_frontdoor_alpha/n5_retest_v7_execute_20260716T190836Z/summary.json` (`decision_grade=true`, `n5_spec_on` `376/376` accepted).
 - Hy3 now loads on experimental v7 commit `98a1ad8cf` or newer. Root cause was a Hy3 tensor-name drift: the AngelSlim GGUF stores 80 router-bias tensors as `blk.N.exp_probs_b.bias`, while the experimental loader previously requested bare `blk.N.exp_probs_b`, producing `done_getting_tensors: wrong number of tensors; expected 1298, got 1218`. The throwaway AngelSlim build at `/mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin/` remains a reference/fallback only.
 - Qwable community GGUFs do not include the MTP head. Treat Qwable as a standalone reasoner, scaffold generator, or verifier/selector candidate.
+
+## Nemotron-Labs-Diffusion Fork Loader Probe
+
+The stock experimental v7 loader cannot load the local Nemotron-Labs-Diffusion-14B Q8_0 GGUF. Both CPU and MI210 v7 smoke cases fail at model load with:
+
+```text
+check_tensor_dims: tensor 'blk.0.attn_q.weight' has wrong shape; expected 5120, 5120, got 5120, 4096, 1, 1
+```
+
+Evidence:
+
+- CPU stock-v7 failure: `/mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716/nemotron_diff14_q8_cpu_v7.stderr`.
+- MI210 stock-v7 failure: `/mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716-mi210-confirm/nemotron_diff14_q8_mi210_v7.stderr`.
+
+After the operator authorized a fork-specific loader if needed, `spiritbuun/buun-llama-cpp` branch tarball `rocm-fused-turbo-port` was procured into scratch at `/mnt/raid0/llm/tmp/buun-llama-cpp-src`. The CPU fork build produced `/mnt/raid0/llm/tmp/buun-llama-cpp-src/build-cpu/bin/llama-diffusion-cli`. The HIP fork build produced `/mnt/raid0/llm/tmp/buun-llama-cpp-src/build-hip/bin/llama-diffusion-cli` and `llama-server`.
+
+The HIP build needed a scratch-only ROCm 6.2/gfx90a compile guard in `ggml/src/ggml-cuda/vendors/hip.h`: gate the CUDA-compatible FP8 alias block behind `defined(CDNA3)` because this ROCm stack exposes FNUZ FP8 names but not `__hip_fp8_e4m3`, and MI210/gfx90a does not need that path. This patch was applied only in `/mnt/raid0/llm/tmp/buun-llama-cpp-src`; production v6 and experimental v7 were untouched.
+
+Fork-loader smoke observations:
+
+| Case | Result | Observation | Evidence |
+|---|---|---|---|
+| CPU fork `llama-diffusion-cli` self-spec | PASS | One self-spec cycle, average 5.0 tokens/cycle, 100.0% draft accept rate, output `ok`; single-token observed generation `0.8 t/s`. | `/mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/cpu_selfspec.stderr` |
+| MI210 fork `llama-diffusion-cli` self-spec | PASS | One self-spec cycle, average 5.0 tokens/cycle, 100.0% draft accept rate, output `ok`; single-token observed generation `6.2 t/s`. | `/mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_selfspec.stderr` |
+| MI210 fork `llama-server` chat API | PASS | Server auto-detected diffusion model and enabled self-speculation; `/v1/chat/completions` returned content `ok`; prompt eval was `267.06 t/s` for 22 prompt tokens. | `/mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_server.stderr`; `/mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_server_response.json` |
+
+Classification: the local GGUF is runnable with the fork loader, but this is not production-v7 support and not decision-grade speed evidence. The `intake-576` / diffusion-self-spec checkbox remains open until a maintained loader path, quality acceptance, and throughput protocol are closed.
 
 ## First MI210 Smoke Evidence During GLM Download
 
@@ -74,6 +102,7 @@ Second-pass smoke observations gathered during the active GLM download:
 | `qwen35_9b_mtp_cpu_v7` / `qwen35_9b_mtp_mi210_v7` | PASS; prompt `35.8 t/s`, generation `11.4 t/s`; exact-output prompt was not obeyed because reasoning text was emitted. | PASS; prompt `114.6 t/s`, generation `113.7 t/s`; exact-output prompt was not obeyed because reasoning text was emitted. | `/mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/`; `/mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-qwen35_9b_mtp_mi210_v7/` |
 | `minicpm_q4_cpu_text_v7` / `minicpm_q4_mi210_text_v7` | PASS; prompt `67.6 t/s`, generation `9.5 t/s`; returned `ok`. | PASS; prompt `423.3 t/s`, generation `107.2 t/s`; returned `ok` plus stray `</think>`. | `/mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/`; `/mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-minicpm_q4_mi210_text_v7/` |
 | `qwen3_vl8_cpu_text_v7` / `qwen3_vl8_mi210_text_v7` | PASS; prompt `64.9 t/s`, generation `15.4 t/s`; returned `ok`. | PASS; prompt `415.2 t/s`, generation `192.3 t/s`; returned `ok`. | `/mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/`; `/mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-remaining/` |
+| `nemotron_nano_9b_q8_cpu_v7` / `nemotron_nano_9b_q8_mi210_v7` | PASS; prompt `15.4 t/s`, generation `5.1 t/s`; emitted `<think>` preamble despite `--reasoning off`. | PASS; prompt `200.0 t/s`, generation `83.7 t/s`; emitted `<think>` preamble despite `--reasoning off`. | `/mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/` |
 
 Runner note: `scripts/benchmark/run_model_admission_smoke_queue.sh` now accepts repeated `--only CASE` arguments; before this checkpoint, repeated `--only` silently kept only the last case.
 

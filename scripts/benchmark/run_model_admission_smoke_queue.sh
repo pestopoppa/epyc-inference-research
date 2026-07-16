@@ -33,6 +33,10 @@ QUEUE=(
   minicpm_q4_mi210_text_v7
   qwen3_vl8_cpu_text_v7
   qwen3_vl8_mi210_text_v7
+  nemotron_nano_9b_q8_cpu_v7
+  nemotron_nano_9b_q8_mi210_v7
+  nemotron_diff14_q8_cpu_v7
+  nemotron_diff14_q8_mi210_v7
   deepseek_v4_flash_cpu_v7
 )
 
