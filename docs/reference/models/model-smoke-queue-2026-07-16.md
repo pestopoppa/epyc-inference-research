@@ -52,7 +52,7 @@ docs/data/model_admission_smoke_commands_20260716.sh registry_gap_status
 | 10 | `bonsai_8b_cpu_v7` | ✅ 2026-07-16 CPU smoke passed: exact `ok`, 52.6 t/s generation. | Low CPU, small artifact. |
 | 11 | `bonsai_8b_mi210_v7` | ✅ 2026-07-16 MI210 smoke passed: output `OK`, observed 72.7 t/s generation under v7. | GPU load, small artifact. |
 | 12 | `qwable_iq4xs_cpu_v7` | CPU direct-CLI smoke is currently harness-unsafe; use bounded queue/server path only. | Medium CPU, 18 GB artifact. |
-| 13 | `qwable_iq4xs_mi210_v7` | ✅ 2026-07-16 MI210 load/decode passed; output-quality warning and JSON-schema sampler failure remain open. | GPU load, 18 GB artifact. |
+| 13 | `qwable_iq4xs_mi210_v7` | ✅ 2026-07-16 MI210 load/decode passed; bounded server/chat reasoning-economics smoke also passed at 97.82 t/s generation and returned requested JSON values inside fences. Strict schema/prompting and JSON-schema sampler failure remain open. | GPU load, 18 GB artifact. |
 | 14 | `qwable_q8_mi210_v7` | ✅ 2026-07-16 MI210 load/decode passed; output-quality warning remains open. | GPU load, 35 GB artifact. |
 | 15 | `qwen3_4b_thinking_cpu_v7` / `qwen3_4b_thinking_mi210_v7` | ✅ 2026-07-16 CPU and MI210 load/decode smokes passed during active GLM download; output emitted reasoning preamble despite `--reasoning off`. | Low CPU/GPU. |
 | 16 | `qwen25_coder14_cpu_v7` / `qwen25_coder14_mi210_v7` | ✅ 2026-07-16 CPU and MI210 load/decode smokes passed; long MI210 run observed `99%` GPU use and `14%` VRAM while GLM kept downloading. | Medium CPU/GPU. |

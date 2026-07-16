@@ -6050,6 +6050,17 @@ roles:
     performance:
       benchmark_status: observation_only
       study_summary: "CoT scaffold study found Qwable useful as a GPU reasoning/cost lever on reasoning-heavy tasks; deployable use still needs a codified gate."
+      server_chat_smoke_status: bounded_iq4_mi210_pass_schema_caveat
+      server_chat_observation: >
+        2026-07-16 bounded reasoning-economics runner smoke on experimental v7
+        b10077-da1bf5e2f returned the requested standalone_iq4_gpu/IQ4_XS/reasoner
+        values inside a fenced JSON block. Prompt 298.88 t/s over 46 tokens;
+        generation 97.82 t/s over 42 tokens. Treat as harness-safe MI210 smoke,
+        not strict schema acceptance.
+      evidence:
+      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/summary.json
+      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/responses/standalone_iq4_gpu.raw.json
+      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/logs/standalone_iq4_gpu.server.log
     memory:
       residency: cold
       pinned: false

@@ -82,12 +82,29 @@ These are admission observations gathered 2026-07-16 while GLM-5.2 was still dow
 | Bonsai-8B local orphan | PASS load/decode; output `OK`. | Prompt `349.9 t/s`, generation `72.7 t/s`. | `bonsai_8b_mi210_v7_final.log` |
 | Bonsai-27B Q1_0 | PASS load/decode with coherence warning; generated a reasoning preamble instead of obeying `OK only`. | Prompt `31.3 t/s`, generation `12.4 t/s`. | `bonsai_27b_q1_0_mi210_v7.log` |
 | Ternary Bonsai-27B Q2_0 | FAIL hard load on v7/artifact combination. | `gguf_init_from_reader: tensor 'output_norm.weight' has offset ... expected ...`. | `ternary_bonsai_q2_0_mi210_v7.log` |
-| Qwable-v1 IQ4_XS | PASS load/decode with output-quality warning; emitted reasoning preamble and hit the short cap. | Prompt `178.4 t/s`, generation `100.5 t/s`. | `qwable_iq4xs_reasoning_mi210_v7.log` |
+| Qwable-v1 IQ4_XS | PASS load/decode with output-quality warning; emitted reasoning preamble and hit the short cap. A later bounded server/chat runner smoke returned the requested JSON values in a fenced block. | Initial load/decode prompt `178.4 t/s`, generation `100.5 t/s`; server/chat smoke prompt `298.88 t/s`, generation `97.82 t/s`. | `qwable_iq4xs_reasoning_mi210_v7.log`; `/mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/` |
 | Qwable-v1 IQ4_XS JSON schema | FAIL sampler initialization. | `Failed to initialize samplers: std::exception`. | `qwable_iq4xs_json_mi210_v7.log` |
 | Qwable-v1 Q8_0 | PASS load/decode with output-quality warning; emitted reasoning preamble instead of clean one-sentence answer. | Prompt `169.8 t/s`, generation `102.5 t/s`. | `qwable_q8_0_reasoning_mi210_v7.log` |
 | Hy3 AngelSlim IQ1_M-mtp | PASS capped CPU load/decode on patched experimental v7. | Returned `OK`; prompt `20.2 t/s`. Generation t/s is not meaningful for the one-token cap. | `/mnt/raid0/llm/tmp/hy3-tensor-mismatch-20260716/patched-v7-hy3/smoke.stdout` |
 
 Follow-ups: investigate Ternary Bonsai Q2_0 artifact/runtime compatibility, Qwable JSON-schema sampler initialization, and model-specific prompting/template strategy for Qwable and Bonsai-27B. The Qwable speed/load observations do not invalidate earlier successful v7/GPU Qwable work; the failed CPU direct-CLI runs were harness failures.
+
+## Qwable Server/Chat Reasoning-Economics Smoke
+
+The server/chat-based Qwable runner was used instead of the old direct CLI path to avoid the prior interactive/simple-IO runaway. During the active GLM download, a single IQ4_XS MI210 arm was executed with `--allow-glm-download` because it uses a local 18 GB artifact and the runner owns/cleans its server process.
+
+Evidence directory: `/mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/`.
+
+Result:
+
+- Runner: `scripts/benchmark/qwable_reasoning_economics_runner.py --execute --allow-glm-download`.
+- Binary: experimental v7 `llama-server`, fingerprint `b10077-da1bf5e2f`.
+- Arm: `standalone_iq4_gpu`, model `Qwable-v1.IQ4_XS.gguf`, `ROCm0`, `-ngl 99`, context `8192`.
+- Response status: `ok`; returned the requested keys and values inside a fenced JSON block.
+- Timings: prompt `298.88 t/s` for 46 prompt tokens; generation `97.82 t/s` for 42 completion tokens.
+- Cleanup: no llama processes or KFD PIDs remained after the runner exited.
+
+Classification: this is a useful harness-safe MI210 smoke for Qwable as a standalone reasoner/scaffold candidate. It is not a strict schema pass because the model wrapped the JSON in fences; the next Qwable gate should tune prompt/template/schema handling and compare IQ4_XS vs Q8_0 task quality.
 
 ## CPU/MI210 Churn During Active GLM Download
 
