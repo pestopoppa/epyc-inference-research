@@ -41,15 +41,17 @@ docs/data/model_admission_smoke_commands_20260716.sh registry_gap_status
 | 1 | `hy3_cpu_smoke` | Highest-value Hy3 patched-load gate before MTP-on/off closure. | Heavy CPU + reads 86 GB artifact. |
 | 2 | `bonsai_q1_cpu` | Cheap Bonsai Q1_0 loader/coherence gate. | Low/medium CPU, small artifact. |
 | 3 | `bonsai_q1_mi210_v7` | Bonsai Q1_0 MI210 load/decode sanity if CPU is coherent. | GPU load, small artifact. |
-| 4 | `ternary_q2_0_mi210_v7` | v7 Q2_0 runtime-support smoke for Ternary Bonsai. | GPU load, small artifact. |
-| 5 | `qwable_iq4xs_mi210_v7` | Qwable standalone reasoner/scaffold economics first arm. | GPU load, 18 GB artifact. |
-| 6 | `qwable_q8_mi210_v7` | Near-lossless Qwable quality/speed arm. | GPU load, 35 GB artifact. |
-| 7 | `qwen3_4b_thinking_cpu_v7` / `qwen3_4b_thinking_mi210_v7` | Small thinking/verifier candidate smoke. | Low CPU/GPU. |
-| 8 | `qwen25_coder14_cpu_v7` / `qwen25_coder14_mi210_v7` | Code-model niche check versus existing coder/frontdoor stack. | Medium CPU/GPU. |
-| 9 | `qwen35_9b_mtp_cpu_v7` / `qwen35_9b_mtp_mi210_v7` | MTP-on/off candidate; start with smoke before acceptance sweep. | Medium CPU/GPU; MTP behavior may fail fast. |
-| 10 | `minicpm_q4_cpu_text_v7` / `minicpm_q4_mi210_text_v7` | MiniCPM-o text loader gate before modality mapping. | Medium CPU/GPU. |
-| 11 | `qwen3_vl8_cpu_text_v7` / `qwen3_vl8_mi210_text_v7` | Local Qwen3-VL-8B text loader gate before image smoke. | Medium CPU/GPU; mmproj is loaded. |
-| 12 | `deepseek_v4_flash_cpu_v7` | DeepSeek-V4-Flash loader feasibility only. | Very high CPU/RAM + 154 GB read; schedule last. |
+| 4 | `ternary_q2_0_cpu_v7` | Ternary Bonsai Q2_0 CPU runtime smoke after Q1_0 coherence. | Medium CPU, small artifact. |
+| 5 | `ternary_q2_0_mi210_v7` | v7 Q2_0 runtime-support smoke for Ternary Bonsai. | GPU load, small artifact. |
+| 6 | `qwable_iq4xs_cpu_v7` | Qwable IQ4_XS CPU baseline before GPU/co-residency evaluation. | Medium CPU, 18 GB artifact. |
+| 7 | `qwable_iq4xs_mi210_v7` | Qwable standalone reasoner/scaffold economics first arm. | GPU load, 18 GB artifact. |
+| 8 | `qwable_q8_mi210_v7` | Near-lossless Qwable quality/speed arm. | GPU load, 35 GB artifact. |
+| 9 | `qwen3_4b_thinking_cpu_v7` / `qwen3_4b_thinking_mi210_v7` | Small thinking/verifier candidate smoke. | Low CPU/GPU. |
+| 10 | `qwen25_coder14_cpu_v7` / `qwen25_coder14_mi210_v7` | Code-model niche check versus existing coder/frontdoor stack. | Medium CPU/GPU. |
+| 11 | `qwen35_9b_mtp_cpu_v7` / `qwen35_9b_mtp_mi210_v7` | MTP-on/off candidate; start with smoke before acceptance sweep. | Medium CPU/GPU; MTP behavior may fail fast. |
+| 12 | `minicpm_q4_cpu_text_v7` / `minicpm_q4_mi210_text_v7` | MiniCPM-o text loader gate before modality mapping. | Medium CPU/GPU. |
+| 13 | `qwen3_vl8_cpu_text_v7` / `qwen3_vl8_mi210_text_v7` | Local Qwen3-VL-8B text loader gate before image smoke. | Medium CPU/GPU; mmproj is loaded. |
+| 14 | `deepseek_v4_flash_cpu_v7` | DeepSeek-V4-Flash loader feasibility only. | Very high CPU/RAM + 154 GB read; schedule last. |
 
 ## GLM Follow-Up
 
@@ -82,7 +84,7 @@ These do not depend on GLM download completion by logic, but they still need a q
 | K10 shape-key re-eval | Prior clean re-eval was neutral; lever not landed. | Reopen only with key-collision logging first, then quiet-host sequential A/B with byte-identical Q8 output. | No |
 | K11 determinism | Open correctness/repro issue for Gemma4 external-head + shared-KV. | Fresh-server, quiesced, sequential temp0/seed42 A/B; compare output hashes and acceptance counters. | No |
 | ngram+MTP quality | Speed evidence exists for combined `ngram-mod,draft-mtp`; task-level quality/acceptance monitoring remains the gate. | Monitor live combined worker stack quality/acceptance before treating as permanent default. | No |
-| Bonsai/Q2 runtime checks | Q1_0 and Ternary Q2 artifacts are staged; runtime smokes are queued above. | Run `bonsai_q1_cpu`, `bonsai_q1_mi210_v7`, then `ternary_q2_0_mi210_v7`. | Yes |
+| Bonsai/Q2 runtime checks | Q1_0 and Ternary Q2 artifacts are staged; runtime smokes are queued above. | Run `bonsai_q1_cpu`, `bonsai_q1_mi210_v7`, then `ternary_q2_0_cpu_v7`, `ternary_q2_0_mi210_v7`. | Yes |
 
 ## Recording
 

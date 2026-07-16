@@ -9,7 +9,9 @@ QUEUE=(
   hy3_cpu_smoke
   bonsai_q1_cpu
   bonsai_q1_mi210_v7
+  ternary_q2_0_cpu_v7
   ternary_q2_0_mi210_v7
+  qwable_iq4xs_cpu_v7
   qwable_iq4xs_mi210_v7
   qwable_q8_mi210_v7
   qwen3_4b_thinking_cpu_v7

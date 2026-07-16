@@ -5590,7 +5590,7 @@ roles:
 
   glm_52_ud_iq2m:
     tier: B
-    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; download is incomplete as of 2026-07-16.
+    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; download remains incomplete as of 2026-07-16.
     model:
       name: GLM-5.2-UD-IQ2_M
       huggingface_id: unsloth/GLM-5.2-GGUF
@@ -5603,7 +5603,7 @@ roles:
     artifact_status:
       download: incomplete
       observed_date: 2026-07-16
-      observed_state: "Single active hf-download writer observed; first tiny shard materialized and shards 2-6 still downloading as .incomplete cache files under .cache/huggingface/download/UD-IQ2_M."
+      observed_state: "Live checkpoint snapshot: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M at 75G on disk, writer PID 3862528 alive, manager PID 3890751 alive, one finalized .gguf present, 15 incomplete/lock files remain, and /mnt/raid0/llm had 442G free."
       next_step: "Resume/verify the 6-shard download before any load, smoke, benchmark, or quality gate."
     candidate_roles:
     - architect
