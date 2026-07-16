@@ -5642,7 +5642,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Run long-context DSA/indexer probe and KV-length scaling; short load/coherence is already smoke-passed."
+      next_step: "Run true 64K+ long-context DSA/indexer probe and scaling; short load/coherence plus 4K/8K trace shakedown are already smoke-passed."
     candidate_roles:
     - architect
     - ingest
@@ -5657,7 +5657,7 @@ roles:
       - production_role_claim_without_dsa_quality_gate
       reason: "Artifact is complete and runnable for short CPU smoke, but DSA sparsity, long-context behavior, throughput, and reviewer/task quality are still unverified."
     performance:
-      benchmark_status: short_load_coherence_pass_dsa_open
+      benchmark_status: short_load_coherence_and_4k8k_dsa_trace_pass_true_long_context_open
       short_smoke_observation: >
         2026-07-16 experimental v7 b10077-da1bf5e2f CPU-only llama-server
         loaded the six-shard UD-IQ2_M artifact. With reasoning auto, the model
@@ -5666,9 +5666,18 @@ roles:
         READY. Prompt was 9.92 t/s over 15 prompt tokens; generation was 5.13
         t/s over 2 completion tokens. This is loader/coherence evidence only.
       dsa_caveat: >
-        Short-smoke logs warn that blk.78.* tensors are unused, including
-        indexer and nextn tensors. Keep GLM DSA/MTP gates open until a
-        long-context indexer/KV-scaling probe proves the runtime path.
+        Trace logs show blk.78.* warnings correspond to the expected skipped
+        physical NextN tail block: n_layer=78, n_layer_all=79, and
+        nextn_predict_layers=1. The 4K/8K shakedown also logs Lightning
+        Indexer enablement with indexer.top_k overridden to 32, but true
+        64K+ sparse-scaling and quality gates remain open.
+      dsa_trace_observation: >
+        2026-07-16 CPU-only experimental v7 trace run at 8K processed 5907
+        prompt tokens at 19.77 t/s and returned READY. A paired 4K/8K scaling
+        shakedown with fixed indexer_top_k=32 processed 2900 prompt tokens at
+        23.86 t/s and 5906 prompt tokens at 22.69 t/s. Both logs record
+        Lightning Indexer enabled. This is loader/runtime shakedown evidence,
+        not a final long-context DSA disposition.
       evidence:
       - /mnt/raid0/llm/models/glm52_clean.log
       - /mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json
@@ -5676,6 +5685,11 @@ roles:
       - /mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2305/server.log
       - /mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2308-reasoning-off/summary.json
       - /mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2308-reasoning-off/server.log
+      - /mnt/raid0/llm/tmp/glm52-dsa-long-probe-20260716T2340/plan.json
+      - /mnt/raid0/llm/tmp/glm52-dsa-long-probe-20260716T2340/logs/long_context_dsa_probe.server.log
+      - /mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/plan.json
+      - /mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/logs/kv_length_scaling_4096.server.log
+      - /mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/logs/kv_length_scaling_8192.server.log
     memory:
       residency: cold
       pinned: false

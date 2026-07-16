@@ -121,7 +121,84 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
             self.assertEqual([item["context_length"] for item in kv_stage["series"]], [4096, 8192])
             self.assertIn("--device", short_stage["server"]["server_command"])
             self.assertIn("none", short_stage["server"]["server_command"])
+            self.assertIn("--log-disable", short_stage["server"]["server_command"])
             self.assertEqual(short_stage["request"]["endpoint"], "/v1/chat/completions")
+
+    def test_trace_logs_and_stage_selection_are_reflected_in_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            model_dir = _make_shard_dir(tmp_path)
+            binary_dir = tmp_path / "bin"
+            binary_dir.mkdir()
+            binary = binary_dir / "llama-server"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+            output = tmp_path / "probe" / "plan.json"
+
+            args = runner.parse_args(
+                [
+                    "--output",
+                    str(output),
+                    "--model-dir",
+                    str(model_dir),
+                    "--binary",
+                    str(binary),
+                    "--library-path",
+                    str(binary_dir),
+                    "--trace-logs",
+                    "--only-stage",
+                    "long_context_dsa_probe",
+                    "--only-stage",
+                    "kv_length_scaling",
+                ]
+            )
+            inventory = runner.collect_inventory(model_dir)
+            plan = runner.build_plan(args, inventory, runner.resolve_binary(binary), runner.resolve_library_path(binary, binary_dir))
+
+            self.assertEqual(plan["selected_stages"], ["kv_length_scaling", "long_context_dsa_probe"])
+            long_command = plan["stages"][2]["server"]["server_command"]
+            self.assertNotIn("--log-disable", long_command)
+            self.assertIn("--log-verbosity", long_command)
+            self.assertIn("--log-file", long_command)
+            self.assertEqual(
+                plan["stages"][2]["server"]["log_file"],
+                str(output.parent / "logs" / "long_context_dsa_probe.server.log"),
+            )
+
+    def test_run_execution_skips_unselected_stages(self) -> None:
+        plan = {
+            "selected_stages": ["long_context_dsa_probe"],
+            "stages": [
+                {"name": "shard_integrity_inventory", "kind": "inventory", "status": "ready"},
+                {
+                    "name": "long_context_dsa_probe",
+                    "kind": "long_context_probe",
+                    "status": "ready",
+                    "prompt": {"task_line": "x", "context_length": 1, "kind": "long_context_probe"},
+                    "server": {"server_command": [], "port": 1, "context_length": 1, "log_file": None},
+                    "request": {"max_tokens": 1, "temperature": 0.0, "seed": 1},
+                },
+                {"name": "kv_length_scaling", "kind": "kv_length_scaling", "status": "ready", "series": []},
+            ],
+        }
+        expected = {
+            "name": "long_context_dsa_probe",
+            "status": "ok",
+            "port": 1,
+            "context_length": 1,
+            "prompt_kind": "long_context_probe",
+        }
+        original = runner.run_stage
+        try:
+            runner.run_stage = lambda stage: expected  # type: ignore[assignment]
+            result = runner.run_execution(plan)
+        finally:
+            runner.run_stage = original  # type: ignore[assignment]
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["stages"][0]["status"], "skipped")
+        self.assertEqual(result["stages"][1], expected)
+        self.assertEqual(result["stages"][2]["reason"], "not selected")
 
     def test_main_writes_dry_run_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

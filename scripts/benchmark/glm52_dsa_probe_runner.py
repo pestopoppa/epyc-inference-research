@@ -51,6 +51,7 @@ DEFAULT_MAX_TOKENS = 32
 DEFAULT_SEED = 42
 DEFAULT_TEMPERATURE = 0.0
 DEFAULT_INDEXER_TOP_K = 32
+DEFAULT_REQUEST_TIMEOUT = 3600
 DEFAULT_SHORT_CONTEXT = 4096
 DEFAULT_LONG_CONTEXT = 32768
 DEFAULT_KV_CONTEXTS = (4096, 8192, 16384, 32768)
@@ -250,6 +251,8 @@ def build_server_command(
     threads: int,
     ubatch: int,
     indexer_top_k: int,
+    trace_logs: bool = False,
+    log_file: Path | None = None,
     extra_args: list[str] | None = None,
 ) -> list[str]:
     command = [
@@ -279,8 +282,13 @@ def build_server_command(
         str(threads),
         "-ub",
         str(ubatch),
-        "--log-disable",
     ]
+    if trace_logs:
+        command.extend(["--log-verbosity", "4"])
+        if log_file is not None:
+            command.extend(["--log-file", str(log_file)])
+    else:
+        command.append("--log-disable")
     if extra_args:
         command.extend(extra_args)
     return command
@@ -315,6 +323,8 @@ def _server_spec(
     threads: int,
     ubatch: int,
     indexer_top_k: int,
+    trace_logs: bool,
+    log_file: Path | None = None,
 ) -> dict[str, Any]:
     command = build_server_command(
         binary=binary,
@@ -325,6 +335,8 @@ def _server_spec(
         threads=threads,
         ubatch=ubatch,
         indexer_top_k=indexer_top_k,
+        trace_logs=trace_logs,
+        log_file=log_file,
     )
     return {
         "server_command": command,
@@ -335,7 +347,15 @@ def _server_spec(
         "ubatch": ubatch,
         "indexer_top_k": indexer_top_k,
         "indexer_top_k_override": f"{INDEXER_TOP_K_OVERRIDE_KEY}=int:{indexer_top_k}",
+        "trace_logs": trace_logs,
+        "log_file": str(log_file) if log_file is not None else None,
     }
+
+
+def selected_stage_names(args: argparse.Namespace) -> set[str] | None:
+    if not args.only_stage:
+        return None
+    return set(args.only_stage)
 
 
 def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path, library_path: Path) -> dict[str, Any]:
@@ -344,6 +364,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
     scaling_task = "Return READY for the KV-length scaling checkpoint."
 
     primary_shard = Path(inventory["primary_shard"]) if inventory["primary_shard"] else args.model_dir
+    log_dir = args.output.parent / "logs"
 
     stages: list[dict[str, Any]] = [
         {
@@ -373,12 +394,15 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 threads=args.threads,
                 ubatch=args.ubatch,
                 indexer_top_k=args.indexer_top_k,
+                trace_logs=args.trace_logs,
+                log_file=log_dir / "short_load_decode_smoke.server.log" if args.trace_logs else None,
             ),
             "request": {
                 "endpoint": "/v1/chat/completions",
                 "max_tokens": args.max_tokens,
                 "seed": args.seed,
                 "temperature": args.temperature,
+                "timeout_s": args.request_timeout,
             },
         },
         {
@@ -395,12 +419,15 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 threads=args.threads,
                 ubatch=args.ubatch,
                 indexer_top_k=args.indexer_top_k,
+                trace_logs=args.trace_logs,
+                log_file=log_dir / "long_context_dsa_probe.server.log" if args.trace_logs else None,
             ),
             "request": {
                 "endpoint": "/v1/chat/completions",
                 "max_tokens": args.max_tokens,
                 "seed": args.seed,
                 "temperature": args.temperature,
+                "timeout_s": args.request_timeout,
             },
         },
         {
@@ -421,12 +448,15 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                         threads=args.threads,
                         ubatch=args.ubatch,
                         indexer_top_k=args.indexer_top_k,
+                        trace_logs=args.trace_logs,
+                        log_file=log_dir / f"kv_length_scaling_{context_length}.server.log" if args.trace_logs else None,
                     ),
                     "request": {
                         "endpoint": "/v1/chat/completions",
                         "max_tokens": args.max_tokens,
                         "seed": args.seed,
                         "temperature": args.temperature,
+                        "timeout_s": args.request_timeout,
                     },
                 }
                 for idx, context_length in enumerate(args.kv_contexts)
@@ -445,6 +475,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
         "execution_allowed": inventory["status"] == "ready",
         "refusal_reasons": inventory["refusal_reasons"],
         "inventory": inventory,
+        "selected_stages": sorted(selected_stage_names(args)) if selected_stage_names(args) else "all",
         "stages": stages,
         "execution": None,
     }
@@ -472,7 +503,14 @@ def wait_for_health(port: int, timeout_s: int = 180) -> None:
     raise TimeoutError(f"server on port {port} did not become healthy within {timeout_s}s")
 
 
-def call_completion(port: int, prompt: str, max_tokens: int, temperature: float, seed: int) -> dict[str, Any]:
+def call_completion(
+    port: int,
+    prompt: str,
+    max_tokens: int,
+    temperature: float,
+    seed: int,
+    timeout_s: int,
+) -> dict[str, Any]:
     payload = {
         "model": "auto",
         "messages": [{"role": "user", "content": prompt}],
@@ -487,7 +525,7 @@ def call_completion(port: int, prompt: str, max_tokens: int, temperature: float,
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=120) as resp:
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
     return json.loads(raw)
 
@@ -541,10 +579,66 @@ def terminate_server(proc: subprocess.Popen[str]) -> None:
         raise RuntimeError(f"server pid {pid} still visible after stop")
 
 
+def _response_summary(response: dict[str, Any]) -> dict[str, Any]:
+    choices = response.get("choices") or []
+    first = choices[0] if choices else {}
+    message = first.get("message") if isinstance(first, dict) else {}
+    content = message.get("content", "") if isinstance(message, dict) else ""
+    reasoning_content = message.get("reasoning_content") if isinstance(message, dict) else None
+    return {
+        "usage": response.get("usage", {}),
+        "timings": response.get("timings", {}),
+        "finish_reason": first.get("finish_reason") if isinstance(first, dict) else None,
+        "content_preview": content[:200],
+        "reasoning_preview": reasoning_content[:200] if isinstance(reasoning_content, str) else None,
+    }
+
+
+def summarize_server_log(log_file: str | None) -> dict[str, Any]:
+    if not log_file:
+        return {"status": "disabled", "path": None}
+    path = Path(log_file)
+    if not path.exists():
+        return {"status": "missing", "path": str(path)}
+
+    text = path.read_text(encoding="utf-8", errors="replace")
+    patterns = (
+        "lightning",
+        "indexer",
+        "fused_lid",
+        "dsa",
+        "unused tensor",
+        "prompt eval time",
+        "eval time",
+        "graphs reused",
+        "n_layer",
+        "top_k",
+    )
+    matches: list[str] = []
+    for line in text.splitlines():
+        lower = line.lower()
+        if any(pattern in lower for pattern in patterns):
+            matches.append(line)
+    return {
+        "status": "ok",
+        "path": str(path),
+        "bytes": path.stat().st_size,
+        "line_count": text.count("\n") + (1 if text else 0),
+        "matched_line_count": len(matches),
+        "matched_lines_tail": matches[-80:],
+    }
+
+
 def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
     server_command = stage["server"]["server_command"]
     prompt = _build_prompt(stage["prompt"]["task_line"], stage["prompt"]["context_length"])
+    log_file = stage["server"].get("log_file")
+    if log_file:
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.unlink(missing_ok=True)
     proc = launch_server(server_command)
+    response: dict[str, Any] | None = None
     try:
         wait_for_health(stage["server"]["port"])
         response = call_completion(
@@ -553,22 +647,36 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
             stage["request"]["max_tokens"],
             stage["request"]["temperature"],
             stage["request"]["seed"],
+            stage["request"]["timeout_s"],
         )
-        return {
-            "name": stage["name"],
-            "status": "ok",
-            "port": stage["server"]["port"],
-            "context_length": stage["server"]["context_length"],
-            "prompt_kind": stage["prompt"]["kind"],
-            "usage": response.get("usage", {}),
-        }
     finally:
         terminate_server(proc)
 
+    assert response is not None
+    summary = _response_summary(response)
+    return {
+        "name": stage["name"],
+        "status": "ok",
+        "port": stage["server"]["port"],
+        "context_length": stage["server"]["context_length"],
+        "prompt_kind": stage["prompt"]["kind"],
+        **summary,
+        "server_log": summarize_server_log(stage["server"].get("log_file")),
+    }
+
+
+def _stage_selected(stage_name: str, selected: set[str] | None) -> bool:
+    return selected is None or stage_name in selected
+
 
 def run_execution(plan: dict[str, Any]) -> dict[str, Any]:
+    selected_payload = plan.get("selected_stages")
+    selected = None if selected_payload == "all" else set(selected_payload)
     results: list[dict[str, Any]] = []
     for stage in plan["stages"]:
+        if not _stage_selected(stage["name"], selected):
+            results.append({"name": stage["name"], "status": "skipped", "reason": "not selected"})
+            continue
         if stage["status"] != "ready":
             results.append({"name": stage["name"], "status": "skipped", "reason": "preflight blocked"})
             continue
@@ -626,6 +734,28 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="Request seed")
     parser.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE, help="Request temperature")
     parser.add_argument("--indexer-top-k", type=int, default=DEFAULT_INDEXER_TOP_K, help="Fixed DSA indexer_top_k")
+    parser.add_argument(
+        "--request-timeout",
+        type=int,
+        default=DEFAULT_REQUEST_TIMEOUT,
+        help="HTTP request timeout in seconds for long CPU-prefill probes",
+    )
+    parser.add_argument(
+        "--trace-logs",
+        action="store_true",
+        help="Keep llama-server trace logs instead of passing --log-disable",
+    )
+    parser.add_argument(
+        "--only-stage",
+        action="append",
+        choices=[
+            "shard_integrity_inventory",
+            "short_load_decode_smoke",
+            "long_context_dsa_probe",
+            "kv_length_scaling",
+        ],
+        help="Execute only the named stage. May be repeated. Dry-run plans still include all stages.",
+    )
     parser.add_argument(
         "--short-context",
         type=int,

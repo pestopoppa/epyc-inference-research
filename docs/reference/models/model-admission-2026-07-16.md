@@ -12,7 +12,7 @@ This checkpoint records local artifact admission for the quiet-window model back
 
 | Candidate | Local artifact state | Manifest/source evidence | First runnable gate |
 |---|---:|---|---|
-| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; next gate is long-context DSA-indexer probe and KV scaling. |
+| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement. True 64K+ long-context classification remains open. |
 | Hy3 AngelSlim IQ1_M-mtp | Complete: `Hy3-IQ1_M-mtp.gguf`, 91,756,066,624 bytes, plus license, README, chat template, recipes, and two Hy3 llama.cpp patches. Experimental v7 commit `98a1ad8cf` now loads it after the Hy3 router-bias tensor-name fix. | HF metadata sidecar revision `218c93f0fb5227553b67e556b01dfe70fb70cf30`, LFS hash `f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13`. Capped CPU smoke loaded the model and returned `OK` with v7 `llama-cli` `10077 (da1bf5e2f)`. | MTP-on/off correctness and throughput closure. |
 | Bonsai-27B Q1_0 | Complete: `Bonsai-27B-Q1_0.gguf`, 3,803,452,480 bytes. | HF metadata sidecar revision `0cf7e3d21581b169b4df1de8bf01316000e2fbb7`, LFS hash `17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0`. | Text load smoke on production v6 is valid; public quality is contested, so quality gate before any role claim. |
 | Ternary Bonsai-27B Q2_0 | Complete: `Ternary-Bonsai-27B-Q2_0.gguf`, 7,165,121,600 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757`. | Runtime support check on refreshed v7/experimental before load smoke. Production v6 does not advertise Q2_0. |
@@ -66,7 +66,16 @@ Short CPU-only load/coherence smoke on experimental v7 `b10077-da1bf5e2f` passed
 - `/mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2305/`: load + chat served successfully with reasoning auto; generation entered `reasoning_content` and hit the 8-token cap before producing answer content. Prompt `9.92 t/s`, generation `2.93 t/s`.
 - `/mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2308-reasoning-off/`: same CPU-only server with `--reasoning off --reasoning-budget 0`; returned exact content `READY`. Prompt `9.92 t/s`, generation `5.13 t/s` over two completion tokens.
 
-Caveat: the load log warns that `blk.78.*` tensors are unused, including indexer and `nextn` tensors. This does not block short-context coherence, but it keeps K23/DSA and native-GLM-MTP open. The next GLM gate is not another short smoke; it is a long-context DSA/indexer engagement probe plus KV-length scaling.
+Caveat resolved for the loader boundary: the trace log prints `n_layer=78`, `n_layer_all=79`, and `glm-dsa.nextn_predict_layers=1`, so the `blk.78.*` unused-tensor warnings are the expected skipped physical NextN tail block, not an unreconciled live trunk layer. This does not prove the 1M-context thesis; K23 remains open for true long-context DSA/indexer behavior and native-GLM-MTP.
+
+## GLM-5.2 DSA Trace Shakedown
+
+The GLM DSA runner now supports selected-stage execution and retained trace logs (`--trace-logs`, `--only-stage`, and long request timeouts). Evidence:
+
+- `/mnt/raid0/llm/tmp/glm52-dsa-long-probe-20260716T2340/plan.json`: CPU-only experimental v7 8K shakedown, `--override-kv glm-dsa.attention.indexer.top_k=int:32`, prompt `5907` tokens, prompt eval `19.77 t/s`, decode `2.73 t/s`, content `READY`. The server log records `general.architecture=glm-dsa`, original metadata `indexer.top_k=2048`, override to `32`, `n_layer=78`, `n_layer_all=79`, and `Lightning Indexer enabled`.
+- `/mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/plan.json`: CPU-only preliminary KV/context scaling with fixed `indexer_top_k=32`; 4K leg processed `2900` prompt tokens at `23.86 t/s`, 8K leg processed `5906` prompt tokens at `22.69 t/s`, both logs show `Lightning Indexer enabled` and graph reuse.
+
+Interpretation: this proves loader metadata reconciliation, expected tail-block skip behavior, and Lightning Indexer enablement at 4K/8K. It is not yet a decision-grade DSA classification. The open K23 question is still whether attention compute at 64K+ scales near `indexer_top_k` or full KV, and whether quality/needle behavior remains coherent at long context.
 
 ## Nemotron-Labs-Diffusion Fork Loader Probe
 
@@ -242,7 +251,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 
 ## Next Queue
 
-1. Run the GLM long-context DSA/indexer engagement probe and KV-length scaling; artifact integrity and short load/coherence are now closed.
+1. Run true 64K+ GLM long-context DSA/indexer engagement and scaling; artifact integrity, short load/coherence, loader metadata, and the 4K/8K trace shakedown are now closed.
 2. Run Hy3 MTP-on/off correctness and throughput closure on experimental v7 commit `98a1ad8cf` or newer; the basic load/decode smoke is now closed.
 3. Investigate Ternary Bonsai Q2_0 artifact/runtime compatibility before retrying; ordinary Q1_0 and Bonsai-8B load/decode are already smoke-passed, while dspark variants failed.
 4. Run Qwable IQ4_XS and Q8_0 standalone/scaffold gates with task-level quality acceptance; long MI210/CPU speed observations and the strict-IQ4 JSON prompt smoke are now recorded.

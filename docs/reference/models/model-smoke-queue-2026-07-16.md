@@ -1,6 +1,6 @@
 # Model Smoke Queue - 2026-07-16
 
-This queue is for the first clean inference windows after GLM-5.2 artifact admission. GLM-5.2 UD-IQ2_M is now downloaded and size-verified; short CPU load/coherence passed. The remaining GLM gate is long-context DSA/indexer verification.
+This queue is for the first clean inference windows after GLM-5.2 artifact admission. GLM-5.2 UD-IQ2_M is now downloaded and size-verified; short CPU load/coherence and a 4K/8K DSA trace shakedown passed. The remaining GLM gate is true 64K+ long-context DSA/indexer verification and quality.
 
 2026-07-16 operator update: do not leave CPU/GPU idle just because GLM is still downloading. Non-GLM inference churn is allowed during the GLM download when it follows single-owner resource lanes: one MI210 owner, one bounded CPU-only owner, no GLM loads, no duplicate HF downloads, no full-stack/AutoPilot restart, and no disk-heavy DeepSeek/GLM/offload gates. Treat results gathered under active GLM download as smoke/admission observations unless repeated in a fully quiet window.
 
@@ -85,11 +85,12 @@ GLM-5.2 UD-IQ2_M artifact integrity and short CPU load/coherence are closed in t
 
 1. ✅ Shard integrity and manifest: six public shards match HF tree `abc55e72527792c6e77069c99b4cb7de16fa9f23`; total `238,577,580,768` bytes.
 2. ✅ Short load/decode smoke: experimental v7 `b10077-da1bf5e2f`, CPU-only, `--reasoning off`, returned exact `READY` in `/mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2308-reasoning-off/`.
-3. ⬜ Long-context DSA probe.
-4. ⬜ KV-length scaling with fixed `indexer_top_k` to classify `DSA-REAL-SPARSE`, `DSA-DENSE-MASK`, or `DSA-FALLBACK`.
-5. Runner: [`scripts/benchmark/glm52_dsa_probe_runner.py`](../../../scripts/benchmark/glm52_dsa_probe_runner.py). Dry-run preflight `/mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json` is ready for execute mode and records stale HF cache markers separately from effective blockers.
+3. ✅ 4K/8K DSA trace shakedown: `/mnt/raid0/llm/tmp/glm52-dsa-long-probe-20260716T2340/plan.json` and `/mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/plan.json`; logs show metadata override `indexer.top_k=32`, `n_layer=78`, `n_layer_all=79`, and `Lightning Indexer enabled`. 4K prompt `23.86 t/s`; 8K prompt `22.69 t/s`.
+4. ⬜ True long-context DSA probe (>64K, ideally toward 131K+) with a needle/coherence task.
+5. ⬜ KV-length scaling beyond 8K with fixed `indexer_top_k` to classify `DSA-REAL-SPARSE`, `DSA-DENSE-MASK`, or `DSA-FALLBACK`.
+6. Runner: [`scripts/benchmark/glm52_dsa_probe_runner.py`](../../../scripts/benchmark/glm52_dsa_probe_runner.py). Dry-run preflight `/mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json` is ready for execute mode and records stale HF cache markers separately from effective blockers; use `--trace-logs` and `--only-stage` for instrumented follow-ups.
 
-Caveat: the short-smoke load logs warn that `blk.78.*` tensors are unused, including indexer and `nextn` tensors. Treat this as a K23/DSA/MTP follow-up, not as a production role claim.
+Caveat disposition: `blk.78.*` warnings match the expected skipped NextN tail block (`n_layer=78`, `n_layer_all=79`, `nextn_predict_layers=1`). Treat DSA sparsity/quality as still open; do not register GLM-5.2 into production roles from 4K/8K evidence alone.
 
 ## MI210 Strategy Gates
 
