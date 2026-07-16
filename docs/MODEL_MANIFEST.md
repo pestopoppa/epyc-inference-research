@@ -15,10 +15,10 @@ compiled at `2026-07-05T04:32:46Z` with `stack_priors_version: 4`.
 |------|----------|-------|-----------|------|-----------|---------|
 | `frontdoor` | `8070` primary; launch ports `8070/8080/8180/8280/8380` | Qwen3.6-35B-A3B-MTP-Q8_0 | 37 GB | HOT | 24.3 | 32K effective / 262K max |
 | `coder_escalation` | `8070` | Qwen3.6-35B-A3B-MTP-Q8_0, shared with `frontdoor` | 37 GB shared | HOT | 24.3 | 32K effective / 262K max |
-| `worker_general` | `8072` primary; launch ports `8072/8082/8182/8282/8382` | gemma-4-26B-A4B-it-ORIG-Q4_K_M | 16 GB | HOT | 60.7 | 16K |
-| `worker_math` | `8072/8082` | shared with `worker_general` | 16 GB shared | HOT | 60.7 | 16K |
+| `worker_general` | `8072` primary; launch ports `8072/8082/8182/8282/8382` | gemma-4-26B-A4B-it-ORIG-Q4_K_M | 16 GB | HOT | 38.46 | 16K |
+| `worker_math` | `8072/8082` | shared with `worker_general` | 16 GB shared | HOT | 38.46 | 16K |
 | `worker_summarize` | `8070` | shared with `frontdoor` | 37 GB shared | HOT | 24.3 | 32K effective / 262K max |
-| `toolrunner` | `8072/8082` | shared with `worker_general` | 16 GB shared | HOT | 60.7 | 16K |
+| `toolrunner` | `8072/8082` | shared with `worker_general` | 16 GB shared | HOT | 38.46 | 16K |
 | `worker_vision` | `8086` | Qwen2.5-VL-7B-Instruct | 4.4 GB | HOT | 20.0 | 8K effective / 128K max |
 | `vision_escalation` | `8087` primary; launch ports `8087/8187/8287/8387/8487` | Qwen3-VL-30B-A3B-Instruct | 18 GB | HOT | 27.6 | 16K effective / 262K max |
 | `architect_general` | `8083` | Qwen3.5-122B-A10B | 69 GB | HOT | 12.19 | 16K effective / 262K max |
@@ -57,6 +57,11 @@ Supporting services:
 
 - **Qwen3-Coder-REAP-246B-A35B (Q4_K_M)**: 50%-pruned architect candidate,
   about 139 GB, measured around 6.25 t/s in earlier research probes.
+- **2026-07-16 quiet-window candidates**: GLM-5.2 UD-IQ2_M, Hy3
+  AngelSlim IQ1_M-mtp, Bonsai/Ternary Bonsai, and Qwable are tracked in the
+  research registry with artifact admission notes. See
+  [model-admission-2026-07-16.md](reference/models/model-admission-2026-07-16.md)
+  and the ordered [model-smoke-queue-2026-07-16.md](reference/models/model-smoke-queue-2026-07-16.md).
 - **DeepSeek-V3 and other large architects**: candidate/evidence records only
   unless promoted through the stack-change pipeline.
 - **Historical Qwen2.5/Qwen3-Coder rows**: retained for benchmark comparison,

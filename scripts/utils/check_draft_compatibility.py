@@ -24,8 +24,9 @@ Exit codes:
 
 import sys
 import argparse
+import json
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
+from typing import Tuple, Dict, Any
 
 try:
     from gguf import GGUFReader
@@ -41,6 +42,7 @@ def get_tokenizer_info(path: str) -> Dict[str, Any]:
         'vocab_size': None,
         'bos_token_id': None,
         'eos_token_id': None,
+        'pad_token_id': None,
         'tokenizer_model': None,
         'tokenizer_pre': None,
         'add_bos': None,
@@ -67,6 +69,10 @@ def get_tokenizer_info(path: str) -> Dict[str, Any]:
         elif fname == 'tokenizer.ggml.eos_token_id':
             val = field.parts[-1]
             info['eos_token_id'] = val[0] if hasattr(val, '__getitem__') else val
+
+        elif fname in {'tokenizer.ggml.padding_token_id', 'tokenizer.ggml.pad_token_id'}:
+            val = field.parts[-1]
+            info['pad_token_id'] = val[0] if hasattr(val, '__getitem__') else val
 
         elif fname == 'tokenizer.ggml.model':
             val = field.parts[-1]
@@ -99,7 +105,19 @@ def get_tokenizer_info(path: str) -> Dict[str, Any]:
     return info
 
 
-def check_compatibility(draft_path: str, target_path: str, verbose: bool = True) -> Tuple[bool, str]:
+def _fmt(value: Any) -> str:
+    if isinstance(value, int):
+        return f"{value:,}"
+    return str(value)
+
+
+def check_compatibility(
+    draft_path: str,
+    target_path: str,
+    verbose: bool = True,
+    strict: bool = False,
+    expected_specials: Dict[str, int] | None = None,
+) -> Tuple[bool, str]:
     """
     Check if draft model is compatible with target for speculative decoding.
 
@@ -121,16 +139,35 @@ def check_compatibility(draft_path: str, target_path: str, verbose: bool = True)
     issues = []
     warnings = []
 
+    def record(message: str) -> None:
+        if strict:
+            issues.append(message)
+        else:
+            warnings.append(message)
+
+    required_metadata = [
+        'vocab_size',
+        'bos_token_id',
+        'eos_token_id',
+        'pad_token_id',
+        'tokenizer_model',
+        'tokenizer_pre',
+    ]
+    for key in required_metadata:
+        for role, info in (('draft', draft_info), ('target', target_info)):
+            if info[key] is None:
+                record(f"MISSING METADATA: {role}.{key}")
+
     # Check tokenizer model match (quick sanity check)
     if draft_info['tokenizer_model'] != target_info['tokenizer_model']:
-        warnings.append(
+        record(
             f"TOKENIZER MODEL MISMATCH: draft={draft_info['tokenizer_model']}, target={target_info['tokenizer_model']} "
             f"- Different tokenizer families, compatibility unlikely"
         )
 
     # Check tokenizer pre-processor match
     if draft_info['tokenizer_pre'] != target_info['tokenizer_pre']:
-        warnings.append(
+        record(
             f"TOKENIZER PRE MISMATCH: draft={draft_info['tokenizer_pre']}, target={target_info['tokenizer_pre']}"
         )
 
@@ -139,45 +176,72 @@ def check_compatibility(draft_path: str, target_path: str, verbose: bool = True)
     #   - Gemma-3: 64 token diff → SIGSEGV crash
     #   - Qwen2.5-Coder: 128 token diff → Works fine (11x speedup)
     # The outcome depends on whether extra tokens are actually generated.
-    if draft_info['vocab_size'] != target_info['vocab_size']:
+    if (
+        draft_info['vocab_size'] is not None
+        and target_info['vocab_size'] is not None
+        and draft_info['vocab_size'] != target_info['vocab_size']
+    ):
         diff = abs(target_info['vocab_size'] - draft_info['vocab_size'])
         if draft_info['vocab_size'] < target_info['vocab_size']:
             # Draft has fewer tokens than target - RISKY
-            warnings.append(
-                f"VOCAB MISMATCH: draft={draft_info['vocab_size']:,}, target={target_info['vocab_size']:,} "
-                f"({diff:,} fewer tokens in draft) - TESTING REQUIRED! May crash if target generates token ID >= {draft_info['vocab_size']:,}"
+            record(
+                f"VOCAB MISMATCH: draft={_fmt(draft_info['vocab_size'])}, target={_fmt(target_info['vocab_size'])} "
+                f"({diff:,} fewer tokens in draft) - TESTING REQUIRED! May crash if target generates token ID >= {_fmt(draft_info['vocab_size'])}"
             )
         else:
             # Draft has more tokens than target - usually safe
-            warnings.append(
-                f"VOCAB SIZE: draft={draft_info['vocab_size']:,} > target={target_info['vocab_size']:,} "
+            record(
+                f"VOCAB SIZE: draft={_fmt(draft_info['vocab_size'])} > target={_fmt(target_info['vocab_size'])} "
                 f"({diff:,} extra in draft) - Usually safe, draft has superset"
             )
 
     # Check BOS token
     if draft_info['bos_token_id'] != target_info['bos_token_id']:
-        warnings.append(
+        record(
             f"BOS token mismatch: draft={draft_info['bos_token_id']}, target={target_info['bos_token_id']}"
         )
 
     # Check EOS token
     if draft_info['eos_token_id'] != target_info['eos_token_id']:
-        warnings.append(
+        record(
             f"EOS token mismatch: draft={draft_info['eos_token_id']}, target={target_info['eos_token_id']}"
         )
 
+    # Check PAD token when present. N5 relies on the aligned scratch draft having
+    # the same PAD metadata as the target, so strict mode must not ignore it.
+    if draft_info['pad_token_id'] != target_info['pad_token_id']:
+        record(
+            f"PAD token mismatch: draft={draft_info['pad_token_id']}, target={target_info['pad_token_id']}"
+        )
+
+    if expected_specials:
+        special_fields = {
+            'bos': 'bos_token_id',
+            'eos': 'eos_token_id',
+            'pad': 'pad_token_id',
+        }
+        for name, expected in expected_specials.items():
+            field = special_fields[name]
+            for role, info in (('draft', draft_info), ('target', target_info)):
+                if info[field] != expected:
+                    issues.append(
+                        f"{name.upper()} token assertion failed for {role}: got {info[field]}, expected {expected}"
+                    )
+
     if verbose:
         print(f"\nDraft Model: {Path(draft_path).name}")
-        print(f"  vocab_size: {draft_info['vocab_size']:,}")
+        print(f"  vocab_size: {_fmt(draft_info['vocab_size'])}")
         print(f"  bos_token_id: {draft_info['bos_token_id']}")
         print(f"  eos_token_id: {draft_info['eos_token_id']}")
+        print(f"  pad_token_id: {draft_info['pad_token_id']}")
         print(f"  tokenizer_model: {draft_info['tokenizer_model']}")
         print(f"  tokenizer_pre: {draft_info['tokenizer_pre']}")
 
         print(f"\nTarget Model: {Path(target_path).name}")
-        print(f"  vocab_size: {target_info['vocab_size']:,}")
+        print(f"  vocab_size: {_fmt(target_info['vocab_size'])}")
         print(f"  bos_token_id: {target_info['bos_token_id']}")
         print(f"  eos_token_id: {target_info['eos_token_id']}")
+        print(f"  pad_token_id: {target_info['pad_token_id']}")
         print(f"  tokenizer_model: {target_info['tokenizer_model']}")
         print(f"  tokenizer_pre: {target_info['tokenizer_pre']}")
 
@@ -201,6 +265,14 @@ def main():
     parser.add_argument('target', nargs='?', help='Path to target model GGUF')
     parser.add_argument('-q', '--quiet', action='store_true', help='Suppress verbose output')
     parser.add_argument('--json', action='store_true', help='Output as JSON')
+    parser.add_argument(
+        '--strict',
+        action='store_true',
+        help='Fail closed on tokenizer family, vocab, BOS/EOS/PAD, and expected-special mismatches',
+    )
+    parser.add_argument('--expect-bos', type=int, help='Require both models to use this BOS token id')
+    parser.add_argument('--expect-eos', type=int, help='Require both models to use this EOS token id')
+    parser.add_argument('--expect-pad', type=int, help='Require both models to use this PAD token id')
 
     args = parser.parse_args()
 
@@ -210,7 +282,37 @@ def main():
         print("  python3 check_draft_compatibility.py /path/to/draft.gguf /path/to/target.gguf")
         sys.exit(3)
 
-    compatible, message = check_compatibility(args.draft, args.target, verbose=not args.quiet)
+    expected_specials = {
+        name: value
+        for name, value in {
+            'bos': args.expect_bos,
+            'eos': args.expect_eos,
+            'pad': args.expect_pad,
+        }.items()
+        if value is not None
+    }
+    compatible, message = check_compatibility(
+        args.draft,
+        args.target,
+        verbose=not args.quiet and not args.json,
+        strict=args.strict,
+        expected_specials=expected_specials or None,
+    )
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    'compatible': compatible,
+                    'strict': args.strict,
+                    'expected_specials': expected_specials,
+                    'message': message,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        sys.exit(0 if compatible else 1)
 
     print(f"\n{'='*60}")
     if compatible:

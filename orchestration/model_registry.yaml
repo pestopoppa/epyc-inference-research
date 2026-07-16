@@ -565,7 +565,7 @@ server_mode:
     previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
     acceleration:
       type: speculative_decoding
-      spec_type: draft-mtp
+      spec_type: ngram-mod,draft-mtp
       draft_max: 2
       draft_p_min: 0.0
       threads_draft: 16
@@ -574,7 +574,9 @@ server_mode:
       corpus_retrieval: false
     numa_instances: 4
     numa_ports: [8082, 8182, 8282, 8382]
-    throughput: 60.7
+    # 2026-07-16 routing-prior rollback: supersedes the legacy May-08 60.7 t/s
+    # prior with the Jun-28 matched v6/iQK port artifact (N=206, avg_tokens_per_second).
+    throughput: 38.46
 
   # REAP-25B: Permanently pruned Qwen3-Coder-30B-A3B (25% experts removed by Cerebras REAP)
   # Pure MoE — speculative decoding IS viable (unlike Qwen3.5 hybrids)
@@ -3255,8 +3257,8 @@ roles:
                           # with the larger canonical ubatch when sequence is short.
     constraints:
       forbid:
-      - prompt_lookup       # MTP-only model; --spec-type ngram-simple conflicts with -md MTP draft
-      reason: "draft-mtp cannot coexist with ngram-simple lookup — both consume the spec-decode slot."  # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6, ik_llama deprecated
+      - prompt_lookup       # Legacy prompt_lookup remains disabled; v7 common_speculative ngram modes compose with draft-mtp when explicitly launched.
+      reason: "legacy prompt_lookup remains disabled; use common_speculative ngram-* + draft-mtp composition for launch-time n-gram fallback."
     # 2026-06-26 v6 cutover: runtime_requirements (ik_llama binary_dir + ld_library_path) removed — native draft-mtp on production-consolidated-v6.
     performance:
       baseline_tps: 7.05    # measured 2026-05-06, EPYC canonical (96 threads, fa=1, no-mmap, OMP env stack)
@@ -3335,8 +3337,8 @@ roles:
       ubatch: 512           # 2026-05-08: smaller ubatch to match deep-dive recipe
     constraints:
       forbid:
-      - prompt_lookup       # MTP-only model; --spec-type ngram-simple conflicts with -md MTP draft
-      reason: "draft-mtp cannot coexist with ngram-simple lookup — both consume the spec-decode slot."  # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6, ik_llama deprecated
+      - prompt_lookup       # Legacy prompt_lookup remains disabled; v7 common_speculative ngram modes compose with draft-mtp when explicitly launched.
+      reason: "legacy prompt_lookup remains disabled; use common_speculative ngram-* + draft-mtp composition for launch-time n-gram fallback."
     # 2026-06-26 v6 cutover: runtime_requirements (ik_llama binary_dir + ld_library_path) removed — native draft-mtp on production-consolidated-v6.
     performance:
       baseline_tps: 41.49     # measured 2026-05-06, EPYC canonical
@@ -3582,7 +3584,7 @@ roles:
     - coder
     acceleration:
       type: speculative_decoding
-      spec_type: draft-mtp  # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6 (was 'mtp', ik_llama deprecated)
+      spec_type: ngram-mod,draft-mtp  # 2026-07-16: v7 common_speculative ngram-mod first, native draft-mtp fallback.
       draft_role: draft_gemma4_26b_a4b_assistant_q8
       draft_max: 2
       draft_p_min: 0.0
@@ -3591,11 +3593,11 @@ roles:
     constraints:
       forbid:
       - prompt_lookup
-      reason: "draft-mtp and ngram-simple lookup both consume the spec-decode slot."  # 2026-06-26 v6 cutover: native draft-mtp on production-consolidated-v6, ik_llama deprecated
+      reason: "legacy prompt_lookup remains disabled; v7 common_speculative composes ngram-mod with draft-mtp as one launch-time stack."
     # 2026-06-26 v6 cutover: runtime_requirements (ik_llama binary_dir + ld_library_path) removed — native draft-mtp on production-consolidated-v6.
     performance:
-      baseline_tps: 44.7
-      optimized_tps: 60.7
+      baseline_tps: 38.46
+      optimized_tps: 38.46
       quality_pct: 90
       tool_compliance_pct: 96
     memory:
@@ -5244,6 +5246,53 @@ roles:
     - qwen3.5-397b-a17b
     notes: >
       Higher quality draft (Q8_0 vs Q4_0). Compatible with all qwen35 targets.
+  draft_qwen35_0_8b_q8_0_frontdoor_mtp_specials:
+    tier: D
+    description: N5 aligned Qwen3.5-0.8B Q8_0 draft artifact with active MTP frontdoor Qwen3.6 BOS/EOS/PAD metadata for qwen35 external-draft retests.
+    model:
+      name: Qwen3.5-0.8B-Q8_0.frontdoor-mtp-specials
+      path: /mnt/raid0/llm/scratch/n5/Qwen3.5-0.8B-Q8_0.frontdoor-mtp-specials.gguf
+      quant: Q8_0
+      size_gb: 0.8
+      architecture: qwen35
+    artifact_status:
+      download: local_scratch_derivative
+      observed_date: 2026-07-16
+      file_bytes: 811843904
+      source_model: Qwen3.5-0.8B-Q8_0
+      prior_non_mtp_aligned_path: /mnt/raid0/llm/scratch/n5/Qwen3.5-0.8B-Q8_0.frontdoor-specials.gguf
+      metadata_override:
+        bos_token_id: 248044
+        eos_token_id: 248046
+        pad_token_id: 248055
+    candidate_roles:
+    - draft
+    - n5_frontdoor_alpha_retest
+    compatible_targets:
+    - qwen3.6-35b-a3b-mtp
+    - qwen35-frontdoor
+    acceleration:
+      type: external_draft
+      status: harness_ready_no_alpha_evidence
+    constraints:
+      forbid:
+      - production_stack_registration
+      - alpha_binning_without_decision_grade_summary
+      reason: "Scratch metadata-aligned artifact for N5 research only; no valid frontdoor drafter alpha evidence exists yet."
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_plan:
+      cpu_only: "Use only through scripts/benchmark/n5_frontdoor_drafter_retest.sh strict/execute in an isolated retest worktree/build."
+      gpu_only: "Not a standalone model-selection candidate."
+      cpu_gpu_hybrid: "Future external-draft deployment only if N5 alpha gate passes."
+    notes: >
+      Registered to stop the N5 retest input living only as a scratch-path
+      detail. Strict compatibility requires BOS/EOS/PAD 248044/248046/248044
+      for the historical non-MTP frontdoor, but the active MTP frontdoor uses
+      BOS/EOS/PAD 248044/248046/248055. This registered artifact is aligned to
+      the active MTP target; fail-closed preflight is enforced by
+      scripts/utils/check_draft_compatibility.py.
 
   # =============================================================================
   # Embedder Models (Tier D - Supporting)
@@ -5530,6 +5579,600 @@ roles:
     memory:
       residency: cold
       pinned: false
+
+  # =============================================================================
+  # Downloaded / staged research candidates (2026-07-16)
+  # =============================================================================
+  #
+  # Catalogue-only entries. These are NOT production stack models and must not be
+  # copied into epyc-orchestrator/orchestration/model_registry.yaml unless a
+  # promotion handoff explicitly moves them into the live topology.
+
+  glm_52_ud_iq2m:
+    tier: B
+    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; download is incomplete as of 2026-07-16.
+    model:
+      name: GLM-5.2-UD-IQ2_M
+      huggingface_id: unsloth/GLM-5.2-GGUF
+      path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf
+      quant: UD-IQ2_M
+      size_gb: 239
+      split_count: 6
+      architecture: glm_moe_dsa
+      ctx_max: 131072
+    artifact_status:
+      download: incomplete
+      observed_date: 2026-07-16
+      observed_state: "Single active hf-download writer observed; first tiny shard materialized and shards 2-6 still downloading as .incomplete cache files under .cache/huggingface/download/UD-IQ2_M."
+      next_step: "Resume/verify the 6-shard download before any load, smoke, benchmark, or quality gate."
+    candidate_roles:
+    - architect
+    - ingest
+    - long_context
+    - reasoning
+    acceleration:
+      type: native_mtp_pending
+      notes: "Model-family MTP/DSA runnability is unverified in the local llama.cpp fork; first gate is load + DSA long-context smoke."
+    constraints:
+      forbid:
+      - benchmark_until_download_complete
+      - production_stack_registration
+      reason: "Artifact is not complete or runnable yet; keep out of live orchestrator registry."
+    performance:
+      benchmark_status: not_run_artifact_incomplete
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: false
+      hybrid_candidate: true
+      notes: "Too large for 64 GB MI210 GPU-only; CPU and CPU+GPU hot-expert/offload strategies require separate gates."
+    benchmark_plan:
+      cpu_only: "Shard integrity -> load/short smoke -> DSA long-context probe -> canonical throughput and quality."
+      gpu_only: "Not expected to fit on MI210."
+      cpu_gpu_hybrid: "Run expert-routing-skew profile first; only then test hot-expert/offload placement."
+
+  hy3_angelslim_iq1m_mtp:
+    tier: B
+    description: AngelSlim Hy3 IQ1_M with baked MTP - 295B-total/21B-active Hunyuan-v3 MoE research candidate.
+    model:
+      name: Hy3-IQ1_M-mtp
+      huggingface_id: AngelSlim/Hy3-GGUF
+      path: /mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf
+      quant: IQ1_M
+      size_gb: 86
+      architecture: hy_v3
+      ctx_max: 256000
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-16
+      file_bytes: 91756066624
+      runtime_build:
+        status: patched_cpu_build_complete
+        observed_date: 2026-07-16
+        path: /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin
+        binaries:
+        - llama-cli
+        - llama-server
+        notes: "Built from the bundled AngelSlim patches in a throwaway tree with CUDA=0 and SERVER=1. Embedded server UI assets are absent due npm/HF UI asset fetch failures, but the CLI help path runs and exposes draft-mtp plus n-gram speculative modes."
+      hf_metadata:
+        path: /mnt/raid0/llm/models/hy3-angelslim/.cache/huggingface/download/Hy3-IQ1_M-mtp.gguf.metadata
+        revision: 218c93f0fb5227553b67e556b01dfe70fb70cf30
+        source_hash_kind: hf_lfs_etag_sha256
+        source_hash: f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13
+      support_files:
+      - /mnt/raid0/llm/models/hy3-angelslim/patches/01-hyv3-arch.patch
+      - /mnt/raid0/llm/models/hy3-angelslim/patches/02-hyv3-mtp-tools.patch
+      - /mnt/raid0/llm/models/hy3-angelslim/hyv3_opensource_chat_template.jinja
+    candidate_roles:
+    - architect
+    - reasoning
+    - long_context
+    acceleration:
+      type: speculative_decoding
+      spec_type: draft-mtp
+      notes: "Requires a hy_v3/MTP-capable llama.cpp build or the bundled AngelSlim patches; not a stock production-v6/v7 assumption."
+    constraints:
+      forbid:
+      - production_stack_registration_without_load_gate
+      reason: "Large MoE candidate; must pass patched-build load/smoke plus MTP-vs-no-MTP correctness and throughput closure."
+    performance:
+      benchmark_status: load_smoke_pending
+      expected_cpu_mtp: "Prior handoff predicts net-neutral on EPYC CPU; measurement still required."
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: false
+      hybrid_candidate: true
+      notes: "GGUF is larger than MI210 HBM; GPU-only is not expected to fit. CPU+GPU hybrid requires hy_v3 op support and offload profiling."
+    benchmark_plan:
+      cpu_only: "Use /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin/llama-cli for load/decode smoke, then greedy MTP-on vs no-MTP and correctness probe."
+      gpu_only: "Not expected to fit on MI210."
+      cpu_gpu_hybrid: "Only after CPU load gate; test op/offload coverage and expert-residency feasibility."
+
+  bonsai_27b_q1_0:
+    tier: C
+    description: PrismML Bonsai-27B Q1_0 - 1-bit Qwen3.6-27B post-training candidate; cheap load/decode smoke pending.
+    model:
+      name: Bonsai-27B-Q1_0
+      path: /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf
+      quant: Q1_0
+      size_gb: 3.6
+      architecture: qwen35
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-16
+      file_bytes: 3803452480
+      hf_metadata:
+        path: /mnt/raid0/llm/models/bonsai-27b/.cache/huggingface/download/Bonsai-27B-Q1_0.gguf.metadata
+        revision: 0cf7e3d21581b169b4df1de8bf01316000e2fbb7
+        source_hash_kind: hf_lfs_etag_sha256
+        source_hash: 17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0
+    candidate_roles:
+    - worker
+    - reasoning
+    - frontdoor
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration_without_quality_gate
+      reason: "Public quality is contested; run load/decode smoke and K5 quality gate before any stack candidacy claim."
+    performance:
+      benchmark_status: not_run
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+      notes: "Small enough for CPU-only and GPU-only characterization."
+    benchmark_plan:
+      cpu_only: "Load/decode smoke, then standard quality gate if coherent."
+      gpu_only: "MI210 load/decode smoke and throughput sanity if CPU smoke passes."
+      cpu_gpu_hybrid: "Not a primary path at this size."
+
+  ternary_bonsai_27b_q2_0:
+    tier: C
+    description: PrismML Ternary Bonsai-27B Q2_0 - staged for refreshed upstream/v7 Q2_0 support.
+    model:
+      name: Ternary-Bonsai-27B-Q2_0
+      path: /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-Q2_0.gguf
+      quant: Q2_0
+      size_gb: 6.7
+      architecture: qwen35
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-16
+      file_bytes: 7165121600
+      hf_metadata:
+        path: /mnt/raid0/llm/models/ternary-bonsai-27b/.cache/huggingface/download/Ternary-Bonsai-27B-Q2_0.gguf.metadata
+        revision: 20e435f518bd5b882795954aba81e80a91894321
+        source_hash_kind: hf_lfs_etag_sha256
+        source_hash: 868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757
+    candidate_roles:
+    - worker
+    - reasoning
+    - frontdoor
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration_without_v7_support_check
+      - production_stack_registration_without_quality_gate
+      reason: "Q2_0 support depends on the refreshed experimental/upstream kernel lineage; validate runtime support before load/quality claims."
+    performance:
+      benchmark_status: not_run
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+    benchmark_plan:
+      cpu_only: "After Q1_0 smoke and Q2_0 runtime-support check, run CPU throughput/quality."
+      gpu_only: "Run MI210 throughput/quality if CPU load is coherent."
+      cpu_gpu_hybrid: "Not a primary path at this size."
+
+  ternary_bonsai_27b_q2_g64:
+    tier: C
+    description: PrismML Ternary Bonsai-27B Q2_g64 - staged variant; runtime support requires explicit v7/upstream check.
+    model:
+      name: Ternary-Bonsai-27B-Q2_g64
+      path: /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-Q2_g64.gguf
+      quant: Q2_g64
+      size_gb: 7.1
+      architecture: qwen35
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-16
+      file_bytes: 7585330240
+      hf_metadata:
+        path: /mnt/raid0/llm/models/ternary-bonsai-27b/.cache/huggingface/download/Ternary-Bonsai-27B-Q2_g64.gguf.metadata
+        revision: 20e435f518bd5b882795954aba81e80a91894321
+        source_hash_kind: hf_lfs_etag_sha256
+        source_hash: 59a45d1ecef702b14531b06d22949f33b25c1897da31a8c0b298e01e4d9138eb
+    candidate_roles:
+    - worker
+    - reasoning
+    - frontdoor
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration_without_runtime_support_check
+      - production_stack_registration_without_quality_gate
+      reason: "Variant-specific quant/runtime support is not proven in the production kernel."
+    performance:
+      benchmark_status: not_run
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+    benchmark_plan:
+      cpu_only: "Run only after Q1_0 and Q2_0 baselines identify a reason to test this variant."
+      gpu_only: "Run MI210 smoke/throughput after runtime-support check."
+      cpu_gpu_hybrid: "Not a primary path at this size."
+
+  qwable_v1_iq4xs:
+    tier: C
+    description: Qwable-v1 IQ4_XS - Qwen3.6-35B-A3B/Fable-5 reasoning-distilled GPU sidecar candidate.
+    model:
+      name: Qwable-v1.IQ4_XS
+      path: /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf
+      quant: IQ4_XS
+      size_gb: 18
+      architecture: qwen35moe
+      license: AGPL-3.0
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-16
+      mtp_head: absent_in_community_gguf
+      file_bytes: 18939313056
+      hf_metadata:
+        path: /mnt/raid0/llm/models/Qwable-v1-GGUF/.cache/huggingface/download/Qwable-v1.IQ4_XS.gguf.metadata
+        revision: f35ea1502056a2886dd88fb8a29272f8f3c9c3a5
+        source_hash_kind: hf_lfs_etag_sha256
+        source_hash: 3921bb8f1fc26ddd80ee97d0f48ccf507bd1dab04dbe4fc475e2eae65a05f460
+      hf_tree_manifest: /mnt/raid0/llm/models/Qwable-v1-GGUF/.cache/huggingface/trees/f35ea1502056a2886dd88fb8a29272f8f3c9c3a5.json
+    candidate_roles:
+    - reasoning_sidecar
+    - scaffold_generator
+    - verifier_selector
+    - standalone_reasoner
+    acceleration:
+      type: none
+      notes: "MTP head was dropped in the community GGUF; use as plain text-generation reasoner, not as a draft/MTP model."
+    performance:
+      benchmark_status: observation_only
+      study_summary: "CoT scaffold study found Qwable useful as a GPU reasoning/cost lever on reasoning-heavy tasks; deployable use still needs a codified gate."
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: true
+      notes: "IQ4_XS fits on MI210 alongside the Qwen3.6-35B beneficiary; preferred sidecar co-residency arm."
+    benchmark_plan:
+      cpu_only: "Optional baseline to compare CPU-only reasoner latency."
+      gpu_only: "Primary path: MI210 standalone reasoner/scaffold throughput and task-quality gates."
+      cpu_gpu_hybrid: "Primary deployment pattern: GPU reasoner feeding CPU-hosted beneficiary or routing standalone answers."
+
+  qwable_v1_q8_0:
+    tier: B
+    description: Qwable-v1 Q8_0 - near-lossless Qwable reasoning-distilled candidate; sequential/co-residency constrained on MI210.
+    model:
+      name: Qwable-v1.Q8_0
+      path: /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf
+      quant: Q8_0
+      size_gb: 35
+      architecture: qwen35moe
+      license: AGPL-3.0
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-16
+      mtp_head: absent_in_community_gguf
+      file_bytes: 36903140256
+      hf_metadata:
+        path: /mnt/raid0/llm/models/Qwable-v1-GGUF/.cache/huggingface/download/Qwable-v1.Q8_0.gguf.metadata
+        revision: f35ea1502056a2886dd88fb8a29272f8f3c9c3a5
+        source_hash_kind: hf_lfs_etag_sha256
+        source_hash: d7420a49e8c2c7adabafe199f20cac27a5b291173604cc758bf3d2f29a2334c0
+      hf_tree_manifest: /mnt/raid0/llm/models/Qwable-v1-GGUF/.cache/huggingface/trees/f35ea1502056a2886dd88fb8a29272f8f3c9c3a5.json
+    candidate_roles:
+    - reasoning_sidecar
+    - scaffold_generator
+    - verifier_selector
+    - standalone_reasoner
+    acceleration:
+      type: none
+      notes: "MTP head was dropped in the community GGUF; use as plain text-generation reasoner."
+    performance:
+      benchmark_status: observation_only
+      study_summary: "Use as near-lossless quality arm for Qwable; compare against IQ4_XS where memory permits."
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: true
+      notes: "Q8_0 does not co-reside with a 35B beneficiary on 64 GB MI210; use sequentially or with smaller beneficiaries."
+    benchmark_plan:
+      cpu_only: "Optional CPU-only latency baseline."
+      gpu_only: "MI210 standalone reasoner quality/speed arm."
+      cpu_gpu_hybrid: "Sequential sidecar or smaller-beneficiary co-residency only."
+
+  deepseek_v4_flash_local_q4kexperts:
+    tier: C
+    description: DeepSeek-V4-Flash local artifact - large DSA/flash-attention research candidate staged on disk; catalogue-only until loader support and memory plan are verified.
+    model:
+      name: DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix
+      path: /mnt/raid0/llm/models/deepseek-v4-flash/DeepSeek-V4-Flash-Q4KExperts-F16HC-F16Compressor-F16Indexer-Q8Attn-Q8Shared-Q8Out-chat-v2-imatrix.gguf
+      quant: mixed_q4kexperts_f16hc_f16compressor_f16indexer_q8attn_q8shared_q8out
+      size_gb: 153.3
+      architecture: deepseek_v4_flash
+    artifact_status:
+      download: present
+      observed_date: 2026-07-16
+      file_bytes: 164633502592
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - architect
+    - long_context
+    - reasoning
+    acceleration:
+      type: dsa_flash_pending
+      notes: "Runtime support and attention/indexer behavior are unverified locally."
+    constraints:
+      forbid:
+      - production_stack_registration_without_loader_gate
+      - benchmark_without_memory_plan
+      reason: "Large experimental architecture/quant mix; first gate is loader support plus CPU/GPU/hybrid memory feasibility."
+    performance:
+      benchmark_status: not_run
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: false
+      hybrid_candidate: true
+      notes: "Artifact exceeds 64 GB MI210 HBM; GPU-only is not expected to fit."
+    benchmark_plan:
+      cpu_only: "Header/load smoke, then tiny decode if loader support is present."
+      gpu_only: "Not expected to fit on MI210."
+      cpu_gpu_hybrid: "Only after loader support and offload feasibility are proven."
+
+  minicpm_o_45_local_multimodal:
+    tier: C
+    description: MiniCPM-o-4_5 local multimodal/audio bundle; catalogue-only until runtime feature coverage is mapped.
+    model:
+      name: MiniCPM-o-4_5
+      huggingface_id: openbmb/MiniCPM-o-4_5-gguf
+      path: /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 4.7
+      architecture: minicpm_o
+      variants:
+      - name: MiniCPM-o-4_5-Q4_K_M
+        path: /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf
+        file_bytes: 5026714400
+      - name: MiniCPM-o-4_5-Q5_K_M
+        path: /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q5_K_M.gguf
+        file_bytes: 5849946912
+      - name: MiniCPM-o-4_5-Q8_0
+        path: /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q8_0.gguf
+        file_bytes: 8707877536
+      projectors:
+      - /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/audio/MiniCPM-o-4_5-audio-F16.gguf
+      - /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf
+      - /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/tts/MiniCPM-o-4_5-projector-F16.gguf
+      - /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/tts/MiniCPM-o-4_5-tts-F16.gguf
+      - /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/encoder.gguf
+      - /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/flow_matching.gguf
+      - /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/token2wav-gguf/hifigan2.gguf
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-16
+      hf_metadata:
+        q4_k_m:
+          path: /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/.cache/huggingface/download/MiniCPM-o-4_5-Q4_K_M.gguf.metadata
+          revision: 385a4f55f7272bf2ee941b4a57f2e3f51a8fca38
+          source_hash_kind: hf_lfs_etag_sha256
+          source_hash: 1237a97ee081b8abebc47aa7dad565701e8f5f904cdc92f6723ac4281bbc0932
+        q8_0:
+          path: /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/.cache/huggingface/download/MiniCPM-o-4_5-Q8_0.gguf.metadata
+          revision: 385a4f55f7272bf2ee941b4a57f2e3f51a8fca38
+          source_hash_kind: hf_lfs_etag_sha256
+          source_hash: ae6af22ad3b7f1a7bf667922af84b9eb3e2199cc86f402702eaf9b054054788d
+    candidate_roles:
+    - multimodal
+    - vision
+    - audio
+    - tts
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration_without_multimodal_runtime_gate
+      reason: "Bundle needs explicit llama.cpp modality support mapping and task-level smoke before stack use."
+    performance:
+      benchmark_status: not_run
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+    benchmark_plan:
+      cpu_only: "Text-only load smoke first; modality smokes only after runtime support is mapped."
+      gpu_only: "MI210 text/vision smoke if CPU loader path is coherent."
+      cpu_gpu_hybrid: "Not a primary path at this size."
+
+  qwen25_coder_14b_local_q4km:
+    tier: C
+    description: Qwen2.5-Coder-14B local Q4_K_M code-model candidate; catalogue-only until compared against existing coder/frontdoor stack.
+    model:
+      name: Qwen2.5-Coder-14B-Instruct-Q4_K_M
+      path: /mnt/raid0/llm/models/qwen2.5-coder-14b-base/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 8.4
+      architecture: qwen25_coder
+    artifact_status:
+      download: present
+      observed_date: 2026-07-16
+      file_bytes: 8988111072
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - coder
+    - toolrunner
+    - worker
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration_without_code_quality_gate
+      reason: "Existing coder/frontdoor routes are stronger baselines; this needs a speed/quality niche before stack use."
+    performance:
+      benchmark_status: not_run
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+    benchmark_plan:
+      cpu_only: "Code smoke and canonical code-quality subset versus existing coder baseline."
+      gpu_only: "MI210 throughput smoke if quality niche remains plausible."
+      cpu_gpu_hybrid: "Not a primary path at this size."
+
+  qwen35_9b_mtp_local_q4km:
+    tier: C
+    description: Qwen3.5-9B MTP local Q4_K_M candidate; catalogue-only MTP comparison artifact.
+    model:
+      name: Qwen3.5-9B-Q4_K_M
+      path: /mnt/raid0/llm/models/Qwen3.5-9B-MTP-GGUF/Qwen3.5-9B-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 5.5
+      architecture: qwen35
+      mtp_capable: true
+    artifact_status:
+      download: present
+      observed_date: 2026-07-16
+      file_bytes: 5868826976
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - frontdoor
+    - worker
+    - drafter
+    acceleration:
+      type: speculative_decoding
+      spec_type: native_mtp_candidate
+      notes: "Existing non-MTP Qwen3.5-9B registry rows remain separate; this local artifact is the MTP comparison candidate."
+    constraints:
+      forbid:
+      - production_stack_registration_without_mtp_gate
+      reason: "Must prove MTP acceptance/quality and role niche versus existing 35B frontdoor and worker models."
+    performance:
+      benchmark_status: not_run
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+    benchmark_plan:
+      cpu_only: "MTP-on/off smoke and acceptance measurement."
+      gpu_only: "MI210 MTP smoke if CPU path is coherent."
+      cpu_gpu_hybrid: "Not a primary path at this size."
+
+  qwen3_vl_8b_local_q4km:
+    tier: C
+    description: Local Qwen3-VL-8B Q4_K_M + mmproj mirror; catalogue-only exact-path entry for the newly staged local artifact.
+    model:
+      name: Qwen3VL-8B-Instruct-Q4_K_M
+      huggingface_id: unsloth/Qwen3-VL-8B-Instruct-GGUF
+      path: /mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf
+      mmproj_path: /mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/mmproj-Qwen3VL-8B-Instruct-F16.gguf
+      quant: Q4_K_M
+      size_gb: 4.7
+      architecture: qwen3_vl
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-16
+      file_bytes: 5027784800
+      mmproj_file_bytes: 1159029824
+      hf_metadata:
+        path: /mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/.cache/huggingface/download/Qwen3VL-8B-Instruct-Q4_K_M.gguf.metadata
+        revision: f982a07559d4a2f6c8744d840bf6fccab30eea96
+        source_hash_kind: hf_lfs_etag_sha256
+        source_hash: 67d1659bfe71b89d50b45a4ad1a9e5b997e5bb16ce5da66a6a6167abd569e9e2
+    candidate_roles:
+    - vision
+    - multimodal
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration_without_vision_quality_gate
+      reason: "Production vision roles already exist; local mirror needs exact-path load/vision smoke and quality niche."
+    performance:
+      benchmark_status: not_run
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+    benchmark_plan:
+      cpu_only: "Text + image smoke."
+      gpu_only: "MI210 text + image throughput/quality smoke."
+      cpu_gpu_hybrid: "Not a primary path at this size."
+
+  qwen3_4b_thinking_2507_local_q8:
+    tier: C
+    description: Local Qwen3-4B-Thinking-2507 Q8_0 small reasoning candidate; catalogue-only exact-path entry.
+    model:
+      name: Qwen3-4B-Thinking-2507-Q8_0
+      huggingface_id: unsloth/Qwen3-4B-Thinking-2507-GGUF
+      path: /mnt/raid0/llm/models/Qwen3-4B-Thinking-2507-GGUF/Qwen3-4B-Thinking-2507-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 4.0
+      architecture: qwen3
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-16
+      file_bytes: 4280405632
+      hf_metadata:
+        path: /mnt/raid0/llm/models/Qwen3-4B-Thinking-2507-GGUF/.cache/huggingface/download/Qwen3-4B-Thinking-2507-Q8_0.gguf.metadata
+        revision: f40adb104d4d44aee52f398b60597c5866a973a3
+        source_hash_kind: hf_lfs_etag_sha256
+        source_hash: b15c7bf6f44fae7573595ffd5ae2ceebcbb26df904fe6d98b8c9a2f9ee8967b2
+      hf_tree_manifest: /mnt/raid0/llm/models/Qwen3-4B-Thinking-2507-GGUF/.cache/huggingface/trees/f40adb104d4d44aee52f398b60597c5866a973a3.json
+    candidate_roles:
+    - reasoning
+    - verifier_selector
+    - cheap_thinking
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration_without_reasoning_quality_gate
+      reason: "Small thinking model needs task-class quality and cost evidence before any routing claim."
+    performance:
+      benchmark_status: not_run
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+    benchmark_plan:
+      cpu_only: "Reasoning smoke and small verifier/selector benchmark."
+      gpu_only: "MI210 throughput/quality smoke."
+      cpu_gpu_hybrid: "Not a primary path at this size."
 
   # =============================================================================
   # EXTERNAL API BACKENDS
