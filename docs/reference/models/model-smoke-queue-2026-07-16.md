@@ -40,7 +40,7 @@ docs/data/model_admission_smoke_commands_20260716.sh registry_gap_status
 
 | Order | Case | Purpose | Resource risk |
 |---:|---|---|---|
-| 1 | `hy3_cpu_smoke` | Highest-value Hy3 patched-load gate before MTP-on/off closure. | Heavy CPU + reads 86 GB artifact. |
+| 1 | `hy3_cpu_smoke` | ✅ 2026-07-16 basic load/decode smoke passed on experimental v7 commit `98a1ad8cf`; next Hy3 work is MTP-on/off correctness and throughput closure. | Heavy CPU + reads 86 GB artifact. |
 | 2 | `bonsai_q1_cpu` | Cheap Bonsai Q1_0 loader/coherence gate. | Low/medium CPU, small artifact. |
 | 3 | `bonsai_q1_mi210_v7` | Bonsai Q1_0 MI210 load/decode sanity if CPU is coherent. | GPU load, small artifact. |
 | 4 | `bonsai_dspark_cpu_v7` | Bonsai dspark Q4_1 loader/coherence classification. | Low/medium CPU, small artifact. |

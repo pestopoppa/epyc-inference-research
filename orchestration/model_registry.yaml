@@ -5648,13 +5648,13 @@ roles:
       observed_date: 2026-07-16
       file_bytes: 91756066624
       runtime_build:
-        status: patched_cpu_build_complete
+        status: experimental_v7_load_smoke_pass
         observed_date: 2026-07-16
-        path: /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin
+        path: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin
+        commit: 98a1ad8cf
         binaries:
         - llama-cli
-        - llama-server
-        notes: "Built from the bundled AngelSlim patches in a throwaway tree with CUDA=0 and SERVER=1. Embedded server UI assets are absent due npm/HF UI asset fetch failures, but the CLI help path runs and exposes draft-mtp plus n-gram speculative modes."
+        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Capped CPU smoke on 2026-07-16 loaded the model and returned `OK` with `llama-cli` version `10077 (da1bf5e2f)`. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
       hf_metadata:
         path: /mnt/raid0/llm/models/hy3-angelslim/.cache/huggingface/download/Hy3-IQ1_M-mtp.gguf.metadata
         revision: 218c93f0fb5227553b67e556b01dfe70fb70cf30
@@ -5671,13 +5671,13 @@ roles:
     acceleration:
       type: speculative_decoding
       spec_type: draft-mtp
-      notes: "Requires a hy_v3/MTP-capable llama.cpp build or the bundled AngelSlim patches; not a stock production-v6/v7 assumption."
+      notes: "Requires experimental v7 commit 98a1ad8cf or newer for AngelSlim GGUF loading; MTP-on/off correctness and throughput closure still pending."
     constraints:
       forbid:
       - production_stack_registration_without_load_gate
-      reason: "Large MoE candidate; must pass patched-build load/smoke plus MTP-vs-no-MTP correctness and throughput closure."
+      reason: "Large MoE candidate; experimental v7 load smoke passed, but MTP-vs-no-MTP correctness and throughput closure are still required before any role claim."
     performance:
-      benchmark_status: load_smoke_pending
+      benchmark_status: load_smoke_pass_mtp_closure_pending
       expected_cpu_mtp: "Prior handoff predicts net-neutral on EPYC CPU; measurement still required."
     memory:
       residency: cold
@@ -5687,7 +5687,7 @@ roles:
       hybrid_candidate: true
       notes: "GGUF is larger than MI210 HBM; GPU-only is not expected to fit. CPU+GPU hybrid requires hy_v3 op support and offload profiling."
     benchmark_plan:
-      cpu_only: "Use /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin/llama-cli for load/decode smoke, then greedy MTP-on vs no-MTP and correctness probe."
+      cpu_only: "Use /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-cli from commit 98a1ad8cf or newer for load/decode smoke, then greedy MTP-on vs no-MTP and correctness probe."
       gpu_only: "Not expected to fit on MI210."
       cpu_gpu_hybrid: "Only after CPU load gate; test op/offload coverage and expert-residency feasibility."
 

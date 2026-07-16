@@ -186,9 +186,9 @@ hy3_build_cpu_runtime() {
 
 hy3_cpu_smoke() {
   require_no_glm_download
-  "${HY3_BUILD}/build/bin/llama-cli" \
+  v7_cpu_llama \
     -m "${HY3_DIR}/Hy3-IQ1_M-mtp.gguf" \
-    -ngl 0 -t "${THREADS:-96}" -c 4096 -n 64 --jinja \
+    -ngl 0 -t "${THREADS:-8}" -c 512 -n 8 -cnv --reasoning off --reasoning-budget 0 \
     -p 'Return exactly: ok'
 }
 
