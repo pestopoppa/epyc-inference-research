@@ -12,7 +12,7 @@ This checkpoint records local artifact admission for the quiet-window model back
 
 | Candidate | Local artifact state | Manifest/source evidence | First runnable gate |
 |---|---:|---|---|
-| GLM-5.2 UD-IQ2_M | Incomplete; live snapshot updated 2026-07-16T19:55Z shows 117G on disk, writer PID `3862528` alive, manager PID `3890751` alive, one finalized `.gguf`, five large active `.incomplete` shard bodies, and 15 incomplete/lock files total. | HF cache locks and `.incomplete` files under `/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/download/UD-IQ2_M`; `/mnt/raid0/llm` had 400G free at the checkpoint. | Wait for all six shards, then integrity verification, load smoke, and long-context DSA-indexer probe. |
+| GLM-5.2 UD-IQ2_M | Incomplete; live snapshot updated 2026-07-16T21:01Z shows 155G on disk, writer PID `3862528` alive, manager PID `3890751` alive, one finalized `.gguf`, five large active `.incomplete` shard bodies, and 15 incomplete/lock files total. | HF cache locks and `.incomplete` files under `/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/download/UD-IQ2_M`; `/mnt/raid0/llm` had 363G free at the checkpoint. | Wait for all six shards, then integrity verification, load smoke, and long-context DSA-indexer probe. |
 | Hy3 AngelSlim IQ1_M-mtp | Complete: `Hy3-IQ1_M-mtp.gguf`, 91,756,066,624 bytes, plus license, README, chat template, recipes, and two Hy3 llama.cpp patches. Experimental v7 commit `98a1ad8cf` now loads it after the Hy3 router-bias tensor-name fix. | HF metadata sidecar revision `218c93f0fb5227553b67e556b01dfe70fb70cf30`, LFS hash `f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13`. Capped CPU smoke loaded the model and returned `OK` with v7 `llama-cli` `10077 (da1bf5e2f)`. | MTP-on/off correctness and throughput closure. |
 | Bonsai-27B Q1_0 | Complete: `Bonsai-27B-Q1_0.gguf`, 3,803,452,480 bytes. | HF metadata sidecar revision `0cf7e3d21581b169b4df1de8bf01316000e2fbb7`, LFS hash `17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0`. | Text load smoke on production v6 is valid; public quality is contested, so quality gate before any role claim. |
 | Ternary Bonsai-27B Q2_0 | Complete: `Ternary-Bonsai-27B-Q2_0.gguf`, 7,165,121,600 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757`. | Runtime support check on refreshed v7/experimental before load smoke. Production v6 does not advertise Q2_0. |
@@ -24,7 +24,7 @@ This checkpoint records local artifact admission for the quiet-window model back
 
 A low-contention exact-path audit found additional downloaded research artifacts under `/mnt/raid0/llm/models` that were not represented by exact local paths in the research registry. Catalogue-only entries were added for the real gaps below. Existing LM Studio mirrors for Qwen2.5-Coder-32B, Qwen3-Next-80B, Qwen3-VL-8B, and DeepSeek-R1-0528-Qwen3-8B were already logically represented by relative `lmstudio-community/...` rows and were not duplicated.
 
-The same sweep found stale zero-byte Hugging Face `.lock` files in Qwable, MiniCPM-o-4_5, local Qwen3-VL-8B, and local Qwen3-4B-Thinking cache directories. The expected GGUF/projector files are present and no non-GLM downloader is running, so these are not treated as incomplete downloads. GLM-5.2 is the only active incomplete download in this checkpoint; the live status snapshot was refreshed at 2026-07-16T19:55Z to 117G on disk with writer PID `3862528`, manager PID `3890751`, one finalized `.gguf`, five large active `.incomplete` shard bodies, 15 incomplete/lock files total, and 400G free.
+The same sweep found stale zero-byte Hugging Face `.lock` files in Qwable, MiniCPM-o-4_5, local Qwen3-VL-8B, and local Qwen3-4B-Thinking cache directories. The expected GGUF/projector files are present and no non-GLM downloader is running, so these are not treated as incomplete downloads. GLM-5.2 is the only active incomplete download in this checkpoint; the live status snapshot was refreshed at 2026-07-16T21:01Z to 155G on disk with writer PID `3862528`, manager PID `3890751`, one finalized `.gguf`, five large active `.incomplete` shard bodies, 15 incomplete/lock files total, and 363G free.
 
 | Candidate | Local artifact state | Registry action | First runnable gate |
 |---|---:|---|---|
@@ -61,6 +61,22 @@ These are admission observations gathered 2026-07-16 while GLM-5.2 was still dow
 
 Follow-ups: investigate Ternary Bonsai Q2_0 artifact/runtime compatibility, Qwable JSON-schema sampler initialization, and model-specific prompting/template strategy for Qwable and Bonsai-27B. The Qwable speed/load observations do not invalidate earlier successful v7/GPU Qwable work; the failed CPU direct-CLI runs were harness failures.
 
+## CPU/MI210 Churn During Active GLM Download
+
+The active GLM download is not a blanket reason to leave CPU or MI210 idle. At 2026-07-16T21:00Z the host had roughly 1.0 TiB in Linux buff/cache and 1.1 TiB available memory, so recently used GGUFs can reload primarily from page cache even after the stack is stopped. A live Qwen2.5-Coder-14B MI210 run during the GLM writer held `99%` GPU use and `14%` VRAM while the GLM HF download continued, then completed cleanly. Avoid only GLM itself, duplicate downloads, and very large disk/RAM-heavy GLM/DeepSeek/offload gates while the GLM writer is active; already-local small/moderate GPU smokes are fair game with single-owner lanes and bounded logs.
+
+Second-pass smoke observations gathered during the active GLM download:
+
+| Candidate/case | CPU observation | MI210 observation | Evidence |
+|---|---:|---:|---|
+| `qwen3_4b_thinking_cpu_v7` / `qwen3_4b_thinking_mi210_v7` | PASS; prompt `119.7 t/s`, generation `8.8 t/s`; emitted reasoning preamble. | PASS; prompt `974.8 t/s`, generation `141.0 t/s`; emitted reasoning preamble. | `/mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/`; `/mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local/` |
+| `qwen25_coder14_cpu_v7` / long MI210 run | PASS; prompt `57.2 t/s`, generation `4.5 t/s`. | PASS; prompt `854.0 t/s`, generation `66.7 t/s`; live poll observed `99%` GPU use and `14%` VRAM. | `/mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/`; `/mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local/qwen25_coder14_mi210_long/` |
+| `qwen35_9b_mtp_cpu_v7` / `qwen35_9b_mtp_mi210_v7` | PASS; prompt `35.8 t/s`, generation `11.4 t/s`; exact-output prompt was not obeyed because reasoning text was emitted. | PASS; prompt `114.6 t/s`, generation `113.7 t/s`; exact-output prompt was not obeyed because reasoning text was emitted. | `/mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/`; `/mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-qwen35_9b_mtp_mi210_v7/` |
+| `minicpm_q4_cpu_text_v7` / `minicpm_q4_mi210_text_v7` | PASS; prompt `67.6 t/s`, generation `9.5 t/s`; returned `ok`. | PASS; prompt `423.3 t/s`, generation `107.2 t/s`; returned `ok` plus stray `</think>`. | `/mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/`; `/mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-minicpm_q4_mi210_text_v7/` |
+| `qwen3_vl8_cpu_text_v7` / `qwen3_vl8_mi210_text_v7` | PASS; prompt `64.9 t/s`, generation `15.4 t/s`; returned `ok`. | PASS; prompt `415.2 t/s`, generation `192.3 t/s`; returned `ok`. | `/mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/`; `/mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-remaining/` |
+
+Runner note: `scripts/benchmark/run_model_admission_smoke_queue.sh` now accepts repeated `--only CASE` arguments; before this checkpoint, repeated `--only` silently kept only the last case.
+
 ## Deferred Low-Contention Manifest Work
 
 Do not hash the large GGUFs during active GLM download or benchmark windows. If a human-readable manifest is needed, first emit byte inventories and reuse HF sidecars:
@@ -82,7 +98,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 ## Next Queue
 
 1. Keep the GLM-5.2 download watcher active and do not start duplicate HF downloads.
-2. During active GLM download, churn light non-GLM smokes with explicit resource ownership: one MI210 owner, one bounded CPU-only owner, no GLM loads, no full-stack/AutoPilot restart, and no disk-heavy DeepSeek/offload gates. Treat those results as admission observations until repeated cleanly if they become decision-gating.
+2. During active GLM download, churn non-GLM smokes with explicit resource ownership: one MI210 owner, one bounded CPU-only owner, no GLM loads, no duplicate downloads, no full-stack/AutoPilot restart, and no disk-heavy DeepSeek/offload gates. Treat those results as admission observations until repeated cleanly if they become decision-gating.
 3. Run Hy3 MTP-on/off correctness and throughput closure on experimental v7 commit `98a1ad8cf` or newer; the basic load/decode smoke is now closed.
 4. Run Bonsai Q1_0 CPU smoke through v7 with `--device none`, then MI210 smoke if coherent; then classify Bonsai dspark and Bonsai-8B side artifacts.
 5. Run Ternary Bonsai Q2_0 smoke only on refreshed v7/experimental, then classify the Ternary Bonsai dspark side artifact.

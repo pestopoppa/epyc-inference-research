@@ -6079,7 +6079,13 @@ roles:
       - production_stack_registration_without_multimodal_runtime_gate
       reason: "Bundle needs explicit llama.cpp modality support mapping and task-level smoke before stack use."
     performance:
-      benchmark_status: not_run
+      benchmark_status: cpu_mi210_text_smoke_pass_observation
+      observed_date: 2026-07-16
+      cpu_observation: "Text smoke passed during active GLM download: prompt 67.6 t/s, generation 9.5 t/s, returned `ok`."
+      mi210_observation: "Text smoke passed during active GLM download: prompt 423.3 t/s, generation 107.2 t/s, returned `ok` plus stray `</think>`."
+      evidence:
+      - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/minicpm_q4_cpu_text_v7/minicpm_q4_cpu_text_v7.stdout
+      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-minicpm_q4_mi210_text_v7/minicpm_q4_mi210_text_v7.stdout
     memory:
       residency: cold
       pinned: false
@@ -6116,7 +6122,13 @@ roles:
       - production_stack_registration_without_code_quality_gate
       reason: "Existing coder/frontdoor routes are stronger baselines; this needs a speed/quality niche before stack use."
     performance:
-      benchmark_status: not_run
+      benchmark_status: cpu_mi210_load_smoke_pass_observation
+      observed_date: 2026-07-16
+      cpu_observation: "CPU smoke passed during active GLM download: prompt 57.2 t/s, generation 4.5 t/s."
+      mi210_observation: "Long MI210 smoke passed during active GLM download: prompt 854.0 t/s, generation 66.7 t/s; live poll observed 99% GPU use and 14% VRAM."
+      evidence:
+      - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen25_coder14_cpu_v7/qwen25_coder14_cpu_v7.stdout
+      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local/qwen25_coder14_mi210_long/stdout.log
     memory:
       residency: cold
       pinned: false
@@ -6156,7 +6168,13 @@ roles:
       - production_stack_registration_without_mtp_gate
       reason: "Must prove MTP acceptance/quality and role niche versus existing 35B frontdoor and worker models."
     performance:
-      benchmark_status: not_run
+      benchmark_status: cpu_mi210_mtp_smoke_pass_observation_quality_open
+      observed_date: 2026-07-16
+      cpu_observation: "MTP smoke passed during active GLM download: prompt 35.8 t/s, generation 11.4 t/s; exact-output prompt emitted reasoning text."
+      mi210_observation: "MTP smoke passed during active GLM download: prompt 114.6 t/s, generation 113.7 t/s; exact-output prompt emitted reasoning text."
+      evidence:
+      - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen35_9b_mtp_cpu_v7/qwen35_9b_mtp_cpu_v7.stdout
+      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-qwen35_9b_mtp_mi210_v7/qwen35_9b_mtp_mi210_v7.stdout
     memory:
       residency: cold
       pinned: false
@@ -6199,7 +6217,13 @@ roles:
       - production_stack_registration_without_vision_quality_gate
       reason: "Production vision roles already exist; local mirror needs exact-path load/vision smoke and quality niche."
     performance:
-      benchmark_status: not_run
+      benchmark_status: cpu_mi210_text_smoke_pass_observation
+      observed_date: 2026-07-16
+      cpu_observation: "Text smoke passed during active GLM download: prompt 64.9 t/s, generation 15.4 t/s, returned `ok`."
+      mi210_observation: "Text smoke passed during active GLM download: prompt 415.2 t/s, generation 192.3 t/s, returned `ok`."
+      evidence:
+      - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen3_vl8_cpu_text_v7/qwen3_vl8_cpu_text_v7.stdout
+      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-remaining/qwen3_vl8_mi210_text_v7.stdout
     memory:
       residency: cold
       pinned: false
@@ -6242,7 +6266,13 @@ roles:
       - production_stack_registration_without_reasoning_quality_gate
       reason: "Small thinking model needs task-class quality and cost evidence before any routing claim."
     performance:
-      benchmark_status: not_run
+      benchmark_status: cpu_mi210_load_smoke_pass_observation_quality_open
+      observed_date: 2026-07-16
+      cpu_observation: "CPU smoke passed during active GLM download: prompt 119.7 t/s, generation 8.8 t/s; emitted reasoning preamble despite `--reasoning off`."
+      mi210_observation: "MI210 smoke passed during active GLM download: prompt 974.8 t/s, generation 141.0 t/s; emitted reasoning preamble despite `--reasoning off`."
+      evidence:
+      - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen3_4b_thinking_cpu_v7/qwen3_4b_thinking_cpu_v7.stdout
+      - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local/qwen3_4b_thinking_mi210_v7.stdout
     memory:
       residency: cold
       pinned: false

@@ -40,7 +40,7 @@ usage() {
   cat <<'USAGE'
 usage:
   run_model_admission_smoke_queue.sh --list
-  run_model_admission_smoke_queue.sh --run [--from CASE] [--only CASE] [--out DIR] [--allow-glm-download]
+  run_model_admission_smoke_queue.sh --run [--from CASE] [--only CASE ...] [--out DIR] [--allow-glm-download]
 
 Runs the 2026-07-16 model admission smoke queue with bounded per-case
 stdout/stderr capture. Each case runs under timeout(1) and live log caps, so a
@@ -77,7 +77,7 @@ case_index() {
 
 RUN=0
 FROM=""
-ONLY=""
+ONLY_CASES=()
 ALLOW_GLM=0
 
 while [[ $# -gt 0 ]]; do
@@ -95,7 +95,7 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --only)
-      ONLY="${2:-}"
+      ONLY_CASES+=("${2:-}")
       shift 2
       ;;
     --out)
@@ -140,12 +140,14 @@ if [[ -n "${FROM}" ]]; then
   }
 fi
 
-if [[ -n "${ONLY}" ]]; then
-  case_index "${ONLY}" >/dev/null || {
-    echo "FATAL: unknown --only case: ${ONLY}" >&2
-    list_queue >&2
-    exit 64
-  }
+if [[ "${#ONLY_CASES[@]}" -gt 0 ]]; then
+  for only_case in "${ONLY_CASES[@]}"; do
+    case_index "${only_case}" >/dev/null || {
+      echo "FATAL: unknown --only case: ${only_case}" >&2
+      list_queue >&2
+      exit 64
+    }
+  done
 fi
 
 SUMMARY="${OUT_BASE}/summary.tsv"
@@ -154,8 +156,15 @@ printf 'case\tstatus\texit_code\tstdout\tstderr\ttimeout_s\tlog_cap_bytes\n' > "
 for idx in "${!QUEUE[@]}"; do
   case_name="${QUEUE[$idx]}"
   [[ "${idx}" -ge "${START}" ]] || continue
-  if [[ -n "${ONLY}" && "${case_name}" != "${ONLY}" ]]; then
-    continue
+  if [[ "${#ONLY_CASES[@]}" -gt 0 ]]; then
+    selected=0
+    for only_case in "${ONLY_CASES[@]}"; do
+      if [[ "${case_name}" == "${only_case}" ]]; then
+        selected=1
+        break
+      fi
+    done
+    [[ "${selected}" -eq 1 ]] || continue
   fi
 
   stdout="${OUT_BASE}/${case_name}.stdout"
