@@ -2,9 +2,8 @@
 """Qwable reasoning-economics runner.
 
 Defaults to a dry-run plan. The dry-run writes a JSON plan plus a companion
-command file for the experimental v7 build. Pass --execute to run only the
-first smoke arm; the remaining arms stay plan-only until the economics sweep is
-explicitly staged.
+command file for the experimental v7 build. Pass --execute to run the selected
+smoke arm(s); by default this remains the first, minimal IQ4 arm.
 
 The runner is intentionally narrow:
   - the llama-server binary is pinned to /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin
@@ -112,6 +111,21 @@ ARMS: tuple[ArmSpec, ...] = (
         beneficiary_policy="smaller-beneficiary-only",
     ),
     ArmSpec(
+        name="strict_iq4_json_gpu",
+        model_path=MODEL_IQ4_XS,
+        device="ROCm0",
+        ngl=99,
+        role="strict_json_reasoner",
+        prompt=(
+            'Return exactly this minified JSON and no markdown: '
+            '{"arm":"strict_iq4_json_gpu","quant":"IQ4_XS","role":"reasoner"}'
+        ),
+        resource_class="gpu_iq4_strict_json",
+        residency_note="Prompt/template strict-output probe without sampler grammar.",
+        co_residency_policy="co-resident-plausible",
+        beneficiary_policy="can share the host with a smaller beneficiary more plausibly than Q8",
+    ),
+    ArmSpec(
         name="cpu_iq4_baseline",
         model_path=MODEL_IQ4_XS,
         device="none",
@@ -161,7 +175,13 @@ ARMS: tuple[ArmSpec, ...] = (
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Qwable reasoning-economics runner")
-    parser.add_argument("--execute", action="store_true", help="Run the first smoke arm after writing the plan")
+    parser.add_argument("--execute", action="store_true", help="Run selected smoke arm(s) after writing the plan")
+    parser.add_argument(
+        "--only",
+        action="append",
+        choices=[arm.name for arm in ARMS],
+        help="Arm name to execute. May be repeated. Defaults to the first IQ4 smoke.",
+    )
     parser.add_argument(
         "--allow-glm-download",
         action="store_true",
@@ -362,6 +382,13 @@ def smoke_payload(arm: ArmSpec, args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def selected_arm_indices(args: argparse.Namespace) -> list[int]:
+    if not args.only:
+        return [0]
+    wanted = set(args.only)
+    return [index for index, arm in enumerate(ARMS) if arm.name in wanted]
+
+
 def smoke_command_string(port: int, arm: ArmSpec, args: argparse.Namespace) -> str:
     payload = canonical_json(smoke_payload(arm, args))
     argv = [
@@ -426,6 +453,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "execution": {
             "execute_mode_is_minimal": True,
             "first_smoke_arm": ARMS[0].name,
+            "selected_smoke_arms": [ARMS[index].name for index in selected_arm_indices(args)],
             "request": {
                 "max_tokens": args.max_tokens,
                 "temperature": args.temperature,
@@ -484,9 +512,44 @@ def launch_server(argv: list[str], log_path: Path) -> subprocess.Popen[str]:
     return proc
 
 
-def run_first_smoke(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]) -> dict[str, Any]:
-    arm = ARMS[0]
-    port = plan["arms"][0]["port"]
+def parse_content_json(content: str) -> dict[str, Any]:
+    stripped = content.strip()
+    if not stripped:
+        return {"content_json_mode": "empty", "content_json": None}
+    try:
+        return {"content_json_mode": "strict", "content_json": json.loads(stripped)}
+    except json.JSONDecodeError:
+        pass
+
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if len(lines) >= 3 and lines[-1].strip() == "```":
+            fenced = "\n".join(lines[1:-1]).strip()
+            try:
+                return {"content_json_mode": "fenced", "content_json": json.loads(fenced)}
+            except json.JSONDecodeError:
+                pass
+    return {"content_json_mode": "non_json", "content_json": None}
+
+
+def response_summary(response: dict[str, Any]) -> dict[str, Any]:
+    choices = response.get("choices") or []
+    first = choices[0] if choices else {}
+    message = first.get("message") if isinstance(first, dict) else {}
+    content = message.get("content", "") if isinstance(message, dict) else ""
+    summary = {
+        "finish_reason": first.get("finish_reason") if isinstance(first, dict) else None,
+        "usage": response.get("usage"),
+        "timings": response.get("timings"),
+        "content": content,
+    }
+    summary.update(parse_content_json(content))
+    return summary
+
+
+def run_smoke_arm(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any], arm_index: int) -> dict[str, Any]:
+    arm = ARMS[arm_index]
+    port = plan["arms"][arm_index]["port"]
     log_path = output_dir / "logs" / f"{arm.name}.server.log"
     raw_response_path = output_dir / "responses" / f"{arm.name}.raw.json"
     result_path = output_dir / "results" / f"{arm.name}.json"
@@ -523,6 +586,7 @@ def run_first_smoke(args: argparse.Namespace, output_dir: Path, plan: dict[str, 
                 "status": "ok",
                 "response_sha256": response_hash,
                 "response_path": str(raw_response_path),
+                "response_summary": response_summary(response),
             }
         )
         result_path.write_text(json.dumps(record, indent=2, sort_keys=True), encoding="utf-8")
@@ -539,6 +603,10 @@ def run_first_smoke(args: argparse.Namespace, output_dir: Path, plan: dict[str, 
                 log_handle = getattr(proc, "_qwable_log_handle", None)
                 if log_handle is not None:
                     log_handle.close()
+
+
+def run_first_smoke(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]) -> dict[str, Any]:
+    return run_smoke_arm(args, output_dir, plan, 0)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -569,6 +637,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"q8_0_model: {MODEL_Q8_0}")
     print(f"glm_active: {plan['glm_guard']['active']}")
     print(f"first_smoke_arm: {ARMS[0].name}")
+    print(f"selected_smoke_arms: {', '.join(plan['execution']['selected_smoke_arms'])}")
     print("resource_note_iq4: can co-reside more plausibly")
     print("resource_note_q8: sequential or smaller-beneficiary only")
 
@@ -578,9 +647,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Commands written to {output_dir / 'commands.sh'}")
         return 0
 
-    print("Executing first smoke only.")
+    print("Executing selected smoke arm(s).")
     try:
-        record = run_first_smoke(args, output_dir, plan)
+        records = [run_smoke_arm(args, output_dir, plan, index) for index in selected_arm_indices(args)]
     except Exception as exc:
         print(f"Execute mode failed: {exc}", file=sys.stderr)
         return 1
@@ -589,13 +658,14 @@ def main(argv: list[str] | None = None) -> int:
         "schema": "qwable_reasoning_economics_execute.v1",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "mode": "execute",
-        "first_smoke": record,
+        "first_smoke": records[0] if records else None,
+        "smokes": records,
         "plan_path": str(output_dir / "plan.json"),
         "commands_path": str(output_dir / "commands.sh"),
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
     print(f"Summary written to {output_dir / 'summary.json'}")
-    print("First-smoke execution complete.")
+    print("Selected-smoke execution complete.")
     return 0
 
 

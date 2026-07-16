@@ -23,6 +23,17 @@ def _make_shard_dir(root: Path, *, include_blocker: bool = False) -> Path:
     return model_dir
 
 
+def _write_matching_hf_tree(model_dir: Path) -> None:
+    tree_dir = model_dir / ".cache" / "huggingface" / "trees"
+    tree_dir.mkdir(parents=True, exist_ok=True)
+    files = {}
+    for shard in sorted(model_dir.glob("*.gguf")):
+        rel = shard.relative_to(model_dir).as_posix()
+        size = shard.stat().st_size
+        files[rel] = {"size": size, "lfs_size": size, "lfs_sha256": f"sha-{shard.name}"}
+    (tree_dir / "revision.json").write_text(json.dumps({"files": files}), encoding="utf-8")
+
+
 class TestGlm52DsaProbeRunner(unittest.TestCase):
     def test_collect_inventory_blocks_incomplete_download_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -34,6 +45,21 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
             self.assertEqual(inventory["non_cache_shard_count"], 6)
             self.assertTrue(any(item["path"].endswith(".incomplete") for item in inventory["blocker_files"]))
             self.assertTrue(any("download.partial.incomplete" in reason for reason in inventory["refusal_reasons"]))
+
+    def test_collect_inventory_ignores_stale_hf_incomplete_after_manifest_complete(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir = _make_shard_dir(Path(tmp))
+            _write_matching_hf_tree(model_dir)
+            stale_dir = model_dir / ".cache" / "huggingface" / "download" / "UD-IQ2_M"
+            stale_dir.mkdir(parents=True, exist_ok=True)
+            (stale_dir / "old-body.incomplete").write_bytes(b"stale")
+
+            inventory = runner.collect_inventory(model_dir)
+
+            self.assertEqual(inventory["status"], "ready")
+            self.assertEqual(inventory["hf_tree_manifest"]["status"], "complete")
+            self.assertEqual(inventory["blocker_files"], [])
+            self.assertEqual(len(inventory["stale_cache_marker_files"]), 1)
 
     def test_build_plan_uses_experimental_binary_and_sanitized_library_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

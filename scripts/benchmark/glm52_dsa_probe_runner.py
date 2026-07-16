@@ -111,11 +111,71 @@ def is_blocker_file(path: Path) -> bool:
     return path.name.endswith(".incomplete") or path.name.endswith(".lock")
 
 
+def _best_manifest_match(model_dir: Path, shards: list[ShardRecord]) -> dict[str, Any]:
+    tree_dir = model_dir / ".cache" / "huggingface" / "trees"
+    best: dict[str, Any] = {
+        "status": "missing",
+        "path": None,
+        "matched_shards": 0,
+        "mismatches": [],
+    }
+    if not tree_dir.exists():
+        return best
+
+    shard_by_path = {record.path: record.size for record in shards}
+    for tree_path in sorted(tree_dir.glob("*.json")):
+        try:
+            data = json.loads(tree_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            candidate = {
+                "status": "unreadable",
+                "path": str(tree_path),
+                "matched_shards": 0,
+                "mismatches": [str(exc)],
+            }
+            if best["status"] == "missing":
+                best = candidate
+            continue
+
+        files = data.get("files") if isinstance(data, dict) else None
+        if not isinstance(files, dict):
+            continue
+
+        matched = 0
+        mismatches: list[str] = []
+        for rel_path, local_size in shard_by_path.items():
+            meta = files.get(rel_path)
+            if not isinstance(meta, dict):
+                mismatches.append(f"{rel_path}: missing from manifest")
+                continue
+            manifest_size = meta.get("size")
+            lfs_size = meta.get("lfs_size", manifest_size)
+            if local_size == manifest_size == lfs_size:
+                matched += 1
+            else:
+                mismatches.append(
+                    f"{rel_path}: local={local_size} manifest={manifest_size} lfs={lfs_size}"
+                )
+
+        candidate = {
+            "status": "complete" if matched == len(shards) and not mismatches else "partial",
+            "path": str(tree_path),
+            "matched_shards": matched,
+            "mismatches": mismatches,
+        }
+        if matched > int(best.get("matched_shards", 0)):
+            best = candidate
+        if candidate["status"] == "complete":
+            return candidate
+
+    return best
+
+
 def collect_inventory(model_dir: Path) -> dict[str, Any]:
     resolved_dir = model_dir.expanduser().resolve()
     shards: list[ShardRecord] = []
-    blockers: list[str] = []
     blocker_records: list[ShardRecord] = []
+    stale_cache_markers: list[ShardRecord] = []
 
     if resolved_dir.exists():
         for entry in sorted(resolved_dir.rglob("*")):
@@ -124,16 +184,33 @@ def collect_inventory(model_dir: Path) -> dict[str, Any]:
             rel = entry.relative_to(resolved_dir).as_posix()
             size = entry.stat().st_size
             if is_blocker_file(entry):
-                blockers.append(rel)
                 blocker_records.append(ShardRecord(path=rel, size=size))
             if ".cache" not in entry.parts and entry.suffix == ".gguf":
                 shards.append(ShardRecord(path=rel, size=size))
 
     shard_records = [dataclasses.asdict(record) for record in shards]
-    blocker_payload = [dataclasses.asdict(record) for record in blocker_records]
+    manifest = _best_manifest_match(resolved_dir, shards)
+    manifest_complete = (
+        len(shards) == REQUIRED_NON_CACHE_SHARDS
+        and manifest["status"] == "complete"
+    )
+    effective_blockers: list[ShardRecord] = []
+    for record in blocker_records:
+        is_stale_hf_incomplete = (
+            manifest_complete
+            and record.path.startswith(".cache/huggingface/download/")
+            and record.path.endswith(".incomplete")
+        )
+        if is_stale_hf_incomplete:
+            stale_cache_markers.append(record)
+        else:
+            effective_blockers.append(record)
+
+    blocker_payload = [dataclasses.asdict(record) for record in effective_blockers]
+    stale_cache_payload = [dataclasses.asdict(record) for record in stale_cache_markers]
     total_bytes = sum(record.size for record in shards)
     shard_count = len(shards)
-    status = "ready" if shard_count == REQUIRED_NON_CACHE_SHARDS and not blockers else "blocked"
+    status = "ready" if shard_count == REQUIRED_NON_CACHE_SHARDS and not effective_blockers else "blocked"
     primary_shard = str((resolved_dir / shards[0].path).resolve()) if shards else None
 
     reasons: list[str] = []
@@ -143,8 +220,10 @@ def collect_inventory(model_dir: Path) -> dict[str, Any]:
         reasons.append(
             f"expected {REQUIRED_NON_CACHE_SHARDS} non-cache gguf shards, found {shard_count}"
         )
-    if blockers:
-        reasons.append(f"found blocker files: {', '.join(blockers)}")
+    if effective_blockers:
+        reasons.append(f"found blocker files: {', '.join(record.path for record in effective_blockers)}")
+    if manifest["status"] not in {"complete", "missing"}:
+        reasons.append(f"manifest verification not complete: {manifest['status']}")
 
     return {
         "model_dir": str(resolved_dir),
@@ -154,6 +233,8 @@ def collect_inventory(model_dir: Path) -> dict[str, Any]:
         "non_cache_shards": shard_records,
         "primary_shard": primary_shard,
         "blocker_files": blocker_payload,
+        "stale_cache_marker_files": stale_cache_payload,
+        "hf_tree_manifest": manifest,
         "total_shard_bytes": total_bytes,
         "refusal_reasons": reasons,
     }
@@ -276,6 +357,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 "total_shard_bytes": inventory["total_shard_bytes"],
             },
             "blockers": inventory["blocker_files"],
+            "stale_cache_markers": inventory.get("stale_cache_marker_files", []),
         },
         {
             "name": "short_load_decode_smoke",

@@ -12,7 +12,7 @@ This checkpoint records local artifact admission for the quiet-window model back
 
 | Candidate | Local artifact state | Manifest/source evidence | First runnable gate |
 |---|---:|---|---|
-| GLM-5.2 UD-IQ2_M | Incomplete; live snapshot updated 2026-07-16T22:50Z shows 218G on disk, writer PID `3862528` alive, manager PID `3890751` alive, shards 3-6 finalized, shard 2 still downloading as a ~43.9G `.incomplete` body, and shard 1 visible as a tiny 9.4 MB `.gguf` and therefore not integrity evidence. One lock file remained. | HF cache lock and `.incomplete` files under `/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/download/UD-IQ2_M`; `/mnt/raid0/llm` had ~298G free at the checkpoint. | Wait for all six shards, then integrity verification, load smoke, and long-context DSA-indexer probe. |
+| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; next gate is long-context DSA-indexer probe and KV scaling. |
 | Hy3 AngelSlim IQ1_M-mtp | Complete: `Hy3-IQ1_M-mtp.gguf`, 91,756,066,624 bytes, plus license, README, chat template, recipes, and two Hy3 llama.cpp patches. Experimental v7 commit `98a1ad8cf` now loads it after the Hy3 router-bias tensor-name fix. | HF metadata sidecar revision `218c93f0fb5227553b67e556b01dfe70fb70cf30`, LFS hash `f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13`. Capped CPU smoke loaded the model and returned `OK` with v7 `llama-cli` `10077 (da1bf5e2f)`. | MTP-on/off correctness and throughput closure. |
 | Bonsai-27B Q1_0 | Complete: `Bonsai-27B-Q1_0.gguf`, 3,803,452,480 bytes. | HF metadata sidecar revision `0cf7e3d21581b169b4df1de8bf01316000e2fbb7`, LFS hash `17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0`. | Text load smoke on production v6 is valid; public quality is contested, so quality gate before any role claim. |
 | Ternary Bonsai-27B Q2_0 | Complete: `Ternary-Bonsai-27B-Q2_0.gguf`, 7,165,121,600 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757`. | Runtime support check on refreshed v7/experimental before load smoke. Production v6 does not advertise Q2_0. |
@@ -25,7 +25,7 @@ This checkpoint records local artifact admission for the quiet-window model back
 
 A low-contention exact-path audit found additional downloaded research artifacts under `/mnt/raid0/llm/models` that were not represented by exact local paths in the research registry. Catalogue-only entries were added for the real gaps below. Existing LM Studio mirrors for Qwen2.5-Coder-32B, Qwen3-Next-80B, Qwen3-VL-8B, and DeepSeek-R1-0528-Qwen3-8B were already logically represented by relative `lmstudio-community/...` rows and were not duplicated.
 
-The same sweep found stale zero-byte Hugging Face `.lock` files in Qwable, MiniCPM-o-4_5, local Qwen3-VL-8B, and local Qwen3-4B-Thinking cache directories. The expected GGUF/projector files are present and no non-GLM downloader is running, so these are not treated as incomplete downloads. GLM-5.2 is the only active incomplete download in this checkpoint; the live status snapshot was refreshed at 2026-07-16T21:01Z to 155G on disk with writer PID `3862528`, manager PID `3890751`, one finalized `.gguf`, five large active `.incomplete` shard bodies, 15 incomplete/lock files total, and 363G free.
+The same sweep found stale zero-byte Hugging Face `.lock` files in Qwable, MiniCPM-o-4_5, local Qwen3-VL-8B, and local Qwen3-4B-Thinking cache directories. The expected GGUF/projector files are present and no non-GLM downloader is running, so these are not treated as incomplete downloads. GLM-5.2 later completed in the same session; stale GLM `.incomplete` cache markers remain under `.cache/huggingface/download/UD-IQ2_M`, but the public shards match the HF tree manifest exactly.
 
 | Candidate | Local artifact state | Registry action | First runnable gate |
 |---|---:|---|---|
@@ -45,6 +45,28 @@ The same sweep found stale zero-byte Hugging Face `.lock` files in Qwable, MiniC
 - Experimental v7 has `Q2_0` model-loader support; use v7 for Ternary Bonsai Q2_0 smoke after the v7 worktree is the intended candidate. The `build-hip` CLI was relinked on 2026-07-16 after a stale `libllama-cli-impl.so` caused `--version` to segfault; after the N5/K4 output-capacity fix it reports `10077 (da1bf5e2f)` **only when** `LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin` is set. Direct invocation without that library path resolves production v6 libraries and can report `9774 (91745611f)`, so direct `--version` output without the candidate library path is not v7 evidence. Current N5 evidence artifacts: strict dry preflight `/mnt/raid0/llm/epyc-inference-research/data/specdec_frontdoor_alpha/n5_retest_v7_semantic_preflight_20260716T190817Z/preflight.json`; execute summary `/mnt/raid0/llm/epyc-inference-research/data/specdec_frontdoor_alpha/n5_retest_v7_execute_20260716T190836Z/summary.json` (`decision_grade=true`, `n5_spec_on` `376/376` accepted).
 - Hy3 now loads on experimental v7 commit `98a1ad8cf` or newer. Root cause was a Hy3 tensor-name drift: the AngelSlim GGUF stores 80 router-bias tensors as `blk.N.exp_probs_b.bias`, while the experimental loader previously requested bare `blk.N.exp_probs_b`, producing `done_getting_tensors: wrong number of tensors; expected 1298, got 1218`. The throwaway AngelSlim build at `/mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin/` remains a reference/fallback only.
 - Qwable community GGUFs do not include the MTP head. Treat Qwable as a standalone reasoner, scaffold generator, or verifier/selector candidate.
+
+## GLM-5.2 Completion + Short Smoke
+
+GLM-5.2 UD-IQ2_M completed after the earlier live snapshots. The relevant completion evidence is `/mnt/raid0/llm/models/glm52_clean.log`, which ends with `Fetching 6 files: 100%`. The cached HF tree manifest at `/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json` size-verifies all six public shards:
+
+| Shard | Local bytes | Manifest bytes | LFS SHA256 |
+|---|---:|---:|---|
+| `00001` | 9,423,744 | 9,423,744 | `7b8e91dd6dde4999da6c05bc75ae39e4982c6d8fa14969af9445c4d44d992623` |
+| `00002` | 49,223,976,800 | 49,223,976,800 | `251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1` |
+| `00003` | 49,143,176,640 | 49,143,176,640 | `1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b` |
+| `00004` | 49,143,176,640 | 49,143,176,640 | `10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e` |
+| `00005` | 49,143,176,640 | 49,143,176,640 | `40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d` |
+| `00006` | 41,914,650,304 | 41,914,650,304 | `eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d` |
+
+The GLM DSA preflight runner was repaired so stale Hugging Face cache `.incomplete` markers do not block once all public shards are manifest-complete. Dry-run plan `/mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json` reports `execution_allowed=true`, `hf_tree_manifest.status=complete`, no blockers, and five stale cache marker records.
+
+Short CPU-only load/coherence smoke on experimental v7 `b10077-da1bf5e2f` passed:
+
+- `/mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2305/`: load + chat served successfully with reasoning auto; generation entered `reasoning_content` and hit the 8-token cap before producing answer content. Prompt `9.92 t/s`, generation `2.93 t/s`.
+- `/mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2308-reasoning-off/`: same CPU-only server with `--reasoning off --reasoning-budget 0`; returned exact content `READY`. Prompt `9.92 t/s`, generation `5.13 t/s` over two completion tokens.
+
+Caveat: the load log warns that `blk.78.*` tensors are unused, including indexer and `nextn` tensors. This does not block short-context coherence, but it keeps K23/DSA and native-GLM-MTP open. The next GLM gate is not another short smoke; it is a long-context DSA/indexer engagement probe plus KV-length scaling.
 
 ## Nemotron-Labs-Diffusion Fork Loader Probe
 
@@ -104,7 +126,9 @@ Result:
 - Timings: prompt `298.88 t/s` for 46 prompt tokens; generation `97.82 t/s` for 42 completion tokens.
 - Cleanup: no llama processes or KFD PIDs remained after the runner exited.
 
-Classification: this is a useful harness-safe MI210 smoke for Qwable as a standalone reasoner/scaffold candidate. It is not a strict schema pass because the model wrapped the JSON in fences; the next Qwable gate should tune prompt/template/schema handling and compare IQ4_XS vs Q8_0 task quality.
+Follow-up selector run: `/mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/` used the same bounded server/chat runner after adding named-arm execution. `standalone_q8_gpu` returned valid requested JSON inside fences at prompt `294.19 t/s`, generation `103.63 t/s` over 41 completion tokens. `strict_iq4_json_gpu` returned exact minified JSON with no markdown at prompt `304.25 t/s`, generation `99.24 t/s` over 23 completion tokens.
+
+Classification: this is useful harness-safe MI210 evidence for Qwable as a standalone reasoner/scaffold candidate. The strict IQ4 prompt shows Qwable can satisfy exact JSON under a tighter prompt/template without sampler grammar; Q8 still wrapped valid JSON in fences. The separate JSON-schema sampler failure remains open, and the next Qwable gate should compare IQ4_XS vs Q8_0 on task quality rather than first-speed smokes.
 
 ## CPU/MI210 Churn During Active GLM Download
 
@@ -218,13 +242,12 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 
 ## Next Queue
 
-1. Keep the GLM-5.2 download watcher active and do not start duplicate HF downloads.
-2. During active GLM download, churn non-GLM smokes with explicit resource ownership: one MI210 owner, one bounded CPU-only owner, no GLM loads, no duplicate downloads, no full-stack/AutoPilot restart, and no disk-heavy DeepSeek/offload gates. Treat those results as admission observations until repeated cleanly if they become decision-gating.
-3. Run Hy3 MTP-on/off correctness and throughput closure on experimental v7 commit `98a1ad8cf` or newer; the basic load/decode smoke is now closed.
-4. Investigate Ternary Bonsai Q2_0 artifact/runtime compatibility before retrying; ordinary Q1_0 and Bonsai-8B load/decode are already smoke-passed, while dspark variants failed.
-5. Run Qwable IQ4_XS and Q8_0 standalone/scaffold gates with task-level quality acceptance; long MI210/CPU speed observations are now recorded.
-6. Move beyond speed-only admission observations for MiniCPM-o, Qwen3-VL-8B, Qwen3.5-9B MTP, Bonsai, Qwable, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible.
-7. After GLM finishes, run GLM shard integrity, load smoke, and DSA long-context probes; schedule exact-path DeepSeek/offload-style smokes only after download/cache contention clears.
+1. Run the GLM long-context DSA/indexer engagement probe and KV-length scaling; artifact integrity and short load/coherence are now closed.
+2. Run Hy3 MTP-on/off correctness and throughput closure on experimental v7 commit `98a1ad8cf` or newer; the basic load/decode smoke is now closed.
+3. Investigate Ternary Bonsai Q2_0 artifact/runtime compatibility before retrying; ordinary Q1_0 and Bonsai-8B load/decode are already smoke-passed, while dspark variants failed.
+4. Run Qwable IQ4_XS and Q8_0 standalone/scaffold gates with task-level quality acceptance; long MI210/CPU speed observations and the strict-IQ4 JSON prompt smoke are now recorded.
+5. Move beyond speed-only admission observations for MiniCPM-o, Qwen3-VL-8B, Qwen3.5-9B MTP, Bonsai, Qwable, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible.
+6. Schedule exact-path DeepSeek/offload-style smokes only after the GLM DSA gate or when resource ownership is explicit; the GLM download itself is no longer active.
 
 Opt-in command file: `docs/data/model_admission_smoke_commands_20260716.sh`.
 

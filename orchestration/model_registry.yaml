@@ -5604,7 +5604,7 @@ roles:
 
   glm_52_ud_iq2m:
     tier: B
-    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; download remains incomplete as of 2026-07-16.
+    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete and short CPU load/coherence smoke passed on 2026-07-16.
     model:
       name: GLM-5.2-UD-IQ2_M
       huggingface_id: unsloth/GLM-5.2-GGUF
@@ -5615,10 +5615,34 @@ roles:
       architecture: glm_moe_dsa
       ctx_max: 131072
     artifact_status:
-      download: incomplete
+      download: complete
       observed_date: 2026-07-16
-      observed_state: "Live checkpoint snapshot updated 2026-07-16T22:50Z: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M at 218G on disk, writer PID 3862528 alive, manager PID 3890751 alive, shards 3-6 finalized, shard 2 still downloading as a ~43.9G .incomplete body, shard 1 visible as a tiny 9.4 MB .gguf and therefore not integrity evidence, one lock file remained, and /mnt/raid0/llm had about 298G free."
-      next_step: "Resume/verify the 6-shard download before any load, smoke, benchmark, or quality gate."
+      observed_state: "HF writer exited and glm52_clean.log reports Fetching 6 files: 100%. Six public UD-IQ2_M shards are present and match the cached HF tree manifest by size."
+      total_shard_bytes: 238577580768
+      hf_tree_manifest:
+        path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json
+        revision: abc55e72527792c6e77069c99b4cb7de16fa9f23
+        verification: all_public_shards_size_match
+      shards:
+      - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf
+        bytes: 9423744
+        lfs_sha256: 7b8e91dd6dde4999da6c05bc75ae39e4982c6d8fa14969af9445c4d44d992623
+      - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf
+        bytes: 49223976800
+        lfs_sha256: 251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1
+      - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf
+        bytes: 49143176640
+        lfs_sha256: 1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b
+      - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf
+        bytes: 49143176640
+        lfs_sha256: 10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e
+      - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf
+        bytes: 49143176640
+        lfs_sha256: 40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d
+      - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
+        bytes: 41914650304
+        lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
+      next_step: "Run long-context DSA/indexer probe and KV-length scaling; short load/coherence is already smoke-passed."
     candidate_roles:
     - architect
     - ingest
@@ -5629,11 +5653,29 @@ roles:
       notes: "Model-family MTP/DSA runnability is unverified in the local llama.cpp fork; first gate is load + DSA long-context smoke."
     constraints:
       forbid:
-      - benchmark_until_download_complete
       - production_stack_registration
-      reason: "Artifact is not complete or runnable yet; keep out of live orchestrator registry."
+      - production_role_claim_without_dsa_quality_gate
+      reason: "Artifact is complete and runnable for short CPU smoke, but DSA sparsity, long-context behavior, throughput, and reviewer/task quality are still unverified."
     performance:
-      benchmark_status: not_run_artifact_incomplete
+      benchmark_status: short_load_coherence_pass_dsa_open
+      short_smoke_observation: >
+        2026-07-16 experimental v7 b10077-da1bf5e2f CPU-only llama-server
+        loaded the six-shard UD-IQ2_M artifact. With reasoning auto, the model
+        generated reasoning_content but no answer content under an 8-token cap.
+        With --reasoning off --reasoning-budget 0 it returned exact content
+        READY. Prompt was 9.92 t/s over 15 prompt tokens; generation was 5.13
+        t/s over 2 completion tokens. This is loader/coherence evidence only.
+      dsa_caveat: >
+        Short-smoke logs warn that blk.78.* tensors are unused, including
+        indexer and nextn tensors. Keep GLM DSA/MTP gates open until a
+        long-context indexer/KV-scaling probe proves the runtime path.
+      evidence:
+      - /mnt/raid0/llm/models/glm52_clean.log
+      - /mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json
+      - /mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2305/summary.json
+      - /mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2305/server.log
+      - /mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2308-reasoning-off/summary.json
+      - /mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2308-reasoning-off/server.log
     memory:
       residency: cold
       pinned: false
@@ -6091,6 +6133,12 @@ roles:
         values inside a fenced JSON block. Prompt 298.88 t/s over 46 tokens;
         generation 97.82 t/s over 42 tokens. Treat as harness-safe MI210 smoke,
         not strict schema acceptance.
+      strict_json_observation: >
+        2026-07-16 selector follow-up on the same bounded server/chat runner
+        returned exact minified JSON for the strict_iq4_json_gpu arm with no
+        markdown fences. Prompt 304.25 t/s over 44 tokens; generation 99.24
+        t/s over 23 tokens. This narrows the open issue to prompt/template and
+        sampler-grammar handling rather than a general inability to emit JSON.
       long_decode_observation: >
         2026-07-16 longer server runs during active GLM download: CPU generated
         616 tokens at 13.71 t/s; MI210 generated 1322 tokens at 98.32 t/s.
@@ -6102,6 +6150,8 @@ roles:
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/summary.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/responses/standalone_iq4_gpu.raw.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/logs/standalone_iq4_gpu.server.log
+      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/summary.json
+      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/responses/strict_iq4_json_gpu.raw.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_iq4xs_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_iq4xs_mi210/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c2048/summary.txt
@@ -6151,8 +6201,16 @@ roles:
     performance:
       benchmark_status: observation_only
       study_summary: "Use as near-lossless quality arm for Qwable; compare against IQ4_XS where memory permits."
+      server_chat_observation: >
+        2026-07-16 bounded selector run on experimental v7 b10077-da1bf5e2f
+        returned the requested standalone_q8_gpu/Q8_0/reasoner values as valid
+        JSON inside markdown fences. Prompt 294.19 t/s over 45 tokens;
+        generation 103.63 t/s over 41 tokens. Strict prompt/template handling
+        remains a quality gate.
       long_decode_observation: "2026-07-16 longer server runs during active GLM download: CPU generated 706 tokens at 10.00 t/s; MI210 generated 1087 tokens at 100.15 t/s."
       evidence:
+      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/summary.json
+      - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/responses/standalone_q8_gpu.raw.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_q8_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_q8_mi210/summary.txt
     memory:
