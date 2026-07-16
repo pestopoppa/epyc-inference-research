@@ -46,7 +46,7 @@ ADAPTER_SUITES = {
     "general", "math", "coder", "thinking", "instruction_precision", "vl",
     "gaia", "cruxeval", "bigcodebench",
     # Phase 1 hard benchmarks (mode-advantage signal)
-    "gpqa", "simpleqa", "hotpotqa", "livecodebench",
+    "gpqa", "mmlu_pro", "simpleqa", "hotpotqa", "livecodebench",
     # Phase 2 hard benchmarks
     "debugbench", "usaco",
     # Phase 3: physics reasoning
@@ -135,6 +135,7 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         "bigcodebench": BigCodeBenchAdapter,
         # Phase 1 hard benchmarks
         "gpqa": GPQAAdapter,
+        "mmlu_pro": MMLUProAdapter,
         "simpleqa": SimpleQAAdapter,
         "hotpotqa": HotpotQAAdapter,
         "livecodebench": LiveCodeBenchAdapter,
@@ -1222,6 +1223,81 @@ class GPQAAdapter(BaseAdapter):
             "scoring_method": "multiple_choice",
             "scoring_config": {},
         }
+
+
+# ── MMLU-Pro (Extended Multiple-Choice) ─────────────────────────────────────
+
+class MMLUProAdapter(BaseAdapter):
+    """MMLU-Pro: 12,032 extended multiple-choice questions (10 options, A-J).
+
+    Source: TIGER-Lab/MMLU-Pro on HuggingFace.
+    Harder variant of MMLU with 10 distractor options per question.
+    Used as a quality gate for v7+ kernel promotion.
+
+    Scoring: multiple_choice (A-J).
+    Tiers: Based on category difficulty.
+    """
+
+    suite_name = "mmlu_pro"
+    has_real_tiers = True
+    CHOICE_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
+
+    # Tier 3: hard STEM + professional
+    HARD_CATEGORIES = {
+        "math", "physics", "chemistry", "computer science",
+        "engineering", "biology", "health",
+    }
+    # Tier 2: social sciences + humanities
+    MEDIUM_CATEGORIES = {
+        "economics", "psychology", "philosophy", "history", "law",
+    }
+    # Tier 1: business + other
+    EASY_CATEGORIES = {"business", "other"}
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+        try:
+            import datasets as hf
+            self._dataset = hf.load_dataset(
+                "TIGER-Lab/MMLU-Pro", split="test",
+            )
+        except Exception as e:
+            print(f"  [adapter] MMLU-Pro load failed: {e}")
+            self._dataset = []
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        question = row["question"]
+        options = row["options"]
+        answer = row["answer"]
+        category = row.get("category", "other")
+
+        prompt_lines = [question, ""]
+        for i, opt in enumerate(options):
+            prompt_lines.append(f"{self.CHOICE_LABELS[i]}) {opt}")
+        prompt_lines.append("")
+        prompt_lines.append("Answer with the letter only (A through J).")
+
+        return {
+            "id": f"mmlu_pro_{category}_{idx:05d}",
+            "suite": "mmlu_pro",
+            "prompt": "\n".join(prompt_lines),
+            "context": "",
+            "expected": answer,
+            "scoring": [],
+            "image_path": "",
+            "tier": self._get_tier_for_index(idx),
+            "scoring_method": "multiple_choice",
+            "scoring_config": {},
+        }
+
+    def _get_tier_for_index(self, idx: int) -> int:
+        category = self._dataset[idx].get("category", "other")
+        if category in self.HARD_CATEGORIES:
+            return 3
+        elif category in self.MEDIUM_CATEGORIES:
+            return 2
+        return 1
 
 
 # ── SimpleQA (Factual Accuracy) ───────────────────────────────────────────
