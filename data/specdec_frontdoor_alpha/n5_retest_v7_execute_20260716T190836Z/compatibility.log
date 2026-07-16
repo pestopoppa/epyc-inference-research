@@ -1,0 +1,19 @@
+
+Draft Model: Qwen3.5-0.8B-Q8_0.frontdoor-mtp-specials.gguf
+  vocab_size: 248,320
+  bos_token_id: 248044
+  eos_token_id: 248046
+  pad_token_id: 248055
+  tokenizer_model: gpt2
+  tokenizer_pre: qwen35
+
+Target Model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+  vocab_size: 248,320
+  bos_token_id: 248044
+  eos_token_id: 248046
+  pad_token_id: 248055
+  tokenizer_model: gpt2
+  tokenizer_pre: qwen35
+
+============================================================
+RESULT: COMPATIBLE: Vocab sizes match, BOS/EOS tokens match

@@ -164,6 +164,34 @@ finally:
 PY
 }
 
+wait_for_port_release() {
+  local timeout="${1:-60}"
+  local elapsed=0
+  while port_in_use; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    if [[ "$elapsed" -ge "$timeout" ]]; then
+      return 1
+    fi
+  done
+}
+
+port_listener_pids() {
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -tiTCP:"${PORT}" -sTCP:LISTEN 2>/dev/null || true
+  fi
+}
+
+kill_port_listeners() {
+  local signal="$1"
+  local pid
+  while read -r pid; do
+    [[ -n "$pid" ]] || continue
+    [[ "$pid" != "$$" ]] || continue
+    kill "-${signal}" "$pid" 2>/dev/null || true
+  done < <(port_listener_pids)
+}
+
 active_autopilot() {
   pgrep -af "scripts/autopilot/autopilot.py start" >/dev/null 2>&1
 }
@@ -173,10 +201,14 @@ live_llama_servers() {
 }
 
 wait_for_server() {
+  local pid="${1:-}"
   local elapsed=0
   while true; do
     if curl -fsS "http://127.0.0.1:${PORT}/health" 2>/dev/null | grep -q '"status":"ok"'; then
       return 0
+    fi
+    if [[ -n "$pid" ]] && ! kill -0 "$pid" 2>/dev/null; then
+      return 1
     fi
     sleep 2
     elapsed=$((elapsed + 2))
@@ -561,17 +593,39 @@ run_arm() {
   local arm_log="${OUTPUT_DIR}/${arm}.llama-server.log"
   local server_shell
   server_shell=$(server_cmd_json "$arm" | python3 -c 'import json,sys; print(json.load(sys.stdin)["shell"])')
+  if port_in_use; then
+    echo "ERROR: port ${PORT} is still in use before launching ${arm}" >&2
+    exit 5
+  fi
   echo "Launching ${arm} on port ${PORT}..."
   eval "$server_shell" >"$arm_log" 2>&1 &
   SERVER_PID=$!
 
   cleanup_arm() {
-    kill "$SERVER_PID" 2>/dev/null || true
-    wait "$SERVER_PID" 2>/dev/null || true
+    if kill -0 "$SERVER_PID" 2>/dev/null; then
+      kill "$SERVER_PID" 2>/dev/null || true
+      wait "$SERVER_PID" 2>/dev/null || true
+    fi
+    if port_in_use; then
+      kill_port_listeners TERM
+      wait_for_port_release 20 || true
+    fi
+    if port_in_use; then
+      kill_port_listeners KILL
+      wait_for_port_release 20 || true
+    fi
   }
   trap cleanup_arm EXIT
 
-  if ! wait_for_server; then
+  sleep 1
+  if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+    echo "ERROR: ${arm} server exited during startup; see ${arm_log}" >&2
+    cleanup_arm
+    trap - EXIT
+    exit 4
+  fi
+
+  if ! wait_for_server "$SERVER_PID"; then
     echo "ERROR: ${arm} server did not become healthy; see ${arm_log}" >&2
     cleanup_arm
     trap - EXIT
@@ -774,6 +828,11 @@ if not decision_grade:
 PY
 
   cleanup_arm
+  if ! wait_for_port_release 30; then
+    echo "ERROR: port ${PORT} did not close after ${arm}; refusing to reuse stale server" >&2
+    trap - EXIT
+    exit 5
+  fi
   trap - EXIT
 }
 

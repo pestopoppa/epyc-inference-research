@@ -1,0 +1,65 @@
+{
+  "arms": {
+    "n5_spec_on": {
+      "acceptance_rate": 1.0,
+      "acceptance_wilson95": [
+        0.9898866784246754,
+        1.0
+      ],
+      "completion_tokens": 768,
+      "decision_grade": true,
+      "draft_accepted": 376,
+      "draft_total": 376,
+      "min_total_completion_tokens": 692,
+      "min_total_draft_tokens": 192,
+      "prompts": 8,
+      "status_ok": true,
+      "taxonomy_counts": {
+        "drafted_ok": 8
+      }
+    },
+    "positive_mtp": {
+      "acceptance_rate": 0.885286783042394,
+      "acceptance_wilson95": [
+        0.8503740040277343,
+        0.9128877451521029
+      ],
+      "completion_tokens": 768,
+      "decision_grade": true,
+      "draft_accepted": 355,
+      "draft_total": 401,
+      "min_total_completion_tokens": 692,
+      "min_total_draft_tokens": 192,
+      "prompts": 8,
+      "status_ok": true,
+      "taxonomy_counts": {
+        "drafted_ok": 8
+      }
+    },
+    "spec_off": {
+      "acceptance_rate": 0.0,
+      "acceptance_wilson95": [
+        0.0,
+        0.0
+      ],
+      "completion_tokens": 768,
+      "decision_grade": true,
+      "draft_accepted": 0,
+      "draft_total": 0,
+      "min_total_completion_tokens": 692,
+      "min_total_draft_tokens": 192,
+      "prompts": 8,
+      "status_ok": true,
+      "taxonomy_counts": {
+        "spec_off_control": 8
+      }
+    }
+  },
+  "created_at": "2026-07-16T19:09:20.037371+00:00",
+  "decision_grade": true,
+  "required_arms": [
+    "n5_spec_on",
+    "positive_mtp",
+    "spec_off"
+  ]
+}
