@@ -17,16 +17,22 @@ HY3_BUILD=/mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716
 v7_cpu_llama() {
   LD_LIBRARY_PATH="${V7_BIN_DIR}:${LD_LIBRARY_PATH:-}" \
   HIP_VISIBLE_DEVICES= ROCR_VISIBLE_DEVICES= CUDA_VISIBLE_DEVICES= \
-  "${V7_LLAMA}" --device none --device-draft none "$@"
+  "${V7_LLAMA}" --device none --device-draft none \
+    --simple-io --no-warmup --single-turn --no-display-prompt --color off "$@"
 }
 
 v7_mi210_llama() {
   LD_LIBRARY_PATH="${V7_BIN_DIR}:${LD_LIBRARY_PATH:-}" HIP_VISIBLE_DEVICES="${HIP_VISIBLE_DEVICES:-0}" \
-  "${V7_LLAMA}" --device ROCm0 "$@"
+  "${V7_LLAMA}" --device ROCm0 \
+    --simple-io --no-warmup --single-turn --no-display-prompt --color off "$@"
 }
 
 require_no_glm_download() {
   if pgrep -af "hf download unsloth/GLM-5.2-GGUF" >/dev/null; then
+    if [[ "${ALLOW_GLM_DOWNLOAD:-0}" == "1" ]]; then
+      echo "WARNING: running non-GLM smoke while GLM-5.2 HF download is active (ALLOW_GLM_DOWNLOAD=1)." >&2
+      return 0
+    fi
     echo "Refusing to run smoke while GLM-5.2 HF download is active." >&2
     pgrep -af "hf download unsloth/GLM-5.2-GGUF" >&2
     exit 75
@@ -152,7 +158,7 @@ qwable_iq4xs_mi210_v7() {
   require_no_glm_download
   v7_mi210_llama \
     -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf \
-    -ngl 99 -c 4096 -n 128 \
+    -ngl 99 -c 2048 -n 32 --reasoning off --reasoning-budget 0 \
     -p 'Answer in one sentence: what is the purpose of a proof assistant?'
 }
 
@@ -160,7 +166,7 @@ qwable_iq4xs_cpu_v7() {
   require_no_glm_download
   v7_cpu_llama \
     -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf \
-    -ngl 0 -t "${THREADS:-96}" -c 4096 -n 128 \
+    -ngl 0 -t "${THREADS:-8}" -c 1024 -n 8 --reasoning off --reasoning-budget 0 \
     -p 'Answer in one sentence: what is the purpose of a proof assistant?'
 }
 
@@ -168,7 +174,7 @@ qwable_q8_mi210_v7() {
   require_no_glm_download
   v7_mi210_llama \
     -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf \
-    -ngl 99 -c 4096 -n 128 \
+    -ngl 99 -c 2048 -n 32 --reasoning off --reasoning-budget 0 \
     -p 'Answer in one sentence: what is the purpose of a proof assistant?'
 }
 

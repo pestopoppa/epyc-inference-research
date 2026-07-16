@@ -45,6 +45,21 @@ The same sweep found stale zero-byte Hugging Face `.lock` files in Qwable, MiniC
 - Hy3 requires its separate patched llama.cpp build path; do not assume stock v6/v7 can load it. The CPU-only throwaway build completed at `/mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin/`; embedded server UI assets are absent because the build host could not populate npm/HF UI assets, but `llama-cli` and `llama-server` were built and the CLI help path runs.
 - Qwable community GGUFs do not include the MTP head. Treat Qwable as a standalone reasoner, scaffold generator, or verifier/selector candidate.
 
+## First MI210 Smoke Evidence During GLM Download
+
+These are admission observations gathered 2026-07-16 while GLM-5.2 was still downloading. They used experimental v7 `llama-cli` `10077 (da1bf5e2f)` with `LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin`, `--device ROCm0`, and short bounded prompts. Logs live under `/mnt/raid0/llm/tmp/mi210-inference-churn-20260716b/`.
+
+| Candidate | Result | Observation | Evidence |
+|---|---|---|---|
+| Bonsai-8B local orphan | PASS load/decode; output `OK`. | Prompt `349.9 t/s`, generation `72.7 t/s`. | `bonsai_8b_mi210_v7_final.log` |
+| Bonsai-27B Q1_0 | PASS load/decode with coherence warning; generated a reasoning preamble instead of obeying `OK only`. | Prompt `31.3 t/s`, generation `12.4 t/s`. | `bonsai_27b_q1_0_mi210_v7.log` |
+| Ternary Bonsai-27B Q2_0 | FAIL hard load on v7/artifact combination. | `gguf_init_from_reader: tensor 'output_norm.weight' has offset ... expected ...`. | `ternary_bonsai_q2_0_mi210_v7.log` |
+| Qwable-v1 IQ4_XS | PASS load/decode with output-quality warning; emitted reasoning preamble and hit the short cap. | Prompt `178.4 t/s`, generation `100.5 t/s`. | `qwable_iq4xs_reasoning_mi210_v7.log` |
+| Qwable-v1 IQ4_XS JSON schema | FAIL sampler initialization. | `Failed to initialize samplers: std::exception`. | `qwable_iq4xs_json_mi210_v7.log` |
+| Qwable-v1 Q8_0 | PASS load/decode with output-quality warning; emitted reasoning preamble instead of clean one-sentence answer. | Prompt `169.8 t/s`, generation `102.5 t/s`. | `qwable_q8_0_reasoning_mi210_v7.log` |
+
+Follow-ups: investigate Ternary Bonsai Q2_0 artifact/runtime compatibility, Qwable JSON-schema sampler initialization, and model-specific prompting/template strategy for Qwable and Bonsai-27B. The Qwable speed/load observations do not invalidate earlier successful v7/GPU Qwable work; the failed CPU direct-CLI runs were harness failures.
+
 ## Deferred Low-Contention Manifest Work
 
 Do not hash the large GGUFs during active GLM download or benchmark windows. If a human-readable manifest is needed, first emit byte inventories and reuse HF sidecars:
@@ -65,12 +80,13 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 
 ## Next Queue
 
-1. Let GLM-5.2 finish; do not start duplicate HF downloads.
-2. Run Hy3 CPU load smoke from the patched throwaway build, then MTP-on/off correctness and throughput closure.
-3. Run Bonsai Q1_0 CPU smoke through v7 with `--device none`, then MI210 smoke if coherent; then classify Bonsai dspark and Bonsai-8B side artifacts.
-4. Run Ternary Bonsai Q2_0 smoke only on refreshed v7/experimental, then classify the Ternary Bonsai dspark side artifact.
-5. Run Qwable IQ4_XS and Q8_0 standalone/scaffold gates with task-level quality acceptance.
-6. Schedule exact-path smokes for the additional local gap-audit entries above after GLM download contention clears.
+1. Keep the GLM-5.2 download watcher active and do not start duplicate HF downloads.
+2. During active GLM download, churn light non-GLM smokes with explicit resource ownership: one MI210 owner, one bounded CPU-only owner, no GLM loads, no full-stack/AutoPilot restart, and no disk-heavy DeepSeek/offload gates. Treat those results as admission observations until repeated cleanly if they become decision-gating.
+3. Run Hy3 CPU load smoke from the patched throwaway build, then MTP-on/off correctness and throughput closure.
+4. Run Bonsai Q1_0 CPU smoke through v7 with `--device none`, then MI210 smoke if coherent; then classify Bonsai dspark and Bonsai-8B side artifacts.
+5. Run Ternary Bonsai Q2_0 smoke only on refreshed v7/experimental, then classify the Ternary Bonsai dspark side artifact.
+6. Run Qwable IQ4_XS and Q8_0 standalone/scaffold gates with task-level quality acceptance.
+7. After GLM finishes, run GLM shard integrity, load smoke, and DSA long-context probes; schedule exact-path DeepSeek/offload-style smokes only after download/cache contention clears.
 
 Opt-in command file: `docs/data/model_admission_smoke_commands_20260716.sh`.
 

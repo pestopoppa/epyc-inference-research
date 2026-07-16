@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CASE_SCRIPT="${ROOT}/docs/data/model_admission_smoke_commands_20260716.sh"
 OUT_BASE="${OUT_BASE:-/mnt/raid0/llm/tmp/model-admission-smoke-$(date -u +%Y%m%dT%H%M%SZ)}"
+SMOKE_TIMEOUT_SECONDS="${SMOKE_TIMEOUT_SECONDS:-180}"
+SMOKE_KILL_AFTER_SECONDS="${SMOKE_KILL_AFTER_SECONDS:-10}"
+SMOKE_LOG_BYTES="${SMOKE_LOG_BYTES:-1048576}"
 
 QUEUE=(
   hy3_cpu_smoke
@@ -37,12 +40,17 @@ usage() {
   cat <<'USAGE'
 usage:
   run_model_admission_smoke_queue.sh --list
-  run_model_admission_smoke_queue.sh --run [--from CASE] [--only CASE] [--out DIR]
+  run_model_admission_smoke_queue.sh --run [--from CASE] [--only CASE] [--out DIR] [--allow-glm-download]
 
-Runs the 2026-07-16 model admission smoke queue with per-case stdout/stderr
-capture. Model-load cases still refuse to run while the GLM-5.2 HF writer is
+Runs the 2026-07-16 model admission smoke queue with bounded per-case
+stdout/stderr capture. Each case runs under timeout(1) and live log caps, so a
+bad direct-CLI smoke cannot produce unbounded logs or survive after timeout.
+
+By default, model-load cases still refuse to run while the GLM-5.2 HF writer is
 active because docs/data/model_admission_smoke_commands_20260716.sh enforces
-that guard.
+that guard. Use --allow-glm-download only for deliberately light non-GLM smoke
+churn; resulting speed/quality numbers are admission observations, not
+decision-grade measurements.
 USAGE
 }
 
@@ -70,6 +78,7 @@ case_index() {
 RUN=0
 FROM=""
 ONLY=""
+ALLOW_GLM=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -92,6 +101,10 @@ while [[ $# -gt 0 ]]; do
     --out)
       OUT_BASE="${2:-}"
       shift 2
+      ;;
+    --allow-glm-download)
+      ALLOW_GLM=1
+      shift
       ;;
     -h|--help)
       usage
@@ -136,7 +149,7 @@ if [[ -n "${ONLY}" ]]; then
 fi
 
 SUMMARY="${OUT_BASE}/summary.tsv"
-printf 'case\tstatus\texit_code\tstdout\tstderr\n' > "${SUMMARY}"
+printf 'case\tstatus\texit_code\tstdout\tstderr\ttimeout_s\tlog_cap_bytes\n' > "${SUMMARY}"
 
 for idx in "${!QUEUE[@]}"; do
   case_name="${QUEUE[$idx]}"
@@ -149,7 +162,11 @@ for idx in "${!QUEUE[@]}"; do
   stderr="${OUT_BASE}/${case_name}.stderr"
   echo "== ${case_name} =="
   set +e
-  "${CASE_SCRIPT}" "${case_name}" >"${stdout}" 2>"${stderr}"
+  ALLOW_GLM_DOWNLOAD="${ALLOW_GLM}" \
+    timeout -k "${SMOKE_KILL_AFTER_SECONDS}s" "${SMOKE_TIMEOUT_SECONDS}s" \
+    "${CASE_SCRIPT}" "${case_name}" \
+    > >(head -c "${SMOKE_LOG_BYTES}" >"${stdout}") \
+    2> >(head -c "${SMOKE_LOG_BYTES}" >"${stderr}")
   code=$?
   set -e
 
@@ -157,7 +174,9 @@ for idx in "${!QUEUE[@]}"; do
   if [[ "${code}" -ne 0 ]]; then
     status="fail"
   fi
-  printf '%s\t%s\t%s\t%s\t%s\n' "${case_name}" "${status}" "${code}" "${stdout}" "${stderr}" >> "${SUMMARY}"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "${case_name}" "${status}" "${code}" "${stdout}" "${stderr}" \
+    "${SMOKE_TIMEOUT_SECONDS}" "${SMOKE_LOG_BYTES}" >> "${SUMMARY}"
 
   if [[ "${code}" -ne 0 ]]; then
     echo "case failed: ${case_name} exit=${code}" >&2
