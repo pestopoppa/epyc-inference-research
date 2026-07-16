@@ -77,6 +77,17 @@ Second-pass smoke observations gathered during the active GLM download:
 
 Runner note: `scripts/benchmark/run_model_admission_smoke_queue.sh` now accepts repeated `--only CASE` arguments; before this checkpoint, repeated `--only` silently kept only the last case.
 
+## Bonsai / dspark Follow-Up During Active GLM Download
+
+Additional bounded Bonsai smokes were gathered after the multi-`--only` runner fix. Logs live under `/mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/`, `/mnt/raid0/llm/tmp/bonsai-dspark-mi210-churn-20260716/`, and `/mnt/raid0/llm/tmp/bonsai-dspark-mi210-churn-20260716-ternary-dspark/`.
+
+| Candidate/case | CPU observation | MI210 observation | Classification |
+|---|---:|---:|---|
+| Bonsai-27B Q1_0 | PASS; prompt `12.6 t/s`, generation `6.8 t/s`; returned exact `ok`. | PASS; prompt `29.5 t/s`, generation `11.3 t/s`; emitted reasoning preamble instead of exact `ok`. | Load/decode works on CPU and MI210; quality/prompting still open. |
+| Bonsai-8B local orphan | PASS; prompt `51.1 t/s`, generation `52.6 t/s`; returned exact `ok`. | Prior MI210 smoke passed at `72.7 t/s` generation. | Loader/provenance classification improved; still orphan/no HF sidecar. |
+| Bonsai-27B dspark Q4_1 | FAIL on CPU and MI210. | FAIL on CPU and MI210. | v7 reports `unknown model architecture: 'dspark'`; treat as unsupported until dspark architecture support is added. |
+| Ternary Bonsai dspark Q4_1 | FAIL on CPU and MI210. | FAIL on CPU and MI210. | GGUF offset mismatch at `dspark.fc.weight`; likely artifact/runtime compatibility issue, separate from ordinary Q2_0 offset mismatch. |
+
 ## Deferred Low-Contention Manifest Work
 
 Do not hash the large GGUFs during active GLM download or benchmark windows. If a human-readable manifest is needed, first emit byte inventories and reuse HF sidecars:

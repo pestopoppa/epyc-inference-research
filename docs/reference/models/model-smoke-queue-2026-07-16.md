@@ -41,15 +41,15 @@ docs/data/model_admission_smoke_commands_20260716.sh registry_gap_status
 | Order | Case | Purpose | Resource risk |
 |---:|---|---|---|
 | 1 | `hy3_cpu_smoke` | ✅ 2026-07-16 basic load/decode smoke passed on experimental v7 commit `98a1ad8cf`; next Hy3 work is MTP-on/off correctness and throughput closure. | Heavy CPU + reads 86 GB artifact. |
-| 2 | `bonsai_q1_cpu` | Cheap Bonsai Q1_0 loader/coherence gate. | Low/medium CPU, small artifact. |
-| 3 | `bonsai_q1_mi210_v7` | Bonsai Q1_0 MI210 load/decode sanity if CPU is coherent. | GPU load, small artifact. |
-| 4 | `bonsai_dspark_cpu_v7` | Bonsai dspark Q4_1 loader/coherence classification. | Low/medium CPU, small artifact. |
-| 5 | `bonsai_dspark_mi210_v7` | Bonsai dspark Q4_1 MI210 load/decode sanity if CPU is coherent. | GPU load, small artifact. |
+| 2 | `bonsai_q1_cpu` | ✅ 2026-07-16 CPU smoke passed: exact `ok`, 6.8 t/s generation. | Low/medium CPU, small artifact. |
+| 3 | `bonsai_q1_mi210_v7` | ✅ 2026-07-16 MI210 smoke passed: load/decode, 11.3 t/s generation, but emitted reasoning preamble instead of exact `ok`. | GPU load, small artifact. |
+| 4 | `bonsai_dspark_cpu_v7` | ❌ 2026-07-16 CPU smoke failed: `unknown model architecture: 'dspark'`. | Low/medium CPU, small artifact. |
+| 5 | `bonsai_dspark_mi210_v7` | ❌ 2026-07-16 MI210 smoke failed: `unknown model architecture: 'dspark'`. | GPU load, small artifact. |
 | 6 | `ternary_q2_0_cpu_v7` | Ternary Bonsai Q2_0 CPU runtime smoke after Q1_0 coherence. | Medium CPU, small artifact. |
 | 7 | `ternary_q2_0_mi210_v7` | v7 Q2_0 runtime-support smoke for Ternary Bonsai. | GPU load, small artifact. |
-| 8 | `ternary_bonsai_dspark_cpu_v7` | Ternary Bonsai dspark Q4_1 loader/coherence classification. | Low/medium CPU, small artifact. |
-| 9 | `ternary_bonsai_dspark_mi210_v7` | Ternary Bonsai dspark Q4_1 MI210 load/decode sanity if CPU is coherent. | GPU load, small artifact. |
-| 10 | `bonsai_8b_cpu_v7` | Orphan Bonsai-8B loader/provenance classification. | Low CPU, small artifact. |
+| 8 | `ternary_bonsai_dspark_cpu_v7` | ❌ 2026-07-16 CPU smoke failed: GGUF tensor offset mismatch at `dspark.fc.weight`. | Low/medium CPU, small artifact. |
+| 9 | `ternary_bonsai_dspark_mi210_v7` | ❌ 2026-07-16 MI210 smoke failed: same `dspark.fc.weight` offset mismatch. | GPU load, small artifact. |
+| 10 | `bonsai_8b_cpu_v7` | ✅ 2026-07-16 CPU smoke passed: exact `ok`, 52.6 t/s generation. | Low CPU, small artifact. |
 | 11 | `bonsai_8b_mi210_v7` | ✅ 2026-07-16 MI210 smoke passed: output `OK`, observed 72.7 t/s generation under v7. | GPU load, small artifact. |
 | 12 | `qwable_iq4xs_cpu_v7` | CPU direct-CLI smoke is currently harness-unsafe; use bounded queue/server path only. | Medium CPU, 18 GB artifact. |
 | 13 | `qwable_iq4xs_mi210_v7` | ✅ 2026-07-16 MI210 load/decode passed; output-quality warning and JSON-schema sampler failure remain open. | GPU load, 18 GB artifact. |
