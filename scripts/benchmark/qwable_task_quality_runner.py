@@ -37,6 +37,9 @@ DEFAULT_SEED = 7
 DEFAULT_PORT_BASE = 18840
 DEFAULT_REQUEST_TIMEOUT_S = 180
 DEFAULT_STARTUP_TIMEOUT_S = 240
+TASK_SET_DEFAULT = "default"
+TASK_SET_EXPANDED = "expanded"
+TASK_SET_DEFAULT_EXPANDED = "default+expanded"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -88,7 +91,7 @@ ARMS: tuple[ArmSpec, ...] = (
     ),
 )
 
-TASKS: tuple[TaskSpec, ...] = (
+DEFAULT_TASKS: tuple[TaskSpec, ...] = (
     TaskSpec(
         task_id="arithmetic_sum_json",
         prompt=(
@@ -149,6 +152,185 @@ TASKS: tuple[TaskSpec, ...] = (
     ),
 )
 
+EXPANDED_TASKS: tuple[TaskSpec, ...] = (
+    TaskSpec(
+        task_id="needle_catalog_exact",
+        prompt=(
+            "Read the passage and answer with only the catalog number.\n\n"
+            "The archaeological expedition investigates ancient settlement sites "
+            "in the Mediterranean. Pottery fragments are cataloged for trade routes. "
+            "The site supervisor recorded that artifact catalog number AR-2025-1847 "
+            "is a bronze figurine discovered at coordinates 36.8529N, 14.5147E at "
+            "a depth of 2.3 meters.\n\nQuestion: What is the catalog number?"
+        ),
+        scorer="exact",
+        expected="AR-2025-1847",
+        max_tokens=32,
+    ),
+    TaskSpec(
+        task_id="history_nullification_letter",
+        prompt=(
+            "Calhoun's South Carolina Exposition and Protest used language closest "
+            "to which political position? A) Jackson supporters after 1824 "
+            "B) New England Federalists opposing the War of 1812 C) Jefferson and "
+            "the Barbary pirates D) Shays' Rebellion. Return the letter only."
+        ),
+        scorer="exact",
+        expected="B",
+        max_tokens=16,
+    ),
+    TaskSpec(
+        task_id="rest_graphql_grpc_compare",
+        prompt=(
+            "Compare REST, GraphQL, and gRPC. Mention concrete transport or schema "
+            "traits for each. Keep it under 180 words."
+        ),
+        scorer="contains_all_groups",
+        expected={
+            "groups": [
+                ["REST"],
+                ["GraphQL"],
+                ["gRPC"],
+                ["HTTP"],
+                ["schema"],
+                ["Protocol Buffers", "Protobuf", "proto"],
+            ],
+            "case_sensitive": False,
+        },
+        max_tokens=256,
+    ),
+    TaskSpec(
+        task_id="solid_principles_json",
+        prompt=(
+            "Return minified JSON with exactly keys S,O,L,I,D. Each value should be "
+            "the corresponding SOLID principle name, not an explanation."
+        ),
+        scorer="json_exact_aliases",
+        expected={
+            "S": ["Single Responsibility", "Single Responsibility Principle"],
+            "O": ["Open/Closed", "Open/Closed Principle"],
+            "L": ["Liskov Substitution", "Liskov Substitution Principle"],
+            "I": ["Interface Segregation", "Interface Segregation Principle"],
+            "D": ["Dependency Inversion", "Dependency Inversion Principle"],
+        },
+        max_tokens=160,
+    ),
+    TaskSpec(
+        task_id="markdown_table_languages",
+        prompt=(
+            "Compare Python, Rust, and Go as a markdown table with columns: "
+            "Language, Performance, Safety, Ecosystem, Learning Curve, Best For. "
+            "Return only the table."
+        ),
+        scorer="contains_all",
+        expected={
+            "terms": [
+                "|",
+                "Language",
+                "Performance",
+                "Safety",
+                "Ecosystem",
+                "Learning Curve",
+                "Best For",
+                "Python",
+                "Rust",
+                "Go",
+            ],
+            "case_sensitive": False,
+        },
+        max_tokens=384,
+    ),
+    TaskSpec(
+        task_id="quicksort_sections",
+        prompt=(
+            "Explain quicksort with exactly these markdown sections: ## Algorithm, "
+            "## Complexity, ## When to Use, ## Code Example."
+        ),
+        scorer="contains_all",
+        expected={
+            "terms": ["## Algorithm", "## Complexity", "## When to Use", "## Code Example", "pivot", "O(n log n)"],
+            "case_sensitive": False,
+        },
+        max_tokens=512,
+    ),
+    TaskSpec(
+        task_id="binary_search_code",
+        prompt=(
+            "Write a Python binary_search(arr, target) implementation. Return code "
+            "only. It must handle an empty array and return -1 when absent."
+        ),
+        scorer="contains_all",
+        expected={
+            "terms": ["def binary_search", "while", "return -1"],
+            "case_sensitive": True,
+        },
+        max_tokens=384,
+    ),
+    TaskSpec(
+        task_id="plugin_architecture_terms",
+        prompt=(
+            "Design a plugin architecture for a text editor in one concise plan. "
+            "Include interface, discovery, lifecycle, and event hooks."
+        ),
+        scorer="contains_all_groups",
+        expected={
+            "groups": [["interface"], ["discovery", "scan", "scans"], ["lifecycle"], ["event"]],
+            "case_sensitive": False,
+        },
+        max_tokens=384,
+    ),
+    TaskSpec(
+        task_id="thread_safe_singleton_java",
+        prompt=(
+            "Write a thread-safe Java singleton. Return code only. Use either "
+            "volatile double-checked locking, a static holder, or enum singleton."
+        ),
+        scorer="contains_any_group",
+        expected={
+            "groups": [
+                ["volatile", "synchronized", "getInstance"],
+                ["static class", "Holder", "getInstance"],
+                ["enum", "INSTANCE"],
+            ],
+            "case_sensitive": False,
+        },
+        max_tokens=384,
+    ),
+    TaskSpec(
+        task_id="json_array_languages_format",
+        prompt=(
+            "Return a JSON array of exactly 5 objects about programming languages. "
+            "Each object must have rank, name, and reason fields."
+        ),
+        scorer="json_array_schema",
+        expected={"length": 5, "required_keys": ["rank", "name", "reason"]},
+        max_tokens=384,
+    ),
+    TaskSpec(
+        task_id="multi_step_json",
+        prompt=(
+            "A service has 48 requests. 25% fail validation, then one third of the "
+            "remaining requests require review. Return minified JSON with keys "
+            "valid and review using integer strings."
+        ),
+        scorer="json_exact",
+        expected={"valid": "36", "review": "12"},
+        max_tokens=96,
+    ),
+    TaskSpec(
+        task_id="no_tool_discretion_json",
+        prompt=(
+            "You do not have access to tools in this prompt. Return minified JSON "
+            "with key action and value answer_directly."
+        ),
+        scorer="json_exact",
+        expected={"action": "answer_directly"},
+        max_tokens=64,
+    ),
+)
+
+TASKS: tuple[TaskSpec, ...] = DEFAULT_TASKS
+
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Qwable IQ4/Q8 task-quality runner")
@@ -176,6 +358,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--port-base", type=int, default=DEFAULT_PORT_BASE)
+    parser.add_argument(
+        "--task-set",
+        choices=[TASK_SET_DEFAULT, TASK_SET_EXPANDED, TASK_SET_DEFAULT_EXPANDED],
+        default=TASK_SET_DEFAULT,
+        help="Task set to run. Expanded adds practical routing/format/code tasks.",
+    )
+    parser.add_argument(
+        "--spec-type",
+        default="none",
+        help="llama.cpp --spec-type value for optimized-as-served lanes, e.g. ngram-mod.",
+    )
     parser.add_argument("--request-timeout", type=int, default=DEFAULT_REQUEST_TIMEOUT_S)
     parser.add_argument("--startup-timeout", type=int, default=DEFAULT_STARTUP_TIMEOUT_S)
     return parser.parse_args(argv)
@@ -188,6 +381,16 @@ def selected_arm_indices(args: argparse.Namespace) -> list[int]:
     if args.all_arms:
         return list(range(len(ARMS)))
     return [0, 1]
+
+
+def selected_tasks(args: argparse.Namespace) -> tuple[TaskSpec, ...]:
+    if args.task_set == TASK_SET_DEFAULT:
+        return DEFAULT_TASKS
+    if args.task_set == TASK_SET_EXPANDED:
+        return EXPANDED_TASKS
+    if args.task_set == TASK_SET_DEFAULT_EXPANDED:
+        return DEFAULT_TASKS + EXPANDED_TASKS
+    raise ValueError(f"unknown task set: {args.task_set}")
 
 
 def normalize_text(text: str) -> str:
@@ -225,6 +428,29 @@ def score_task(task: TaskSpec, content: str) -> dict[str, Any]:
             "json_mode": json_mode,
             "normalized": normalized,
         }
+    if task.scorer == "json_exact_aliases":
+        json_mode, parsed = parse_json_content(normalized)
+        expected = task.expected if isinstance(task.expected, dict) else {}
+        passed = isinstance(parsed, dict) and set(parsed) == set(expected)
+        mismatches: dict[str, Any] = {}
+        if passed:
+            for key, aliases in expected.items():
+                alias_values = aliases if isinstance(aliases, list) else [aliases]
+                if parsed.get(key) not in alias_values:
+                    mismatches[str(key)] = {
+                        "observed": parsed.get(key),
+                        "accepted": alias_values,
+                    }
+            passed = not mismatches
+        return {
+            "passed": passed,
+            "scorer": task.scorer,
+            "expected": expected,
+            "observed": parsed,
+            "mismatches": mismatches,
+            "json_mode": json_mode,
+            "normalized": normalized,
+        }
     if task.scorer == "exact":
         passed = normalized == str(task.expected)
         return {
@@ -247,11 +473,99 @@ def score_task(task: TaskSpec, content: str) -> dict[str, Any]:
             "observed_words": words,
             "normalized": normalized,
         }
+    if task.scorer == "contains_all":
+        config = task.expected if isinstance(task.expected, dict) else {"terms": task.expected}
+        terms = [str(term) for term in config["terms"]]
+        case_sensitive = bool(config.get("case_sensitive", False))
+        haystack = normalized if case_sensitive else normalized.lower()
+        missing = [
+            term
+            for term in terms
+            if (term if case_sensitive else term.lower()) not in haystack
+        ]
+        return {
+            "passed": not missing,
+            "scorer": task.scorer,
+            "expected_terms": terms,
+            "missing_terms": missing,
+            "case_sensitive": case_sensitive,
+            "normalized": normalized,
+        }
+    if task.scorer == "contains_any_group":
+        config = task.expected if isinstance(task.expected, dict) else {"groups": task.expected}
+        groups = [[str(term) for term in group] for group in config["groups"]]
+        case_sensitive = bool(config.get("case_sensitive", False))
+        haystack = normalized if case_sensitive else normalized.lower()
+        matched_group = None
+        for group in groups:
+            if all((term if case_sensitive else term.lower()) in haystack for term in group):
+                matched_group = group
+                break
+        return {
+            "passed": matched_group is not None,
+            "scorer": task.scorer,
+            "expected_groups": groups,
+            "matched_group": matched_group,
+            "case_sensitive": case_sensitive,
+            "normalized": normalized,
+        }
+    if task.scorer == "contains_all_groups":
+        config = task.expected if isinstance(task.expected, dict) else {"groups": task.expected}
+        groups = [[str(term) for term in group] for group in config["groups"]]
+        case_sensitive = bool(config.get("case_sensitive", False))
+        haystack = normalized if case_sensitive else normalized.lower()
+        missing_groups = []
+        matched_terms = []
+        for group in groups:
+            match = next(
+                (
+                    term
+                    for term in group
+                    if (term if case_sensitive else term.lower()) in haystack
+                ),
+                None,
+            )
+            if match is None:
+                missing_groups.append(group)
+            else:
+                matched_terms.append(match)
+        return {
+            "passed": not missing_groups,
+            "scorer": task.scorer,
+            "expected_groups": groups,
+            "matched_terms": matched_terms,
+            "missing_groups": missing_groups,
+            "case_sensitive": case_sensitive,
+            "normalized": normalized,
+        }
+    if task.scorer == "json_array_schema":
+        json_mode, parsed = parse_json_content(normalized)
+        config = task.expected if isinstance(task.expected, dict) else {}
+        expected_length = config.get("length")
+        required_keys = [str(key) for key in config.get("required_keys", [])]
+        passed = isinstance(parsed, list)
+        if passed and expected_length is not None:
+            passed = len(parsed) == int(expected_length)
+        if passed and required_keys:
+            passed = all(
+                isinstance(item, dict)
+                and all(key in item for key in required_keys)
+                for item in parsed
+            )
+        return {
+            "passed": passed,
+            "scorer": task.scorer,
+            "expected_length": expected_length,
+            "required_keys": required_keys,
+            "observed": parsed,
+            "json_mode": json_mode,
+            "normalized": normalized,
+        }
     raise ValueError(f"unknown scorer: {task.scorer}")
 
 
 def launch_argv(arm: ArmSpec, port: int, args: argparse.Namespace) -> list[str]:
-    return [
+    argv = [
         str(base.SERVER_BIN),
         "-m",
         str(arm.model_path),
@@ -272,6 +586,9 @@ def launch_argv(arm: ArmSpec, port: int, args: argparse.Namespace) -> list[str]:
         "-rea",
         "off",
     ]
+    if args.spec_type != "none":
+        argv.extend(["--spec-type", args.spec_type])
+    return argv
 
 
 def task_payload(task: TaskSpec, args: argparse.Namespace) -> dict[str, Any]:
@@ -306,6 +623,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "server_bin": str(base.SERVER_BIN),
         "ld_library_path": str(base.SERVER_LIB_DIR),
         "selected_arms": [ARMS[index].name for index in selected_arm_indices(args)],
+        "task_set": args.task_set,
         "glm_guard": {
             "pattern": base.GLM_PATTERN,
             "active": base.glm_download_active(),
@@ -319,6 +637,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "seed": args.seed,
             "request_timeout_s": args.request_timeout,
             "startup_timeout_s": args.startup_timeout,
+            "spec_type": args.spec_type,
         },
         "arms": [
             {
@@ -331,10 +650,10 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             }
             for index, arm in enumerate(ARMS)
         ],
-        "tasks": [dataclasses.asdict(task) for task in TASKS],
+        "tasks": [dataclasses.asdict(task) for task in selected_tasks(args)],
         "classification": (
-            "small deterministic task-quality slice; not a role-quality gate "
-            "or production-stack promotion decision by itself"
+            "deterministic task-quality slice; expanded/spec lanes are realistic "
+            "routing evidence but still not production-stack promotion by itself"
         ),
     }
 
@@ -363,7 +682,7 @@ def run_arm(
     try:
         proc = base.launch_server(launch_argv(arm, port, args), log_path)
         base.wait_for_health(port, args.startup_timeout, pid=proc.pid)
-        for task in TASKS:
+        for task in selected_tasks(args):
             payload = task_payload(task, args)
             response, raw = query(port, payload, args.request_timeout)
             response_dir = output_dir / "responses" / arm.name
@@ -433,9 +752,11 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "mode": "execute",
         "classification": (
-            "small deterministic task-quality slice; compare IQ4_XS vs Q8_0, "
-            "but do not promote a production role from this alone"
+            "deterministic task-quality slice; compare selected quant/device/spec "
+            "lanes, but do not promote a production role from this alone"
         ),
+        "task_set": args.task_set,
+        "spec_type": args.spec_type,
         "results": results,
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")

@@ -1,0 +1,789 @@
+{
+  "arm": "iq4_cpu",
+  "device": "none",
+  "mean_decode_tps": 15.955051560954821,
+  "mean_prompt_tps": 90.50565891875009,
+  "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+  "ngl": 0,
+  "pass_rate": 1.0,
+  "passed": 18,
+  "port": 18860,
+  "role": "cpu_iq4_task_quality",
+  "tasks": [
+    {
+      "content": "{\"answer\":\"55\"}",
+      "prompt": "Compute 34 + 21. Return only minified JSON with exactly one key \"answer\" whose string value is the integer result.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/arithmetic_sum_json.raw.json",
+      "score": {
+        "expected": {
+          "answer": "55"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"answer\":\"55\"}",
+        "observed": {
+          "answer": "55"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "arithmetic_sum_json",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 440.203,
+        "predicted_n": 7,
+        "predicted_per_second": 15.90175441784813,
+        "predicted_per_token_ms": 62.88614285714285,
+        "prompt_ms": 704.551,
+        "prompt_n": 61,
+        "prompt_per_second": 86.57996369318899,
+        "prompt_per_token_ms": 11.550016393442624
+      },
+      "usage": {
+        "completion_tokens": 7,
+        "prompt_tokens": 61,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 68
+      }
+    },
+    {
+      "content": "{\"answer\":\"yes\"}",
+      "prompt": "All dax are mip. Every mip is vun. Is every dax a vun? Return only minified JSON with exactly one key \"answer\" whose string value is \"yes\" or \"no\".",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/logic_transitive_json.raw.json",
+      "score": {
+        "expected": {
+          "answer": "yes"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"answer\":\"yes\"}",
+        "observed": {
+          "answer": "yes"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "logic_transitive_json",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 369.983,
+        "predicted_n": 6,
+        "predicted_per_second": 16.216961319844426,
+        "predicted_per_token_ms": 61.663833333333336,
+        "prompt_ms": 530.062,
+        "prompt_n": 51,
+        "prompt_per_second": 96.21515973603087,
+        "prompt_per_token_ms": 10.393372549019608
+      },
+      "usage": {
+        "completion_tokens": 6,
+        "prompt_tokens": 71,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 77
+      }
+    },
+    {
+      "content": "{\"finish_24h\":\"10:35\"}",
+      "prompt": "A job starts at 09:15 and lasts 80 minutes. Return only minified JSON with exactly one key \"finish_24h\" using HH:MM.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/time_addition_json.raw.json",
+      "score": {
+        "expected": {
+          "finish_24h": "10:35"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"finish_24h\":\"10:35\"}",
+        "observed": {
+          "finish_24h": "10:35"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "time_addition_json",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 949.002,
+        "predicted_n": 14,
+        "predicted_per_second": 14.752339826470333,
+        "predicted_per_token_ms": 67.78585714285714,
+        "prompt_ms": 524.225,
+        "prompt_n": 50,
+        "prompt_per_second": 95.37889265105632,
+        "prompt_per_token_ms": 10.4845
+      },
+      "usage": {
+        "completion_tokens": 14,
+        "prompt_tokens": 70,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 84
+      }
+    },
+    {
+      "content": "B",
+      "prompt": "A benchmark gives the correct answer in the prompt. Does a model passing that benchmark prove independent reasoning? A) yes B) no. Return exactly one character: A or B.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/option_reasoning_letter.raw.json",
+      "score": {
+        "expected": "B",
+        "normalized": "B",
+        "observed": "B",
+        "passed": true,
+        "scorer": "exact"
+      },
+      "task_id": "option_reasoning_letter",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 75.851,
+        "predicted_n": 2,
+        "predicted_per_second": 26.3674836192008,
+        "predicted_per_token_ms": 37.9255,
+        "prompt_ms": 516.924,
+        "prompt_n": 48,
+        "prompt_per_second": 92.85697704111243,
+        "prompt_per_token_ms": 10.76925
+      },
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 68,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 70
+      }
+    },
+    {
+      "content": "prevent overfitting to training data",
+      "prompt": "In exactly five lowercase words, describe why held-out tests matter. Return only the five words.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/lowercase_five_words.raw.json",
+      "score": {
+        "expected_word_count": 5,
+        "normalized": "prevent overfitting to training data",
+        "observed_words": [
+          "prevent",
+          "overfitting",
+          "to",
+          "training",
+          "data"
+        ],
+        "passed": true,
+        "scorer": "five_lowercase_words"
+      },
+      "task_id": "lowercase_five_words",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 513.717,
+        "predicted_n": 8,
+        "predicted_per_second": 15.572776450847451,
+        "predicted_per_token_ms": 64.214625,
+        "prompt_ms": 406.753,
+        "prompt_n": 31,
+        "prompt_per_second": 76.21332848190426,
+        "prompt_per_token_ms": 13.121064516129032
+      },
+      "usage": {
+        "completion_tokens": 8,
+        "prompt_tokens": 51,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 59
+      }
+    },
+    {
+      "content": "{\"label\":\"qwable\",\"status\":\"ready\"}",
+      "prompt": "Given label=qwable and status=ready, return only minified JSON with exactly keys label and status sorted alphabetically.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/sorted_keys_json.raw.json",
+      "score": {
+        "expected": {
+          "label": "qwable",
+          "status": "ready"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"label\":\"qwable\",\"status\":\"ready\"}",
+        "observed": {
+          "label": "qwable",
+          "status": "ready"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "sorted_keys_json",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 734.023,
+        "predicted_n": 11,
+        "predicted_per_second": 14.985906436174343,
+        "predicted_per_token_ms": 66.72936363636364,
+        "prompt_ms": 441.812,
+        "prompt_n": 37,
+        "prompt_per_second": 83.74602772219858,
+        "prompt_per_token_ms": 11.940864864864865
+      },
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 57,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 68
+      }
+    },
+    {
+      "content": "AR-2025-1847",
+      "prompt": "Read the passage and answer with only the catalog number.\n\nThe archaeological expedition investigates ancient settlement sites in the Mediterranean. Pottery fragments are cataloged for trade routes. The site supervisor recorded that artifact catalog number AR-2025-1847 is a bronze figurine discovered at coordinates 36.8529N, 14.5147E at a depth of 2.3 meters.\n\nQuestion: What is the catalog number?",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/needle_catalog_exact.raw.json",
+      "score": {
+        "expected": "AR-2025-1847",
+        "normalized": "AR-2025-1847",
+        "observed": "AR-2025-1847",
+        "passed": true,
+        "scorer": "exact"
+      },
+      "task_id": "needle_catalog_exact",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 810.672,
+        "predicted_n": 12,
+        "predicted_per_second": 14.802534193853987,
+        "predicted_per_token_ms": 67.556,
+        "prompt_ms": 920.889,
+        "prompt_n": 110,
+        "prompt_per_second": 119.44979253742851,
+        "prompt_per_token_ms": 8.371718181818181
+      },
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 130,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 142
+      }
+    },
+    {
+      "content": "B",
+      "prompt": "Calhoun's South Carolina Exposition and Protest used language closest to which political position? A) Jackson supporters after 1824 B) New England Federalists opposing the War of 1812 C) Jefferson and the Barbary pirates D) Shays' Rebellion. Return the letter only.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/history_nullification_letter.raw.json",
+      "score": {
+        "expected": "B",
+        "normalized": "B",
+        "observed": "B",
+        "passed": true,
+        "scorer": "exact"
+      },
+      "task_id": "history_nullification_letter",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 76.204,
+        "predicted_n": 2,
+        "predicted_per_second": 26.24534145189229,
+        "predicted_per_token_ms": 38.102,
+        "prompt_ms": 717.176,
+        "prompt_n": 74,
+        "prompt_per_second": 103.18248240320366,
+        "prompt_per_token_ms": 9.691567567567569
+      },
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 94,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 96
+      }
+    },
+    {
+      "content": "REST uses HTTP verbs (GET, POST, PUT, DELETE) over JSON or XML payloads. Its schema is implicit, defined by URL conventions and status codes, making it cacheable and widely supported but prone to over-fetching or under-fetching data.\n\nGraphQL employs a single endpoint with a strongly typed schema defined in SDL (Schema Definition Language). Clients specify exact fields via queries, reducing payload size and enabling flexible data fetching. It typically runs over HTTP/HTTPS with JSON, though WebSockets are supported for subscriptions.\n\ngRPC relies on HTTP/2 as the transport protocol, leveraging multiplexed streams and binary framing for low latency. Its schema is defined using Protocol Buffers (protobuf), a compact binary format that enforces strict contracts between client and server. gRPC supports streaming (unary, server, client, bidirectional) and is language-agnostic via code generation.\n\nIn summary: REST is simple, cache-friendly, and verb-driven; GraphQL offers precise data selection with a typed schema; gRPC delivers high-performance, binary RPC over HTTP/2 with protobuf schemas.",
+      "prompt": "Compare REST, GraphQL, and gRPC. Mention concrete transport or schema traits for each. Keep it under 180 words.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/rest_graphql_grpc_compare.raw.json",
+      "score": {
+        "case_sensitive": false,
+        "expected_groups": [
+          [
+            "REST"
+          ],
+          [
+            "GraphQL"
+          ],
+          [
+            "gRPC"
+          ],
+          [
+            "HTTP"
+          ],
+          [
+            "schema"
+          ],
+          [
+            "Protocol Buffers",
+            "Protobuf",
+            "proto"
+          ]
+        ],
+        "matched_terms": [
+          "REST",
+          "GraphQL",
+          "gRPC",
+          "HTTP",
+          "schema",
+          "Protocol Buffers"
+        ],
+        "missing_groups": [],
+        "normalized": "REST uses HTTP verbs (GET, POST, PUT, DELETE) over JSON or XML payloads. Its schema is implicit, defined by URL conventions and status codes, making it cacheable and widely supported but prone to over-fetching or under-fetching data.\n\nGraphQL employs a single endpoint with a strongly typed schema defined in SDL (Schema Definition Language). Clients specify exact fields via queries, reducing payload size and enabling flexible data fetching. It typically runs over HTTP/HTTPS with JSON, though WebSockets are supported for subscriptions.\n\ngRPC relies on HTTP/2 as the transport protocol, leveraging multiplexed streams and binary framing for low latency. Its schema is defined using Protocol Buffers (protobuf), a compact binary format that enforces strict contracts between client and server. gRPC supports streaming (unary, server, client, bidirectional) and is language-agnostic via code generation.\n\nIn summary: REST is simple, cache-friendly, and verb-driven; GraphQL offers precise data selection with a typed schema; gRPC delivers high-performance, binary RPC over HTTP/2 with protobuf schemas.",
+        "passed": true,
+        "scorer": "contains_all_groups"
+      },
+      "task_id": "rest_graphql_grpc_compare",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 15868.034,
+        "predicted_n": 221,
+        "predicted_per_second": 13.927371216875386,
+        "predicted_per_token_ms": 71.80105882352942,
+        "prompt_ms": 463.394,
+        "prompt_n": 39,
+        "prompt_per_second": 84.16164214469761,
+        "prompt_per_token_ms": 11.881897435897436
+      },
+      "usage": {
+        "completion_tokens": 221,
+        "prompt_tokens": 59,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 280
+      }
+    },
+    {
+      "content": "{\"S\":\"Single Responsibility\",\"O\":\"Open/Closed\",\"L\":\"Liskov Substitution\",\"I\":\"Interface Segregation\",\"D\":\"Dependency Inversion\"}",
+      "prompt": "Return minified JSON with exactly keys S,O,L,I,D. Each value should be the corresponding SOLID principle name, not an explanation.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/solid_principles_json.raw.json",
+      "score": {
+        "expected": {
+          "D": [
+            "Dependency Inversion",
+            "Dependency Inversion Principle"
+          ],
+          "I": [
+            "Interface Segregation",
+            "Interface Segregation Principle"
+          ],
+          "L": [
+            "Liskov Substitution",
+            "Liskov Substitution Principle"
+          ],
+          "O": [
+            "Open/Closed",
+            "Open/Closed Principle"
+          ],
+          "S": [
+            "Single Responsibility",
+            "Single Responsibility Principle"
+          ]
+        },
+        "json_mode": "strict",
+        "mismatches": {},
+        "normalized": "{\"S\":\"Single Responsibility\",\"O\":\"Open/Closed\",\"L\":\"Liskov Substitution\",\"I\":\"Interface Segregation\",\"D\":\"Dependency Inversion\"}",
+        "observed": {
+          "D": "Dependency Inversion",
+          "I": "Interface Segregation",
+          "L": "Liskov Substitution",
+          "O": "Open/Closed",
+          "S": "Single Responsibility"
+        },
+        "passed": true,
+        "scorer": "json_exact_aliases"
+      },
+      "task_id": "solid_principles_json",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 2314.219,
+        "predicted_n": 33,
+        "predicted_per_second": 14.259670325064308,
+        "predicted_per_token_ms": 70.12784848484849,
+        "prompt_ms": 467.693,
+        "prompt_n": 40,
+        "prompt_per_second": 85.52618918820679,
+        "prompt_per_token_ms": 11.692325
+      },
+      "usage": {
+        "completion_tokens": 33,
+        "prompt_tokens": 60,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 93
+      }
+    },
+    {
+      "content": "| Language | Performance | Safety | Ecosystem | Learning Curve | Best For |\n|----------|-------------|--------|-----------|----------------|----------|\n| Python | Moderate | Low | Extensive | Easy | Rapid prototyping, data science, scripting |\n| Rust | High | High | Growing | Steep | Systems programming, performance-critical apps |\n| Go | High | Moderate | Large | Moderate | Cloud services, microservices, concurrency |",
+      "prompt": "Compare Python, Rust, and Go as a markdown table with columns: Language, Performance, Safety, Ecosystem, Learning Curve, Best For. Return only the table.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/markdown_table_languages.raw.json",
+      "score": {
+        "case_sensitive": false,
+        "expected_terms": [
+          "|",
+          "Language",
+          "Performance",
+          "Safety",
+          "Ecosystem",
+          "Learning Curve",
+          "Best For",
+          "Python",
+          "Rust",
+          "Go"
+        ],
+        "missing_terms": [],
+        "normalized": "| Language | Performance | Safety | Ecosystem | Learning Curve | Best For |\n|----------|-------------|--------|-----------|----------------|----------|\n| Python | Moderate | Low | Extensive | Easy | Rapid prototyping, data science, scripting |\n| Rust | High | High | Growing | Steep | Systems programming, performance-critical apps |\n| Go | High | Moderate | Large | Moderate | Cloud services, microservices, concurrency |",
+        "passed": true,
+        "scorer": "contains_all"
+      },
+      "task_id": "markdown_table_languages",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 6702.475,
+        "predicted_n": 94,
+        "predicted_per_second": 14.02466999130918,
+        "predicted_per_token_ms": 71.3029255319149,
+        "prompt_ms": 480.297,
+        "prompt_n": 46,
+        "prompt_per_second": 95.77407312558688,
+        "prompt_per_token_ms": 10.441239130434782
+      },
+      "usage": {
+        "completion_tokens": 94,
+        "prompt_tokens": 66,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 160
+      }
+    },
+    {
+      "content": "## Algorithm\n\nQuicksort is a divide-and-conquer sorting algorithm that works by selecting a pivot element from the array and partitioning the other elements into two sub-arrays, according to whether they are less than or greater than the pivot. The sub-arrays are then recursively sorted. Common pivot selection strategies include choosing the first element, last element, middle element, or a random element. The partitioning step rearranges the array so that all elements less than the pivot come before it, and all elements greater come after it, placing the pivot in its final sorted position.\n\n## Complexity\n\n- Best case: O(n log n) \u2014 occurs when the pivot consistently divides the array into two nearly equal halves.\n- Average case: O(n log n) \u2014 expected performance over random inputs.\n- Worst case: O(n\u00b2) \u2014 occurs when the pivot is always the smallest or largest element (e.g., already sorted array with first-element pivot).\n- Space complexity: O(log n) average due to recursion stack; O(n) worst case.\n- In-place: Yes, typically implemented with O(1) extra space beyond recursion stack.\n- Stable: No, not guaranteed to preserve relative order of equal elements.\n\n## When to Use\n\n- General-purpose sorting when average-case performance matters.\n- Large datasets where O(n log n) average time is desirable.\n- Memory-constrained environments due to in-place partitioning.\n- When cache efficiency is important (good locality of reference).\n- Avoid when worst-case O(n\u00b2) is unacceptable (e.g., real-time systems) or when stability is required (use mergesort instead).\n\n## Code Example\n\n```python\ndef quicksort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n```",
+      "prompt": "Explain quicksort with exactly these markdown sections: ## Algorithm, ## Complexity, ## When to Use, ## Code Example.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/quicksort_sections.raw.json",
+      "score": {
+        "case_sensitive": false,
+        "expected_terms": [
+          "## Algorithm",
+          "## Complexity",
+          "## When to Use",
+          "## Code Example",
+          "pivot",
+          "O(n log n)"
+        ],
+        "missing_terms": [],
+        "normalized": "## Algorithm\n\nQuicksort is a divide-and-conquer sorting algorithm that works by selecting a pivot element from the array and partitioning the other elements into two sub-arrays, according to whether they are less than or greater than the pivot. The sub-arrays are then recursively sorted. Common pivot selection strategies include choosing the first element, last element, middle element, or a random element. The partitioning step rearranges the array so that all elements less than the pivot come before it, and all elements greater come after it, placing the pivot in its final sorted position.\n\n## Complexity\n\n- Best case: O(n log n) \u2014 occurs when the pivot consistently divides the array into two nearly equal halves.\n- Average case: O(n log n) \u2014 expected performance over random inputs.\n- Worst case: O(n\u00b2) \u2014 occurs when the pivot is always the smallest or largest element (e.g., already sorted array with first-element pivot).\n- Space complexity: O(log n) average due to recursion stack; O(n) worst case.\n- In-place: Yes, typically implemented with O(1) extra space beyond recursion stack.\n- Stable: No, not guaranteed to preserve relative order of equal elements.\n\n## When to Use\n\n- General-purpose sorting when average-case performance matters.\n- Large datasets where O(n log n) average time is desirable.\n- Memory-constrained environments due to in-place partitioning.\n- When cache efficiency is important (good locality of reference).\n- Avoid when worst-case O(n\u00b2) is unacceptable (e.g., real-time systems) or when stability is required (use mergesort instead).\n\n## Code Example\n\n```python\ndef quicksort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n```",
+        "passed": true,
+        "scorer": "contains_all"
+      },
+      "task_id": "quicksort_sections",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 31679.601,
+        "predicted_n": 440,
+        "predicted_per_second": 13.889063817438863,
+        "predicted_per_token_ms": 71.99909318181818,
+        "prompt_ms": 434.76,
+        "prompt_n": 37,
+        "prompt_per_second": 85.10442543012238,
+        "prompt_per_token_ms": 11.75027027027027
+      },
+      "usage": {
+        "completion_tokens": 440,
+        "prompt_tokens": 57,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 497
+      }
+    },
+    {
+      "content": "def binary_search(arr, target):\n    left, right = 0, len(arr) - 1\n    while left <= right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n    return -1",
+      "prompt": "Write a Python binary_search(arr, target) implementation. Return code only. It must handle an empty array and return -1 when absent.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/binary_search_code.raw.json",
+      "score": {
+        "case_sensitive": true,
+        "expected_terms": [
+          "def binary_search",
+          "while",
+          "return -1"
+        ],
+        "missing_terms": [],
+        "normalized": "def binary_search(arr, target):\n    left, right = 0, len(arr) - 1\n    while left <= right:\n        mid = (left + right) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n    return -1",
+        "passed": true,
+        "scorer": "contains_all"
+      },
+      "task_id": "binary_search_code",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 6338.054,
+        "predicted_n": 89,
+        "predicted_per_second": 14.042164992598675,
+        "predicted_per_token_ms": 71.21408988764045,
+        "prompt_ms": 462.56,
+        "prompt_n": 40,
+        "prompt_per_second": 86.47526807333102,
+        "prompt_per_token_ms": 11.564
+      },
+      "usage": {
+        "completion_tokens": 89,
+        "prompt_tokens": 60,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 149
+      }
+    },
+    {
+      "content": "1. Define a Plugin interface with methods: init(), load(), unload(), and event handlers (onKey, onCursor, onSave).\n2. Implement a discovery mechanism that scans a designated plugins directory for valid plugin modules (e.g., .js/.py files) and registers them.\n3. Manage the plugin lifecycle by providing functions to load, unload, and reload plugins dynamically, ensuring proper initialization and cleanup.\n4. Set up an event system that allows plugins to subscribe to editor events (e.g., key presses, cursor movements, file saves) and emit custom events.\n5. Provide a plugin API that exposes editor functionality (e.g., text manipulation, UI updates) to plugins, enabling them to interact with the editor seamlessly.\n6. Ensure security by sandboxing plugin execution and validating plugin code before loading.\n7. Document the plugin architecture, including how to create, install, and manage plugins, to facilitate community contributions.",
+      "prompt": "Design a plugin architecture for a text editor in one concise plan. Include interface, discovery, lifecycle, and event hooks.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/plugin_architecture_terms.raw.json",
+      "score": {
+        "case_sensitive": false,
+        "expected_groups": [
+          [
+            "interface"
+          ],
+          [
+            "discovery",
+            "scan",
+            "scans"
+          ],
+          [
+            "lifecycle"
+          ],
+          [
+            "event"
+          ]
+        ],
+        "matched_terms": [
+          "interface",
+          "discovery",
+          "lifecycle",
+          "event"
+        ],
+        "missing_groups": [],
+        "normalized": "1. Define a Plugin interface with methods: init(), load(), unload(), and event handlers (onKey, onCursor, onSave).\n2. Implement a discovery mechanism that scans a designated plugins directory for valid plugin modules (e.g., .js/.py files) and registers them.\n3. Manage the plugin lifecycle by providing functions to load, unload, and reload plugins dynamically, ensuring proper initialization and cleanup.\n4. Set up an event system that allows plugins to subscribe to editor events (e.g., key presses, cursor movements, file saves) and emit custom events.\n5. Provide a plugin API that exposes editor functionality (e.g., text manipulation, UI updates) to plugins, enabling them to interact with the editor seamlessly.\n6. Ensure security by sandboxing plugin execution and validating plugin code before loading.\n7. Document the plugin architecture, including how to create, install, and manage plugins, to facilitate community contributions.",
+        "passed": true,
+        "scorer": "contains_all_groups"
+      },
+      "task_id": "plugin_architecture_terms",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 13886.768,
+        "predicted_n": 193,
+        "predicted_per_second": 13.898122298867527,
+        "predicted_per_token_ms": 71.95216580310881,
+        "prompt_ms": 409.209,
+        "prompt_n": 36,
+        "prompt_per_second": 87.97460466412029,
+        "prompt_per_token_ms": 11.366916666666667
+      },
+      "usage": {
+        "completion_tokens": 193,
+        "prompt_tokens": 56,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 249
+      }
+    },
+    {
+      "content": "public class Singleton {\n    private static volatile Singleton instance;\n\n    private Singleton() {}\n\n    public static Singleton getInstance() {\n        if (instance == null) {\n            synchronized (Singleton.class) {\n                if (instance == null) {\n                    instance = new Singleton();\n                }\n            }\n        }\n        return instance;\n    }\n}",
+      "prompt": "Write a thread-safe Java singleton. Return code only. Use either volatile double-checked locking, a static holder, or enum singleton.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/thread_safe_singleton_java.raw.json",
+      "score": {
+        "case_sensitive": false,
+        "expected_groups": [
+          [
+            "volatile",
+            "synchronized",
+            "getInstance"
+          ],
+          [
+            "static class",
+            "Holder",
+            "getInstance"
+          ],
+          [
+            "enum",
+            "INSTANCE"
+          ]
+        ],
+        "matched_group": [
+          "volatile",
+          "synchronized",
+          "getInstance"
+        ],
+        "normalized": "public class Singleton {\n    private static volatile Singleton instance;\n\n    private Singleton() {}\n\n    public static Singleton getInstance() {\n        if (instance == null) {\n            synchronized (Singleton.class) {\n                if (instance == null) {\n                    instance = new Singleton();\n                }\n            }\n        }\n        return instance;\n    }\n}",
+        "passed": true,
+        "scorer": "contains_any_group"
+      },
+      "task_id": "thread_safe_singleton_java",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 5630.754,
+        "predicted_n": 79,
+        "predicted_per_second": 14.030092595059207,
+        "predicted_per_token_ms": 71.2753670886076,
+        "prompt_ms": 435.269,
+        "prompt_n": 38,
+        "prompt_per_second": 87.30233487797202,
+        "prompt_per_token_ms": 11.454447368421052
+      },
+      "usage": {
+        "completion_tokens": 79,
+        "prompt_tokens": 58,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 137
+      }
+    },
+    {
+      "content": "[\n  {\n    \"rank\": 1,\n    \"name\": \"Python\",\n    \"reason\": \"Versatile and beginner-friendly with extensive libraries for data science and web development.\"\n  },\n  {\n    \"rank\": 2,\n    \"name\": \"JavaScript\",\n    \"reason\": \"Essential for web development, enabling interactive front-end and back-end applications via Node.js.\"\n  },\n  {\n    \"rank\": 3,\n    \"name\": \"Java\",\n    \"reason\": \"Widely used in enterprise applications and Android development due to its robustness and platform independence.\"\n  },\n  {\n    \"rank\": 4,\n    \"name\": \"C++\",\n    \"reason\": \"Offers high performance and control over system resources, making it ideal for game engines and system software.\"\n  },\n  {\n    \"rank\": 5,\n    \"name\": \"Go\",\n    \"reason\": \"Known for simplicity and efficient concurrency, making it popular for cloud services and microservices.\"\n  }\n]",
+      "prompt": "Return a JSON array of exactly 5 objects about programming languages. Each object must have rank, name, and reason fields.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/json_array_languages_format.raw.json",
+      "score": {
+        "expected_length": 5,
+        "json_mode": "strict",
+        "normalized": "[\n  {\n    \"rank\": 1,\n    \"name\": \"Python\",\n    \"reason\": \"Versatile and beginner-friendly with extensive libraries for data science and web development.\"\n  },\n  {\n    \"rank\": 2,\n    \"name\": \"JavaScript\",\n    \"reason\": \"Essential for web development, enabling interactive front-end and back-end applications via Node.js.\"\n  },\n  {\n    \"rank\": 3,\n    \"name\": \"Java\",\n    \"reason\": \"Widely used in enterprise applications and Android development due to its robustness and platform independence.\"\n  },\n  {\n    \"rank\": 4,\n    \"name\": \"C++\",\n    \"reason\": \"Offers high performance and control over system resources, making it ideal for game engines and system software.\"\n  },\n  {\n    \"rank\": 5,\n    \"name\": \"Go\",\n    \"reason\": \"Known for simplicity and efficient concurrency, making it popular for cloud services and microservices.\"\n  }\n]",
+        "observed": [
+          {
+            "name": "Python",
+            "rank": 1,
+            "reason": "Versatile and beginner-friendly with extensive libraries for data science and web development."
+          },
+          {
+            "name": "JavaScript",
+            "rank": 2,
+            "reason": "Essential for web development, enabling interactive front-end and back-end applications via Node.js."
+          },
+          {
+            "name": "Java",
+            "rank": 3,
+            "reason": "Widely used in enterprise applications and Android development due to its robustness and platform independence."
+          },
+          {
+            "name": "C++",
+            "rank": 4,
+            "reason": "Offers high performance and control over system resources, making it ideal for game engines and system software."
+          },
+          {
+            "name": "Go",
+            "rank": 5,
+            "reason": "Known for simplicity and efficient concurrency, making it popular for cloud services and microservices."
+          }
+        ],
+        "passed": true,
+        "required_keys": [
+          "rank",
+          "name",
+          "reason"
+        ],
+        "scorer": "json_array_schema"
+      },
+      "task_id": "json_array_languages_format",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 16791.489,
+        "predicted_n": 233,
+        "predicted_per_second": 13.876077338942364,
+        "predicted_per_token_ms": 72.06647639484979,
+        "prompt_ms": 445.04,
+        "prompt_n": 37,
+        "prompt_per_second": 83.13859428365988,
+        "prompt_per_token_ms": 12.028108108108109
+      },
+      "usage": {
+        "completion_tokens": 233,
+        "prompt_tokens": 57,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 290
+      }
+    },
+    {
+      "content": "{\"valid\":\"36\",\"review\":\"12\"}",
+      "prompt": "A service has 48 requests. 25% fail validation, then one third of the remaining requests require review. Return minified JSON with keys valid and review using integer strings.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/multi_step_json.raw.json",
+      "score": {
+        "expected": {
+          "review": "12",
+          "valid": "36"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"valid\":\"36\",\"review\":\"12\"}",
+        "observed": {
+          "review": "12",
+          "valid": "36"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "multi_step_json",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 806.503,
+        "predicted_n": 12,
+        "predicted_per_second": 14.879051906812498,
+        "predicted_per_token_ms": 67.20858333333334,
+        "prompt_ms": 526.025,
+        "prompt_n": 50,
+        "prompt_per_second": 95.05251651537475,
+        "prompt_per_token_ms": 10.5205
+      },
+      "usage": {
+        "completion_tokens": 12,
+        "prompt_tokens": 70,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 82
+      }
+    },
+    {
+      "content": "{\"action\":\"answer_directly\"}",
+      "prompt": "You do not have access to tools in this prompt. Return minified JSON with key action and value answer_directly.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/responses/iq4_cpu/no_tool_discretion_json.raw.json",
+      "score": {
+        "expected": {
+          "action": "answer_directly"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"action\":\"answer_directly\"}",
+        "observed": {
+          "action": "answer_directly"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "no_tool_discretion_json",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 515.479,
+        "predicted_n": 8,
+        "predicted_per_second": 15.51954589808702,
+        "predicted_per_token_ms": 64.434875,
+        "prompt_ms": 423.681,
+        "prompt_n": 36,
+        "prompt_per_second": 84.96958796830636,
+        "prompt_per_token_ms": 11.768916666666666
+      },
+      "usage": {
+        "completion_tokens": 8,
+        "prompt_tokens": 56,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 64
+      }
+    }
+  ],
+  "total": 18
+}

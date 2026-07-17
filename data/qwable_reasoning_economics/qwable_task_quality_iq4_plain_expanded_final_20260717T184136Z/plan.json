@@ -1,0 +1,323 @@
+{
+  "arms": [
+    {
+      "device": "ROCm0",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "name": "iq4_gpu",
+      "ngl": 99,
+      "port": 18840,
+      "role": "mi210_iq4_task_quality"
+    },
+    {
+      "device": "ROCm0",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+      "name": "q8_gpu",
+      "ngl": 99,
+      "port": 18850,
+      "role": "mi210_q8_task_quality"
+    },
+    {
+      "device": "none",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "name": "iq4_cpu",
+      "ngl": 0,
+      "port": 18860,
+      "role": "cpu_iq4_task_quality"
+    },
+    {
+      "device": "none",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+      "name": "q8_cpu",
+      "ngl": 0,
+      "port": 18870,
+      "role": "cpu_q8_task_quality"
+    }
+  ],
+  "classification": "deterministic task-quality slice; expanded/spec lanes are realistic routing evidence but still not production-stack promotion by itself",
+  "created_at": "2026-07-17T18:41:37.031059+00:00",
+  "experimental_root": "/mnt/raid0/llm/llama.cpp-experimental",
+  "glm_guard": {
+    "active": false,
+    "allow_override_flag": "--allow-glm-download",
+    "blocked_in_execute": true,
+    "pattern": "hf download unsloth/GLM-5.2-GGUF"
+  },
+  "ld_library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "mode": "execute",
+  "request": {
+    "context": 8192,
+    "max_tokens": 512,
+    "request_timeout_s": 420,
+    "seed": 7,
+    "spec_type": "none",
+    "startup_timeout_s": 300,
+    "temperature": 0.0
+  },
+  "schema": "qwable_task_quality_plan.v1",
+  "selected_arms": [
+    "iq4_gpu"
+  ],
+  "server_bin": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "task_set": "default+expanded",
+  "tasks": [
+    {
+      "expected": {
+        "answer": "55"
+      },
+      "max_tokens": 96,
+      "prompt": "Compute 34 + 21. Return only minified JSON with exactly one key \"answer\" whose string value is the integer result.",
+      "scorer": "json_exact",
+      "task_id": "arithmetic_sum_json"
+    },
+    {
+      "expected": {
+        "answer": "yes"
+      },
+      "max_tokens": 96,
+      "prompt": "All dax are mip. Every mip is vun. Is every dax a vun? Return only minified JSON with exactly one key \"answer\" whose string value is \"yes\" or \"no\".",
+      "scorer": "json_exact",
+      "task_id": "logic_transitive_json"
+    },
+    {
+      "expected": {
+        "finish_24h": "10:35"
+      },
+      "max_tokens": 96,
+      "prompt": "A job starts at 09:15 and lasts 80 minutes. Return only minified JSON with exactly one key \"finish_24h\" using HH:MM.",
+      "scorer": "json_exact",
+      "task_id": "time_addition_json"
+    },
+    {
+      "expected": "B",
+      "max_tokens": 16,
+      "prompt": "A benchmark gives the correct answer in the prompt. Does a model passing that benchmark prove independent reasoning? A) yes B) no. Return exactly one character: A or B.",
+      "scorer": "exact",
+      "task_id": "option_reasoning_letter"
+    },
+    {
+      "expected": 5,
+      "max_tokens": 48,
+      "prompt": "In exactly five lowercase words, describe why held-out tests matter. Return only the five words.",
+      "scorer": "five_lowercase_words",
+      "task_id": "lowercase_five_words"
+    },
+    {
+      "expected": {
+        "label": "qwable",
+        "status": "ready"
+      },
+      "max_tokens": 96,
+      "prompt": "Given label=qwable and status=ready, return only minified JSON with exactly keys label and status sorted alphabetically.",
+      "scorer": "json_exact",
+      "task_id": "sorted_keys_json"
+    },
+    {
+      "expected": "AR-2025-1847",
+      "max_tokens": 32,
+      "prompt": "Read the passage and answer with only the catalog number.\n\nThe archaeological expedition investigates ancient settlement sites in the Mediterranean. Pottery fragments are cataloged for trade routes. The site supervisor recorded that artifact catalog number AR-2025-1847 is a bronze figurine discovered at coordinates 36.8529N, 14.5147E at a depth of 2.3 meters.\n\nQuestion: What is the catalog number?",
+      "scorer": "exact",
+      "task_id": "needle_catalog_exact"
+    },
+    {
+      "expected": "B",
+      "max_tokens": 16,
+      "prompt": "Calhoun's South Carolina Exposition and Protest used language closest to which political position? A) Jackson supporters after 1824 B) New England Federalists opposing the War of 1812 C) Jefferson and the Barbary pirates D) Shays' Rebellion. Return the letter only.",
+      "scorer": "exact",
+      "task_id": "history_nullification_letter"
+    },
+    {
+      "expected": {
+        "case_sensitive": false,
+        "groups": [
+          [
+            "REST"
+          ],
+          [
+            "GraphQL"
+          ],
+          [
+            "gRPC"
+          ],
+          [
+            "HTTP"
+          ],
+          [
+            "schema"
+          ],
+          [
+            "Protocol Buffers",
+            "Protobuf",
+            "proto"
+          ]
+        ]
+      },
+      "max_tokens": 256,
+      "prompt": "Compare REST, GraphQL, and gRPC. Mention concrete transport or schema traits for each. Keep it under 180 words.",
+      "scorer": "contains_all_groups",
+      "task_id": "rest_graphql_grpc_compare"
+    },
+    {
+      "expected": {
+        "D": [
+          "Dependency Inversion",
+          "Dependency Inversion Principle"
+        ],
+        "I": [
+          "Interface Segregation",
+          "Interface Segregation Principle"
+        ],
+        "L": [
+          "Liskov Substitution",
+          "Liskov Substitution Principle"
+        ],
+        "O": [
+          "Open/Closed",
+          "Open/Closed Principle"
+        ],
+        "S": [
+          "Single Responsibility",
+          "Single Responsibility Principle"
+        ]
+      },
+      "max_tokens": 160,
+      "prompt": "Return minified JSON with exactly keys S,O,L,I,D. Each value should be the corresponding SOLID principle name, not an explanation.",
+      "scorer": "json_exact_aliases",
+      "task_id": "solid_principles_json"
+    },
+    {
+      "expected": {
+        "case_sensitive": false,
+        "terms": [
+          "|",
+          "Language",
+          "Performance",
+          "Safety",
+          "Ecosystem",
+          "Learning Curve",
+          "Best For",
+          "Python",
+          "Rust",
+          "Go"
+        ]
+      },
+      "max_tokens": 384,
+      "prompt": "Compare Python, Rust, and Go as a markdown table with columns: Language, Performance, Safety, Ecosystem, Learning Curve, Best For. Return only the table.",
+      "scorer": "contains_all",
+      "task_id": "markdown_table_languages"
+    },
+    {
+      "expected": {
+        "case_sensitive": false,
+        "terms": [
+          "## Algorithm",
+          "## Complexity",
+          "## When to Use",
+          "## Code Example",
+          "pivot",
+          "O(n log n)"
+        ]
+      },
+      "max_tokens": 512,
+      "prompt": "Explain quicksort with exactly these markdown sections: ## Algorithm, ## Complexity, ## When to Use, ## Code Example.",
+      "scorer": "contains_all",
+      "task_id": "quicksort_sections"
+    },
+    {
+      "expected": {
+        "case_sensitive": true,
+        "terms": [
+          "def binary_search",
+          "while",
+          "return -1"
+        ]
+      },
+      "max_tokens": 384,
+      "prompt": "Write a Python binary_search(arr, target) implementation. Return code only. It must handle an empty array and return -1 when absent.",
+      "scorer": "contains_all",
+      "task_id": "binary_search_code"
+    },
+    {
+      "expected": {
+        "case_sensitive": false,
+        "groups": [
+          [
+            "interface"
+          ],
+          [
+            "discovery",
+            "scan",
+            "scans"
+          ],
+          [
+            "lifecycle"
+          ],
+          [
+            "event"
+          ]
+        ]
+      },
+      "max_tokens": 384,
+      "prompt": "Design a plugin architecture for a text editor in one concise plan. Include interface, discovery, lifecycle, and event hooks.",
+      "scorer": "contains_all_groups",
+      "task_id": "plugin_architecture_terms"
+    },
+    {
+      "expected": {
+        "case_sensitive": false,
+        "groups": [
+          [
+            "volatile",
+            "synchronized",
+            "getInstance"
+          ],
+          [
+            "static class",
+            "Holder",
+            "getInstance"
+          ],
+          [
+            "enum",
+            "INSTANCE"
+          ]
+        ]
+      },
+      "max_tokens": 384,
+      "prompt": "Write a thread-safe Java singleton. Return code only. Use either volatile double-checked locking, a static holder, or enum singleton.",
+      "scorer": "contains_any_group",
+      "task_id": "thread_safe_singleton_java"
+    },
+    {
+      "expected": {
+        "length": 5,
+        "required_keys": [
+          "rank",
+          "name",
+          "reason"
+        ]
+      },
+      "max_tokens": 384,
+      "prompt": "Return a JSON array of exactly 5 objects about programming languages. Each object must have rank, name, and reason fields.",
+      "scorer": "json_array_schema",
+      "task_id": "json_array_languages_format"
+    },
+    {
+      "expected": {
+        "review": "12",
+        "valid": "36"
+      },
+      "max_tokens": 96,
+      "prompt": "A service has 48 requests. 25% fail validation, then one third of the remaining requests require review. Return minified JSON with keys valid and review using integer strings.",
+      "scorer": "json_exact",
+      "task_id": "multi_step_json"
+    },
+    {
+      "expected": {
+        "action": "answer_directly"
+      },
+      "max_tokens": 64,
+      "prompt": "You do not have access to tools in this prompt. Return minified JSON with key action and value answer_directly.",
+      "scorer": "json_exact",
+      "task_id": "no_tool_discretion_json"
+    }
+  ]
+}

@@ -6353,8 +6353,8 @@ roles:
       type: none
       notes: "MTP head was dropped in the community GGUF; use as plain text-generation reasoner, not as a draft/MTP model."
     performance:
-      benchmark_status: strict_output_schema_and_small_task_quality_slice_pass_routing_open
-      study_summary: "CoT scaffold study found Qwable useful as a GPU reasoning/cost lever on reasoning-heavy tasks; deployable use still needs a codified gate."
+      benchmark_status: expanded_task_quality_pass_iq4_plain_preferred_ngram_neutral
+      study_summary: "Qwable IQ4_XS is the preferred standalone reasoning-heavy sidecar candidate; scaffold delivery remains a fallback only when the beneficiary must answer."
       server_chat_smoke_status: bounded_iq4_mi210_pass_schema_caveat
       server_chat_observation: >
         2026-07-16 bounded reasoning-economics runner smoke on experimental v7
@@ -6396,6 +6396,21 @@ roles:
         at mean prompt 89.78 t/s and mean decode 17.11 t/s. Q8_0 also passed
         6/6 on both devices, but did not show a quality advantage in this small
         slice and was slower on CPU.
+      expanded_task_quality_observation: >
+        2026-07-17 expanded Qwable IQ4_XS task-quality gate added routing,
+        format, code, architecture, long-context needle, and exact-JSON tasks
+        to the six-task slice. The MI210 plain reasoning-off lane passed 18/18
+        at mean prompt 396.21 t/s and mean decode 106.65 t/s. The MI210
+        ngram-mod lane also passed 18/18 at mean prompt 395.31 t/s and mean
+        decode 106.66 t/s, so ngram-mod is safe on this slice but not a speed
+        lever for Qwable IQ4_XS. The CPU reasoning-off lane passed 18/18 at
+        mean prompt 90.51 t/s and mean decode 15.96 t/s.
+      routing_recommendation: >
+        Prefer Qwable-v1 IQ4_XS as a standalone reasoning-heavy route when it
+        can answer directly. Use the plain reasoning-off server lane by default;
+        keep ngram-mod available only as a measured per-task experiment because
+        it was neutral on the expanded gate. Keep scaffold delivery as a
+        beneficiary-must-answer fallback for tools/context/role constraints.
       long_decode_observation: >
         2026-07-16 longer server runs during active GLM download: CPU generated
         616 tokens at 13.71 t/s; MI210 generated 1322 tokens at 98.32 t/s.
@@ -6415,6 +6430,9 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/results/strict_iq4_schema_gpu.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_20260717T113232Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_cpu_20260717T113317Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_iq4_plain_expanded_final_20260717T184136Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_iq4_ngram_expanded_final_20260717T184106Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/summary.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_iq4xs_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_iq4xs_mi210/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c2048/summary.txt
