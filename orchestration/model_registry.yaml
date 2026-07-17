@@ -686,16 +686,14 @@ server_mode:
     # Phase 3 compliance gate (2026-05-07): medium passes; aggressive fails procedure (89%
     # baseline). Compliance pinned 0.933 across all 4 levels, recall 0.93-1.00.
     agent_file_compression_operating_point: medium
-    model: Qwen3-Next-80B-A3B-Q4_K_M.gguf
+    model: Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf
     memory_gb: 46
     tier: hot
     acceleration:
-      type: moe_expert_reduction
-      experts: 4  # MoE4 for quality (MoE2 degrades output)
-      override_key: qwen3next.expert_used_count
+      type: none  # 2026-07-17: default experts; stale MoE4 override removed from live ingest policy
     throughput: 14.4-20.8
     benchmark_score: 25/27 (93%) on canonical long_context suite, May-4
-    notes: "SSM-hybrid linear attention scales O(n) per token — at extreme contexts (50K+) outperforms pure-attention models. Best Stage-1 candidate for three_stage_summarization (full-context fast draft). Stage-2 review now uses frontdoor (Qwen3.6-35B-A3B Q8, 100% long_context)."
+    notes: "SSM-hybrid linear attention scales O(n) per token — at extreme contexts (50K+) outperforms pure-attention models. Best Stage-1 candidate for three_stage_summarization (full-context fast draft). Stage-2 review now uses frontdoor (Qwen3.6-35B-A3B Q8, 100% long_context). Historical MoE4 rows are not live launch policy as of 2026-07-17."
 
   # Voice recognition service (separate from LLM inference)
   voice_server:
@@ -1325,9 +1323,7 @@ roles:
     - summarization  # Best summary quality (tested 2026-01-26)
     - architect
     acceleration:
-      type: moe_expert_reduction
-      experts: 4  # MoE4 for quality (tested 2026-01-26: 6.29 t/s, best output)
-      override_key: qwen3next.expert_used_count
+      type: none  # 2026-07-17: default experts for live ingest; historical MoE4 benchmark retained below
     constraints:
       forbid:
       - speculative_decoding
@@ -1336,9 +1332,9 @@ roles:
         works via auto freeze-recurrent (validated 2026-03-10).
     performance:
       baseline_tps: 10.12
-      optimized_tps: 6.29  # MoE4 on 10K context (2026-01-26)
+      optimized_tps: 10.12  # default-expert live policy; old MoE4 6.29 t/s row is historical only
       long_context_tps_range: 14.4-20.8 t/s @ ~12K context (May-4 long_context suite)
-      speedup: n/a  # MoE4 trades speed for quality
+      speedup: n/a
       summarization_benchmark: "73.8s for 464 tokens on Twyne whitepaper (10K context)"
       long_context_quality: 25/27 (93%) on canonical long_context suite, May-4 Claude-as-Judge
     memory:
