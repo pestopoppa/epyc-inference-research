@@ -246,7 +246,7 @@ runtime_defaults:
       worker_fast: 30          # 1.5B — expected <2s, 30s = 15x headroom
       frontdoor: 180           # 30B MoE @ 18 t/s — raised from 90 to accommodate pipeline stages
       coder_escalation: 120    # 32B Q4KM @ 10.8 t/s — 500 tok ~46s. 120s = 2.6x headroom
-      vision_escalation: 120   # 30B MoE VL, multimodal processing
+      vision_escalation: 60    # temporary Qwen2.5-VL alias while 30B escalation replacement is gated
       ingest_long_context: 300 # 80B SSM, long document ingestion
       architect_general: 600   # 122B MoE hybrid; ~12.19 t/s no-MTP canonical (Probe B 2026-05-04), ~20.75 t/s v6 MTP-on (2026-06-26). Old "4.3 t/s" = pre-2026-05-04 2x cross-NUMA artifact. Complex multi-step reasoning.
 
@@ -3710,35 +3710,37 @@ roles:
       Keep for: screenshot analysis, UI automation, tool-using vision tasks.
       Server uses /v1/chat/completions with image_url content type.
   vision_escalation:
-    tier: B
+    tier: C
     port: 8087
-    description: "Complex vision - dedicated VL MoE server with mmproj"
+    description: "Temporary safe vision escalation alias - Qwen2.5-VL server with mmproj"
     model:
-      name: Qwen3-VL-30B-A3B-Instruct
-      path: lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf
-      mmproj_path: lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/mmproj-Qwen3-VL-30B-A3B-Instruct-F16.gguf
+      name: Qwen2.5-VL-7B-Instruct
+      path: lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf
+      mmproj_path: lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-model-f16.gguf
       quant: Q4_K_M
-      size_gb: 18.0
-      architecture: qwen3vlmoe
-      ctx_max: 262144
+      size_gb: 4.4
+      architecture: dense
+      ctx_max: 128000
     thinking_control:
       mode: native_no_thinking_toggle
       effective_mode: native_no_think_tags
-      evidence_strength: model_variant_inferred
-      evidence: Qwen3-VL-30B-A3B-Instruct is the non-thinking VL variant; multimodal role follows native VL chat behavior rather than a text-model enable_thinking toggle.
+      evidence_strength: model_family_inferred
+      evidence: Qwen2.5-VL Instruct predates Qwen3 thinking controls; multimodal role has no chat-template thinking toggle.
     candidate_roles:
     - vision
     acceleration:
-      type: moe_expert_reduction
-      baseline_experts: 8  # GGUF default; --skip-moe-reduction compares moe<X>_* against this
-      experts: 4
-      override_key: qwen3vlmoe.expert_used_count
+      type: baseline
+      disallowed:
+        - speculative_decoding
+        - prompt_lookup
+      reason: VL models with mmproj not supported by llama-speculative binary
     performance:
-      baseline_tps: 19.0
-      optimized_tps: 27.6
-      speedup: 1.45x
-      vl_score: {pct: 92.0, raw: "11/12"}  # rescored 2026-03-04 (was 27/36=75%)
-      benchmark_date: 2026-03-04
+      baseline_tps: 16.91
+      optimized_tps: 21.32
+      speedup: 1.0x
+      vl_score: {pct: 100.0, raw: "4/4 K35 fixed fixtures"}
+      benchmark_date: 2026-07-17
+      evidence: /mnt/raid0/llm/tmp/k35-vision-matrix-20260717T1500Z/summary.json
     memory:
       residency: hot
       pinned: false
@@ -3755,15 +3757,15 @@ roles:
       - GUI automation failure
       - cross-reference multiple image regions
     paged_attention:
-      recommended: true
-      block_size: 64
-      reason: "30B VL MoE benefits from paged attention for image-heavy workloads"
+      recommended: false
+      reason: temporary alias uses Qwen2.5-VL dense worker model
     notes: |
-      75% accuracy - LOWER than 4B (94%) due to OCR issues ("Centric" error).
-      Faster than 4B (27.6 t/s vs 18 t/s) but less accurate.
-      Consider vision_qwen3_vl_8b (86%) as alternative escalation target.
-      Good for: extended reasoning on complex diagrams, multi-image comparison.
-      WARNING: 0% agentic - cannot do tool calls.
+      Temporary 2026-07-17 safety alias to worker_vision. K35 fixed-fixture
+      matrix showed worker_vision passed 4/4 while the former Qwen3-VL-30B MoE4
+      escalation lane passed only 3/4 and missed the chart fixture. Diagnostic
+      probes with --image-min/max-tokens 1024 and default experts also failed.
+      Keep port 8087 for call-site stability, but do not treat this as a true
+      higher-quality escalation model until a replacement A/B wins.
   worker_summarize:
     tier: C
     description: Short-context document summarization (sub-5000 tokens; longer inputs trigger three_stage_summarization). Qwen3.6-35B-A3B Q8 — same model as frontdoor, shared GGUF mmap.
