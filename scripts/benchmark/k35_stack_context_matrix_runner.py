@@ -28,7 +28,9 @@ import argparse
 import dataclasses
 import json
 import os
+import re
 import shlex
+import shutil
 import signal
 import socket
 import subprocess
@@ -370,6 +372,95 @@ def run_capture(argv: list[str], *, timeout: int = 30) -> dict[str, Any]:
     }
 
 
+PROC_STATUS_KEYS = {
+    "Name",
+    "State",
+    "VmPeak",
+    "VmSize",
+    "VmHWM",
+    "VmRSS",
+    "RssAnon",
+    "RssFile",
+    "RssShmem",
+    "VmSwap",
+    "Threads",
+    "Cpus_allowed_list",
+    "Mems_allowed_list",
+}
+SMAPS_ROLLUP_KEYS = {
+    "Rss",
+    "Pss",
+    "Pss_Dirty",
+    "Private_Clean",
+    "Private_Dirty",
+    "Shared_Clean",
+    "Shared_Dirty",
+    "Anonymous",
+    "AnonHugePages",
+    "Swap",
+}
+KIB_PATTERN = re.compile(r"^([A-Za-z_]+):\s+(\d+) kB$")
+
+
+def parse_proc_status(text: str) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for line in text.splitlines():
+        key, sep, value = line.partition(":")
+        if sep and key in PROC_STATUS_KEYS:
+            fields[key] = value.strip()
+    return fields
+
+
+def parse_smaps_rollup(text: str) -> dict[str, int]:
+    fields: dict[str, int] = {}
+    for line in text.splitlines():
+        match = KIB_PATTERN.match(line.strip())
+        if match and match.group(1) in SMAPS_ROLLUP_KEYS:
+            fields[f"{match.group(1)}_kib"] = int(match.group(2))
+    return fields
+
+
+def read_optional_text(path: Path) -> dict[str, Any]:
+    try:
+        return {"ok": True, "text": path.read_text(encoding="utf-8", errors="replace")}
+    except OSError as exc:
+        return {"ok": False, "error": repr(exc)}
+
+
+def collect_process_memory(pid: int) -> dict[str, Any]:
+    status_raw = read_optional_text(Path(f"/proc/{pid}/status"))
+    smaps_raw = read_optional_text(Path(f"/proc/{pid}/smaps_rollup"))
+    return {
+        "pid": pid,
+        "captured_at": utc_now(),
+        "ps": run_capture(["ps", "-p", str(pid), "-o", "pid=,comm=,rss=,vsz=,psr=,args="], timeout=10),
+        "status": {
+            "ok": status_raw["ok"],
+            "fields": parse_proc_status(status_raw.get("text", "")) if status_raw["ok"] else {},
+            "error": status_raw.get("error"),
+        },
+        "smaps_rollup": {
+            "ok": smaps_raw["ok"],
+            "fields": parse_smaps_rollup(smaps_raw.get("text", "")) if smaps_raw["ok"] else {},
+            "error": smaps_raw.get("error"),
+        },
+    }
+
+
+def collect_rocm_snapshot() -> dict[str, Any]:
+    if shutil.which("rocm-smi") is None:
+        return {"ok": False, "skipped": "rocm-smi not found"}
+    return run_capture(["rocm-smi", "--showpidgpus", "--showmemuse", "--showuse"], timeout=20)
+
+
+def collect_resident_memory_sample(pid: int, phase: str) -> dict[str, Any]:
+    return {
+        "phase": phase,
+        "process": collect_process_memory(pid),
+        "rocm": collect_rocm_snapshot(),
+    }
+
+
 def collect_process_blockers() -> list[dict[str, Any]]:
     proc = run_capture(["ps", "-eo", "pid=,comm=,args="], timeout=10)
     blockers: list[dict[str, Any]] = []
@@ -601,8 +692,10 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
         )
     started = time.monotonic()
     cleanup: dict[str, Any] | None = None
+    memory_samples: list[dict[str, Any]] = []
     try:
         wait_for_health(cell["port"], args.startup_timeout)
+        memory_samples.append(collect_resident_memory_sample(proc.pid, "after_health"))
         prompt = prompt_for_context(cell["nominal_context"], args.max_tokens)
         request_started = time.monotonic()
         response = query_chat(
@@ -613,6 +706,7 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
             timeout_s=args.request_timeout,
         )
         elapsed_s = time.monotonic() - request_started
+        memory_samples.append(collect_resident_memory_sample(proc.pid, "after_request"))
         write_json(response_path, response)
         result = summarize_response(
             scenario,
@@ -632,8 +726,11 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
             "error": repr(exc),
         }
     finally:
+        if proc.poll() is None:
+            memory_samples.append(collect_resident_memory_sample(proc.pid, "before_cleanup"))
         cleanup = terminate(proc)
     result["started_at_monotonic"] = started
+    result["memory_samples"] = memory_samples
     result["cleanup"] = cleanup
     result["server_log"] = str(server_log)
     result["response_path"] = str(response_path)

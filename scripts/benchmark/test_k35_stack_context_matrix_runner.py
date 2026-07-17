@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -139,6 +140,45 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             plan = json.loads((Path(tmp) / "plan.json").read_text())
             self.assertEqual(len(plan["cells"]), 1)
             self.assertTrue((Path(tmp) / "commands.sh").exists())
+
+    def test_proc_memory_parsers_extract_resident_fields(self):
+        status = k35.parse_proc_status(
+            "\n".join(
+                [
+                    "Name:\tllama-server",
+                    "VmRSS:\t  123456 kB",
+                    "RssAnon:\t   11111 kB",
+                    "Cpus_allowed_list:\t0-3",
+                    "Ignored:\tvalue",
+                ]
+            )
+        )
+        self.assertEqual(status["VmRSS"], "123456 kB")
+        self.assertEqual(status["RssAnon"], "11111 kB")
+        self.assertEqual(status["Cpus_allowed_list"], "0-3")
+        self.assertNotIn("Ignored", status)
+
+        smaps = k35.parse_smaps_rollup(
+            "\n".join(
+                [
+                    "Rss:              2048 kB",
+                    "Pss:              1024 kB",
+                    "Private_Dirty:     512 kB",
+                    "VmFlags: rd wr",
+                ]
+            )
+        )
+        self.assertEqual(smaps["Rss_kib"], 2048)
+        self.assertEqual(smaps["Pss_kib"], 1024)
+        self.assertEqual(smaps["Private_Dirty_kib"], 512)
+        self.assertNotIn("VmFlags_kib", smaps)
+
+    def test_collect_process_memory_current_process(self):
+        sample = k35.collect_process_memory(os.getpid())
+        self.assertEqual(sample["pid"], os.getpid())
+        self.assertTrue(sample["status"]["ok"])
+        self.assertIn("VmRSS", sample["status"]["fields"])
+        self.assertIn("ps", sample)
 
 
 if __name__ == "__main__":
