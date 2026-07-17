@@ -22,6 +22,7 @@ import argparse
 import dataclasses
 import json
 import os
+import re
 import shlex
 import signal
 import socket
@@ -373,6 +374,7 @@ def _request_spec(
     min_completion_tokens: int = 0,
     progress_poll_interval_s: int = 0,
     purpose: str = "coherence",
+    stream: bool = False,
 ) -> dict[str, Any]:
     return {
         "endpoint": "/v1/chat/completions",
@@ -383,6 +385,7 @@ def _request_spec(
         "min_completion_tokens": min_completion_tokens,
         "progress_poll_interval_s": progress_poll_interval_s,
         "purpose": purpose,
+        "stream": stream,
     }
 
 
@@ -399,6 +402,7 @@ def _server_spec(
     trace_logs: bool,
     metrics: bool,
     log_file: Path | None = None,
+    extra_args: list[str] | None = None,
 ) -> dict[str, Any]:
     command = build_server_command(
         binary=binary,
@@ -412,6 +416,7 @@ def _server_spec(
         trace_logs=trace_logs,
         log_file=log_file,
         metrics=metrics,
+        extra_args=extra_args,
     )
     return {
         "server_command": command,
@@ -425,6 +430,7 @@ def _server_spec(
         "trace_logs": trace_logs,
         "metrics": metrics,
         "log_file": str(log_file) if log_file is not None else None,
+        "extra_args": extra_args or [],
     }
 
 
@@ -442,6 +448,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
     long_min_completion_tokens = args.min_completion_tokens if args.long_output else 0
     long_progress_poll_interval = args.progress_poll_interval if args.long_output else 0
     long_metrics = args.metrics or args.long_output
+    long_trace_logs = args.trace_logs or args.long_output
     scaling_task = "Return READY for the KV-length scaling checkpoint."
 
     primary_shard = Path(inventory["primary_shard"]) if inventory["primary_shard"] else args.model_dir
@@ -484,6 +491,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 trace_logs=args.trace_logs,
                 metrics=args.metrics,
                 log_file=log_dir / "short_load_decode_smoke.server.log" if args.trace_logs else None,
+                extra_args=args.server_extra_arg,
             ),
             "request": _request_spec(
                 max_tokens=args.max_tokens,
@@ -513,9 +521,10 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 threads=args.threads,
                 ubatch=args.ubatch,
                 indexer_top_k=args.indexer_top_k,
-                trace_logs=args.trace_logs,
+                trace_logs=long_trace_logs,
                 metrics=long_metrics,
-                log_file=log_dir / "long_context_dsa_probe.server.log" if args.trace_logs else None,
+                log_file=log_dir / "long_context_dsa_probe.server.log" if long_trace_logs else None,
+                extra_args=args.server_extra_arg,
             ),
             "request": _request_spec(
                 max_tokens=long_max_tokens,
@@ -525,6 +534,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 min_completion_tokens=long_min_completion_tokens,
                 progress_poll_interval_s=long_progress_poll_interval,
                 purpose="coherence_plus_throughput" if args.long_output else "coherence",
+                stream=args.long_output,
             ),
         },
         {
@@ -554,6 +564,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                         trace_logs=args.trace_logs,
                         metrics=args.metrics,
                         log_file=log_dir / f"kv_length_scaling_{context_length}.server.log" if args.trace_logs else None,
+                        extra_args=args.server_extra_arg,
                     ),
                     "request": _request_spec(
                         max_tokens=args.max_tokens,
@@ -631,6 +642,119 @@ def call_completion(
     with urllib.request.urlopen(req, timeout=timeout_s) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
     return json.loads(raw)
+
+
+def _delta_text(delta: dict[str, Any], key: str) -> str:
+    value = delta.get(key)
+    return value if isinstance(value, str) else ""
+
+
+def call_completion_streaming(
+    port: int,
+    prompt: str,
+    max_tokens: int,
+    temperature: float,
+    seed: int,
+    timeout_s: int,
+    progress_callback: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "model": "auto",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "seed": seed,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    content_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    parse_errors: list[str] = []
+    chunk_count = 0
+    finish_reason: str | None = None
+    usage: dict[str, Any] = {}
+    timings: dict[str, Any] = {}
+    started_at = datetime.now(timezone.utc)
+    first_chunk_at: str | None = None
+    completed_at: str | None = None
+
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+        for raw_line in resp:
+            line = raw_line.decode("utf-8", errors="replace").strip()
+            if not line or not line.startswith("data:"):
+                continue
+            data = line.removeprefix("data:").strip()
+            if data == "[DONE]":
+                completed_at = datetime.now(timezone.utc).isoformat()
+                break
+            try:
+                event = json.loads(data)
+            except json.JSONDecodeError as exc:
+                parse_errors.append(f"{exc}: {data[:160]}")
+                continue
+
+            chunk_count += 1
+            if first_chunk_at is None:
+                first_chunk_at = datetime.now(timezone.utc).isoformat()
+            if isinstance(event.get("usage"), dict):
+                usage = event["usage"]
+            if isinstance(event.get("timings"), dict):
+                timings = event["timings"]
+
+            choices = event.get("choices") or []
+            first = choices[0] if choices else {}
+            if isinstance(first, dict) and first.get("finish_reason") is not None:
+                finish_reason = first.get("finish_reason")
+            delta = first.get("delta") if isinstance(first, dict) else {}
+            if isinstance(delta, dict):
+                content_delta = _delta_text(delta, "content")
+                reasoning_delta = _delta_text(delta, "reasoning_content")
+                if content_delta:
+                    content_parts.append(content_delta)
+                if reasoning_delta:
+                    reasoning_parts.append(reasoning_delta)
+
+            if progress_callback is not None:
+                progress_callback(
+                    {
+                        "sampled_at": datetime.now(timezone.utc).isoformat(),
+                        "status": "stream_chunk",
+                        "chunk_count": chunk_count,
+                        "content_char_count": sum(len(part) for part in content_parts),
+                        "reasoning_char_count": sum(len(part) for part in reasoning_parts),
+                    }
+                )
+
+    if completed_at is None:
+        completed_at = datetime.now(timezone.utc).isoformat()
+
+    return {
+        "choices": [
+            {
+                "message": {
+                    "content": "".join(content_parts),
+                    "reasoning_content": "".join(reasoning_parts) or None,
+                },
+                "finish_reason": finish_reason,
+            }
+        ],
+        "usage": usage,
+        "timings": timings,
+        "streaming": {
+            "enabled": True,
+            "chunk_count": chunk_count,
+            "started_at": started_at.isoformat(),
+            "first_chunk_at": first_chunk_at,
+            "completed_at": completed_at,
+            "parse_errors_tail": parse_errors[-10:],
+        },
+    }
 
 
 def count_prompt_tokens(port: int, prompt: str, timeout_s: int) -> int:
@@ -716,10 +840,27 @@ def _response_summary(response: dict[str, Any]) -> dict[str, Any]:
     return {
         "usage": response.get("usage", {}),
         "timings": response.get("timings", {}),
+        "streaming": response.get("streaming", {}),
         "finish_reason": first.get("finish_reason") if isinstance(first, dict) else None,
         "content_preview": content[:200],
         "reasoning_preview": reasoning_content[:200] if isinstance(reasoning_content, str) else None,
     }
+
+
+def _response_completion_text(response: dict[str, Any]) -> str:
+    choices = response.get("choices") or []
+    first = choices[0] if choices else {}
+    message = first.get("message") if isinstance(first, dict) else {}
+    if not isinstance(message, dict):
+        return ""
+    parts: list[str] = []
+    reasoning_content = message.get("reasoning_content")
+    content = message.get("content")
+    if isinstance(reasoning_content, str):
+        parts.append(reasoning_content)
+    if isinstance(content, str):
+        parts.append(content)
+    return "".join(parts)
 
 
 def build_prompt_with_token_floor(
@@ -837,14 +978,42 @@ def summarize_server_log(log_file: str | None) -> dict[str, Any]:
         "prompt eval time",
         "eval time",
         "graphs reused",
+        "slot",
+        "progress",
+        "tokens",
         "n_layer",
         "top_k",
     )
     matches: list[str] = []
+    prompt_eval_tokens: int | None = None
+    prompt_eval_tps: float | None = None
+    decode_tokens: int | None = None
+    decode_tps: float | None = None
+    max_decoded_checkpoint: int | None = None
     for line in text.splitlines():
         lower = line.lower()
         if any(pattern in lower for pattern in patterns):
             matches.append(line)
+        decoded_match = re.search(r"n_decoded\s*=\s*(\d+)", line)
+        if decoded_match:
+            max_decoded_checkpoint = max(
+                max_decoded_checkpoint or 0,
+                int(decoded_match.group(1)),
+            )
+        prompt_match = re.search(
+            r"prompt eval time\s*=.*?/\s*(\d+)\s+tokens.*?,\s*([0-9.]+)\s+tokens per second",
+            line,
+        )
+        if prompt_match:
+            prompt_eval_tokens = int(prompt_match.group(1))
+            prompt_eval_tps = float(prompt_match.group(2))
+        eval_match = re.search(
+            r"\beval time\s*=.*?/\s*(\d+)\s+tokens.*?,\s*([0-9.]+)\s+tokens per second",
+            line,
+        )
+        if eval_match and "prompt eval time" not in lower:
+            decode_tokens = int(eval_match.group(1))
+            decode_tps = float(eval_match.group(2))
     return {
         "status": "ok",
         "path": str(path),
@@ -852,6 +1021,11 @@ def summarize_server_log(log_file: str | None) -> dict[str, Any]:
         "line_count": text.count("\n") + (1 if text else 0),
         "matched_line_count": len(matches),
         "matched_lines_tail": matches[-80:],
+        "prompt_eval_tokens": prompt_eval_tokens,
+        "prompt_eval_tps": prompt_eval_tps,
+        "decode_tokens": decode_tokens,
+        "decode_tps": decode_tps,
+        "max_decoded_checkpoint": max_decoded_checkpoint,
     }
 
 
@@ -866,8 +1040,10 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
     response: dict[str, Any] | None = None
     prompt_info: dict[str, Any] | None = None
     progress_samples: list[dict[str, Any]] = []
+    stream_progress_samples: list[dict[str, Any]] = []
     stop_event = threading.Event()
     poll_thread: threading.Thread | None = None
+    completion_tokens_from_tokenize: int | None = None
     try:
         wait_for_health(stage["server"]["port"])
         tokenize_timeout = max(60, min(stage["request"]["timeout_s"], 600))
@@ -881,7 +1057,7 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
             token_counter=lambda prompt: count_prompt_tokens(stage["server"]["port"], prompt, tokenize_timeout),
         )
         poll_interval = int(stage["request"].get("progress_poll_interval_s", 0) or 0)
-        if stage["server"].get("metrics") and poll_interval > 0:
+        if stage["server"].get("metrics") and poll_interval > 0 and not stage["request"].get("stream"):
             poll_thread = threading.Thread(
                 target=collect_progress_metrics,
                 kwargs={
@@ -893,14 +1069,37 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
                 daemon=True,
             )
             poll_thread.start()
-        response = call_completion(
-            stage["server"]["port"],
-            prompt_info["prompt"],
-            stage["request"]["max_tokens"],
-            stage["request"]["temperature"],
-            stage["request"]["seed"],
-            stage["request"]["timeout_s"],
+        if stage["request"].get("stream"):
+            response = call_completion_streaming(
+                stage["server"]["port"],
+                prompt_info["prompt"],
+                stage["request"]["max_tokens"],
+                stage["request"]["temperature"],
+                stage["request"]["seed"],
+                stage["request"]["timeout_s"],
+                progress_callback=lambda sample: stream_progress_samples.append(sample),
+            )
+        else:
+            response = call_completion(
+                stage["server"]["port"],
+                prompt_info["prompt"],
+                stage["request"]["max_tokens"],
+                stage["request"]["temperature"],
+                stage["request"]["seed"],
+                stage["request"]["timeout_s"],
+            )
+        min_completion_tokens = int(stage["request"].get("min_completion_tokens", 0) or 0)
+        response_usage = response.get("usage", {}) if isinstance(response, dict) else {}
+        response_completion_tokens = (
+            response_usage.get("completion_tokens") if isinstance(response_usage, dict) else None
         )
+        if min_completion_tokens > 0 and not isinstance(response_completion_tokens, int):
+            completion_text = _response_completion_text(response)
+            completion_tokens_from_tokenize = (
+                count_prompt_tokens(stage["server"]["port"], completion_text, tokenize_timeout)
+                if completion_text
+                else 0
+            )
         stop_event.set()
         if poll_thread is not None:
             poll_thread.join(timeout=10)
@@ -913,21 +1112,28 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
     assert response is not None
     assert prompt_info is not None
     summary = _response_summary(response)
+    server_log = summarize_server_log(stage["server"].get("log_file"))
     usage = summary.get("usage", {})
     completion_tokens = usage.get("completion_tokens") if isinstance(usage, dict) else None
+    completion_token_count_source = "usage"
+    if not isinstance(completion_tokens, int) and isinstance(server_log.get("decode_tokens"), int):
+        completion_tokens = int(server_log["decode_tokens"])
+        completion_token_count_source = "server_log_eval_time"
+    if not isinstance(completion_tokens, int) and isinstance(server_log.get("max_decoded_checkpoint"), int):
+        completion_tokens = int(server_log["max_decoded_checkpoint"])
+        completion_token_count_source = "server_log_decoded_checkpoint"
+    if not isinstance(completion_tokens, int) and completion_tokens_from_tokenize is not None:
+        completion_tokens = completion_tokens_from_tokenize
+        completion_token_count_source = "tokenize_completion_text"
     min_completion_tokens = int(stage["request"].get("min_completion_tokens", 0) or 0)
     completion_token_min_passed = (
         min_completion_tokens == 0
         or (isinstance(completion_tokens, int) and completion_tokens >= min_completion_tokens)
     )
-    if min_completion_tokens > 0 and not completion_token_min_passed:
-        raise RuntimeError(
-            "completion token minimum not met for throughput evidence: "
-            f"completion_tokens={completion_tokens!r}, min_completion_tokens={min_completion_tokens}"
-        )
+    status = "ok" if completion_token_min_passed else "failed_completion_floor"
     return {
         "name": stage["name"],
-        "status": "ok",
+        "status": status,
         "port": stage["server"]["port"],
         "context_length": stage["server"]["context_length"],
         "prompt_kind": stage["prompt"]["kind"],
@@ -939,10 +1145,12 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
         "prompt_token_adjustment_attempts": prompt_info["prompt_token_adjustment_attempts"],
         "completion_token_min": min_completion_tokens,
         "completion_token_count": completion_tokens,
+        "completion_token_count_source": completion_token_count_source,
         "completion_token_min_passed": completion_token_min_passed,
         "progress_metrics_samples": progress_samples,
+        "stream_progress_samples_tail": stream_progress_samples[-120:],
         **summary,
-        "server_log": summarize_server_log(stage["server"].get("log_file")),
+        "server_log": server_log,
     }
 
 
@@ -982,7 +1190,7 @@ def run_execution(plan: dict[str, Any]) -> dict[str, Any]:
             continue
         results.append(run_stage(stage))
     return {
-        "status": "ok",
+        "status": "ok" if all(result.get("status") != "failed_completion_floor" for result in results) else "failed",
         "stages": results,
     }
 
@@ -1047,6 +1255,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--metrics",
         action="store_true",
         help="Enable llama-server --metrics in staged server commands",
+    )
+    parser.add_argument(
+        "--server-extra-arg",
+        action="append",
+        default=[],
+        help="Extra llama-server argument appended to each staged server command. Repeat once per argument.",
     )
     parser.add_argument(
         "--progress-poll-interval",

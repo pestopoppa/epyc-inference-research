@@ -106,7 +106,18 @@ Interpretation: GLM DSA cache/runtime wiring is closed. Remaining GLM gates are 
 
 The attempted current-source 96K quality/throughput probe at `/mnt/raid0/llm/tmp/glm52-current-source-96k-quality-20260717T144022Z/plan.json` is discarded as **non-evidence**. The plan used execute mode with `--log-disable`, no `--metrics` endpoint, a non-streaming busy request, and only `max_tokens=32`; no response artifact was produced. Do not consume it as GLM quality, throughput, or kernel evidence.
 
-The GLM DSA runner now has an instrumented long-output contract: use `--long-output` with enough `--throughput-max-tokens`, a `--min-completion-tokens` floor, and live progress telemetry (`--metrics` / `/metrics` samples). Long-output or reviewer-quality runs that lack those fields are process observations only.
+The GLM DSA runner now has an instrumented long-output contract: use `--long-output` with enough `--throughput-max-tokens`, a `--min-completion-tokens` floor, streaming progress, retained trace logs, and server-log timing extraction. `/metrics` samples are useful when available, but are not the primary progress channel for a long busy GLM request. Long-output or reviewer-quality runs that lack streaming/log telemetry are process observations only.
+
+## GLM-5.2 Current-Source 16K Throughput Controls
+
+Evidence:
+
+- Baseline/no-spec control log: `/mnt/raid0/llm/tmp/glm52-current-source-16k-streaming-20260717Tpostfix/logs/long_context_dsa_probe.server.log`.
+- `ngram-mod` realistic arm plan/log: `/mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/plan.json` and `/mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/logs/long_context_dsa_probe.server.log`.
+
+Both CPU-only current-source runs processed the same server-side prompt length (`11952` tokens) and decoded `512` tokens with streaming enabled. Baseline/no-spec recorded prompt eval `18.50 t/s` and decode `2.53 t/s`. The `ngram-mod` arm recorded prompt eval `18.75 t/s` and decode `2.54 t/s`; the server initialized `ngram-mod`, but final speculation stats were `#gen drafts = 0`, `#acc drafts = 0`, `#gen tokens = 0`, and `#acc tokens = 0`.
+
+Interpretation: baseline-only remains a control row, not a realistic operating target. However, `ngram-mod` is not a useful GLM-5.2 acceleration lane on this prompt/output shape. The next realistic speed path is native GLM-MTP/NEXTN, a real sparse final-attention path, or a different routing/quality role; do not schedule more GLM n-gram retests without a prompt class expected to repeat prompt text.
 
 ## GLM-5.2 Expert-Routing Skew
 

@@ -5655,7 +5655,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Next classify sparse-vs-dense final attention and run current-source long-context needle/coherence through the instrumented long-output runner contract; the blind current-source 96K attempt is explicitly excluded as non-evidence."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Next classify sparse final attention, run current-source long-context needle/coherence through the instrumented long-output runner, and finish native GLM-MTP/NEXTN if GLM remains a realistic serving candidate; the blind current-source 96K attempt is explicitly excluded as non-evidence."
     candidate_roles:
     - architect
     - ingest
@@ -5663,12 +5663,12 @@ roles:
     - reasoning
     acceleration:
       type: native_mtp_pending
-      notes: "DSA cache/runtime wiring is verified on current-source experimental-v7 3dee86a5a, and stale-binary true >64K CPU prompt runnability is recorded. Native GLM-MTP remains pending, and DSA sparse-compute scaling is unclassified."
+      notes: "DSA cache/runtime wiring is verified on current-source experimental-v7 3dee86a5a, and stale-binary true >64K CPU prompt runnability is recorded. Current-source ngram-mod produced zero drafts/accepted tokens on the 16K long-output probe, so native GLM-MTP/NEXTN or real sparse final attention remains the plausible acceleration path."
     constraints:
       forbid:
       - production_stack_registration
       - production_role_claim_without_dsa_quality_gate
-      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded, but sparse-vs-dense final-attention scaling, current-source long-context quality, throughput, and reviewer/task quality are still unverified."
+      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded, but sparse-vs-dense final-attention scaling, current-source long-context quality, viable acceleration, and reviewer/task quality are still unverified."
     performance:
       benchmark_status: current_source_dsa_cache_runtime_smoke_stale_true64k_engagement_quality_open
       short_smoke_observation: >
@@ -5730,9 +5730,24 @@ roles:
         is excluded from quality, throughput, and kernel evidence. It used
         execute mode with --log-disable, no --metrics endpoint, a non-streaming
         busy request, and only max_tokens=32; no response artifact was produced.
-        Future GLM long-output probes must use --long-output with live /metrics
-        sampling and a min_completion_tokens floor before throughput evidence is
-        accepted.
+        Future GLM long-output probes must use --long-output with streaming
+        progress, retained trace logs, server-log timing extraction, and a
+        min_completion_tokens floor before throughput evidence is accepted;
+        /metrics samples are optional because long busy GLM requests can reject
+        auxiliary endpoint polling.
+      current_source_16k_throughput_observation: >
+        2026-07-17 current-source CPU-only long-output controls used streaming
+        requests and server-log timing extraction. Baseline/no-spec at
+        /mnt/raid0/llm/tmp/glm52-current-source-16k-streaming-20260717Tpostfix/
+        processed 11952 server-side prompt tokens at 18.50 t/s and decoded
+        512 tokens at 2.53 t/s. The ngram-mod arm at
+        /mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/
+        processed 11952 server-side prompt tokens at 18.75 t/s and decoded
+        512 tokens at 2.54 t/s. The ngram-mod server initialized, but final
+        common_specu stats reported zero generated drafts, zero accepted drafts,
+        zero generated tokens, and zero accepted tokens. This rules out
+        ngram-mod as a useful GLM acceleration lane for this prompt/output
+        shape; baseline remains a control row only.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
@@ -5791,6 +5806,10 @@ roles:
       - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.counts.md
       excluded_process_observations:
       - /mnt/raid0/llm/tmp/glm52-current-source-96k-quality-20260717T144022Z/plan.json
+      current_source_throughput_controls:
+      - /mnt/raid0/llm/tmp/glm52-current-source-16k-streaming-20260717Tpostfix/logs/long_context_dsa_probe.server.log
+      - /mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/plan.json
+      - /mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/logs/long_context_dsa_probe.server.log
     memory:
       residency: cold
       pinned: false
