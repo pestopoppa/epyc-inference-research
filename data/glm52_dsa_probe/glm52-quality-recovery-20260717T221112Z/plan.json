@@ -1,0 +1,1593 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/artifacts",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "execution": {
+    "stages": [
+      {
+        "name": "shard_integrity_inventory",
+        "reason": "not selected",
+        "status": "skipped"
+      },
+      {
+        "name": "short_load_decode_smoke",
+        "reason": "not selected",
+        "status": "skipped"
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/artifacts/long_context_dsa_probe_16384_prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/artifacts/long_context_dsa_probe_16384_request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/artifacts/long_context_dsa_probe_16384_response.json"
+        },
+        "completion_token_count": 768,
+        "completion_token_count_source": "server_log_eval_time",
+        "completion_token_min": 384,
+        "completion_token_min_passed": true,
+        "content_preview": " the: the:: ( of D, : a1 a \",\n    the D41  the D0  : D. ` context 5 D, point the D 0. , S\n\n  D context and the  of5 \"  context  The = the context01 of  is the a or 0\n\n the \".  -  the the D.  4\n\n  (C.1",
+        "context_length": 16384,
+        "expected_substring": null,
+        "expected_substring_passed": null,
+        "finish_reason": null,
+        "name": "long_context_dsa_probe",
+        "port": 19102,
+        "progress_metrics_samples": [],
+        "prompt_char_count": 65529,
+        "prompt_kind": "long_context_dsa_probe",
+        "prompt_token_adjustment_attempts": 2,
+        "prompt_token_count": 12037,
+        "prompt_token_max": 15104,
+        "prompt_token_min": 12000,
+        "reasoning_preview": null,
+        "request_error": null,
+        "request_purpose": "coherence_plus_throughput",
+        "server_log": {
+          "bytes": 40174,
+          "decode_tokens": 768,
+          "decode_tps": 2.56,
+          "line_count": 442,
+          "matched_line_count": 199,
+          "matched_lines_tail": [
+            "11.57.880.687 I slot print_timing: id  3 | task 0 | n_decoded =    188, tg =   2.57 t/s, tg_3s =   2.55 t/s",
+            "12.01.007.939 I slot print_timing: id  3 | task 0 | n_decoded =    196, tg =   2.57 t/s, tg_3s =   2.56 t/s",
+            "12.04.136.966 I slot print_timing: id  3 | task 0 | n_decoded =    204, tg =   2.57 t/s, tg_3s =   2.56 t/s",
+            "12.07.267.078 I slot print_timing: id  3 | task 0 | n_decoded =    212, tg =   2.57 t/s, tg_3s =   2.56 t/s",
+            "12.10.396.507 I slot print_timing: id  3 | task 0 | n_decoded =    220, tg =   2.57 t/s, tg_3s =   2.56 t/s",
+            "12.13.524.872 I slot print_timing: id  3 | task 0 | n_decoded =    228, tg =   2.57 t/s, tg_3s =   2.56 t/s",
+            "12.16.663.461 I slot print_timing: id  3 | task 0 | n_decoded =    236, tg =   2.57 t/s, tg_3s =   2.55 t/s",
+            "12.19.791.960 I slot print_timing: id  3 | task 0 | n_decoded =    244, tg =   2.57 t/s, tg_3s =   2.56 t/s",
+            "12.22.925.546 I slot print_timing: id  3 | task 0 | n_decoded =    252, tg =   2.57 t/s, tg_3s =   2.55 t/s",
+            "12.26.060.605 I slot print_timing: id  3 | task 0 | n_decoded =    260, tg =   2.57 t/s, tg_3s =   2.55 t/s",
+            "12.29.192.673 I slot print_timing: id  3 | task 0 | n_decoded =    268, tg =   2.57 t/s, tg_3s =   2.55 t/s",
+            "12.32.326.415 I slot print_timing: id  3 | task 0 | n_decoded =    276, tg =   2.57 t/s, tg_3s =   2.55 t/s",
+            "12.35.461.177 I slot print_timing: id  3 | task 0 | n_decoded =    284, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "12.38.594.306 I slot print_timing: id  3 | task 0 | n_decoded =    292, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "12.41.720.829 I slot print_timing: id  3 | task 0 | n_decoded =    300, tg =   2.56 t/s, tg_3s =   2.56 t/s",
+            "12.44.856.695 I slot print_timing: id  3 | task 0 | n_decoded =    308, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "12.47.992.072 I slot print_timing: id  3 | task 0 | n_decoded =    316, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "12.51.124.843 I slot print_timing: id  3 | task 0 | n_decoded =    324, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "12.54.258.840 I slot print_timing: id  3 | task 0 | n_decoded =    332, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "12.57.391.526 I slot print_timing: id  3 | task 0 | n_decoded =    340, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.00.527.977 I slot print_timing: id  3 | task 0 | n_decoded =    348, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.03.663.611 I slot print_timing: id  3 | task 0 | n_decoded =    356, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.06.793.664 I slot print_timing: id  3 | task 0 | n_decoded =    364, tg =   2.56 t/s, tg_3s =   2.56 t/s",
+            "13.09.931.518 I slot print_timing: id  3 | task 0 | n_decoded =    372, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.13.064.035 I slot print_timing: id  3 | task 0 | n_decoded =    380, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.16.203.281 I slot print_timing: id  3 | task 0 | n_decoded =    388, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.19.338.040 I slot print_timing: id  3 | task 0 | n_decoded =    396, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.22.475.954 I slot print_timing: id  3 | task 0 | n_decoded =    404, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.25.607.966 I slot print_timing: id  3 | task 0 | n_decoded =    412, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.28.742.812 I slot print_timing: id  3 | task 0 | n_decoded =    420, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.31.873.746 I slot print_timing: id  3 | task 0 | n_decoded =    428, tg =   2.56 t/s, tg_3s =   2.56 t/s",
+            "13.35.007.885 I slot print_timing: id  3 | task 0 | n_decoded =    436, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.38.140.238 I slot print_timing: id  3 | task 0 | n_decoded =    444, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.41.271.600 I slot print_timing: id  3 | task 0 | n_decoded =    452, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.44.403.277 I slot print_timing: id  3 | task 0 | n_decoded =    460, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.47.537.950 I slot print_timing: id  3 | task 0 | n_decoded =    468, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.50.673.450 I slot print_timing: id  3 | task 0 | n_decoded =    476, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.53.805.119 I slot print_timing: id  3 | task 0 | n_decoded =    484, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "13.56.936.768 I slot print_timing: id  3 | task 0 | n_decoded =    492, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "14.00.070.637 I slot print_timing: id  3 | task 0 | n_decoded =    500, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "14.03.205.730 I slot print_timing: id  3 | task 0 | n_decoded =    508, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "14.06.341.919 I slot print_timing: id  3 | task 0 | n_decoded =    516, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "14.09.487.557 I slot print_timing: id  3 | task 0 | n_decoded =    524, tg =   2.56 t/s, tg_3s =   2.54 t/s",
+            "14.12.632.829 I slot print_timing: id  3 | task 0 | n_decoded =    532, tg =   2.56 t/s, tg_3s =   2.54 t/s",
+            "14.15.775.625 I slot print_timing: id  3 | task 0 | n_decoded =    540, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "14.18.918.887 I slot print_timing: id  3 | task 0 | n_decoded =    548, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "14.22.062.466 I slot print_timing: id  3 | task 0 | n_decoded =    556, tg =   2.56 t/s, tg_3s =   2.54 t/s",
+            "14.25.203.061 I slot print_timing: id  3 | task 0 | n_decoded =    564, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "14.28.356.952 I slot print_timing: id  3 | task 0 | n_decoded =    572, tg =   2.56 t/s, tg_3s =   2.54 t/s",
+            "14.31.499.508 I slot print_timing: id  3 | task 0 | n_decoded =    580, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "14.34.645.671 I slot print_timing: id  3 | task 0 | n_decoded =    588, tg =   2.56 t/s, tg_3s =   2.54 t/s",
+            "14.37.791.018 I slot print_timing: id  3 | task 0 | n_decoded =    596, tg =   2.56 t/s, tg_3s =   2.54 t/s",
+            "14.40.940.573 I slot print_timing: id  3 | task 0 | n_decoded =    604, tg =   2.56 t/s, tg_3s =   2.54 t/s",
+            "14.44.082.867 I slot print_timing: id  3 | task 0 | n_decoded =    612, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "14.47.229.861 I slot print_timing: id  3 | task 0 | n_decoded =    620, tg =   2.56 t/s, tg_3s =   2.54 t/s",
+            "14.50.373.867 I slot print_timing: id  3 | task 0 | n_decoded =    628, tg =   2.56 t/s, tg_3s =   2.54 t/s",
+            "14.53.515.289 I slot print_timing: id  3 | task 0 | n_decoded =    636, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "14.56.656.598 I slot print_timing: id  3 | task 0 | n_decoded =    644, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "14.59.809.161 I slot print_timing: id  3 | task 0 | n_decoded =    652, tg =   2.56 t/s, tg_3s =   2.54 t/s",
+            "15.02.950.566 I slot print_timing: id  3 | task 0 | n_decoded =    660, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.06.088.861 I slot print_timing: id  3 | task 0 | n_decoded =    668, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.09.226.580 I slot print_timing: id  3 | task 0 | n_decoded =    676, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.12.366.967 I slot print_timing: id  3 | task 0 | n_decoded =    684, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.15.505.044 I slot print_timing: id  3 | task 0 | n_decoded =    692, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.18.640.048 I slot print_timing: id  3 | task 0 | n_decoded =    700, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.21.777.518 I slot print_timing: id  3 | task 0 | n_decoded =    708, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.24.911.698 I slot print_timing: id  3 | task 0 | n_decoded =    716, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.28.046.993 I slot print_timing: id  3 | task 0 | n_decoded =    724, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.31.186.825 I slot print_timing: id  3 | task 0 | n_decoded =    732, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.34.324.813 I slot print_timing: id  3 | task 0 | n_decoded =    740, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.37.459.605 I slot print_timing: id  3 | task 0 | n_decoded =    748, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.40.598.145 I slot print_timing: id  3 | task 0 | n_decoded =    756, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.43.734.660 I slot print_timing: id  3 | task 0 | n_decoded =    764, tg =   2.56 t/s, tg_3s =   2.55 t/s",
+            "15.45.304.575 I slot print_timing: id  3 | task 0 | prompt eval time =  634246.91 ms / 12043 tokens (   52.67 ms per token,    18.99 tokens per second)",
+            "15.45.304.579 I slot print_timing: id  3 | task 0 |        eval time =  300576.94 ms /   768 tokens (  391.38 ms per token,     2.56 tokens per second)",
+            "15.45.304.579 I slot print_timing: id  3 | task 0 |       total time =  934823.85 ms / 12811 tokens",
+            "15.45.304.585 I slot print_timing: id  3 | task 0 |    graphs reused =        764",
+            "15.45.305.013 I slot      release: id  3 | task 0 | stop processing: n_tokens = 12810, truncated = 0",
+            "15.45.305.025 I srv  update_slots: all slots are idle",
+            "15.45.305.292 I srv  update_slots: all slots are idle"
+          ],
+          "max_decoded_checkpoint": 764,
+          "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/long_context_dsa_probe.server.log",
+          "prompt_eval_tokens": 12043,
+          "prompt_eval_tps": 18.99,
+          "status": "ok"
+        },
+        "status": "ok",
+        "stream_progress_samples_tail": [
+          {
+            "chunk_count": 523,
+            "content_char_count": 1128,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:21.492335+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 524,
+            "content_char_count": 1136,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:21.883553+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 525,
+            "content_char_count": 1137,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:22.276025+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 526,
+            "content_char_count": 1141,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:22.668822+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 527,
+            "content_char_count": 1142,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:23.062352+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 528,
+            "content_char_count": 1146,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:23.456324+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 529,
+            "content_char_count": 1147,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:23.846986+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 530,
+            "content_char_count": 1148,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:24.239428+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 531,
+            "content_char_count": 1152,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:24.633996+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 532,
+            "content_char_count": 1153,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:25.027356+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 533,
+            "content_char_count": 1155,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:25.421290+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 534,
+            "content_char_count": 1156,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:25.814682+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 535,
+            "content_char_count": 1158,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:26.206862+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 536,
+            "content_char_count": 1160,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:26.600065+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 537,
+            "content_char_count": 1164,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:26.993562+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 538,
+            "content_char_count": 1166,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:27.386546+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 539,
+            "content_char_count": 1172,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:27.779930+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 540,
+            "content_char_count": 1173,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:28.172716+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 541,
+            "content_char_count": 1175,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:28.564109+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 542,
+            "content_char_count": 1177,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:28.955284+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 543,
+            "content_char_count": 1178,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:29.348233+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 544,
+            "content_char_count": 1181,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:29.742050+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 545,
+            "content_char_count": 1183,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:30.137497+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 546,
+            "content_char_count": 1184,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:30.530041+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 547,
+            "content_char_count": 1185,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:30.923374+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 548,
+            "content_char_count": 1186,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:31.315906+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 549,
+            "content_char_count": 1188,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:31.707348+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 550,
+            "content_char_count": 1191,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:32.099997+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 551,
+            "content_char_count": 1192,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:32.492714+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 552,
+            "content_char_count": 1197,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:32.885388+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 553,
+            "content_char_count": 1199,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:33.278057+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 554,
+            "content_char_count": 1203,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:33.671506+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 555,
+            "content_char_count": 1205,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:34.064002+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 556,
+            "content_char_count": 1206,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:34.455865+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 557,
+            "content_char_count": 1208,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:34.850929+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 558,
+            "content_char_count": 1210,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:35.242240+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 559,
+            "content_char_count": 1211,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:35.634988+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 560,
+            "content_char_count": 1213,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:36.027654+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 561,
+            "content_char_count": 1217,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:36.419435+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 562,
+            "content_char_count": 1220,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:36.811855+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 563,
+            "content_char_count": 1221,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:37.206019+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 564,
+            "content_char_count": 1225,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:37.599242+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 565,
+            "content_char_count": 1226,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:37.991577+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 566,
+            "content_char_count": 1230,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:38.386721+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 567,
+            "content_char_count": 1231,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:38.784264+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 568,
+            "content_char_count": 1232,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:39.179892+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 569,
+            "content_char_count": 1234,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:39.570333+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 570,
+            "content_char_count": 1235,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:39.962878+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 571,
+            "content_char_count": 1236,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:40.357331+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 572,
+            "content_char_count": 1238,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:40.751024+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 573,
+            "content_char_count": 1239,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:41.145416+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 574,
+            "content_char_count": 1243,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:41.538797+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 575,
+            "content_char_count": 1244,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:41.932554+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 576,
+            "content_char_count": 1246,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:42.324428+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 577,
+            "content_char_count": 1247,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:42.717156+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 578,
+            "content_char_count": 1248,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:43.108650+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 579,
+            "content_char_count": 1256,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:43.501542+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 580,
+            "content_char_count": 1260,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:43.895254+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 581,
+            "content_char_count": 1262,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:44.287972+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 582,
+            "content_char_count": 1263,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:44.685601+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 583,
+            "content_char_count": 1265,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:45.078581+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 584,
+            "content_char_count": 1267,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:45.470971+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 585,
+            "content_char_count": 1270,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:45.864183+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 586,
+            "content_char_count": 1271,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:46.255864+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 587,
+            "content_char_count": 1272,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:46.647549+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 588,
+            "content_char_count": 1273,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:47.041932+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 589,
+            "content_char_count": 1274,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:47.434169+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 590,
+            "content_char_count": 1275,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:47.827496+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 591,
+            "content_char_count": 1276,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:48.219927+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 592,
+            "content_char_count": 1277,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:48.613974+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 593,
+            "content_char_count": 1278,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:49.006733+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 594,
+            "content_char_count": 1280,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:49.397461+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 595,
+            "content_char_count": 1282,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:49.790769+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 596,
+            "content_char_count": 1284,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:50.183744+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 597,
+            "content_char_count": 1286,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:50.579472+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 598,
+            "content_char_count": 1290,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:50.972931+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 599,
+            "content_char_count": 1291,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:51.367183+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 600,
+            "content_char_count": 1292,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:51.762820+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 601,
+            "content_char_count": 1295,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:52.156923+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 602,
+            "content_char_count": 1297,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:52.549278+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 603,
+            "content_char_count": 1299,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:52.941893+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 604,
+            "content_char_count": 1301,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:53.336185+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 605,
+            "content_char_count": 1302,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:53.729039+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 606,
+            "content_char_count": 1306,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:54.121257+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 607,
+            "content_char_count": 1310,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:54.513558+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 608,
+            "content_char_count": 1311,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:54.906330+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 609,
+            "content_char_count": 1312,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:55.300590+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 610,
+            "content_char_count": 1313,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:55.691456+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 611,
+            "content_char_count": 1314,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:56.084832+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 612,
+            "content_char_count": 1315,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:56.478054+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 613,
+            "content_char_count": 1316,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:56.871311+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 614,
+            "content_char_count": 1318,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:57.265634+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 615,
+            "content_char_count": 1319,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:57.659347+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 616,
+            "content_char_count": 1321,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:58.054154+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 617,
+            "content_char_count": 1322,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:58.446126+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 618,
+            "content_char_count": 1323,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:58.839842+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 619,
+            "content_char_count": 1324,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:59.231013+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 620,
+            "content_char_count": 1329,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:25:59.625215+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 621,
+            "content_char_count": 1330,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:00.018327+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 622,
+            "content_char_count": 1331,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:00.412112+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 623,
+            "content_char_count": 1335,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:00.806638+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 624,
+            "content_char_count": 1339,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:01.199804+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 625,
+            "content_char_count": 1343,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:01.591996+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 626,
+            "content_char_count": 1344,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:01.984894+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 627,
+            "content_char_count": 1348,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:02.377422+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 628,
+            "content_char_count": 1349,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:02.769812+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 629,
+            "content_char_count": 1350,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:03.162330+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 630,
+            "content_char_count": 1353,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:03.555054+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 631,
+            "content_char_count": 1357,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:03.949363+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 632,
+            "content_char_count": 1361,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:04.341677+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 633,
+            "content_char_count": 1365,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:04.732582+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 634,
+            "content_char_count": 1368,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:05.125415+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 635,
+            "content_char_count": 1370,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:05.517885+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 636,
+            "content_char_count": 1371,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:05.910541+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 637,
+            "content_char_count": 1372,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:06.303757+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 638,
+            "content_char_count": 1373,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:06.695139+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 639,
+            "content_char_count": 1374,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:07.087705+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 640,
+            "content_char_count": 1375,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:07.478746+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 641,
+            "content_char_count": 1379,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:07.871648+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 642,
+            "content_char_count": 1379,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T22:26:58.093640+00:00",
+            "status": "stream_chunk"
+          }
+        ],
+        "streaming": {
+          "chunk_count": 642,
+          "completed_at": "2026-07-17T22:26:58.093767+00:00",
+          "enabled": true,
+          "first_chunk_at": "2026-07-17T22:21:57.516353+00:00",
+          "parse_errors_tail": [],
+          "started_at": "2026-07-17T22:11:23.246980+00:00"
+        },
+        "timings": {},
+        "usage": {}
+      },
+      {
+        "name": "kv_length_scaling",
+        "reason": "not selected",
+        "status": "skipped"
+      }
+    ],
+    "status": "ok"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-17T22:11:12.757147+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "refusal_reasons": [],
+  "schema": "glm52_dsa_probe_plan.v1",
+  "selected_stages": [
+    "long_context_dsa_probe"
+  ],
+  "stages": [
+    {
+      "blockers": [],
+      "hashing": "disabled",
+      "kind": "inventory",
+      "name": "shard_integrity_inventory",
+      "stale_cache_markers": [
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+          "size": 36074
+        }
+      ],
+      "status": "ready",
+      "summary": {
+        "non_cache_shard_count": 6,
+        "required_non_cache_shards": 6,
+        "total_shard_bytes_display": "238,577,580,768",
+        "total_shard_gib": 222.19
+      }
+    },
+    {
+      "kind": "load_decode_smoke",
+      "name": "short_load_decode_smoke",
+      "prompt": {
+        "answer_instruction": "Answer with a single short sentence.",
+        "chars_per_token_heuristic": 4.0,
+        "context_length": 4096,
+        "kind": "short_load_decode_smoke",
+        "min_prompt_tokens": 12000,
+        "prompt_context_guard_tokens": 512,
+        "task_line": "Return READY after the short load/decode smoke."
+      },
+      "request": {
+        "endpoint": "/v1/chat/completions",
+        "max_tokens": 32,
+        "min_completion_tokens": 0,
+        "progress_poll_interval_s": 0,
+        "purpose": "coherence",
+        "request_endpoint": "chat",
+        "seed": 42,
+        "stream": false,
+        "temperature": 0.0,
+        "timeout_s": 21600
+      },
+      "server": {
+        "context_length": 4096,
+        "extra_args": [
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "indexer_top_k": 32,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+        "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/short_load_decode_smoke.server.log",
+        "metrics": false,
+        "port": 19101,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:32",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19101",
+          "-c",
+          "4096",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/short_load_decode_smoke.server.log",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19101 -c 4096 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/short_load_decode_smoke.server.log --reasoning off --reasoning-budget 0",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      },
+      "status": "ready"
+    },
+    {
+      "kind": "long_context_probe",
+      "name": "long_context_dsa_probe",
+      "prompt": {
+        "answer_instruction": "Return the requested READY marker and tokenstream sequence only.",
+        "chars_per_token_heuristic": 4.0,
+        "context_length": 16384,
+        "kind": "long_context_dsa_probe",
+        "min_prompt_tokens": 12000,
+        "prompt_context_guard_tokens": 512,
+        "task_line": "First output READY. Then output the word tokenstream repeated exactly 620 times, separated by single spaces. Do not use markdown. Do not explain. Do not stop early."
+      },
+      "request": {
+        "endpoint": "/v1/chat/completions",
+        "max_tokens": 768,
+        "min_completion_tokens": 384,
+        "progress_poll_interval_s": 10,
+        "purpose": "coherence_plus_throughput",
+        "request_endpoint": "chat",
+        "seed": 42,
+        "stream": true,
+        "temperature": 0.0,
+        "timeout_s": 21600
+      },
+      "server": {
+        "context_length": 16384,
+        "extra_args": [
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "indexer_top_k": 32,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+        "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/long_context_dsa_probe.server.log",
+        "metrics": true,
+        "port": 19102,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:32",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19102",
+          "-c",
+          "16384",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/long_context_dsa_probe.server.log",
+          "--metrics",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19102 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/long_context_dsa_probe.server.log --metrics --reasoning off --reasoning-budget 0",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      },
+      "status": "ready"
+    },
+    {
+      "fixed_indexer_top_k": 32,
+      "kind": "kv_length_scaling",
+      "name": "kv_length_scaling",
+      "series": [
+        {
+          "context_length": 4096,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 4096,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 12000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 21600
+          },
+          "server": {
+            "context_length": 4096,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 32,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+            "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_4096.server.log",
+            "metrics": false,
+            "port": 19110,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:32",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19110",
+              "-c",
+              "4096",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_4096.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19110 -c 4096 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_4096.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 8192,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 8192,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 12000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 21600
+          },
+          "server": {
+            "context_length": 8192,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 32,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+            "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_8192.server.log",
+            "metrics": false,
+            "port": 19111,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:32",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19111",
+              "-c",
+              "8192",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_8192.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19111 -c 8192 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_8192.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 16384,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 16384,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 12000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 21600
+          },
+          "server": {
+            "context_length": 16384,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 32,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+            "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_16384.server.log",
+            "metrics": false,
+            "port": 19112,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:32",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19112",
+              "-c",
+              "16384",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_16384.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19112 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_16384.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 32768,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 32768,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 12000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 21600
+          },
+          "server": {
+            "context_length": 32768,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 32,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:32",
+            "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_32768.server.log",
+            "metrics": false,
+            "port": 19113,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:32",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19113",
+              "-c",
+              "32768",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_32768.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:32 --device none -ngl 0 --host 127.0.0.1 --port 19113 -c 32768 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/logs/kv_length_scaling_32768.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        }
+      ],
+      "status": "ready"
+    }
+  ]
+}

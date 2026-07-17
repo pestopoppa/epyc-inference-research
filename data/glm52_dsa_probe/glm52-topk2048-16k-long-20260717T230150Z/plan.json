@@ -1,0 +1,1379 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/artifacts",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "execution": {
+    "stages": [
+      {
+        "name": "shard_integrity_inventory",
+        "reason": "not selected",
+        "status": "skipped"
+      },
+      {
+        "name": "short_load_decode_smoke",
+        "reason": "not selected",
+        "status": "skipped"
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/artifacts/long_context_dsa_probe_16384_prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/artifacts/long_context_dsa_probe_16384_request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/artifacts/long_context_dsa_probe_16384_response.json"
+        },
+        "completion_token_count": 85,
+        "completion_token_count_source": "usage",
+        "completion_token_min": 384,
+        "completion_token_min_passed": false,
+        "content_preview": " the GL context, 0  |00\n\n\n\n00\n DSA </think>0: the the context...\n\n DSA and and The, the0 and. a\n8\n 000 0. the GLM0 0 the000 is the is |00: 00 under0 DSA. The 01005003M00",
+        "context_length": 16384,
+        "expected_substring": null,
+        "expected_substring_passed": null,
+        "finish_reason": "stop",
+        "name": "long_context_dsa_probe",
+        "port": 19102,
+        "progress_metrics_samples": [],
+        "prompt_char_count": 65529,
+        "prompt_kind": "long_context_dsa_probe",
+        "prompt_token_adjustment_attempts": 2,
+        "prompt_token_count": 12037,
+        "prompt_token_max": 15104,
+        "prompt_token_min": 12000,
+        "reasoning_preview": null,
+        "request_error": null,
+        "request_purpose": "coherence_plus_throughput",
+        "server_log": {
+          "bytes": 29194,
+          "decode_tokens": 85,
+          "decode_tps": 2.16,
+          "line_count": 331,
+          "matched_line_count": 114,
+          "matched_lines_tail": [
+            "0.00.305.816 I llama_model_loader: - kv  50:                      tokenizer.ggml.tokens arr[str,154880]  = [\"!\", \"\\\"\", \"#\", \"$\", \"%\", \"&\", \"'\", ...",
+            "0.00.325.030 I llama_model_loader: - kv  62:                      quantize.imatrix.file str              = GLM-5.2-GGUF/imatrix_unsloth.gguf",
+            "0.00.325.030 I llama_model_loader: - kv  63:                   quantize.imatrix.dataset str              = unsloth_calibration_GLM-5.2.txt",
+            "0.00.325.094 I validate_override: Using metadata override (  int) 'glm-dsa.attention.indexer.top_k' = 0.00.325.096 I 2048",
+            "0.00.385.505 I load: 0 unused tokens",
+            "0.00.394.839 I load: printing all EOG tokens:",
+            "0.00.394.915 I load: special tokens cache size = 36",
+            "0.00.421.077 I print_info: arch                  = glm-dsa",
+            "0.00.421.080 I print_info: n_layer               = 78",
+            "0.00.421.080 I print_info: n_layer_all           = 79",
+            "0.00.421.110 I print_info: n_layer_dense_lead    = 3",
+            "0.00.426.454 W model has unused tensor blk.78.attn_norm.weight (size = 24576 bytes) -- ignoring",
+            "0.00.426.457 W model has unused tensor blk.78.attn_q_a_norm.weight (size = 8192 bytes) -- ignoring",
+            "0.00.426.459 W model has unused tensor blk.78.attn_kv_a_norm.weight (size = 2048 bytes) -- ignoring",
+            "0.00.426.462 W model has unused tensor blk.78.attn_q_a.weight (size = 8650752 bytes) -- ignoring",
+            "0.00.426.464 W model has unused tensor blk.78.attn_q_b.weight (size = 35651584 bytes) -- ignoring",
+            "0.00.426.466 W model has unused tensor blk.78.attn_kv_a_mqa.weight (size = 3760128 bytes) -- ignoring",
+            "0.00.426.468 W model has unused tensor blk.78.attn_k_b.weight (size = 6684672 bytes) -- ignoring",
+            "0.00.426.470 W model has unused tensor blk.78.attn_v_b.weight (size = 8912896 bytes) -- ignoring",
+            "0.00.426.472 W model has unused tensor blk.78.attn_output.weight (size = 69206016 bytes) -- ignoring",
+            "0.00.426.476 W model has unused tensor blk.78.ffn_norm.weight (size = 24576 bytes) -- ignoring",
+            "0.00.426.478 W model has unused tensor blk.78.indexer.k_norm.weight (size = 512 bytes) -- ignoring",
+            "0.00.426.480 W model has unused tensor blk.78.indexer.k_norm.bias (size = 512 bytes) -- ignoring",
+            "0.00.426.484 W model has unused tensor blk.78.indexer.proj.weight (size = 786432 bytes) -- ignoring",
+            "0.00.426.486 W model has unused tensor blk.78.indexer.attn_k.weight (size = 835584 bytes) -- ignoring",
+            "0.00.426.488 W model has unused tensor blk.78.indexer.attn_q_b.weight (size = 8912896 bytes) -- ignoring",
+            "0.00.426.490 W model has unused tensor blk.78.ffn_gate_inp.weight (size = 6291456 bytes) -- ignoring",
+            "0.00.426.496 W model has unused tensor blk.78.ffn_gate_exps.weight (size = 1056964608 bytes) -- ignoring",
+            "0.00.426.499 W model has unused tensor blk.78.ffn_down_exps.weight (size = 1384120320 bytes) -- ignoring",
+            "0.00.426.501 W model has unused tensor blk.78.ffn_up_exps.weight (size = 1056964608 bytes) -- ignoring",
+            "0.00.426.503 W model has unused tensor blk.78.ffn_gate_shexp.weight (size = 8650752 bytes) -- ignoring",
+            "0.00.426.506 W model has unused tensor blk.78.ffn_down_shexp.weight (size = 10321920 bytes) -- ignoring",
+            "0.00.426.508 W model has unused tensor blk.78.ffn_up_shexp.weight (size = 8650752 bytes) -- ignoring",
+            "0.00.426.512 W model has unused tensor blk.78.nextn.eh_proj.weight (size = 80216064 bytes) -- ignoring",
+            "0.00.426.514 W model has unused tensor blk.78.nextn.enorm.weight (size = 24576 bytes) -- ignoring",
+            "0.00.426.516 W model has unused tensor blk.78.nextn.hnorm.weight (size = 24576 bytes) -- ignoring",
+            "0.00.426.523 W model has unused tensor blk.78.nextn.shared_head_norm.weight (size = 24576 bytes) -- ignoring",
+            "0.07.773.638 I llama_kv_cache_dsa: creating main KV cache, size = 16384 cells",
+            "0.07.856.843 I llama_kv_cache_dsa: creating indexer KV cache, size = 16384 cells",
+            "0.07.879.988 I resolve_fused_ops: resolving fused Lightning Indexer support:",
+            "0.07.881.000 I resolve_fused_ops: Lightning Indexer enabled",
+            "0.09.269.889 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 16384, kv_unified = 'true'",
+            "0.09.269.913 I slot   load_model: id  0 | task -1 | new slot, n_ctx = 16384",
+            "0.09.269.919 I slot   load_model: id  1 | task -1 | new slot, n_ctx = 16384",
+            "0.09.269.920 I slot   load_model: id  2 | task -1 | new slot, n_ctx = 16384",
+            "0.09.269.920 I slot   load_model: id  3 | task -1 | new slot, n_ctx = 16384",
+            "0.09.269.991 I srv          init: idle slots will be saved to prompt cache and cleared upon starting a new task",
+            "0.09.290.284 I srv  update_slots: all slots are idle",
+            "0.10.391.079 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1",
+            "0.10.391.097 I srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 16384 tokens, 8589934592 est)",
+            "0.10.391.127 I cmn  common_reaso: activated, budget=0 tokens",
+            "0.10.391.152 I slot launch_slot_: id  3 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+            "0.10.391.161 I slot launch_slot_: id  3 | task -1 | sampler params: ",
+            "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+            "0.10.391.163 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0",
+            "0.10.391.164 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+            "0.10.391.166 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+            "0.10.391.191 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+            "0.10.391.192 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+            "0.10.391.213 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+            "0.10.391.214 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+            "0.10.391.249 I slot   operator(): id  3 | task 0 | new prompt, n_ctx_slot = 16384, n_keep = 0, task.n_tokens = 12043",
+            "0.10.391.260 I slot   operator(): id  3 | task 0 | cached n_tokens = 0, memory_seq_rm [0, end)",
+            "1.27.964.727 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =   2048, progress = 0.17, t =  77.57 s / 26.40 tokens per second",
+            "1.27.964.739 I slot   operator(): id  3 | task 0 | cached n_tokens = 2048, memory_seq_rm [2048, end)",
+            "3.05.288.236 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =   4096, progress = 0.34, t = 174.90 s / 23.42 tokens per second",
+            "3.05.288.244 I slot   operator(): id  3 | task 0 | cached n_tokens = 4096, memory_seq_rm [4096, end)",
+            "5.02.023.736 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =   6144, progress = 0.51, t = 291.63 s / 21.07 tokens per second",
+            "5.02.023.744 I slot   operator(): id  3 | task 0 | cached n_tokens = 6144, memory_seq_rm [6144, end)",
+            "7.16.676.298 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =   8192, progress = 0.68, t = 426.29 s / 19.22 tokens per second",
+            "7.16.676.309 I slot   operator(): id  3 | task 0 | cached n_tokens = 8192, memory_seq_rm [8192, end)",
+            "9.46.627.751 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =  10240, progress = 0.85, t = 576.24 s / 17.77 tokens per second",
+            "9.46.627.758 I slot   operator(): id  3 | task 0 | cached n_tokens = 10240, memory_seq_rm [10240, end)",
+            "9.46.629.335 I slot init_sampler: id  3 | task 0 | init sampler, took 1.53 ms, tokens: text = 12043, total = 12043",
+            "12.53.434.604 I slot print_timing: id  3 | task 0 | prompt eval time =  723609.10 ms / 12043 tokens (   60.09 ms per token,    16.64 tokens per second)",
+            "12.53.434.612 I slot print_timing: id  3 | task 0 |        eval time =   39434.22 ms /    85 tokens (  463.93 ms per token,     2.16 tokens per second)",
+            "12.53.434.614 I slot print_timing: id  3 | task 0 |       total time =  763043.32 ms / 12128 tokens",
+            "12.53.434.620 I slot print_timing: id  3 | task 0 |    graphs reused =         84",
+            "12.53.434.884 I slot      release: id  3 | task 0 | stop processing: n_tokens = 12127, truncated = 0",
+            "12.53.434.896 I srv  update_slots: all slots are idle"
+          ],
+          "max_decoded_checkpoint": null,
+          "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/long_context_dsa_probe.server.log",
+          "prompt_eval_tokens": 12043,
+          "prompt_eval_tps": 16.64,
+          "status": "ok"
+        },
+        "status": "failed_completion_floor",
+        "stream_progress_samples_tail": [
+          {
+            "chunk_count": 1,
+            "content_char_count": 0,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:04.955190+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 2,
+            "content_char_count": 4,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:04.955235+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 3,
+            "content_char_count": 7,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:05.433640+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 4,
+            "content_char_count": 15,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:05.905995+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 5,
+            "content_char_count": 16,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:06.379246+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 6,
+            "content_char_count": 17,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:06.851828+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 7,
+            "content_char_count": 18,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:07.321837+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 8,
+            "content_char_count": 19,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:07.791623+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 9,
+            "content_char_count": 21,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:08.261394+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 10,
+            "content_char_count": 22,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:08.732540+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 11,
+            "content_char_count": 23,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:09.202718+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 12,
+            "content_char_count": 25,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:09.671830+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 13,
+            "content_char_count": 27,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:10.142306+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 14,
+            "content_char_count": 28,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:10.610286+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 15,
+            "content_char_count": 29,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:11.079259+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 16,
+            "content_char_count": 30,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:11.547785+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 17,
+            "content_char_count": 32,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:12.015999+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 18,
+            "content_char_count": 34,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:12.484236+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 19,
+            "content_char_count": 35,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:12.953023+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 20,
+            "content_char_count": 43,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:13.421443+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 21,
+            "content_char_count": 44,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:13.890041+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 22,
+            "content_char_count": 45,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:14.360194+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 23,
+            "content_char_count": 49,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:14.831599+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 24,
+            "content_char_count": 53,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:15.299988+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 25,
+            "content_char_count": 61,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:15.767865+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 26,
+            "content_char_count": 66,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:16.234167+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 27,
+            "content_char_count": 68,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:16.702340+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 28,
+            "content_char_count": 70,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:17.170824+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 29,
+            "content_char_count": 74,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:17.640881+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 30,
+            "content_char_count": 78,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:18.109593+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 31,
+            "content_char_count": 82,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:18.578369+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 32,
+            "content_char_count": 83,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:19.047854+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 33,
+            "content_char_count": 87,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:19.522105+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 34,
+            "content_char_count": 88,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:19.992947+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 35,
+            "content_char_count": 92,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:20.460880+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 36,
+            "content_char_count": 93,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:20.930123+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 37,
+            "content_char_count": 95,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:21.397625+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 38,
+            "content_char_count": 96,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:21.866450+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 39,
+            "content_char_count": 97,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:22.335017+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 40,
+            "content_char_count": 98,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:22.802122+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 41,
+            "content_char_count": 99,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:23.270012+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 42,
+            "content_char_count": 100,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:23.740304+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 43,
+            "content_char_count": 101,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:24.210070+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 44,
+            "content_char_count": 102,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:24.680071+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 45,
+            "content_char_count": 103,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:25.148924+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 46,
+            "content_char_count": 104,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:25.618182+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 47,
+            "content_char_count": 105,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:26.086643+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 48,
+            "content_char_count": 109,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:26.556628+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 49,
+            "content_char_count": 112,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:27.026121+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 50,
+            "content_char_count": 113,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:27.495849+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 51,
+            "content_char_count": 114,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:27.963919+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 52,
+            "content_char_count": 115,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:28.432141+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 53,
+            "content_char_count": 116,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:28.902224+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 54,
+            "content_char_count": 120,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:29.371129+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 55,
+            "content_char_count": 121,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:29.838393+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 56,
+            "content_char_count": 122,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:30.307401+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 57,
+            "content_char_count": 123,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:30.775400+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 58,
+            "content_char_count": 126,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:31.245165+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 59,
+            "content_char_count": 130,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:31.714839+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 60,
+            "content_char_count": 133,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:32.185641+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 61,
+            "content_char_count": 135,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:32.656333+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 62,
+            "content_char_count": 136,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:33.125992+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 63,
+            "content_char_count": 137,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:33.596136+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 64,
+            "content_char_count": 138,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:34.064911+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 65,
+            "content_char_count": 139,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:34.533374+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 66,
+            "content_char_count": 140,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:35.005773+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 67,
+            "content_char_count": 141,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:35.474444+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 68,
+            "content_char_count": 147,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:35.944253+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 69,
+            "content_char_count": 148,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:36.413153+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 70,
+            "content_char_count": 150,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:36.882789+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 71,
+            "content_char_count": 152,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:37.353260+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 72,
+            "content_char_count": 153,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:37.823582+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 73,
+            "content_char_count": 157,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:38.290489+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 74,
+            "content_char_count": 158,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:38.759394+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 75,
+            "content_char_count": 159,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:39.229481+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 76,
+            "content_char_count": 160,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:39.698328+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 77,
+            "content_char_count": 161,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:40.167756+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 78,
+            "content_char_count": 162,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:40.635745+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 79,
+            "content_char_count": 163,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:41.105005+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 80,
+            "content_char_count": 164,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:41.574214+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 81,
+            "content_char_count": 165,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:42.044127+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 82,
+            "content_char_count": 166,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:42.513883+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 83,
+            "content_char_count": 167,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:42.984121+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 84,
+            "content_char_count": 168,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:43.453031+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 85,
+            "content_char_count": 169,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:43.919305+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 86,
+            "content_char_count": 169,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:44.389481+00:00",
+            "status": "stream_chunk"
+          },
+          {
+            "chunk_count": 87,
+            "content_char_count": 169,
+            "reasoning_char_count": 0,
+            "sampled_at": "2026-07-17T23:14:44.389529+00:00",
+            "status": "stream_chunk"
+          }
+        ],
+        "streaming": {
+          "chunk_count": 87,
+          "completed_at": "2026-07-17T23:14:44.389548+00:00",
+          "enabled": true,
+          "first_chunk_at": "2026-07-17T23:14:04.955158+00:00",
+          "parse_errors_tail": [],
+          "started_at": "2026-07-17T23:02:01.314881+00:00"
+        },
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 39434.223,
+          "predicted_n": 85,
+          "predicted_per_second": 2.1554881403394206,
+          "predicted_per_token_ms": 463.9320352941176,
+          "prompt_ms": 723609.102,
+          "prompt_n": 12043,
+          "prompt_per_second": 16.6429636757112,
+          "prompt_per_token_ms": 60.08545229593955
+        },
+        "usage": {
+          "completion_tokens": 85,
+          "prompt_tokens": 12043,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 12128
+        }
+      },
+      {
+        "name": "kv_length_scaling",
+        "reason": "not selected",
+        "status": "skipped"
+      }
+    ],
+    "status": "failed"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-17T23:01:50.923870+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "refusal_reasons": [],
+  "schema": "glm52_dsa_probe_plan.v1",
+  "selected_stages": [
+    "long_context_dsa_probe"
+  ],
+  "stages": [
+    {
+      "blockers": [],
+      "hashing": "disabled",
+      "kind": "inventory",
+      "name": "shard_integrity_inventory",
+      "stale_cache_markers": [
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+          "size": 36074
+        }
+      ],
+      "status": "ready",
+      "summary": {
+        "non_cache_shard_count": 6,
+        "required_non_cache_shards": 6,
+        "total_shard_bytes_display": "238,577,580,768",
+        "total_shard_gib": 222.19
+      }
+    },
+    {
+      "kind": "load_decode_smoke",
+      "name": "short_load_decode_smoke",
+      "prompt": {
+        "answer_instruction": "Answer with a single short sentence.",
+        "chars_per_token_heuristic": 4.0,
+        "context_length": 4096,
+        "kind": "short_load_decode_smoke",
+        "min_prompt_tokens": 12000,
+        "prompt_context_guard_tokens": 512,
+        "task_line": "Return READY after the short load/decode smoke."
+      },
+      "request": {
+        "endpoint": "/v1/chat/completions",
+        "max_tokens": 32,
+        "min_completion_tokens": 0,
+        "progress_poll_interval_s": 0,
+        "purpose": "coherence",
+        "request_endpoint": "chat",
+        "seed": 42,
+        "stream": false,
+        "temperature": 0.0,
+        "timeout_s": 21600
+      },
+      "server": {
+        "context_length": 4096,
+        "extra_args": [
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "indexer_top_k": 2048,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:2048",
+        "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/short_load_decode_smoke.server.log",
+        "metrics": false,
+        "port": 19101,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:2048",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19101",
+          "-c",
+          "4096",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/short_load_decode_smoke.server.log",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:2048 --device none -ngl 0 --host 127.0.0.1 --port 19101 -c 4096 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/short_load_decode_smoke.server.log --reasoning off --reasoning-budget 0",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      },
+      "status": "ready"
+    },
+    {
+      "kind": "long_context_probe",
+      "name": "long_context_dsa_probe",
+      "prompt": {
+        "answer_instruction": "Return the requested READY marker and tokenstream sequence only.",
+        "chars_per_token_heuristic": 4.0,
+        "context_length": 16384,
+        "kind": "long_context_dsa_probe",
+        "min_prompt_tokens": 12000,
+        "prompt_context_guard_tokens": 512,
+        "task_line": "First output READY. Then output the word tokenstream repeated exactly 620 times, separated by single spaces. Do not use markdown. Do not explain. Do not stop early."
+      },
+      "request": {
+        "endpoint": "/v1/chat/completions",
+        "max_tokens": 768,
+        "min_completion_tokens": 384,
+        "progress_poll_interval_s": 10,
+        "purpose": "coherence_plus_throughput",
+        "request_endpoint": "chat",
+        "seed": 42,
+        "stream": true,
+        "temperature": 0.0,
+        "timeout_s": 21600
+      },
+      "server": {
+        "context_length": 16384,
+        "extra_args": [
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "indexer_top_k": 2048,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:2048",
+        "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/long_context_dsa_probe.server.log",
+        "metrics": true,
+        "port": 19102,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:2048",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19102",
+          "-c",
+          "16384",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/long_context_dsa_probe.server.log",
+          "--metrics",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:2048 --device none -ngl 0 --host 127.0.0.1 --port 19102 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/long_context_dsa_probe.server.log --metrics --reasoning off --reasoning-budget 0",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      },
+      "status": "ready"
+    },
+    {
+      "fixed_indexer_top_k": 2048,
+      "kind": "kv_length_scaling",
+      "name": "kv_length_scaling",
+      "series": [
+        {
+          "context_length": 4096,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 4096,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 12000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 21600
+          },
+          "server": {
+            "context_length": 4096,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 2048,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:2048",
+            "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_4096.server.log",
+            "metrics": false,
+            "port": 19110,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:2048",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19110",
+              "-c",
+              "4096",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_4096.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:2048 --device none -ngl 0 --host 127.0.0.1 --port 19110 -c 4096 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_4096.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 8192,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 8192,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 12000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 21600
+          },
+          "server": {
+            "context_length": 8192,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 2048,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:2048",
+            "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_8192.server.log",
+            "metrics": false,
+            "port": 19111,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:2048",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19111",
+              "-c",
+              "8192",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_8192.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:2048 --device none -ngl 0 --host 127.0.0.1 --port 19111 -c 8192 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_8192.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 16384,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 16384,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 12000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 21600
+          },
+          "server": {
+            "context_length": 16384,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 2048,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:2048",
+            "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_16384.server.log",
+            "metrics": false,
+            "port": 19112,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:2048",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19112",
+              "-c",
+              "16384",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_16384.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:2048 --device none -ngl 0 --host 127.0.0.1 --port 19112 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_16384.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 32768,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 32768,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 12000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 32,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 21600
+          },
+          "server": {
+            "context_length": 32768,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 2048,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:2048",
+            "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_32768.server.log",
+            "metrics": false,
+            "port": 19113,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:2048",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19113",
+              "-c",
+              "32768",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "/mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_32768.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:2048 --device none -ngl 0 --host 127.0.0.1 --port 19113 -c 32768 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/kv_length_scaling_32768.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        }
+      ],
+      "status": "ready"
+    }
+  ]
+}

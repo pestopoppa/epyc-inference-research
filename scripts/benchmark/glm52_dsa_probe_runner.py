@@ -54,7 +54,9 @@ DEFAULT_THROUGHPUT_MAX_TOKENS = 768
 DEFAULT_MIN_COMPLETION_TOKENS = 384
 DEFAULT_SEED = 42
 DEFAULT_TEMPERATURE = 0.0
-DEFAULT_INDEXER_TOP_K = 32
+# Match the GGUF metadata default. Low values such as 32 are useful stress
+# knobs, but 2026-07-17 probes showed they can corrupt runner-shaped output.
+DEFAULT_INDEXER_TOP_K = 2048
 DEFAULT_REQUEST_TIMEOUT = 3600
 DEFAULT_PROGRESS_POLL_INTERVAL = 30
 REQUEST_ENDPOINTS = ("chat", "v1_completions", "completion")
@@ -103,6 +105,10 @@ def _utc_timestamp() -> str:
 
 def _canonical_json(value: Any) -> str:
     return json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False)
+
+
+def _format_count(value: int) -> str:
+    return f"{value:,}"
 
 
 def _is_under_production_root(path: Path) -> bool:
@@ -261,7 +267,8 @@ def collect_inventory(model_dir: Path) -> dict[str, Any]:
         "blocker_files": blocker_payload,
         "stale_cache_marker_files": stale_cache_payload,
         "hf_tree_manifest": manifest,
-        "total_shard_bytes": total_bytes,
+        "total_shard_bytes_display": _format_count(total_bytes),
+        "total_shard_gib": round(total_bytes / (1024**3), 2),
         "refusal_reasons": reasons,
     }
 
@@ -500,7 +507,8 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
             "summary": {
                 "required_non_cache_shards": REQUIRED_NON_CACHE_SHARDS,
                 "non_cache_shard_count": inventory["non_cache_shard_count"],
-                "total_shard_bytes": inventory["total_shard_bytes"],
+                "total_shard_bytes_display": inventory["total_shard_bytes_display"],
+                "total_shard_gib": inventory["total_shard_gib"],
             },
             "blockers": inventory["blocker_files"],
             "stale_cache_markers": inventory.get("stale_cache_marker_files", []),
@@ -1492,7 +1500,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default="chat",
         help="Completion request endpoint: chat=/v1/chat/completions, v1_completions=/v1/completions, completion=/completion",
     )
-    parser.add_argument("--indexer-top-k", type=int, default=DEFAULT_INDEXER_TOP_K, help="Fixed DSA indexer_top_k")
+    parser.add_argument(
+        "--indexer-top-k",
+        type=int,
+        default=DEFAULT_INDEXER_TOP_K,
+        help=(
+            "Fixed DSA indexer_top_k. Defaults to the GLM-5.2 GGUF metadata "
+            "value; low approximation values must be requested explicitly."
+        ),
+    )
     parser.add_argument(
         "--request-timeout",
         type=int,

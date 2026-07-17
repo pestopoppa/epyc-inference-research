@@ -63,6 +63,16 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
             self.assertEqual(inventory["blocker_files"], [])
             self.assertEqual(len(inventory["stale_cache_marker_files"]), 1)
 
+    def test_collect_inventory_reports_total_size_without_raw_long_digit_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            model_dir = _make_shard_dir(Path(tmp))
+
+            inventory = runner.collect_inventory(model_dir)
+
+            self.assertNotIn("total_shard_bytes", inventory)
+            self.assertEqual(inventory["total_shard_bytes_display"], "231")
+            self.assertEqual(inventory["total_shard_gib"], 0.0)
+
     def test_build_plan_uses_experimental_binary_and_sanitized_library_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -168,6 +178,13 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
                 self.assertEqual(request["request_endpoint"], "completion")
                 self.assertEqual(request["endpoint"], "/completion")
             self.assertFalse(plan["stages"][2]["request"]["stream"])
+
+    def test_indexer_top_k_defaults_to_metadata_value_and_can_be_overridden(self) -> None:
+        default_args = runner.parse_args([])
+        override_args = runner.parse_args(["--indexer-top-k", "32"])
+
+        self.assertEqual(default_args.indexer_top_k, 2048)
+        self.assertEqual(override_args.indexer_top_k, 32)
 
     def test_request_payloads_match_selected_endpoint(self) -> None:
         chat = runner.build_request_payload("chat", "hello", 7, 0.1, 42)

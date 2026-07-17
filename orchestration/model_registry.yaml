@@ -3065,6 +3065,7 @@ roles:
       context_sweep_observation: "2026-07-16 MI210 context sweep: generation t/s 80.68 at 1148 prompt tokens, 79.85 at 6428 prompt tokens, and 74.30 at 22428 prompt tokens."
       mi210_quiet_repeat_observation: "2026-07-17 quiet-host sidecar repeat with Firefox/MegaSync gone: stock experimental-v7 CLI prompt 448.9 t/s, generation 83.3 t/s over a 1536-token cap on MI210. Throughput-only: prompt drifted into meta/help text, and the invoked build-hip binary self-reported stale 9d70bae4b while source HEAD was 2e79e10cc."
       protocol_correction_observation: "2026-07-17 protocol probe showed the earlier exact-output concern was harness/protocol-specific: llama-cli must use -f for prompt files, not -p @file; --reasoning-format none leaves thought text in the content channel. A server/API probe with --reasoning-format deepseek --reasoning off returned message.content exactly 'ok' while separating message.reasoning_content, prompt 201.34 t/s and generation 83.11 t/s on MI210. Treat old CLI exactness rows as load/throughput controls only."
+      task_quality_channel_observation: "2026-07-17 broader MI210 server/chat task-quality follow-up under --reasoning-format deepseek --reasoning off failed 0/5. Exact ok, strict JSON, and needle answers landed in message.reasoning_content while message.content was empty; arithmetic also answered 65 instead of 95. Throughput is non-decision because a CPU GLM probe was active. Next step is a protocol-channel matrix before further quality scoring or BF16 ceiling comparison."
       evidence:
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/summary.tsv
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/nemotron_nano_9b_q8_cpu_v7.stdout
@@ -3079,6 +3080,7 @@ roles:
       - /mnt/raid0/llm/tmp/nemotron-nano-reasoning-extract-20260717T215851Z/summary.json
       - /mnt/raid0/llm/tmp/nemotron-nano-cli-deepseek-20260717T215912Z/
       - /mnt/raid0/llm/tmp/nemotron-nano-cli-deepseek-budget0-20260717T220002Z/
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/nemotron-nano-quality-20260717T221952Z/summary.json
     benchmark_date: 2026-04-23
     notes: |
       Reasoning-mode toggle (default AUTO/ON per user preference):
@@ -5629,7 +5631,7 @@ roles:
 
   glm_52_ud_iq2m:
     tier: B
-    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, and current-source 32K needle/coherence failed on malformed peg-native output.
+    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, and current-source 12K+/32K quality still fails on malformed output.
     model:
       name: GLM-5.2-UD-IQ2_M
       huggingface_id: unsloth/GLM-5.2-GGUF
@@ -5667,7 +5669,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence now fails in both default-reasoning and reasoning-off modes with malformed peg-native output after full prompt ingest and 64-token decode. Short runner-shaped controls at ~1.4K prompt tokens also produce gibberish despite the exact tiny READY smoke passing. Next classify/fix the output-format/protocol sensitivity before reviewer/task quality work, and only pursue native GLM-MTP/NEXTN or sparse final attention if quality is recovered; the blind current-source 96K attempt is explicitly excluded as non-evidence."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence fails in both default-reasoning and reasoning-off modes with malformed peg-native output after full prompt ingest and 64-token decode. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. However, the quality cliff returns between 1767 and 2143 prompt tokens and persists at 3K/12K even at top_k=2048. Next isolate the context-length/content-position failure and fix output-format quality before reviewer/task work; only pursue native GLM-MTP/NEXTN or sparse final attention if quality is recovered."
     candidate_roles:
     - architect
     - ingest
@@ -5680,7 +5682,7 @@ roles:
       forbid:
       - production_stack_registration
       - production_role_claim_without_dsa_quality_gate
-      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded, but current-source runner-shaped prompts fail with malformed/gibberish output even before 32K; sparse final-attention, viable acceleration, and reviewer/task quality remain blocked."
+      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated, but current-source 12K+/32K runner-shaped prompts still fail with malformed/gibberish output even at metadata-default top_k=2048; sparse final-attention, viable acceleration, and reviewer/task quality remain blocked."
     performance:
       benchmark_status: current_source_runner_shaped_output_malformed_quality_blocked
       short_smoke_observation: >
@@ -5788,6 +5790,29 @@ roles:
         into gibberish. Do not schedule more long baseline GLM passes until the
         protocol/output-format sensitivity is isolated; no realistic optimized
         GLM serving lane is validated yet.
+      current_source_topk2048_recovery_observation: >
+        2026-07-17 metadata-default indexer_top_k=2048 recovered the 1.4K
+        runner-shaped chat prompt that the old low-top-k default corrupted.
+        The original low-top-k long-output recovery run at
+        data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/plan.json
+        processed 12043 prompt tokens and decoded 768 tokens, but emitted
+        malformed content without READY or tokenstream.
+        data/glm52_dsa_probe/glm52-topk2048-short-20260717T230024Z/plan.json
+        processed 1389 server prompt tokens and returned exact READY with
+        prompt 27.70 t/s and decode 4.86 t/s. A tighter threshold slice at
+        data/glm52_dsa_probe/glm52-topk2048-1600tok-coherence-20260717T232125Z/plan.json
+        also passed at 1767 prompt tokens. The 2143-token probe at
+        data/glm52_dsa_probe/glm52-topk2048-2k-coherence-20260717T231915Z/plan.json
+        failed by copying filler text, and the 3045-token probe at
+        data/glm52_dsa_probe/glm52-topk2048-4k-coherence-20260717T231535Z/plan.json
+        failed with malformed/filler output. The realistic 16K long-output
+        follow-up at
+        data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/plan.json
+        processed 12043 server prompt tokens at 16.64 t/s and decoded only 85
+        tokens at 2.16 t/s before stopping with malformed content and no READY
+        or tokenstream. Low indexer_top_k is now an explicit stress knob, not
+        the runner default; the context-length/content quality cliff begins
+        between 1767 and 2143 prompt tokens on this prompt family.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
@@ -5850,6 +5875,14 @@ roles:
       - /mnt/raid0/llm/tmp/glm52-current-source-16k-streaming-20260717Tpostfix/logs/long_context_dsa_probe.server.log
       - /mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/plan.json
       - /mnt/raid0/llm/tmp/glm52-current-source-16k-ngram-20260717Trealistic/logs/long_context_dsa_probe.server.log
+      topk_sensitivity:
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-short-20260717T230024Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-1600tok-coherence-20260717T232125Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-2k-coherence-20260717T231915Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-4k-coherence-20260717T231535Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/long_context_dsa_probe.server.log
     memory:
       residency: cold
       pinned: false

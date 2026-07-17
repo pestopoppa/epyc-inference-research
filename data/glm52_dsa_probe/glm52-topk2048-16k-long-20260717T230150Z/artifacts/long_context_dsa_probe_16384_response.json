@@ -1,0 +1,38 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "content": " the GL context, 0  |00\n\n\n\n00\n DSA </think>0: the the context...\n\n DSA and and The, the0 and. a\n8\n 000 0. the GLM0 0 the000 is the is |00: 00 under0 DSA. The 01005003M00",
+        "reasoning_content": null
+      }
+    }
+  ],
+  "streaming": {
+    "chunk_count": 87,
+    "completed_at": "2026-07-17T23:14:44.389548+00:00",
+    "enabled": true,
+    "first_chunk_at": "2026-07-17T23:14:04.955158+00:00",
+    "parse_errors_tail": [],
+    "started_at": "2026-07-17T23:02:01.314881+00:00"
+  },
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 39434.223,
+    "predicted_n": 85,
+    "predicted_per_second": 2.1554881403394206,
+    "predicted_per_token_ms": 463.9320352941176,
+    "prompt_ms": 723609.102,
+    "prompt_n": 12043,
+    "prompt_per_second": 16.6429636757112,
+    "prompt_per_token_ms": 60.08545229593955
+  },
+  "usage": {
+    "completion_tokens": 85,
+    "prompt_tokens": 12043,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 12128
+  }
+}
