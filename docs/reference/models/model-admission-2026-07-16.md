@@ -164,11 +164,16 @@ The GLM runner had been defaulting to `glm-dsa.attention.indexer.top_k=32`, an a
 | 16K long-output gate, old default `indexer_top_k=32` | `data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/plan.json` | `12043 / 768` | ❌ malformed content, no `READY`/`tokenstream`; prompt `18.99 t/s`, decode `2.56 t/s` |
 | Chat, same runner-shaped prompt, `indexer_top_k=2048` | `data/glm52_dsa_probe/glm52-topk2048-short-20260717T230024Z/plan.json` | `1389 / 2` | ✅ exact `READY`, prompt `27.70 t/s`, decode `4.86 t/s` |
 | 1.6K coherence, `indexer_top_k=2048` | `data/glm52_dsa_probe/glm52-topk2048-1600tok-coherence-20260717T232125Z/plan.json` | `1767 / 2` | ✅ exact `READY`, prompt `26.78 t/s`, decode `4.80 t/s` |
+| 2K coherence, `indexer_top_k=2048` | `data/glm52_dsa_probe/glm52-topk2048-ctx2560-cross2k-20260717T233500Z/plan.json` | `2056 / 3` | ✅ `READY`, prompt `26.54 t/s`, decode `3.58 t/s` |
 | 2K coherence, `indexer_top_k=2048` | `data/glm52_dsa_probe/glm52-topk2048-2k-coherence-20260717T231915Z/plan.json` | `2143 / 30` | ❌ copied filler text, no `READY`; prompt `25.39 t/s`, decode `2.45 t/s` |
+| 2.1K coherence, `indexer_top_k=2048` | `data/glm52_dsa_probe/glm52-topk2048-ctx2560-2100tok-20260717T234100Z/plan.json` | `2168 / 21` | ❌ copied filler text, no `READY`; prompt `25.95 t/s`, decode `2.50 t/s` |
+| 2.1K coherence, `indexer_top_k=4096` | `data/glm52_dsa_probe/glm52-topk4096-ctx2560-2100tok-20260717T234600Z/plan.json` | `2168 / 2` | ✅ exact `READY`, prompt `25.92 t/s`, decode `4.73 t/s` |
 | 4K coherence, `indexer_top_k=2048` | `data/glm52_dsa_probe/glm52-topk2048-4k-coherence-20260717T231535Z/plan.json` | `3045 / 64` | ❌ malformed/filler output, no `READY`; prompt `24.36 t/s`, decode `2.37 t/s` |
+| 4K coherence, `indexer_top_k=4096` | `data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/plan.json` | `3045 / 2` | ✅ exact `READY`, prompt `24.31 t/s`, decode `4.57 t/s` |
 | 16K long-output gate, `indexer_top_k=2048` | `data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/plan.json` | `12043 / 85` | ❌ malformed content, no `READY`/`tokenstream`, early `stop`; prompt `16.64 t/s`, decode `2.16 t/s` |
+| 16K coherence, `indexer_top_k=16384` | `data/glm52_dsa_probe/glm52-topk16384-16k-coherence-20260718T000200Z/plan.json` | `12045 / 2` | ✅ exact `READY`, prompt `16.37 t/s`, decode `3.41 t/s` |
 
-Disposition: low `indexer_top_k` is now an explicit stress knob, not the runner default. Metadata-default `2048` fixes the short runner-shaped corruption, but the quality cliff reappears between `1767` and `2143` prompt tokens on this runner-shaped prompt family and remains present at 3K/12K. Continue GLM work by isolating the context-length/content-position failure before spending on native GLM-MTP/NEXTN or sparse-final-attention acceleration.
+Disposition: low `indexer_top_k` is now an explicit stress knob, not the runner default. Source inspection shows this knob caps the actual final-attention KV rows selected by DSA, not just an advisory indexer limit. Metadata-default `2048` fixes the short runner-shaped corruption, but starts dropping enough final prompt rows to fail this prompt family between `2056` and `2168` prompt tokens. Dense-by-construction settings (`top_k >= prompt_tokens`) recover exact `READY` at 2.1K, 3K, and 12K. Continue GLM work by sweeping the smallest safe DSA cap/schedule before reviewer/task quality or GLM-MTP/NEXTN acceleration.
 
 ## GLM-5.2 Expert-Routing Skew
 

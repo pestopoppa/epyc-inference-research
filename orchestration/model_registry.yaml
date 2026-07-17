@@ -5631,7 +5631,7 @@ roles:
 
   glm_52_ud_iq2m:
     tier: B
-    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, and current-source 12K+/32K quality still fails on malformed output.
+    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, and current-source runner-shaped quality recovered when the DSA top-k cap is at least the prompt length.
     model:
       name: GLM-5.2-UD-IQ2_M
       huggingface_id: unsloth/GLM-5.2-GGUF
@@ -5669,7 +5669,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence fails in both default-reasoning and reasoning-off modes with malformed peg-native output after full prompt ingest and 64-token decode. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. However, the quality cliff returns between 1767 and 2143 prompt tokens and persists at 3K/12K even at top_k=2048. Next isolate the context-length/content-position failure and fix output-format quality before reviewer/task work; only pursue native GLM-MTP/NEXTN or sparse final attention if quality is recovered."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence fails in both default-reasoning and reasoning-off modes with malformed peg-native output after full prompt ingest and 64-token decode. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. Source/runtime evidence now narrows the remaining malformed output to the DSA final-attention selection cap: top_k=2048 passes at 2056 prompt tokens but fails at 2168/3045/12043, while dense-by-construction caps recover 2168, 3045, and 12045 with exact READY. Next sweep the smallest safe prompt-length-aware top_k schedule before reviewer/task work; only pursue native GLM-MTP/NEXTN or sparse final attention after quality is stable."
     candidate_roles:
     - architect
     - ingest
@@ -5682,7 +5682,7 @@ roles:
       forbid:
       - production_stack_registration
       - production_role_claim_without_dsa_quality_gate
-      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated, but current-source 12K+/32K runner-shaped prompts still fail with malformed/gibberish output even at metadata-default top_k=2048; sparse final-attention, viable acceleration, and reviewer/task quality remain blocked."
+      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated and dense-by-construction top_k recovers runner-shaped prompts through 12K, but production-quality serving still needs a smallest-safe top_k schedule plus task-quality gates before role claims."
     performance:
       benchmark_status: current_source_runner_shaped_output_malformed_quality_blocked
       short_smoke_observation: >
@@ -5793,7 +5793,9 @@ roles:
       current_source_topk2048_recovery_observation: >
         2026-07-17 metadata-default indexer_top_k=2048 recovered the 1.4K
         runner-shaped chat prompt that the old low-top-k default corrupted.
-        The original low-top-k long-output recovery run at
+        Source inspection confirmed indexer_top_k caps the actual final-attention
+        KV rows selected by DSA, not just advisory indexer work. The original
+        low-top-k long-output recovery run at
         data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/plan.json
         processed 12043 prompt tokens and decoded 768 tokens, but emitted
         malformed content without READY or tokenstream.
@@ -5801,18 +5803,28 @@ roles:
         processed 1389 server prompt tokens and returned exact READY with
         prompt 27.70 t/s and decode 4.86 t/s. A tighter threshold slice at
         data/glm52_dsa_probe/glm52-topk2048-1600tok-coherence-20260717T232125Z/plan.json
-        also passed at 1767 prompt tokens. The 2143-token probe at
+        also passed at 1767 prompt tokens, and
+        data/glm52_dsa_probe/glm52-topk2048-ctx2560-cross2k-20260717T233500Z/plan.json
+        passed at 2056 prompt tokens. The 2143-token probe at
         data/glm52_dsa_probe/glm52-topk2048-2k-coherence-20260717T231915Z/plan.json
-        failed by copying filler text, and the 3045-token probe at
+        failed by copying filler text; a tighter 2168-token repeat at
+        data/glm52_dsa_probe/glm52-topk2048-ctx2560-2100tok-20260717T234100Z/plan.json
+        failed the same way. The 3045-token probe at
         data/glm52_dsa_probe/glm52-topk2048-4k-coherence-20260717T231535Z/plan.json
         failed with malformed/filler output. The realistic 16K long-output
         follow-up at
         data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/plan.json
         processed 12043 server prompt tokens at 16.64 t/s and decoded only 85
         tokens at 2.16 t/s before stopping with malformed content and no READY
-        or tokenstream. Low indexer_top_k is now an explicit stress knob, not
-        the runner default; the context-length/content quality cliff begins
-        between 1767 and 2143 prompt tokens on this prompt family.
+        or tokenstream. Dense-by-construction follow-ups recovered exact READY:
+        data/glm52_dsa_probe/glm52-topk4096-ctx2560-2100tok-20260717T234600Z/plan.json
+        at 2168 prompt tokens, prompt 25.92 t/s and decode 4.73 t/s;
+        data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/plan.json
+        at 3045 prompt tokens, prompt 24.31 t/s and decode 4.57 t/s; and
+        data/glm52_dsa_probe/glm52-topk16384-16k-coherence-20260718T000200Z/plan.json
+        at 12045 prompt tokens, prompt 16.37 t/s and decode 3.41 t/s. Low
+        indexer_top_k is now an explicit stress knob, not the runner default;
+        serving work should sweep the smallest safe prompt-length-aware cap.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
@@ -5879,10 +5891,16 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-quality-recovery-20260717T221112Z/plan.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-short-20260717T230024Z/plan.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-1600tok-coherence-20260717T232125Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-ctx2560-cross2k-20260717T233500Z/plan.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-2k-coherence-20260717T231915Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-ctx2560-2100tok-20260717T234100Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk4096-ctx2560-2100tok-20260717T234600Z/plan.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-4k-coherence-20260717T231535Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/plan.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/plan.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/long_context_dsa_probe.server.log
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk16384-16k-coherence-20260718T000200Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk16384-16k-coherence-20260718T000200Z/logs/long_context_dsa_probe.server.log
     memory:
       residency: cold
       pinned: false

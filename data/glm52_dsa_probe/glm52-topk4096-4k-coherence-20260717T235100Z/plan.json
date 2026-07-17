@@ -1,0 +1,762 @@
+{
+  "artifact_dir": "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/artifacts",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "execution": {
+    "stages": [
+      {
+        "name": "shard_integrity_inventory",
+        "reason": "not selected",
+        "status": "skipped"
+      },
+      {
+        "name": "short_load_decode_smoke",
+        "reason": "not selected",
+        "status": "skipped"
+      },
+      {
+        "artifacts": {
+          "prompt": "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/artifacts/long_context_dsa_probe_4096_prompt.txt",
+          "request": "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/artifacts/long_context_dsa_probe_4096_request.json",
+          "response": "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/artifacts/long_context_dsa_probe_4096_response.json"
+        },
+        "completion_token_count": 2,
+        "completion_token_count_source": "usage",
+        "completion_token_min": 0,
+        "completion_token_min_passed": true,
+        "content_preview": "READY",
+        "context_length": 4096,
+        "expected_substring": "READY",
+        "expected_substring_passed": true,
+        "finish_reason": "stop",
+        "name": "long_context_dsa_probe",
+        "port": 19102,
+        "progress_metrics_samples": [],
+        "prompt_char_count": 16536,
+        "prompt_kind": "long_context_dsa_probe",
+        "prompt_token_adjustment_attempts": 2,
+        "prompt_token_count": 3039,
+        "prompt_token_max": 3520,
+        "prompt_token_min": 3000,
+        "reasoning_preview": null,
+        "request_error": null,
+        "request_purpose": "coherence",
+        "server_log": {
+          "bytes": 28181,
+          "decode_tokens": 2,
+          "decode_tps": 4.57,
+          "line_count": 323,
+          "matched_line_count": 106,
+          "matched_lines_tail": [
+            "0.00.294.843 I llama_model_loader: - kv  40:                glm-dsa.expert_shared_count u32              = 1",
+            "0.00.294.843 I llama_model_loader: - kv  41:               glm-dsa.expert_weights_scale f32              = 2.500000",
+            "0.00.294.844 I llama_model_loader: - kv  42:                glm-dsa.expert_weights_norm bool             = true",
+            "0.00.294.844 I llama_model_loader: - kv  43:               glm-dsa.rope.dimension_count u32              = 64",
+            "0.00.294.845 I llama_model_loader: - kv  44:               glm-dsa.nextn_predict_layers u32              = 1",
+            "0.00.294.845 I llama_model_loader: - kv  45:       glm-dsa.attention.indexer.head_count u32              = 32",
+            "0.00.294.846 I llama_model_loader: - kv  46:       glm-dsa.attention.indexer.key_length u32              = 128",
+            "0.00.294.846 I llama_model_loader: - kv  47:            glm-dsa.attention.indexer.top_k u32              = 2048",
+            "0.00.303.393 I llama_model_loader: - kv  50:                      tokenizer.ggml.tokens arr[str,154880]  = [\"!\", \"\\\"\", \"#\", \"$\", \"%\", \"&\", \"'\", ...",
+            "0.00.322.833 I llama_model_loader: - kv  62:                      quantize.imatrix.file str              = GLM-5.2-GGUF/imatrix_unsloth.gguf",
+            "0.00.322.833 I llama_model_loader: - kv  63:                   quantize.imatrix.dataset str              = unsloth_calibration_GLM-5.2.txt",
+            "0.00.322.903 I validate_override: Using metadata override (  int) 'glm-dsa.attention.indexer.top_k' = 0.00.322.904 I 4096",
+            "0.00.382.253 I load: 0 unused tokens",
+            "0.00.391.493 I load: printing all EOG tokens:",
+            "0.00.391.568 I load: special tokens cache size = 36",
+            "0.00.417.354 I print_info: arch                  = glm-dsa",
+            "0.00.417.356 I print_info: n_layer               = 78",
+            "0.00.417.356 I print_info: n_layer_all           = 79",
+            "0.00.417.380 I print_info: n_layer_dense_lead    = 3",
+            "0.00.422.779 W model has unused tensor blk.78.attn_norm.weight (size = 24576 bytes) -- ignoring",
+            "0.00.422.782 W model has unused tensor blk.78.attn_q_a_norm.weight (size = 8192 bytes) -- ignoring",
+            "0.00.422.784 W model has unused tensor blk.78.attn_kv_a_norm.weight (size = 2048 bytes) -- ignoring",
+            "0.00.422.786 W model has unused tensor blk.78.attn_q_a.weight (size = 8650752 bytes) -- ignoring",
+            "0.00.422.788 W model has unused tensor blk.78.attn_q_b.weight (size = 35651584 bytes) -- ignoring",
+            "0.00.422.789 W model has unused tensor blk.78.attn_kv_a_mqa.weight (size = 3760128 bytes) -- ignoring",
+            "0.00.422.791 W model has unused tensor blk.78.attn_k_b.weight (size = 6684672 bytes) -- ignoring",
+            "0.00.422.793 W model has unused tensor blk.78.attn_v_b.weight (size = 8912896 bytes) -- ignoring",
+            "0.00.422.795 W model has unused tensor blk.78.attn_output.weight (size = 69206016 bytes) -- ignoring",
+            "0.00.422.797 W model has unused tensor blk.78.ffn_norm.weight (size = 24576 bytes) -- ignoring",
+            "0.00.422.799 W model has unused tensor blk.78.indexer.k_norm.weight (size = 512 bytes) -- ignoring",
+            "0.00.422.801 W model has unused tensor blk.78.indexer.k_norm.bias (size = 512 bytes) -- ignoring",
+            "0.00.422.803 W model has unused tensor blk.78.indexer.proj.weight (size = 786432 bytes) -- ignoring",
+            "0.00.422.805 W model has unused tensor blk.78.indexer.attn_k.weight (size = 835584 bytes) -- ignoring",
+            "0.00.422.808 W model has unused tensor blk.78.indexer.attn_q_b.weight (size = 8912896 bytes) -- ignoring",
+            "0.00.422.809 W model has unused tensor blk.78.ffn_gate_inp.weight (size = 6291456 bytes) -- ignoring",
+            "0.00.422.815 W model has unused tensor blk.78.ffn_gate_exps.weight (size = 1056964608 bytes) -- ignoring",
+            "0.00.422.817 W model has unused tensor blk.78.ffn_down_exps.weight (size = 1384120320 bytes) -- ignoring",
+            "0.00.422.819 W model has unused tensor blk.78.ffn_up_exps.weight (size = 1056964608 bytes) -- ignoring",
+            "0.00.422.821 W model has unused tensor blk.78.ffn_gate_shexp.weight (size = 8650752 bytes) -- ignoring",
+            "0.00.422.823 W model has unused tensor blk.78.ffn_down_shexp.weight (size = 10321920 bytes) -- ignoring",
+            "0.00.422.825 W model has unused tensor blk.78.ffn_up_shexp.weight (size = 8650752 bytes) -- ignoring",
+            "0.00.422.828 W model has unused tensor blk.78.nextn.eh_proj.weight (size = 80216064 bytes) -- ignoring",
+            "0.00.422.830 W model has unused tensor blk.78.nextn.enorm.weight (size = 24576 bytes) -- ignoring",
+            "0.00.422.832 W model has unused tensor blk.78.nextn.hnorm.weight (size = 24576 bytes) -- ignoring",
+            "0.00.422.841 W model has unused tensor blk.78.nextn.shared_head_norm.weight (size = 24576 bytes) -- ignoring",
+            "0.07.785.176 I llama_kv_cache_dsa: creating main KV cache, size = 4096 cells",
+            "0.07.805.930 I llama_kv_cache_dsa: creating indexer KV cache, size = 4096 cells",
+            "0.07.815.542 I resolve_fused_ops: resolving fused Lightning Indexer support:",
+            "0.07.816.570 I resolve_fused_ops: Lightning Indexer enabled",
+            "0.08.912.455 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 4096, kv_unified = 'true'",
+            "0.08.912.477 I slot   load_model: id  0 | task -1 | new slot, n_ctx = 4096",
+            "0.08.912.483 I slot   load_model: id  1 | task -1 | new slot, n_ctx = 4096",
+            "0.08.912.483 I slot   load_model: id  2 | task -1 | new slot, n_ctx = 4096",
+            "0.08.912.483 I slot   load_model: id  3 | task -1 | new slot, n_ctx = 4096",
+            "0.08.912.558 I srv          init: idle slots will be saved to prompt cache and cleared upon starting a new task",
+            "0.08.933.123 I srv  update_slots: all slots are idle",
+            "0.09.629.367 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1",
+            "0.09.629.383 I srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 4096 tokens, 8589934592 est)",
+            "0.09.629.407 I cmn  common_reaso: activated, budget=0 tokens",
+            "0.09.629.431 I slot launch_slot_: id  3 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+            "0.09.629.441 I slot launch_slot_: id  3 | task -1 | sampler params: ",
+            "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+            "0.09.629.444 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0",
+            "0.09.629.444 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+            "0.09.629.446 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+            "0.09.629.458 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+            "0.09.629.458 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+            "0.09.629.464 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+            "0.09.629.466 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+            "0.09.629.486 I slot   operator(): id  3 | task 0 | new prompt, n_ctx_slot = 4096, n_keep = 0, task.n_tokens = 3045",
+            "0.09.629.492 I slot   operator(): id  3 | task 0 | cached n_tokens = 0, memory_seq_rm [0, end)",
+            "1.28.361.032 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =   2048, progress = 0.67, t =  78.73 s / 26.01 tokens per second",
+            "1.28.361.042 I slot   operator(): id  3 | task 0 | cached n_tokens = 2048, memory_seq_rm [2048, end)",
+            "1.28.361.480 I slot init_sampler: id  3 | task 0 | init sampler, took 0.41 ms, tokens: text = 3045, total = 3045",
+            "2.15.331.347 I slot print_timing: id  3 | task 0 | prompt eval time =  125264.38 ms /  3045 tokens (   41.14 ms per token,    24.31 tokens per second)",
+            "2.15.331.356 I slot print_timing: id  3 | task 0 |        eval time =     437.45 ms /     2 tokens (  218.73 ms per token,     4.57 tokens per second)",
+            "2.15.331.357 I slot print_timing: id  3 | task 0 |       total time =  125701.84 ms /  3047 tokens",
+            "2.15.331.362 I slot print_timing: id  3 | task 0 |    graphs reused =          1",
+            "2.15.331.460 I slot      release: id  3 | task 0 | stop processing: n_tokens = 3046, truncated = 0",
+            "2.15.331.471 I srv  update_slots: all slots are idle"
+          ],
+          "max_decoded_checkpoint": null,
+          "path": "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/long_context_dsa_probe.server.log",
+          "prompt_eval_tokens": 3045,
+          "prompt_eval_tps": 24.31,
+          "status": "ok"
+        },
+        "status": "ok",
+        "stream_progress_samples_tail": [],
+        "streaming": {},
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 437.455,
+          "predicted_n": 2,
+          "predicted_per_second": 4.571898823879028,
+          "predicted_per_token_ms": 218.7275,
+          "prompt_ms": 125264.385,
+          "prompt_n": 3045,
+          "prompt_per_second": 24.308585397198094,
+          "prompt_per_token_ms": 41.137729064039405
+        },
+        "usage": {
+          "completion_tokens": 2,
+          "prompt_tokens": 3045,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 3047
+        }
+      },
+      {
+        "name": "kv_length_scaling",
+        "reason": "not selected",
+        "status": "skipped"
+      }
+    ],
+    "status": "ok"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-17T23:40:09.925700+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "refusal_reasons": [],
+  "schema": "glm52_dsa_probe_plan.v1",
+  "selected_stages": [
+    "long_context_dsa_probe"
+  ],
+  "stages": [
+    {
+      "blockers": [],
+      "hashing": "disabled",
+      "kind": "inventory",
+      "name": "shard_integrity_inventory",
+      "stale_cache_markers": [
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+          "size": 0
+        },
+        {
+          "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+          "size": 36074
+        }
+      ],
+      "status": "ready",
+      "summary": {
+        "non_cache_shard_count": 6,
+        "required_non_cache_shards": 6,
+        "total_shard_bytes_display": "238,577,580,768",
+        "total_shard_gib": 222.19
+      }
+    },
+    {
+      "kind": "load_decode_smoke",
+      "name": "short_load_decode_smoke",
+      "prompt": {
+        "answer_instruction": "Answer with a single short sentence.",
+        "chars_per_token_heuristic": 4.0,
+        "context_length": 4096,
+        "kind": "short_load_decode_smoke",
+        "min_prompt_tokens": 3000,
+        "prompt_context_guard_tokens": 512,
+        "task_line": "Return READY after the short load/decode smoke."
+      },
+      "request": {
+        "endpoint": "/v1/chat/completions",
+        "max_tokens": 64,
+        "min_completion_tokens": 0,
+        "progress_poll_interval_s": 0,
+        "purpose": "coherence",
+        "request_endpoint": "chat",
+        "seed": 42,
+        "stream": false,
+        "temperature": 0.0,
+        "timeout_s": 2400
+      },
+      "server": {
+        "context_length": 4096,
+        "extra_args": [
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "indexer_top_k": 4096,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:4096",
+        "log_file": "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/short_load_decode_smoke.server.log",
+        "metrics": false,
+        "port": 19101,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:4096",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19101",
+          "-c",
+          "4096",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/short_load_decode_smoke.server.log",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:4096 --device none -ngl 0 --host 127.0.0.1 --port 19101 -c 4096 -t 96 -ub 512 --log-verbosity 4 --log-file data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/short_load_decode_smoke.server.log --reasoning off --reasoning-budget 0",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      },
+      "status": "ready"
+    },
+    {
+      "kind": "long_context_probe",
+      "name": "long_context_dsa_probe",
+      "prompt": {
+        "answer_instruction": "Answer with a single short sentence.",
+        "chars_per_token_heuristic": 4.0,
+        "context_length": 4096,
+        "expected_substring": "READY",
+        "kind": "long_context_dsa_probe",
+        "min_prompt_tokens": 3000,
+        "prompt_context_guard_tokens": 512,
+        "task_line": "Return READY after the long-context DSA probe."
+      },
+      "request": {
+        "endpoint": "/v1/chat/completions",
+        "max_tokens": 64,
+        "min_completion_tokens": 0,
+        "progress_poll_interval_s": 0,
+        "purpose": "coherence",
+        "request_endpoint": "chat",
+        "seed": 42,
+        "stream": false,
+        "temperature": 0.0,
+        "timeout_s": 2400
+      },
+      "server": {
+        "context_length": 4096,
+        "extra_args": [
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "indexer_top_k": 4096,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:4096",
+        "log_file": "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/long_context_dsa_probe.server.log",
+        "metrics": false,
+        "port": 19102,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:4096",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19102",
+          "-c",
+          "4096",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/long_context_dsa_probe.server.log",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:4096 --device none -ngl 0 --host 127.0.0.1 --port 19102 -c 4096 -t 96 -ub 512 --log-verbosity 4 --log-file data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/long_context_dsa_probe.server.log --reasoning off --reasoning-budget 0",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      },
+      "status": "ready"
+    },
+    {
+      "fixed_indexer_top_k": 4096,
+      "kind": "kv_length_scaling",
+      "name": "kv_length_scaling",
+      "series": [
+        {
+          "context_length": 4096,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 4096,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 3000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 64,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 2400
+          },
+          "server": {
+            "context_length": 4096,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 4096,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:4096",
+            "log_file": "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_4096.server.log",
+            "metrics": false,
+            "port": 19110,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:4096",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19110",
+              "-c",
+              "4096",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_4096.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:4096 --device none -ngl 0 --host 127.0.0.1 --port 19110 -c 4096 -t 96 -ub 512 --log-verbosity 4 --log-file data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_4096.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 8192,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 8192,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 3000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 64,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 2400
+          },
+          "server": {
+            "context_length": 8192,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 4096,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:4096",
+            "log_file": "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_8192.server.log",
+            "metrics": false,
+            "port": 19111,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:4096",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19111",
+              "-c",
+              "8192",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_8192.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:4096 --device none -ngl 0 --host 127.0.0.1 --port 19111 -c 8192 -t 96 -ub 512 --log-verbosity 4 --log-file data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_8192.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 16384,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 16384,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 3000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 64,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 2400
+          },
+          "server": {
+            "context_length": 16384,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 4096,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:4096",
+            "log_file": "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_16384.server.log",
+            "metrics": false,
+            "port": 19112,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:4096",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19112",
+              "-c",
+              "16384",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_16384.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:4096 --device none -ngl 0 --host 127.0.0.1 --port 19112 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_16384.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        },
+        {
+          "context_length": 32768,
+          "prompt": {
+            "answer_instruction": "Answer with a single short sentence.",
+            "chars_per_token_heuristic": 4.0,
+            "context_length": 32768,
+            "kind": "kv_length_scaling",
+            "min_prompt_tokens": 3000,
+            "prompt_context_guard_tokens": 512,
+            "task_line": "Return READY for the KV-length scaling checkpoint."
+          },
+          "request": {
+            "endpoint": "/v1/chat/completions",
+            "max_tokens": 64,
+            "min_completion_tokens": 0,
+            "progress_poll_interval_s": 0,
+            "purpose": "coherence",
+            "request_endpoint": "chat",
+            "seed": 42,
+            "stream": false,
+            "temperature": 0.0,
+            "timeout_s": 2400
+          },
+          "server": {
+            "context_length": 32768,
+            "extra_args": [
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "indexer_top_k": 4096,
+            "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:4096",
+            "log_file": "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_32768.server.log",
+            "metrics": false,
+            "port": 19113,
+            "server_command": [
+              "env",
+              "-i",
+              "PATH=/usr/bin:/bin",
+              "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+              "OMP_NUM_THREADS=1",
+              "numactl",
+              "--interleave=all",
+              "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+              "-m",
+              "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+              "--override-kv",
+              "glm-dsa.attention.indexer.top_k=int:4096",
+              "--device",
+              "none",
+              "-ngl",
+              "0",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              "19113",
+              "-c",
+              "32768",
+              "-t",
+              "96",
+              "-ub",
+              "512",
+              "--log-verbosity",
+              "4",
+              "--log-file",
+              "data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_32768.server.log",
+              "--reasoning",
+              "off",
+              "--reasoning-budget",
+              "0"
+            ],
+            "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:4096 --device none -ngl 0 --host 127.0.0.1 --port 19113 -c 32768 -t 96 -ub 512 --log-verbosity 4 --log-file data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/logs/kv_length_scaling_32768.server.log --reasoning off --reasoning-budget 0",
+            "threads": 96,
+            "trace_logs": true,
+            "ubatch": 512
+          }
+        }
+      ],
+      "status": "ready"
+    }
+  ]
+}
