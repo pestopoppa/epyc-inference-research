@@ -5642,7 +5642,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Run true 64K+ long-context DSA/indexer probe and scaling; short load/coherence plus 4K/8K trace shakedown are already smoke-passed."
+      next_step: "Run true 64K+ actual-token long-context DSA/indexer probe and scaling with --min-prompt-tokens 65536 plus a larger request timeout; short load/coherence, 4K/8K trace shakedown, and 48K timeout scaling evidence are already recorded."
     candidate_roles:
     - architect
     - ingest
@@ -5657,7 +5657,7 @@ roles:
       - production_role_claim_without_dsa_quality_gate
       reason: "Artifact is complete and runnable for short CPU smoke, but DSA sparsity, long-context behavior, throughput, and reviewer/task quality are still unverified."
     performance:
-      benchmark_status: short_load_coherence_and_4k8k_dsa_trace_pass_true_long_context_open
+      benchmark_status: short_load_coherence_4k8k_dsa_trace_and_48k_timeout_observation_true64k_open
       short_smoke_observation: >
         2026-07-16 experimental v7 b10077-da1bf5e2f CPU-only llama-server
         loaded the six-shard UD-IQ2_M artifact. With reasoning auto, the model
@@ -5678,6 +5678,14 @@ roles:
         23.86 t/s and 5906 prompt tokens at 22.69 t/s. Both logs record
         Lightning Indexer enabled. This is loader/runtime shakedown evidence,
         not a final long-context DSA disposition.
+      dsa_48k_timeout_observation: >
+        2026-07-17 CPU-only experimental v7 run at nominal --long-context
+        65536 produced a 48009-token prompt because the old prompt builder used
+        a character heuristic. The server log records Lightning Indexer enabled
+        and prefill checkpoints through 45056 prompt tokens before the 5400s
+        HTTP timeout canceled the task. Prefill tapered from 25.29 t/s at 2048
+        tokens to 8.71 t/s at 45056 tokens. This is useful scaling and timeout
+        evidence, but it does not close the true >64K actual-token gate.
       evidence:
       - /mnt/raid0/llm/models/glm52_clean.log
       - /mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json
@@ -5690,6 +5698,8 @@ roles:
       - /mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/plan.json
       - /mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/logs/kv_length_scaling_4096.server.log
       - /mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/logs/kv_length_scaling_8192.server.log
+      - /mnt/raid0/llm/tmp/glm52-dsa-64k-probe-20260716T235329Z/plan.json
+      - /mnt/raid0/llm/tmp/glm52-dsa-64k-probe-20260716T235329Z/logs/long_context_dsa_probe.server.log
     memory:
       residency: cold
       pinned: false
