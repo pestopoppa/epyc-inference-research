@@ -5720,9 +5720,15 @@ roles:
         and captured --show-statistics to
         /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.stats.txt.
         The output summarizes activation tensors, including ffn_down_exps,
-        ffn_gate_exps, and ffn_up_exps, but does not expose per-expert router
-        hit-frequency. Treat it as activation/load evidence only; hot-expert
-        offload and REAP remain blocked on a real router-hit profiler.
+        ffn_gate_exps, and ffn_up_exps. Follow-up extraction with
+        scripts/benchmark/extract_imatrix_expert_counts.py read the persisted
+        ffn_down_exps.weight.counts tensors and produced
+        /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.counts.json
+        plus .md. First signal is near-uniform globally (top_32=17.1%,
+        entropy_norm=0.996) but moderately skewed within layers (median layer
+        top_32=55.6%, max=70.5%). Treat it as hypothesis-only because the
+        corpus is tiny/repetitive; hot-expert offload and REAP remain blocked
+        on representative workload-profile evidence.
       evidence:
       - /mnt/raid0/llm/models/glm52_clean.log
       - /mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json
@@ -5741,6 +5747,8 @@ roles:
       - /mnt/raid0/llm/tmp/glm52-dsa-true64k-probe-20260717T0125/logs/long_context_dsa_probe.server.log
       - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.gguf
       - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.stats.txt
+      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.counts.json
+      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.counts.md
     memory:
       residency: cold
       pinned: false
@@ -5751,7 +5759,7 @@ roles:
     benchmark_plan:
       cpu_only: "Shard integrity -> load/short smoke -> true >64K DSA probe -> sparse-vs-dense classification -> canonical throughput and quality."
       gpu_only: "Not expected to fit on MI210."
-      cpu_gpu_hybrid: "Run a true per-expert router-hit profile first; the 2026-07-17 imatrix activation-stat attempt is insufficient for hot-expert/offload placement."
+      cpu_gpu_hybrid: "Repeat imatrix expert-count extraction on representative workload prompts; the 2026-07-17 tiny-corpus signal is hypothesis-only and insufficient for hot-expert/offload placement."
 
   hy3_angelslim_iq1m_mtp:
     tier: B
