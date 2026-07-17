@@ -5,9 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TMP_ROOT="/mnt/raid0/llm/tmp"
 EXPERIMENTAL_ROOT="/mnt/raid0/llm/llama.cpp-experimental"
 EXPERIMENTAL_BIN_DIR="${EXPERIMENTAL_ROOT}/build-hip/bin"
+EXPERIMENTAL_GGUF_PY="${EXPERIMENTAL_ROOT}/gguf-py"
 DEFAULT_BINARY="${EXPERIMENTAL_BIN_DIR}/llama-imatrix"
 PRODUCTION_BINARY="/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-imatrix"
 GLM_PATTERN='hf download unsloth/GLM-5.2-GGUF'
+EXPERT_COUNT_EXTRACTOR="${SCRIPT_DIR}/extract_imatrix_expert_counts.py"
 
 EXECUTE=0
 SHOW_STATISTICS=0
@@ -137,6 +139,26 @@ stats_command() {
     "${stats_out}"
 }
 
+artifact_stem() {
+  local artifact="$1"
+  local stem
+  stem="$(basename "${artifact%.*}")"
+  printf '%s' "${stem%.imatrix}"
+}
+
+counts_command() {
+  local artifact="$1"
+  local counts_json="$2"
+  local counts_md="$3"
+  [[ -x "${EXPERT_COUNT_EXTRACTOR}" ]] || die "expert-count extractor not executable: ${EXPERT_COUNT_EXTRACTOR}"
+  printf 'PYTHONPATH=%q uv run --with numpy python %q --artifact %q --output-json %q --output-md %q\n' \
+    "${EXPERIMENTAL_GGUF_PY}" \
+    "${EXPERT_COUNT_EXTRACTOR}" \
+    "${artifact}" \
+    "${counts_json}" \
+    "${counts_md}"
+}
+
 execute_command() {
   local corpus="$1"
   local artifact="$2"
@@ -252,23 +274,31 @@ if [[ "${EXECUTE}" -eq 1 && -z "${INPUT_ARTIFACT}" && "${SHOW_STATISTICS}" -eq 0
   require_tmp_path "${OUTPUT_ARTIFACT}"
   mkdir -p "$(dirname "${OUTPUT_ARTIFACT}")"
   stats_out="${OUT_ROOT}/expert-routing-skew.stats.txt"
+  counts_json="${OUT_ROOT}/$(artifact_stem "${OUTPUT_ARTIFACT}").counts.json"
+  counts_md="${OUT_ROOT}/$(artifact_stem "${OUTPUT_ARTIFACT}").counts.md"
 
   log "dry-run=false"
   log "binary=${BINARY_PATH}"
   log "corpus=${local_corpus}"
   log "artifact=${OUTPUT_ARTIFACT}"
   log "stats=${stats_out}"
+  log "counts_json=${counts_json}"
+  log "counts_md=${counts_md}"
   log "command:"
   execute_cmd=$(execute_command "${local_corpus}" "${OUTPUT_ARTIFACT}")
   printf '%s\n' "${execute_cmd}"
   log "follow-up:"
   stats_cmd=$(stats_command "${OUTPUT_ARTIFACT}" "${stats_out}" "${MODEL}")
   printf '%s\n' "${stats_cmd}"
+  counts_cmd=$(counts_command "${OUTPUT_ARTIFACT}" "${counts_json}" "${counts_md}")
+  printf '%s\n' "${counts_cmd}"
 
   log "running calibration"
   run_shell_command "${execute_cmd}" >"${OUT_ROOT}/expert-routing-skew.execute.log" 2>&1
   log "running statistics"
   run_shell_command "${stats_cmd}"
+  log "extracting expert counts"
+  run_shell_command "${counts_cmd}"
   log "done"
   exit 0
 fi
@@ -279,18 +309,26 @@ if [[ "${SHOW_STATISTICS}" -eq 1 || -n "${INPUT_ARTIFACT}" ]]; then
   [[ -n "${MODEL}" ]] || die "--show-statistics requires --model PATH"
   [[ -f "${MODEL}" ]] || die "model not found: ${MODEL}"
   stats_out="${OUT_ROOT}/$(basename "${INPUT_ARTIFACT%.*}").stats.txt"
+  counts_json="${OUT_ROOT}/$(artifact_stem "${INPUT_ARTIFACT}").counts.json"
+  counts_md="${OUT_ROOT}/$(artifact_stem "${INPUT_ARTIFACT}").counts.md"
 
   log "dry-run=$([[ "${EXECUTE}" -eq 1 ]] && printf 'false' || printf 'true')"
   log "binary=${BINARY_PATH}"
   log "artifact=${INPUT_ARTIFACT}"
   log "model=${MODEL}"
   log "stats=${stats_out}"
+  log "counts_json=${counts_json}"
+  log "counts_md=${counts_md}"
   log "command:"
   stats_cmd=$(stats_command "${INPUT_ARTIFACT}" "${stats_out}" "${MODEL}")
   printf '%s\n' "${stats_cmd}"
+  counts_cmd=$(counts_command "${INPUT_ARTIFACT}" "${counts_json}" "${counts_md}")
+  printf '%s\n' "${counts_cmd}"
   if [[ "${EXECUTE}" -eq 1 ]]; then
     log "running statistics"
     run_shell_command "${stats_cmd}"
+    log "extracting expert counts"
+    run_shell_command "${counts_cmd}"
     log "done"
   fi
   exit 0
