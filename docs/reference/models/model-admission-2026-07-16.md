@@ -44,7 +44,7 @@ The same sweep found stale zero-byte Hugging Face `.lock` files in Qwable, MiniC
 | DeepSeek-V4-Flash local mixed quant | Present: 164,633,502,592-byte GGUF under `/mnt/raid0/llm/models/deepseek-v4-flash/`. | Added `deepseek_v4_flash_local_q4kexperts` with local-artifact provenance only; no HF sidecar found. | Loader support plus CPU/GPU/hybrid memory feasibility. |
 | MiniCPM-o-4_5 multimodal bundle | Present: Q4/Q5/Q8 text GGUFs plus audio, vision, TTS, and token2wav projectors. | Added `minicpm_o_45_local_multimodal` with HF sidecar provenance for Q4/Q8. | Text-only load smoke, then modality support mapping. |
 | Qwen2.5-Coder-14B local Q4_K_M | Present: 8,988,111,072-byte GGUF. | Added `qwen25_coder_14b_local_q4km`; no HF sidecar found. | Code smoke and quality/speed niche against existing coder/frontdoor routes. |
-| Qwen3.5-9B MTP local Q4_K_M | Present: 5,868,826,976-byte GGUF. | Added `qwen35_9b_mtp_local_q4km`; no HF sidecar found. | MTP-on/off smoke and acceptance measurement. |
+| Qwen3.5-9B MTP local Q4_K_M | Present: 5,868,826,976-byte GGUF. | Added `qwen35_9b_mtp_local_q4km`; no HF sidecar found. | ✅ 2026-07-17 quiet-host MI210 matched no-spec vs native `draft-mtp` A/B recorded. Short exact tasks passed `5/6` on both arms and no-spec was faster; long repetitive structured output passed on both arms and MTP was faster. Next gate is broader task-level role/niche quality, not first runnable MTP support. |
 | Qwen3-VL-8B local Q4_K_M + mmproj | Present: 5,027,784,800-byte GGUF plus 1,159,029,824-byte mmproj. | Added `qwen3_vl_8b_local_q4km` with HF sidecar provenance. | Text + image smoke, then MI210 throughput/quality if coherent. |
 | Qwen3-4B-Thinking-2507 local Q8_0 | Present: 4,280,405,632-byte GGUF. | Added `qwen3_4b_thinking_2507_local_q8` with HF sidecar/tree provenance. | Small reasoning/verifier smoke and task-class quality gate. |
 | N5 aligned Qwen3.5-0.8B Q8 draft | Present: 811,843,904-byte scratch derivative at `/mnt/raid0/llm/scratch/n5/Qwen3.5-0.8B-Q8_0.frontdoor-mtp-specials.gguf`; historical non-MTP-aligned source remains at `frontdoor-specials.gguf`. | Added `draft_qwen35_0_8b_q8_0_frontdoor_mtp_specials` as a research-only external-draft artifact with active-MTP-frontdoor BOS/EOS/PAD `248044/248046/248055`. | Use only through the hardened N5 strict/execute harness in an isolated retest worktree/build; not a production-stack registry candidate. |
@@ -310,7 +310,7 @@ A longer single-owner MI210 server sweep was run at `/mnt/raid0/llm/tmp/model-lo
 | Nemotron-Nano-9B-v2 Q8_0 | 86 | 1536 | 415.06 | 82.78 | Hit length cap; emitted `<think>` despite reasoning-off flags. |
 | Qwable-v1 IQ4_XS | 84 | 1322 | 519.89 | 98.32 | Plain reasoner/server path. |
 | Qwable-v1 Q8_0 | 84 | 1087 | 497.75 | 100.15 | Near-lossless Qwable arm; similar decode speed to IQ4_XS in this prompt. |
-| Qwen3.5-9B MTP local Q4_K_M | 84 | 1197 | 487.56 | 99.44 | Needs MTP acceptance/quality gate before role claim. |
+| Qwen3.5-9B MTP local Q4_K_M | 84 | 1197 | 487.56 | 99.44 | Superseded by the 2026-07-17 quiet-host matched A/B below for acceptance/task-class interpretation. |
 | MiniCPM-o-4_5 local Q4 | 84 | 1472 | 1648.90 | 107.20 | Text-only path; modality mapping remains separate. |
 | Qwen3-VL-8B local text path | 80 | 1536 | 1569.12 | 102.73 | Text path with mmproj available; image runtime/coherence smoke closed 2026-07-17. |
 | Bonsai-8B local orphan | 84 | 1073 | 950.75 | 38.00 | Provenance unresolved despite coherent decode. |
@@ -318,6 +318,17 @@ A longer single-owner MI210 server sweep was run at `/mnt/raid0/llm/tmp/model-lo
 | Qwen2.5-Coder-14B local Q4_K_M | 101 | 1344 | 1095.25 | 66.16 | Recorded for completeness; operator later deprioritized further testing of this model. |
 
 2026-07-17 quiet-host repeat: `/mnt/raid0/llm/tmp/model-admission-gpu-20260717-nemotron-nano/` reran Nemotron-Nano Q8 on MI210 after Firefox/MegaSync removal and measured prompt `448.9 t/s`, generation `83.3 t/s` over a 1536-token cap. This confirms the earlier ~83 t/s decode observation, but remains throughput-only: output drifted into prompt-file/meta help text, and the invoked experimental `build-hip` binary self-reported stale `9d70bae4b` while source HEAD was `2e79e10cc`.
+
+## Qwen3.5-9B MTP Quiet-Host Matched A/B
+
+Evidence lives under `/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-quality-20260717T202549Z/summary.json` and `/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-longoutput-20260717T202636Z/summary.json`. Both runs used the experimental v7 HIP server from `build-hip/bin` with `LD_LIBRARY_PATH` pinned, `--reasoning off --reasoning-budget 0`, q8 KV, MI210 offload, fresh sequential servers, deterministic requests, and no AutoPilot/stack contention.
+
+| Slice | No-spec | Native MTP | Result |
+|---|---:|---:|---|
+| Short exact tasks | `5/6` passed, mean decode `124.77 t/s` | `5/6` passed, mean decode `109.28 t/s`, draft accept `30/30` | No-spec wins because 2-14 token completions are overhead-dominated. |
+| Long repetitive structured output | `1024` completion tokens at `95.08 t/s`; all generated words matched the requested token | `1024` completion tokens at `140.50 t/s`; draft accept `682/682`; all generated words matched the requested token | MTP wins when the output is long and predictable. |
+
+Interpretation: Qwen3.5-9B native MTP is runnable and acceptance-clean on a realistic long-output slice, but it is a task-class-dependent acceleration lane. Use no-spec for tiny verifier-style completions; consider MTP for longer repetitive/structured generation after a broader role-quality/niche gate. This is not yet a production role claim against the existing frontdoor/worker stack.
 
 ## MI210 Context-Size Sweep
 
@@ -368,7 +379,7 @@ CPU long-run observations now span the main non-GLM candidates that had MI210 lo
 | Nemotron-Nano-9B-v2 Q8_0 | 67 | 768 | 97.46 | 5.44 | Emitted `<think>` despite reasoning-off flags. |
 | Qwable-v1 IQ4_XS | 66 | 616 | 88.90 | 13.71 | CPU control/regression-guard lane for IQ4_XS reasoner; serving decision uses MI210 quality-clean lane when available. |
 | Qwable-v1 Q8_0 | 66 | 706 | 87.99 | 10.00 | CPU control/regression-guard lane for Q8_0 reasoner. |
-| Qwen3.5-9B MTP local Q4_K_M | 64 | 768 | 108.23 | 10.25 | `draft-mtp` active; response had empty `message.content` despite 768 completion tokens, likely reasoning-only content. |
+| Qwen3.5-9B MTP local Q4_K_M | 64 | 768 | 108.23 | 10.25 | `draft-mtp` active; response had empty `message.content` despite 768 completion tokens, likely reasoning-only content. Superseded for quality/acceptance by the 2026-07-17 reasoning-off matched MI210 A/B above. |
 | MiniCPM-o-4_5 Q4_K_M text path | 62 | 768 | 235.49 | 7.69 | Response had empty `message.content` despite 768 completion tokens; keep as throughput-only. |
 | Qwen3-VL-8B Q4_K_M text path | 62 | 768 | 229.37 | 7.69 | Corrected local model/mmproj path; image runtime/coherence smoke closed 2026-07-17. |
 | Bonsai-8B local orphan | 66 | 593 | 224.17 | 30.08 | Provenance unresolved, but longer CPU decode is coherent. |
@@ -445,7 +456,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 3. Investigate the Ternary Bonsai Q2_0 artifact/runtime offset mismatch before retrying. Q2_g64 is CPU+MI210 runtime-smoke passed and has preliminary throughput observations, including a positive MI210 `ngram-mod` structured-copy speed signal, but the strict quality gate passed only 6/8 and blocks any role claim; dspark variants failed separately.
 4. Qwable IQ4_XS standalone routing and broader representative quality are closed for the research registry: plain reasoning-off IQ4_XS is the preferred reasoning-heavy route, `ngram-mod` is neutral on the expanded slice, and scaffold remains only the beneficiary-must-answer fallback. Remaining work is production hosting/composite-route wiring, not model admission.
 5. Treat Nemotron-Nano BF16 as a quality-ceiling arm only after Q8_0 merits comparison. Nemotron-Cascade-2 is now historical/catalogue only; do not schedule inference absent an explicit Mamba2-hybrid revival study.
-6. Move beyond speed-only admission observations for Qwen3.5-9B MTP, Bonsai, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible. MiniCPM-o now has a K35 quality-clean vision candidate result plus targeted frontdoor co-residency/service-tax evidence; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure; SuperGemma4 is quality-clean but slower/heavier than MiniCPM-o. PaddleOCR-VL now has a guarded `odl_bench` producer and two scored document-parser demos; prompt-only HTML-table recovery failed, so it remains a document-specialist lane pending table post-processing / parser comparison, not a general vision QA role.
+6. Move beyond first-pass admission observations for Qwen3.5-9B MTP, Bonsai, and Nemotron where role candidacy remains plausible. Qwen3.5-9B MTP now has a quiet-host matched no-spec/MTP slice: no-spec is better for tiny completions, while native MTP is faster on long repetitive structured output with clean acceptance; broader role-quality/niche evidence remains open. MiniCPM-o now has a K35 quality-clean vision candidate result plus targeted frontdoor co-residency/service-tax evidence; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure; SuperGemma4 is quality-clean but slower/heavier than MiniCPM-o. PaddleOCR-VL now has a guarded `odl_bench` producer and two scored document-parser demos; prompt-only HTML-table recovery failed, so it remains a document-specialist lane pending table post-processing / parser comparison, not a general vision QA role.
 7. Keep generic GLM hot-expert offload/REAP deprioritized after the production-representative skew profile; reopen only with a narrower role-specific corpus or different placement mechanism.
 
 Opt-in command file: `docs/data/model_admission_smoke_commands_20260716.sh`.

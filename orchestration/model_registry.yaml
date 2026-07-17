@@ -6760,7 +6760,7 @@ roles:
       mtp_capable: true
     artifact_status:
       download: present
-      observed_date: 2026-07-16
+      observed_date: 2026-07-17
       file_bytes: 5868826976
       provenance: local_artifact_no_hf_sidecar_found
     candidate_roles:
@@ -6774,19 +6774,23 @@ roles:
     constraints:
       forbid:
       - production_stack_registration_without_mtp_gate
-      reason: "Must prove MTP acceptance/quality and role niche versus existing 35B frontdoor and worker models."
+      reason: "MTP first acceptance/quality slice is task-class dependent: no-spec wins tiny completions, MTP wins long repetitive structured output. Broader role niche versus existing 35B frontdoor and worker models remains open."
     performance:
-      benchmark_status: cpu_mi210_mtp_smoke_pass_observation_quality_open
-      observed_date: 2026-07-16
+      benchmark_status: quiet_host_mi210_matched_mtp_ab_task_class_dependent_quality_open
+      observed_date: 2026-07-17
       cpu_observation: "MTP smoke passed during active GLM download: prompt 35.8 t/s, generation 11.4 t/s; exact-output prompt emitted reasoning text."
       mi210_observation: "MTP smoke passed during active GLM download: prompt 114.6 t/s, generation 113.7 t/s; exact-output prompt emitted reasoning text."
       long_cpu_observation: "2026-07-16 longer CPU server run with draft-mtp generated 768 completion tokens at 10.25 t/s after a 64-token prompt; response had empty message.content despite nonzero completion tokens, likely reasoning-only content."
       long_mi210_observation: "2026-07-16 longer MI210 server run with draft-mtp generated 1197 tokens at 99.44 t/s after an 84-token prompt; server reported draft acceptance 632/1128 (0.56028), mean length 2.12."
+      quiet_mi210_short_task_ab: "2026-07-17 reasoning-off matched server A/B: no-spec and draft-mtp n=2 both passed 5/6 short exact tasks with reasoning_len=0; no-spec mean decode 124.77 t/s, MTP 109.28 t/s; MTP draft acceptance 30/30."
+      quiet_mi210_long_structured_ab: "2026-07-17 reasoning-off matched long-output A/B: no-spec 95.08 t/s vs draft-mtp n=2 140.50 t/s over 1024 completion tokens; both produced all requested repeated tokens; MTP draft acceptance 682/682."
       evidence:
       - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen35_9b_mtp_cpu_v7/qwen35_9b_mtp_cpu_v7.stdout
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-qwen35_9b_mtp_mi210_v7/qwen35_9b_mtp_mi210_v7.stdout
       - /mnt/raid0/llm/tmp/model-long-cpu-remaining-20260716T223834/qwen35_9b_mtp_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwen35_9b_mtp_mi210/summary.txt
+      - /mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-quality-20260717T202549Z/summary.json
+      - /mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-longoutput-20260717T202636Z/summary.json
     memory:
       residency: cold
       pinned: false
@@ -6794,8 +6798,8 @@ roles:
       gpu_only_candidate: true
       hybrid_candidate: false
     benchmark_plan:
-      cpu_only: "MTP-on/off smoke and acceptance measurement."
-      gpu_only: "MI210 MTP smoke if CPU path is coherent."
+      cpu_only: "CPU remains a control/regression guard; do not use CPU baseline as the serving metric unless no optimized lane exists."
+      gpu_only: "Broader MI210 role-quality/niche gate. Prefer no-spec for tiny completions; use native MTP for longer repetitive/structured outputs where acceptance amortizes overhead."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   qwen3_vl_8b_local_q4km:
