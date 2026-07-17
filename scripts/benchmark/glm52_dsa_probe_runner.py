@@ -27,6 +27,7 @@ import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -48,10 +49,13 @@ REQUIRED_NON_CACHE_SHARDS = 6
 DEFAULT_THREADS = 96
 DEFAULT_UBATCH = 512
 DEFAULT_MAX_TOKENS = 32
+DEFAULT_THROUGHPUT_MAX_TOKENS = 768
+DEFAULT_MIN_COMPLETION_TOKENS = 384
 DEFAULT_SEED = 42
 DEFAULT_TEMPERATURE = 0.0
 DEFAULT_INDEXER_TOP_K = 32
 DEFAULT_REQUEST_TIMEOUT = 3600
+DEFAULT_PROGRESS_POLL_INTERVAL = 30
 DEFAULT_SHORT_CONTEXT = 4096
 DEFAULT_LONG_CONTEXT = 32768
 DEFAULT_KV_CONTEXTS = (4096, 8192, 16384, 32768)
@@ -67,6 +71,16 @@ FILLER_TEXT = (
     "The GLM DSA probe keeps the context deterministic while the runner checks "
     "shard integrity, load behavior, and KV scaling under a fixed indexer "
     "configuration. "
+)
+LONG_OUTPUT_REPEAT_COUNT = 620
+LONG_OUTPUT_TASK_LINE = (
+    "First output READY. Then output the word tokenstream repeated exactly "
+    f"{LONG_OUTPUT_REPEAT_COUNT} times, separated by single spaces. Do not use "
+    "markdown. Do not explain. Do not stop early."
+)
+SHORT_ANSWER_INSTRUCTION = "Answer with a single short sentence."
+LONG_OUTPUT_ANSWER_INSTRUCTION = (
+    "Return the requested READY marker and tokenstream sequence only."
 )
 
 
@@ -257,6 +271,7 @@ def build_server_command(
     indexer_top_k: int,
     trace_logs: bool = False,
     log_file: Path | None = None,
+    metrics: bool = False,
     extra_args: list[str] | None = None,
 ) -> list[str]:
     command = [
@@ -293,6 +308,8 @@ def build_server_command(
             command.extend(["--log-file", str(log_file)])
     else:
         command.append("--log-disable")
+    if metrics:
+        command.append("--metrics")
     if extra_args:
         command.extend(extra_args)
     return command
@@ -302,18 +319,30 @@ def _target_prompt_chars(context_length: int) -> int:
     return int(max(0, (context_length - PROMPT_RESERVE_TOKENS) * PROMPT_CHARS_PER_TOKEN_HEURISTIC))
 
 
-def _build_prompt_from_chars(task_line: str, target_chars: int) -> str:
+def _build_prompt_from_chars(
+    task_line: str,
+    target_chars: int,
+    answer_instruction: str = SHORT_ANSWER_INSTRUCTION,
+) -> str:
     repeats = max(1, target_chars // len(FILLER_TEXT) + 1)
     filler = (FILLER_TEXT * repeats)[:target_chars]
     return (
         f"{filler}\n\n--- TASK ---\n"
         f"{task_line}\n"
-        "Answer with a single short sentence."
+        f"{answer_instruction}"
     )
 
 
-def _build_prompt(task_line: str, context_length: int) -> str:
-    return _build_prompt_from_chars(task_line, _target_prompt_chars(context_length))
+def _build_prompt(
+    task_line: str,
+    context_length: int,
+    answer_instruction: str = SHORT_ANSWER_INSTRUCTION,
+) -> str:
+    return _build_prompt_from_chars(
+        task_line,
+        _target_prompt_chars(context_length),
+        answer_instruction=answer_instruction,
+    )
 
 
 def _prompt_spec(
@@ -322,14 +351,38 @@ def _prompt_spec(
     task_line: str,
     min_prompt_tokens: int,
     prompt_context_guard_tokens: int,
+    answer_instruction: str = SHORT_ANSWER_INSTRUCTION,
 ) -> dict[str, Any]:
     return {
         "kind": kind,
         "context_length": context_length,
         "task_line": task_line,
+        "answer_instruction": answer_instruction,
         "chars_per_token_heuristic": PROMPT_CHARS_PER_TOKEN_HEURISTIC,
         "min_prompt_tokens": min_prompt_tokens,
         "prompt_context_guard_tokens": prompt_context_guard_tokens,
+    }
+
+
+def _request_spec(
+    *,
+    max_tokens: int,
+    seed: int,
+    temperature: float,
+    timeout_s: int,
+    min_completion_tokens: int = 0,
+    progress_poll_interval_s: int = 0,
+    purpose: str = "coherence",
+) -> dict[str, Any]:
+    return {
+        "endpoint": "/v1/chat/completions",
+        "max_tokens": max_tokens,
+        "seed": seed,
+        "temperature": temperature,
+        "timeout_s": timeout_s,
+        "min_completion_tokens": min_completion_tokens,
+        "progress_poll_interval_s": progress_poll_interval_s,
+        "purpose": purpose,
     }
 
 
@@ -344,6 +397,7 @@ def _server_spec(
     ubatch: int,
     indexer_top_k: int,
     trace_logs: bool,
+    metrics: bool,
     log_file: Path | None = None,
 ) -> dict[str, Any]:
     command = build_server_command(
@@ -357,6 +411,7 @@ def _server_spec(
         indexer_top_k=indexer_top_k,
         trace_logs=trace_logs,
         log_file=log_file,
+        metrics=metrics,
     )
     return {
         "server_command": command,
@@ -368,6 +423,7 @@ def _server_spec(
         "indexer_top_k": indexer_top_k,
         "indexer_top_k_override": f"{INDEXER_TOP_K_OVERRIDE_KEY}=int:{indexer_top_k}",
         "trace_logs": trace_logs,
+        "metrics": metrics,
         "log_file": str(log_file) if log_file is not None else None,
     }
 
@@ -380,7 +436,12 @@ def selected_stage_names(args: argparse.Namespace) -> set[str] | None:
 
 def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path, library_path: Path) -> dict[str, Any]:
     short_task = "Return READY after the short load/decode smoke."
-    long_task = "Return READY after the long-context DSA probe."
+    long_task = LONG_OUTPUT_TASK_LINE if args.long_output else "Return READY after the long-context DSA probe."
+    long_answer_instruction = LONG_OUTPUT_ANSWER_INSTRUCTION if args.long_output else SHORT_ANSWER_INSTRUCTION
+    long_max_tokens = args.throughput_max_tokens if args.long_output else args.max_tokens
+    long_min_completion_tokens = args.min_completion_tokens if args.long_output else 0
+    long_progress_poll_interval = args.progress_poll_interval if args.long_output else 0
+    long_metrics = args.metrics or args.long_output
     scaling_task = "Return READY for the KV-length scaling checkpoint."
 
     primary_shard = Path(inventory["primary_shard"]) if inventory["primary_shard"] else args.model_dir
@@ -421,15 +482,15 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 ubatch=args.ubatch,
                 indexer_top_k=args.indexer_top_k,
                 trace_logs=args.trace_logs,
+                metrics=args.metrics,
                 log_file=log_dir / "short_load_decode_smoke.server.log" if args.trace_logs else None,
             ),
-            "request": {
-                "endpoint": "/v1/chat/completions",
-                "max_tokens": args.max_tokens,
-                "seed": args.seed,
-                "temperature": args.temperature,
-                "timeout_s": args.request_timeout,
-            },
+            "request": _request_spec(
+                max_tokens=args.max_tokens,
+                seed=args.seed,
+                temperature=args.temperature,
+                timeout_s=args.request_timeout,
+            ),
         },
         {
             "name": "long_context_dsa_probe",
@@ -441,6 +502,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 long_task,
                 args.min_prompt_tokens,
                 args.prompt_context_guard_tokens,
+                answer_instruction=long_answer_instruction,
             ),
             "server": _server_spec(
                 binary=binary,
@@ -452,15 +514,18 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 ubatch=args.ubatch,
                 indexer_top_k=args.indexer_top_k,
                 trace_logs=args.trace_logs,
+                metrics=long_metrics,
                 log_file=log_dir / "long_context_dsa_probe.server.log" if args.trace_logs else None,
             ),
-            "request": {
-                "endpoint": "/v1/chat/completions",
-                "max_tokens": args.max_tokens,
-                "seed": args.seed,
-                "temperature": args.temperature,
-                "timeout_s": args.request_timeout,
-            },
+            "request": _request_spec(
+                max_tokens=long_max_tokens,
+                seed=args.seed,
+                temperature=args.temperature,
+                timeout_s=args.request_timeout,
+                min_completion_tokens=long_min_completion_tokens,
+                progress_poll_interval_s=long_progress_poll_interval,
+                purpose="coherence_plus_throughput" if args.long_output else "coherence",
+            ),
         },
         {
             "name": "kv_length_scaling",
@@ -487,15 +552,15 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                         ubatch=args.ubatch,
                         indexer_top_k=args.indexer_top_k,
                         trace_logs=args.trace_logs,
+                        metrics=args.metrics,
                         log_file=log_dir / f"kv_length_scaling_{context_length}.server.log" if args.trace_logs else None,
                     ),
-                    "request": {
-                        "endpoint": "/v1/chat/completions",
-                        "max_tokens": args.max_tokens,
-                        "seed": args.seed,
-                        "temperature": args.temperature,
-                        "timeout_s": args.request_timeout,
-                    },
+                    "request": _request_spec(
+                        max_tokens=args.max_tokens,
+                        seed=args.seed,
+                        temperature=args.temperature,
+                        timeout_s=args.request_timeout,
+                    ),
                 }
                 for idx, context_length in enumerate(args.kv_contexts)
             ],
@@ -629,12 +694,16 @@ def terminate_server(proc: subprocess.Popen[str]) -> None:
             proc.wait(timeout=20)
 
     ps = subprocess.run(
-        ["ps", "-p", str(pid), "-o", "pid="],
+        ["ps", "-p", str(pid), "-o", "pid=,stat="],
         check=False,
         capture_output=True,
         text=True,
     )
-    if ps.returncode == 0 and ps.stdout.strip() == str(pid):
+    if ps.returncode == 0:
+        fields = ps.stdout.strip().split()
+        if len(fields) >= 2 and fields[0] == str(pid) and "Z" in fields[1]:
+            return
+    if ps.returncode == 0 and ps.stdout.strip().split()[0:1] == [str(pid)]:
         raise RuntimeError(f"server pid {pid} still visible after stop")
 
 
@@ -661,6 +730,7 @@ def build_prompt_with_token_floor(
     max_completion_tokens: int,
     prompt_context_guard_tokens: int,
     token_counter: Callable[[str], int],
+    answer_instruction: str = SHORT_ANSWER_INSTRUCTION,
 ) -> dict[str, Any]:
     max_prompt_tokens = context_length - max_completion_tokens - prompt_context_guard_tokens
     if max_prompt_tokens <= 0:
@@ -676,7 +746,7 @@ def build_prompt_with_token_floor(
         )
 
     target_chars = _target_prompt_chars(context_length)
-    prompt = _build_prompt_from_chars(task_line, target_chars)
+    prompt = _build_prompt_from_chars(task_line, target_chars, answer_instruction=answer_instruction)
     token_count = token_counter(prompt)
     attempts = 1
 
@@ -689,7 +759,7 @@ def build_prompt_with_token_floor(
         observed_chars_per_token = max(1.0, len(prompt) / max(token_count, 1))
         deficit = min_prompt_tokens - token_count
         target_chars += int(deficit * observed_chars_per_token * 1.10) + len(FILLER_TEXT)
-        prompt = _build_prompt_from_chars(task_line, target_chars)
+        prompt = _build_prompt_from_chars(task_line, target_chars, answer_instruction=answer_instruction)
         token_count = token_counter(prompt)
         attempts += 1
 
@@ -707,6 +777,47 @@ def build_prompt_with_token_floor(
         "prompt_token_max": max_prompt_tokens,
         "prompt_token_adjustment_attempts": attempts,
     }
+
+
+def _summarize_metrics_text(text: str) -> dict[str, Any]:
+    patterns = ("tokens", "prompt", "eval", "slot", "request", "latency", "processing")
+    matches = [
+        line
+        for line in text.splitlines()
+        if any(pattern in line.lower() for pattern in patterns)
+    ]
+    return {
+        "bytes": len(text.encode("utf-8", errors="replace")),
+        "line_count": text.count("\n") + (1 if text else 0),
+        "matched_line_count": len(matches),
+        "matched_lines_tail": matches[-40:],
+    }
+
+
+def fetch_metrics(port: int, timeout_s: int = 5) -> dict[str, Any]:
+    req = urllib.request.Request(f"http://127.0.0.1:{port}/metrics", method="GET")
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+        text = resp.read().decode("utf-8", errors="replace")
+    return _summarize_metrics_text(text)
+
+
+def collect_progress_metrics(
+    *,
+    port: int,
+    interval_s: int,
+    stop_event: threading.Event,
+    samples: list[dict[str, Any]],
+    max_samples: int = 80,
+) -> None:
+    while not stop_event.wait(interval_s):
+        sample: dict[str, Any] = {"sampled_at": datetime.now(timezone.utc).isoformat()}
+        try:
+            sample.update({"status": "ok", **fetch_metrics(port)})
+        except Exception as exc:
+            sample.update({"status": "error", "error": str(exc)})
+        samples.append(sample)
+        if len(samples) > max_samples:
+            del samples[: len(samples) - max_samples]
 
 
 def summarize_server_log(log_file: str | None) -> dict[str, Any]:
@@ -754,6 +865,9 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
     proc = launch_server(server_command)
     response: dict[str, Any] | None = None
     prompt_info: dict[str, Any] | None = None
+    progress_samples: list[dict[str, Any]] = []
+    stop_event = threading.Event()
+    poll_thread: threading.Thread | None = None
     try:
         wait_for_health(stage["server"]["port"])
         tokenize_timeout = max(60, min(stage["request"]["timeout_s"], 600))
@@ -763,8 +877,22 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
             min_prompt_tokens=int(stage["prompt"].get("min_prompt_tokens", 0)),
             max_completion_tokens=stage["request"]["max_tokens"],
             prompt_context_guard_tokens=int(stage["prompt"].get("prompt_context_guard_tokens", 0)),
+            answer_instruction=str(stage["prompt"].get("answer_instruction", SHORT_ANSWER_INSTRUCTION)),
             token_counter=lambda prompt: count_prompt_tokens(stage["server"]["port"], prompt, tokenize_timeout),
         )
+        poll_interval = int(stage["request"].get("progress_poll_interval_s", 0) or 0)
+        if stage["server"].get("metrics") and poll_interval > 0:
+            poll_thread = threading.Thread(
+                target=collect_progress_metrics,
+                kwargs={
+                    "port": stage["server"]["port"],
+                    "interval_s": poll_interval,
+                    "stop_event": stop_event,
+                    "samples": progress_samples,
+                },
+                daemon=True,
+            )
+            poll_thread.start()
         response = call_completion(
             stage["server"]["port"],
             prompt_info["prompt"],
@@ -773,23 +901,46 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
             stage["request"]["seed"],
             stage["request"]["timeout_s"],
         )
+        stop_event.set()
+        if poll_thread is not None:
+            poll_thread.join(timeout=10)
     finally:
+        stop_event.set()
+        if poll_thread is not None:
+            poll_thread.join(timeout=10)
         terminate_server(proc)
 
     assert response is not None
     assert prompt_info is not None
     summary = _response_summary(response)
+    usage = summary.get("usage", {})
+    completion_tokens = usage.get("completion_tokens") if isinstance(usage, dict) else None
+    min_completion_tokens = int(stage["request"].get("min_completion_tokens", 0) or 0)
+    completion_token_min_passed = (
+        min_completion_tokens == 0
+        or (isinstance(completion_tokens, int) and completion_tokens >= min_completion_tokens)
+    )
+    if min_completion_tokens > 0 and not completion_token_min_passed:
+        raise RuntimeError(
+            "completion token minimum not met for throughput evidence: "
+            f"completion_tokens={completion_tokens!r}, min_completion_tokens={min_completion_tokens}"
+        )
     return {
         "name": stage["name"],
         "status": "ok",
         "port": stage["server"]["port"],
         "context_length": stage["server"]["context_length"],
         "prompt_kind": stage["prompt"]["kind"],
+        "request_purpose": stage["request"].get("purpose", "coherence"),
         "prompt_char_count": prompt_info["prompt_char_count"],
         "prompt_token_count": prompt_info["prompt_token_count"],
         "prompt_token_min": prompt_info["prompt_token_min"],
         "prompt_token_max": prompt_info["prompt_token_max"],
         "prompt_token_adjustment_attempts": prompt_info["prompt_token_adjustment_attempts"],
+        "completion_token_min": min_completion_tokens,
+        "completion_token_count": completion_tokens,
+        "completion_token_min_passed": completion_token_min_passed,
+        "progress_metrics_samples": progress_samples,
         **summary,
         "server_log": summarize_server_log(stage["server"].get("log_file")),
     }
@@ -861,6 +1012,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--threads", type=int, default=DEFAULT_THREADS, help="llama-server threads")
     parser.add_argument("--ubatch", type=int, default=DEFAULT_UBATCH, help="llama-server ubatch")
     parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS, help="Request max_tokens")
+    parser.add_argument(
+        "--long-output",
+        action="store_true",
+        help="Use one long-context request that combines READY coherence with enough generation for throughput evidence",
+    )
+    parser.add_argument(
+        "--throughput-max-tokens",
+        type=int,
+        default=DEFAULT_THROUGHPUT_MAX_TOKENS,
+        help="max_tokens for --long-output long-context throughput probes",
+    )
+    parser.add_argument(
+        "--min-completion-tokens",
+        type=int,
+        default=DEFAULT_MIN_COMPLETION_TOKENS,
+        help="Minimum completion tokens required for --long-output throughput evidence",
+    )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="Request seed")
     parser.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE, help="Request temperature")
     parser.add_argument("--indexer-top-k", type=int, default=DEFAULT_INDEXER_TOP_K, help="Fixed DSA indexer_top_k")
@@ -874,6 +1042,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--trace-logs",
         action="store_true",
         help="Keep llama-server trace logs instead of passing --log-disable",
+    )
+    parser.add_argument(
+        "--metrics",
+        action="store_true",
+        help="Enable llama-server --metrics in staged server commands",
+    )
+    parser.add_argument(
+        "--progress-poll-interval",
+        type=int,
+        default=DEFAULT_PROGRESS_POLL_INTERVAL,
+        help="Seconds between /metrics samples during --long-output completion calls",
     )
     parser.add_argument(
         "--only-stage",

@@ -102,6 +102,12 @@ Experimental-v7 commit `3dee86a5a` closes the current-source cache/runtime gap f
 
 Interpretation: GLM DSA cache/runtime wiring is closed. Remaining GLM gates are sparse final-attention profiling/implementation, current-source long-context needle/coherence, task quality, CPU throughput, and native GLM-MTP.
 
+## GLM-5.2 Aborted Current-Source 96K Attempt
+
+The attempted current-source 96K quality/throughput probe at `/mnt/raid0/llm/tmp/glm52-current-source-96k-quality-20260717T144022Z/plan.json` is discarded as **non-evidence**. The plan used execute mode with `--log-disable`, no `--metrics` endpoint, a non-streaming busy request, and only `max_tokens=32`; no response artifact was produced. Do not consume it as GLM quality, throughput, or kernel evidence.
+
+The GLM DSA runner now has an instrumented long-output contract: use `--long-output` with enough `--throughput-max-tokens`, a `--min-completion-tokens` floor, and live progress telemetry (`--metrics` / `/metrics` samples). Long-output or reviewer-quality runs that lack those fields are process observations only.
+
 ## GLM-5.2 Expert-Routing Skew
 
 The 2026-07-17 expert-routing-skew gate now has both a tiny-corpus first pass and a production-representative repeat. The first pass at `/mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/` established that `llama-imatrix` GGUF artifacts persist per-expert `.counts` tensors, not just activation statistics.

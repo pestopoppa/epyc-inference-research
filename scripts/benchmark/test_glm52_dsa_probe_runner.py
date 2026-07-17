@@ -170,6 +170,52 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
                 runner.DEFAULT_PROMPT_CONTEXT_GUARD_TOKENS,
             )
 
+    def test_long_output_plan_enables_metrics_and_completion_floor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            model_dir = _make_shard_dir(tmp_path)
+            binary_dir = tmp_path / "bin"
+            binary_dir.mkdir()
+            binary = binary_dir / "llama-server"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+
+            args = runner.parse_args(
+                [
+                    "--output",
+                    str(tmp_path / "plan.json"),
+                    "--model-dir",
+                    str(model_dir),
+                    "--binary",
+                    str(binary),
+                    "--library-path",
+                    str(binary_dir),
+                    "--long-output",
+                    "--throughput-max-tokens",
+                    "640",
+                    "--min-completion-tokens",
+                    "320",
+                    "--progress-poll-interval",
+                    "7",
+                ]
+            )
+            inventory = runner.collect_inventory(model_dir)
+            plan = runner.build_plan(args, inventory, runner.resolve_binary(binary), runner.resolve_library_path(binary, binary_dir))
+
+            short_stage = plan["stages"][1]
+            long_stage = plan["stages"][2]
+
+            self.assertFalse(short_stage["server"]["metrics"])
+            self.assertNotIn("--metrics", short_stage["server"]["server_command"])
+            self.assertTrue(long_stage["server"]["metrics"])
+            self.assertIn("--metrics", long_stage["server"]["server_command"])
+            self.assertEqual(long_stage["request"]["purpose"], "coherence_plus_throughput")
+            self.assertEqual(long_stage["request"]["max_tokens"], 640)
+            self.assertEqual(long_stage["request"]["min_completion_tokens"], 320)
+            self.assertEqual(long_stage["request"]["progress_poll_interval_s"], 7)
+            self.assertIn("tokenstream", long_stage["prompt"]["task_line"])
+            self.assertEqual(long_stage["prompt"]["answer_instruction"], runner.LONG_OUTPUT_ANSWER_INSTRUCTION)
+
     def test_prompt_token_floor_expands_until_live_tokenizer_count_passes_minimum(self) -> None:
         counts: list[int] = []
 
@@ -237,6 +283,115 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
         self.assertEqual(result["stages"][0]["status"], "skipped")
         self.assertEqual(result["stages"][1], expected)
         self.assertEqual(result["stages"][2]["reason"], "not selected")
+
+    def test_run_stage_records_completion_floor_pass(self) -> None:
+        stage = {
+            "name": "long_context_dsa_probe",
+            "prompt": {
+                "task_line": "Return READY.",
+                "context_length": 4096,
+                "kind": "long_context_probe",
+                "answer_instruction": runner.SHORT_ANSWER_INSTRUCTION,
+            },
+            "server": {"server_command": [], "port": 1, "context_length": 4096, "log_file": None, "metrics": False},
+            "request": {
+                "max_tokens": 16,
+                "temperature": 0.0,
+                "seed": 1,
+                "timeout_s": 60,
+                "min_completion_tokens": 2,
+                "progress_poll_interval_s": 0,
+                "purpose": "coherence_plus_throughput",
+            },
+        }
+
+        class FakeProc:
+            pid = None
+
+        originals = (
+            runner.launch_server,
+            runner.wait_for_health,
+            runner.count_prompt_tokens,
+            runner.call_completion,
+            runner.terminate_server,
+        )
+        try:
+            runner.launch_server = lambda command: FakeProc()  # type: ignore[assignment]
+            runner.wait_for_health = lambda port: None  # type: ignore[assignment]
+            runner.count_prompt_tokens = lambda port, prompt, timeout_s: 100  # type: ignore[assignment]
+            runner.call_completion = lambda port, prompt, max_tokens, temperature, seed, timeout_s: {  # type: ignore[assignment]
+                "usage": {"prompt_tokens": 100, "completion_tokens": 3},
+                "timings": {"predicted_per_second": 12.5},
+                "choices": [{"message": {"content": "READY tokenstream tokenstream"}, "finish_reason": "stop"}],
+            }
+            runner.terminate_server = lambda proc: None  # type: ignore[assignment]
+            result = runner.run_stage(stage)
+        finally:
+            (
+                runner.launch_server,
+                runner.wait_for_health,
+                runner.count_prompt_tokens,
+                runner.call_completion,
+                runner.terminate_server,
+            ) = originals  # type: ignore[assignment]
+
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["request_purpose"], "coherence_plus_throughput")
+        self.assertEqual(result["completion_token_min"], 2)
+        self.assertEqual(result["completion_token_count"], 3)
+        self.assertTrue(result["completion_token_min_passed"])
+
+    def test_run_stage_rejects_short_completion_for_throughput_evidence(self) -> None:
+        stage = {
+            "name": "long_context_dsa_probe",
+            "prompt": {
+                "task_line": "Return READY.",
+                "context_length": 4096,
+                "kind": "long_context_probe",
+                "answer_instruction": runner.SHORT_ANSWER_INSTRUCTION,
+            },
+            "server": {"server_command": [], "port": 1, "context_length": 4096, "log_file": None, "metrics": False},
+            "request": {
+                "max_tokens": 16,
+                "temperature": 0.0,
+                "seed": 1,
+                "timeout_s": 60,
+                "min_completion_tokens": 8,
+                "progress_poll_interval_s": 0,
+                "purpose": "coherence_plus_throughput",
+            },
+        }
+
+        class FakeProc:
+            pid = None
+
+        originals = (
+            runner.launch_server,
+            runner.wait_for_health,
+            runner.count_prompt_tokens,
+            runner.call_completion,
+            runner.terminate_server,
+        )
+        try:
+            runner.launch_server = lambda command: FakeProc()  # type: ignore[assignment]
+            runner.wait_for_health = lambda port: None  # type: ignore[assignment]
+            runner.count_prompt_tokens = lambda port, prompt, timeout_s: 100  # type: ignore[assignment]
+            runner.call_completion = lambda port, prompt, max_tokens, temperature, seed, timeout_s: {  # type: ignore[assignment]
+                "usage": {"prompt_tokens": 100, "completion_tokens": 3},
+                "timings": {},
+                "choices": [{"message": {"content": "READY"}, "finish_reason": "stop"}],
+            }
+            runner.terminate_server = lambda proc: None  # type: ignore[assignment]
+            with self.assertRaisesRegex(RuntimeError, "completion token minimum not met"):
+                runner.run_stage(stage)
+        finally:
+            (
+                runner.launch_server,
+                runner.wait_for_health,
+                runner.count_prompt_tokens,
+                runner.call_completion,
+                runner.terminate_server,
+            ) = originals  # type: ignore[assignment]
 
     def test_main_writes_dry_run_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

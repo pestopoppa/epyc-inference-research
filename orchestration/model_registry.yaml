@@ -5655,7 +5655,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Next classify sparse-vs-dense final attention and run current-source long-context needle/coherence; stale-binary true >64K prompt execution is recorded but the prefill curve tapered to dense-looking speeds."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Next classify sparse-vs-dense final attention and run current-source long-context needle/coherence through the instrumented long-output runner contract; the blind current-source 96K attempt is explicitly excluded as non-evidence."
     candidate_roles:
     - architect
     - ingest
@@ -5724,6 +5724,15 @@ roles:
         tokens and ended length-capped with reasoning-only preview. This closes
         stale-binary true >64K runnability/engagement, but not current-source
         >64K behavior, sparse-compute scaling, or long-context quality.
+      dsa_blind_96k_process_failure: >
+        2026-07-17 current-source 96K attempt at
+        /mnt/raid0/llm/tmp/glm52-current-source-96k-quality-20260717T144022Z/plan.json
+        is excluded from quality, throughput, and kernel evidence. It used
+        execute mode with --log-disable, no --metrics endpoint, a non-streaming
+        busy request, and only max_tokens=32; no response artifact was produced.
+        Future GLM long-output probes must use --long-output with live /metrics
+        sampling and a min_completion_tokens floor before throughput evidence is
+        accepted.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
@@ -5780,6 +5789,8 @@ roles:
       - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.stats.txt
       - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.counts.json
       - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.counts.md
+      excluded_process_observations:
+      - /mnt/raid0/llm/tmp/glm52-current-source-96k-quality-20260717T144022Z/plan.json
     memory:
       residency: cold
       pinned: false
@@ -5788,7 +5799,7 @@ roles:
       hybrid_candidate: true
       notes: "Too large for 64 GB MI210 GPU-only; CPU and CPU+GPU hot-expert/offload strategies require separate gates."
     benchmark_plan:
-      cpu_only: "Shard integrity -> load/short smoke -> true >64K DSA probe -> sparse-vs-dense classification -> canonical throughput and quality."
+      cpu_only: "Shard integrity -> load/short smoke -> true >64K DSA probe -> sparse-vs-dense classification -> instrumented long-output/needle with metrics and min completion tokens -> canonical throughput and quality."
       gpu_only: "Not expected to fit on MI210."
       cpu_gpu_hybrid: "Production-representative imatrix expert-count extraction is near-uniform globally; generic hot-expert/offload placement is not justified without narrower role-specific skew evidence."
 
