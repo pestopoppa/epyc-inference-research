@@ -6152,7 +6152,7 @@ roles:
       - production_stack_registration_without_quality_gate
       reason: "Q2_0 support depends on the refreshed experimental/upstream kernel lineage; validate runtime support before load/quality claims."
     performance:
-      benchmark_status: ternary_dspark_smoke_fail_offset_mismatch
+      benchmark_status: ternary_q2_0_smoke_fail_output_norm_offset_mismatch
       observed_date: 2026-07-16
       q2_0_observation: "Prior MI210 Q2_0 smoke failed hard on `output_norm.weight` GGUF offset mismatch."
       dspark_observation: "Ternary-Bonsai-27B-dspark-Q4_1 failed on CPU and MI210 with GGUF tensor offset mismatch at `dspark.fc.weight`."

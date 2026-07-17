@@ -141,4 +141,4 @@ For each case, capture stdout/stderr into a dated directory under `/mnt/raid0/ll
 
 - `docs/reference/models/model-admission-2026-07-16.md`
 - `orchestration/model_registry.yaml`
-- `/mnt/raid0/llm/epyc-root/progress/2026-07/2026-07-16.md`
+- the current daily progress file under `/mnt/raid0/llm/epyc-root/progress/2026-07/`
