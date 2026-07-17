@@ -20,6 +20,13 @@ Usage:
   kernel_store.py pareto [--model NAME] [--db PATH]
   kernel_store.py best   [--model NAME] [--db PATH]
   kernel_store.py list   [--model NAME] [--db PATH]
+  kernel_store.py purge  --git-sha SHA [--force] [--db PATH]
+  kernel_store.py rewind (--git-sha SHA | --boundary-id N) [--force] [--db PATH]
+
+purge/rewind are DESTRUCTIVE and DRY-RUN by default (they only report what they
+would remove); pass --force to actually delete. rewind rolls the store back
+along its append-order (`id`) timeline, dropping everything ingested after the
+boundary.
 """
 import argparse, datetime, json, os, sqlite3, sys
 
@@ -47,6 +54,17 @@ def _connect(db):
     c = sqlite3.connect(db)
     c.executescript(SCHEMA)
     return c
+
+
+def _connect_ro(db):
+    """Open the store READ-ONLY for inspection (dry-runs, counts).
+
+    Uses SQLite's URI `mode=ro` so the connection physically cannot mutate the
+    store or run the schema DDL — appropriate for the non-destructive half of a
+    destructive op. Errors out cleanly if the store does not exist yet."""
+    if not os.path.exists(db):
+        sys.exit(f"store does not exist: {db}")
+    return sqlite3.connect(f"file:{db}?mode=ro", uri=True)
 
 
 def _is_correct(rec):
@@ -77,7 +95,7 @@ def ingest(db, path):
             bad += 1
             continue
         try:
-            c.execute(
+            cur = c.execute(
                 """INSERT OR IGNORE INTO runs(label,ts,git_sha,model,status,tbo,coherence,
                    single_tps_baseline,single_tps_variant,delta_pct,aggregate_tps_variant,
                    correct,mechanism,raw) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -90,15 +108,97 @@ def ingest(db, path):
                     json.dumps(r.get("mechanism", {})), line,
                 ),
             )
-            (dup, n) = (dup + 1, n) if c.total_changes == 0 else (dup, n + 1)
+            # cursor.rowcount is 1 when the row was inserted and 0 when the
+            # UNIQUE(label,ts,git_sha) key already existed and OR IGNORE skipped
+            # it. The previous code tested `c.total_changes == 0`, but
+            # total_changes is CUMULATIVE over the connection's lifetime, so
+            # after the first successful insert it was never 0 again and every
+            # later row — inserts AND duplicates alike — was miscounted as an
+            # insert (n over-counted, dup stuck at 0). rowcount is per-statement.
+            if cur.rowcount == 1:
+                n += 1
+            else:
+                dup += 1
         except sqlite3.IntegrityError:
             dup += 1
     c.commit()
-    # recompute n/dup robustly (total_changes is cumulative)
-    print(f"ingested {path}: inserted+seen ok; {bad} unparseable lines. store={db}")
+    print(f"ingested {path}: {n} inserted, {dup} duplicate(s) skipped, "
+          f"{bad} unparseable line(s). store={db}")
     cur = c.execute("SELECT COUNT(*), SUM(correct) FROM runs")
     tot, cok = cur.fetchone()
     print(f"store now holds {tot} runs ({cok or 0} correctness-passing).")
+    return n, dup, bad
+
+
+def purge(db, git_sha, force):
+    """Remove every row for a given kernel git_sha (e.g. a retracted build).
+
+    DRY-RUN by default: counts (read-only) what WOULD be deleted and stops.
+    `--force` is required to actually delete. Returns the number of rows the
+    call removed (0 for a dry-run or a no-op)."""
+    if not git_sha:
+        sys.exit("purge needs --git-sha <sha>")
+    ro = _connect_ro(db)
+    (cnt,) = ro.execute(
+        "SELECT COUNT(*) FROM runs WHERE git_sha=?", (git_sha,)
+    ).fetchone()
+    ro.close()
+    if cnt == 0:
+        print(f"purge: no rows with git_sha={git_sha} — nothing to do. store={db}")
+        return 0
+    if not force:
+        print(f"purge DRY-RUN: would delete {cnt} row(s) with git_sha={git_sha}. "
+              f"Re-run with --force to apply. store={db}")
+        return 0
+    c = _connect(db)
+    c.execute("DELETE FROM runs WHERE git_sha=?", (git_sha,))
+    c.commit()
+    print(f"purge: deleted {cnt} row(s) with git_sha={git_sha}. store={db}")
+    return cnt
+
+
+def rewind(db, git_sha, boundary_id, force):
+    """Roll the store back to a prior state along its insertion timeline.
+
+    The timeline is the monotonic autoincrement `id` (append order), which is a
+    stabler axis than `ts` (which can tie or arrive out of order). Everything
+    appended AFTER the boundary is removed; the boundary row itself is kept.
+
+    Boundary selectors (exactly one):
+      --git-sha SHA   : rewind to just after that sha's last-ingested run
+                        (boundary = MAX(id) among rows with that git_sha).
+      --boundary-id N : rewind to an explicit row id (keep id<=N).
+
+    DRY-RUN by default; `--force` applies. Returns rows removed (0 if dry-run/no-op).
+    """
+    ro = _connect_ro(db)
+    if git_sha is not None:
+        (boundary,) = ro.execute(
+            "SELECT MAX(id) FROM runs WHERE git_sha=?", (git_sha,)
+        ).fetchone()
+        if boundary is None:
+            ro.close()
+            sys.exit(f"rewind: no rows with git_sha={git_sha}; cannot set a boundary.")
+        desc = f"git_sha={git_sha} (last row id={boundary})"
+    else:
+        boundary = boundary_id
+        desc = f"boundary id={boundary}"
+    (cnt,) = ro.execute(
+        "SELECT COUNT(*) FROM runs WHERE id>?", (boundary,)
+    ).fetchone()
+    ro.close()
+    if cnt == 0:
+        print(f"rewind: store already at or before {desc} — nothing to remove. store={db}")
+        return 0
+    if not force:
+        print(f"rewind DRY-RUN: would remove {cnt} row(s) appended after {desc}. "
+              f"Re-run with --force to apply. store={db}")
+        return 0
+    c = _connect(db)
+    c.execute("DELETE FROM runs WHERE id>?", (boundary,))
+    c.commit()
+    print(f"rewind: removed {cnt} row(s); store rolled back to {desc}. store={db}")
+    return cnt
 
 
 def _rows(db, model):
@@ -245,12 +345,20 @@ def export(db, out):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["ingest", "pareto", "best", "list", "export"])
+    ap.add_argument("cmd", choices=["ingest", "pareto", "best", "list", "export",
+                                    "purge", "rewind"])
     ap.add_argument("path", nargs="?")
     ap.add_argument("--db", default=DEFAULT_DB)
     ap.add_argument("--model", default=None)
     ap.add_argument("--out", default=DEFAULT_DASHBOARD_JSON,
                     help="export: dashboard JSON contract path")
+    ap.add_argument("--git-sha", default=None,
+                    help="purge/rewind: kernel git_sha selector")
+    ap.add_argument("--boundary-id", type=int, default=None,
+                    help="rewind: explicit append-order row-id boundary (keep id<=N)")
+    ap.add_argument("--force", action="store_true",
+                    help="purge/rewind: actually apply the destructive op "
+                         "(default is a dry-run)")
     a = ap.parse_args()
     if a.cmd == "ingest":
         if not a.path:
@@ -264,6 +372,14 @@ def main():
         _list(a.db, a.model)
     elif a.cmd == "export":
         export(a.db, a.out)
+    elif a.cmd == "purge":
+        purge(a.db, a.git_sha, a.force)
+    elif a.cmd == "rewind":
+        if a.git_sha is None and a.boundary_id is None:
+            sys.exit("rewind needs --git-sha SHA or --boundary-id N")
+        if a.git_sha is not None and a.boundary_id is not None:
+            sys.exit("rewind: pass only one of --git-sha / --boundary-id")
+        rewind(a.db, a.git_sha, a.boundary_id, a.force)
 
 
 if __name__ == "__main__":
