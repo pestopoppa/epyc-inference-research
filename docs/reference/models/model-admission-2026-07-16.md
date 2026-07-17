@@ -12,7 +12,7 @@ This checkpoint records local artifact admission for the quiet-window model back
 
 | Candidate | Local artifact state | Manifest/source evidence | First runnable gate |
 |---|---:|---|---|
-| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement; ⚠️ 48K actual-prompt timeout reached 45K tokens under DSA before `5400s` timeout. True 64K+ actual-token classification remains open. |
+| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement; ✅ true >64K CPU DSA probe processed `65,969` prompt tokens with Lightning Indexer enabled. Sparse-vs-dense classification and quality/needle gates remain open because prefill tapered to dense-looking speeds. |
 | Hy3 AngelSlim IQ1_M-mtp | Complete: `Hy3-IQ1_M-mtp.gguf`, 91,756,066,624 bytes, plus license, README, chat template, recipes, and two Hy3 llama.cpp patches. Experimental v7 commit `98a1ad8cf` now loads it after the Hy3 router-bias tensor-name fix. | HF metadata sidecar revision `218c93f0fb5227553b67e556b01dfe70fb70cf30`, LFS hash `f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13`. Capped CPU smoke loaded the model and returned `OK`; follow-up CPU and MI210-hybrid MTP/no-spec A/Bs both produced coherent output. | ✅ MTP-on/off functional closure recorded; no-spec is faster than `draft-mtp` in the measured CPU and MI210-hybrid samples. Next gate is task quality / architecture fit, not more first-load smoke. |
 | Bonsai-27B Q1_0 | Complete: `Bonsai-27B-Q1_0.gguf`, 3,803,452,480 bytes. | HF metadata sidecar revision `0cf7e3d21581b169b4df1de8bf01316000e2fbb7`, LFS hash `17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0`. | Text load smoke on production v6 is valid; public quality is contested, so quality gate before any role claim. |
 | Ternary Bonsai-27B Q2_0 | Complete: `Ternary-Bonsai-27B-Q2_0.gguf`, 7,165,121,600 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757`. | Runtime support check on refreshed v7/experimental before load smoke. Production v6 does not advertise Q2_0. |
@@ -78,6 +78,23 @@ The GLM DSA runner now supports selected-stage execution and retained trace logs
 - `/mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/plan.json`: CPU-only preliminary KV/context scaling with fixed `indexer_top_k=32`; 4K leg processed `2900` prompt tokens at `23.86 t/s`, 8K leg processed `5906` prompt tokens at `22.69 t/s`, both logs show `Lightning Indexer enabled` and graph reuse.
 
 Interpretation: this proves loader metadata reconciliation, expected tail-block skip behavior, and Lightning Indexer enablement at 4K/8K. It is not yet a decision-grade DSA classification. The open K23 question is still whether attention compute at 64K+ scales near `indexer_top_k` or full KV, and whether quality/needle behavior remains coherent at long context.
+
+## GLM-5.2 True >64K DSA Probe
+
+Evidence directory: `/mnt/raid0/llm/tmp/glm52-dsa-true64k-probe-20260717T0125/`.
+
+The patched GLM DSA runner completed a true >64K actual-token CPU-only probe on experimental v7 with `--long-context 90000 --min-prompt-tokens 65536 --max-tokens 16 --request-timeout 21600 --trace-logs --only-stage long_context_dsa_probe`. The live tokenizer floor expanded the prompt to `65,957` tokenizer-counted prompt tokens; the server processed `65,969` prompt tokens and decoded 16 completion tokens. Logs again show `general.architecture=glm-dsa`, metadata `indexer.top_k=2048`, override `indexer.top_k=32`, expected `blk.78.*` NextN-tail skipping, and `Lightning Indexer enabled`.
+
+| Field | Observation |
+|---|---:|
+| Prompt eval | `9,753,509.04 ms / 65,969 tokens` = `6.76 t/s` |
+| Decode | `13,362.45 ms / 16 tokens` = `1.20 t/s` |
+| 65K checkpoint | `65,536` prompt tokens at cumulative `6.81 t/s` |
+| Last 2K interval | `63,488 -> 65,536` in `520.75s` = `3.93 t/s` |
+| Response | `finish_reason=length`, reasoning-only preview; no answer content under the 16-token cap |
+| Cleanup | wrapper/server PIDs gone; ROCm reported no KFD PIDs |
+
+Interpretation: this closes the "can GLM-5.2 process a true >64K prompt with the landed DSA/indexer path engaged" question. It does **not** close the 1M-context or sparse-compute thesis. The prefill curve tapered from `26.10 t/s` at 2K to `6.81 t/s` cumulative at 65K, with the final 2K interval at `3.93 t/s`, so the next K23/D2 gate should classify whether this is `DSA-DENSE-MASK` rather than `DSA-REAL-SPARSE`. Quality/needle behavior is still unmeasured.
 
 ## Nemotron-Labs-Diffusion Fork Loader Probe
 
@@ -272,7 +289,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 
 ## Next Queue
 
-1. Run true 64K+ GLM long-context DSA/indexer engagement and scaling with the live-tokenizer floor guard (`--min-prompt-tokens 65536`) and a larger timeout (`--request-timeout 21600`); artifact integrity, short load/coherence, loader metadata, 4K/8K trace shakedown, and the 48K timeout scaling observation are now recorded.
+1. Classify GLM-5.2 DSA sparse-vs-dense scaling and run a needle/coherence task. True >64K prompt execution is now recorded, but the prefill curve tapered to dense-looking speeds and the 16-token response was reasoning-only.
 2. Run Hy3 task-level quality / architecture-fit probes if the 295B/21B-active candidate remains interesting. MTP-on/off functional closure is done, and `draft-mtp` regressed vs no-spec in both CPU and MI210-hybrid samples.
 3. Investigate Ternary Bonsai Q2_0 and Q2_g64 artifact/runtime compatibility before retrying; ordinary Q1_0 and Bonsai-8B load/decode are already smoke-passed, while dspark variants failed.
 4. Run Qwable IQ4_XS vs Q8_0 standalone quality gates first; use scaffold only as the fallback path when the beneficiary must answer. Long MI210/CPU speed observations and strict-IQ4 prompt-only JSON are recorded; schema-mode acceptance still needs the bounded K22 follow-up.

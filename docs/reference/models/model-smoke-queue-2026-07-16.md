@@ -1,6 +1,6 @@
 # Model Smoke Queue - 2026-07-16
 
-This queue is for the first clean inference windows after GLM-5.2 artifact admission. GLM-5.2 UD-IQ2_M is now downloaded and size-verified; short CPU load/coherence and a 4K/8K DSA trace shakedown passed. The remaining GLM gate is true 64K+ long-context DSA/indexer verification and quality.
+This queue is for the first clean inference windows after GLM-5.2 artifact admission. GLM-5.2 UD-IQ2_M is now downloaded and size-verified; short CPU load/coherence, 4K/8K DSA trace shakedown, and a true >64K CPU DSA/indexer probe passed. The remaining GLM gates are sparse-vs-dense scaling classification plus quality/needle behavior.
 
 2026-07-16 operator update: do not leave CPU/GPU idle just because GLM is still downloading. Non-GLM inference churn is allowed during the GLM download when it follows single-owner resource lanes: one MI210 owner, one bounded CPU-only owner, no GLM loads, no duplicate HF downloads, no full-stack/AutoPilot restart, and no disk-heavy DeepSeek/GLM/offload gates. Treat results gathered under active GLM download as smoke/admission observations unless repeated in a fully quiet window.
 
@@ -91,11 +91,12 @@ GLM-5.2 UD-IQ2_M artifact integrity and short CPU load/coherence are closed in t
 2. ✅ Short load/decode smoke: experimental v7 `b10077-da1bf5e2f`, CPU-only, `--reasoning off`, returned exact `READY` in `/mnt/raid0/llm/tmp/glm52-short-smoke-20260716T2308-reasoning-off/`.
 3. ✅ 4K/8K DSA trace shakedown: `/mnt/raid0/llm/tmp/glm52-dsa-long-probe-20260716T2340/plan.json` and `/mnt/raid0/llm/tmp/glm52-dsa-kv-scaling-20260716T2350/plan.json`; logs show metadata override `indexer.top_k=32`, `n_layer=78`, `n_layer_all=79`, and `Lightning Indexer enabled`. 4K prompt `23.86 t/s`; 8K prompt `22.69 t/s`.
 4. ⚠️ 2026-07-17 long-context timeout observation: `/mnt/raid0/llm/tmp/glm52-dsa-64k-probe-20260716T235329Z/` launched with `--long-context 65536`, but the prompt heuristic produced `task.n_tokens = 48009`, not >64K actual tokens. CPU-only prefill reached `45056 / 48009` prompt tokens before the `5400s` HTTP timeout canceled the task; checkpoints tapered from `25.29 t/s` at 2K to `8.71 t/s` at 45K, with `Lightning Indexer enabled`. This is useful scaling/timeout evidence, not a completed long-context gate.
-5. ⬜ True long-context DSA probe (>64K actual prompt tokens, ideally toward 131K+) with a needle/coherence task. Use the new live-tokenizer floor guard, e.g. `--long-context 90000 --min-prompt-tokens 65536 --request-timeout 21600`.
-6. ⬜ KV-length scaling beyond 8K with fixed `indexer_top_k` to classify `DSA-REAL-SPARSE`, `DSA-DENSE-MASK`, or `DSA-FALLBACK`.
-7. Runner: [`scripts/benchmark/glm52_dsa_probe_runner.py`](../../../scripts/benchmark/glm52_dsa_probe_runner.py). Dry-run preflight `/mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json` is ready for execute mode and records stale HF cache markers separately from effective blockers; use `--trace-logs`, `--only-stage`, and `--min-prompt-tokens` for instrumented follow-ups.
+5. ✅ True >64K prompt DSA/indexer engagement: `/mnt/raid0/llm/tmp/glm52-dsa-true64k-probe-20260717T0125/plan.json`; CPU-only experimental v7 processed `65,969` prompt tokens with `Lightning Indexer enabled`, prompt eval `6.76 t/s`, decode `1.20 t/s` over 16 tokens, and no lingering wrapper/server/KFD processes after cleanup. This closes runnability/engagement, not quality or sparse-compute scaling.
+6. ⬜ Needle/coherence task at long context; the true-64K probe hit the 16-token cap with reasoning-only preview and no answer content.
+7. ⬜ KV-length scaling beyond 8K with fixed `indexer_top_k` to classify `DSA-REAL-SPARSE`, `DSA-DENSE-MASK`, or `DSA-FALLBACK`; the true-64K curve tapered from `26.10 t/s` at 2K to `6.81 t/s` cumulative at 65K, with the final 2K interval at `3.93 t/s`.
+8. Runner: [`scripts/benchmark/glm52_dsa_probe_runner.py`](../../../scripts/benchmark/glm52_dsa_probe_runner.py). Dry-run preflight `/mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json` is ready for execute mode and records stale HF cache markers separately from effective blockers; use `--trace-logs`, `--only-stage`, and `--min-prompt-tokens` for instrumented follow-ups.
 
-Caveat disposition: `blk.78.*` warnings match the expected skipped NextN tail block (`n_layer=78`, `n_layer_all=79`, `nextn_predict_layers=1`). Treat DSA sparsity/quality as still open; do not register GLM-5.2 into production roles from 4K/8K evidence alone.
+Caveat disposition: `blk.78.*` warnings match the expected skipped NextN tail block (`n_layer=78`, `n_layer_all=79`, `nextn_predict_layers=1`). Treat DSA sparsity/quality as still open; do not register GLM-5.2 into production roles from load/engagement evidence alone.
 
 ## MI210 Strategy Gates
 
