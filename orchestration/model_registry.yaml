@@ -5713,6 +5713,16 @@ roles:
         tokens and ended length-capped with reasoning-only preview. This closes
         true >64K runnability/engagement, but not sparse-compute scaling or
         long-context quality.
+      expert_activation_stats_observation: >
+        2026-07-17 first expert-routing-skew attempt rebuilt stale
+        experimental-v7 llama-imatrix, calibrated
+        /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.gguf,
+        and captured --show-statistics to
+        /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.stats.txt.
+        The output summarizes activation tensors, including ffn_down_exps,
+        ffn_gate_exps, and ffn_up_exps, but does not expose per-expert router
+        hit-frequency. Treat it as activation/load evidence only; hot-expert
+        offload and REAP remain blocked on a real router-hit profiler.
       evidence:
       - /mnt/raid0/llm/models/glm52_clean.log
       - /mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json
@@ -5729,6 +5739,8 @@ roles:
       - /mnt/raid0/llm/tmp/glm52-dsa-64k-probe-20260716T235329Z/logs/long_context_dsa_probe.server.log
       - /mnt/raid0/llm/tmp/glm52-dsa-true64k-probe-20260717T0125/plan.json
       - /mnt/raid0/llm/tmp/glm52-dsa-true64k-probe-20260717T0125/logs/long_context_dsa_probe.server.log
+      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.gguf
+      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.stats.txt
     memory:
       residency: cold
       pinned: false
@@ -5739,7 +5751,7 @@ roles:
     benchmark_plan:
       cpu_only: "Shard integrity -> load/short smoke -> true >64K DSA probe -> sparse-vs-dense classification -> canonical throughput and quality."
       gpu_only: "Not expected to fit on MI210."
-      cpu_gpu_hybrid: "Run expert-routing-skew profile first; only then test hot-expert/offload placement."
+      cpu_gpu_hybrid: "Run a true per-expert router-hit profile first; the 2026-07-17 imatrix activation-stat attempt is insufficient for hot-expert/offload placement."
 
   hy3_angelslim_iq1m_mtp:
     tier: B

@@ -26,7 +26,8 @@ PARSE_SPECIAL=1
 usage() {
   cat <<'USAGE'
 usage:
-  expert_routing_skew_profile.sh [--show-statistics --artifact PATH]
+  expert_routing_skew_profile.sh [--show-statistics --artifact PATH --model PATH]
+  expert_routing_skew_profile.sh [--execute --artifact PATH --model PATH]
   expert_routing_skew_profile.sh [--execute --model PATH [--corpus-file PATH]]
                                  [--output-artifact PATH] [--out-root DIR]
 
@@ -127,9 +128,11 @@ EOF
 stats_command() {
   local artifact="$1"
   local stats_out="$2"
-  printf 'LD_LIBRARY_PATH=%q %q --show-statistics --in-file %q > %q\n' \
+  local model="$3"
+  printf 'LD_LIBRARY_PATH=%q %q -m %q --show-statistics --in-file %q > %q 2>&1\n' \
     "${EXPERIMENTAL_BIN_DIR}" \
     "${BINARY_PATH}" \
+    "${model}" \
     "${artifact}" \
     "${stats_out}"
 }
@@ -220,7 +223,7 @@ done
 if [[ "${EXECUTE}" -ne 1 && "${SHOW_STATISTICS}" -ne 1 && -z "${INPUT_ARTIFACT}" ]]; then
   usage
   printf '\nExamples:\n' >&2
-  printf '  %s --show-statistics --artifact /mnt/raid0/llm/tmp/example.imatrix.gguf\n' "$0" >&2
+  printf '  %s --show-statistics --artifact /mnt/raid0/llm/tmp/example.imatrix.gguf --model /mnt/raid0/llm/models/example.gguf\n' "$0" >&2
   printf '  %s --execute --model /mnt/raid0/llm/models/example.gguf\n' "$0" >&2
   exit 0
 fi
@@ -229,7 +232,7 @@ resolve_binary
 require_no_glm_download
 make_out_root
 
-if [[ "${EXECUTE}" -eq 1 ]]; then
+if [[ "${EXECUTE}" -eq 1 && -z "${INPUT_ARTIFACT}" && "${SHOW_STATISTICS}" -eq 0 ]]; then
   [[ -n "${MODEL}" ]] || die "--execute requires --model PATH"
   [[ -f "${MODEL}" ]] || die "model not found: ${MODEL}"
   if [[ -n "${INPUT_ARTIFACT}" || "${SHOW_STATISTICS}" -eq 1 ]]; then
@@ -259,7 +262,7 @@ if [[ "${EXECUTE}" -eq 1 ]]; then
   execute_cmd=$(execute_command "${local_corpus}" "${OUTPUT_ARTIFACT}")
   printf '%s\n' "${execute_cmd}"
   log "follow-up:"
-  stats_cmd=$(stats_command "${OUTPUT_ARTIFACT}" "${stats_out}")
+  stats_cmd=$(stats_command "${OUTPUT_ARTIFACT}" "${stats_out}" "${MODEL}")
   printf '%s\n' "${stats_cmd}"
 
   log "running calibration"
@@ -273,14 +276,22 @@ fi
 if [[ "${SHOW_STATISTICS}" -eq 1 || -n "${INPUT_ARTIFACT}" ]]; then
   [[ -n "${INPUT_ARTIFACT}" ]] || die "--show-statistics requires --artifact PATH"
   [[ -f "${INPUT_ARTIFACT}" ]] || die "artifact not found: ${INPUT_ARTIFACT}"
+  [[ -n "${MODEL}" ]] || die "--show-statistics requires --model PATH"
+  [[ -f "${MODEL}" ]] || die "model not found: ${MODEL}"
   stats_out="${OUT_ROOT}/$(basename "${INPUT_ARTIFACT%.*}").stats.txt"
 
-  log "dry-run=true"
+  log "dry-run=$([[ "${EXECUTE}" -eq 1 ]] && printf 'false' || printf 'true')"
   log "binary=${BINARY_PATH}"
   log "artifact=${INPUT_ARTIFACT}"
+  log "model=${MODEL}"
   log "stats=${stats_out}"
   log "command:"
-  stats_cmd=$(stats_command "${INPUT_ARTIFACT}" "${stats_out}")
+  stats_cmd=$(stats_command "${INPUT_ARTIFACT}" "${stats_out}" "${MODEL}")
   printf '%s\n' "${stats_cmd}"
+  if [[ "${EXECUTE}" -eq 1 ]]; then
+    log "running statistics"
+    run_shell_command "${stats_cmd}"
+    log "done"
+  fi
   exit 0
 fi
