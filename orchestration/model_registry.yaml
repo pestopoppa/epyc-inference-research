@@ -6164,9 +6164,21 @@ roles:
       forbid:
       - production_stack_registration_without_runtime_support_check
       - production_stack_registration_without_quality_gate
-      reason: "Variant-specific quant/runtime support is not proven in the production kernel."
+      reason: "Variant-specific quant/runtime support is smoke-passed only on experimental v7; quality and throughput are not proven."
     performance:
-      benchmark_status: not_run
+      benchmark_status: experimental_v7_cpu_mi210_runtime_smoke_pass_quality_open
+      observed_date: 2026-07-17
+      runtime_observation: >
+        Pinned experimental-v7 direct `llama-cli` smoke at
+        /mnt/raid0/llm/tmp/ternary-q2-g64-smoke-20260717T113848Z/ loaded
+        Ternary-Bonsai-27B-Q2_g64 on CPU and MI210 and returned exact `ok`
+        from both arms. Smoke stdout reports build `b10088-d1e5a20eb`; pinned
+        version artifact reports `10088 (d1e5a20eb)`. Timing was intentionally
+        suppressed for this runtime/coherence gate.
+      evidence:
+      - /mnt/raid0/llm/tmp/ternary-q2-g64-smoke-20260717T113848Z/cpu.stdout
+      - /mnt/raid0/llm/tmp/ternary-q2-g64-smoke-20260717T113848Z/mi210.stdout
+      - /mnt/raid0/llm/tmp/ternary-q2-g64-smoke-20260717T113848Z/version.pinned.txt
     memory:
       residency: cold
       pinned: false
@@ -6174,8 +6186,8 @@ roles:
       gpu_only_candidate: true
       hybrid_candidate: false
     benchmark_plan:
-      cpu_only: "Run only after Q1_0 and Q2_0 baselines identify a reason to test this variant."
-      gpu_only: "Run MI210 smoke/throughput after runtime-support check."
+      cpu_only: "Runtime smoke passed; next CPU work is quality/throughput only if this variant remains useful."
+      gpu_only: "Runtime smoke passed; next MI210 work is quality/throughput only if this variant remains useful."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   bonsai_8b_local_orphan:
