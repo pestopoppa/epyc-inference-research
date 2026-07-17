@@ -12,9 +12,14 @@ have enough prior evidence to call them "optimized" rather than baseline:
   faster than native MTP or external draft-tree on the measured workload.
 * worker_general: CPU composed ngram-mod,draft-mtp with the live Gemma4
   assistant head, q8 KV, reasoning off, and production-shaped thread flags.
+* architect_general: CPU native NEXTN/draft-mtp, same-file draft head, q4/f16 KV,
+  and request-level enable_thinking=false so content is measured.
+* ingest_long_context: CPU Qwen3-Next default-expert route with speculation
+  disabled. Historical MoE4 registry entries are treated as stale until
+  re-approved.
 
-Add architect/ingest/vision scenarios only after their fastest safe configs are
-settled and documented.
+Add vision scenarios only after their fastest safe configs are settled and
+documented.
 """
 
 from __future__ import annotations
@@ -76,6 +81,10 @@ class Scenario:
     kv_v: str
     reasoning: str
     prior_evidence: str
+    parallel: int = 1
+    jinja: bool = True
+    mlock: bool = False
+    enable_thinking: bool | None = None
     draft_model: Path | None = None
     spec_type: str = "none"
     spec_draft_n_max: int | None = None
@@ -83,6 +92,8 @@ class Scenario:
     spec_draft_device: str | None = None
     spec_draft_ngl: int | None = None
     no_mmap: bool = False
+    override_kv: tuple[str, ...] = ()
+    slot_save_path: Path | None = None
     extra_args: tuple[str, ...] = ()
 
 
@@ -103,6 +114,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         kv_k="q8_0",
         kv_v="q8_0",
         reasoning="off",
+        enable_thinking=False,
         prior_evidence=(
             "data/specdec_frontdoor_alpha/stage2_mi210_gpu_residency_20260717T0510Z/"
             "summary.json: gpu_no_spec 101.64 t/s vs native MTP 96.40 and external 36.06"
@@ -134,6 +146,64 @@ SCENARIOS: tuple[Scenario, ...] = (
         prior_evidence=(
             "/mnt/raid0/llm/tmp/v7-worker-general-shortctx-recheck-20260717T112435Z/: "
             "short-context full-instance composed spec decoded at 76.02 and 116.96 t/s"
+        ),
+    ),
+    Scenario(
+        name="architect_general_cpu_native_mtp",
+        role="architect_general",
+        description=(
+            "Production-shaped Qwen3.5-122B architect CPU lane with native NEXTN "
+            "same-file draft-mtp, q4_0/f16 KV, jinja, mlock, and thinking disabled."
+        ),
+        model=Path(
+            "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/"
+            "Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf"
+        ),
+        max_context=16384,
+        threads=96,
+        ubatch=8192,
+        device="none",
+        n_gpu_layers=0,
+        kv_k="q4_0",
+        kv_v="f16",
+        reasoning="off",
+        parallel=2,
+        mlock=True,
+        enable_thinking=False,
+        spec_type="draft-mtp",
+        spec_draft_n_max=4,
+        slot_save_path=Path("/mnt/raid0/llm/cache/kv_slots/architect_general"),
+        prior_evidence=(
+            "/mnt/raid0/llm/tmp/v7-spec-server-ab-20260716T155208Z/summary.json: "
+            "architect draft-mtp prod 19.34 t/s vs v7 19.30 t/s with matched acceptance"
+        ),
+    ),
+    Scenario(
+        name="ingest_long_context_cpu_default_experts",
+        role="ingest_long_context",
+        description=(
+            "Qwen3-Next ingest CPU lane with default expert count and speculation "
+            "disabled because SSM/recurrent state is unsafe for spec."
+        ),
+        model=Path(
+            "/mnt/raid0/llm/lmstudio/models/lmstudio-community/"
+            "Qwen3-Next-80B-A3B-Instruct-GGUF/"
+            "Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf"
+        ),
+        max_context=32768,
+        threads=96,
+        ubatch=8192,
+        device="none",
+        n_gpu_layers=0,
+        kv_k="q4_0",
+        kv_v="q4_0",
+        reasoning="auto",
+        mlock=True,
+        spec_type="none",
+        slot_save_path=Path("/mnt/raid0/llm/cache/kv_slots/ingest_long_context"),
+        prior_evidence=(
+            "Operator correction 2026-07-17: historical qwen3next.expert_used_count=int:4 "
+            "registry policy is stale for K35; measure default-expert ingest with spec disabled."
         ),
     ),
 )
@@ -197,9 +267,11 @@ def pick_port(base: int) -> int:
 
 
 def server_context(scenario: Scenario, nominal_context: int, max_tokens: int) -> int:
-    requested = max(2048, nominal_context + max_tokens + 1024)
+    per_slot_requested = max(2048, nominal_context + max_tokens + 1024)
+    requested = per_slot_requested * scenario.parallel
     capped = min(scenario.max_context, requested)
-    if capped < max_tokens + 1024:
+    per_slot_capped = capped // scenario.parallel
+    if per_slot_capped < max_tokens + 1024:
         raise ValueError(
             f"{scenario.name} context cap {scenario.max_context} is too small for {max_tokens} tokens"
         )
@@ -232,7 +304,7 @@ def build_server_argv(
         "--port",
         str(port),
         "-np",
-        "1",
+        str(scenario.parallel),
         "-c",
         str(ctx),
         "-t",
@@ -241,22 +313,29 @@ def build_server_argv(
         str(scenario.ubatch),
         "--metrics",
         "--slots",
-        "--jinja",
-        "--reasoning",
-        scenario.reasoning,
-        "--device",
-        scenario.device,
-        "-ngl",
-        str(scenario.n_gpu_layers),
-        "-ctk",
-        scenario.kv_k,
-        "-ctv",
-        scenario.kv_v,
-        "-fa",
-        "on",
-        "--spec-type",
-        scenario.spec_type,
     ]
+    if scenario.jinja:
+        argv.append("--jinja")
+    argv.extend(
+        [
+            "--reasoning",
+            scenario.reasoning,
+            "--device",
+            scenario.device,
+            "-ngl",
+            str(scenario.n_gpu_layers),
+            "-ctk",
+            scenario.kv_k,
+            "-ctv",
+            scenario.kv_v,
+            "-fa",
+            "on",
+            "--spec-type",
+            scenario.spec_type,
+        ]
+    )
+    if scenario.mlock:
+        argv.append("--mlock")
     if scenario.no_mmap:
         argv.append("--no-mmap")
     if scenario.draft_model is not None:
@@ -269,6 +348,10 @@ def build_server_argv(
         argv.extend(["--spec-draft-device", scenario.spec_draft_device])
     if scenario.spec_draft_ngl is not None:
         argv.extend(["--spec-draft-ngl", str(scenario.spec_draft_ngl)])
+    for override in scenario.override_kv:
+        argv.extend(["--override-kv", override])
+    if scenario.slot_save_path is not None:
+        argv.extend(["--slot-save-path", str(scenario.slot_save_path)])
     argv.extend(scenario.extra_args)
     return argv
 
@@ -357,7 +440,14 @@ def wait_for_health(port: int, timeout_s: int) -> None:
     raise TimeoutError(f"server on port {port} did not become healthy: {last_error}")
 
 
-def query_chat(port: int, prompt: str, *, max_tokens: int, timeout_s: int) -> dict[str, Any]:
+def query_chat(
+    scenario: Scenario,
+    port: int,
+    prompt: str,
+    *,
+    max_tokens: int,
+    timeout_s: int,
+) -> dict[str, Any]:
     body = {
         "model": "k35-local",
         "messages": [{"role": "user", "content": prompt}],
@@ -367,6 +457,8 @@ def query_chat(port: int, prompt: str, *, max_tokens: int, timeout_s: int) -> di
         "stream": False,
         "cache_prompt": False,
     }
+    if scenario.enable_thinking is not None:
+        body["chat_template_kwargs"] = {"enable_thinking": scenario.enable_thinking}
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}/v1/chat/completions",
         data=json.dumps(body).encode("utf-8"),
@@ -456,7 +548,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     port = args.port_base
     for scenario in scenarios:
         for nominal_context in contexts:
-            if nominal_context > scenario.max_context:
+            if nominal_context > scenario.max_context // scenario.parallel:
                 continue
             cell_port = port
             port += 1
@@ -514,6 +606,7 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
         prompt = prompt_for_context(cell["nominal_context"], args.max_tokens)
         request_started = time.monotonic()
         response = query_chat(
+            scenario,
             cell["port"],
             prompt,
             max_tokens=args.max_tokens,
