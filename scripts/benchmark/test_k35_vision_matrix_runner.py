@@ -60,6 +60,42 @@ class K35VisionMatrixRunnerTests(unittest.TestCase):
         self.assertNotIn("--override-kv", argv)
         self.assertNotIn("qwen3vlmoe.expert_used_count", joined)
 
+    def test_qwen3vl8b_cpu_candidate_uses_local_artifacts(self):
+        scenario = k35v.scenario_by_name("vision_candidate_cpu_qwen3vl8b_q4")
+        argv = k35v.build_server_argv(
+            scenario,
+            binary=Path("/tmp/llama-server"),
+            port=19255,
+        )
+        joined = " ".join(argv)
+        self.assertIn("/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf", argv)
+        self.assertIn("mmproj-Qwen3VL-8B-Instruct-F16.gguf", joined)
+        self.assertIn("--device none", joined)
+
+    def test_qwen3vl8b_mi210_candidate_offloads_and_sets_image_tokens(self):
+        scenario = k35v.scenario_by_name("vision_candidate_mi210_qwen3vl8b_q4")
+        argv = k35v.build_server_argv(
+            scenario,
+            binary=Path("/tmp/llama-server"),
+            port=19256,
+        )
+        joined = " ".join(argv)
+        self.assertIn("--device ROCm0", joined)
+        self.assertIn("--image-min-tokens 1024", joined)
+        self.assertIn("--image-max-tokens 1024", joined)
+
+    def test_qwen3vl8b_mi210_default_image_candidate_uses_default_bounds(self):
+        scenario = k35v.scenario_by_name("vision_candidate_mi210_qwen3vl8b_q4_default_image")
+        argv = k35v.build_server_argv(
+            scenario,
+            binary=Path("/tmp/llama-server"),
+            port=19257,
+        )
+        joined = " ".join(argv)
+        self.assertIn("--device ROCm0", joined)
+        self.assertNotIn("--image-min-tokens", joined)
+        self.assertNotIn("--image-max-tokens", joined)
+
     def test_score_response_normalizes_expected_terms(self):
         fixture = k35v.fixture_by_id("receipt_doc_number")
         score = k35v.score_response("The document number is CS 00012465.", fixture)

@@ -211,7 +211,7 @@ Evidence directory: `data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_202
 
 The generalized Bonsai/Ternary runner executed the same CPU and MI210 strict-output probes against `Ternary-Bonsai-27B-Q2_g64.gguf` on experimental v7. The gate passed exact `ok`, strict minified JSON, and simple math on both devices, but failed the short six-word instruction on both devices. Classification: loadable and partially coherent, but not role-ready.
 
-Throughput is recorded as observations, not decision-grade promotion evidence. The raw `llama-bench` control arm is useful for apples-to-apples sanity only: MI210 p512/tg128 measured `25.69` prompt t/s and `10.53` decode t/s; CPU measured `25.27` prompt t/s and `8.39` decode t/s. On a more realistic 120-row structured-copy CLI prompt, MI210 `--spec-type ngram-mod` improved generation from `9.8` to `22.9` t/s (`2.34x`) versus `--spec-type none`, but both arms still emitted empty `<think>` tags despite reasoning-off. The CPU CLI 1024-token control timed out before a timing line, so it is recorded as no-decision rather than throughput.
+Throughput is recorded as observations, not decision-grade promotion evidence. The raw `llama-bench` control arm is an apples-to-apples regression guard only, not the serving decision metric: MI210 p512/tg128 measured `25.69` prompt t/s and `10.53` decode t/s; CPU measured `25.27` prompt t/s and `8.39` decode t/s. On a more realistic 120-row structured-copy CLI prompt, MI210 `--spec-type ngram-mod` improved generation from `9.8` to `22.9` t/s (`2.34x`) versus `--spec-type none`, but both arms still emitted empty `<think>` tags despite reasoning-off. The CPU CLI 1024-token control timed out before a timing line, so it is recorded as no-decision rather than throughput. Serving decisions require a realistic lane plus task-quality acceptance; speed-only wins stay experimental.
 
 Sidecar: `data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/throughput_observation.json`.
 
@@ -232,7 +232,7 @@ The patched experimental v7 build `b10078-98a1ad8cf` was used for bounded CLI A/
 | MI210 hybrid no-spec, 12-sentence sample | PASS | 8.1 | 9.2 | Best measured Hy3 lane so far. |
 | MI210 hybrid `draft-mtp`, 12-sentence sample | PASS | 7.8 | 5.9 | MTP is a clear regression in this hybrid configuration. |
 
-Classification: Hy3 admission should treat `draft-mtp` as functional but not beneficial on the current CPU/hybrid configurations. The useful serving candidate is MI210 hybrid no-spec with CPU experts, pending task-level quality and a larger representative benchmark. Full GPU residency is not feasible on a single MI210 for this artifact.
+Classification: Hy3 admission should treat `draft-mtp` as functional but not beneficial on the current CPU/hybrid configurations. The useful serving candidate is MI210 hybrid no-spec with CPU experts, pending task-level quality and a larger representative benchmark. The no-spec rows are the current realistic candidate lane; the MTP rows are rejected optimization attempts until a different prompt class proves otherwise. Full GPU residency is not feasible on a single MI210 for this artifact.
 
 ## Qwable Server/Chat Reasoning-Economics Smoke
 
@@ -251,7 +251,7 @@ Result:
 
 Follow-up selector run: `/mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/` used the same bounded server/chat runner after adding named-arm execution. `standalone_q8_gpu` returned valid requested JSON inside fences at prompt `294.19 t/s`, generation `103.63 t/s` over 41 completion tokens. `strict_iq4_json_gpu` returned exact minified JSON with no markdown at prompt `304.25 t/s`, generation `99.24 t/s` over 23 completion tokens.
 
-Quiet-host repeat: `data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/` ran IQ4, Q8, strict JSON, CPU baseline, scaffold stub, and selector stub arms sequentially on a clean host. MI210 decode: `standalone_iq4_gpu` `99.27 t/s` (fenced valid JSON), `standalone_q8_gpu` `103.04 t/s` (fenced valid JSON), and `strict_iq4_json_gpu` `99.44 t/s` (exact strict JSON). CPU IQ4 baseline was `13.82 t/s`. The scaffold and selector stubs returned parseable JSON, but with placeholder/arbitrary values, so they are not deployment evidence.
+Quiet-host repeat: `data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/` ran IQ4, Q8, strict JSON, CPU control, scaffold stub, and selector stub arms sequentially on a clean host. MI210 decode: `standalone_iq4_gpu` `99.27 t/s` (fenced valid JSON), `standalone_q8_gpu` `103.04 t/s` (fenced valid JSON), and `strict_iq4_json_gpu` `99.44 t/s` (exact strict JSON). CPU IQ4 control/regression-guard lane was `13.82 t/s`; it is not the serving decision metric while MI210 is available and quality-clean. The scaffold and selector stubs returned parseable JSON, but with placeholder/arbitrary values, so they are not deployment evidence.
 
 Schema-mode closure: the runner initially recorded correct dry-run schema commands but execute mode rebuilt a separate request payload, so planned schema constraints were not sent. After fixing execute mode to use the planned payload, `data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/` passed top-level `json_schema` acceptance: `strict_iq4_schema_gpu` returned the exact expected object (`{"arm":"strict_iq4_schema_gpu","quant":"IQ4_XS","role":"reasoner"}`) as strict JSON, prompt `241.73 t/s`, decode `64.55 t/s`.
 
@@ -347,8 +347,8 @@ CPU long-run observations now span the main non-GLM candidates that had MI210 lo
 |---|---:|---:|---:|---:|---|
 | Nemotron-Labs-Diffusion-14B via scratch buun CPU server | 72 | 768 | 109.94 | 4.82 | Fork loader only; not stock v7. |
 | Nemotron-Nano-9B-v2 Q8_0 | 67 | 768 | 97.46 | 5.44 | Emitted `<think>` despite reasoning-off flags. |
-| Qwable-v1 IQ4_XS | 66 | 616 | 88.90 | 13.71 | CPU baseline for IQ4_XS reasoner. |
-| Qwable-v1 Q8_0 | 66 | 706 | 87.99 | 10.00 | CPU baseline for Q8_0 reasoner. |
+| Qwable-v1 IQ4_XS | 66 | 616 | 88.90 | 13.71 | CPU control/regression-guard lane for IQ4_XS reasoner; serving decision uses MI210 quality-clean lane when available. |
+| Qwable-v1 Q8_0 | 66 | 706 | 87.99 | 10.00 | CPU control/regression-guard lane for Q8_0 reasoner. |
 | Qwen3.5-9B MTP local Q4_K_M | 64 | 768 | 108.23 | 10.25 | `draft-mtp` active; response had empty `message.content` despite 768 completion tokens, likely reasoning-only content. |
 | MiniCPM-o-4_5 Q4_K_M text path | 62 | 768 | 235.49 | 7.69 | Response had empty `message.content` despite 768 completion tokens; keep as throughput-only. |
 | Qwen3-VL-8B Q4_K_M text path | 62 | 768 | 229.37 | 7.69 | Corrected local model/mmproj path; image runtime/coherence smoke closed 2026-07-17. |
@@ -360,6 +360,12 @@ CPU long-run observations now span the main non-GLM candidates that had MI210 lo
 The initial experimental v7 `llama-mtmd-cli` binary segfaulted even on `--version`; rebuilding only the experimental `llama-mtmd-cli`, `llama-qwen2vl-cli`, and `test-mtmd-c-api` targets fixed the tool-level failure without touching production v6. Pinned `llama-mtmd-cli --version` now reports `10088 (d1e5a20eb)`, and `test-mtmd-c-api` passes.
 
 Evidence lives under `/mnt/raid0/llm/tmp/qwen3-vl8-image-smoke-20260717T115124Z/`. CPU-only image smoke loaded the local Qwen3-VL-8B Q4_K_M GGUF plus mmproj and answered the generated shapes fixture as `Circles Squares`. MI210 image smoke used `--image-min-tokens 1024 --image-max-tokens 1024`, offloaded the mmproj, encoded the OCR fixture in `295 ms`, and read `Hello World 123`. Classification: runtime/coherence smoke only; this closes the stale "image smoke open" admission task, but does not replace a vision quality gate or throughput-vs-context benchmark.
+
+## Qwen3-VL-8B K35 Vision-Candidate A/B
+
+Evidence lives under `/mnt/raid0/llm/tmp/k35-qwen3vl8-candidate-20260717T185330Z/summary.json` and `/mnt/raid0/llm/tmp/k35-qwen3vl8-mi210-default-image-20260717T185459Z/summary.json`. CPU local Qwen3-VL-8B passed the four fixed K35 OCR/chart fixtures (`4/4`) but decoded at only `10.81-13.39 t/s`, slower than the temporary Qwen2.5-VL escalation alias, and the chart answer was verbose rather than strict. MI210 Qwen3-VL-8B was much faster (`109.61-125.72 t/s`) but failed the chart fixture as `Moldova` under both the 1024 image-token and default-image-token launch shapes (`3/4` each).
+
+Disposition: the local Qwen3-VL-8B artifact is runtime/coherence-clean and CPU-quality-clean on this small fixture set, but it is not the active `vision_escalation` replacement. For serving decisions, keep the quality-safe Qwen2.5-VL alias until a faster candidate passes the chart fixture. Baseline/control rows remain useful for attribution; model-admission decisions should use realistic optimized lanes only after the lane is quality-clean.
 
 ## Deferred Low-Contention Manifest Work
 
@@ -386,7 +392,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 3. Investigate the Ternary Bonsai Q2_0 artifact/runtime offset mismatch before retrying. Q2_g64 is CPU+MI210 runtime-smoke passed and has preliminary throughput observations, including a positive MI210 `ngram-mod` structured-copy speed signal, but the strict quality gate passed only 6/8 and blocks any role claim; dspark variants failed separately.
 4. Qwable IQ4_XS standalone routing and broader representative quality are closed for the research registry: plain reasoning-off IQ4_XS is the preferred reasoning-heavy route, `ngram-mod` is neutral on the expanded slice, and scaffold remains only the beneficiary-must-answer fallback. Remaining work is production hosting/composite-route wiring, not model admission.
 5. Treat Nemotron-Nano BF16 as a quality-ceiling arm only after Q8_0 merits comparison. Nemotron-Cascade-2 is now historical/catalogue only; do not schedule inference absent an explicit Mamba2-hybrid revival study.
-6. Move beyond speed-only admission observations for MiniCPM-o, Qwen3-VL-8B, Qwen3.5-9B MTP, Bonsai, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible.
+6. Move beyond speed-only admission observations for MiniCPM-o, Qwen3.5-9B MTP, Bonsai, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible. Qwen3-VL-8B now has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure.
 7. Keep generic GLM hot-expert offload/REAP deprioritized after the production-representative skew profile; reopen only with a narrower role-specific corpus or different placement mechanism.
 
 Opt-in command file: `docs/data/model_admission_smoke_commands_20260716.sh`.

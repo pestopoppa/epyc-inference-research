@@ -157,6 +157,66 @@ SCENARIOS: tuple[VisionScenario, ...] = (
         ),
         candidate=True,
     ),
+    VisionScenario(
+        name="vision_candidate_cpu_qwen3vl8b_q4",
+        role="vision_escalation_candidate",
+        description=(
+            "Local Qwen3-VL-8B Q4_K_M + F16 projector candidate, CPU-only. "
+            "Tests whether a smaller Qwen3-VL lane can beat the temporary "
+            "Qwen2.5-VL alias on the fixed K35 fixtures."
+        ),
+        model=Path("/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf"),
+        mmproj=Path("/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/mmproj-Qwen3VL-8B-Instruct-F16.gguf"),
+        context=8192,
+        threads=24,
+        parallel=1,
+        prior_evidence=(
+            "/mnt/raid0/llm/tmp/qwen3-vl8-image-smoke-20260717T115124Z/: "
+            "CPU and MI210 image runtime/coherence smoke passed, but not the K35 quality matrix."
+        ),
+        candidate=True,
+    ),
+    VisionScenario(
+        name="vision_candidate_mi210_qwen3vl8b_q4",
+        role="vision_escalation_candidate",
+        description=(
+            "Local Qwen3-VL-8B Q4_K_M + F16 projector candidate with model/projector "
+            "offloaded to MI210. Measures quality plus GPU text-tax/throughput for "
+            "a possible faster escalation lane."
+        ),
+        model=Path("/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf"),
+        mmproj=Path("/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/mmproj-Qwen3VL-8B-Instruct-F16.gguf"),
+        context=8192,
+        threads=24,
+        parallel=1,
+        device="ROCm0",
+        extra_args=("--image-min-tokens", "1024", "--image-max-tokens", "1024"),
+        prior_evidence=(
+            "/mnt/raid0/llm/tmp/qwen3-vl8-image-smoke-20260717T115124Z/: "
+            "MI210 image smoke read the OCR fixture correctly with 1024 image tokens."
+        ),
+        candidate=True,
+    ),
+    VisionScenario(
+        name="vision_candidate_mi210_qwen3vl8b_q4_default_image",
+        role="vision_escalation_candidate",
+        description=(
+            "Local Qwen3-VL-8B Q4_K_M + F16 projector offloaded to MI210 with "
+            "default image-token bounds. This isolates whether the 1024-token "
+            "diagnostic override caused the chart regression."
+        ),
+        model=Path("/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf"),
+        mmproj=Path("/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/mmproj-Qwen3VL-8B-Instruct-F16.gguf"),
+        context=8192,
+        threads=24,
+        parallel=1,
+        device="ROCm0",
+        prior_evidence=(
+            "/mnt/raid0/llm/tmp/k35-qwen3vl8-candidate-20260717T185330Z/: "
+            "MI210 Qwen3-VL-8B with 1024 image tokens passed 3/4 and failed chart_tanzania."
+        ),
+        candidate=True,
+    ),
 )
 
 
