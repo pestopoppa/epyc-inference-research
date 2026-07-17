@@ -5957,7 +5957,7 @@ roles:
 
   bonsai_27b_q1_0:
     tier: C
-    description: PrismML Bonsai-27B Q1_0 - 1-bit Qwen3.6-27B post-training candidate; cheap load/decode smoke pending.
+    description: PrismML Bonsai-27B Q1_0 - 1-bit Qwen3.6-27B post-training candidate; load/decode works, but role-readiness remains gated on prompt/instruction quality.
     model:
       name: Bonsai-27B-Q1_0
       path: /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf
@@ -6004,15 +6004,16 @@ roles:
     constraints:
       forbid:
       - production_stack_registration_without_quality_gate
-      reason: "Public quality is contested; run load/decode smoke and K5 quality gate before any stack candidacy claim."
+      reason: "Public quality is contested; the 2026-07-17 CPU+MI210 strict-output gate passed 6/8 probes but failed the six-word instruction probe on both devices, so no production role claim yet."
     performance:
-      benchmark_status: cpu_mi210_load_smoke_pass_observation_quality_open
-      observed_date: 2026-07-16
+      benchmark_status: cpu_mi210_load_smoke_pass_quality_gate_partial_fail
+      observed_date: 2026-07-17
       cpu_observation: "CPU smoke passed during active GLM download: prompt 12.6 t/s, generation 6.8 t/s, returned exact `ok`."
       mi210_observation: "MI210 smoke passed during active GLM download: prompt 29.5 t/s, generation 11.3 t/s, but emitted reasoning preamble instead of exact `ok`."
       long_cpu_observation: "2026-07-16 longer CPU server run generated 768 completion tokens at 8.86 t/s after a 64-token prompt; response had empty message.content despite nonzero completion tokens, so treat as throughput-only."
       long_mi210_observation: "2026-07-16 longer MI210 server run generated 1259 tokens at 11.15 t/s after an 84-token prompt; this confirms the local low decode rate is not a one-token artifact."
       kv_quant_observation: "2026-07-16 MI210 default KV vs q4_0/q4_0 KV sweep showed no decode-speed improvement: 10.97 vs 10.93 t/s at 1285 prompt tokens, and 10.54 vs 10.54 t/s at 25225 prompt tokens."
+      strict_output_gate: "2026-07-17 quiet-host gate with completion-mode, reasoning-off v7 CLI passed 6/8 CPU+MI210 probes: exact ok, strict minified JSON, and simple math passed on both devices; short six-word instruction failed on both, so Bonsai is loadable/partially coherent but not role-ready."
       related_dspark_observation: "Bonsai-27B-dspark-Q4_1 failed on CPU and MI210 with `unknown model architecture: 'dspark'`; unsupported until dspark architecture support is added."
       evidence:
       - /mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_q1_cpu/bonsai_q1_cpu.stdout
@@ -6024,6 +6025,7 @@ roles:
       - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/q4kv-c2048/summary.txt
       - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/default_kv-c32768/summary.txt
       - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/q4kv-c32768/summary.txt
+      - /mnt/raid0/llm/epyc-inference-research/data/bonsai_q1_quality_gate/bonsai_q1_quality_clean_20260717T0755Z/summary.json
     memory:
       residency: cold
       pinned: false
@@ -6032,8 +6034,8 @@ roles:
       hybrid_candidate: false
       notes: "Small enough for CPU-only and GPU-only characterization."
     benchmark_plan:
-      cpu_only: "Load/decode smoke, then standard quality gate if coherent."
-      gpu_only: "MI210 load/decode smoke and throughput sanity if CPU smoke passes."
+      cpu_only: "Load/decode smoke passed; repeat only after prompt/template changes or a broader quality gate."
+      gpu_only: "MI210 load/decode and partial strict-output gate passed; role-quality remains open because instruction-format compliance failed."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   ternary_bonsai_27b_q2_0:

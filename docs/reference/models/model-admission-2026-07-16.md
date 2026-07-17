@@ -152,6 +152,22 @@ These are admission observations gathered 2026-07-16 while GLM-5.2 was still dow
 
 Follow-ups: investigate Ternary Bonsai Q2_0/Q2_g64 artifact/runtime compatibility, run a bounded Qwable schema-vs-prompt strict-output gate after K22, and tune model-specific prompting/template strategy for Qwable and Bonsai-27B. The Qwable speed/load observations do not invalidate earlier successful v7/GPU Qwable work; the failed CPU direct-CLI runs were harness failures.
 
+## Bonsai Q1_0 Quiet-Host Prompting Gate
+
+Evidence directory: `data/bonsai_q1_quality_gate/bonsai_q1_quality_clean_20260717T0755Z/`.
+
+The Bonsai Q1 runner now executes the staged CPU and MI210 probes with experimental v7 `llama-cli` in completion mode (`-no-cnv`), reasoning disabled, prompt/timing output suppressed, deterministic sampling, and transcript-preserving generated-text extraction. This fixed the earlier harness ambiguity where the model produced the right content but the CLI banner/prompt wrapper polluted stdout.
+
+| Arm class | Result | Observation |
+|---|---|---|
+| CPU + MI210 exact `ok` | PASS | Both devices generated exactly `ok`. |
+| CPU + MI210 strict minified JSON | PASS | Both devices generated exactly `{"status":"ok","model":"bonsai"}`. |
+| CPU + MI210 simple math | PASS | Both devices generated exactly `95`. |
+| CPU six-word instruction | FAIL | Generated `prevents overfitting ensures generalization validates performance reliably` (seven words instead of six). |
+| MI210 six-word instruction | FAIL | Generated `prevents overfitting, ensuring generalization to unseen data.` with punctuation and seven words. |
+
+Classification: Bonsai-27B Q1_0 is loadable and partially instruction-coherent on both CPU and MI210, but it is not role-ready. The immediate next work is to tighten the prompt/template strategy or replace the probe with a less ambiguous deterministic instruction-following check before any production-stack role claim.
+
 ## Hy3 MTP / Hybrid Closure
 
 Evidence directory: `/mnt/raid0/llm/tmp/hy3-mtp-closure-20260716T234610Z/`.

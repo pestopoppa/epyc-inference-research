@@ -14,9 +14,10 @@ import bonsai_q1_quality_gate_runner as runner
 
 
 class _CompletedProcess:
-    def __init__(self, returncode: int, stdout: str = ""):
+    def __init__(self, returncode: int, stdout: str = "", stderr: str = ""):
         self.returncode = returncode
         self.stdout = stdout
+        self.stderr = stderr
 
 
 def _fake_runner_factory(mapping: dict[str, list[str]]):
@@ -70,6 +71,10 @@ class BonsaiQ1QualityGateRunnerTests(unittest.TestCase):
                 mi210 = manifest["gate"]["command_templates"][1]
                 self.assertIn(str(runner.EXPERIMENTAL_LLAMA_CLI), cpu["shell"])
                 self.assertIn("--device none", cpu["shell"])
+                self.assertIn("-no-cnv", cpu["argv"])
+                self.assertIn("--reasoning", cpu["argv"])
+                self.assertIn("--reasoning-budget", cpu["argv"])
+                self.assertIn("--no-show-timings", cpu["argv"])
                 self.assertIn("-ngl 0", cpu["shell"])
                 self.assertIn("Return exactly: ok", cpu["shell"])
                 self.assertIn("--device ROCm0", mi210["shell"])
@@ -125,6 +130,62 @@ class BonsaiQ1QualityGateRunnerTests(unittest.TestCase):
                 commands = (output_dir / "commands.sh").read_text()
                 self.assertIn(str(runner.EXPERIMENTAL_LLAMA_CLI), commands)
                 self.assertNotIn("/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-cli", commands)
+
+    def test_evaluate_probe_exact_rules(self):
+        self.assertTrue(runner.evaluate_probe("exact_ok", "ok\n")["passed"])
+        self.assertFalse(runner.evaluate_probe("exact_ok", "OK\n")["passed"])
+        self.assertTrue(runner.evaluate_probe("strict_json", '{"status":"ok","model":"bonsai"}')["passed"])
+        self.assertFalse(runner.evaluate_probe("strict_json", '```json\n{"status":"ok","model":"bonsai"}\n```')["passed"])
+        self.assertTrue(runner.evaluate_probe("simple_math", "95\n")["passed"])
+        self.assertTrue(runner.evaluate_probe("short_instruction", "held out tests prevent benchmark leakage")["passed"])
+        self.assertFalse(runner.evaluate_probe("short_instruction", "Held out tests prevent benchmark leakage")["passed"])
+
+    def test_evaluate_probe_scores_generated_segment_from_llama_cli_stdout(self):
+        stdout = """
+Loading model...
+
+> Return exactly: ok
+ok
+
+
+Exiting...
+"""
+        result = runner.evaluate_probe("exact_ok", stdout, "Return exactly: ok")
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["generated_text"], "ok")
+
+    def test_run_execute_writes_summary_with_mocked_subprocess(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model = Path(tmpdir) / "Bonsai-27B-Q1_0.gguf"
+            model.write_text("placeholder", encoding="utf-8")
+            binary = Path(tmpdir) / "llama-cli"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+
+            def fake_run(argv, capture_output=True, text=True, timeout=300, check=False):  # noqa: ANN001
+                return _CompletedProcess(0, "ok\n", "")
+
+            with (
+                mock.patch.object(runner, "EXPERIMENTAL_ROOT", Path(tmpdir)),
+                mock.patch.object(runner, "EXPERIMENTAL_BIN_DIR", binary.parent),
+                mock.patch.object(runner, "MODEL_PATH", model),
+                mock.patch.object(runner, "EXPERIMENTAL_LLAMA_CLI", binary),
+                mock.patch.object(runner, "EXPERIMENTAL_LD_LIBRARY_PATH", str(binary.parent)),
+                mock.patch.object(runner.subprocess, "run", side_effect=fake_run),
+            ):
+                guards = runner.GuardState(
+                    quiet_host_blockers=[],
+                    glm_download_active=False,
+                    glm_download_blockers=[],
+                )
+                manifest = runner.build_manifest(guards, execute=True)
+                output_dir = Path(tmpdir) / "out"
+                runner.write_artifacts(output_dir, manifest)
+                summary = runner.run_execute(output_dir, manifest, ["bonsai_q1_cpu_exact_ok"], timeout_s=30)
+
+                self.assertEqual(summary["status"], "pass")
+                self.assertEqual(summary["passed"], 1)
+                self.assertTrue((output_dir / "arms" / "bonsai_q1_cpu_exact_ok" / "stdout.txt").exists())
+                self.assertTrue((output_dir / "summary.json").exists())
 
 
 if __name__ == "__main__":

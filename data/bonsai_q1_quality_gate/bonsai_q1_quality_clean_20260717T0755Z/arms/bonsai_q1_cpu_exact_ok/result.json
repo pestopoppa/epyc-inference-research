@@ -1,0 +1,20 @@
+{
+  "acceptance": {
+    "generated_text": "ok",
+    "normalized_stdout": "ok",
+    "passed": true,
+    "reason": "exact ok"
+  },
+  "arm": "bonsai_q1_cpu_exact_ok",
+  "command": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-cli --device none --device-draft none --simple-io --no-warmup --single-turn --no-display-prompt --no-show-timings --color off -no-cnv --reasoning off --reasoning-budget 0 --temp 0 --seed 1 -m /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf -t 96 -c 2048 -ngl 0 -n 64 -p 'Return exactly: ok'",
+  "device": "none",
+  "expected": "exact ok, no reasoning preamble",
+  "probe_id": "exact_ok",
+  "prompt": "Return exactly: ok",
+  "returncode": 0,
+  "role": "cpu_quality_baseline",
+  "status": "pass",
+  "stderr_path": "data/bonsai_q1_quality_gate/bonsai_q1_quality_clean_20260717T0755Z/arms/bonsai_q1_cpu_exact_ok/stderr.txt",
+  "stdout_path": "data/bonsai_q1_quality_gate/bonsai_q1_quality_clean_20260717T0755Z/arms/bonsai_q1_cpu_exact_ok/stdout.txt",
+  "timeout_s": 420
+}

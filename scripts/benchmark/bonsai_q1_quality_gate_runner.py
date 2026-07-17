@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -39,6 +40,7 @@ DEFAULT_CONTEXT = 2048
 DEFAULT_MAX_TOKENS = 64
 DEFAULT_CPU_NGL = 0
 DEFAULT_MI210_NGL = 99
+DEFAULT_TIMEOUT_S = 300
 GLM_PATTERN = "hf download unsloth/GLM-5.2-GGUF"
 AUTOPILOT_PATTERN = "scripts/autopilot/autopilot.py start"
 
@@ -178,8 +180,18 @@ def _cpu_command(probe: dict[str, Any]) -> list[str]:
         "--no-warmup",
         "--single-turn",
         "--no-display-prompt",
+        "--no-show-timings",
         "--color",
         "off",
+        "-no-cnv",
+        "--reasoning",
+        "off",
+        "--reasoning-budget",
+        "0",
+        "--temp",
+        "0",
+        "--seed",
+        "1",
         "-m",
         str(MODEL_PATH),
         "-t",
@@ -203,8 +215,18 @@ def _mi210_command(probe: dict[str, Any]) -> list[str]:
         "--no-warmup",
         "--single-turn",
         "--no-display-prompt",
+        "--no-show-timings",
         "--color",
         "off",
+        "-no-cnv",
+        "--reasoning",
+        "off",
+        "--reasoning-budget",
+        "0",
+        "--temp",
+        "0",
+        "--seed",
+        "1",
         "-m",
         str(MODEL_PATH),
         "-t",
@@ -254,7 +276,7 @@ def _command_templates() -> list[dict[str, Any]]:
     return commands
 
 
-def build_manifest(guards: GuardState) -> dict[str, Any]:
+def build_manifest(guards: GuardState, *, execute: bool = False) -> dict[str, Any]:
     blockers = list(guards.quiet_host_blockers)
     blockers.extend(guards.glm_download_blockers)
 
@@ -269,8 +291,9 @@ def build_manifest(guards: GuardState) -> dict[str, Any]:
     return {
         "meta": {
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "mode": "dry_run",
-            "dry_run_only": True,
+            "mode": "execute" if execute else "dry_run",
+            "dry_run_only": not execute,
+            "supports_execute": True,
             "experimental_root": str(EXPERIMENTAL_ROOT),
             "experimental_binary": str(EXPERIMENTAL_LLAMA_CLI),
             "experimental_ld_library_path": EXPERIMENTAL_LD_LIBRARY_PATH,
@@ -298,7 +321,7 @@ def build_manifest(guards: GuardState) -> dict[str, Any]:
             "gate_id": "bonsai_q1_role_claim_gate",
             "title": "Bonsai-27B Q1_0 quality/prompting gate",
             "status": status,
-            "dry_run_only": True,
+            "dry_run_only": not execute,
             "exact_command_known": True,
             "model_path": str(MODEL_PATH),
             "blockers": blockers,
@@ -320,8 +343,9 @@ def build_manifest(guards: GuardState) -> dict[str, Any]:
             ],
             "command_templates": command_templates,
             "notes": [
-                "This is a planner only; it does not load the model or launch inference.",
+                "Dry-run mode does not load the model or launch inference.",
                 "The commands are pinned to /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin.",
+                "Command templates force completion mode (-no-cnv), disable reasoning, and suppress prompt/timing output so stdout is the generated text under test.",
                 "The exact-ok prompt mirrors the staged Bonsai smoke commands; the additional probes test minimal instruction following before any role claim.",
             ],
         },
@@ -359,6 +383,136 @@ def write_artifacts(output_dir: Path, manifest: dict[str, Any]) -> None:
     (output_dir / "commands.sh").write_text(render_commands(manifest), encoding="utf-8")
 
 
+def extract_generated_text(stdout: str, prompt: str | None = None) -> str:
+    text = stdout.replace("\r\n", "\n")
+    if prompt:
+        marker = f"> {prompt}\n"
+        if marker in text:
+            text = text.split(marker, 1)[1]
+    if "\n\nExiting..." in text:
+        text = text.split("\n\nExiting...", 1)[0]
+    return text
+
+
+def normalize_stdout(stdout: str, prompt: str | None = None) -> str:
+    if prompt is not None:
+        stdout = extract_generated_text(stdout, prompt)
+    return stdout.strip()
+
+
+def evaluate_probe(probe_id: str, stdout: str, prompt: str | None = None) -> dict[str, Any]:
+    text = normalize_stdout(stdout, prompt)
+    if probe_id == "exact_ok":
+        passed = text == "ok"
+        reason = "exact ok" if passed else "stdout was not exactly ok"
+    elif probe_id == "strict_json":
+        expected = '{"status":"ok","model":"bonsai"}'
+        passed = text == expected
+        reason = "exact minified JSON" if passed else "stdout did not match exact minified JSON"
+    elif probe_id == "simple_math":
+        passed = text == "95"
+        reason = "exact integer" if passed else "stdout was not exactly 95"
+    elif probe_id == "short_instruction":
+        words = text.split()
+        passed = len(words) == 6 and all(re.fullmatch(r"[a-z]+", word) for word in words)
+        reason = "six lowercase words" if passed else "stdout was not exactly six lowercase words"
+    else:
+        passed = False
+        reason = f"unknown probe id: {probe_id}"
+    return {
+        "passed": passed,
+        "reason": reason,
+        "normalized_stdout": text,
+        "generated_text": text,
+    }
+
+
+def run_arm(command: dict[str, Any], output_dir: Path, timeout_s: int) -> dict[str, Any]:
+    arm = command["arm"]
+    arm_dir = output_dir / "arms" / arm
+    arm_dir.mkdir(parents=True, exist_ok=True)
+    stdout_path = arm_dir / "stdout.txt"
+    stderr_path = arm_dir / "stderr.txt"
+    result_path = arm_dir / "result.json"
+
+    record: dict[str, Any] = {
+        "arm": arm,
+        "probe_id": command["probe_id"],
+        "device": command["device"],
+        "role": command["role"],
+        "prompt": command["prompt"],
+        "expected": command["expected"],
+        "command": command["shell"],
+        "stdout_path": str(stdout_path),
+        "stderr_path": str(stderr_path),
+        "timeout_s": timeout_s,
+    }
+    try:
+        completed = subprocess.run(
+            command["argv"],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            check=False,
+        )
+        stdout_path.write_text(completed.stdout, encoding="utf-8")
+        stderr_path.write_text(completed.stderr, encoding="utf-8")
+        acceptance = evaluate_probe(command["probe_id"], completed.stdout, command["prompt"])
+        record.update(
+            {
+                "returncode": completed.returncode,
+                "status": "pass" if completed.returncode == 0 and acceptance["passed"] else "fail",
+                "acceptance": acceptance,
+            }
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode("utf-8", errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
+        stdout_path.write_text(stdout, encoding="utf-8")
+        stderr_path.write_text(stderr, encoding="utf-8")
+        record.update(
+            {
+                "returncode": None,
+                "status": "timeout",
+                "acceptance": {
+                    "passed": False,
+                    "reason": "timeout",
+                    "normalized_stdout": normalize_stdout(stdout, command["prompt"]),
+                    "generated_text": normalize_stdout(stdout, command["prompt"]),
+                },
+            }
+        )
+    result_path.write_text(json.dumps(record, indent=2, sort_keys=True), encoding="utf-8")
+    return record
+
+
+def run_execute(output_dir: Path, manifest: dict[str, Any], selected: list[str] | None, timeout_s: int) -> dict[str, Any]:
+    commands = manifest["gate"]["command_templates"]
+    if selected:
+        selected_set = set(selected)
+        commands = [command for command in commands if command["arm"] in selected_set]
+    records = [run_arm(command, output_dir, timeout_s) for command in commands]
+    passed = sum(1 for record in records if record["status"] == "pass")
+    failed = sum(1 for record in records if record["status"] == "fail")
+    timed_out = sum(1 for record in records if record["status"] == "timeout")
+    summary = {
+        "schema": "bonsai_q1_quality_gate_execute.v1",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "status": "pass" if passed == len(records) else "fail",
+        "passed": passed,
+        "failed": failed,
+        "timed_out": timed_out,
+        "total": len(records),
+        "records": records,
+    }
+    (output_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    return summary
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Dry-run-first Bonsai Q1_0 quality gate planner")
     parser.add_argument(
@@ -367,17 +521,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=RESEARCH_ROOT / "data" / "bonsai_q1_quality_gate" / _utc_stamp(),
         help="Directory for manifest.json, gate.json, and commands.sh",
     )
+    parser.add_argument("--execute", action="store_true", help="Run the generated command templates after writing the plan")
+    parser.add_argument("--only", action="append", help="Arm name to execute. May be repeated. Defaults to all arms.")
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT_S, help="Per-arm timeout in seconds")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     guards = collect_guard_state()
-    manifest = build_manifest(guards)
+    manifest = build_manifest(guards, execute=args.execute)
     write_artifacts(args.output_dir, manifest)
 
     print("Bonsai Q1_0 quality gate planner")
-    print("mode: dry_run")
+    print(f"mode: {'execute' if args.execute else 'dry_run'}")
     print(f"output_dir: {args.output_dir}")
     print(f"experimental_binary: {EXPERIMENTAL_LLAMA_CLI}")
     print(f"experimental_ld_library_path: {EXPERIMENTAL_LD_LIBRARY_PATH}")
@@ -385,7 +542,25 @@ def main(argv: list[str] | None = None) -> int:
     print(f"glm_download_active: {guards.glm_download_active}")
     print(f"plan_file: {args.output_dir / 'manifest.json'}")
     print(f"commands_file: {args.output_dir / 'commands.sh'}")
-    print("Dry run only. No inference was launched.")
+    if not args.execute:
+        print("Dry run only. No inference was launched.")
+        return 0
+    if manifest["gate"]["blockers"]:
+        print("FATAL: execute blocked by guards:", file=sys.stderr)
+        for blocker in manifest["gate"]["blockers"]:
+            print(f"- {blocker}", file=sys.stderr)
+        return 75
+
+    known_arms = {command["arm"] for command in manifest["gate"]["command_templates"]}
+    unknown = sorted(set(args.only or []) - known_arms)
+    if unknown:
+        print(f"FATAL: unknown --only arm(s): {', '.join(unknown)}", file=sys.stderr)
+        return 2
+
+    summary = run_execute(args.output_dir, manifest, args.only, args.timeout)
+    print(f"summary_file: {args.output_dir / 'summary.json'}")
+    print(f"passed: {summary['passed']}/{summary['total']}")
+    print(f"status: {summary['status']}")
     return 0
 
 
