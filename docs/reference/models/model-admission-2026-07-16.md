@@ -255,6 +255,8 @@ A longer single-owner MI210 server sweep was run at `/mnt/raid0/llm/tmp/model-lo
 | Bonsai-27B Q1_0 | 84 | 1259 | 136.62 | 11.15 | Confirms low MI210 decode speed; quality still unknown. |
 | Qwen2.5-Coder-14B local Q4_K_M | 101 | 1344 | 1095.25 | 66.16 | Recorded for completeness; operator later deprioritized further testing of this model. |
 
+2026-07-17 quiet-host repeat: `/mnt/raid0/llm/tmp/model-admission-gpu-20260717-nemotron-nano/` reran Nemotron-Nano Q8 on MI210 after Firefox/MegaSync removal and measured prompt `448.9 t/s`, generation `83.3 t/s` over a 1536-token cap. This confirms the earlier ~83 t/s decode observation, but remains throughput-only: output drifted into prompt-file/meta help text, and the invoked experimental `build-hip` binary self-reported stale `9d70bae4b` while source HEAD was `2e79e10cc`.
+
 ## MI210 Context-Size Sweep
 
 The context sweep at `/mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/` measured prompt and decode behavior at short, mid, and long prompts for three representative candidates. All cases wrote cleanup logs. The measured prompt-token counts differ from nominal context sizes because the prompt body is tokenizer-dependent.

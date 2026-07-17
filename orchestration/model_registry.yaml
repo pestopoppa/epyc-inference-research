@@ -3066,6 +3066,7 @@ roles:
       mi210_observation: "2026-07-16 stock experimental v7 smoke passed during active GLM download: prompt 200.0 t/s, generation 83.7 t/s; emitted <think> preamble despite --reasoning off."
       long_decode_observation: "2026-07-16 longer server runs during active GLM download: CPU 67 prompt / 768 completion tokens at prompt 97.46 t/s and generation 5.44 t/s; MI210 86 prompt / 1536 completion tokens at prompt 415.06 t/s and generation 82.78 t/s."
       context_sweep_observation: "2026-07-16 MI210 context sweep: generation t/s 80.68 at 1148 prompt tokens, 79.85 at 6428 prompt tokens, and 74.30 at 22428 prompt tokens."
+      mi210_quiet_repeat_observation: "2026-07-17 quiet-host sidecar repeat with Firefox/MegaSync gone: stock experimental-v7 CLI prompt 448.9 t/s, generation 83.3 t/s over a 1536-token cap on MI210. Throughput-only: prompt drifted into meta/help text, and the invoked build-hip binary self-reported stale 9d70bae4b while source HEAD was 2e79e10cc."
       evidence:
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/summary.tsv
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/nemotron_nano_9b_q8_cpu_v7.stdout
@@ -3075,6 +3076,7 @@ roles:
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_nano_q8-c2048/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_nano_q8-c8192/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_nano_q8-c32768/summary.txt
+      - /mnt/raid0/llm/tmp/model-admission-gpu-20260717-nemotron-nano/stdout.txt
     benchmark_date: 2026-04-23
     notes: |
       Reasoning-mode toggle (default AUTO/ON per user preference):
