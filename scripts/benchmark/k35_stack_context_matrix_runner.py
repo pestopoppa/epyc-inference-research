@@ -174,7 +174,7 @@ def selected_contexts(values: list[int] | None) -> list[int]:
 def prompt_for_context(nominal_context: int, max_tokens: int) -> str:
     # Keep the filler word tokenizer-friendly. Earlier alphanumeric markers
     # expanded 3x past the nominal context and turned a 2K smoke into 6K tokens.
-    target_words = max(64, nominal_context - 256)
+    target_words = max(64, nominal_context - max_tokens - 1024)
     repeated = " ".join("benchmark" for _ in range(target_words))
     return (
         "You are serving a throughput benchmark. Preserve the instruction at the end.\n\n"
