@@ -363,7 +363,9 @@ The realistic lane is `--reasoning off`. With that flag, CPU MiniCPM-o passed th
 
 Follow-up co-residency smoke lives under `/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/`. It launched the fastest validated MI210 frontdoor lane beside MiniCPM-o `--reasoning off`; both servers were healthy together at `66%` MI210 VRAM, handled concurrent requests, and cleaned up fully. Frontdoor decoded `512` tokens at `99.97 t/s`; MiniCPM-o answered the chart fixture as `Tanzania`.
 
-Disposition: MiniCPM-o is now the first fast quality-clean `vision_escalation` candidate on the K35 fixture set, and the targeted frontdoor co-residency smoke passed. It is still not an automatic live-stack flip because a single smoke is not a broad service-level concurrency matrix. The remaining decision is whether to activate the MI210 lane now, keep the Qwen2.5-VL CPU safety alias, or require broader service/text-tax data first.
+Service-tax follow-up lives under `/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/`. Frontdoor alone decoded `101.68` and `101.84 t/s`; frontdoor with MiniCPM-o resident but idle decoded `101.89` and `101.86 t/s`; active concurrent MiniCPM-o vision dropped frontdoor to `80.16` and `80.34 t/s` while MiniCPM-o decoded `90.49` and `90.23 t/s`.
+
+Disposition: MiniCPM-o is now the first fast quality-clean `vision_escalation` candidate on the K35 fixture set, and targeted frontdoor co-residency/service-tax probes passed. It is still not an automatic live-stack flip because this is not a broad service-level concurrency matrix. The remaining decision is whether to activate the MI210 lane with scheduling policy, keep the Qwen2.5-VL CPU safety alias, or require broader service/text-tax data first.
 
 ## Qwen3-VL-8B Image Runtime Smoke
 
