@@ -1,0 +1,23 @@
+{
+  "pr_title": "Guard booking webhook signature check",
+  "repo": "calcom/cal.com",
+  "number": 2001,
+  "comments": [
+    {
+      "comment": "Signature comparison uses == instead of a constant-time compare; timing side-channel.",
+      "criterion": "security",
+      "file": "packages/features/webhooks/verify.ts",
+      "line_start": 40,
+      "line_end": 44,
+      "severity": "high"
+    },
+    {
+      "comment": "Nullable `payload.body` is dereferenced before the guard clause runs.",
+      "criterion": "runtime_error",
+      "file": "packages/features/webhooks/verify.ts",
+      "line_start": 22,
+      "line_end": 23,
+      "severity": "medium"
+    }
+  ]
+}

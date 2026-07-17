@@ -1,0 +1,31 @@
+{
+  "pr_title": "Cache dashboard permissions lookup",
+  "repo": "grafana/grafana",
+  "number": 3300,
+  "comments": [
+    {
+      "comment": "Permission cache key omits the org id, so users in different orgs share cached ACLs.",
+      "criterion": "security",
+      "file": "pkg/services/dashboards/cache.go",
+      "line_start": 55,
+      "line_end": 60,
+      "severity": "high"
+    },
+    {
+      "comment": "Cache is never invalidated on permission update; stale reads until TTL expiry.",
+      "criterion": "logic_bug",
+      "file": "pkg/services/dashboards/cache.go",
+      "line_start": 72,
+      "line_end": 80,
+      "severity": "medium"
+    },
+    {
+      "comment": "Consider renaming the receiver for clarity.",
+      "criterion": "logic_bug",
+      "file": "pkg/services/dashboards/cache.go",
+      "line_start": 12,
+      "line_end": 12,
+      "severity": "low"
+    }
+  ]
+}

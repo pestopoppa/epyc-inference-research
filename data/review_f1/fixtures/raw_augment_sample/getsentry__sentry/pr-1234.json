@@ -1,0 +1,31 @@
+{
+  "pr_title": "Fix retry backoff in ingest consumer",
+  "repo": "getsentry/sentry",
+  "number": 1234,
+  "comments": [
+    {
+      "comment": "Off-by-one in the retry loop causes one extra unbounded retry.",
+      "criterion": "logic_bug",
+      "file": "src/sentry/ingest/consumer.py",
+      "line_start": 88,
+      "line_end": 92,
+      "severity": "high"
+    },
+    {
+      "comment": "Exponential backoff sleep is computed but never awaited; retries hammer the broker.",
+      "criterion": "performance",
+      "file": "src/sentry/ingest/consumer.py",
+      "line_start": 101,
+      "line_end": 101,
+      "severity": "medium"
+    },
+    {
+      "comment": "Variable name `tmp` is not descriptive.",
+      "criterion": "logic_bug",
+      "file": "src/sentry/ingest/consumer.py",
+      "line_start": 77,
+      "line_end": 77,
+      "severity": "low"
+    }
+  ]
+}

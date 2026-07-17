@@ -344,6 +344,21 @@ You can list all previous benchmark runs and compare any two side by side, which
 
 </details>
 
+## Paired Significance Testing (Quant A/B)
+
+Comparing two runs by their headline accuracy answers "which scored higher" but not "is the difference more than one-question noise?" -- the failure mode where an identical per-suite regression turns out to be a single-question flip. Because we score quants on **fixed question pools**, the statistically correct test is a **paired McNemar test on the discordant items** (the questions where the two arms disagree), not two independent confidence intervals, which are underpowered for a paired design.
+
+Paired McNemar is the formal successor to the **3/n resolution gate** (2026-06-06). Instead of the ad-hoc "a delta smaller than 3/n is noise" heuristic, McNemar returns an exact p-value on the discordant count, answering "are these flips more than one-question noise?" directly. The exact-binomial variant (rather than chi-square with continuity correction) is the correct choice for the small-discordant-count regime our per-suite runs live in.
+
+Two guardrails are mandatory before the test is run:
+
+- **Gate on `dataset_sha256` + `test_profile` equality.** A paired test is only valid when both arms scored the *same* question set under the *same* evaluation profile. The comparison refuses mismatched -- or unidentified -- inputs rather than silently pairing them.
+- **Report per-category deltas and completion-token cost alongside the p-value.** A damaged quant that "thinks longer" surfaces as token inflation and truncation, not just accuracy loss, so a speed number must always be paired with a correctness/garbage check.
+
+Implementation notes (orchestrator repo): the canonical exact paired-McNemar lives in `scripts/autopilot/paired_stats.py` (`mcnemar_from_vectors`), with a `dataset_sha256` + `test_profile` equality gate (`require_matched_comparison`) that refuses to compare mismatched arms. Wilson score intervals and the supporting ECE / ROC-AUC calibration metrics are consolidated in the clean-room, stdlib-only `src/llm_primitives/stat_tests.py` (no numpy/sklearn dependency).
+
+**Measurement note.** A McNemar p-value is a *decision-gating* statistic: it may gate a quant keep/revert only via a codified recipe with operator approval -- never ad hoc, and never through `canonical_recipe.py` (which is speed-only). The integration target is the eval-scoring path tracked in `handoffs/active/eval-benchmark-cost-reduction.md`.
+
 ## Permanent Results
 
 Benchmark results persist in `benchmarks/results/` even after models are deleted from disk. This matters because storage is finite, new models arrive constantly, and you need historical comparisons to spot trends. Each result includes the full configuration (MoE settings, K values, quantization) so any run can be reproduced later.

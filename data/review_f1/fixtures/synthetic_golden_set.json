@@ -1,0 +1,140 @@
+{
+  "cases": [
+    {
+      "case_id": "calcom-cal-com__pr-2001",
+      "golden_findings": [
+        {
+          "comment": "Signature comparison uses == instead of a constant-time compare; timing side-channel.",
+          "criterion": "security",
+          "golden_id": "calcom-cal-com__pr-2001-g0",
+          "location": {
+            "file": "packages/features/webhooks/verify.ts",
+            "line_end": 44,
+            "line_start": 40
+          },
+          "provenance": "augment-v1-synthetic",
+          "severity": "high"
+        },
+        {
+          "comment": "Nullable `payload.body` is dereferenced before the guard clause runs.",
+          "criterion": "runtime_error",
+          "golden_id": "calcom-cal-com__pr-2001-g1",
+          "location": {
+            "file": "packages/features/webhooks/verify.ts",
+            "line_end": 23,
+            "line_start": 22
+          },
+          "provenance": "augment-v1-synthetic",
+          "severity": "medium"
+        }
+      ],
+      "pr_ref": {
+        "number": 2001,
+        "repo": "calcom/cal.com",
+        "title": "Guard booking webhook signature check"
+      },
+      "provenance": "augment-v1-synthetic"
+    },
+    {
+      "case_id": "getsentry-sentry__pr-1234",
+      "golden_findings": [
+        {
+          "comment": "Off-by-one in the retry loop causes one extra unbounded retry.",
+          "criterion": "logic_bug",
+          "golden_id": "getsentry-sentry__pr-1234-g0",
+          "location": {
+            "file": "src/sentry/ingest/consumer.py",
+            "line_end": 92,
+            "line_start": 88
+          },
+          "provenance": "augment-v1-synthetic",
+          "severity": "high"
+        },
+        {
+          "comment": "Exponential backoff sleep is computed but never awaited; retries hammer the broker.",
+          "criterion": "performance",
+          "golden_id": "getsentry-sentry__pr-1234-g1",
+          "location": {
+            "file": "src/sentry/ingest/consumer.py",
+            "line_end": 101,
+            "line_start": 101
+          },
+          "provenance": "augment-v1-synthetic",
+          "severity": "medium"
+        },
+        {
+          "comment": "Variable name `tmp` is not descriptive.",
+          "criterion": "logic_bug",
+          "golden_id": "getsentry-sentry__pr-1234-g2",
+          "location": {
+            "file": "src/sentry/ingest/consumer.py",
+            "line_end": 77,
+            "line_start": 77
+          },
+          "provenance": "augment-v1-synthetic",
+          "severity": "low"
+        }
+      ],
+      "pr_ref": {
+        "number": 1234,
+        "repo": "getsentry/sentry",
+        "title": "Fix retry backoff in ingest consumer"
+      },
+      "provenance": "augment-v1-synthetic"
+    },
+    {
+      "case_id": "grafana-grafana__pr-3300",
+      "golden_findings": [
+        {
+          "comment": "Permission cache key omits the org id, so users in different orgs share cached ACLs.",
+          "criterion": "security",
+          "golden_id": "grafana-grafana__pr-3300-g0",
+          "location": {
+            "file": "pkg/services/dashboards/cache.go",
+            "line_end": 60,
+            "line_start": 55
+          },
+          "provenance": "augment-v1-synthetic",
+          "severity": "high"
+        },
+        {
+          "comment": "Cache is never invalidated on permission update; stale reads until TTL expiry.",
+          "criterion": "logic_bug",
+          "golden_id": "grafana-grafana__pr-3300-g1",
+          "location": {
+            "file": "pkg/services/dashboards/cache.go",
+            "line_end": 80,
+            "line_start": 72
+          },
+          "provenance": "augment-v1-synthetic",
+          "severity": "medium"
+        },
+        {
+          "comment": "Consider renaming the receiver for clarity.",
+          "criterion": "logic_bug",
+          "golden_id": "grafana-grafana__pr-3300-g2",
+          "location": {
+            "file": "pkg/services/dashboards/cache.go",
+            "line_end": 12,
+            "line_start": 12
+          },
+          "provenance": "augment-v1-synthetic",
+          "severity": "low"
+        }
+      ],
+      "pr_ref": {
+        "number": 3300,
+        "repo": "grafana/grafana",
+        "title": "Cache dashboard permissions lookup"
+      },
+      "provenance": "augment-v1-synthetic"
+    }
+  ],
+  "checksum": "d9cade38f13cc9b255ac8c14429c5adbb0e92080fb848e104ad74f2724ca855e",
+  "n_cases": 3,
+  "n_golden_scored": 6,
+  "n_golden_total": 8,
+  "provenance": "augment-v1-synthetic",
+  "schema_version": "review_f1.golden.v1",
+  "source": "data/review_f1/fixtures/raw_augment_sample"
+}
