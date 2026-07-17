@@ -104,6 +104,14 @@ distance `0.337318`, and table TEDS `0.0`. Treat that as producer/runtime
 evidence plus a table-format prompt gap, not a final document-parser quality
 claim.
 
+Follow-up `/mnt/raid0/llm/tmp/odl-paddleocr-vl-htmltables-20260717T201106Z/`
+used `--prompt-profile html_tables`. It completed without model errors and
+improved reading-order edit distance to `0.285753`, but emitted zero HTML
+`<table>` tags, kept table TEDS at `0.0`, worsened text-block edit distance to
+`0.429062`, and slowed median page latency to `3245.60 ms`. Prompt-only table
+recovery is therefore negative; the next table lever should be post-processing /
+HTML conversion or a different parser, not another near-identical prompt.
+
 ## Usage
 
 ```bash
@@ -127,6 +135,7 @@ $RES/.venv/bin/python -m scripts.benchmark.odl_bench.adapter run-model \
   --gt /mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/OmniDocBench_demo.json \
   --image-root /mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images \
   --run-dir /mnt/raid0/llm/tmp/odl-paddleocr-vl \
+  --prompt-profile html_tables \
   --allow-inference --score
 ```
 

@@ -34,6 +34,7 @@ from .paddleocr_vl import (
     DEFAULT_MMPROJ as PADDLEOCR_DEFAULT_MMPROJ,
     DEFAULT_MODEL as PADDLEOCR_DEFAULT_MODEL,
     PADDLEOCR_VL_ENGINE,
+    PROMPT_PROFILES as PADDLEOCR_PROMPT_PROFILES,
     PaddleOcrVlConfig,
     PaddleOcrVlProducer,
 )
@@ -361,6 +362,13 @@ def _main(argv=None):
     p_model.add_argument("--startup-timeout", type=int, default=240)
     p_model.add_argument("--request-timeout", type=int, default=900)
     p_model.add_argument("--allow-dirty-host", action="store_true")
+    p_model.add_argument(
+        "--prompt-profile",
+        choices=sorted(PADDLEOCR_PROMPT_PROFILES),
+        default="default",
+        help="PaddleOCR-VL extraction prompt profile",
+    )
+    p_model.add_argument("--prompt-file", type=Path, default=None, help="override prompt text from file")
 
     args = parser.parse_args(argv)
 
@@ -389,6 +397,11 @@ def _main(argv=None):
         if not args.allow_inference:
             parser.error("run-model requires --allow-inference")
         adapter = OdlBenchAdapter()
+        prompt = (
+            args.prompt_file.read_text(encoding="utf-8")
+            if args.prompt_file
+            else PADDLEOCR_PROMPT_PROFILES[args.prompt_profile]
+        )
         cfg = PaddleOcrVlConfig(
             binary=args.binary,
             model=args.model,
@@ -402,6 +415,8 @@ def _main(argv=None):
             max_tokens=args.max_tokens,
             startup_timeout_s=args.startup_timeout,
             request_timeout_s=args.request_timeout,
+            prompt=prompt,
+            prompt_profile=str(args.prompt_file) if args.prompt_file else args.prompt_profile,
             allow_dirty_host=args.allow_dirty_host,
         )
         row_set = adapter.build_model_gated_row_set(

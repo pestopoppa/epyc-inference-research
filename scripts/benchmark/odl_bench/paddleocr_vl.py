@@ -36,6 +36,17 @@ DEFAULT_PROMPT = (
     "Preserve reading order, headings, lists, tables, equations, labels, numbers, "
     "and all visible text. Return only the Markdown content."
 )
+HTML_TABLE_PROMPT = (
+    "Extract this document page as Markdown for OmniDocBench end-to-end scoring. "
+    "Preserve reading order and all visible text. Render every table as valid HTML "
+    "using <table>, <tr>, <th>, and <td> tags with rowspan/colspan when visible; "
+    "do not use Markdown pipe tables. Keep non-table content as concise Markdown. "
+    "Return only the extracted document content."
+)
+PROMPT_PROFILES = {
+    "default": DEFAULT_PROMPT,
+    "html_tables": HTML_TABLE_PROMPT,
+}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -53,6 +64,7 @@ class PaddleOcrVlConfig:
     request_timeout_s: int = 900
     startup_timeout_s: int = 240
     prompt: str = DEFAULT_PROMPT
+    prompt_profile: str = "default"
     allow_dirty_host: bool = False
 
 
@@ -259,6 +271,18 @@ class PaddleOcrVlProducer:
 
         server_argv = build_server_argv(self.config)
         write_json(response_dir / "server_argv.json", server_argv)
+        write_json(
+            response_dir / "producer_config.json",
+            {
+                "engine": PADDLEOCR_VL_ENGINE,
+                "prompt_profile": self.config.prompt_profile,
+                "prompt": self.config.prompt,
+                "max_tokens": self.config.max_tokens,
+                "context": self.config.context,
+                "device": self.config.device,
+                "gpu_layers": self.config.gpu_layers,
+            },
+        )
         server_stderr = response_dir / "server.stderr"
         proc: subprocess.Popen[str] | None = None
         artifacts: list[PredictionArtifact] = []

@@ -40,6 +40,7 @@ from odl_bench.backends import (  # noqa: E402
 from odl_bench.bootstrap import bench_root  # noqa: E402
 from odl_bench.manifest_stubs import model_gated_manifest, model_gated_stubs  # noqa: E402
 from odl_bench.paddleocr_vl import (  # noqa: E402
+    PROMPT_PROFILES,
     PADDLEOCR_VL_ENGINE,
     PaddleOcrVlConfig,
     PaddleOcrVlProducer,
@@ -294,6 +295,12 @@ class TestModelGatedProducerGuards(unittest.TestCase):
         self.assertIn("--mmproj /tmp/paddle-mmproj.gguf", joined)
         self.assertIn("--reasoning off", joined)
         self.assertIn("-ngl 99", joined)
+
+    def test_paddle_prompt_profiles_include_html_table_lane(self):
+        self.assertIn("default", PROMPT_PROFILES)
+        self.assertIn("html_tables", PROMPT_PROFILES)
+        self.assertIn("<table>", PROMPT_PROFILES["html_tables"])
+        self.assertIn("do not use Markdown pipe tables", PROMPT_PROFILES["html_tables"])
 
     def test_paddle_producer_records_page_errors_and_continues(self):
         with tempfile.TemporaryDirectory() as td:
