@@ -6167,11 +6167,11 @@ roles:
       forbid:
       - production_stack_registration_without_v7_support_check
       - production_stack_registration_without_quality_gate
-      reason: "Q2_0 support depends on the refreshed experimental/upstream kernel lineage; validate runtime support before load/quality claims."
+      reason: "Runtime smoke fails before prompt execution due to a GGUF tensor-offset/layout mismatch. Treat as producer-layout or experimental-loader compatibility work, not a harness retry."
     performance:
-      benchmark_status: ternary_q2_0_smoke_fail_output_norm_offset_mismatch
-      observed_date: 2026-07-16
-      q2_0_observation: "Prior MI210 Q2_0 smoke failed hard on `output_norm.weight` GGUF offset mismatch."
+      benchmark_status: ternary_q2_0_noncanonical_layout_offset_mismatch
+      observed_date: 2026-07-17
+      q2_0_observation: "Read-only audit classified the Q2_0 failure as artifact/layout incompatibility: loader rejects `output_norm.weight` offset 337715200 vs expected 357580800 before prompt execution. Header parses as GGUF v3 with structured tensor offsets and local file size matches HF metadata, so evidence favors noncanonical Q2_0 packing under standard GGML_TYPE_Q2_0 rather than simple truncation or a bad harness."
       dspark_observation: "Ternary-Bonsai-27B-dspark-Q4_1 failed on CPU and MI210 with GGUF tensor offset mismatch at `dspark.fc.weight`."
       evidence:
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716b/ternary_bonsai_q2_0_mi210_v7.log
@@ -6184,8 +6184,8 @@ roles:
       gpu_only_candidate: true
       hybrid_candidate: false
     benchmark_plan:
-      cpu_only: "After Q1_0 smoke and Q2_0 runtime-support check, run CPU throughput/quality."
-      gpu_only: "Run MI210 throughput/quality if CPU load is coherent."
+      cpu_only: "Do not rerun until upstream/producer Q2_0 packing is verified or an experimental compatibility loader is scoped."
+      gpu_only: "Do not rerun until upstream/producer Q2_0 packing is verified or an experimental compatibility loader is scoped."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   ternary_bonsai_27b_q2_g64:
@@ -6561,6 +6561,63 @@ roles:
       cpu_only: "Header/load smoke, then tiny decode if loader support is present."
       gpu_only: "Not expected to fit on MI210."
       cpu_gpu_hybrid: "Only after loader support and offload feasibility are proven."
+
+  paddleocr_vl_16_gguf:
+    tier: B
+    description: PaddleOCR-VL-1.6 GGUF + PaddleOCR mmproj document/OCR extraction specialist; downloaded, SHA-verified, and MI210 llama-server smoke-clean as a fast extraction lane, but not yet wired into pdf_router or odl_bench Wave-3.
+    model:
+      name: PaddleOCR-VL-1.6-GGUF
+      huggingface_id: PaddlePaddle/PaddleOCR-VL-1.6-GGUF
+      path: /mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf
+      mmproj_path: /mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF-mmproj.gguf
+      quant: GGUF
+      size_gb: 0.87
+      architecture: paddleocr
+      modalities:
+      - image
+      - document
+      - ocr
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-17
+      revision: 511b09642bb324401f15f97cc23bc67e8f0a291d
+      files:
+      - path: /mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF.gguf
+        bytes: 935769056
+        sha256: f3ae46ec885050acf4b3d31944431e1fd90d50664fb09126af4a3c050ba14ee8
+      - path: /mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/PaddleOCR-VL-1.6-GGUF-mmproj.gguf
+        bytes: 881770560
+        sha256: 204d757d7610d9b3faab10d506d69e5b244e32bf765e2bab2d0167e65e0a058a
+    candidate_roles:
+    - document_extraction
+    - ocr
+    - structural_parser
+    acceleration:
+      type: gpu_offload
+      notes: "MI210 llama-server smoke used `-ngl 99 --reasoning off`; no spec-dec evidence needed for this small extractor lane yet."
+    constraints:
+      forbid:
+      - production_stack_registration_without_wave3_adapter
+      - general_vision_escalation_claim_from_extraction_smoke
+      reason: "Runtime and extraction smoke passed, but pdf_router/odl_bench Wave-3 producer is not implemented and evidence is document-extraction shaped, not general QA escalation."
+    performance:
+      benchmark_status: mi210_document_extraction_smoke_pass_wave3_adapter_open
+      observed_date: 2026-07-17
+      mi210_observation: "PaddleOCR-VL loaded through experimental-v7 llama-server with model+mmproj. First smoke at /mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z/ passed digit OCR at 484.36 t/s and invoice markdown extraction at 489.82 t/s. Narrow receipt QA under a 96-token cap emitted broad OCR text and failed the exact doc-number check, but the realistic full-extraction follow-up at /mnt/raid0/llm/tmp/paddleocr-vl-receipt-extract-20260717T194415Z/ included CS00012465 at 487.55 t/s over 768 completion tokens. Cleanup proof showed no llama-server/AutoPilot process and 0% VRAM."
+      evidence:
+      - /mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z/summary.json
+      - /mnt/raid0/llm/tmp/paddleocr-vl-receipt-extract-20260717T194415Z/summary.json
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+      notes: "Small artifact; MI210 smoke used only a lightweight transient server. Co-residency not yet tested."
+    benchmark_plan:
+      cpu_only: "Optional parity/control smoke after Wave-3 adapter exists."
+      gpu_only: "Implement odl_bench Wave-3 producer that writes <stem>.md predictions, then compare against LightOnOCR/ODL on document structural/table/reading-order metrics."
+      cpu_gpu_hybrid: "Not needed at this artifact size."
 
   minicpm_o_45_local_multimodal:
     tier: C

@@ -339,6 +339,14 @@ The Bonsai Q1_0 KV sweep at `/mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-2026071
 
 Interpretation: KV quantization does not explain the local Bonsai Q1_0 speed gap. The likely remaining causes are the ROCm/gfx90a Q1_0 weight/dequant path, model artifact/build differences, or launch settings relative to external CUDA reports.
 
+## Ternary Bonsai Q2_0 Offset-Mismatch Audit
+
+Read-only follow-up on 2026-07-17 classified the `Ternary-Bonsai-27B-Q2_0.gguf` load failure as an artifact/layout compatibility issue rather than a harness retry target. The failing loader line is `tensor 'output_norm.weight' has offset 337715200, expected 357580800` in `/mnt/raid0/llm/tmp/mi210-inference-churn-20260716b/ternary_bonsai_q2_0_mi210_v7.log`; the mismatch appears before prompt execution, so launch shape and MI210 settings are not implicated.
+
+The local file is `7165121600` bytes from revision `20e435f518bd5b882795954aba81e80a91894321` with LFS hash `868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757`. Header parsing succeeds as GGUF v3 with structured tensor offsets, and sibling `Ternary-Bonsai-27B-Q2_g64.gguf` from the same source revision loads. The first matrix storage looks like roughly `2.125` bits/weight while this v7 loader expects standard `GGML_TYPE_Q2_0` (`2.25` bits/weight), so the likeliest root cause is noncanonical Q2_0 packing under the standard type id.
+
+Disposition: do not spend more cycles rerunning Q2_0 smokes until the producer layout is verified or an experimental compatibility loader is scoped. Near-term Bonsai work should either use Q2_g64 task-quality gates or explicitly take on Q2_0 loader/export reconciliation.
+
 ## CPU Long-Decode Evidence
 
 CPU long-run observations now span the main non-GLM candidates that had MI210 long-run data. Evidence lives under `/mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/`, `/mnt/raid0/llm/tmp/model-long-cpu-remaining-20260716T223834/`, and `/mnt/raid0/llm/tmp/model-long-cpu-remaining2-20260716T224231/`. The first resume attempt used a stale Qwen3-VL filename and failed health for that case; the corrected Qwen3-VL run in the second resume directory passed. Qwen2.5-Coder-14B remains intentionally skipped per operator direction.
@@ -387,6 +395,14 @@ CPU SuperGemma4 passed the four fixed K35 OCR/chart fixtures (`4/4`) at `25.58-3
 
 Disposition: SuperGemma4 is quality-clean on this small multimodal fixture slice, but it is not the preferred `vision_escalation` replacement because MiniCPM-o is faster (`110.81-122.18 t/s` on MI210), much smaller, and has targeted frontdoor co-residency/service-tax evidence. Retain SuperGemma4 as a fallback or cross-check candidate, not the lead activation lane.
 
+## PaddleOCR-VL-1.6 Document-Extraction Smoke
+
+Artifacts were downloaded into `/mnt/raid0/llm/models/PaddleOCR-VL-1.6-GGUF/` from `PaddlePaddle/PaddleOCR-VL-1.6-GGUF` revision `511b09642bb324401f15f97cc23bc67e8f0a291d`: model GGUF `935769056` bytes, SHA-256 `f3ae46ec885050acf4b3d31944431e1fd90d50664fb09126af4a3c050ba14ee8`; mmproj GGUF `881770560` bytes, SHA-256 `204d757d7610d9b3faab10d506d69e5b244e32bf765e2bab2d0167e65e0a058a`.
+
+MI210 `llama-server` smoke evidence lives under `/mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z/` and `/mnt/raid0/llm/tmp/paddleocr-vl-receipt-extract-20260717T194415Z/`. The v7 server loaded the `paddleocr` model plus PaddleOCR mmproj with `-ngl 99 --reasoning off`. A simple digit fixture returned `7500` at `484.36 t/s`; a synthetic invoice markdown extraction returned the visible invoice table and total at `489.82 t/s`; and a full receipt extraction with a 768-token cap included `CS00012465` at `487.55 t/s`. The server cleaned up fully after both runs.
+
+Disposition: PaddleOCR-VL is runtime-clean and very fast as a document/OCR extraction specialist. It should not be evaluated as a general `vision_escalation` QA replacement from narrow-answer prompts; the useful next gate is a Wave-3 `odl_bench` producer that writes `<stem>.md` predictions for PaddleOCR-VL, then compares it with LightOnOCR/ODL on document structural/table/reading-order metrics.
+
 ## Deferred Low-Contention Manifest Work
 
 Do not hash the large GGUFs during active GLM download or benchmark windows. If a human-readable manifest is needed, first emit byte inventories and reuse HF sidecars:
@@ -412,7 +428,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 3. Investigate the Ternary Bonsai Q2_0 artifact/runtime offset mismatch before retrying. Q2_g64 is CPU+MI210 runtime-smoke passed and has preliminary throughput observations, including a positive MI210 `ngram-mod` structured-copy speed signal, but the strict quality gate passed only 6/8 and blocks any role claim; dspark variants failed separately.
 4. Qwable IQ4_XS standalone routing and broader representative quality are closed for the research registry: plain reasoning-off IQ4_XS is the preferred reasoning-heavy route, `ngram-mod` is neutral on the expanded slice, and scaffold remains only the beneficiary-must-answer fallback. Remaining work is production hosting/composite-route wiring, not model admission.
 5. Treat Nemotron-Nano BF16 as a quality-ceiling arm only after Q8_0 merits comparison. Nemotron-Cascade-2 is now historical/catalogue only; do not schedule inference absent an explicit Mamba2-hybrid revival study.
-6. Move beyond speed-only admission observations for Qwen3.5-9B MTP, Bonsai, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible. MiniCPM-o now has a K35 quality-clean vision candidate result plus targeted frontdoor co-residency/service-tax evidence; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure; SuperGemma4 is quality-clean but slower/heavier than MiniCPM-o.
+6. Move beyond speed-only admission observations for Qwen3.5-9B MTP, Bonsai, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible. MiniCPM-o now has a K35 quality-clean vision candidate result plus targeted frontdoor co-residency/service-tax evidence; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure; SuperGemma4 is quality-clean but slower/heavier than MiniCPM-o. PaddleOCR-VL is admitted only as a fast document-extraction specialist pending `odl_bench` Wave-3 wiring, not as a general vision QA role.
 7. Keep generic GLM hot-expert offload/REAP deprioritized after the production-representative skew profile; reopen only with a narrower role-specific corpus or different placement mechanism.
 
 Opt-in command file: `docs/data/model_admission_smoke_commands_20260716.sh`.
