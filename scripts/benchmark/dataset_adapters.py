@@ -67,6 +67,8 @@ ADAPTER_SUITES = {
     "scoring_verifiers",
     # P3b: episodic memory (Tulving Benchmark, arXiv 2501.13121)
     "tulving_episodic",
+    # K-LCM-1: LongCoT-Mini easy-split deterministic reasoning (intake-386/RE-4)
+    "longcot_mini",
 }
 
 # Suites that stay YAML-based (no public dataset or intentionally synthetic)
@@ -121,6 +123,15 @@ def _get_document_extraction_adapter():
         return None
 
 
+def _get_longcot_mini_adapter():
+    """Lazy-import LongCoT-Mini adapter (K-LCM-1 / intake-386 / RE-4)."""
+    try:
+        from longcot_mini_adapter import LongCoTMiniAdapter
+        return LongCoTMiniAdapter
+    except ImportError:
+        return None
+
+
 def get_adapter(suite: str) -> Optional["BaseAdapter"]:
     """Get the dataset adapter for a suite, or None if YAML-only."""
     adapters = {
@@ -164,6 +175,8 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         "scoring_verifiers": _get_scoring_verifiers_adapter(),
         # P3b: episodic memory (Tulving Benchmark, arXiv 2501.13121)
         "tulving_episodic": _get_tulving_episodic_adapter(),
+        # K-LCM-1: LongCoT-Mini easy-split deterministic reasoning
+        "longcot_mini": _get_longcot_mini_adapter(),
     }
     cls = adapters.get(suite)
     if cls is None:
