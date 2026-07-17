@@ -259,7 +259,7 @@ A longer single-owner MI210 server sweep was run at `/mnt/raid0/llm/tmp/model-lo
 | Qwable-v1 Q8_0 | 84 | 1087 | 497.75 | 100.15 | Near-lossless Qwable arm; similar decode speed to IQ4_XS in this prompt. |
 | Qwen3.5-9B MTP local Q4_K_M | 84 | 1197 | 487.56 | 99.44 | Needs MTP acceptance/quality gate before role claim. |
 | MiniCPM-o-4_5 local Q4 | 84 | 1472 | 1648.90 | 107.20 | Text-only path; modality mapping remains separate. |
-| Qwen3-VL-8B local text path | 80 | 1536 | 1569.12 | 102.73 | Text path with mmproj available; image smoke remains open. |
+| Qwen3-VL-8B local text path | 80 | 1536 | 1569.12 | 102.73 | Text path with mmproj available; image runtime/coherence smoke closed 2026-07-17. |
 | Bonsai-8B local orphan | 84 | 1073 | 950.75 | 38.00 | Provenance unresolved despite coherent decode. |
 | Bonsai-27B Q1_0 | 84 | 1259 | 136.62 | 11.15 | Confirms low MI210 decode speed; quality still unknown. |
 | Qwen2.5-Coder-14B local Q4_K_M | 101 | 1344 | 1095.25 | 66.16 | Recorded for completeness; operator later deprioritized further testing of this model. |
@@ -309,9 +309,15 @@ CPU long-run observations now span the main non-GLM candidates that had MI210 lo
 | Qwable-v1 Q8_0 | 66 | 706 | 87.99 | 10.00 | CPU baseline for Q8_0 reasoner. |
 | Qwen3.5-9B MTP local Q4_K_M | 64 | 768 | 108.23 | 10.25 | `draft-mtp` active; response had empty `message.content` despite 768 completion tokens, likely reasoning-only content. |
 | MiniCPM-o-4_5 Q4_K_M text path | 62 | 768 | 235.49 | 7.69 | Response had empty `message.content` despite 768 completion tokens; keep as throughput-only. |
-| Qwen3-VL-8B Q4_K_M text path | 62 | 768 | 229.37 | 7.69 | Corrected local model/mmproj path; text-only, image smoke still open. |
+| Qwen3-VL-8B Q4_K_M text path | 62 | 768 | 229.37 | 7.69 | Corrected local model/mmproj path; image runtime/coherence smoke closed 2026-07-17. |
 | Bonsai-8B local orphan | 66 | 593 | 224.17 | 30.08 | Provenance unresolved, but longer CPU decode is coherent. |
 | Bonsai-27B Q1_0 | 64 | 768 | 54.04 | 8.86 | Response had empty `message.content`; confirms CPU is also slow, though less dramatically than MI210 Q1. |
+
+## Qwen3-VL-8B Image Runtime Smoke
+
+The initial experimental v7 `llama-mtmd-cli` binary segfaulted even on `--version`; rebuilding only the experimental `llama-mtmd-cli`, `llama-qwen2vl-cli`, and `test-mtmd-c-api` targets fixed the tool-level failure without touching production v6. Pinned `llama-mtmd-cli --version` now reports `10088 (d1e5a20eb)`, and `test-mtmd-c-api` passes.
+
+Evidence lives under `/mnt/raid0/llm/tmp/qwen3-vl8-image-smoke-20260717T115124Z/`. CPU-only image smoke loaded the local Qwen3-VL-8B Q4_K_M GGUF plus mmproj and answered the generated shapes fixture as `Circles Squares`. MI210 image smoke used `--image-min-tokens 1024 --image-max-tokens 1024`, offloaded the mmproj, encoded the OCR fixture in `295 ms`, and read `Hello World 123`. Classification: runtime/coherence smoke only; this closes the stale "image smoke open" admission task, but does not replace a vision quality gate or throughput-vs-context benchmark.
 
 ## Deferred Low-Contention Manifest Work
 

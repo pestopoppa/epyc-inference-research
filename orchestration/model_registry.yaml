@@ -5831,6 +5831,13 @@ roles:
         source_hash_kind: hf_lfs_etag_sha256
         source_hash: f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13
       support_files:
+      - /mnt/raid0/llm/models/hy3-angelslim/LICENSE
+      - /mnt/raid0/llm/models/hy3-angelslim/README.md
+      - /mnt/raid0/llm/models/hy3-angelslim/recipes/hyv3_iq1m_recipe.txt
+      - /mnt/raid0/llm/models/hy3-angelslim/recipes/hyv3_iq1m_mtp_recipe.txt
+      - /mnt/raid0/llm/models/hy3-angelslim/recipes/hyv3_q4km_recipe.txt
+      - /mnt/raid0/llm/models/hy3-angelslim/recipes/hyv3_q4km_mtp_recipe.txt
+      - /mnt/raid0/llm/models/hy3-angelslim/setup_hyv3_llama.sh
       - /mnt/raid0/llm/models/hy3-angelslim/patches/01-hyv3-arch.patch
       - /mnt/raid0/llm/models/hy3-angelslim/patches/02-hyv3-mtp-tools.patch
       - /mnt/raid0/llm/models/hy3-angelslim/hyv3_opensource_chat_template.jinja
@@ -6661,11 +6668,15 @@ roles:
       mi210_observation: "Text smoke passed during active GLM download: prompt 415.2 t/s, generation 192.3 t/s, returned `ok`."
       long_cpu_observation: "2026-07-16 corrected local-path longer CPU server run generated 768 tokens at 7.69 t/s after a 62-token prompt; an earlier resume attempt failed health because it used stale Qwen3-VL filenames."
       long_mi210_observation: "2026-07-16 longer MI210 server run generated 1536 tokens at 102.73 t/s after an 80-token prompt."
+      image_cpu_observation: "2026-07-17 rebuilt experimental v7 llama-mtmd-cli (d1e5a20eb) after --version segfault; CPU-only mtmd image smoke loaded local Q4_K_M + mmproj and answered the shapes fixture (`Circles Squares`)."
+      image_mi210_observation: "2026-07-17 MI210 mtmd image smoke with --image-min/max-tokens 1024 and mmproj offload read the generated OCR fixture as `Hello World 123`; this is runtime/coherence evidence, not throughput or quality-gate evidence."
       evidence:
       - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen3_vl8_cpu_text_v7/qwen3_vl8_cpu_text_v7.stdout
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-remaining/qwen3_vl8_mi210_text_v7.stdout
       - /mnt/raid0/llm/tmp/model-long-cpu-remaining2-20260716T224231/qwen3_vl8_text_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwen3_vl8_text_mi210/summary.txt
+      - /mnt/raid0/llm/tmp/qwen3-vl8-image-smoke-20260717T115124Z/cpu_shapes_jinja.log
+      - /mnt/raid0/llm/tmp/qwen3-vl8-image-smoke-20260717T115124Z/gpu_text.log
     memory:
       residency: cold
       pinned: false
