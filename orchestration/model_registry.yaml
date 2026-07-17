@@ -6254,7 +6254,7 @@ roles:
       type: none
       notes: "MTP head was dropped in the community GGUF; use as plain text-generation reasoner, not as a draft/MTP model."
     performance:
-      benchmark_status: strict_output_and_schema_smoke_pass_quality_open
+      benchmark_status: strict_output_schema_and_small_task_quality_slice_pass_routing_open
       study_summary: "CoT scaffold study found Qwable useful as a GPU reasoning/cost lever on reasoning-heavy tasks; deployable use still needs a codified gate."
       server_chat_smoke_status: bounded_iq4_mi210_pass_schema_caveat
       server_chat_observation: >
@@ -6290,6 +6290,13 @@ roles:
         Prompt was 241.73 t/s over 31 tokens; generation was 64.55 t/s over
         51 completion tokens. This is schema acceptance, not task-quality
         acceptance.
+      task_quality_slice_observation: >
+        2026-07-17 bounded server/chat task-quality runner compared IQ4_XS and
+        Q8_0 on six deterministic tasks. IQ4_XS passed 6/6 on MI210 at mean
+        prompt 371.24 t/s and mean decode 112.15 t/s, and passed 6/6 on CPU
+        at mean prompt 89.78 t/s and mean decode 17.11 t/s. Q8_0 also passed
+        6/6 on both devices, but did not show a quality advantage in this small
+        slice and was slower on CPU.
       long_decode_observation: >
         2026-07-16 longer server runs during active GLM download: CPU generated
         616 tokens at 13.71 t/s; MI210 generated 1322 tokens at 98.32 t/s.
@@ -6307,6 +6314,8 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/results/strict_iq4_json_gpu.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/results/strict_iq4_schema_gpu.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_20260717T113232Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_cpu_20260717T113317Z/summary.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_iq4xs_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_iq4xs_mi210/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c2048/summary.txt
@@ -6354,7 +6363,7 @@ roles:
       type: none
       notes: "MTP head was dropped in the community GGUF; use as plain text-generation reasoner."
     performance:
-      benchmark_status: strict_output_smoke_pass_quality_open
+      benchmark_status: strict_output_and_small_task_quality_slice_pass_routing_open
       study_summary: "Use as near-lossless quality arm for Qwable; compare against IQ4_XS where memory permits."
       server_chat_observation: >
         2026-07-16 bounded selector run on experimental v7 b10077-da1bf5e2f
@@ -6367,13 +6376,19 @@ roles:
         data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/
         returned valid requested standalone_q8_gpu/Q8_0/reasoner JSON inside
         markdown fences. Prompt 298.08 t/s over 45 tokens; generation 103.04
-        t/s over 41 completion tokens. Treat as speed/format smoke; task-quality
-        comparison against IQ4_XS remains open.
+        t/s over 41 completion tokens. Treat as speed/format smoke.
+      task_quality_slice_observation: >
+        2026-07-17 bounded server/chat task-quality runner passed 6/6 on MI210
+        at mean prompt 333.49 t/s and mean decode 113.62 t/s, and passed 6/6
+        on CPU at mean prompt 70.72 t/s and mean decode 13.66 t/s. This small
+        slice did not show a Q8-only quality advantage over IQ4_XS.
       long_decode_observation: "2026-07-16 longer server runs during active GLM download: CPU generated 706 tokens at 10.00 t/s; MI210 generated 1087 tokens at 100.15 t/s."
       evidence:
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/summary.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/responses/standalone_q8_gpu.raw.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/results/standalone_q8_gpu.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_20260717T113232Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_cpu_20260717T113317Z/summary.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_q8_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_q8_mi210/summary.txt
     memory:

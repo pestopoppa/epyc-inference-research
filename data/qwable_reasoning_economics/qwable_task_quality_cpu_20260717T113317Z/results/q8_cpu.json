@@ -1,0 +1,235 @@
+{
+  "arm": "q8_cpu",
+  "device": "none",
+  "mean_decode_tps": 13.655772178621236,
+  "mean_prompt_tps": 70.71523649567935,
+  "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+  "ngl": 0,
+  "pass_rate": 1.0,
+  "passed": 6,
+  "port": 18910,
+  "role": "cpu_q8_task_quality",
+  "tasks": [
+    {
+      "content": "{\"answer\":\"55\"}",
+      "prompt": "Compute 34 + 21. Return only minified JSON with exactly one key \"answer\" whose string value is the integer result.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_cpu_20260717T113317Z/responses/q8_cpu/arithmetic_sum_json.raw.json",
+      "score": {
+        "expected": {
+          "answer": "55"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"answer\":\"55\"}",
+        "observed": {
+          "answer": "55"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "arithmetic_sum_json",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 564.037,
+        "predicted_n": 7,
+        "predicted_per_second": 12.410533351535449,
+        "predicted_per_token_ms": 80.57671428571429,
+        "prompt_ms": 872.338,
+        "prompt_n": 61,
+        "prompt_per_second": 69.92702369952931,
+        "prompt_per_token_ms": 14.30062295081967
+      },
+      "usage": {
+        "completion_tokens": 7,
+        "prompt_tokens": 61,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 68
+      }
+    },
+    {
+      "content": "{\"answer\":\"yes\"}",
+      "prompt": "All dax are mip. Every mip is vun. Is every dax a vun? Return only minified JSON with exactly one key \"answer\" whose string value is \"yes\" or \"no\".",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_cpu_20260717T113317Z/responses/q8_cpu/logic_transitive_json.raw.json",
+      "score": {
+        "expected": {
+          "answer": "yes"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"answer\":\"yes\"}",
+        "observed": {
+          "answer": "yes"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "logic_transitive_json",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 472.912,
+        "predicted_n": 6,
+        "predicted_per_second": 12.687349866359916,
+        "predicted_per_token_ms": 78.81866666666666,
+        "prompt_ms": 667.452,
+        "prompt_n": 51,
+        "prompt_per_second": 76.40998903291923,
+        "prompt_per_token_ms": 13.087294117647058
+      },
+      "usage": {
+        "completion_tokens": 6,
+        "prompt_tokens": 71,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 77
+      }
+    },
+    {
+      "content": "{\"finish_24h\":\"10:35\"}",
+      "prompt": "A job starts at 09:15 and lasts 80 minutes. Return only minified JSON with exactly one key \"finish_24h\" using HH:MM.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_cpu_20260717T113317Z/responses/q8_cpu/time_addition_json.raw.json",
+      "score": {
+        "expected": {
+          "finish_24h": "10:35"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"finish_24h\":\"10:35\"}",
+        "observed": {
+          "finish_24h": "10:35"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "time_addition_json",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 1222.582,
+        "predicted_n": 14,
+        "predicted_per_second": 11.451174645136277,
+        "predicted_per_token_ms": 87.32728571428572,
+        "prompt_ms": 649.794,
+        "prompt_n": 50,
+        "prompt_per_second": 76.94746334992321,
+        "prompt_per_token_ms": 12.99588
+      },
+      "usage": {
+        "completion_tokens": 14,
+        "prompt_tokens": 70,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 84
+      }
+    },
+    {
+      "content": "B",
+      "prompt": "A benchmark gives the correct answer in the prompt. Does a model passing that benchmark prove independent reasoning? A) yes B) no. Return exactly one character: A or B.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_cpu_20260717T113317Z/responses/q8_cpu/option_reasoning_letter.raw.json",
+      "score": {
+        "expected": "B",
+        "normalized": "B",
+        "observed": "B",
+        "passed": true,
+        "scorer": "exact"
+      },
+      "task_id": "option_reasoning_letter",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 94.822,
+        "predicted_n": 2,
+        "predicted_per_second": 21.092151610385773,
+        "predicted_per_token_ms": 47.411,
+        "prompt_ms": 657.329,
+        "prompt_n": 48,
+        "prompt_per_second": 73.0227937608108,
+        "prompt_per_token_ms": 13.694354166666665
+      },
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 68,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 70
+      }
+    },
+    {
+      "content": "prevent overfitting to training data",
+      "prompt": "In exactly five lowercase words, describe why held-out tests matter. Return only the five words.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_cpu_20260717T113317Z/responses/q8_cpu/lowercase_five_words.raw.json",
+      "score": {
+        "expected_word_count": 5,
+        "normalized": "prevent overfitting to training data",
+        "observed_words": [
+          "prevent",
+          "overfitting",
+          "to",
+          "training",
+          "data"
+        ],
+        "passed": true,
+        "scorer": "five_lowercase_words"
+      },
+      "task_id": "lowercase_five_words",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 646.611,
+        "predicted_n": 8,
+        "predicted_per_second": 12.372199050124419,
+        "predicted_per_token_ms": 80.826375,
+        "prompt_ms": 507.515,
+        "prompt_n": 31,
+        "prompt_per_second": 61.08193846487296,
+        "prompt_per_token_ms": 16.371451612903225
+      },
+      "usage": {
+        "completion_tokens": 8,
+        "prompt_tokens": 51,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 59
+      }
+    },
+    {
+      "content": "{\"label\":\"qwable\",\"status\":\"ready\"}",
+      "prompt": "Given label=qwable and status=ready, return only minified JSON with exactly keys label and status sorted alphabetically.",
+      "response_path": "data/qwable_reasoning_economics/qwable_task_quality_cpu_20260717T113317Z/responses/q8_cpu/sorted_keys_json.raw.json",
+      "score": {
+        "expected": {
+          "label": "qwable",
+          "status": "ready"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"label\":\"qwable\",\"status\":\"ready\"}",
+        "observed": {
+          "label": "qwable",
+          "status": "ready"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "sorted_keys_json",
+      "timings": {
+        "cache_n": 20,
+        "predicted_ms": 922.724,
+        "predicted_n": 11,
+        "predicted_per_second": 11.921224548185588,
+        "predicted_per_token_ms": 83.884,
+        "prompt_ms": 553.046,
+        "prompt_n": 37,
+        "prompt_per_second": 66.90221066602055,
+        "prompt_per_token_ms": 14.94718918918919
+      },
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 57,
+        "prompt_tokens_details": {
+          "cached_tokens": 20
+        },
+        "total_tokens": 68
+      }
+    }
+  ],
+  "total": 6
+}

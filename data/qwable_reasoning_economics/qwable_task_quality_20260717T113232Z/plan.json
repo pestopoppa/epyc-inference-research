@@ -1,0 +1,114 @@
+{
+  "arms": [
+    {
+      "device": "ROCm0",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "name": "iq4_gpu",
+      "ngl": 99,
+      "port": 18840,
+      "role": "mi210_iq4_task_quality"
+    },
+    {
+      "device": "ROCm0",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+      "name": "q8_gpu",
+      "ngl": 99,
+      "port": 18850,
+      "role": "mi210_q8_task_quality"
+    },
+    {
+      "device": "none",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "name": "iq4_cpu",
+      "ngl": 0,
+      "port": 18860,
+      "role": "cpu_iq4_task_quality"
+    },
+    {
+      "device": "none",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+      "name": "q8_cpu",
+      "ngl": 0,
+      "port": 18870,
+      "role": "cpu_q8_task_quality"
+    }
+  ],
+  "classification": "small deterministic task-quality slice; not a role-quality gate or production-stack promotion decision by itself",
+  "created_at": "2026-07-17T11:32:32.458280+00:00",
+  "experimental_root": "/mnt/raid0/llm/llama.cpp-experimental",
+  "glm_guard": {
+    "active": false,
+    "allow_override_flag": "--allow-glm-download",
+    "blocked_in_execute": true,
+    "pattern": "hf download unsloth/GLM-5.2-GGUF"
+  },
+  "ld_library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "mode": "execute",
+  "request": {
+    "context": 8192,
+    "max_tokens": 96,
+    "request_timeout_s": 240,
+    "seed": 7,
+    "startup_timeout_s": 300,
+    "temperature": 0.0
+  },
+  "schema": "qwable_task_quality_plan.v1",
+  "selected_arms": [
+    "iq4_gpu",
+    "q8_gpu"
+  ],
+  "server_bin": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "tasks": [
+    {
+      "expected": {
+        "answer": "55"
+      },
+      "max_tokens": 96,
+      "prompt": "Compute 34 + 21. Return only minified JSON with exactly one key \"answer\" whose string value is the integer result.",
+      "scorer": "json_exact",
+      "task_id": "arithmetic_sum_json"
+    },
+    {
+      "expected": {
+        "answer": "yes"
+      },
+      "max_tokens": 96,
+      "prompt": "All dax are mip. Every mip is vun. Is every dax a vun? Return only minified JSON with exactly one key \"answer\" whose string value is \"yes\" or \"no\".",
+      "scorer": "json_exact",
+      "task_id": "logic_transitive_json"
+    },
+    {
+      "expected": {
+        "finish_24h": "10:35"
+      },
+      "max_tokens": 96,
+      "prompt": "A job starts at 09:15 and lasts 80 minutes. Return only minified JSON with exactly one key \"finish_24h\" using HH:MM.",
+      "scorer": "json_exact",
+      "task_id": "time_addition_json"
+    },
+    {
+      "expected": "B",
+      "max_tokens": 16,
+      "prompt": "A benchmark gives the correct answer in the prompt. Does a model passing that benchmark prove independent reasoning? A) yes B) no. Return exactly one character: A or B.",
+      "scorer": "exact",
+      "task_id": "option_reasoning_letter"
+    },
+    {
+      "expected": 5,
+      "max_tokens": 48,
+      "prompt": "In exactly five lowercase words, describe why held-out tests matter. Return only the five words.",
+      "scorer": "five_lowercase_words",
+      "task_id": "lowercase_five_words"
+    },
+    {
+      "expected": {
+        "label": "qwable",
+        "status": "ready"
+      },
+      "max_tokens": 96,
+      "prompt": "Given label=qwable and status=ready, return only minified JSON with exactly keys label and status sorted alphabetically.",
+      "scorer": "json_exact",
+      "task_id": "sorted_keys_json"
+    }
+  ]
+}
