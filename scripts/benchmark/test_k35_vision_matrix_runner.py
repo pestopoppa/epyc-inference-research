@@ -96,6 +96,31 @@ class K35VisionMatrixRunnerTests(unittest.TestCase):
         self.assertNotIn("--image-min-tokens", joined)
         self.assertNotIn("--image-max-tokens", joined)
 
+    def test_minicpm_o45_cpu_candidate_uses_vision_projector(self):
+        scenario = k35v.scenario_by_name("vision_candidate_cpu_minicpm_o45_q4")
+        argv = k35v.build_server_argv(
+            scenario,
+            binary=Path("/tmp/llama-server"),
+            port=19258,
+        )
+        joined = " ".join(argv)
+        self.assertIn("/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf", argv)
+        self.assertIn("vision/MiniCPM-o-4_5-vision-F16.gguf", joined)
+        self.assertIn("--device none", joined)
+        self.assertIn("--reasoning off", joined)
+
+    def test_minicpm_o45_mi210_candidate_offloads_to_gpu(self):
+        scenario = k35v.scenario_by_name("vision_candidate_mi210_minicpm_o45_q4")
+        argv = k35v.build_server_argv(
+            scenario,
+            binary=Path("/tmp/llama-server"),
+            port=19259,
+        )
+        joined = " ".join(argv)
+        self.assertIn("vision/MiniCPM-o-4_5-vision-F16.gguf", joined)
+        self.assertIn("--device ROCm0", joined)
+        self.assertIn("--reasoning off", joined)
+
     def test_score_response_normalizes_expected_terms(self):
         fixture = k35v.fixture_by_id("receipt_doc_number")
         score = k35v.score_response("The document number is CS 00012465.", fixture)

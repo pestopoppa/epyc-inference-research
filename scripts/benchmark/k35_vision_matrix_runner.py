@@ -177,6 +177,48 @@ SCENARIOS: tuple[VisionScenario, ...] = (
         candidate=True,
     ),
     VisionScenario(
+        name="vision_candidate_cpu_minicpm_o45_q4",
+        role="vision_escalation_candidate",
+        description=(
+            "Local MiniCPM-o-4_5 Q4_K_M + vision F16 projector candidate, CPU-only. "
+            "Maps whether the staged MiniCPM-o multimodal bundle works through the "
+            "llama-server vision API before any stack role claim."
+        ),
+        model=Path("/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf"),
+        mmproj=Path("/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf"),
+        context=8192,
+        threads=24,
+        parallel=1,
+        extra_args=("--reasoning", "off"),
+        prior_evidence=(
+            "/mnt/raid0/llm/tmp/model-long-cpu-remaining-20260716T223834/ and "
+            "/mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/: text-only load/decode passed; "
+            "vision modality mapping remained open."
+        ),
+        candidate=True,
+    ),
+    VisionScenario(
+        name="vision_candidate_mi210_minicpm_o45_q4",
+        role="vision_escalation_candidate",
+        description=(
+            "Local MiniCPM-o-4_5 Q4_K_M + vision F16 projector candidate offloaded "
+            "to MI210. Tests whether the multimodal bundle can become a fast "
+            "vision-escalation candidate rather than a text-only observation."
+        ),
+        model=Path("/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf"),
+        mmproj=Path("/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf"),
+        context=8192,
+        threads=24,
+        parallel=1,
+        device="ROCm0",
+        extra_args=("--reasoning", "off"),
+        prior_evidence=(
+            "/mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/minicpm_q4_mi210/summary.txt: "
+            "MI210 text-only long run generated 1472 tokens at 107.20 t/s."
+        ),
+        candidate=True,
+    ),
+    VisionScenario(
         name="vision_candidate_mi210_qwen3vl8b_q4",
         role="vision_escalation_candidate",
         description=(
