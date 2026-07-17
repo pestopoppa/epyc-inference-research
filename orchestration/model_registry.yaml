@@ -3627,6 +3627,7 @@ roles:
       optimized_tps: 38.46
       quality_pct: 90
       tool_compliance_pct: 96
+      draft_depth_sweep_observation: "2026-07-17 T5 production-shaped CPU worker sweep at /mnt/raid0/llm/tmp/t5-gemma-worker-draft-depth-20260717T213641Z/summary.json confirms draft_max=2: depth2 87.76 t/s with 492/666 accepted; depth3 76.38 t/s with 492/812 accepted; depth4 84.40 t/s with 494/734 accepted."
     memory:
       residency: hot
       pinned: true
