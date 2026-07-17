@@ -218,17 +218,21 @@ nemotron_diff14_q8_mi210_v7() {
 
 nemotron_nano_9b_q8_cpu_v7() {
   require_no_glm_download
+  # CLI stdout includes reasoning markers for this model; use server/chat with
+  # --reasoning-format deepseek for exact-output scoring.
   v7_cpu_llama \
     -m /mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf \
-    -ngl 0 -t "${THREADS:-16}" -c 2048 -n 64 --reasoning-format none --reasoning off \
+    -ngl 0 -t "${THREADS:-16}" -c 2048 -n 128 --reasoning-format deepseek --reasoning off \
     -p 'Return exactly: ok'
 }
 
 nemotron_nano_9b_q8_mi210_v7() {
   require_no_glm_download
+  # CLI stdout includes reasoning markers for this model; use server/chat with
+  # --reasoning-format deepseek for exact-output scoring.
   v7_mi210_llama \
     -m /mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf \
-    -ngl 99 -c 2048 -n 64 --reasoning-format none --reasoning off \
+    -ngl 99 -c 2048 -n 128 --reasoning-format deepseek --reasoning off \
     -p 'Return exactly: ok'
 }
 

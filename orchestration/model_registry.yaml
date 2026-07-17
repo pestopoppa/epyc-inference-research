@@ -3010,6 +3010,7 @@ roles:
       use_chat_api: true
       chat_template: null  # bartowski GGUF may not embed chat template — verify at sanity check, supply via --chat-template if needed
       reasoning: auto  # default ON; toggle via system prompt (see notes)
+      reasoning_format: deepseek  # server/chat scoring must split thoughts out of message.content
       reasoning_budget: 4096
       max_tokens_multiplier: 4
       env_vars:
@@ -3063,6 +3064,7 @@ roles:
       long_decode_observation: "2026-07-16 longer server runs during active GLM download: CPU 67 prompt / 768 completion tokens at prompt 97.46 t/s and generation 5.44 t/s; MI210 86 prompt / 1536 completion tokens at prompt 415.06 t/s and generation 82.78 t/s."
       context_sweep_observation: "2026-07-16 MI210 context sweep: generation t/s 80.68 at 1148 prompt tokens, 79.85 at 6428 prompt tokens, and 74.30 at 22428 prompt tokens."
       mi210_quiet_repeat_observation: "2026-07-17 quiet-host sidecar repeat with Firefox/MegaSync gone: stock experimental-v7 CLI prompt 448.9 t/s, generation 83.3 t/s over a 1536-token cap on MI210. Throughput-only: prompt drifted into meta/help text, and the invoked build-hip binary self-reported stale 9d70bae4b while source HEAD was 2e79e10cc."
+      protocol_correction_observation: "2026-07-17 protocol probe showed the earlier exact-output concern was harness/protocol-specific: llama-cli must use -f for prompt files, not -p @file; --reasoning-format none leaves thought text in the content channel. A server/API probe with --reasoning-format deepseek --reasoning off returned message.content exactly 'ok' while separating message.reasoning_content, prompt 201.34 t/s and generation 83.11 t/s on MI210. Treat old CLI exactness rows as load/throughput controls only."
       evidence:
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/summary.tsv
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/nemotron_nano_9b_q8_cpu_v7.stdout
@@ -3073,6 +3075,10 @@ roles:
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_nano_q8-c8192/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_nano_q8-c32768/summary.txt
       - /mnt/raid0/llm/tmp/model-admission-gpu-20260717-nemotron-nano/stdout.txt
+      - /mnt/raid0/llm/tmp/nemotron-nano-protocol-probe-20260717T215806Z/
+      - /mnt/raid0/llm/tmp/nemotron-nano-reasoning-extract-20260717T215851Z/summary.json
+      - /mnt/raid0/llm/tmp/nemotron-nano-cli-deepseek-20260717T215912Z/
+      - /mnt/raid0/llm/tmp/nemotron-nano-cli-deepseek-budget0-20260717T220002Z/
     benchmark_date: 2026-04-23
     notes: |
       Reasoning-mode toggle (default AUTO/ON per user preference):
@@ -3086,6 +3092,9 @@ roles:
       - Verify llama.cpp-experimental fork supports --mamba-ssm-dtype float32 (NVIDIA accuracy guidance)
       - bartowski GGUF may lack embedded chat template — may need explicit --chat-template
         (NVIDIA template uses conditional thinking markers with SPECIAL_10/11/12 tokens)
+      - For exact-output scoring, prefer llama-server/chat with --reasoning-format deepseek
+        and inspect message.content; direct llama-cli stdout includes reasoning markers and is
+        suitable only for load/throughput smoke unless a parser strips reasoning explicitly.
       - Only 4 attention layers use KV — CPU-friendly at long context
 
   nemotron_nano_9b_bf16:

@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-"""NUMA scaling test for Nemotron-Cascade 2: 1×48t, 2×48t, 2×96t, 4×48t."""
-import subprocess, time, json, os
+"""NUMA scaling test for historical Nemotron-Cascade 2.
+
+This script is retained as a catalogue/historical reproduction harness. It must
+not start servers from an accidental invocation such as ``--help``.
+"""
+import argparse, subprocess, time, json, os, sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 import urllib.request
@@ -46,10 +50,10 @@ CONFIGS = [
     },
 ]
 
-def start_instances(instances):
+def start_instances(instances, server=SERVER, model=MODEL):
     procs = []
     for inst in instances:
-        cmd = (f"taskset -c {inst['cpus']} {SERVER} -m {MODEL} "
+        cmd = (f"taskset -c {inst['cpus']} {server} -m {model} "
                f"-t {inst['threads']} --port {inst['port']} -c 4096 -np 1 --no-warmup")
         p = subprocess.Popen(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         procs.append(p)
@@ -89,7 +93,7 @@ def stop_instances(procs):
         p.wait()
     time.sleep(3)
 
-def bench_config(config):
+def bench_config(config, server=SERVER, model=MODEL):
     label = config["label"]
     instances = config["instances"]
     ports = [i["port"] for i in instances]
@@ -99,7 +103,7 @@ def bench_config(config):
     print(f"CONFIG: {label}")
     print(f"{'='*60}")
 
-    procs = start_instances(instances)
+    procs = start_instances(instances, server=server, model=model)
     print(f"  {n} instance(s) ready")
 
     try:
@@ -137,13 +141,54 @@ def bench_config(config):
     finally:
         stop_instances(procs)
 
-def main():
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description=(
+            "Dry-run-first Nemotron-Cascade-2 NUMA scaling harness. "
+            "The model is catalogue/historical; live execution requires an explicit override."
+        )
+    )
+    parser.add_argument("--execute", action="store_true", help="Start servers and run the benchmark.")
+    parser.add_argument(
+        "--allow-historical-cascade",
+        action="store_true",
+        help="Acknowledge that Nemotron-Cascade-2 is catalogue-only and live inference is intentional.",
+    )
+    parser.add_argument("--model", default=MODEL)
+    parser.add_argument("--server", default=SERVER)
+    return parser.parse_args(argv)
+
+
+def dry_run_plan(args):
+    return {
+        "schema": "nemotron_cascade2_scaling_dry_run.v1",
+        "status": "dry_run_only",
+        "classification": "historical_catalogue_no_default_inference",
+        "model": args.model,
+        "server": args.server,
+        "execution_requires": ["--execute", "--allow-historical-cascade"],
+        "configs": CONFIGS,
+    }
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    if not args.execute:
+        print(json.dumps(dry_run_plan(args), indent=2))
+        return 0
+    if not args.allow_historical_cascade:
+        print(
+            "Refusing live Nemotron-Cascade-2 benchmark without --allow-historical-cascade.",
+            file=sys.stderr,
+        )
+        return 2
+
     print("Nemotron-Cascade 2 NUMA Scaling Test")
     print("=" * 60)
 
     results = []
     for config in CONFIGS:
-        label, avg_agg, per_inst, n = bench_config(config)
+        label, avg_agg, per_inst, n = bench_config(config, server=args.server, model=args.model)
         results.append((label, n, avg_agg, per_inst))
 
     print(f"\n{'='*60}")
@@ -155,5 +200,8 @@ def main():
         eff = per / baseline_per * 100
         print(f"{label:<30} {n:>3} {agg:>10.1f} {per:>10.1f} {eff:>9.0f}%")
 
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

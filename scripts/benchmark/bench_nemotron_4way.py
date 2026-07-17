@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
-"""NUMA 4-way concurrent benchmark for Nemotron-Cascade 2."""
-import subprocess, time, json, os
+"""NUMA 4-way concurrent benchmark for historical Nemotron-Cascade 2.
+
+This script is retained as a catalogue/historical reproduction harness. It must
+not start servers from an accidental invocation such as ``--help``.
+"""
+import argparse, subprocess, time, json, os, sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 import urllib.request
@@ -18,10 +22,10 @@ PROMPT = {
 WARMUP = 2
 ROUNDS = 8
 
-def start_servers():
+def start_servers(server=SERVER, model=MODEL):
     procs = []
     for i, (cpus, port) in enumerate(zip(CPUS, PORTS)):
-        cmd = f"taskset -c {cpus} {SERVER} -m {MODEL} -t 48 --port {port} -c 4096 -np 1 --no-warmup"
+        cmd = f"taskset -c {cpus} {server} -m {model} -t 48 --port {port} -c 4096 -np 1 --no-warmup"
         p = subprocess.Popen(cmd.split(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         procs.append(p)
         print(f"  Instance {i}: CPUs {cpus}, port {port}, PID {p.pid}")
@@ -56,9 +60,52 @@ def send_request(port):
     tps = tokens / elapsed if elapsed > 0 else 0
     return tokens, elapsed, tps
 
-def main():
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description=(
+            "Dry-run-first Nemotron-Cascade-2 4-way benchmark. "
+            "The model is catalogue/historical; live execution requires an explicit override."
+        )
+    )
+    parser.add_argument("--execute", action="store_true", help="Start servers and run the benchmark.")
+    parser.add_argument(
+        "--allow-historical-cascade",
+        action="store_true",
+        help="Acknowledge that Nemotron-Cascade-2 is catalogue-only and live inference is intentional.",
+    )
+    parser.add_argument("--model", default=MODEL)
+    parser.add_argument("--server", default=SERVER)
+    return parser.parse_args(argv)
+
+
+def dry_run_plan(args):
+    return {
+        "schema": "nemotron_cascade2_4way_dry_run.v1",
+        "status": "dry_run_only",
+        "classification": "historical_catalogue_no_default_inference",
+        "model": args.model,
+        "server": args.server,
+        "execution_requires": ["--execute", "--allow-historical-cascade"],
+        "ports": PORTS,
+        "cpus": CPUS,
+        "output": "/mnt/raid0/llm/epyc-inference-research/data/nemotron_cascade2/4way_results.csv",
+    }
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    if not args.execute:
+        print(json.dumps(dry_run_plan(args), indent=2))
+        return 0
+    if not args.allow_historical_cascade:
+        print(
+            "Refusing live Nemotron-Cascade-2 benchmark without --allow-historical-cascade.",
+            file=sys.stderr,
+        )
+        return 2
+
     print("Starting 4 NUMA instances...")
-    procs = start_servers()
+    procs = start_servers(server=args.server, model=args.model)
 
     try:
         print(f"\nWarmup ({WARMUP} rounds)...")
@@ -115,6 +162,7 @@ def main():
         for p in procs:
             p.wait()
         print("All stopped.")
+    return 0
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
