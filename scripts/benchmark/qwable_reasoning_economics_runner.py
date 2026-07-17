@@ -77,6 +77,8 @@ class ArmSpec:
     residency_note: str
     co_residency_policy: str
     beneficiary_policy: str
+    response_format: dict[str, Any] | None = None
+    json_schema: dict[str, Any] | None = None
 
 
 ARMS: tuple[ArmSpec, ...] = (
@@ -124,6 +126,30 @@ ARMS: tuple[ArmSpec, ...] = (
         residency_note="Prompt/template strict-output probe without sampler grammar.",
         co_residency_policy="co-resident-plausible",
         beneficiary_policy="can share the host with a smaller beneficiary more plausibly than Q8",
+    ),
+    ArmSpec(
+        name="strict_iq4_schema_gpu",
+        model_path=MODEL_IQ4_XS,
+        device="ROCm0",
+        ngl=99,
+        role="schema_json_reasoner",
+        prompt=(
+            "Return a JSON object for the Qwable schema gate with arm, quant, and role."
+        ),
+        resource_class="gpu_iq4_schema_json",
+        residency_note="Sampler/schema constrained strict-output probe after K22 grammar-prefill fix.",
+        co_residency_policy="co-resident-plausible",
+        beneficiary_policy="can share the host with a smaller beneficiary more plausibly than Q8",
+        json_schema={
+            "type": "object",
+            "properties": {
+                "arm": {"type": "string", "enum": ["strict_iq4_schema_gpu"]},
+                "quant": {"type": "string", "enum": ["IQ4_XS"]},
+                "role": {"type": "string", "enum": ["reasoner"]},
+            },
+            "required": ["arm", "quant", "role"],
+            "additionalProperties": False,
+        },
     ),
     ArmSpec(
         name="cpu_iq4_baseline",
@@ -266,17 +292,7 @@ def wait_for_health(port: int, timeout_s: int, pid: int | None = None) -> None:
     raise RuntimeError(f"server on port {port} did not become healthy within {timeout_s}s")
 
 
-def query_chat(port: int, prompt: str, max_tokens: int, temperature: float, seed: int, timeout_s: int) -> tuple[dict[str, Any], str]:
-    payload = {
-        "model": "auto",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "top_p": 1.0,
-        "top_k": 1,
-        "seed": seed,
-        "stream": False,
-    }
+def query_chat(port: int, payload: dict[str, Any], timeout_s: int) -> tuple[dict[str, Any], str]:
     req = urllib.request.Request(
         f"http://127.0.0.1:{port}/v1/chat/completions",
         data=canonical_json(payload).encode("utf-8"),
@@ -370,7 +386,7 @@ def launch_command_string(arm: ArmSpec, port: int, args: argparse.Namespace) -> 
 
 
 def smoke_payload(arm: ArmSpec, args: argparse.Namespace) -> dict[str, Any]:
-    return {
+    payload = {
         "model": "auto",
         "messages": [{"role": "user", "content": arm.prompt}],
         "max_tokens": args.max_tokens,
@@ -380,6 +396,11 @@ def smoke_payload(arm: ArmSpec, args: argparse.Namespace) -> dict[str, Any]:
         "seed": args.seed,
         "stream": False,
     }
+    if arm.response_format is not None:
+        payload["response_format"] = arm.response_format
+    if arm.json_schema is not None:
+        payload["json_schema"] = arm.json_schema
+    return payload
 
 
 def selected_arm_indices(args: argparse.Namespace) -> list[int]:
@@ -423,6 +444,8 @@ def build_arm_plan(arm: ArmSpec, index: int, args: argparse.Namespace) -> dict[s
             "co_residency_policy": arm.co_residency_policy,
             "beneficiary_policy": arm.beneficiary_policy,
         },
+        "response_format": arm.response_format,
+        "json_schema": arm.json_schema,
         "commands": {
             "launch": launch_command_string(arm, port, args),
             "smoke": smoke_command_string(port, arm, args),
@@ -560,8 +583,8 @@ def run_smoke_arm(args: argparse.Namespace, output_dir: Path, plan: dict[str, An
     record: dict[str, Any] = {
         "arm": arm.name,
         "port": port,
-        "command": plan["arms"][0]["commands"]["launch"],
-        "smoke_command": plan["arms"][0]["commands"]["smoke"],
+        "command": plan["arms"][arm_index]["commands"]["launch"],
+        "smoke_command": plan["arms"][arm_index]["commands"]["smoke"],
         "model_path": str(arm.model_path),
         "device": arm.device,
         "ngl": arm.ngl,
@@ -571,14 +594,7 @@ def run_smoke_arm(args: argparse.Namespace, output_dir: Path, plan: dict[str, An
         proc = launch_server(launch_argv(arm, port, args), log_path)
         record["server_pid"] = proc.pid
         wait_for_health(port, args.startup_timeout, pid=proc.pid)
-        response, raw_response = query_chat(
-            port=port,
-            prompt=arm.prompt,
-            max_tokens=args.max_tokens,
-            temperature=args.temperature,
-            seed=args.seed,
-            timeout_s=args.request_timeout,
-        )
+        response, raw_response = query_chat(port=port, payload=smoke_payload(arm, args), timeout_s=args.request_timeout)
         raw_response_path.write_text(raw_response, encoding="utf-8")
         response_hash = sha256_text(canonical_json(response))
         record.update(

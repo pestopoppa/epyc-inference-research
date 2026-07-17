@@ -6225,7 +6225,7 @@ roles:
       type: none
       notes: "MTP head was dropped in the community GGUF; use as plain text-generation reasoner, not as a draft/MTP model."
     performance:
-      benchmark_status: observation_only
+      benchmark_status: strict_output_and_schema_smoke_pass_quality_open
       study_summary: "CoT scaffold study found Qwable useful as a GPU reasoning/cost lever on reasoning-heavy tasks; deployable use still needs a codified gate."
       server_chat_smoke_status: bounded_iq4_mi210_pass_schema_caveat
       server_chat_observation: >
@@ -6234,6 +6234,16 @@ roles:
         values inside a fenced JSON block. Prompt 298.88 t/s over 46 tokens;
         generation 97.82 t/s over 42 tokens. Treat as harness-safe MI210 smoke,
         not strict schema acceptance.
+      quiet_host_repeat_observation: >
+        2026-07-17 quiet-host bounded runner repeat on experimental v7 completed
+        six sequential arms at
+        data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/.
+        MI210 standalone_iq4_gpu returned valid fenced JSON at prompt 317.96
+        t/s and generation 99.27 t/s; standalone_q8_gpu returned valid fenced
+        JSON at prompt 298.08 t/s and generation 103.04 t/s. CPU IQ4 baseline
+        returned strict JSON at 13.82 t/s. The scaffold and selector stubs were
+        parseable but semantically placeholder/arbitrary, so they are not
+        deployment evidence.
       strict_json_observation: >
         2026-07-16 selector follow-up on the same bounded server/chat runner
         returned exact minified JSON for the strict_iq4_json_gpu arm with no
@@ -6241,11 +6251,16 @@ roles:
         t/s over 23 tokens. This narrows the open issue to prompt/template and
         sampler-grammar handling rather than a general inability to emit JSON.
       schema_mode_gate: >
-        Initial direct CLI --json-schema failed sampler initialization, but
-        experimental v7 K22 later fixed the plain JSON-schema grammar prefill
-        crash and bounded Qwable schema smokes no longer hit that init failure.
-        Before deployment, run a bounded prompt-only strict JSON vs
-        sampler-grammar JSON acceptance comparison.
+        Closed as bounded smoke evidence on 2026-07-17. The runner initially
+        recorded correct schema dry-run commands while execute mode rebuilt a
+        separate request payload; the harness now sends the planned payload.
+        The corrected top-level json_schema arm at
+        data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/
+        returned exact strict JSON:
+        {"arm":"strict_iq4_schema_gpu","quant":"IQ4_XS","role":"reasoner"}.
+        Prompt was 241.73 t/s over 31 tokens; generation was 64.55 t/s over
+        51 completion tokens. This is schema acceptance, not task-quality
+        acceptance.
       long_decode_observation: >
         2026-07-16 longer server runs during active GLM download: CPU generated
         616 tokens at 13.71 t/s; MI210 generated 1322 tokens at 98.32 t/s.
@@ -6259,6 +6274,10 @@ roles:
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/logs/standalone_iq4_gpu.server.log
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/summary.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/responses/strict_iq4_json_gpu.raw.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/results/strict_iq4_json_gpu.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/results/strict_iq4_schema_gpu.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_iq4xs_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_iq4xs_mi210/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c2048/summary.txt
@@ -6306,7 +6325,7 @@ roles:
       type: none
       notes: "MTP head was dropped in the community GGUF; use as plain text-generation reasoner."
     performance:
-      benchmark_status: observation_only
+      benchmark_status: strict_output_smoke_pass_quality_open
       study_summary: "Use as near-lossless quality arm for Qwable; compare against IQ4_XS where memory permits."
       server_chat_observation: >
         2026-07-16 bounded selector run on experimental v7 b10077-da1bf5e2f
@@ -6314,10 +6333,18 @@ roles:
         JSON inside markdown fences. Prompt 294.19 t/s over 45 tokens;
         generation 103.63 t/s over 41 tokens. Strict prompt/template handling
         remains a quality gate.
+      quiet_host_repeat_observation: >
+        2026-07-17 quiet-host bounded runner repeat at
+        data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/
+        returned valid requested standalone_q8_gpu/Q8_0/reasoner JSON inside
+        markdown fences. Prompt 298.08 t/s over 45 tokens; generation 103.04
+        t/s over 41 completion tokens. Treat as speed/format smoke; task-quality
+        comparison against IQ4_XS remains open.
       long_decode_observation: "2026-07-16 longer server runs during active GLM download: CPU generated 706 tokens at 10.00 t/s; MI210 generated 1087 tokens at 100.15 t/s."
       evidence:
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/summary.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/responses/standalone_q8_gpu.raw.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/results/standalone_q8_gpu.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_q8_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_q8_mi210/summary.txt
     memory:

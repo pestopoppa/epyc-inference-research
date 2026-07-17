@@ -1,0 +1,220 @@
+{
+  "arms": [
+    {
+      "commands": {
+        "cleanup": "if kill -0 $SERVER_PID 2>/dev/null; then kill $SERVER_PID; wait $SERVER_PID 2>/dev/null || true; fi",
+        "launch": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+        "smoke": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'"
+      },
+      "device": "ROCm0",
+      "json_schema": null,
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "name": "standalone_iq4_gpu",
+      "ngl": 99,
+      "port": 18700,
+      "resource_class": "gpu_iq4",
+      "resource_notes": {
+        "beneficiary_policy": "can share the host with a smaller beneficiary more plausibly than Q8",
+        "co_residency_policy": "co-resident-plausible",
+        "residency": "IQ4 can co-reside more plausibly than Q8."
+      },
+      "response_format": null,
+      "role": "standalone_reasoner"
+    },
+    {
+      "commands": {
+        "cleanup": "if kill -0 $SERVER_PID 2>/dev/null; then kill $SERVER_PID; wait $SERVER_PID 2>/dev/null || true; fi",
+        "launch": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf --host 127.0.0.1 --port 18710 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+        "smoke": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18710/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_q8_gpu\\\", \\\"Q8_0\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'"
+      },
+      "device": "ROCm0",
+      "json_schema": null,
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+      "name": "standalone_q8_gpu",
+      "ngl": 99,
+      "port": 18710,
+      "resource_class": "gpu_q8",
+      "resource_notes": {
+        "beneficiary_policy": "smaller-beneficiary-only",
+        "co_residency_policy": "sequential_only",
+        "residency": "Q8 is the heavier standalone arm."
+      },
+      "response_format": null,
+      "role": "standalone_reasoner"
+    },
+    {
+      "commands": {
+        "cleanup": "if kill -0 $SERVER_PID 2>/dev/null; then kill $SERVER_PID; wait $SERVER_PID 2>/dev/null || true; fi",
+        "launch": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18720 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+        "smoke": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18720/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return exactly this minified JSON and no markdown: {\\\"arm\\\":\\\"strict_iq4_json_gpu\\\",\\\"quant\\\":\\\"IQ4_XS\\\",\\\"role\\\":\\\"reasoner\\\"}\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'"
+      },
+      "device": "ROCm0",
+      "json_schema": null,
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "name": "strict_iq4_json_gpu",
+      "ngl": 99,
+      "port": 18720,
+      "resource_class": "gpu_iq4_strict_json",
+      "resource_notes": {
+        "beneficiary_policy": "can share the host with a smaller beneficiary more plausibly than Q8",
+        "co_residency_policy": "co-resident-plausible",
+        "residency": "Prompt/template strict-output probe without sampler grammar."
+      },
+      "response_format": null,
+      "role": "strict_json_reasoner"
+    },
+    {
+      "commands": {
+        "cleanup": "if kill -0 $SERVER_PID 2>/dev/null; then kill $SERVER_PID; wait $SERVER_PID 2>/dev/null || true; fi",
+        "launch": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18730 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+        "smoke": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18730/v1/chat/completions -H 'Content-Type: application/json' --data '{\"json_schema\":{\"additionalProperties\":false,\"properties\":{\"arm\":{\"enum\":[\"strict_iq4_schema_gpu\"],\"type\":\"string\"},\"quant\":{\"enum\":[\"IQ4_XS\"],\"type\":\"string\"},\"role\":{\"enum\":[\"reasoner\"],\"type\":\"string\"}},\"required\":[\"arm\",\"quant\",\"role\"],\"type\":\"object\"},\"max_tokens\":128,\"messages\":[{\"content\":\"Return a JSON object for the Qwable schema gate with arm, quant, and role.\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'"
+      },
+      "device": "ROCm0",
+      "json_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "arm": {
+            "enum": [
+              "strict_iq4_schema_gpu"
+            ],
+            "type": "string"
+          },
+          "quant": {
+            "enum": [
+              "IQ4_XS"
+            ],
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "reasoner"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "arm",
+          "quant",
+          "role"
+        ],
+        "type": "object"
+      },
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "name": "strict_iq4_schema_gpu",
+      "ngl": 99,
+      "port": 18730,
+      "resource_class": "gpu_iq4_schema_json",
+      "resource_notes": {
+        "beneficiary_policy": "can share the host with a smaller beneficiary more plausibly than Q8",
+        "co_residency_policy": "co-resident-plausible",
+        "residency": "Sampler/schema constrained strict-output probe after K22 grammar-prefill fix."
+      },
+      "response_format": null,
+      "role": "schema_json_reasoner"
+    },
+    {
+      "commands": {
+        "cleanup": "if kill -0 $SERVER_PID 2>/dev/null; then kill $SERVER_PID; wait $SERVER_PID 2>/dev/null || true; fi",
+        "launch": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18740 --device none -ngl 0 -t 96 -c 8192 -fa on -rea off",
+        "smoke": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18740/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"cpu_iq4_baseline\\\", \\\"IQ4_XS\\\", and \\\"baseline\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'"
+      },
+      "device": "none",
+      "json_schema": null,
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "name": "cpu_iq4_baseline",
+      "ngl": 0,
+      "port": 18740,
+      "resource_class": "cpu_iq4",
+      "resource_notes": {
+        "beneficiary_policy": "not_a_co_residency_candidate",
+        "co_residency_policy": "baseline_only",
+        "residency": "CPU baseline establishes the lower-bound economics floor."
+      },
+      "response_format": null,
+      "role": "cpu_baseline"
+    },
+    {
+      "commands": {
+        "cleanup": "if kill -0 $SERVER_PID 2>/dev/null; then kill $SERVER_PID; wait $SERVER_PID 2>/dev/null || true; fi",
+        "launch": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18750 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+        "smoke": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18750/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Draft a minimal scaffold plan, then tag the beneficiary path as a stub. Return compact JSON with keys arm, scaffold, and beneficiary.\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'"
+      },
+      "device": "ROCm0",
+      "json_schema": null,
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "name": "scaffold_then_beneficiary_stub",
+      "ngl": 99,
+      "port": 18750,
+      "resource_class": "hybrid_stub_iq4",
+      "resource_notes": {
+        "beneficiary_policy": "smaller-beneficiary-preferred",
+        "co_residency_policy": "co-resident-plausible",
+        "residency": "Stub arm for the eventual scaffold-plus-beneficiary hybrid characterization."
+      },
+      "response_format": null,
+      "role": "scaffold_generator_stub"
+    },
+    {
+      "commands": {
+        "cleanup": "if kill -0 $SERVER_PID 2>/dev/null; then kill $SERVER_PID; wait $SERVER_PID 2>/dev/null || true; fi",
+        "launch": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18760 --device none -ngl 0 -t 96 -c 8192 -fa on -rea off",
+        "smoke": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18760/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Draft a verifier-selector stub and return compact JSON with keys arm, verifier, and selector.\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'"
+      },
+      "device": "none",
+      "json_schema": null,
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "name": "verifier_selector_stub",
+      "ngl": 0,
+      "port": 18760,
+      "resource_class": "cpu_selector_stub",
+      "resource_notes": {
+        "beneficiary_policy": "smaller-beneficiary-only",
+        "co_residency_policy": "small-footprint-preferred",
+        "residency": "Stub arm for the selector/verifier economics path."
+      },
+      "response_format": null,
+      "role": "verifier_selector_stub"
+    }
+  ],
+  "created_at": "2026-07-17T06:49:44.676576+00:00",
+  "execution": {
+    "execute_mode_is_minimal": true,
+    "first_smoke_arm": "standalone_iq4_gpu",
+    "request": {
+      "max_tokens": 128,
+      "request_timeout_s": 240,
+      "seed": 42,
+      "startup_timeout_s": 240,
+      "temperature": 0.0
+    },
+    "selected_smoke_arms": [
+      "strict_iq4_schema_gpu"
+    ]
+  },
+  "experimental_root": "/mnt/raid0/llm/llama.cpp-experimental",
+  "glm_guard": {
+    "active": false,
+    "allow_override_flag": "--allow-glm-download",
+    "blocked_in_execute": true,
+    "pattern": "hf download unsloth/GLM-5.2-GGUF"
+  },
+  "ld_library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "mode": "execute",
+  "model_paths": {
+    "iq4_xs": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+    "q8_0": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf"
+  },
+  "resource_summary": {
+    "iq4_xs": "can co-reside more plausibly",
+    "q8_0": "sequential or smaller-beneficiary only"
+  },
+  "sanitized_env": {
+    "HOME": "/tmp",
+    "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "PATH": "/usr/bin:/bin"
+  },
+  "schema": "qwable_reasoning_economics_plan.v1",
+  "server_bin": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server"
+}

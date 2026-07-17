@@ -1,0 +1,43 @@
+{
+  "arm": "verifier_selector_stub",
+  "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+  "device": "none",
+  "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+  "ngl": 0,
+  "port": 18750,
+  "response_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/responses/verifier_selector_stub.raw.json",
+  "response_sha256": "28f414ec50ef095634344fa3e89d01dced78c7805e2cd65810aebefd561c4dd3",
+  "response_summary": {
+    "content": "```json\n{\n  \"arm\": \"x86_64\",\n  \"verifier\": \"default\",\n  \"selector\": \"any\"\n}\n```",
+    "content_json": {
+      "arm": "x86_64",
+      "selector": "any",
+      "verifier": "default"
+    },
+    "content_json_mode": "fenced",
+    "finish_reason": "stop",
+    "timings": {
+      "cache_n": 0,
+      "predicted_ms": 2855.042,
+      "predicted_n": 39,
+      "predicted_per_second": 13.660044230522702,
+      "predicted_per_token_ms": 73.20620512820513,
+      "prompt_ms": 410.424,
+      "prompt_n": 30,
+      "prompt_per_second": 73.09514063505058,
+      "prompt_per_token_ms": 13.6808
+    },
+    "usage": {
+      "completion_tokens": 39,
+      "prompt_tokens": 30,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 69
+    }
+  },
+  "role": "verifier_selector_stub",
+  "server_pid": 339496,
+  "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+  "status": "ok"
+}

@@ -1,0 +1,43 @@
+{
+  "arm": "standalone_iq4_gpu",
+  "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+  "device": "ROCm0",
+  "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+  "ngl": 99,
+  "port": 18700,
+  "response_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/responses/standalone_iq4_gpu.raw.json",
+  "response_sha256": "d1e5ee2f4a487d96f89dc9e2148e3ee89fcdde463f38be31ce33cb17c265552e",
+  "response_summary": {
+    "content": "```json\n{\n  \"arm\": \"standalone_iq4_gpu\",\n  \"quant\": \"IQ4_XS\",\n  \"role\": \"reasoner\"\n}\n```",
+    "content_json": {
+      "arm": "standalone_iq4_gpu",
+      "quant": "IQ4_XS",
+      "role": "reasoner"
+    },
+    "content_json_mode": "fenced",
+    "finish_reason": "stop",
+    "timings": {
+      "cache_n": 0,
+      "predicted_ms": 423.104,
+      "predicted_n": 42,
+      "predicted_per_second": 99.2663742247769,
+      "predicted_per_token_ms": 10.073904761904762,
+      "prompt_ms": 144.674,
+      "prompt_n": 46,
+      "prompt_per_second": 317.9562326333688,
+      "prompt_per_token_ms": 3.145086956521739
+    },
+    "usage": {
+      "completion_tokens": 42,
+      "prompt_tokens": 46,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 88
+    }
+  },
+  "role": "standalone_reasoner",
+  "server_pid": 338117,
+  "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+  "status": "ok"
+}

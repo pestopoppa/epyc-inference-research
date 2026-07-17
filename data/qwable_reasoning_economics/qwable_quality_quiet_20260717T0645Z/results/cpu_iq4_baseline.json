@@ -1,0 +1,43 @@
+{
+  "arm": "cpu_iq4_baseline",
+  "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+  "device": "none",
+  "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+  "ngl": 0,
+  "port": 18730,
+  "response_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/responses/cpu_iq4_baseline.raw.json",
+  "response_sha256": "79a365302067f2a8b492d67ef3498efb9d94ff47e184c490345d7dd4c30a9785",
+  "response_summary": {
+    "content": "{\n  \"arm\": \"cpu_iq4_baseline\",\n  \"quant\": \"IQ4_XS\",\n  \"role\": \"baseline\"\n}",
+    "content_json": {
+      "arm": "cpu_iq4_baseline",
+      "quant": "IQ4_XS",
+      "role": "baseline"
+    },
+    "content_json_mode": "strict",
+    "finish_reason": "stop",
+    "timings": {
+      "cache_n": 0,
+      "predicted_ms": 2532.902,
+      "predicted_n": 35,
+      "predicted_per_second": 13.818142194210436,
+      "predicted_per_token_ms": 72.36862857142857,
+      "prompt_ms": 499.136,
+      "prompt_n": 44,
+      "prompt_per_second": 88.15232722143865,
+      "prompt_per_token_ms": 11.344000000000001
+    },
+    "usage": {
+      "completion_tokens": 35,
+      "prompt_tokens": 44,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 79
+    }
+  },
+  "role": "cpu_baseline",
+  "server_pid": 338902,
+  "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+  "status": "ok"
+}

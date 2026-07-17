@@ -50,6 +50,7 @@ class TestQwableReasoningEconomicsRunner(TestCase):
                     "standalone_iq4_gpu",
                     "standalone_q8_gpu",
                     "strict_iq4_json_gpu",
+                    "strict_iq4_schema_gpu",
                     "cpu_iq4_baseline",
                     "scaffold_then_beneficiary_stub",
                     "verifier_selector_stub",
@@ -83,7 +84,14 @@ class TestQwableReasoningEconomicsRunner(TestCase):
             self.assertEqual(strict_arm["role"], "strict_json_reasoner")
             self.assertIn("strict_iq4_json_gpu", strict_arm["commands"]["smoke"])
 
-            cpu_arm = plan["arms"][3]
+            schema_arm = plan["arms"][3]
+            self.assertEqual(schema_arm["role"], "schema_json_reasoner")
+            self.assertIsNone(schema_arm["response_format"])
+            self.assertEqual(schema_arm["json_schema"]["properties"]["arm"]["enum"], ["strict_iq4_schema_gpu"])
+            self.assertIn("json_schema", schema_arm["commands"]["smoke"])
+            self.assertIn("strict_iq4_schema_gpu", schema_arm["commands"]["smoke"])
+
+            cpu_arm = plan["arms"][4]
             self.assertIn("--device none", cpu_arm["commands"]["launch"])
             self.assertIn("-ngl 0", cpu_arm["commands"]["launch"])
 
@@ -108,6 +116,41 @@ class TestQwableReasoningEconomicsRunner(TestCase):
                 plan["execution"]["selected_smoke_arms"],
                 ["standalone_q8_gpu", "strict_iq4_json_gpu"],
             )
+
+    def test_run_smoke_arm_records_current_arm_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "qwable"
+            args = runner.parse_args(["--output-dir", str(output_dir), "--port-base", "19100"])
+            with mock.patch.object(runner, "glm_download_active", return_value=False):
+                plan = runner.build_plan(args)
+
+            fake_proc = mock.Mock()
+            fake_proc.pid = 12345
+            fake_proc.poll.return_value = 0
+            response = {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {
+                            "content": '{"arm":"standalone_q8_gpu","quant":"Q8_0","role":"reasoner"}'
+                        },
+                    }
+                ],
+                "usage": {"completion_tokens": 8},
+                "timings": {"predicted_per_second": 100.0},
+            }
+            with (
+                mock.patch.object(runner, "launch_server", return_value=fake_proc),
+                mock.patch.object(runner, "wait_for_health", return_value=None),
+                mock.patch.object(runner, "query_chat", return_value=(response, json.dumps(response))) as query_chat,
+                mock.patch.object(runner, "terminate_server", return_value=None),
+            ):
+                record = runner.run_smoke_arm(args, output_dir, plan, 1)
+
+            self.assertEqual(record["arm"], "standalone_q8_gpu")
+            self.assertEqual(record["command"], plan["arms"][1]["commands"]["launch"])
+            self.assertEqual(record["smoke_command"], plan["arms"][1]["commands"]["smoke"])
+            self.assertEqual(query_chat.call_args.kwargs["payload"], runner.smoke_payload(runner.ARMS[1], args))
 
     def test_response_summary_classifies_strict_and_fenced_json(self) -> None:
         strict = runner.response_summary(

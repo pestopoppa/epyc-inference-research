@@ -1,0 +1,95 @@
+{
+  "commands_path": "data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/commands.sh",
+  "created_at": "2026-07-17T06:49:49.891219+00:00",
+  "first_smoke": {
+    "arm": "strict_iq4_schema_gpu",
+    "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18730 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+    "device": "ROCm0",
+    "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+    "ngl": 99,
+    "port": 18730,
+    "response_path": "data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/responses/strict_iq4_schema_gpu.raw.json",
+    "response_sha256": "6f2330c9615868756cce1e93be633a77f6de9a4e06a3d36886f56de205775e8a",
+    "response_summary": {
+      "content": "{\n  \"arm\": \"strict_iq4_schema_gpu\",\n  \"quant\": \"IQ4_XS\",\n  \"role\": \"reasoner\"\n}",
+      "content_json": {
+        "arm": "strict_iq4_schema_gpu",
+        "quant": "IQ4_XS",
+        "role": "reasoner"
+      },
+      "content_json_mode": "strict",
+      "finish_reason": "stop",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 712.625,
+        "predicted_n": 46,
+        "predicted_per_second": 64.55007893352044,
+        "predicted_per_token_ms": 15.491847826086957,
+        "prompt_ms": 128.243,
+        "prompt_n": 31,
+        "prompt_per_second": 241.72859337351747,
+        "prompt_per_token_ms": 4.1368709677419355
+      },
+      "usage": {
+        "completion_tokens": 46,
+        "prompt_tokens": 31,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 77
+      }
+    },
+    "role": "schema_json_reasoner",
+    "server_pid": 346498,
+    "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18730/v1/chat/completions -H 'Content-Type: application/json' --data '{\"json_schema\":{\"additionalProperties\":false,\"properties\":{\"arm\":{\"enum\":[\"strict_iq4_schema_gpu\"],\"type\":\"string\"},\"quant\":{\"enum\":[\"IQ4_XS\"],\"type\":\"string\"},\"role\":{\"enum\":[\"reasoner\"],\"type\":\"string\"}},\"required\":[\"arm\",\"quant\",\"role\"],\"type\":\"object\"},\"max_tokens\":128,\"messages\":[{\"content\":\"Return a JSON object for the Qwable schema gate with arm, quant, and role.\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+    "status": "ok"
+  },
+  "mode": "execute",
+  "plan_path": "data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/plan.json",
+  "schema": "qwable_reasoning_economics_execute.v1",
+  "smokes": [
+    {
+      "arm": "strict_iq4_schema_gpu",
+      "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18730 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+      "device": "ROCm0",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "ngl": 99,
+      "port": 18730,
+      "response_path": "data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/responses/strict_iq4_schema_gpu.raw.json",
+      "response_sha256": "6f2330c9615868756cce1e93be633a77f6de9a4e06a3d36886f56de205775e8a",
+      "response_summary": {
+        "content": "{\n  \"arm\": \"strict_iq4_schema_gpu\",\n  \"quant\": \"IQ4_XS\",\n  \"role\": \"reasoner\"\n}",
+        "content_json": {
+          "arm": "strict_iq4_schema_gpu",
+          "quant": "IQ4_XS",
+          "role": "reasoner"
+        },
+        "content_json_mode": "strict",
+        "finish_reason": "stop",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 712.625,
+          "predicted_n": 46,
+          "predicted_per_second": 64.55007893352044,
+          "predicted_per_token_ms": 15.491847826086957,
+          "prompt_ms": 128.243,
+          "prompt_n": 31,
+          "prompt_per_second": 241.72859337351747,
+          "prompt_per_token_ms": 4.1368709677419355
+        },
+        "usage": {
+          "completion_tokens": 46,
+          "prompt_tokens": 31,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 77
+        }
+      },
+      "role": "schema_json_reasoner",
+      "server_pid": 346498,
+      "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18730/v1/chat/completions -H 'Content-Type: application/json' --data '{\"json_schema\":{\"additionalProperties\":false,\"properties\":{\"arm\":{\"enum\":[\"strict_iq4_schema_gpu\"],\"type\":\"string\"},\"quant\":{\"enum\":[\"IQ4_XS\"],\"type\":\"string\"},\"role\":{\"enum\":[\"reasoner\"],\"type\":\"string\"}},\"required\":[\"arm\",\"quant\",\"role\"],\"type\":\"object\"},\"max_tokens\":128,\"messages\":[{\"content\":\"Return a JSON object for the Qwable schema gate with arm, quant, and role.\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+      "status": "ok"
+    }
+  ]
+}

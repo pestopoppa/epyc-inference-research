@@ -1,0 +1,310 @@
+{
+  "commands_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/commands.sh",
+  "created_at": "2026-07-17T06:42:55.279219+00:00",
+  "first_smoke": {
+    "arm": "standalone_iq4_gpu",
+    "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+    "device": "ROCm0",
+    "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+    "ngl": 99,
+    "port": 18700,
+    "response_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/responses/standalone_iq4_gpu.raw.json",
+    "response_sha256": "d1e5ee2f4a487d96f89dc9e2148e3ee89fcdde463f38be31ce33cb17c265552e",
+    "response_summary": {
+      "content": "```json\n{\n  \"arm\": \"standalone_iq4_gpu\",\n  \"quant\": \"IQ4_XS\",\n  \"role\": \"reasoner\"\n}\n```",
+      "content_json": {
+        "arm": "standalone_iq4_gpu",
+        "quant": "IQ4_XS",
+        "role": "reasoner"
+      },
+      "content_json_mode": "fenced",
+      "finish_reason": "stop",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 423.104,
+        "predicted_n": 42,
+        "predicted_per_second": 99.2663742247769,
+        "predicted_per_token_ms": 10.073904761904762,
+        "prompt_ms": 144.674,
+        "prompt_n": 46,
+        "prompt_per_second": 317.9562326333688,
+        "prompt_per_token_ms": 3.145086956521739
+      },
+      "usage": {
+        "completion_tokens": 42,
+        "prompt_tokens": 46,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 88
+      }
+    },
+    "role": "standalone_reasoner",
+    "server_pid": 338117,
+    "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+    "status": "ok"
+  },
+  "mode": "execute",
+  "plan_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/plan.json",
+  "schema": "qwable_reasoning_economics_execute.v1",
+  "smokes": [
+    {
+      "arm": "standalone_iq4_gpu",
+      "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+      "device": "ROCm0",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "ngl": 99,
+      "port": 18700,
+      "response_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/responses/standalone_iq4_gpu.raw.json",
+      "response_sha256": "d1e5ee2f4a487d96f89dc9e2148e3ee89fcdde463f38be31ce33cb17c265552e",
+      "response_summary": {
+        "content": "```json\n{\n  \"arm\": \"standalone_iq4_gpu\",\n  \"quant\": \"IQ4_XS\",\n  \"role\": \"reasoner\"\n}\n```",
+        "content_json": {
+          "arm": "standalone_iq4_gpu",
+          "quant": "IQ4_XS",
+          "role": "reasoner"
+        },
+        "content_json_mode": "fenced",
+        "finish_reason": "stop",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 423.104,
+          "predicted_n": 42,
+          "predicted_per_second": 99.2663742247769,
+          "predicted_per_token_ms": 10.073904761904762,
+          "prompt_ms": 144.674,
+          "prompt_n": 46,
+          "prompt_per_second": 317.9562326333688,
+          "prompt_per_token_ms": 3.145086956521739
+        },
+        "usage": {
+          "completion_tokens": 42,
+          "prompt_tokens": 46,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 88
+        }
+      },
+      "role": "standalone_reasoner",
+      "server_pid": 338117,
+      "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+      "status": "ok"
+    },
+    {
+      "arm": "standalone_q8_gpu",
+      "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+      "device": "ROCm0",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+      "ngl": 99,
+      "port": 18710,
+      "response_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/responses/standalone_q8_gpu.raw.json",
+      "response_sha256": "81dd034ff8a47b5cfceadbc794a992380de479595a5c42e999b3068855151373",
+      "response_summary": {
+        "content": "```json\n{\n  \"arm\": \"standalone_q8_gpu\",\n  \"quant\": \"Q8_0\",\n  \"role\": \"reasoner\"\n}\n```",
+        "content_json": {
+          "arm": "standalone_q8_gpu",
+          "quant": "Q8_0",
+          "role": "reasoner"
+        },
+        "content_json_mode": "fenced",
+        "finish_reason": "stop",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 397.898,
+          "predicted_n": 41,
+          "predicted_per_second": 103.04148299312888,
+          "predicted_per_token_ms": 9.704829268292684,
+          "prompt_ms": 150.968,
+          "prompt_n": 45,
+          "prompt_per_second": 298.07641354459224,
+          "prompt_per_token_ms": 3.3548444444444443
+        },
+        "usage": {
+          "completion_tokens": 41,
+          "prompt_tokens": 45,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 86
+        }
+      },
+      "role": "standalone_reasoner",
+      "server_pid": 338424,
+      "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+      "status": "ok"
+    },
+    {
+      "arm": "strict_iq4_json_gpu",
+      "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+      "device": "ROCm0",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "ngl": 99,
+      "port": 18720,
+      "response_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/responses/strict_iq4_json_gpu.raw.json",
+      "response_sha256": "bdc7db25da6ad1c2290ccf51f7b084f890f9257dbdfec8146cf3ab4e2f93cd8f",
+      "response_summary": {
+        "content": "{\"arm\":\"strict_iq4_json_gpu\",\"quant\":\"IQ4_XS\",\"role\":\"reasoner\"}",
+        "content_json": {
+          "arm": "strict_iq4_json_gpu",
+          "quant": "IQ4_XS",
+          "role": "reasoner"
+        },
+        "content_json_mode": "strict",
+        "finish_reason": "stop",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 231.291,
+          "predicted_n": 23,
+          "predicted_per_second": 99.44182869199408,
+          "predicted_per_token_ms": 10.056130434782608,
+          "prompt_ms": 143.041,
+          "prompt_n": 44,
+          "prompt_per_second": 307.6041135059179,
+          "prompt_per_token_ms": 3.2509318181818183
+        },
+        "usage": {
+          "completion_tokens": 23,
+          "prompt_tokens": 44,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 67
+        }
+      },
+      "role": "strict_json_reasoner",
+      "server_pid": 338683,
+      "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+      "status": "ok"
+    },
+    {
+      "arm": "cpu_iq4_baseline",
+      "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+      "device": "none",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "ngl": 0,
+      "port": 18730,
+      "response_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/responses/cpu_iq4_baseline.raw.json",
+      "response_sha256": "79a365302067f2a8b492d67ef3498efb9d94ff47e184c490345d7dd4c30a9785",
+      "response_summary": {
+        "content": "{\n  \"arm\": \"cpu_iq4_baseline\",\n  \"quant\": \"IQ4_XS\",\n  \"role\": \"baseline\"\n}",
+        "content_json": {
+          "arm": "cpu_iq4_baseline",
+          "quant": "IQ4_XS",
+          "role": "baseline"
+        },
+        "content_json_mode": "strict",
+        "finish_reason": "stop",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 2532.902,
+          "predicted_n": 35,
+          "predicted_per_second": 13.818142194210436,
+          "predicted_per_token_ms": 72.36862857142857,
+          "prompt_ms": 499.136,
+          "prompt_n": 44,
+          "prompt_per_second": 88.15232722143865,
+          "prompt_per_token_ms": 11.344000000000001
+        },
+        "usage": {
+          "completion_tokens": 35,
+          "prompt_tokens": 44,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 79
+        }
+      },
+      "role": "cpu_baseline",
+      "server_pid": 338902,
+      "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+      "status": "ok"
+    },
+    {
+      "arm": "scaffold_then_beneficiary_stub",
+      "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+      "device": "ROCm0",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "ngl": 99,
+      "port": 18740,
+      "response_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/responses/scaffold_then_beneficiary_stub.raw.json",
+      "response_sha256": "261f8208005e08fbeaddaf00dcded05538a4e4b5396c1ef6ad0cb7f068845857",
+      "response_summary": {
+        "content": "{\n  \"arm\": \"minimal\",\n  \"scaffold\": \"placeholder\",\n  \"beneficiary\": \"stub\"\n}",
+        "content_json": {
+          "arm": "minimal",
+          "beneficiary": "stub",
+          "scaffold": "placeholder"
+        },
+        "content_json_mode": "strict",
+        "finish_reason": "stop",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 301.245,
+          "predicted_n": 30,
+          "predicted_per_second": 99.58671513220136,
+          "predicted_per_token_ms": 10.041500000000001,
+          "prompt_ms": 142.715,
+          "prompt_n": 39,
+          "prompt_per_second": 273.2719055460183,
+          "prompt_per_token_ms": 3.6593589743589745
+        },
+        "usage": {
+          "completion_tokens": 30,
+          "prompt_tokens": 39,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 69
+        }
+      },
+      "role": "scaffold_generator_stub",
+      "server_pid": 339250,
+      "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+      "status": "ok"
+    },
+    {
+      "arm": "verifier_selector_stub",
+      "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 18700 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on -rea off",
+      "device": "none",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "ngl": 0,
+      "port": 18750,
+      "response_path": "data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/responses/verifier_selector_stub.raw.json",
+      "response_sha256": "28f414ec50ef095634344fa3e89d01dced78c7805e2cd65810aebefd561c4dd3",
+      "response_summary": {
+        "content": "```json\n{\n  \"arm\": \"x86_64\",\n  \"verifier\": \"default\",\n  \"selector\": \"any\"\n}\n```",
+        "content_json": {
+          "arm": "x86_64",
+          "selector": "any",
+          "verifier": "default"
+        },
+        "content_json_mode": "fenced",
+        "finish_reason": "stop",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 2855.042,
+          "predicted_n": 39,
+          "predicted_per_second": 13.660044230522702,
+          "predicted_per_token_ms": 73.20620512820513,
+          "prompt_ms": 410.424,
+          "prompt_n": 30,
+          "prompt_per_second": 73.09514063505058,
+          "prompt_per_token_ms": 13.6808
+        },
+        "usage": {
+          "completion_tokens": 39,
+          "prompt_tokens": 30,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 69
+        }
+      },
+      "role": "verifier_selector_stub",
+      "server_pid": 339496,
+      "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:18700/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":128,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"standalone_iq4_gpu\\\", \\\"IQ4_XS\\\", and \\\"reasoner\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+      "status": "ok"
+    }
+  ]
+}

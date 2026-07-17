@@ -188,7 +188,11 @@ Result:
 
 Follow-up selector run: `/mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/` used the same bounded server/chat runner after adding named-arm execution. `standalone_q8_gpu` returned valid requested JSON inside fences at prompt `294.19 t/s`, generation `103.63 t/s` over 41 completion tokens. `strict_iq4_json_gpu` returned exact minified JSON with no markdown at prompt `304.25 t/s`, generation `99.24 t/s` over 23 completion tokens.
 
-Classification: this is useful harness-safe MI210 evidence for Qwable as a standalone reasoner/scaffold candidate. The strict IQ4 prompt shows Qwable can satisfy exact JSON under a tighter prompt/template without sampler grammar; Q8 still wrapped valid JSON in fences. The initial JSON-schema sampler crash is tracked as K22-fixed on experimental v7, but schema-mode acceptance still needs a bounded prompt-vs-grammar comparison. The next Qwable gate should compare IQ4_XS vs Q8_0 on task quality rather than first-speed smokes.
+Quiet-host repeat: `data/qwable_reasoning_economics/qwable_quality_quiet_20260717T0645Z/` ran IQ4, Q8, strict JSON, CPU baseline, scaffold stub, and selector stub arms sequentially on a clean host. MI210 decode: `standalone_iq4_gpu` `99.27 t/s` (fenced valid JSON), `standalone_q8_gpu` `103.04 t/s` (fenced valid JSON), and `strict_iq4_json_gpu` `99.44 t/s` (exact strict JSON). CPU IQ4 baseline was `13.82 t/s`. The scaffold and selector stubs returned parseable JSON, but with placeholder/arbitrary values, so they are not deployment evidence.
+
+Schema-mode closure: the runner initially recorded correct dry-run schema commands but execute mode rebuilt a separate request payload, so planned schema constraints were not sent. After fixing execute mode to use the planned payload, `data/qwable_reasoning_economics/qwable_schema_fixed_quiet_20260717T0718Z/` passed top-level `json_schema` acceptance: `strict_iq4_schema_gpu` returned the exact expected object (`{"arm":"strict_iq4_schema_gpu","quant":"IQ4_XS","role":"reasoner"}`) as strict JSON, prompt `241.73 t/s`, decode `64.55 t/s`.
+
+Classification: Qwable IQ4_XS now has bounded quiet-host strict-output and schema-mode evidence under the server/chat harness. This is still not a role-quality claim: the next Qwable gate should compare IQ4_XS vs Q8_0 on task quality, then use scaffold delivery only as the fallback when the beneficiary must answer.
 
 ## CPU/MI210 Churn During Active GLM Download
 
@@ -305,7 +309,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 1. Classify GLM-5.2 DSA sparse-vs-dense scaling and run a needle/coherence task. True >64K prompt execution is now recorded, but the prefill curve tapered to dense-looking speeds and the 16-token response was reasoning-only.
 2. Run Hy3 task-level quality / architecture-fit probes if the 295B/21B-active candidate remains interesting. MTP-on/off functional closure is done, and `draft-mtp` regressed vs no-spec in both CPU and MI210-hybrid samples.
 3. Investigate Ternary Bonsai Q2_0 and Q2_g64 artifact/runtime compatibility before retrying; ordinary Q1_0 and Bonsai-8B load/decode are already smoke-passed, while dspark variants failed.
-4. Run Qwable IQ4_XS vs Q8_0 standalone quality gates first; use scaffold only as the fallback path when the beneficiary must answer. Long MI210/CPU speed observations and strict-IQ4 prompt-only JSON are recorded; schema-mode acceptance still needs the bounded K22 follow-up.
+4. Run Qwable IQ4_XS vs Q8_0 standalone task-quality gates first; use scaffold only as the fallback path when the beneficiary must answer. Long MI210/CPU speed observations, strict-IQ4 prompt-only JSON, and top-level `json_schema` acceptance are recorded.
 5. Treat Nemotron-Nano BF16 as a quality-ceiling arm only after Q8_0 merits comparison. Nemotron-Cascade-2 is now historical/catalogue only; do not schedule inference absent an explicit Mamba2-hybrid revival study.
 6. Move beyond speed-only admission observations for MiniCPM-o, Qwen3-VL-8B, Qwen3.5-9B MTP, Bonsai, Qwable, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible.
 7. Keep generic GLM hot-expert offload/REAP deprioritized after the production-representative skew profile; reopen only with a narrower role-specific corpus or different placement mechanism.
