@@ -6171,6 +6171,12 @@ roles:
         markdown fences. Prompt 304.25 t/s over 44 tokens; generation 99.24
         t/s over 23 tokens. This narrows the open issue to prompt/template and
         sampler-grammar handling rather than a general inability to emit JSON.
+      schema_mode_gate: >
+        Initial direct CLI --json-schema failed sampler initialization, but
+        experimental v7 K22 later fixed the plain JSON-schema grammar prefill
+        crash and bounded Qwable schema smokes no longer hit that init failure.
+        Before deployment, run a bounded prompt-only strict JSON vs
+        sampler-grammar JSON acceptance comparison.
       long_decode_observation: >
         2026-07-16 longer server runs during active GLM download: CPU generated
         616 tokens at 13.71 t/s; MI210 generated 1322 tokens at 98.32 t/s.
@@ -6198,8 +6204,8 @@ roles:
       notes: "IQ4_XS fits on MI210 alongside the Qwen3.6-35B beneficiary; preferred sidecar co-residency arm."
     benchmark_plan:
       cpu_only: "Optional baseline to compare CPU-only reasoner latency."
-      gpu_only: "Primary path: MI210 standalone reasoner/scaffold throughput and task-quality gates."
-      cpu_gpu_hybrid: "Primary deployment pattern: GPU reasoner feeding CPU-hosted beneficiary or routing standalone answers."
+      gpu_only: "Primary path: MI210 standalone reasoner/verifier quality gates; compare IQ4_XS vs Q8_0 before role claims."
+      cpu_gpu_hybrid: "Fallback deployment pattern: GPU reasoner feeding CPU-hosted beneficiary when the beneficiary must answer; prove blended wall-clock/cost before promotion."
 
   qwable_v1_q8_0:
     tier: B

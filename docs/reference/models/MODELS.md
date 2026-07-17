@@ -10,6 +10,13 @@ This document is a research-facing snapshot. The current live stack is governed
 by orchestrator generated stack priors; historical benchmark rows in this repo
 are evidence, not launch truth.
 
+For the July 2026 research-candidate catalogue, use
+[`model-admission-2026-07-16.md`](model-admission-2026-07-16.md) and the full
+research registry (`orchestration/model_registry.yaml`). That admission backlog
+contains downloaded candidates such as GLM-5.2, Hy3, Qwable, Bonsai, Nemotron,
+MiniCPM-o, Qwen3-VL-8B, and DeepSeek-V4-Flash; this file intentionally remains a
+live-stack snapshot rather than the full artifact catalogue.
+
 ## Production Models By Role
 
 ### Front Door And Coder Escalation
