@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import dataclasses
+from html import escape
 import json
 import mimetypes
 import signal
@@ -183,6 +184,63 @@ def finish_reason_from_response(response: dict[str, Any]) -> str:
     return ""
 
 
+def _split_pipe_row(line: str) -> list[str] | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("|") or stripped.endswith("|"):
+        return None
+    if "|" not in stripped:
+        return None
+    cells = [cell.strip() for cell in stripped.split("|")]
+    if len(cells) < 2 or any(cell == "" for cell in cells):
+        return None
+    return cells
+
+
+def _looks_like_key_value_rows(rows: list[list[str]]) -> bool:
+    if not rows or len(rows[0]) != 2:
+        return False
+    return all(row[0].endswith(":") for row in rows)
+
+
+def normalize_pipe_table_blocks(markdown: str) -> str:
+    """Convert aligned pipe-delimited row runs into HTML table blocks."""
+
+    lines = markdown.splitlines()
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        row = _split_pipe_row(lines[i])
+        if row is None:
+            out.append(lines[i])
+            i += 1
+            continue
+
+        rows = [row]
+        j = i + 1
+        while j < len(lines):
+            next_row = _split_pipe_row(lines[j])
+            if next_row is None or len(next_row) != len(row):
+                break
+            rows.append(next_row)
+            j += 1
+
+        if len(rows) < 2 or _looks_like_key_value_rows(rows):
+            out.extend(lines[i:j])
+            i = j
+            continue
+
+        out.append("<table>")
+        for cells in rows:
+            out.append("  <tr>")
+            for cell in cells:
+                out.append(f"    <td>{escape(cell, quote=False)}</td>")
+            out.append("  </tr>")
+        out.append("</table>")
+        i = j
+
+    return "\n".join(out)
+
+
 def query_page(config: PaddleOcrVlConfig, image_path: Path) -> dict[str, Any]:
     body = {
         "messages": [
@@ -312,7 +370,7 @@ class PaddleOcrVlProducer:
                 try:
                     response = query_page(self.config, image_path)
                     latency_ms = (time.perf_counter() - started) * 1000.0
-                    content = content_from_response(response)
+                    content = normalize_pipe_table_blocks(content_from_response(response))
                     timings = response.get("timings") or {}
                     usage = response.get("usage") or {}
                     finish_reason = finish_reason_from_response(response)

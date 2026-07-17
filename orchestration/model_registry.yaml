@@ -5657,7 +5657,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence now fails in both default-reasoning and reasoning-off modes with malformed peg-native output after full prompt ingest and 64-token decode. Next classify/fix the output-format failure before reviewer/task quality work, and only pursue native GLM-MTP/NEXTN or sparse final attention if quality is recovered; the blind current-source 96K attempt is explicitly excluded as non-evidence."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence now fails in both default-reasoning and reasoning-off modes with malformed peg-native output after full prompt ingest and 64-token decode. Short runner-shaped controls at ~1.4K prompt tokens also produce gibberish despite the exact tiny READY smoke passing. Next classify/fix the output-format/protocol sensitivity before reviewer/task quality work, and only pursue native GLM-MTP/NEXTN or sparse final attention if quality is recovered; the blind current-source 96K attempt is explicitly excluded as non-evidence."
     candidate_roles:
     - architect
     - ingest
@@ -5670,9 +5670,9 @@ roles:
       forbid:
       - production_stack_registration
       - production_role_claim_without_dsa_quality_gate
-      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded, but current-source 32K needle/coherence failed with malformed peg-native output; sparse final-attention, viable acceleration, and reviewer/task quality remain blocked."
+      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded, but current-source runner-shaped prompts fail with malformed/gibberish output even before 32K; sparse final-attention, viable acceleration, and reviewer/task quality remain blocked."
     performance:
-      benchmark_status: current_source_32k_needle_failed_malformed_peg_native_quality_blocked
+      benchmark_status: current_source_runner_shaped_output_malformed_quality_blocked
       short_smoke_observation: >
         2026-07-16 experimental v7 b10077-da1bf5e2f CPU-only llama-server
         loaded the six-shard UD-IQ2_M artifact. With reasoning auto, the model
@@ -5765,6 +5765,19 @@ roles:
         data/glm52_dsa_probe/current_source_32k_needle_20260717T1755Z/summary.json.
         This is long-context quality/acceptance evidence, not optimized
         serving-throughput evidence.
+      current_source_short_runner_controls: >
+        2026-07-17 exact tiny chat smoke still returned READY at
+        /mnt/raid0/llm/tmp/glm52-current-source-ready-smoke-20260717T092344/,
+        but short runner-shaped controls show the output-format issue occurs
+        before long context. Raw /completion without the chat template at
+        /mnt/raid0/llm/tmp/glm52-raw-completion-smoke-20260717T210058Z/plan.json
+        processed 1383 prompt tokens and decoded 64 tokens at 2.69 t/s into
+        gibberish. Templated chat with the same runner-shaped filler at
+        /mnt/raid0/llm/tmp/glm52-chat-short-runner-control-20260717T210356Z/plan.json
+        processed 1389 server prompt tokens and decoded 64 tokens at 2.69 t/s
+        into gibberish. Do not schedule more long baseline GLM passes until the
+        protocol/output-format sensitivity is isolated; no realistic optimized
+        GLM serving lane is validated yet.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
@@ -6603,7 +6616,7 @@ roles:
     performance:
       benchmark_status: mi210_document_extraction_smoke_pass_wave3_producer_scored_table_prompt_open
       observed_date: 2026-07-17
-      mi210_observation: "PaddleOCR-VL loaded through experimental-v7 llama-server with model+mmproj. First smoke at /mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z/ passed digit OCR at 484.36 t/s and invoice markdown extraction at 489.82 t/s. Narrow receipt QA under a 96-token cap emitted broad OCR text and failed the exact doc-number check, but the realistic full-extraction follow-up at /mnt/raid0/llm/tmp/paddleocr-vl-receipt-extract-20260717T194415Z/ included CS00012465 at 487.55 t/s over 768 completion tokens. The guarded odl_bench Wave-3 producer at /mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-20260717T200212Z/model_gated_row_set.json wrote/scored 18/18 demo pages, captured one peg-native model error as an empty prediction, and reported median decode 485.30 t/s, median page latency 2918.78 ms, text-block edit distance 0.343019, reading-order edit distance 0.337318, and table TEDS 0.0. The html_tables prompt-profile follow-up at /mnt/raid0/llm/tmp/odl-paddleocr-vl-htmltables-20260717T201106Z/model_gated_row_set.json completed 18/18 with no model errors and improved reading-order edit distance to 0.285753, but emitted 0 HTML <table> tags, kept table TEDS at 0.0, worsened text-block edit distance to 0.429062, and slowed median page latency to 3245.60 ms. Cleanup proof showed no llama-server/AutoPilot process, 0% VRAM, and no KFD PIDs."
+      mi210_observation: "PaddleOCR-VL loaded through experimental-v7 llama-server with model+mmproj. First smoke at /mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z/ passed digit OCR at 484.36 t/s and invoice markdown extraction at 489.82 t/s. Narrow receipt QA under a 96-token cap emitted broad OCR text and failed the exact doc-number check, but the realistic full-extraction follow-up at /mnt/raid0/llm/tmp/paddleocr-vl-receipt-extract-20260717T194415Z/ included CS00012465 at 487.55 t/s over 768 completion tokens. The guarded odl_bench Wave-3 producer at /mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-20260717T200212Z/model_gated_row_set.json wrote/scored 18/18 demo pages, captured one peg-native model error as an empty prediction, and reported median decode 485.30 t/s, median page latency 2918.78 ms, text-block edit distance 0.343019, reading-order edit distance 0.337318, and table TEDS 0.0. The html_tables prompt-profile follow-up at /mnt/raid0/llm/tmp/odl-paddleocr-vl-htmltables-20260717T201106Z/model_gated_row_set.json completed 18/18 with no model errors and improved reading-order edit distance to 0.285753, but emitted 0 HTML <table> tags, kept table TEDS at 0.0, worsened text-block edit distance to 0.429062, and slowed median page latency to 3245.60 ms. A no-inference post-process rescore at /mnt/raid0/llm/tmp/odl-paddleocr-vl-postprocess-rescore-20260717T211432Z/postprocess_rescore_summary.json converted aligned pipe table rows to escaped HTML in 2/18 existing prediction files; table TEDS improved 0.0 -> 0.058333 and structure-only TEDS to 0.066667, while text-block edit distance moved 0.343019 -> 0.343540 and reading-order edit distance 0.337318 -> 0.350138. Cleanup proof showed no llama-server/AutoPilot process, 0% VRAM, and no KFD PIDs. Keep PaddleOCR-VL as a fast document/OCR specialist, but it is not table-quality-clean yet."
       evidence:
       - /mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z/summary.json
       - /mnt/raid0/llm/tmp/paddleocr-vl-receipt-extract-20260717T194415Z/summary.json

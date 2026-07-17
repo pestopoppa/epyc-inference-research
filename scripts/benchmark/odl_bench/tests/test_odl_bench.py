@@ -45,6 +45,7 @@ from odl_bench.paddleocr_vl import (  # noqa: E402
     PaddleOcrVlConfig,
     PaddleOcrVlProducer,
     build_server_argv,
+    normalize_pipe_table_blocks,
 )
 from odl_bench.schemas import (  # noqa: E402
     METRIC_READING_ORDER,
@@ -268,6 +269,41 @@ class TestModelGatedStubs(unittest.TestCase):
         self.assertEqual(payload["wave"], 3)
 
 
+class TestPaddleTablePostProcessing(unittest.TestCase):
+    def test_normalizes_aligned_pipe_rows_to_html_table(self):
+        markdown = "\n".join(
+            [
+                "Intro paragraph",
+                "Name | Score | Rank",
+                "Alice | 10 | 1",
+                "Bob & Carol | <9 | 2",
+                "Outro paragraph",
+            ]
+        )
+
+        normalized = normalize_pipe_table_blocks(markdown)
+
+        self.assertIn("<table>", normalized)
+        self.assertIn("<td>Name</td>", normalized)
+        self.assertIn("<td>Bob &amp; Carol</td>", normalized)
+        self.assertIn("<td>&lt;9</td>", normalized)
+        self.assertIn("Intro paragraph", normalized)
+        self.assertIn("Outro paragraph", normalized)
+        self.assertNotIn("Name | Score | Rank", normalized)
+
+    def test_preserves_single_pipe_line_and_key_value_prose(self):
+        single_line = "just one | line"
+        key_values = "\n".join(
+            [
+                "Name: | Alice",
+                "Role: | Reviewer",
+            ]
+        )
+
+        self.assertEqual(normalize_pipe_table_blocks(single_line), single_line)
+        self.assertEqual(normalize_pipe_table_blocks(key_values), key_values)
+
+
 @unittest.skipIf(BENCH_ROOT is None, "opendataloader-bench checkout not found")
 class TestModelGatedProducerGuards(unittest.TestCase):
     def test_model_gated_generation_requires_explicit_inference_flag(self):
@@ -369,6 +405,70 @@ class TestModelGatedProducerGuards(unittest.TestCase):
             self.assertEqual((root / "pred" / "page2.md").read_text(), "")
             self.assertEqual(manifest.artifacts[1].finish_reason, "error")
             self.assertIn("model errors", manifest.detail)
+
+    def test_paddle_producer_normalizes_pipe_table_rows_before_writing(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            image_dir = root / "images"
+            image_dir.mkdir()
+            (image_dir / "page1.jpg").write_bytes(b"fake")
+            gt = root / "gt.json"
+            gt.write_text(
+                json.dumps([{"page_info": {"image_path": "page1.jpg"}}]),
+                encoding="utf-8",
+            )
+
+            class FakeProc:
+                pid = 123456
+                returncode = 0
+
+                def poll(self):
+                    return 0
+
+            originals = (
+                PaddleOcrVlProducer.validate_inputs,
+                paddleocr_vl.subprocess.Popen,
+                paddleocr_vl.wait_for_health,
+                paddleocr_vl.query_page,
+                paddleocr_vl.terminate,
+            )
+
+            try:
+                PaddleOcrVlProducer.validate_inputs = lambda self: None  # type: ignore[assignment]
+                paddleocr_vl.subprocess.Popen = lambda *a, **k: FakeProc()  # type: ignore[assignment]
+                paddleocr_vl.wait_for_health = lambda port, timeout_s: None  # type: ignore[assignment]
+                paddleocr_vl.query_page = lambda config, image_path: {  # type: ignore[assignment]
+                    "choices": [
+                        {
+                            "message": {
+                                "content": "Caption\nCol A | Col B\n1 | 2\nTail"
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ]
+                }
+                paddleocr_vl.terminate = lambda proc: {"dead": True}  # type: ignore[assignment]
+
+                PaddleOcrVlProducer(PaddleOcrVlConfig()).generate(
+                    gt_json=gt,
+                    image_root=image_dir,
+                    prediction_dir=root / "pred",
+                    response_dir=root / "resp",
+                )
+            finally:
+                (
+                    PaddleOcrVlProducer.validate_inputs,
+                    paddleocr_vl.subprocess.Popen,
+                    paddleocr_vl.wait_for_health,
+                    paddleocr_vl.query_page,
+                    paddleocr_vl.terminate,
+                ) = originals  # type: ignore[assignment]
+
+            written = (root / "pred" / "page1.md").read_text()
+            self.assertIn("<table>", written)
+            self.assertIn("<td>Col A</td>", written)
+            self.assertIn("Caption", written)
+            self.assertIn("Tail", written)
 
 
 class TestAvailabilityAndCommand(unittest.TestCase):

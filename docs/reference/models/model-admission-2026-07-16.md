@@ -143,6 +143,17 @@ Two CPU-only current-source 32K needle probes used the instrumented runner with 
 
 Interpretation: current-source GLM-5.2 can ingest a 24K-token prompt through the DSA cache/runtime path, but it does not pass the long-context needle/coherence gate. This is acceptance evidence, not optimized-serving throughput evidence. Do not promote GLM into reviewer, architect, or long-context roles from load/runnability alone; the next useful GLM work is output-format/root-cause isolation, then task quality, before spending more effort on native GLM-MTP/NEXTN or sparse final attention.
 
+## GLM-5.2 Short Runner-Shaped Output Controls
+
+The exact tiny chat smoke at `/mnt/raid0/llm/tmp/glm52-current-source-ready-smoke-20260717T092344/` still passes (`READY`), but two short runner-shaped controls show the malformed-output problem is not limited to 24K+ context:
+
+| Arm | Evidence | Prompt/completion tokens | Result |
+|---|---|---:|---|
+| Raw `/completion`, no chat template | `/mnt/raid0/llm/tmp/glm52-raw-completion-smoke-20260717T210058Z/plan.json` | `1383 / 64` | Gibberish token stream (`0:. 0 a GL 1 ...`), decode `2.69 t/s` |
+| Chat endpoint, runner-shaped prompt | `/mnt/raid0/llm/tmp/glm52-chat-short-runner-control-20260717T210356Z/plan.json` | `1389 / 64` server tokens | Gibberish token stream (`0 ... . 1 context Sa0 ...`), decode `2.69 t/s` |
+
+Interpretation: raw completion is an invalid serving protocol for GLM-5.2, and even templated chat can fail on runner-shaped filler at only ~1.4K prompt tokens. Stop scheduling long baseline GLM throughput passes until this output-format/protocol sensitivity is isolated. Baseline remains a control row; no realistic optimized GLM lane is validated yet.
+
 ## GLM-5.2 Expert-Routing Skew
 
 The 2026-07-17 expert-routing-skew gate now has both a tiny-corpus first pass and a production-representative repeat. The first pass at `/mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/` established that `llama-imatrix` GGUF artifacts persist per-expert `.counts` tensors, not just activation statistics.
@@ -431,7 +442,9 @@ Operational demo evidence lives at `/mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-202
 
 The follow-up `html_tables` prompt profile run lives at `/mnt/raid0/llm/tmp/odl-paddleocr-vl-htmltables-20260717T201106Z/model_gated_row_set.json`. It completed `18/18` pages with no model errors and improved reading-order edit distance to `0.285753`, but emitted `0` HTML `<table>` tags, kept table TEDS at `0.0`, worsened text-block edit distance to `0.429062`, and slowed median page latency to `3245.60 ms`. This is negative evidence for prompt-only table recovery.
 
-Disposition: PaddleOCR-VL is runtime-clean and very fast as a document/OCR extraction specialist. It should not be evaluated as a general `vision_escalation` QA replacement from narrow-answer prompts. The producer is now usable, but prompt-only table recovery failed (`table.TEDS=0.0` in both scored profiles), so the next quality work is table post-processing / HTML conversion or a different parser arm, plus matched comparison against LightOnOCR/ODL on a document corpus.
+Post-processing evidence lives at `/mnt/raid0/llm/tmp/odl-paddleocr-vl-postprocess-rescore-20260717T211432Z/postprocess_rescore_summary.json`. The default predictions were copied, aligned pipe-delimited table row runs were converted to escaped HTML tables without rerunning inference, and the transformed copy was rescored under a unique prediction-dir basename. Only `2/18` files changed. Table TEDS improved from `0.0` to `0.058333` and structure-only TEDS to `0.066667`, while text-block edit distance moved from `0.343019` to `0.343540` and reading-order edit distance from `0.337318` to `0.350138`.
+
+Disposition: PaddleOCR-VL is runtime-clean and very fast as a document/OCR extraction specialist. It should not be evaluated as a general `vision_escalation` QA replacement from narrow-answer prompts. The producer is usable and the post-processing hook fixes a real scorer-compatibility gap, but the quality result is still not table-clean. Next document work is stronger table extraction or a different parser arm, plus matched comparison against LightOnOCR/ODL on a document corpus.
 
 ## Deferred Low-Contention Manifest Work
 
@@ -453,12 +466,12 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 
 ## Next Queue
 
-1. Root-cause GLM-5.2 current-source 32K malformed `peg-native` output before any role claim. True >64K prompt execution is recorded as stale-binary runnability, current-source 32K needle/coherence now fails, and the prefill curve remains dense-looking.
+1. Root-cause GLM-5.2 current-source malformed output before any role claim. True >64K prompt execution is recorded as stale-binary runnability, current-source 32K needle/coherence fails, and short runner-shaped chat/raw controls already produce gibberish despite exact tiny `READY` passing. Do not spend more long baseline GLM runs until this protocol/output-format sensitivity is isolated.
 2. Run Hy3 task-level quality / architecture-fit probes if the 295B/21B-active candidate remains interesting. MTP-on/off functional closure is done, and `draft-mtp` regressed vs no-spec in both CPU and MI210-hybrid samples.
 3. Investigate the Ternary Bonsai Q2_0 artifact/runtime offset mismatch before retrying. Q2_g64 is CPU+MI210 runtime-smoke passed and has preliminary throughput observations, including a positive MI210 `ngram-mod` structured-copy speed signal, but the strict quality gate passed only 6/8 and blocks any role claim; dspark variants failed separately.
 4. Qwable IQ4_XS standalone routing and broader representative quality are closed for the research registry: plain reasoning-off IQ4_XS is the preferred reasoning-heavy route, `ngram-mod` is neutral on the expanded slice, and scaffold remains only the beneficiary-must-answer fallback. Remaining work is production hosting/composite-route wiring, not model admission.
 5. Treat Nemotron-Nano BF16 as a quality-ceiling arm only after Q8_0 merits comparison. Nemotron-Cascade-2 is now historical/catalogue only; do not schedule inference absent an explicit Mamba2-hybrid revival study.
-6. Move beyond first-pass admission observations for Qwen3.5-9B MTP, Bonsai, and Nemotron where role candidacy remains plausible. Qwen3.5-9B MTP now has a quiet-host matched no-spec/MTP slice: no-spec is better for tiny completions, while native MTP is faster on long repetitive structured output with clean acceptance; broader role-quality/niche evidence remains open. MiniCPM-o now has a K35 quality-clean vision candidate result plus targeted frontdoor co-residency/service-tax evidence; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure; SuperGemma4 is quality-clean but slower/heavier than MiniCPM-o. PaddleOCR-VL now has a guarded `odl_bench` producer and two scored document-parser demos; prompt-only HTML-table recovery failed, so it remains a document-specialist lane pending table post-processing / parser comparison, not a general vision QA role.
+6. Move beyond first-pass admission observations for Qwen3.5-9B MTP, Bonsai, and Nemotron where role candidacy remains plausible. Qwen3.5-9B MTP now has a quiet-host matched no-spec/MTP slice: no-spec is better for tiny completions, while native MTP is faster on long repetitive structured output with clean acceptance; broader role-quality/niche evidence remains open. MiniCPM-o now has a K35 quality-clean vision candidate result plus targeted frontdoor co-residency/service-tax evidence; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure; SuperGemma4 is quality-clean but slower/heavier than MiniCPM-o. PaddleOCR-VL now has a guarded `odl_bench` producer and three scored document-parser rows; the pipe-table post-processor moves table TEDS off zero but is still not table-quality-clean, so PaddleOCR remains a document-specialist lane pending stronger table extraction / parser comparison, not a general vision QA role.
 7. Keep generic GLM hot-expert offload/REAP deprioritized after the production-representative skew profile; reopen only with a narrower role-specific corpus or different placement mechanism.
 
 Opt-in command file: `docs/data/model_admission_smoke_commands_20260716.sh`.
