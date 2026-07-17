@@ -1,0 +1,195 @@
+{
+  "arm": "baseline_cpu_target_no_spec",
+  "finished_at": "2026-07-17T04:43:40.884452+00:00",
+  "port": 53787,
+  "purpose": "CPU target only baseline with speculation disabled",
+  "raw_response_path": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044319Z_draftpathfix_96/baseline.raw.json",
+  "records": [
+    {
+      "content": "",
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "output_sha256": "828a3400cce561f3db883f68c0858bb578d94295c4e27636350b30c52a4a0289",
+      "prompt": "Write exactly 12 numbered checklist items about validating speculative decoding telemetry. Each item must be one sentence of 12 to 18 words.",
+      "prompt_index": 1,
+      "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Topic:** Validating speculative decoding telemetry\n   - **Format:** Exactly 12 numbered checklist items\n   - **Constraint 1:** Each item must be exactly one sentence\n   - **Constraint 2:** Each sentence must be exactly 12 to 18 words long\n\n2.  **Deconstruct Constraints:**\n   - 12 items total\n  ",
+      "request_duration_s": 4.719801230123267,
+      "response_sha256": "c8c2d730bff91868d33e1ed06f62771ff1645f5494db072821050d435c7b8fc5",
+      "status": "ok",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 4405.617,
+        "predicted_n": 96,
+        "predicted_per_second": 21.79036443703572,
+        "predicted_per_token_ms": 45.89184375,
+        "prompt_ms": 304.557,
+        "prompt_n": 40,
+        "prompt_per_second": 131.3383044881582,
+        "prompt_per_token_ms": 7.613925
+      },
+      "usage": {
+        "completion_tokens": 96,
+        "prompt_tokens": 40,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 136
+      }
+    },
+    {
+      "content": "",
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "output_sha256": "294e7bc647e66ec2ce1c0b23ca01e8db53bbec796f48ddfb069b1cd9684b2040",
+      "prompt": "Write exactly 10 compact JSONL records about frontdoor routing experiments, one per line, with keys id, risk, and mitigation.",
+      "prompt_index": 2,
+      "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Format:** Exactly 10 compact JSONL records\n   - **Content:** About frontdoor routing experiments\n   - **Fields per record:** `id`, `risk`, `mitigation`\n   - **Constraint:** One record per line, compact JSON (no extra whitespace/newlines within records)\n\n2.  **Deconstruct Requirements:**\n   - JSONL format",
+      "request_duration_s": 4.65920887212269,
+      "response_sha256": "9fc9445822588211d4b3957b1901c389bb022942aa127bf748e2257c0475a664",
+      "status": "ok",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 4343.76,
+        "predicted_n": 96,
+        "predicted_per_second": 22.100668545223492,
+        "predicted_per_token_ms": 45.2475,
+        "prompt_ms": 289.638,
+        "prompt_n": 38,
+        "prompt_per_second": 131.19825437269972,
+        "prompt_per_token_ms": 7.6220526315789465
+      },
+      "usage": {
+        "completion_tokens": 96,
+        "prompt_tokens": 38,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 134
+      }
+    },
+    {
+      "content": "",
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "output_sha256": "09a1d50f5e019dfcc64a6b604f8167e920e0c9cb1b913cfe08b97d0496694b89",
+      "prompt": "Write exactly 8 Python comments describing safe benchmark harness cleanup. Each comment must mention a distinct failure mode.",
+      "prompt_index": 3,
+      "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Quantity:** Exactly 8 Python comments\n   - **Topic:** Safe benchmark harness cleanup\n   - **Constraint:** Each comment must mention a distinct failure mode\n   - **Language:** Python comments (starting with `#`)\n\n2.  **Deconstruct Constraints:**\n   - \"Exactly 8 Python comments\" -> I need to output only 8 lines, each starting",
+      "request_duration_s": 4.625952837057412,
+      "response_sha256": "cb2a6f6deb4dbfaf9007b176cdd1b9f42239420fa66f04f1b33a0052ade5b7b5",
+      "status": "ok",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 4346.784,
+        "predicted_n": 96,
+        "predicted_per_second": 22.08529340312286,
+        "predicted_per_token_ms": 45.278999999999996,
+        "prompt_ms": 254.181,
+        "prompt_n": 31,
+        "prompt_per_second": 121.96033535158016,
+        "prompt_per_token_ms": 8.199387096774194
+      },
+      "usage": {
+        "completion_tokens": 96,
+        "prompt_tokens": 31,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 127
+      }
+    },
+    {
+      "content": "",
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "output_sha256": "ed78977d39e711539426527c29665dbc861fcdb3d7ae018e35c5cdab12281089",
+      "prompt": "Write exactly 12 short operator notes about immutable production kernels and experimental v7 validation. Use one sentence per note.",
+      "prompt_index": 4,
+      "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Topic:** Immutable production kernels and experimental v7 validation\n   - **Format:** Exactly 12 short operator notes\n   - **Constraint:** Use one sentence per note\n   - **Tone/Style:** Technical, operational, concise\n\n2.  **Deconstruct Constraints:**\n   - Exactly 12 notes\n   - Each note must be exactly one sentence\n",
+      "request_duration_s": 4.647188368951902,
+      "response_sha256": "36d780f8c9d4fc0e18b154f54471dfbbed26a68bf7b602ff8167a03dfb3796f6",
+      "status": "ok",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 4352.133,
+        "predicted_n": 96,
+        "predicted_per_second": 22.058149417768256,
+        "predicted_per_token_ms": 45.33471875,
+        "prompt_ms": 269.461,
+        "prompt_n": 34,
+        "prompt_per_second": 126.17781422914632,
+        "prompt_per_token_ms": 7.925323529411765
+      },
+      "usage": {
+        "completion_tokens": 96,
+        "prompt_tokens": 34,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 130
+      }
+    }
+  ],
+  "server_argv": [
+    "env",
+    "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+    "OMP_NUM_THREADS=1",
+    "numactl",
+    "--interleave=all",
+    "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+    "-m",
+    "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "-t",
+    "96",
+    "-np",
+    "1",
+    "-c",
+    "8192",
+    "-ub",
+    "8192",
+    "-ngl",
+    "0",
+    "--device",
+    "none",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "53787",
+    "--metrics",
+    "--slots",
+    "--jinja",
+    "--reasoning",
+    "auto",
+    "-fa",
+    "on",
+    "-ctk",
+    "q8_0",
+    "-ctv",
+    "q8_0",
+    "--spec-type",
+    "none"
+  ],
+  "server_log": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044319Z_draftpathfix_96/baseline.server.log",
+  "server_pid": 263746,
+  "started_at": "2026-07-17T04:43:19.138313+00:00",
+  "startup_elapsed_s": 2.063629156909883,
+  "summary": {
+    "acceptance_rate": 0.0,
+    "completion_tokens": 384,
+    "draft_n": 0,
+    "draft_n_accepted": 0,
+    "ok_prompts": 4,
+    "predicted_ms": 17448.294,
+    "predicted_per_second": 22.00788226058089,
+    "prompt_ms": 1117.837,
+    "prompt_per_second": 127.92562779725488,
+    "prompt_tokens": 143,
+    "prompts": 4,
+    "request_duration_s": 18.65215130825527,
+    "status_ok": true,
+    "taxonomy_counts": {
+      "spec_off_control": 4
+    },
+    "wall_tokens_per_second": 20.587437537569468
+  }
+}

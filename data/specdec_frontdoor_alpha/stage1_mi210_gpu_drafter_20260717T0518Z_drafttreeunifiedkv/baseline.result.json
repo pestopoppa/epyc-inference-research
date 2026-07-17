@@ -1,0 +1,195 @@
+{
+  "arm": "baseline_cpu_target_no_spec",
+  "finished_at": "2026-07-17T04:57:21.313026+00:00",
+  "port": 42685,
+  "purpose": "CPU target only baseline with speculation disabled",
+  "raw_response_path": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T0518Z_drafttreeunifiedkv/baseline.raw.json",
+  "records": [
+    {
+      "content": "",
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "output_sha256": "b6ae24ee131f35a4ea8d17ffb01dc26bf16b51e03013847452fe4e35e69bd5f1",
+      "prompt": "Write exactly 12 numbered checklist items about validating speculative decoding telemetry. Each item must be one sentence of 12 to 18 words.",
+      "prompt_index": 1,
+      "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Topic:** Validating speculative decoding telemetry\n   - **Format:** Exactly 12 numbered checklist items\n   - **Constraint 1:** Each item must be exactly one sentence\n   - **Constraint 2:** Each sentence must be exactly 12 to 18 words long\n\n2.  **Deconstruct Constraints:**\n   - 12 items total\n   - Numbered list (1. to 12.)\n   - Each item: 1 sentence\n   - Word count per sentence: 12-18 words (inclusive)\n   - Topic: speculative decoding telemetry validation\n\n3.  **Understand Topic (Speculative Decoding Telemetry):**\n   - Speculative decoding is a technique in LLM inference where a smaller \"draft\" model proposes tokens, and a larger \"target\" model verifies them to speed up generation.\n   - Telemetry refers to metrics/data collected about this process (e.g., acceptance rates, latency, draft/target token counts, verification failures, throughput).\n   - Validation means checking that the telemetry data is accurate, complete, properly formatted, and useful for debugging/optimization.\n\n",
+      "request_duration_s": 12.081976402085274,
+      "response_sha256": "8ade4301b9bb65768cd3fee4e669ad9b45d6cd5139711a40bff3f00b776e001a",
+      "status": "ok",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 11774.643,
+        "predicted_n": 256,
+        "predicted_per_second": 21.741635818597643,
+        "predicted_per_token_ms": 45.99469921875,
+        "prompt_ms": 297.646,
+        "prompt_n": 40,
+        "prompt_per_second": 134.38782983812985,
+        "prompt_per_token_ms": 7.44115
+      },
+      "usage": {
+        "completion_tokens": 256,
+        "prompt_tokens": 40,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 296
+      }
+    },
+    {
+      "content": "",
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "output_sha256": "143af9530e2d938c7b02d244567a6173da5d85cb1c14e9bcc5207c2be4fd959c",
+      "prompt": "Write exactly 10 compact JSONL records about frontdoor routing experiments, one per line, with keys id, risk, and mitigation.",
+      "prompt_index": 2,
+      "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Format:** Exactly 10 compact JSONL records\n   - **Content:** About frontdoor routing experiments\n   - **Fields per record:** `id`, `risk`, `mitigation`\n   - **Constraint:** One record per line, compact JSON (no extra whitespace/newlines within records)\n\n2.  **Deconstruct Requirements:**\n   - JSONL format: Each line is a valid JSON object\n   - Exactly 10 lines\n   - Keys: `id`, `risk`, `mitigation`\n   - Topic: Frontdoor routing experiments (networking/security context, likely related to Azure Front Door or similar CDN/load balancer routing experiments)\n   - Compact: No pretty-printing, minimal whitespace\n\n3.  **Brainstorming Content (Frontdoor Routing Experiments):**\n   I need to create 10 distinct experiments with IDs, risks, and mitigations. The context should be realistic for cloud/network routing experiments (e.g., traffic shifting, failover testing, latency optimization, security rule testing, cache behavior, etc.).\n   - Experiment 1: Traffic shift to secondary region\n   - Experiment 2",
+      "request_duration_s": 11.589757170993835,
+      "response_sha256": "934376b1255311f8a2d1894efd5fb9cae8e26654a0757d9f636c802561945d76",
+      "status": "ok",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 11287.197,
+        "predicted_n": 256,
+        "predicted_per_second": 22.680564536970515,
+        "predicted_per_token_ms": 44.09061328125,
+        "prompt_ms": 277.679,
+        "prompt_n": 38,
+        "prompt_per_second": 136.84866338469962,
+        "prompt_per_token_ms": 7.3073421052631575
+      },
+      "usage": {
+        "completion_tokens": 256,
+        "prompt_tokens": 38,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 294
+      }
+    },
+    {
+      "content": "",
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "output_sha256": "d1ab1bc7cc92d6b5da0bc52341381e66f8935310a7a6841d9a7be01ef67ab8c6",
+      "prompt": "Write exactly 8 Python comments describing safe benchmark harness cleanup. Each comment must mention a distinct failure mode.",
+      "prompt_index": 3,
+      "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Quantity:** Exactly 8 Python comments\n   - **Topic:** Safe benchmark harness cleanup\n   - **Constraint:** Each comment must mention a distinct failure mode\n   - **Language:** Python comments (starting with `#`)\n\n2.  **Deconstruct Constraints:**\n   - \"Exactly 8 Python comments\" -> I need to output only 8 lines, each starting with `#`, or at least exactly 8 comment lines in the output. I'll make sure the entire output consists of exactly 8 comment lines to be safe.\n   - \"describing safe benchmark harness cleanup\" -> The comments should relate to cleaning up resources/state after running benchmarks safely.\n   - \"Each comment must mention a distinct failure mode\" -> I need 8 different failure modes (e.g., memory leak, file descriptor leak, zombie processes, race condition, resource exhaustion, state pollution, signal interruption, garbage collection delay, etc.) and each comment must explicitly mention one.\n\n3.  **Brainstorming Failure Modes & Cleanup Actions:**\n   1. Memory leak -> `# Ensure temporary arrays are explicitly deleted to prevent memory leaks during repeated benchmark iterations.`",
+      "request_duration_s": 11.561358556849882,
+      "response_sha256": "7d7f779852bf4da7364f26b81efd04456ac1b801b96f5706176851cbdc916534",
+      "status": "ok",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 11286.721,
+        "predicted_n": 256,
+        "predicted_per_second": 22.681521054697818,
+        "predicted_per_token_ms": 44.08875390625,
+        "prompt_ms": 248.255,
+        "prompt_n": 31,
+        "prompt_per_second": 124.87160379448551,
+        "prompt_per_token_ms": 8.008225806451613
+      },
+      "usage": {
+        "completion_tokens": 256,
+        "prompt_tokens": 31,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 287
+      }
+    },
+    {
+      "content": "",
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "output_sha256": "3ec986410403d93012abd711406b7c50006324c7f16c896e2d0af64560d20fa6",
+      "prompt": "Write exactly 12 short operator notes about immutable production kernels and experimental v7 validation. Use one sentence per note.",
+      "prompt_index": 4,
+      "reasoning_content": "Here's a thinking process:\n\n1.  **Analyze User Input:**\n   - **Topic:** Immutable production kernels and experimental v7 validation\n   - **Format:** Exactly 12 short operator notes\n   - **Constraint:** Use one sentence per note\n   - **Tone/Style:** Technical, operational, concise\n\n2.  **Deconstruct Constraints:**\n   - Exactly 12 notes\n   - Each note must be exactly one sentence\n   - Each note must be short\n   - Content must relate to \"immutable production kernels\" and \"experimental v7 validation\"\n   - I need to ensure strict compliance with the sentence count and length constraints.\n\n3.  **Brainstorming/Content Generation (Mental Draft):**\n   I'll create 12 distinct notes, each focusing on different aspects of the topic while maintaining the one-sentence constraint. I'll aim for technical accuracy and operational relevance.\n   1. Immutable production kernels eliminate runtime patching to guarantee consistent system behavior across all deployments.\n   2. Experimental v7 validation requires isolated test environments before any production rollout can proceed.\n   3. Operators must verify kernel signatures against the trusted registry before mounting the root filesystem.\n   ",
+      "request_duration_s": 12.09160508797504,
+      "response_sha256": "7b9926ac8592facdfa4423afd0d2d91d8dcaf7582f74eadb17bcf83f4c218605",
+      "status": "ok",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 11801.046,
+        "predicted_n": 256,
+        "predicted_per_second": 21.69299229915721,
+        "predicted_per_token_ms": 46.0978359375,
+        "prompt_ms": 266.47,
+        "prompt_n": 34,
+        "prompt_per_second": 127.59410064922879,
+        "prompt_per_token_ms": 7.837352941176471
+      },
+      "usage": {
+        "completion_tokens": 256,
+        "prompt_tokens": 34,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 290
+      }
+    }
+  ],
+  "server_argv": [
+    "env",
+    "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+    "OMP_NUM_THREADS=1",
+    "numactl",
+    "--interleave=all",
+    "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+    "-m",
+    "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "-t",
+    "96",
+    "-np",
+    "1",
+    "-c",
+    "8192",
+    "-ub",
+    "8192",
+    "-ngl",
+    "0",
+    "--device",
+    "none",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "42685",
+    "--metrics",
+    "--slots",
+    "--jinja",
+    "--reasoning",
+    "auto",
+    "-fa",
+    "on",
+    "-ctk",
+    "q8_0",
+    "-ctv",
+    "q8_0",
+    "--spec-type",
+    "none"
+  ],
+  "server_log": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T0518Z_drafttreeunifiedkv/baseline.server.log",
+  "server_pid": 272830,
+  "started_at": "2026-07-17T04:56:30.898366+00:00",
+  "startup_elapsed_s": 2.059722035890445,
+  "summary": {
+    "acceptance_rate": 0.0,
+    "completion_tokens": 1024,
+    "draft_n": 0,
+    "draft_n_accepted": 0,
+    "ok_prompts": 4,
+    "predicted_ms": 46149.607,
+    "predicted_per_second": 22.188704662208714,
+    "prompt_ms": 1090.05,
+    "prompt_per_second": 131.1866428145498,
+    "prompt_tokens": 143,
+    "prompts": 4,
+    "request_duration_s": 47.32469721790403,
+    "status_ok": true,
+    "taxonomy_counts": {
+      "spec_off_control": 4
+    },
+    "wall_tokens_per_second": 21.63775069251995
+  }
+}

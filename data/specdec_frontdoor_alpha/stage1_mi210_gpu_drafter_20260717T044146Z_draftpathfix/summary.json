@@ -1,0 +1,100 @@
+{
+  "artifacts": {
+    "baseline_log": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044146Z_draftpathfix/baseline.server.log",
+    "baseline_raw": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044146Z_draftpathfix/baseline.raw.json",
+    "baseline_result": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044146Z_draftpathfix/baseline.result.json",
+    "commands": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044146Z_draftpathfix/commands.sh",
+    "execute_plan": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044146Z_draftpathfix/execute_plan.json",
+    "gate_summary": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044146Z_draftpathfix/gate_summary.json",
+    "manifest": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044146Z_draftpathfix/manifest.json",
+    "stage1_log": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044146Z_draftpathfix/stage1.server.log",
+    "stage1_raw": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044146Z_draftpathfix/stage1.raw.json",
+    "stage1_result": "data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044146Z_draftpathfix/stage1.result.json"
+  },
+  "baseline": {
+    "acceptance_rate": 0.0,
+    "completion_tokens": 1024,
+    "draft_n": 0,
+    "draft_n_accepted": 0,
+    "ok_prompts": 4,
+    "predicted_ms": 47014.855,
+    "predicted_per_second": 21.780350061698584,
+    "prompt_ms": 1106.027,
+    "prompt_per_second": 129.29159957216234,
+    "prompt_tokens": 143,
+    "prompts": 4,
+    "request_duration_s": 48.20702983229421,
+    "status_ok": true,
+    "taxonomy_counts": {
+      "spec_off_control": 4
+    },
+    "wall_tokens_per_second": 21.241715234528215
+  },
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "created_at": "2026-07-17T04:42:54.739989+00:00",
+  "decision_grade": false,
+  "decode_speedup": 0.0,
+  "draft_model": "/mnt/raid0/llm/scratch/n5/Qwen3.5-0.8B-Q8_0.frontdoor-mtp-specials.gguf",
+  "enough_completion": false,
+  "max_tokens": 256,
+  "min_completion_tokens_per_arm": 716,
+  "mode": "execute",
+  "n5_summary": {
+    "decision_grade": true,
+    "n5_spec_on": {
+      "acceptance_rate": 1.0,
+      "acceptance_wilson95": [
+        0.9898866784246754,
+        1.0
+      ],
+      "completion_tokens": 768,
+      "decision_grade": true,
+      "draft_accepted": 376,
+      "draft_total": 376,
+      "min_total_completion_tokens": 692,
+      "min_total_draft_tokens": 192,
+      "prompts": 8,
+      "status_ok": true,
+      "taxonomy_counts": {
+        "drafted_ok": 8
+      }
+    },
+    "path": "data/specdec_frontdoor_alpha/n5_retest_v7_execute_20260716T190836Z/summary.json"
+  },
+  "pass_speedup_gte": 1.3,
+  "prompts": 4,
+  "quiet_host": {
+    "blockers": [],
+    "process_snapshot": [
+      "262426 Ss    0.2  0.0       01:08 python3 scripts/benchmark/stage1_mi210_gpu_drafter_planner.py --execute --output-dir data/specdec_frontdoor_alpha/stage1_mi210_gpu_drafter_20260717T044146Z_draftpathfix --n5-summary data/specdec_frontdoor_alpha/n5_retest_v7_execute_20260716T190836Z/summary.json",
+      "314976 Sl+   0.0  0.0 10-16:29:16 docker exec -i -t -u node -e EDITOR=vim -e CLAUDE_CONFIG_DIR=/home/node/.claude -e XDG_CONFIG_HOME=/home/node/.config -e NPM_CONFIG_AUDIT=false -e NPM_CONFIG_PROGRESS=false -e VISUAL=vim -e TZ=UTC -e PATH=/opt/rocm/bin:/home/node/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/share/npm-global/bin -e NPM_CONFIG_FUND=false -e LD_LIBRARY_PATH=/opt/AMD/aocc-compiler-5.0.0/lib:/mnt/raid0/llm/llama.cpp/build/bin:/mnt/raid0/llm/llama.cpp-dflash/build/bin:/opt/rocm/lib -e HOSTNAME=Beelzebub -e NPM_CONFIG_CACHE=/home/node/.npm -e HOME=/home/node -e SHLVL=1 -e NPM_CONFIG_PREFIX=/usr/local/share/npm-global -e NODE_OPTIONS=--max-old-space-size=4096 -e NPM_CONFIG_UPDATE_NOTIFIER=false -e CODEX_HOME=/home/node/.codex -e USER=node -e LANG=C.UTF-8 -e DEVCONTAINER=true -e SHELL=/usr/bin/fish -e ROCM_PATH=/opt/rocm -e HIP_PATH=/opt/rocm -w /workspace 52cd1c0372f8d4032692443ffa9c407e568e892f861c5d3fe8f0e20a29534cb2 tmux new -As agent",
+      "1849379 S<Ls  0.0  0.0 11-20:40:08 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh"
+    ],
+    "ready": true
+  },
+  "schema": "stage1_mi210_gpu_drafter_result.v1",
+  "server_version": "version: 10079 (96986f5e9)\nbuilt with GNU 15.2.0 for Linux x86_64",
+  "stage1": {
+    "acceptance_rate": 0.0,
+    "completion_tokens": 0,
+    "draft_n": 0,
+    "draft_n_accepted": 0,
+    "ok_prompts": 0,
+    "predicted_ms": 0,
+    "predicted_per_second": 0.0,
+    "prompt_ms": 0,
+    "prompt_per_second": 0.0,
+    "prompt_tokens": 0,
+    "prompts": 1,
+    "request_duration_s": 0,
+    "status_ok": false,
+    "taxonomy_counts": {
+      "error": 1
+    },
+    "wall_tokens_per_second": 0.0
+  },
+  "target_model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "usable_draft": false,
+  "verdict": "fail",
+  "wall_speedup": 0.0
+}

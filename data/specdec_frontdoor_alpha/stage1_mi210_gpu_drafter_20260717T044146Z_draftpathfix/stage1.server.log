@@ -1,0 +1,29 @@
+0.00.035.933 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.036.291 W srv  llama_server: -----------------
+0.00.036.293 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.036.293 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.036.293 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.036.293 W srv  llama_server: -----------------
+0.00.037.505 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf'
+0.02.598.535 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+0.02.598.562 I common_speculative_impl_draft_tree: adding speculative implementation 'draft-tree'
+0.02.598.567 I common_speculative_impl_draft_tree: - n_max=1, n_min=0, p_min=0.000000, p_split=0.050000
+0.02.644.976 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.02.645.019 I srv  llama_server: model loaded
+0.02.645.024 I srv  llama_server: listening on http://127.0.0.1:56839
+0.04.104.880 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.04.105.003 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.09.436.739 I slot print_timing: id  0 | task 0 | n_decoded =    101, tg =  20.13 t/s, tg_3s =  20.13 t/s
+0.12.551.254 I slot print_timing: id  0 | task 0 | n_decoded =    165, tg =  20.29 t/s, tg_3s =  20.55 t/s
+0.15.549.588 E init_batch: failed to prepare attention ubatches
+0.15.549.594 W decode: failed to find a memory slot for batch of size 1
+0.15.549.596 W build_tree_seq: seed llama_decode failed for seq 0
+0.15.602.468 E init_batch: failed to prepare attention ubatches
+0.15.602.475 W decode: failed to find a memory slot for batch of size 1
+0.15.602.476 E process: failed to decode draft batch, ret = 1
+0.15.602.480 E srv        decode: failed to process speculative batch
+0.15.602.542 E srv  update_slots: decode() failed: failed to process speculative batch
+0.15.602.552 E srv    send_error: task id = 0, error: decode() failed: failed to process speculative batch
+0.15.602.564 I slot      release: id  0 | task 0 | stop processing: n_tokens = 257, truncated = 0
+0.15.602.612 W srv          stop: cancel task, id_task = 0
+0.15.603.214 I srv    operator(): operator(): cleaning up before exit...

@@ -1,0 +1,13 @@
+{
+  "acceptance_evidence_required": true,
+  "dry_run_only": true,
+  "gate_id": "stage1_frontdoor_external_gpu_drafter_ab",
+  "next_window": "after GLM completes and the host is quiet",
+  "pass_speedup_gte": 1.3,
+  "phase": "post_glm_frontdoor_external_gpu_drafter_ab",
+  "prerequisite_command": "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/n5_frontdoor_drafter_retest.sh --strict",
+  "quiet_host_blockers": [],
+  "quiet_host_ready": true,
+  "status": "ready",
+  "title": "Stage-1 frontdoor external GPU drafter A/B"
+}

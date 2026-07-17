@@ -1,0 +1,157 @@
+{
+  "binary": {
+    "ld_library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+    "path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+    "production_refused": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server"
+  },
+  "created_at": "2026-07-17T04:56:30.892024+00:00",
+  "gate": {
+    "acceptance_artifacts": [
+      "manifest.json",
+      "commands.sh",
+      "gate_summary.json",
+      "baseline summary/metrics",
+      "stage1 summary/metrics",
+      "acceptance evidence excerpt"
+    ],
+    "dry_run_only": true,
+    "gate_id": "stage1_frontdoor_external_gpu_drafter_ab",
+    "kill_metadata": {
+      "kill_if": [
+        "speedup < 1.3",
+        "usable speculative acceptance evidence is missing",
+        "quiet-host blockers are present during the planned window",
+        "N5 strict retest prerequisite is not clean"
+      ]
+    },
+    "pass_metadata": {
+      "speedup_gte": 1.3,
+      "usable_acceptance_evidence_examples": [
+        "summary artifact or server metrics show speculative acceptance rather than permanent fallback",
+        "accepted speculative tokens or acceptance ratio is present and non-zero",
+        "baseline and Stage-1 runs use the same target model and prompt pack"
+      ],
+      "usable_acceptance_evidence_required": true
+    },
+    "server_command_templates": [
+      {
+        "argv": [
+          "env",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+          "-t",
+          "96",
+          "-np",
+          "1",
+          "-c",
+          "8192",
+          "-ub",
+          "8192",
+          "-ngl",
+          "0",
+          "--device",
+          "none",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19187",
+          "--metrics",
+          "--slots",
+          "--jinja",
+          "--reasoning",
+          "auto",
+          "-fa",
+          "on",
+          "-ctk",
+          "q8_0",
+          "-ctv",
+          "q8_0",
+          "--spec-type",
+          "none"
+        ],
+        "arm": "baseline_cpu_target_no_spec",
+        "purpose": "CPU target only baseline with speculation disabled",
+        "shell": "env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf -t 96 -np 1 -c 8192 -ub 8192 -ngl 0 --device none --host 127.0.0.1 --port 19187 --metrics --slots --jinja --reasoning auto -fa on -ctk q8_0 -ctv q8_0 --spec-type none"
+      },
+      {
+        "argv": [
+          "env",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+          "-t",
+          "96",
+          "-np",
+          "1",
+          "-c",
+          "8192",
+          "-ub",
+          "8192",
+          "-ngl",
+          "0",
+          "--device",
+          "none",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19188",
+          "--metrics",
+          "--slots",
+          "--jinja",
+          "--reasoning",
+          "auto",
+          "-fa",
+          "on",
+          "-ctk",
+          "q8_0",
+          "-ctv",
+          "q8_0",
+          "-md",
+          "/mnt/raid0/llm/scratch/n5/Qwen3.5-0.8B-Q8_0.frontdoor-mtp-specials.gguf",
+          "--spec-type",
+          "draft-tree",
+          "--spec-draft-n-max",
+          "1",
+          "--spec-draft-p-split",
+          "0.05",
+          "--spec-draft-device",
+          "ROCm0",
+          "--spec-draft-ngl",
+          "99"
+        ],
+        "arm": "stage1_cpu_target_mi210_external_drafter",
+        "purpose": "CPU target plus MI210 external drafter Stage-1 candidate",
+        "shell": "env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf -t 96 -np 1 -c 8192 -ub 8192 -ngl 0 --device none --host 127.0.0.1 --port 19188 --metrics --slots --jinja --reasoning auto -fa on -ctk q8_0 -ctv q8_0 -md /mnt/raid0/llm/scratch/n5/Qwen3.5-0.8B-Q8_0.frontdoor-mtp-specials.gguf --spec-type draft-tree --spec-draft-n-max 1 --spec-draft-p-split 0.05 --spec-draft-device ROCm0 --spec-draft-ngl 99"
+      }
+    ],
+    "status": "ready",
+    "title": "Stage-1 frontdoor external GPU drafter A/B"
+  },
+  "guards": {
+    "quiet_host": {
+      "blockers": [],
+      "ready": true
+    }
+  },
+  "mode": "dry_run",
+  "phase": "post_glm_frontdoor_external_gpu_drafter_ab",
+  "prerequisites": {
+    "glm_completion_required": true,
+    "n5_frontdoor_retest": {
+      "command": "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/n5_frontdoor_drafter_retest.sh --strict",
+      "purpose": "strict preflight before the Stage-1 external drafter A/B window",
+      "required": true
+    },
+    "quiet_host_required": true
+  },
+  "schema": "stage1_mi210_gpu_drafter_plan.v1"
+}

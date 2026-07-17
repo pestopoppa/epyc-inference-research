@@ -105,6 +105,85 @@ class Stage1Mi210GpuDrafterPlannerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "production v6"):
             planner.validate_experimental_server(planner.PRODUCTION_SERVER)
 
+    def test_parse_args_execute_uses_default_prompt_pack(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = planner.parse_args(["--execute", "--output-dir", tmpdir])
+
+            self.assertTrue(args.execute)
+            self.assertEqual(args.prompts, planner.DEFAULT_PROMPT_PACK)
+            self.assertEqual(args.max_tokens, planner.DEFAULT_MAX_TOKENS)
+
+    def test_validate_n5_summary_requires_decision_grade_acceptance(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            summary_path = Path(tmpdir) / "summary.json"
+            summary_path.write_text(
+                json.dumps(
+                    {
+                        "decision_grade": True,
+                        "arms": {
+                            "n5_spec_on": {
+                                "status_ok": True,
+                                "draft_accepted": 7,
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            loaded = planner.validate_n5_summary(summary_path)
+
+            self.assertTrue(loaded["decision_grade"])
+
+    def test_summarize_arm_computes_decode_speed_and_draft_acceptance(self):
+        records = [
+            {
+                "status": "ok",
+                "server_argv": ["llama-server", "--spec-type", "draft-tree"],
+                "timings": {
+                    "prompt_n": 20,
+                    "prompt_ms": 100.0,
+                    "predicted_n": 10,
+                    "predicted_ms": 200.0,
+                    "draft_n": 8,
+                    "draft_n_accepted": 6,
+                },
+                "request_duration_s": 0.5,
+                "draft_n": 8,
+                "draft_n_accepted": 6,
+            }
+        ]
+
+        summary = planner.summarize_arm(records, "", speculative=True)
+
+        self.assertEqual(summary["predicted_per_second"], 50.0)
+        self.assertEqual(summary["wall_tokens_per_second"], 20.0)
+        self.assertEqual(summary["acceptance_rate"], 0.75)
+        self.assertEqual(summary["taxonomy_counts"], {"drafted_ok": 1})
+
+    def test_build_execute_plan_uses_ephemeral_ports_and_stage1_spec_flags(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            args = Namespace(
+                target_model=Path(tmpdir) / "target.gguf",
+                draft_model=Path(tmpdir) / "draft.gguf",
+                max_tokens=64,
+                min_completion_ratio=0.7,
+                request_timeout=30,
+                startup_timeout=30,
+                prompts=["one", "two"],
+            )
+            args.target_model.write_text("target", encoding="utf-8")
+            args.draft_model.write_text("draft", encoding="utf-8")
+
+            plan = planner.build_execute_plan(args, planner.EXPERIMENTAL_SERVER.resolve(), 33111, 33112)
+
+            self.assertEqual(plan["mode"], "execute")
+            self.assertEqual(plan["arms"][0]["port"], 33111)
+            self.assertEqual(plan["arms"][1]["port"], 33112)
+            self.assertIn("--spec-type", plan["arms"][1]["argv"])
+            self.assertIn("draft-tree", plan["arms"][1]["argv"])
+            self.assertIn("--spec-draft-device", plan["arms"][1]["argv"])
+
 
 if __name__ == "__main__":
     unittest.main()
