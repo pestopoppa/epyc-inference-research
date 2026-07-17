@@ -65,9 +65,15 @@ class PredictionArtifact:
 
     gt_image: str            # GT page_info.image_path basename (e.g. foo.pdf_7.jpg)
     prediction_filename: str  # what the bench looks for (foo.pdf_7.md)
-    source_pdf: str          # PDF the engine read (may be "" if none mapped)
+    source_pdf: str          # PDF the engine read (may be "" for image producers)
     char_count: int
     latency_ms: float
+    source_image: str = ""   # page image read by a model-gated producer
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    prompt_tps: float | None = None
+    decode_tps: float | None = None
+    finish_reason: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

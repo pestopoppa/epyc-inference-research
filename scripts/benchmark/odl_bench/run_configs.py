@@ -115,6 +115,42 @@ def gt_image_basenames(gt_json: str | Path) -> list[str]:
     return names
 
 
+def gt_image_paths(gt_json: str | Path, image_root: str | Path | None = None) -> dict[str, Path]:
+    """Resolve each GT image basename to the page image path a VL producer should read.
+
+    OmniDocBench GT often stores a basename in ``page_info.image_path`` and keeps
+    files under ``<gt_dir>/images``. Some derived corpora use absolute or relative
+    paths. This resolver preserves the basename contract used for prediction
+    filenames while making the image-source root explicit for model-gated arms.
+    Missing files are still returned as best-effort candidates so the caller can
+    record a complete skip/error manifest instead of silently dropping the page.
+    """
+    import json
+    import os
+
+    gt_path = Path(gt_json)
+    root = Path(image_root) if image_root else None
+    with gt_path.open("r", encoding="utf-8") as fh:
+        pages = json.load(fh)
+
+    resolved: dict[str, Path] = {}
+    for page in pages:
+        raw = page.get("page_info", {}).get("image_path", "")
+        if not raw:
+            continue
+        raw_path = Path(raw)
+        basename = os.path.basename(raw)
+        candidates: list[Path] = []
+        if raw_path.is_absolute():
+            candidates.append(raw_path)
+        if root is not None:
+            candidates.extend([root / raw, root / basename])
+        candidates.extend([gt_path.parent / raw, gt_path.parent / "images" / basename])
+        chosen = next((path for path in candidates if path.exists()), candidates[0])
+        resolved[basename] = chosen
+    return resolved
+
+
 def prediction_filename_for(gt_image_basename: str) -> str:
     """Prediction filename the harness resolves for a GT page.
 

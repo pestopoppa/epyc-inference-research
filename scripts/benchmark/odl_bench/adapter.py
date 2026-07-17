@@ -29,6 +29,14 @@ from pathlib import Path
 from . import bootstrap, run_configs
 from .backends import DETERMINISTIC_ENGINES, resolve_backend
 from .manifest_stubs import model_gated_manifest, model_gated_stubs
+from .paddleocr_vl import (
+    DEFAULT_BINARY as PADDLEOCR_DEFAULT_BINARY,
+    DEFAULT_MMPROJ as PADDLEOCR_DEFAULT_MMPROJ,
+    DEFAULT_MODEL as PADDLEOCR_DEFAULT_MODEL,
+    PADDLEOCR_VL_ENGINE,
+    PaddleOcrVlConfig,
+    PaddleOcrVlProducer,
+)
 from .schemas import (
     METRIC_READING_ORDER,
     METRIC_STRUCTURAL,
@@ -245,6 +253,66 @@ class OdlBenchAdapter:
                 row_set.metric_rows.extend(self.score(cfg, pred_dir, bench_python))
         return row_set
 
+    # --------------------------------------------------------- model-gated run
+    def generate_model_gated_predictions(
+        self,
+        engine: str,
+        gt_json: str | Path,
+        out_dir: str | Path,
+        *,
+        image_root: str | Path | None = None,
+        response_dir: str | Path | None = None,
+        allow_inference: bool = False,
+        paddle_config: PaddleOcrVlConfig | None = None,
+    ) -> EngineRunManifest:
+        if engine != PADDLEOCR_VL_ENGINE:
+            raise ValueError(f"unknown model-gated engine {engine!r}; known: {(PADDLEOCR_VL_ENGINE,)}")
+        if not allow_inference:
+            raise PermissionError("model-gated producers require --allow-inference")
+        out_dir = Path(out_dir)
+        response_dir = Path(response_dir) if response_dir else out_dir.parent / f"{out_dir.name}_responses"
+        producer = PaddleOcrVlProducer(paddle_config or PaddleOcrVlConfig())
+        return producer.generate(
+            gt_json=gt_json,
+            image_root=image_root,
+            prediction_dir=out_dir,
+            response_dir=response_dir,
+        )
+
+    def build_model_gated_row_set(
+        self,
+        gt_json: str | Path,
+        run_dir: str | Path,
+        *,
+        engine: str,
+        image_root: str | Path | None = None,
+        allow_inference: bool = False,
+        paddle_config: PaddleOcrVlConfig | None = None,
+        do_score: bool = False,
+        bench_python: str | Path | None = None,
+    ) -> DeterministicRowSet:
+        run_dir = Path(run_dir)
+        row_set = DeterministicRowSet(engines=[engine], gt_json=str(gt_json))
+        pred_dir = run_dir / "predictions" / engine
+        response_dir = run_dir / "responses" / engine
+        manifest = self.generate_model_gated_predictions(
+            engine,
+            gt_json,
+            pred_dir,
+            image_root=image_root,
+            response_dir=response_dir,
+            allow_inference=allow_inference,
+            paddle_config=paddle_config,
+        )
+        row_set.run_manifests.append(manifest)
+        row_set.metric_rows.append(manifest.speed_row())
+        if manifest.detail:
+            row_set.notes.append(f"{engine}: {manifest.detail}")
+        if do_score:
+            cfg = self.emit_config(pred_dir, gt_json, run_dir / "config" / f"{engine}.yaml")
+            row_set.metric_rows.extend(self.score(cfg, pred_dir, bench_python))
+        return row_set
+
     # ------------------------------------------------------- model-gated stubs
     @staticmethod
     def model_gated_manifest_stubs():
@@ -272,6 +340,28 @@ def _main(argv=None):
     p_run.add_argument("--score", action="store_true", help="also run harness scoring (bench venv)")
     p_run.add_argument("--bench-python", default=None)
 
+    p_model = sub.add_parser("run-model", help="run an explicit model-gated prediction producer")
+    p_model.add_argument("--engine", required=True, choices=[PADDLEOCR_VL_ENGINE])
+    p_model.add_argument("--gt", required=True, help="OmniDocBench GT json")
+    p_model.add_argument("--image-root", default=None, help="directory containing GT page images")
+    p_model.add_argument("--run-dir", required=True)
+    p_model.add_argument("--score", action="store_true", help="also run harness scoring (bench venv)")
+    p_model.add_argument("--bench-python", default=None)
+    p_model.add_argument("--allow-inference", action="store_true")
+    p_model.add_argument("--binary", type=Path, default=PADDLEOCR_DEFAULT_BINARY)
+    p_model.add_argument("--model", type=Path, default=PADDLEOCR_DEFAULT_MODEL)
+    p_model.add_argument("--mmproj", type=Path, default=PADDLEOCR_DEFAULT_MMPROJ)
+    p_model.add_argument("--port", type=int, default=19330)
+    p_model.add_argument("--context", type=int, default=8192)
+    p_model.add_argument("--threads", type=int, default=24)
+    p_model.add_argument("--parallel", type=int, default=1)
+    p_model.add_argument("--device", default="ROCm0")
+    p_model.add_argument("--gpu-layers", type=int, default=99)
+    p_model.add_argument("--max-tokens", type=int, default=2048)
+    p_model.add_argument("--startup-timeout", type=int, default=240)
+    p_model.add_argument("--request-timeout", type=int, default=900)
+    p_model.add_argument("--allow-dirty-host", action="store_true")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "availability":
@@ -291,6 +381,40 @@ def _main(argv=None):
             do_score=args.score, bench_python=args.bench_python,
         )
         out = Path(args.run_dir) / "deterministic_row_set.json"
+        out.write_text(json.dumps(row_set.to_dict(), indent=2), encoding="utf-8")
+        print(f"[odl_bench] wrote {out}")
+        print(json.dumps([r.to_dict() for r in row_set.metric_rows], indent=2))
+        return 0
+    if args.cmd == "run-model":
+        if not args.allow_inference:
+            parser.error("run-model requires --allow-inference")
+        adapter = OdlBenchAdapter()
+        cfg = PaddleOcrVlConfig(
+            binary=args.binary,
+            model=args.model,
+            mmproj=args.mmproj,
+            port=args.port,
+            context=args.context,
+            threads=args.threads,
+            parallel=args.parallel,
+            device=args.device,
+            gpu_layers=args.gpu_layers,
+            max_tokens=args.max_tokens,
+            startup_timeout_s=args.startup_timeout,
+            request_timeout_s=args.request_timeout,
+            allow_dirty_host=args.allow_dirty_host,
+        )
+        row_set = adapter.build_model_gated_row_set(
+            args.gt,
+            args.run_dir,
+            engine=args.engine,
+            image_root=args.image_root,
+            allow_inference=args.allow_inference,
+            paddle_config=cfg,
+            do_score=args.score,
+            bench_python=args.bench_python,
+        )
+        out = Path(args.run_dir) / "model_gated_row_set.json"
         out.write_text(json.dumps(row_set.to_dict(), indent=2), encoding="utf-8")
         print(f"[odl_bench] wrote {out}")
         print(json.dumps([r.to_dict() for r in row_set.metric_rows], indent=2))

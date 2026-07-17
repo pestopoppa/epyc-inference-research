@@ -1,13 +1,13 @@
 # odl_bench — EPYC PDF backends × opendataloader-bench (Wave-2 B3)
 
-Wire the EPYC deterministic PDF-extraction backends into the **opendataloader-bench**
-(OmniDocBench) harness for a deterministic structural comparison:
+Wire the EPYC PDF-extraction and opt-in model-gated producers into the
+**opendataloader-bench** (OmniDocBench) harness. The deterministic comparison is
 **pdftotext vs ODL-local vs LiteParse** on structural-fidelity, table-fidelity,
-reading-order, and speed. Model-gated engines (LightOnOCR / ODL-hybrid / VL) are
-**excluded** and emitted as Wave-3 batch-manifest stubs instead of being run here.
+reading-order, and speed. Wave-3 model-gated engines reuse the same
+`<gt_image_stem>.md` prediction/scoring path, but they only run behind explicit
+`--allow-inference`.
 
-**No inference. No commits. Deterministic rows only.** (ODL-local is rule-based
-XY-Cut++, not ML — running it is deterministic extraction, not inference.)
+Default commands remain **no inference**. ODL-local is rule-based XY-Cut++, not ML.
 
 All files here are NEW (research-repo-owned). Nothing under `scripts/benchmark/`
 outside this dir is edited, and the orchestrator `pdf_router` is **imported
@@ -85,6 +85,25 @@ skipped deterministically. Sourcing the OmniDocBench PDFs (Git-LFS dataset absen
 locally) — or supplying a local born-digital corpus with its own GT — is the
 standing precondition captured in the Wave-3 stubs.
 
+## Wave-3 PaddleOCR-VL Producer
+
+`run-model --engine paddleocr_vl_1_6` is the first runnable model-gated producer.
+It consumes GT page images directly instead of a PDF manifest, launches a guarded
+experimental-v7 PaddleOCR-VL `llama-server`, writes one Markdown prediction per
+page, records per-page response JSON, then optionally scores the prediction dir
+with the same OmniDocBench config. It requires `--allow-inference`; without that
+flag argparse exits before any server launch. Per-page model failures become
+empty prediction artifacts plus error JSON so one malformed server response does
+not discard the rest of a scored run.
+
+First operational demo: `/mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-20260717T200212Z/`.
+It wrote and scored all `18` demo predictions, captured one `peg-native` model
+error as an empty page, and reported median decode `485.30 t/s`, median page
+latency `2918.78 ms`, text-block edit distance `0.343019`, reading-order edit
+distance `0.337318`, and table TEDS `0.0`. Treat that as producer/runtime
+evidence plus a table-format prompt gap, not a final document-parser quality
+claim.
+
 ## Usage
 
 ```bash
@@ -101,10 +120,19 @@ $RES/.venv/bin/python -m scripts.benchmark.odl_bench.adapter availability
 
 # emit the Wave-3 model-gated manifest stubs (JSON)
 $RES/.venv/bin/python -m scripts.benchmark.odl_bench.adapter stubs
+
+# run the PaddleOCR-VL document-parser arm over GT page images, then optionally score
+$RES/.venv/bin/python -m scripts.benchmark.odl_bench.adapter run-model \
+  --engine paddleocr_vl_1_6 \
+  --gt /mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/OmniDocBench_demo.json \
+  --image-root /mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images \
+  --run-dir /mnt/raid0/llm/tmp/odl-paddleocr-vl \
+  --allow-inference --score
 ```
 
 Library API: `OdlBenchAdapter.{generate_predictions, emit_config, score,
-build_deterministic_row_set, parse_metric_result, model_gated_manifest_stubs}`.
+build_deterministic_row_set, build_model_gated_row_set, parse_metric_result,
+model_gated_manifest_stubs}`.
 
 ## B2 import contract (read-only symbols we depend on)
 
@@ -148,4 +176,5 @@ availability report, and the scoring-command interpreter pin.
 | `run_configs.py` | OmniDocBench config template + metric mapping + naming contract |
 | `adapter.py` | `OdlBenchAdapter` (generate → config → score → rows) + CLI |
 | `manifest_stubs.py` | model-gated Wave-3 manifest-entry stubs |
+| `paddleocr_vl.py` | guarded PaddleOCR-VL image→markdown producer |
 | `tests/test_odl_bench.py` | stdlib-runnable deterministic tests |

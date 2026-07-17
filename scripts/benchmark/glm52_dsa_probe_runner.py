@@ -57,6 +57,12 @@ DEFAULT_TEMPERATURE = 0.0
 DEFAULT_INDEXER_TOP_K = 32
 DEFAULT_REQUEST_TIMEOUT = 3600
 DEFAULT_PROGRESS_POLL_INTERVAL = 30
+REQUEST_ENDPOINTS = ("chat", "v1_completions", "completion")
+REQUEST_ENDPOINT_PATHS = {
+    "chat": "/v1/chat/completions",
+    "v1_completions": "/v1/completions",
+    "completion": "/completion",
+}
 DEFAULT_SHORT_CONTEXT = 4096
 DEFAULT_LONG_CONTEXT = 32768
 DEFAULT_KV_CONTEXTS = (4096, 8192, 16384, 32768)
@@ -390,6 +396,7 @@ def _prompt_spec(
 
 def _request_spec(
     *,
+    request_endpoint: str = "chat",
     max_tokens: int,
     seed: int,
     temperature: float,
@@ -400,7 +407,8 @@ def _request_spec(
     stream: bool = False,
 ) -> dict[str, Any]:
     return {
-        "endpoint": "/v1/chat/completions",
+        "request_endpoint": request_endpoint,
+        "endpoint": REQUEST_ENDPOINT_PATHS[request_endpoint],
         "max_tokens": max_tokens,
         "seed": seed,
         "temperature": temperature,
@@ -523,6 +531,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 extra_args=args.server_extra_arg,
             ),
             "request": _request_spec(
+                request_endpoint=args.request_endpoint,
                 max_tokens=args.max_tokens,
                 seed=args.seed,
                 temperature=args.temperature,
@@ -559,6 +568,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 extra_args=args.server_extra_arg,
             ),
             "request": _request_spec(
+                request_endpoint=args.request_endpoint,
                 max_tokens=long_max_tokens,
                 seed=args.seed,
                 temperature=args.temperature,
@@ -566,7 +576,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 min_completion_tokens=long_min_completion_tokens,
                 progress_poll_interval_s=long_progress_poll_interval,
                 purpose="coherence_plus_throughput" if args.long_output else "coherence",
-                stream=args.long_output,
+                stream=args.long_output and args.request_endpoint == "chat",
             ),
         },
         {
@@ -599,6 +609,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                         extra_args=args.server_extra_arg,
                     ),
                     "request": _request_spec(
+                        request_endpoint=args.request_endpoint,
                         max_tokens=args.max_tokens,
                         seed=args.seed,
                         temperature=args.temperature,
@@ -622,6 +633,7 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
         "refusal_reasons": inventory["refusal_reasons"],
         "inventory": inventory,
         "selected_stages": sorted(selected_stage_names(args)) if selected_stage_names(args) else "all",
+        "artifact_dir": str(args.output.parent / "artifacts"),
         "stages": stages,
         "execution": None,
     }
@@ -649,6 +661,50 @@ def wait_for_health(port: int, timeout_s: int = 180) -> None:
     raise TimeoutError(f"server on port {port} did not become healthy within {timeout_s}s")
 
 
+def build_request_payload(
+    request_endpoint: str,
+    prompt: str,
+    max_tokens: int,
+    temperature: float,
+    seed: int,
+    *,
+    stream: bool = False,
+) -> dict[str, Any]:
+    if request_endpoint == "chat":
+        payload: dict[str, Any] = {
+            "model": "auto",
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "seed": seed,
+            "stream": stream,
+        }
+        if stream:
+            payload["stream_options"] = {"include_usage": True}
+        return payload
+    if request_endpoint == "v1_completions":
+        return {
+            "model": "auto",
+            "prompt": prompt,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "seed": seed,
+            "stream": False,
+        }
+    if request_endpoint == "completion":
+        return {
+            "prompt": prompt,
+            "n_predict": max_tokens,
+            "temperature": temperature,
+            "seed": seed,
+        }
+    raise ValueError(f"unsupported request endpoint: {request_endpoint}")
+
+
+def build_request_url(port: int, request_endpoint: str) -> str:
+    return f"http://127.0.0.1:{port}{REQUEST_ENDPOINT_PATHS[request_endpoint]}"
+
+
 def call_completion(
     port: int,
     prompt: str,
@@ -656,17 +712,17 @@ def call_completion(
     temperature: float,
     seed: int,
     timeout_s: int,
+    request_endpoint: str = "chat",
 ) -> dict[str, Any]:
-    payload = {
-        "model": "auto",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "seed": seed,
-        "stream": False,
-    }
+    payload = build_request_payload(
+        request_endpoint,
+        prompt,
+        max_tokens,
+        temperature,
+        seed,
+    )
     req = urllib.request.Request(
-        f"http://127.0.0.1:{port}/v1/chat/completions",
+        build_request_url(port, request_endpoint),
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -674,6 +730,18 @@ def call_completion(
     with urllib.request.urlopen(req, timeout=timeout_s) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
     return json.loads(raw)
+
+
+def _chat_stream_payload(prompt: str, max_tokens: int, temperature: float, seed: int) -> dict[str, Any]:
+    return {
+        "model": "auto",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "seed": seed,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
 
 
 def _delta_text(delta: dict[str, Any], key: str) -> str:
@@ -690,17 +758,9 @@ def call_completion_streaming(
     timeout_s: int,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
-    payload = {
-        "model": "auto",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "seed": seed,
-        "stream": True,
-        "stream_options": {"include_usage": True},
-    }
+    payload = _chat_stream_payload(prompt, max_tokens, temperature, seed)
     req = urllib.request.Request(
-        f"http://127.0.0.1:{port}/v1/chat/completions",
+        build_request_url(port, "chat"),
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
@@ -867,8 +927,8 @@ def _response_summary(response: dict[str, Any]) -> dict[str, Any]:
     choices = response.get("choices") or []
     first = choices[0] if choices else {}
     message = first.get("message") if isinstance(first, dict) else {}
-    content = message.get("content", "") if isinstance(message, dict) else ""
     reasoning_content = message.get("reasoning_content") if isinstance(message, dict) else None
+    content = _response_completion_text(response)
     return {
         "request_error": response.get("request_error"),
         "usage": response.get("usage", {}),
@@ -884,15 +944,20 @@ def _response_completion_text(response: dict[str, Any]) -> str:
     choices = response.get("choices") or []
     first = choices[0] if choices else {}
     message = first.get("message") if isinstance(first, dict) else {}
-    if not isinstance(message, dict):
-        return ""
     parts: list[str] = []
-    reasoning_content = message.get("reasoning_content")
-    content = message.get("content")
-    if isinstance(reasoning_content, str):
-        parts.append(reasoning_content)
-    if isinstance(content, str):
-        parts.append(content)
+    if isinstance(message, dict):
+        reasoning_content = message.get("reasoning_content")
+        content = message.get("content")
+        if isinstance(reasoning_content, str):
+            parts.append(reasoning_content)
+        if isinstance(content, str):
+            parts.append(content)
+    text = first.get("text") if isinstance(first, dict) else None
+    if isinstance(text, str):
+        parts.append(text)
+    raw_content = response.get("content")
+    if isinstance(raw_content, str):
+        parts.append(raw_content)
     return "".join(parts)
 
 
@@ -909,6 +974,44 @@ def _request_error_payload(exc: BaseException) -> dict[str, Any]:
         except Exception as body_exc:  # pragma: no cover - defensive only
             payload["body_read_error"] = f"{type(body_exc).__name__}: {body_exc}"
     return payload
+
+
+def _stage_artifact_stem(stage: dict[str, Any]) -> str:
+    return f"{stage['name']}_{stage['server']['context_length']}"
+
+
+def write_stage_artifacts(
+    artifact_dir: Path,
+    stage: dict[str, Any],
+    prompt: str,
+    request_url: str,
+    request_payload: dict[str, Any],
+    response: dict[str, Any],
+) -> dict[str, str]:
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    stem = _stage_artifact_stem(stage)
+    prompt_path = artifact_dir / f"{stem}_prompt.txt"
+    request_path = artifact_dir / f"{stem}_request.json"
+    response_path = artifact_dir / f"{stem}_response.json"
+    prompt_path.write_text(prompt, encoding="utf-8")
+    request_path.write_text(
+        _canonical_json(
+            {
+                "endpoint": stage["request"].get("endpoint"),
+                "request_endpoint": stage["request"].get("request_endpoint", "chat"),
+                "url": request_url,
+                "payload": request_payload,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    response_path.write_text(_canonical_json(response) + "\n", encoding="utf-8")
+    return {
+        "prompt": str(prompt_path),
+        "request": str(request_path),
+        "response": str(response_path),
+    }
 
 
 def build_prompt_with_token_floor(
@@ -1091,7 +1194,7 @@ def summarize_server_log(log_file: str | None) -> dict[str, Any]:
     }
 
 
-def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
+def run_stage(stage: dict[str, Any], artifact_dir: Path | None = None) -> dict[str, Any]:
     server_command = stage["server"]["server_command"]
     log_file = stage["server"].get("log_file")
     if log_file:
@@ -1107,6 +1210,10 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
     poll_thread: threading.Thread | None = None
     completion_tokens_from_tokenize: int | None = None
     request_error: dict[str, Any] | None = None
+    request_endpoint = str(stage["request"].get("request_endpoint", "chat"))
+    request_url = build_request_url(stage["server"]["port"], request_endpoint)
+    request_payload: dict[str, Any] | None = None
+    artifacts: dict[str, str] = {}
     try:
         wait_for_health(stage["server"]["port"])
         tokenize_timeout = max(60, min(stage["request"]["timeout_s"], 600))
@@ -1135,7 +1242,13 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
             )
             poll_thread.start()
         try:
-            if stage["request"].get("stream"):
+            if stage["request"].get("stream") and request_endpoint == "chat":
+                request_payload = _chat_stream_payload(
+                    prompt_info["prompt"],
+                    stage["request"]["max_tokens"],
+                    stage["request"]["temperature"],
+                    stage["request"]["seed"],
+                )
                 response = call_completion_streaming(
                     stage["server"]["port"],
                     prompt_info["prompt"],
@@ -1146,6 +1259,13 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
                     progress_callback=lambda sample: stream_progress_samples.append(sample),
                 )
             else:
+                request_payload = build_request_payload(
+                    request_endpoint,
+                    prompt_info["prompt"],
+                    stage["request"]["max_tokens"],
+                    stage["request"]["temperature"],
+                    stage["request"]["seed"],
+                )
                 response = call_completion(
                     stage["server"]["port"],
                     prompt_info["prompt"],
@@ -1153,8 +1273,18 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
                     stage["request"]["temperature"],
                     stage["request"]["seed"],
                     stage["request"]["timeout_s"],
+                    request_endpoint,
                 )
         except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            if request_payload is None:
+                request_payload = build_request_payload(
+                    request_endpoint,
+                    prompt_info["prompt"],
+                    stage["request"]["max_tokens"],
+                    stage["request"]["temperature"],
+                    stage["request"]["seed"],
+                    stream=bool(stage["request"].get("stream") and request_endpoint == "chat"),
+                )
             request_error = _request_error_payload(exc)
             response = {
                 "request_error": request_error,
@@ -1162,6 +1292,17 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
                 "timings": {},
                 "choices": [],
             }
+        if artifact_dir is not None:
+            assert response is not None
+            assert request_payload is not None
+            artifacts = write_stage_artifacts(
+                artifact_dir,
+                stage,
+                prompt_info["prompt"],
+                request_url,
+                request_payload,
+                response,
+            )
         min_completion_tokens = int(stage["request"].get("min_completion_tokens", 0) or 0)
         response_usage = response.get("usage", {}) if isinstance(response, dict) else {}
         response_completion_tokens = (
@@ -1235,6 +1376,7 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
         "expected_substring_passed": expected_substring_passed,
         "progress_metrics_samples": progress_samples,
         "stream_progress_samples_tail": stream_progress_samples[-120:],
+        "artifacts": artifacts,
         **summary,
         "server_log": server_log,
     }
@@ -1258,6 +1400,7 @@ def _execution_result_failed(result: dict[str, Any]) -> bool:
 def run_execution(plan: dict[str, Any]) -> dict[str, Any]:
     selected_payload = plan.get("selected_stages")
     selected = None if selected_payload == "all" else set(selected_payload)
+    artifact_dir = Path(plan["artifact_dir"]) if plan.get("artifact_dir") else None
     results: list[dict[str, Any]] = []
     for stage in plan["stages"]:
         if not _stage_selected(stage["name"], selected):
@@ -1272,12 +1415,16 @@ def run_execution(plan: dict[str, Any]) -> dict[str, Any]:
         if stage["kind"] == "kv_length_scaling":
             series_results = []
             for entry in stage["series"]:
-                series_results.append(run_stage({
+                stage_payload = {
                     "name": stage["name"],
                     "prompt": entry["prompt"],
                     "server": entry["server"],
                     "request": entry["request"],
-                }))
+                }
+                if artifact_dir is None:
+                    series_results.append(run_stage(stage_payload))
+                else:
+                    series_results.append(run_stage(stage_payload, artifact_dir=artifact_dir))
             results.append({
                 "name": stage["name"],
                 "status": "ok",
@@ -1285,7 +1432,10 @@ def run_execution(plan: dict[str, Any]) -> dict[str, Any]:
                 "series": series_results,
             })
             continue
-        results.append(run_stage(stage))
+        if artifact_dir is None:
+            results.append(run_stage(stage))
+        else:
+            results.append(run_stage(stage, artifact_dir=artifact_dir))
     return {
         "status": "failed" if any(_execution_result_failed(result) for result in results) else "ok",
         "stages": results,
@@ -1336,6 +1486,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="Request seed")
     parser.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE, help="Request temperature")
+    parser.add_argument(
+        "--request-endpoint",
+        choices=REQUEST_ENDPOINTS,
+        default="chat",
+        help="Completion request endpoint: chat=/v1/chat/completions, v1_completions=/v1/completions, completion=/completion",
+    )
     parser.add_argument("--indexer-top-k", type=int, default=DEFAULT_INDEXER_TOP_K, help="Fixed DSA indexer_top_k")
     parser.add_argument(
         "--request-timeout",

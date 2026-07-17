@@ -28,7 +28,7 @@ _PKG_PARENT = Path(__file__).resolve().parents[2]  # .../scripts/benchmark
 if str(_PKG_PARENT) not in sys.path:
     sys.path.insert(0, str(_PKG_PARENT))
 
-from odl_bench import backends, run_configs  # noqa: E402
+from odl_bench import backends, paddleocr_vl, run_configs  # noqa: E402
 from odl_bench.adapter import OdlBenchAdapter  # noqa: E402
 from odl_bench.backends import (  # noqa: E402
     DETERMINISTIC_ENGINES,
@@ -39,6 +39,12 @@ from odl_bench.backends import (  # noqa: E402
 )
 from odl_bench.bootstrap import bench_root  # noqa: E402
 from odl_bench.manifest_stubs import model_gated_manifest, model_gated_stubs  # noqa: E402
+from odl_bench.paddleocr_vl import (  # noqa: E402
+    PADDLEOCR_VL_ENGINE,
+    PaddleOcrVlConfig,
+    PaddleOcrVlProducer,
+    build_server_argv,
+)
 from odl_bench.schemas import (  # noqa: E402
     METRIC_READING_ORDER,
     METRIC_SPEED,
@@ -114,6 +120,13 @@ class TestNamingContract(unittest.TestCase):
                 hits += 1
         # The demo ships a reference prediction dir named exactly this way.
         self.assertGreaterEqual(hits, 15, f"only {hits}/18 names aligned with fixtures")
+
+    def test_gt_image_paths_resolve_demo_images(self):
+        paths = run_configs.gt_image_paths(DEMO_GT)
+        images = run_configs.gt_image_basenames(DEMO_GT)
+        self.assertEqual(set(paths), set(images))
+        self.assertTrue(paths[images[0]].exists())
+        self.assertIn("images", paths[images[0]].parts)
 
 
 @unittest.skipIf(BENCH_ROOT is None, "opendataloader-bench checkout not found")
@@ -252,6 +265,103 @@ class TestModelGatedStubs(unittest.TestCase):
         s = json.dumps(payload)  # must not raise
         self.assertIn("model_gated_manifest", s)
         self.assertEqual(payload["wave"], 3)
+
+
+@unittest.skipIf(BENCH_ROOT is None, "opendataloader-bench checkout not found")
+class TestModelGatedProducerGuards(unittest.TestCase):
+    def test_model_gated_generation_requires_explicit_inference_flag(self):
+        adapter = OdlBenchAdapter(bench_root=BENCH_ROOT)
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(PermissionError):
+                adapter.generate_model_gated_predictions(
+                    PADDLEOCR_VL_ENGINE,
+                    DEMO_GT,
+                    Path(td) / "predictions",
+                    allow_inference=False,
+                )
+
+    def test_paddle_server_argv_uses_experimental_binary_and_projector(self):
+        cfg = PaddleOcrVlConfig(
+            binary=Path("/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server"),
+            model=Path("/tmp/paddle-model.gguf"),
+            mmproj=Path("/tmp/paddle-mmproj.gguf"),
+            port=19999,
+            max_tokens=2048,
+        )
+        argv = build_server_argv(cfg)
+        joined = " ".join(argv)
+        self.assertIn("llama.cpp-experimental", joined)
+        self.assertIn("--mmproj /tmp/paddle-mmproj.gguf", joined)
+        self.assertIn("--reasoning off", joined)
+        self.assertIn("-ngl 99", joined)
+
+    def test_paddle_producer_records_page_errors_and_continues(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            image_dir = root / "images"
+            image_dir.mkdir()
+            (image_dir / "page1.jpg").write_bytes(b"fake")
+            (image_dir / "page2.jpg").write_bytes(b"fake")
+            gt = root / "gt.json"
+            gt.write_text(
+                json.dumps([
+                    {"page_info": {"image_path": "page1.jpg"}},
+                    {"page_info": {"image_path": "page2.jpg"}},
+                ]),
+                encoding="utf-8",
+            )
+
+            class FakeProc:
+                pid = 123456
+                returncode = 0
+
+                def poll(self):
+                    return 0
+
+            originals = (
+                PaddleOcrVlProducer.validate_inputs,
+                paddleocr_vl.subprocess.Popen,
+                paddleocr_vl.wait_for_health,
+                paddleocr_vl.query_page,
+                paddleocr_vl.terminate,
+            )
+
+            def fake_query(config, image_path):
+                if Path(image_path).name == "page1.jpg":
+                    return {
+                        "choices": [{"message": {"content": "page one markdown"}, "finish_reason": "stop"}],
+                        "usage": {"prompt_tokens": 10, "completion_tokens": 3},
+                        "timings": {"prompt_per_second": 100.0, "predicted_per_second": 50.0},
+                    }
+                raise RuntimeError("boom")
+
+            try:
+                PaddleOcrVlProducer.validate_inputs = lambda self: None  # type: ignore[assignment]
+                paddleocr_vl.subprocess.Popen = lambda *a, **k: FakeProc()  # type: ignore[assignment]
+                paddleocr_vl.wait_for_health = lambda port, timeout_s: None  # type: ignore[assignment]
+                paddleocr_vl.query_page = fake_query  # type: ignore[assignment]
+                paddleocr_vl.terminate = lambda proc: {"dead": True}  # type: ignore[assignment]
+
+                manifest = PaddleOcrVlProducer(PaddleOcrVlConfig()).generate(
+                    gt_json=gt,
+                    image_root=image_dir,
+                    prediction_dir=root / "pred",
+                    response_dir=root / "resp",
+                )
+            finally:
+                (
+                    PaddleOcrVlProducer.validate_inputs,
+                    paddleocr_vl.subprocess.Popen,
+                    paddleocr_vl.wait_for_health,
+                    paddleocr_vl.query_page,
+                    paddleocr_vl.terminate,
+                ) = originals  # type: ignore[assignment]
+
+            self.assertEqual(len(manifest.artifacts), 2)
+            self.assertEqual((root / "pred" / "page1.md").read_text(), "page one markdown")
+            self.assertEqual((root / "pred" / "page2.md").read_text(), "")
+            self.assertEqual(manifest.artifacts[1].finish_reason, "error")
+            self.assertIn("model errors", manifest.detail)
 
 
 class TestAvailabilityAndCommand(unittest.TestCase):

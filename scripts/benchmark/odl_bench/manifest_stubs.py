@@ -103,16 +103,16 @@ def model_gated_stubs() -> list[ManifestEntryStub]:
                 "NOT wired into pdf_router today — needs a Wave-3 engine adapter (documented gap)",
             ],
             command=(
-                "python -m scripts.benchmark.odl_bench.adapter run "
-                "--engine paddleocr_vl_1_6 --pdf-manifest <pdf_manifest.json> "
-                "--gt <GT json> --run-dir $RUN_DIR --score"
+                "python -m scripts.benchmark.odl_bench.adapter run-model "
+                "--engine paddleocr_vl_1_6 --gt <GT json> --image-root <GT image dir> "
+                "--run-dir $RUN_DIR --allow-inference --score"
             ),
             env={},
             expected_artifacts=list(_EXPECTED),
             reuses_deterministic_wiring=True,
             notes=(
-                "No orchestrator backend symbol yet — Wave-3 must add a VL engine that "
-                "emits <stem>.md. Listed so the ceiling arm is not forgotten. INFERENCE."
+                "Wave-3 producer consumes GT page images directly and emits <stem>.md. "
+                "INFERENCE; keep it explicit and quiet-window gated."
             ),
         ),
     ]

@@ -125,6 +125,72 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
             self.assertIn("none", short_stage["server"]["server_command"])
             self.assertIn("--log-disable", short_stage["server"]["server_command"])
             self.assertEqual(short_stage["request"]["endpoint"], "/v1/chat/completions")
+            self.assertEqual(short_stage["request"]["request_endpoint"], "chat")
+
+    def test_build_plan_threads_raw_completion_endpoint_to_request_specs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            model_dir = _make_shard_dir(tmp_path)
+            binary_dir = tmp_path / "bin"
+            binary_dir.mkdir()
+            binary = binary_dir / "llama-server"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+
+            args = runner.parse_args(
+                [
+                    "--output",
+                    str(tmp_path / "plan.json"),
+                    "--model-dir",
+                    str(model_dir),
+                    "--binary",
+                    str(binary),
+                    "--library-path",
+                    str(binary_dir),
+                    "--request-endpoint",
+                    "completion",
+                    "--long-output",
+                    "--kv-contexts",
+                    "4096",
+                ]
+            )
+            inventory = runner.collect_inventory(model_dir)
+            plan = runner.build_plan(args, inventory, runner.resolve_binary(binary), runner.resolve_library_path(binary, binary_dir))
+
+            requests = [
+                plan["stages"][1]["request"],
+                plan["stages"][2]["request"],
+                plan["stages"][3]["series"][0]["request"],
+            ]
+
+            self.assertEqual(plan["artifact_dir"], str(tmp_path / "artifacts"))
+            for request in requests:
+                self.assertEqual(request["request_endpoint"], "completion")
+                self.assertEqual(request["endpoint"], "/completion")
+            self.assertFalse(plan["stages"][2]["request"]["stream"])
+
+    def test_request_payloads_match_selected_endpoint(self) -> None:
+        chat = runner.build_request_payload("chat", "hello", 7, 0.1, 42)
+        v1_completions = runner.build_request_payload("v1_completions", "hello", 7, 0.1, 42)
+        completion = runner.build_request_payload("completion", "hello", 7, 0.1, 42)
+
+        self.assertEqual(chat["messages"], [{"role": "user", "content": "hello"}])
+        self.assertEqual(chat["max_tokens"], 7)
+        self.assertEqual(v1_completions["prompt"], "hello")
+        self.assertEqual(v1_completions["max_tokens"], 7)
+        self.assertEqual(completion["prompt"], "hello")
+        self.assertEqual(completion["n_predict"], 7)
+
+    def test_response_completion_text_accepts_chat_v1_and_raw_completion_shapes(self) -> None:
+        self.assertEqual(
+            runner._response_completion_text({"choices": [{"message": {"content": "chat"}}]}),
+            "chat",
+        )
+        self.assertEqual(
+            runner._response_completion_text({"choices": [{"text": "v1"}]}),
+            "v1",
+        )
+        self.assertEqual(runner._response_completion_text({"content": "raw"}), "raw")
 
     def test_trace_logs_and_stage_selection_are_reflected_in_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -451,7 +517,7 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
             runner.launch_server = lambda command: FakeProc()  # type: ignore[assignment]
             runner.wait_for_health = lambda port: None  # type: ignore[assignment]
             runner.count_prompt_tokens = lambda port, prompt, timeout_s: 100  # type: ignore[assignment]
-            runner.call_completion = lambda port, prompt, max_tokens, temperature, seed, timeout_s: {  # type: ignore[assignment]
+            runner.call_completion = lambda port, prompt, max_tokens, temperature, seed, timeout_s, request_endpoint="chat": {  # type: ignore[assignment]
                 "usage": {"prompt_tokens": 100, "completion_tokens": 3},
                 "timings": {"predicted_per_second": 12.5},
                 "choices": [{"message": {"content": "READY tokenstream tokenstream"}, "finish_reason": "stop"}],
@@ -473,6 +539,78 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
         self.assertEqual(result["completion_token_count"], 3)
         self.assertTrue(result["completion_token_min_passed"])
         self.assertIsNone(result["expected_substring_passed"])
+
+    def test_run_stage_writes_prompt_request_response_artifacts_for_raw_completion(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact_dir = Path(tmp) / "artifacts"
+            stage = {
+                "name": "long_context_dsa_probe",
+                "prompt": {
+                    "task_line": "Return READY.",
+                    "context_length": 4096,
+                    "kind": "long_context_probe",
+                    "answer_instruction": runner.SHORT_ANSWER_INSTRUCTION,
+                },
+                "server": {"server_command": [], "port": 1, "context_length": 4096, "log_file": None, "metrics": False},
+                "request": {
+                    "request_endpoint": "completion",
+                    "endpoint": "/completion",
+                    "max_tokens": 16,
+                    "temperature": 0.0,
+                    "seed": 1,
+                    "timeout_s": 60,
+                    "min_completion_tokens": 1,
+                    "progress_poll_interval_s": 0,
+                    "purpose": "coherence",
+                },
+            }
+
+            class FakeProc:
+                pid = None
+
+            originals = (
+                runner.launch_server,
+                runner.wait_for_health,
+                runner.count_prompt_tokens,
+                runner.call_completion,
+                runner.terminate_server,
+            )
+
+            def fake_completion(port, prompt, max_tokens, temperature, seed, timeout_s, request_endpoint="chat"):
+                self.assertEqual(request_endpoint, "completion")
+                return {
+                    "content": "READY",
+                    "timings": {},
+                }
+
+            try:
+                runner.launch_server = lambda command: FakeProc()  # type: ignore[assignment]
+                runner.wait_for_health = lambda port: None  # type: ignore[assignment]
+                runner.count_prompt_tokens = lambda port, prompt, timeout_s: 100  # type: ignore[assignment]
+                runner.call_completion = fake_completion  # type: ignore[assignment]
+                runner.terminate_server = lambda proc: None  # type: ignore[assignment]
+                result = runner.run_stage(stage, artifact_dir=artifact_dir)
+            finally:
+                (
+                    runner.launch_server,
+                    runner.wait_for_health,
+                    runner.count_prompt_tokens,
+                    runner.call_completion,
+                    runner.terminate_server,
+                ) = originals  # type: ignore[assignment]
+
+            self.assertEqual(result["status"], "ok")
+            self.assertEqual(result["completion_token_count"], 100)
+            self.assertEqual(result["completion_token_count_source"], "tokenize_completion_text")
+            artifacts = result["artifacts"]
+            self.assertEqual(set(artifacts), {"prompt", "request", "response"})
+            self.assertIn("Return READY.", Path(artifacts["prompt"]).read_text(encoding="utf-8"))
+            request_artifact = json.loads(Path(artifacts["request"]).read_text(encoding="utf-8"))
+            self.assertEqual(request_artifact["endpoint"], "/completion")
+            self.assertEqual(request_artifact["url"], "http://127.0.0.1:1/completion")
+            self.assertEqual(request_artifact["payload"]["n_predict"], 16)
+            response_artifact = json.loads(Path(artifacts["response"]).read_text(encoding="utf-8"))
+            self.assertEqual(response_artifact["content"], "READY")
 
     def test_run_stage_rejects_missing_expected_substring(self) -> None:
         stage = {
@@ -512,7 +650,7 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
             runner.launch_server = lambda command: FakeProc()  # type: ignore[assignment]
             runner.wait_for_health = lambda port: None  # type: ignore[assignment]
             runner.count_prompt_tokens = lambda port, prompt, timeout_s: 100  # type: ignore[assignment]
-            runner.call_completion = lambda port, prompt, max_tokens, temperature, seed, timeout_s: {  # type: ignore[assignment]
+            runner.call_completion = lambda port, prompt, max_tokens, temperature, seed, timeout_s, request_endpoint="chat": {  # type: ignore[assignment]
                 "usage": {"prompt_tokens": 100, "completion_tokens": 3},
                 "timings": {"predicted_per_second": 12.5},
                 "choices": [{"message": {"content": "READY"}, "finish_reason": "stop"}],
@@ -558,7 +696,7 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
         class FakeProc:
             pid = None
 
-        def fake_completion(port, prompt, max_tokens, temperature, seed, timeout_s):
+        def fake_completion(port, prompt, max_tokens, temperature, seed, timeout_s, request_endpoint="chat"):
             raise HTTPError(
                 url="http://127.0.0.1:1/v1/chat/completions",
                 code=500,
@@ -703,7 +841,7 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
             runner.launch_server = lambda command: FakeProc()  # type: ignore[assignment]
             runner.wait_for_health = lambda port: None  # type: ignore[assignment]
             runner.count_prompt_tokens = lambda port, prompt, timeout_s: 100  # type: ignore[assignment]
-            runner.call_completion = lambda port, prompt, max_tokens, temperature, seed, timeout_s: {  # type: ignore[assignment]
+            runner.call_completion = lambda port, prompt, max_tokens, temperature, seed, timeout_s, request_endpoint="chat": {  # type: ignore[assignment]
                 "usage": {"prompt_tokens": 100, "completion_tokens": 3},
                 "timings": {},
                 "choices": [{"message": {"content": "READY"}, "finish_reason": "stop"}],

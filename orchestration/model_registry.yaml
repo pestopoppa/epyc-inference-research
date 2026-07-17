@@ -6564,7 +6564,7 @@ roles:
 
   paddleocr_vl_16_gguf:
     tier: B
-    description: PaddleOCR-VL-1.6 GGUF + PaddleOCR mmproj document/OCR extraction specialist; downloaded, SHA-verified, and MI210 llama-server smoke-clean as a fast extraction lane, but not yet wired into pdf_router or odl_bench Wave-3.
+    description: PaddleOCR-VL-1.6 GGUF + PaddleOCR mmproj document/OCR extraction specialist; downloaded, SHA-verified, MI210 llama-server smoke-clean, and wired into the guarded odl_bench Wave-3 producer. It is still not production-stack ready until document prompt/table-format tuning and matched LightOnOCR/ODL comparison pass.
     model:
       name: PaddleOCR-VL-1.6-GGUF
       huggingface_id: PaddlePaddle/PaddleOCR-VL-1.6-GGUF
@@ -6597,16 +6597,17 @@ roles:
       notes: "MI210 llama-server smoke used `-ngl 99 --reasoning off`; no spec-dec evidence needed for this small extractor lane yet."
     constraints:
       forbid:
-      - production_stack_registration_without_wave3_adapter
+      - production_stack_registration_without_document_quality_gate
       - general_vision_escalation_claim_from_extraction_smoke
-      reason: "Runtime and extraction smoke passed, but pdf_router/odl_bench Wave-3 producer is not implemented and evidence is document-extraction shaped, not general QA escalation."
+      reason: "Runtime/extraction smoke and the guarded odl_bench producer passed, but first scored demo has table.TEDS=0.0 and evidence remains document-extraction shaped, not general QA escalation."
     performance:
-      benchmark_status: mi210_document_extraction_smoke_pass_wave3_adapter_open
+      benchmark_status: mi210_document_extraction_smoke_pass_wave3_producer_scored_table_prompt_open
       observed_date: 2026-07-17
-      mi210_observation: "PaddleOCR-VL loaded through experimental-v7 llama-server with model+mmproj. First smoke at /mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z/ passed digit OCR at 484.36 t/s and invoice markdown extraction at 489.82 t/s. Narrow receipt QA under a 96-token cap emitted broad OCR text and failed the exact doc-number check, but the realistic full-extraction follow-up at /mnt/raid0/llm/tmp/paddleocr-vl-receipt-extract-20260717T194415Z/ included CS00012465 at 487.55 t/s over 768 completion tokens. Cleanup proof showed no llama-server/AutoPilot process and 0% VRAM."
+      mi210_observation: "PaddleOCR-VL loaded through experimental-v7 llama-server with model+mmproj. First smoke at /mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z/ passed digit OCR at 484.36 t/s and invoice markdown extraction at 489.82 t/s. Narrow receipt QA under a 96-token cap emitted broad OCR text and failed the exact doc-number check, but the realistic full-extraction follow-up at /mnt/raid0/llm/tmp/paddleocr-vl-receipt-extract-20260717T194415Z/ included CS00012465 at 487.55 t/s over 768 completion tokens. The guarded odl_bench Wave-3 producer at /mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-20260717T200212Z/model_gated_row_set.json wrote/scored 18/18 demo pages, captured one peg-native model error as an empty prediction, and reported median decode 485.30 t/s, median page latency 2918.78 ms, text-block edit distance 0.343019, reading-order edit distance 0.337318, and table TEDS 0.0. Cleanup proof showed no llama-server/AutoPilot process, 0% VRAM, and no KFD PIDs."
       evidence:
       - /mnt/raid0/llm/tmp/paddleocr-vl-first-smoke-20260717T194332Z/summary.json
       - /mnt/raid0/llm/tmp/paddleocr-vl-receipt-extract-20260717T194415Z/summary.json
+      - /mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-20260717T200212Z/model_gated_row_set.json
     memory:
       residency: cold
       pinned: false
@@ -6615,8 +6616,8 @@ roles:
       hybrid_candidate: false
       notes: "Small artifact; MI210 smoke used only a lightweight transient server. Co-residency not yet tested."
     benchmark_plan:
-      cpu_only: "Optional parity/control smoke after Wave-3 adapter exists."
-      gpu_only: "Implement odl_bench Wave-3 producer that writes <stem>.md predictions, then compare against LightOnOCR/ODL on document structural/table/reading-order metrics."
+      cpu_only: "Optional parity/control smoke if a CPU-only document lane is needed."
+      gpu_only: "Tune document/table output prompt and compare the guarded odl_bench producer against LightOnOCR/ODL on document structural/table/reading-order metrics."
       cpu_gpu_hybrid: "Not needed at this artifact size."
 
   minicpm_o_45_local_multimodal:
