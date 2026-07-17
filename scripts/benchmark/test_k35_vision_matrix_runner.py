@@ -121,6 +121,37 @@ class K35VisionMatrixRunnerTests(unittest.TestCase):
         self.assertIn("--device ROCm0", joined)
         self.assertIn("--reasoning off", joined)
 
+    def test_supergemma4_cpu_candidate_uses_registered_artifacts(self):
+        scenario = k35v.scenario_by_name("vision_candidate_cpu_supergemma4_mm_q8")
+        argv = k35v.build_server_argv(
+            scenario,
+            binary=Path("/tmp/llama-server"),
+            port=19260,
+        )
+        joined = " ".join(argv)
+        self.assertIn("supergemma4-26b-abliterated-multimodal-Q8_0.gguf", joined)
+        self.assertIn("mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf", joined)
+        self.assertIn("--device none", joined)
+        self.assertIn("--reasoning off", joined)
+        self.assertIn("-ctk q8_0", joined)
+        self.assertIn("-ctv q8_0", joined)
+        self.assertIn("--repeat-penalty 1.05", joined)
+
+    def test_supergemma4_mi210_candidate_offloads_to_gpu(self):
+        scenario = k35v.scenario_by_name("vision_candidate_mi210_supergemma4_mm_q8")
+        argv = k35v.build_server_argv(
+            scenario,
+            binary=Path("/tmp/llama-server"),
+            port=19261,
+        )
+        joined = " ".join(argv)
+        self.assertIn("supergemma4-26b-abliterated-multimodal-Q8_0.gguf", joined)
+        self.assertIn("--device ROCm0", joined)
+        self.assertIn("-ngl 99", joined)
+        self.assertIn("--reasoning off", joined)
+        self.assertIn("-ctk q8_0", joined)
+        self.assertIn("-ctv q8_0", joined)
+
     def test_score_response_normalizes_expected_terms(self):
         fixture = k35v.fixture_by_id("receipt_doc_number")
         score = k35v.score_response("The document number is CS 00012465.", fixture)

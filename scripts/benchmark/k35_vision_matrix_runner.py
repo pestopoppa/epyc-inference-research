@@ -219,6 +219,70 @@ SCENARIOS: tuple[VisionScenario, ...] = (
         candidate=True,
     ),
     VisionScenario(
+        name="vision_candidate_cpu_supergemma4_mm_q8",
+        role="vision_escalation_candidate",
+        description=(
+            "Local SuperGemma4-26B abliterated multimodal Q8_0 candidate, CPU-only. "
+            "Tests the registered multimodal Gemma4 artifact on the fixed K35 "
+            "OCR/chart fixtures before any role claim."
+        ),
+        model=Path(
+            "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/"
+            "supergemma4-26b-abliterated-multimodal-Q8_0.gguf"
+        ),
+        mmproj=Path(
+            "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/"
+            "mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf"
+        ),
+        context=8192,
+        threads=96,
+        parallel=1,
+        extra_args=("--reasoning", "off", "-ctk", "q8_0", "-ctv", "q8_0", "--repeat-penalty", "1.05"),
+        prior_evidence=(
+            "orchestration/model_registry.yaml: supergemma4_26b_mm_q8 had text/VL evidence "
+            "but no K35 multimodal fixture matrix."
+        ),
+        candidate=True,
+    ),
+    VisionScenario(
+        name="vision_candidate_mi210_supergemma4_mm_q8",
+        role="vision_escalation_candidate",
+        description=(
+            "Local SuperGemma4-26B abliterated multimodal Q8_0 candidate offloaded "
+            "to MI210. Tests whether the heavier multimodal Gemma4 lane can beat "
+            "the temporary Qwen2.5-VL alias or MiniCPM-o on quality/speed."
+        ),
+        model=Path(
+            "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/"
+            "supergemma4-26b-abliterated-multimodal-Q8_0.gguf"
+        ),
+        mmproj=Path(
+            "/mnt/raid0/llm/models/supergemma4-26b-abliterated-multimodal-8bit/"
+            "mmproj-supergemma4-26b-abliterated-multimodal-f16.gguf"
+        ),
+        context=8192,
+        threads=96,
+        parallel=1,
+        device="ROCm0",
+        extra_args=(
+            "--reasoning",
+            "off",
+            "-ctk",
+            "q8_0",
+            "-ctv",
+            "q8_0",
+            "-ngl",
+            "99",
+            "--repeat-penalty",
+            "1.05",
+        ),
+        prior_evidence=(
+            "orchestration/model_registry.yaml: supergemma4_26b_mm_q8 is registered "
+            "as a multimodal vision candidate with historical text/VL concerns."
+        ),
+        candidate=True,
+    ),
+    VisionScenario(
         name="vision_candidate_mi210_qwen3vl8b_q4",
         role="vision_escalation_candidate",
         description=(

@@ -379,6 +379,14 @@ Evidence lives under `/mnt/raid0/llm/tmp/k35-qwen3vl8-candidate-20260717T185330Z
 
 Disposition: the local Qwen3-VL-8B artifact is runtime/coherence-clean and CPU-quality-clean on this small fixture set, but it is not the active `vision_escalation` replacement. For serving decisions, keep the quality-safe Qwen2.5-VL alias until a faster candidate passes the chart fixture. Baseline/control rows remain useful for attribution; model-admission decisions should use realistic optimized lanes only after the lane is quality-clean.
 
+## SuperGemma4-26B Multimodal K35 Vision-Candidate A/B
+
+Evidence lives under `/mnt/raid0/llm/tmp/k35-supergemma4-candidate-20260717T193120Z/summary.json`. The runner uses the registered Q8_0 artifact and F16 projector with `--reasoning off`, q8 KV, and `--repeat-penalty 1.05`; the MI210 row also uses `-ngl 99`.
+
+CPU SuperGemma4 passed the four fixed K35 OCR/chart fixtures (`4/4`) at `25.58-31.76 t/s` decode with about `26.4 GiB` PSS. MI210 SuperGemma4 also passed `4/4` at `80.35-83.87 t/s` decode with about `42%` MI210 VRAM. Cleanup proof: server PIDs terminated and `post_cleanup_verification.txt` reports no `llama-server`/AutoPilot processes plus `0%` VRAM/no KFD PIDs.
+
+Disposition: SuperGemma4 is quality-clean on this small multimodal fixture slice, but it is not the preferred `vision_escalation` replacement because MiniCPM-o is faster (`110.81-122.18 t/s` on MI210), much smaller, and has targeted frontdoor co-residency/service-tax evidence. Retain SuperGemma4 as a fallback or cross-check candidate, not the lead activation lane.
+
 ## Deferred Low-Contention Manifest Work
 
 Do not hash the large GGUFs during active GLM download or benchmark windows. If a human-readable manifest is needed, first emit byte inventories and reuse HF sidecars:
@@ -404,7 +412,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 3. Investigate the Ternary Bonsai Q2_0 artifact/runtime offset mismatch before retrying. Q2_g64 is CPU+MI210 runtime-smoke passed and has preliminary throughput observations, including a positive MI210 `ngram-mod` structured-copy speed signal, but the strict quality gate passed only 6/8 and blocks any role claim; dspark variants failed separately.
 4. Qwable IQ4_XS standalone routing and broader representative quality are closed for the research registry: plain reasoning-off IQ4_XS is the preferred reasoning-heavy route, `ngram-mod` is neutral on the expanded slice, and scaffold remains only the beneficiary-must-answer fallback. Remaining work is production hosting/composite-route wiring, not model admission.
 5. Treat Nemotron-Nano BF16 as a quality-ceiling arm only after Q8_0 merits comparison. Nemotron-Cascade-2 is now historical/catalogue only; do not schedule inference absent an explicit Mamba2-hybrid revival study.
-6. Move beyond speed-only admission observations for Qwen3.5-9B MTP, Bonsai, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible. MiniCPM-o now has a K35 quality-clean vision candidate result plus a targeted frontdoor co-residency smoke; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure.
+6. Move beyond speed-only admission observations for Qwen3.5-9B MTP, Bonsai, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible. MiniCPM-o now has a K35 quality-clean vision candidate result plus targeted frontdoor co-residency/service-tax evidence; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure; SuperGemma4 is quality-clean but slower/heavier than MiniCPM-o.
 7. Keep generic GLM hot-expert offload/REAP deprioritized after the production-representative skew profile; reopen only with a narrower role-specific corpus or different placement mechanism.
 
 Opt-in command file: `docs/data/model_admission_smoke_commands_20260716.sh`.

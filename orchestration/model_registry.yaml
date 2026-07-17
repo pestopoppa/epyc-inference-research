@@ -3436,6 +3436,7 @@ roles:
       baseline_tps: 21.1
       optimized_tps: 21.1
       quad_aggregate_tps: 35.3
+      k35_vision_observation: "2026-07-17 K35 fixed OCR/chart candidate gate at /mnt/raid0/llm/tmp/k35-supergemma4-candidate-20260717T193120Z/: SuperGemma4-26B multimodal Q8_0 + F16 projector passed CPU (`4/4`, 25.58-31.76 t/s decode, ~26.4 GiB PSS) and MI210 (`4/4`, 80.35-83.87 t/s decode, ~42% VRAM). Quality-clean on this small fixture set, but not the preferred active vision_escalation replacement because MiniCPM-o is faster on MI210, much smaller, and has frontdoor co-residency/service-tax evidence."
       quality_score: {pct: 65.4, raw: "159/243"}  # Claude-as-Judge 0-3 scale
       quality_pass_rate: 67.9  # 55/81 scored >= 2
       quality_by_suite:  # pass rates (score >= 2)
@@ -3451,7 +3452,8 @@ roles:
     notes: >
       Quality 65.4% with repeat_penalty=1.05. Strongest all-rounder: 100% agentic, 90% general.
       Known upstream repetition bug on tier 3 long-form (google-deepmind/gemma#622).
-      Half speed of Q4 text-only (21 vs 42 tps). VL suite run text-only (42% — needs multimodal eval).
+      Half speed of Q4 text-only (21 vs 42 tps). K35 multimodal fixture gate is now
+      quality-clean, but MiniCPM-o remains the faster/lighter escalation candidate.
 
   # --- Gemma 4 (2026-04-17, both deprecated) ---
   gemma4_e2b_q8:
