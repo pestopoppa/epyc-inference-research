@@ -5657,7 +5657,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Classify sparse-vs-dense DSA scaling and run long-context needle/coherence; true >64K prompt execution is recorded but the prefill curve tapered to dense-looking speeds."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Next classify sparse-vs-dense final attention and run current-source long-context needle/coherence; stale-binary true >64K prompt execution is recorded but the prefill curve tapered to dense-looking speeds."
     candidate_roles:
     - architect
     - ingest
@@ -5665,14 +5665,14 @@ roles:
     - reasoning
     acceleration:
       type: native_mtp_pending
-      notes: "DSA runnability is verified through a true >64K CPU prompt; native GLM-MTP remains pending, and DSA sparse-compute scaling is unclassified."
+      notes: "DSA cache/runtime wiring is verified on current-source experimental-v7 3dee86a5a, and stale-binary true >64K CPU prompt runnability is recorded. Native GLM-MTP remains pending, and DSA sparse-compute scaling is unclassified."
     constraints:
       forbid:
       - production_stack_registration
       - production_role_claim_without_dsa_quality_gate
-      reason: "Artifact is complete and runnable through a true >64K CPU DSA/indexer probe, but sparse-vs-dense scaling, long-context quality, throughput, and reviewer/task quality are still unverified."
+      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded, but sparse-vs-dense final-attention scaling, current-source long-context quality, throughput, and reviewer/task quality are still unverified."
     performance:
-      benchmark_status: short_load_coherence_4k8k_dsa_trace_true64k_engagement_quality_open
+      benchmark_status: current_source_dsa_cache_runtime_smoke_stale_true64k_engagement_quality_open
       short_smoke_observation: >
         2026-07-16 experimental v7 b10077-da1bf5e2f CPU-only llama-server
         loaded the six-shard UD-IQ2_M artifact. With reasoning auto, the model
@@ -5683,9 +5683,9 @@ roles:
       dsa_caveat: >
         Trace logs show blk.78.* warnings correspond to the expected skipped
         physical NextN tail block: n_layer=78, n_layer_all=79, and
-        nextn_predict_layers=1. The 4K/8K shakedown also logs Lightning
-        Indexer enablement with indexer.top_k overridden to 32, but true
-        64K+ sparse-scaling and quality gates remain open.
+        nextn_predict_layers=1. Experimental-v7 3dee86a5a closes the
+        current-source GLM DSA cache/runtime wiring gap, but 64K+ sparse
+        final-attention scaling and quality gates remain open.
       dsa_trace_observation: >
         2026-07-16 CPU-only experimental v7 trace run at 8K processed 5907
         prompt tokens at 19.77 t/s and returned READY. A paired 4K/8K scaling
@@ -5693,6 +5693,17 @@ roles:
         23.86 t/s and 5906 prompt tokens at 22.69 t/s. Both logs record
         Lightning Indexer enabled. This is loader/runtime shakedown evidence,
         not a final long-context DSA disposition.
+      dsa_current_source_wiring_observation: >
+        2026-07-17 experimental-v7 commit 3dee86a5a wires LLM_ARCH_GLM_DSA
+        to llama_kv_cache_dsa, aliases GLM to llama_model_deepseek32::graph,
+        requires live GLM indexer tensors, and force-builds GLM indexer
+        Hadamard rotation tensors. Validation passed test-llama-archs
+        --arch glm-dsa, test-llama-archs --arch deepseek32, ASAN glm-dsa,
+        and rebuilt build-hip server/CLI. Current-source exact READY smoke at
+        /mnt/raid0/llm/tmp/glm52-current-source-ready-smoke-20260717T092344/
+        logged main + indexer DSA caches and Lightning Indexer enabled. This
+        closes GLM DSA cache/runtime wiring, not sparse final-attention or
+        long-context quality.
       dsa_48k_timeout_observation: >
         2026-07-17 CPU-only experimental v7 run at nominal --long-context
         65536 produced a 48009-token prompt because the old prompt builder used
@@ -5702,7 +5713,7 @@ roles:
         tokens to 8.71 t/s at 45056 tokens. This is useful scaling and timeout
         evidence, but it does not close the true >64K actual-token gate.
       dsa_true64k_observation: >
-        2026-07-17 CPU-only experimental v7 run at
+        2026-07-17 stale-binary CPU-only experimental v7 run at
         /mnt/raid0/llm/tmp/glm52-dsa-true64k-probe-20260717T0125/
         used --long-context 90000 --min-prompt-tokens 65536
         --request-timeout 21600 and completed. The runner counted 65957
@@ -5713,8 +5724,8 @@ roles:
         overall; the 65536-token checkpoint was 6.81 t/s cumulative, with the
         final 2048-token interval at 3.93 t/s. Decode was 1.20 t/s over 16
         tokens and ended length-capped with reasoning-only preview. This closes
-        true >64K runnability/engagement, but not sparse-compute scaling or
-        long-context quality.
+        stale-binary true >64K runnability/engagement, but not current-source
+        >64K behavior, sparse-compute scaling, or long-context quality.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
