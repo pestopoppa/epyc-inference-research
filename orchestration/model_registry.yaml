@@ -6623,7 +6623,7 @@ roles:
 
   minicpm_o_45_local_multimodal:
     tier: C
-    description: MiniCPM-o-4_5 local multimodal/audio bundle; reasoning-off vision lane is K35 quality-clean with a frontdoor co-residency smoke, while audio/TTS coverage remains catalogue-only.
+    description: MiniCPM-o-4_5 local multimodal/audio bundle; reasoning-off vision lane is K35 quality-clean with frontdoor co-residency and service-matrix evidence, while audio/TTS coverage remains catalogue-only.
     model:
       name: MiniCPM-o-4_5
       huggingface_id: openbmb/MiniCPM-o-4_5-gguf
@@ -6673,16 +6673,16 @@ roles:
     constraints:
       forbid:
       - production_stack_registration_without_activation_decision
-      reason: "Reasoning-off vision lane has runtime, task-level, and frontdoor co-residency smoke evidence; production stack use still needs an explicit activation/capacity decision."
+      reason: "Reasoning-off vision lane has runtime, task-level, frontdoor co-residency, and 2K/8K service-matrix evidence; production stack use still needs an explicit activation/capacity decision."
     performance:
-      benchmark_status: k35_vision_candidate_pass_reasoning_off_coresidency_smoke_pass_activation_decision_open
+      benchmark_status: k35_vision_candidate_pass_reasoning_off_service_matrix_pass_activation_decision_open
       observed_date: 2026-07-17
       cpu_observation: "Text smoke passed during active GLM download: prompt 67.6 t/s, generation 9.5 t/s, returned `ok`."
       mi210_observation: "Text smoke passed during active GLM download: prompt 423.3 t/s, generation 107.2 t/s, returned `ok` plus stray `</think>`."
       long_cpu_observation: "2026-07-16 longer CPU server run generated 768 completion tokens at 7.69 t/s after a 62-token prompt; response had empty message.content despite nonzero completion tokens, so treat as throughput-only."
       long_mi210_observation: "2026-07-16 longer MI210 server run generated 1472 tokens at 107.20 t/s after an 84-token prompt."
       k35_vision_observation: "2026-07-17 K35 fixed OCR/chart candidate gate: default reasoning mode routed correct answers into reasoning_content and failed message.content scoring (`0/4`) on CPU and MI210. With --reasoning off, CPU passed `4/4` at 11.98-14.13 t/s decode, and MI210 passed `4/4` at 110.81-122.18 t/s decode with 11% VRAM and ~0.96-1.20 GiB host RSS. This is the first quality-clean fast MiniCPM-o vision candidate."
-      k35_coresidency_observation: "2026-07-17 targeted service-policy smoke passed at /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/: MiniCPM-o reasoning-off MI210 server co-resided with the fastest validated MI210 frontdoor Qwen3.6 lane at 66% VRAM, both handled concurrent requests, MiniCPM-o answered the chart fixture as Tanzania, frontdoor decoded 512 text tokens at 99.97 t/s, and post-cleanup verification showed no llama-server/AutoPilot process plus 0% VRAM/no KFD PIDs. Follow-up service-tax probe at /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/ showed frontdoor alone 101.68/101.84 t/s, frontdoor with MiniCPM resident but idle 101.89/101.86 t/s, and active concurrent MiniCPM vision frontdoor 80.16/80.34 t/s while MiniCPM decoded 90.49/90.23 t/s. This supports resident-loaded/on-demand scheduling but is not a broad service-level concurrency matrix or automatic live routing flip."
+      k35_coresidency_observation: "2026-07-17 targeted service-policy smoke passed at /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/: MiniCPM-o reasoning-off MI210 server co-resided with the fastest validated MI210 frontdoor Qwen3.6 lane at 66% VRAM, both handled concurrent requests, MiniCPM-o answered the chart fixture as Tanzania, frontdoor decoded 512 text tokens at 99.97 t/s, and post-cleanup verification showed no llama-server/AutoPilot process plus 0% VRAM/no KFD PIDs. Follow-up service-tax probe at /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/ showed frontdoor alone 101.68/101.84 t/s, frontdoor with MiniCPM resident but idle 101.89/101.86 t/s, and active concurrent MiniCPM vision frontdoor 80.16/80.34 t/s while MiniCPM decoded 90.49/90.23 t/s. Broader service matrix at /mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/summary.json then tested all four K35 fixtures at 2K/8K: frontdoor alone averaged 96.33 t/s, frontdoor with MiniCPM resident but idle averaged 96.48 t/s, active overlap averaged 94.77 t/s frontdoor and 85.22 t/s MiniCPM, and all 8/8 active fixture/context pairs passed. This supports resident-loaded/on-demand scheduling; live routing still needs an explicit activation/capacity decision."
       evidence:
       - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/minicpm_q4_cpu_text_v7/minicpm_q4_cpu_text_v7.stdout
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-minicpm_q4_mi210_text_v7/minicpm_q4_mi210_text_v7.stdout
@@ -6694,6 +6694,7 @@ roles:
       - /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/post_cleanup_verification.txt
       - /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/summary.json
       - /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/post_cleanup_verification.txt
+      - /mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/summary.json
     memory:
       residency: cold
       pinned: false

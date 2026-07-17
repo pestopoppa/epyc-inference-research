@@ -395,7 +395,9 @@ Follow-up co-residency smoke lives under `/mnt/raid0/llm/tmp/k35-minicpm-frontdo
 
 Service-tax follow-up lives under `/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/`. Frontdoor alone decoded `101.68` and `101.84 t/s`; frontdoor with MiniCPM-o resident but idle decoded `101.89` and `101.86 t/s`; active concurrent MiniCPM-o vision dropped frontdoor to `80.16` and `80.34 t/s` while MiniCPM-o decoded `90.49` and `90.23 t/s`.
 
-Disposition: MiniCPM-o is now the first fast quality-clean `vision_escalation` candidate on the K35 fixture set, and targeted frontdoor co-residency/service-tax probes passed. It is still not an automatic live-stack flip because this is not a broad service-level concurrency matrix. The remaining decision is whether to activate the MI210 lane with scheduling policy, keep the Qwen2.5-VL CPU safety alias, or require broader service/text-tax data first.
+Broader service-matrix follow-up lives at `/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/summary.json`. It used the same realistic lanes through `scripts/benchmark/k35_minicpm_service_matrix_runner.py`: MI210-resident frontdoor with q8 KV, reasoning off, no spec; MiniCPM-o Q4_K_M + F16 vision projector on MI210 with `--reasoning off`. Frontdoor alone averaged `96.33 t/s` across 2K/8K contexts; frontdoor with MiniCPM-o resident but idle averaged `96.48 t/s`; active overlap across all four K35 fixtures at 2K and 8K averaged `94.77 t/s` frontdoor and `85.22 t/s` MiniCPM-o, with all `8/8` active fixture/context pairs passing. Cleanup blockers were empty.
+
+Disposition: MiniCPM-o is now the first fast quality-clean `vision_escalation` candidate on the K35 fixture set, and targeted frontdoor co-residency/service-tax plus broader 2K/8K fixture service-matrix probes passed. It is still not an automatic live-stack flip because activation changes MI210 capacity policy. The remaining decision is whether to activate the MI210 lane with scheduling policy or keep the Qwen2.5-VL CPU safety alias.
 
 ## Qwen3-VL-8B Image Runtime Smoke
 
