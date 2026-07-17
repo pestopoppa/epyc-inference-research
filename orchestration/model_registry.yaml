@@ -6733,6 +6733,48 @@ roles:
       gpu_only: "MI210 throughput/quality smoke."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
+  qwen3_4b_fable5_glint_local_q8:
+    tier: C
+    description: Local Qwen3-4B-SFT-Fable5-Glint Q8_0 scaffold-generator candidate; catalogue-only exact-path entry.
+    model:
+      name: Qwen3-4B-SFT-Fable5-Glint
+      huggingface_id: ermiaazarkhalili/Qwen3-4B-SFT-Fable5-Glint
+      path: /mnt/raid0/llm/models/qwen3-4b-sft-fable5-glint.q8_0.gguf
+      quant: Q8_0
+      size_gb: 4.0
+      architecture: qwen3
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-05
+      file_bytes: 4280405120
+      provenance: local_gguf_no_hf_sidecar_found
+    candidate_roles:
+    - scaffold_generator
+    - reasoning
+    - verifier_selector
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration_without_scaffold_quality_gate
+      - benchmark_claim_without_loader_smoke
+      reason: "Fable5-distilled scaffold-generator treatment is staged on disk, but still needs loader, throughput, and task-quality evidence before any routing claim."
+    performance:
+      benchmark_status: not_run
+      evidence:
+      - /mnt/raid0/llm/epyc-root/progress/2026-07/2026-07-05-cot-falsification-and-mtp.md
+      - /mnt/raid0/llm/epyc-root/handoffs/completed/gpu-cot-scaffold-sidecar.md
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+    benchmark_plan:
+      cpu_only: "Loader + small scaffold-quality smoke against Qwen3-4B-Thinking control."
+      gpu_only: "MI210 scaffold-generator throughput/quality smoke if the 4B treatment is revived."
+      cpu_gpu_hybrid: "Not a primary path at this size."
+
   # =============================================================================
   # EXTERNAL API BACKENDS
   # =============================================================================
