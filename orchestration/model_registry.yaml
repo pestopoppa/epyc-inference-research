@@ -5729,6 +5729,20 @@ roles:
         top_32=55.6%, max=70.5%). Treat it as hypothesis-only because the
         corpus is tiny/repetitive; hot-expert offload and REAP remain blocked
         on representative workload-profile evidence.
+      expert_routing_skew_representative_observation: >
+        2026-07-17 production-representative expert-routing repeat used live
+        interactive objectives, core-v2 ledger prompts, Optuna root-workload
+        prompts, current orchestrator prompt files, and retrieval queries
+        (manifest at
+        /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/production_representative.corpus.manifest.json).
+        Extracted ffn_down_exps.weight.counts from
+        /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.imatrix.gguf
+        show near-uniform global expert use: 19,123,200 selections, all 256
+        experts nonzero in every layer, aggregate top_32=15.19%,
+        entropy_norm=0.9987, Gini=0.0664. Layer-local skew weakened vs the tiny
+        corpus: median layer top_32=39.19%, max=45.74%. Generic GLM hot-expert
+        offload/REAP is not justified by current workload evidence; reopen only
+        with a narrower role-specific corpus or different placement mechanism.
       evidence:
       - /mnt/raid0/llm/models/glm52_clean.log
       - /mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json
@@ -5749,6 +5763,12 @@ roles:
       - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.imatrix.stats.txt
       - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.counts.json
       - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/expert-routing-skew.counts.md
+      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/production_representative.corpus.txt
+      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/production_representative.corpus.manifest.json
+      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.imatrix.gguf
+      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.stats.txt
+      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.counts.json
+      - /mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/expert-routing-skew.counts.md
     memory:
       residency: cold
       pinned: false
@@ -5759,7 +5779,7 @@ roles:
     benchmark_plan:
       cpu_only: "Shard integrity -> load/short smoke -> true >64K DSA probe -> sparse-vs-dense classification -> canonical throughput and quality."
       gpu_only: "Not expected to fit on MI210."
-      cpu_gpu_hybrid: "Repeat imatrix expert-count extraction on representative workload prompts; the 2026-07-17 tiny-corpus signal is hypothesis-only and insufficient for hot-expert/offload placement."
+      cpu_gpu_hybrid: "Production-representative imatrix expert-count extraction is near-uniform globally; generic hot-expert/offload placement is not justified without narrower role-specific skew evidence."
 
   hy3_angelslim_iq1m_mtp:
     tier: B

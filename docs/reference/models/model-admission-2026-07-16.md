@@ -96,6 +96,19 @@ The patched GLM DSA runner completed a true >64K actual-token CPU-only probe on 
 
 Interpretation: this closes the "can GLM-5.2 process a true >64K prompt with the landed DSA/indexer path engaged" question. It does **not** close the 1M-context or sparse-compute thesis. The prefill curve tapered from `26.10 t/s` at 2K to `6.81 t/s` cumulative at 65K, with the final 2K interval at `3.93 t/s`, so the next K23/D2 gate should classify whether this is `DSA-DENSE-MASK` rather than `DSA-REAL-SPARSE`. Quality/needle behavior is still unmeasured.
 
+## GLM-5.2 Expert-Routing Skew
+
+The 2026-07-17 expert-routing-skew gate now has both a tiny-corpus first pass and a production-representative repeat. The first pass at `/mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T0520Z-rebuilt/` established that `llama-imatrix` GGUF artifacts persist per-expert `.counts` tensors, not just activation statistics.
+
+The production-representative repeat at `/mnt/raid0/llm/tmp/expert-routing-skew-glm52-20260717T-production-representative/` used a 201-section corpus (`production_representative.corpus.manifest.json`) drawn from live interactive objectives, core-v2 ledger prompts, Optuna root-workload prompts, current orchestrator prompt files, and retrieval queries. Extracted counts over `ffn_down_exps.weight.counts` produced:
+
+- `19,123,200` total expert selections across `75` MoE layers.
+- All `256` experts were nonzero in every layer.
+- Aggregate `top_32=15.19%`, normalized entropy `0.9987`, Gini `0.0664`.
+- Layer distribution: median `top_32=39.19%`, max `45.74%`.
+
+Interpretation: the general GLM workload does **not** show a cacheable hot-expert set. Generic GLM hot-expert GPU residency / REAP should stay deprioritized unless a narrower role-specific corpus shows materially stronger skew. This does not close DSA sparse-vs-dense or long-context quality gates.
+
 ## Nemotron-Labs-Diffusion Fork Loader Probe
 
 The stock experimental v7 loader cannot load the local Nemotron-Labs-Diffusion-14B Q8_0 GGUF. Both CPU and MI210 v7 smoke cases fail at model load with:
@@ -295,7 +308,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 4. Run Qwable IQ4_XS vs Q8_0 standalone quality gates first; use scaffold only as the fallback path when the beneficiary must answer. Long MI210/CPU speed observations and strict-IQ4 prompt-only JSON are recorded; schema-mode acceptance still needs the bounded K22 follow-up.
 5. Treat Nemotron-Nano BF16 as a quality-ceiling arm only after Q8_0 merits comparison. Nemotron-Cascade-2 is now historical/catalogue only; do not schedule inference absent an explicit Mamba2-hybrid revival study.
 6. Move beyond speed-only admission observations for MiniCPM-o, Qwen3-VL-8B, Qwen3.5-9B MTP, Bonsai, Qwable, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible.
-7. Schedule exact-path DeepSeek/offload-style smokes only after the GLM DSA gate or when resource ownership is explicit; the GLM download itself is no longer active.
+7. Keep generic GLM hot-expert offload/REAP deprioritized after the production-representative skew profile; reopen only with a narrower role-specific corpus or different placement mechanism.
 
 Opt-in command file: `docs/data/model_admission_smoke_commands_20260716.sh`.
 

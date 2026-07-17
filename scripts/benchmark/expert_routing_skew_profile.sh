@@ -23,6 +23,7 @@ BINARY_PATH="${DEFAULT_BINARY}"
 CTX_SIZE=128
 BATCH_SIZE=128
 UBATCH_SIZE=128
+CHUNKS=-1
 PARSE_SPECIAL=1
 
 usage() {
@@ -45,6 +46,7 @@ Options:
   --ctx-size N               Context size for execute mode.
   --batch-size N             Batch size for execute mode.
   --ubatch-size N            Ubatch size for execute mode.
+  --chunks N                 Max chunks to process (-1 = all).
   --allow-glm-download       Override the GLM-5.2 download guard.
   --show-statistics          Statistics-only mode for an existing artifact.
   --execute                  Run calibration first, then statistics.
@@ -162,7 +164,11 @@ counts_command() {
 execute_command() {
   local corpus="$1"
   local artifact="$2"
-  printf 'LD_LIBRARY_PATH=%q %q -m %q -f %q -o %q --ctx-size %q --batch-size %q --ubatch-size %q --no-ppl %s\n' \
+  local chunks_arg=""
+  if [[ "${CHUNKS}" -ge 0 ]]; then
+    chunks_arg="$(printf -- '--chunks %q' "${CHUNKS}")"
+  fi
+  printf 'LD_LIBRARY_PATH=%q %q -m %q -f %q -o %q --ctx-size %q --batch-size %q --ubatch-size %q --no-ppl %s %s\n' \
     "${EXPERIMENTAL_BIN_DIR}" \
     "${BINARY_PATH}" \
     "${MODEL}" \
@@ -171,6 +177,7 @@ execute_command() {
     "${CTX_SIZE}" \
     "${BATCH_SIZE}" \
     "${UBATCH_SIZE}" \
+    "${chunks_arg}" \
     "$( [[ "${PARSE_SPECIAL}" -eq 1 ]] && printf '%s' '--parse-special' || printf '%s' '' )"
 }
 
@@ -219,6 +226,10 @@ while [[ $# -gt 0 ]]; do
       UBATCH_SIZE="${2:-}"
       shift 2
       ;;
+    --chunks)
+      CHUNKS="${2:-}"
+      shift 2
+      ;;
     --allow-glm-download)
       ALLOW_GLM_DOWNLOAD=1
       shift
@@ -242,7 +253,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "${EXECUTE}" -ne 1 && "${SHOW_STATISTICS}" -ne 1 && -z "${INPUT_ARTIFACT}" ]]; then
+if [[ "${SHOW_STATISTICS}" -ne 1 && -z "${INPUT_ARTIFACT}" && -z "${MODEL}" ]]; then
   usage
   printf '\nExamples:\n' >&2
   printf '  %s --show-statistics --artifact /mnt/raid0/llm/tmp/example.imatrix.gguf --model /mnt/raid0/llm/models/example.gguf\n' "$0" >&2
@@ -254,8 +265,7 @@ resolve_binary
 require_no_glm_download
 make_out_root
 
-if [[ "${EXECUTE}" -eq 1 && -z "${INPUT_ARTIFACT}" && "${SHOW_STATISTICS}" -eq 0 ]]; then
-  [[ -n "${MODEL}" ]] || die "--execute requires --model PATH"
+if [[ -n "${MODEL}" && -z "${INPUT_ARTIFACT}" && "${SHOW_STATISTICS}" -eq 0 ]]; then
   [[ -f "${MODEL}" ]] || die "model not found: ${MODEL}"
   if [[ -n "${INPUT_ARTIFACT}" || "${SHOW_STATISTICS}" -eq 1 ]]; then
     die "--execute cannot be combined with --artifact or --show-statistics"
@@ -277,7 +287,7 @@ if [[ "${EXECUTE}" -eq 1 && -z "${INPUT_ARTIFACT}" && "${SHOW_STATISTICS}" -eq 0
   counts_json="${OUT_ROOT}/$(artifact_stem "${OUTPUT_ARTIFACT}").counts.json"
   counts_md="${OUT_ROOT}/$(artifact_stem "${OUTPUT_ARTIFACT}").counts.md"
 
-  log "dry-run=false"
+  log "dry-run=$([[ "${EXECUTE}" -eq 1 ]] && printf 'false' || printf 'true')"
   log "binary=${BINARY_PATH}"
   log "corpus=${local_corpus}"
   log "artifact=${OUTPUT_ARTIFACT}"
@@ -293,13 +303,15 @@ if [[ "${EXECUTE}" -eq 1 && -z "${INPUT_ARTIFACT}" && "${SHOW_STATISTICS}" -eq 0
   counts_cmd=$(counts_command "${OUTPUT_ARTIFACT}" "${counts_json}" "${counts_md}")
   printf '%s\n' "${counts_cmd}"
 
-  log "running calibration"
-  run_shell_command "${execute_cmd}" >"${OUT_ROOT}/expert-routing-skew.execute.log" 2>&1
-  log "running statistics"
-  run_shell_command "${stats_cmd}"
-  log "extracting expert counts"
-  run_shell_command "${counts_cmd}"
-  log "done"
+  if [[ "${EXECUTE}" -eq 1 ]]; then
+    log "running calibration"
+    run_shell_command "${execute_cmd}" >"${OUT_ROOT}/expert-routing-skew.execute.log" 2>&1
+    log "running statistics"
+    run_shell_command "${stats_cmd}"
+    log "extracting expert counts"
+    run_shell_command "${counts_cmd}"
+    log "done"
+  fi
   exit 0
 fi
 
