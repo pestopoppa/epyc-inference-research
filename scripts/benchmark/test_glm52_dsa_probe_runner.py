@@ -164,6 +164,44 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
                 plan["stages"][2]["server"]["log_file"],
                 str(output.parent / "logs" / "long_context_dsa_probe.server.log"),
             )
+            self.assertEqual(plan["stages"][2]["prompt"]["min_prompt_tokens"], runner.DEFAULT_MIN_PROMPT_TOKENS)
+            self.assertEqual(
+                plan["stages"][2]["prompt"]["prompt_context_guard_tokens"],
+                runner.DEFAULT_PROMPT_CONTEXT_GUARD_TOKENS,
+            )
+
+    def test_prompt_token_floor_expands_until_live_tokenizer_count_passes_minimum(self) -> None:
+        counts: list[int] = []
+
+        def fake_counter(prompt: str) -> int:
+            count = len(prompt) // 6
+            counts.append(count)
+            return count
+
+        result = runner.build_prompt_with_token_floor(
+            task_line="Return READY.",
+            context_length=90000,
+            min_prompt_tokens=65536,
+            max_completion_tokens=16,
+            prompt_context_guard_tokens=512,
+            token_counter=fake_counter,
+        )
+
+        self.assertGreaterEqual(result["prompt_token_count"], 65536)
+        self.assertLessEqual(result["prompt_token_count"], result["prompt_token_max"])
+        self.assertGreater(result["prompt_token_adjustment_attempts"], 1)
+        self.assertGreater(len(counts), 1)
+
+    def test_prompt_token_floor_rejects_unreachable_budget(self) -> None:
+        with self.assertRaisesRegex(ValueError, "exceeds safe prompt budget"):
+            runner.build_prompt_with_token_floor(
+                task_line="Return READY.",
+                context_length=65536,
+                min_prompt_tokens=65536,
+                max_completion_tokens=16,
+                prompt_context_guard_tokens=512,
+                token_counter=lambda prompt: len(prompt),
+            )
 
     def test_run_execution_skips_unselected_stages(self) -> None:
         plan = {

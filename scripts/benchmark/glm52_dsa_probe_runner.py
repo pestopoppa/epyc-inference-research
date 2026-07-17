@@ -32,7 +32,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -59,6 +59,10 @@ DEFAULT_PORT_BASE = 19100
 INDEXER_TOP_K_OVERRIDE_KEY = "glm-dsa.attention.indexer.top_k"
 
 PROMPT_RESERVE_TOKENS = 192
+PROMPT_CHARS_PER_TOKEN_HEURISTIC = 4.0
+DEFAULT_MIN_PROMPT_TOKENS = 0
+DEFAULT_PROMPT_CONTEXT_GUARD_TOKENS = 512
+PROMPT_TOKEN_FLOOR_MAX_ATTEMPTS = 6
 FILLER_TEXT = (
     "The GLM DSA probe keeps the context deterministic while the runner checks "
     "shard integrity, load behavior, and KV scaling under a fixed indexer "
@@ -294,8 +298,11 @@ def build_server_command(
     return command
 
 
-def _build_prompt(task_line: str, context_length: int) -> str:
-    target_chars = max(0, (context_length - PROMPT_RESERVE_TOKENS) * 4)
+def _target_prompt_chars(context_length: int) -> int:
+    return int(max(0, (context_length - PROMPT_RESERVE_TOKENS) * PROMPT_CHARS_PER_TOKEN_HEURISTIC))
+
+
+def _build_prompt_from_chars(task_line: str, target_chars: int) -> str:
     repeats = max(1, target_chars // len(FILLER_TEXT) + 1)
     filler = (FILLER_TEXT * repeats)[:target_chars]
     return (
@@ -305,11 +312,24 @@ def _build_prompt(task_line: str, context_length: int) -> str:
     )
 
 
-def _prompt_spec(kind: str, context_length: int, task_line: str) -> dict[str, Any]:
+def _build_prompt(task_line: str, context_length: int) -> str:
+    return _build_prompt_from_chars(task_line, _target_prompt_chars(context_length))
+
+
+def _prompt_spec(
+    kind: str,
+    context_length: int,
+    task_line: str,
+    min_prompt_tokens: int,
+    prompt_context_guard_tokens: int,
+) -> dict[str, Any]:
     return {
         "kind": kind,
         "context_length": context_length,
         "task_line": task_line,
+        "chars_per_token_heuristic": PROMPT_CHARS_PER_TOKEN_HEURISTIC,
+        "min_prompt_tokens": min_prompt_tokens,
+        "prompt_context_guard_tokens": prompt_context_guard_tokens,
     }
 
 
@@ -384,7 +404,13 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
             "name": "short_load_decode_smoke",
             "kind": "load_decode_smoke",
             "status": "ready" if inventory["status"] == "ready" else "blocked",
-            "prompt": _prompt_spec("short_load_decode_smoke", args.short_context, short_task),
+            "prompt": _prompt_spec(
+                "short_load_decode_smoke",
+                args.short_context,
+                short_task,
+                args.min_prompt_tokens,
+                args.prompt_context_guard_tokens,
+            ),
             "server": _server_spec(
                 binary=binary,
                 library_path=library_path,
@@ -409,7 +435,13 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
             "name": "long_context_dsa_probe",
             "kind": "long_context_probe",
             "status": "ready" if inventory["status"] == "ready" else "blocked",
-            "prompt": _prompt_spec("long_context_dsa_probe", args.long_context, long_task),
+            "prompt": _prompt_spec(
+                "long_context_dsa_probe",
+                args.long_context,
+                long_task,
+                args.min_prompt_tokens,
+                args.prompt_context_guard_tokens,
+            ),
             "server": _server_spec(
                 binary=binary,
                 library_path=library_path,
@@ -438,7 +470,13 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
             "series": [
                 {
                     "context_length": context_length,
-                    "prompt": _prompt_spec("kv_length_scaling", context_length, scaling_task),
+                    "prompt": _prompt_spec(
+                        "kv_length_scaling",
+                        context_length,
+                        scaling_task,
+                        args.min_prompt_tokens,
+                        args.prompt_context_guard_tokens,
+                    ),
                     "server": _server_spec(
                         binary=binary,
                         library_path=library_path,
@@ -530,6 +568,27 @@ def call_completion(
     return json.loads(raw)
 
 
+def count_prompt_tokens(port: int, prompt: str, timeout_s: int) -> int:
+    payload = {
+        "content": prompt,
+        "add_special": True,
+        "parse_special": True,
+    }
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}/tokenize",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+        raw = resp.read().decode("utf-8", errors="replace")
+    response = json.loads(raw)
+    tokens = response.get("tokens")
+    if not isinstance(tokens, list):
+        raise ValueError(f"/tokenize response missing tokens array: {response!r}")
+    return len(tokens)
+
+
 def launch_server(command: list[str]) -> subprocess.Popen[str]:
     return subprocess.Popen(
         command,
@@ -594,6 +653,62 @@ def _response_summary(response: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_prompt_with_token_floor(
+    *,
+    task_line: str,
+    context_length: int,
+    min_prompt_tokens: int,
+    max_completion_tokens: int,
+    prompt_context_guard_tokens: int,
+    token_counter: Callable[[str], int],
+) -> dict[str, Any]:
+    max_prompt_tokens = context_length - max_completion_tokens - prompt_context_guard_tokens
+    if max_prompt_tokens <= 0:
+        raise ValueError(
+            "prompt token budget is non-positive: "
+            f"context_length={context_length}, max_completion_tokens={max_completion_tokens}, "
+            f"prompt_context_guard_tokens={prompt_context_guard_tokens}"
+        )
+    if min_prompt_tokens > max_prompt_tokens:
+        raise ValueError(
+            f"min_prompt_tokens={min_prompt_tokens} exceeds safe prompt budget "
+            f"{max_prompt_tokens} for context_length={context_length}"
+        )
+
+    target_chars = _target_prompt_chars(context_length)
+    prompt = _build_prompt_from_chars(task_line, target_chars)
+    token_count = token_counter(prompt)
+    attempts = 1
+
+    while min_prompt_tokens > 0 and token_count < min_prompt_tokens:
+        if attempts >= PROMPT_TOKEN_FLOOR_MAX_ATTEMPTS:
+            raise RuntimeError(
+                f"could not reach min_prompt_tokens={min_prompt_tokens}; "
+                f"last token_count={token_count}, target_chars={target_chars}"
+            )
+        observed_chars_per_token = max(1.0, len(prompt) / max(token_count, 1))
+        deficit = min_prompt_tokens - token_count
+        target_chars += int(deficit * observed_chars_per_token * 1.10) + len(FILLER_TEXT)
+        prompt = _build_prompt_from_chars(task_line, target_chars)
+        token_count = token_counter(prompt)
+        attempts += 1
+
+    if token_count > max_prompt_tokens:
+        raise ValueError(
+            f"prompt token count {token_count} exceeds safe prompt budget "
+            f"{max_prompt_tokens} for context_length={context_length}"
+        )
+
+    return {
+        "prompt": prompt,
+        "prompt_token_count": token_count,
+        "prompt_char_count": len(prompt),
+        "prompt_token_min": min_prompt_tokens,
+        "prompt_token_max": max_prompt_tokens,
+        "prompt_token_adjustment_attempts": attempts,
+    }
+
+
 def summarize_server_log(log_file: str | None) -> dict[str, Any]:
     if not log_file:
         return {"status": "disabled", "path": None}
@@ -631,7 +746,6 @@ def summarize_server_log(log_file: str | None) -> dict[str, Any]:
 
 def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
     server_command = stage["server"]["server_command"]
-    prompt = _build_prompt(stage["prompt"]["task_line"], stage["prompt"]["context_length"])
     log_file = stage["server"].get("log_file")
     if log_file:
         log_path = Path(log_file)
@@ -639,11 +753,21 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
         log_path.unlink(missing_ok=True)
     proc = launch_server(server_command)
     response: dict[str, Any] | None = None
+    prompt_info: dict[str, Any] | None = None
     try:
         wait_for_health(stage["server"]["port"])
+        tokenize_timeout = max(60, min(stage["request"]["timeout_s"], 600))
+        prompt_info = build_prompt_with_token_floor(
+            task_line=stage["prompt"]["task_line"],
+            context_length=stage["prompt"]["context_length"],
+            min_prompt_tokens=int(stage["prompt"].get("min_prompt_tokens", 0)),
+            max_completion_tokens=stage["request"]["max_tokens"],
+            prompt_context_guard_tokens=int(stage["prompt"].get("prompt_context_guard_tokens", 0)),
+            token_counter=lambda prompt: count_prompt_tokens(stage["server"]["port"], prompt, tokenize_timeout),
+        )
         response = call_completion(
             stage["server"]["port"],
-            prompt,
+            prompt_info["prompt"],
             stage["request"]["max_tokens"],
             stage["request"]["temperature"],
             stage["request"]["seed"],
@@ -653,6 +777,7 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
         terminate_server(proc)
 
     assert response is not None
+    assert prompt_info is not None
     summary = _response_summary(response)
     return {
         "name": stage["name"],
@@ -660,6 +785,11 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
         "port": stage["server"]["port"],
         "context_length": stage["server"]["context_length"],
         "prompt_kind": stage["prompt"]["kind"],
+        "prompt_char_count": prompt_info["prompt_char_count"],
+        "prompt_token_count": prompt_info["prompt_token_count"],
+        "prompt_token_min": prompt_info["prompt_token_min"],
+        "prompt_token_max": prompt_info["prompt_token_max"],
+        "prompt_token_adjustment_attempts": prompt_info["prompt_token_adjustment_attempts"],
         **summary,
         "server_log": summarize_server_log(stage["server"].get("log_file")),
     }
@@ -767,6 +897,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=DEFAULT_LONG_CONTEXT,
         help="Context length for the long-context DSA probe",
+    )
+    parser.add_argument(
+        "--min-prompt-tokens",
+        type=int,
+        default=DEFAULT_MIN_PROMPT_TOKENS,
+        help="Minimum actual prompt tokens verified through the live /tokenize endpoint before completion",
+    )
+    parser.add_argument(
+        "--prompt-context-guard-tokens",
+        type=int,
+        default=DEFAULT_PROMPT_CONTEXT_GUARD_TOKENS,
+        help="Prompt-token budget held back for chat template overhead and generated tokens",
     )
     parser.add_argument(
         "--kv-contexts",
