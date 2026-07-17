@@ -5920,6 +5920,19 @@ roles:
         buun CPU server generated 768 tokens at 4.82 t/s; scratch buun MI210
         server generated 1195 tokens at 29.04 t/s. These are fork-loader
         observations, not stock-v7 support.
+      quiet_gpu_quality_throughput_observation: >
+        2026-07-17 quiet MI210 fork-loader pass at
+        /mnt/raid0/llm/tmp/nemotron-diff14-quality-mi210-20260717T0900Z/
+        used the scratch buun HIP llama-server with diffusion self-spec enabled
+        and no concurrent llama/AutoPilot/Firefox/MegaSync load. Four
+        deterministic probes passed: exact minified JSON at 84.69 t/s over 10
+        completion tokens, a bolts arithmetic prompt at 37.33 t/s over 48
+        completion tokens, a simple code-edit prompt at 45.46 t/s over 16
+        completion tokens, and a 3072-token throughput prompt at 27.39 t/s
+        ending length-capped with 2378 words. Cleanup was verified: recorded
+        server PID exited with returncode 0 and ROCm returned to 0% / no VRAM
+        allocation. This is research-only fork-loader quality/throughput
+        evidence; stock experimental v7 still lacks a maintained loader path.
       context_sweep_observation: >
         2026-07-16 scratch buun MI210 context sweep generated at 29.93 t/s
         with 1153 prompt tokens, 26.18 t/s with 6433 prompt tokens, and
@@ -5933,6 +5946,7 @@ roles:
       - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_server_response.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/nemotron_diff14_buun_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/nemotron_diff14_q8_buun_mi210/summary.txt
+      - /mnt/raid0/llm/tmp/nemotron-diff14-quality-mi210-20260717T0900Z/summary.json
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c2048/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c8192/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c32768/summary.txt
