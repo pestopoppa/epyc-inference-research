@@ -8,6 +8,17 @@ This checkpoint records local artifact admission for the quiet-window model back
 - Lean production registry untouched: `/mnt/raid0/llm/epyc-orchestrator/orchestration/model_registry.yaml`.
 - Validation: `uv run --with pyyaml python scripts/validate_model_registry.py orchestration/model_registry.yaml` reports 0 errors and the same 11 pre-existing warnings for off-disk historical catalogue rows plus `ingest_long_context` section drift.
 
+## Benchmark Discipline
+
+Admission and serving decisions should use the fastest quality-clean lane that would actually be deployed: reasoning on/off, MTP/NEXTN, `ngram-mod`, KV quantization, GPU offload, CPU+GPU hybrid placement, and co-residency policy are part of the candidate when they are quality-clean. Baseline/no-spec rows remain useful as attribution controls, regression guards, and loader sanity checks, but they are not the primary serving metric. Every throughput row should be labeled as one of:
+
+| Row class | Use |
+|---|---|
+| Operational isolated | Primary serving metric for a single lane on a quiet host. |
+| Operational concurrent | Service-capacity metric when another resident or active lane is intentionally present. |
+| Control/baseline | Attribution or regression guard only; do not use as the deployment-speed claim unless no optimized lane exists. |
+| Debug/runnability | Loader, parser, or correctness investigation; never promote from speed alone. |
+
 ## Artifact Admission
 
 | Candidate | Local artifact state | Manifest/source evidence | First runnable gate |
