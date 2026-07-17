@@ -1,0 +1,62 @@
+{
+  "created_at": "2026-07-17T17:08:00Z",
+  "model": "ternary_q2_g64",
+  "model_path": "/mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-Q2_g64.gguf",
+  "build": "b10088-d1e5a20eb",
+  "measurement_class": "observation",
+  "decision_note": "Use as speed hypothesis and lane-sizing evidence only. The paired quality gate failed 2/8 probes, so this does not support a production role claim.",
+  "quality_gate": {
+    "summary_path": "data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/summary.json",
+    "status": "fail",
+    "passed": 6,
+    "total": 8,
+    "failed_probe": "short_instruction",
+    "failure_devices": [
+      "CPU",
+      "MI210"
+    ]
+  },
+  "control_llama_bench": {
+    "note": "Raw p512/tg128 baseline control, useful for apples-to-apples kernel sanity but not a realistic serving verdict.",
+    "mi210": {
+      "artifact": "/mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/mi210_p512_tg128_r1.json",
+      "prompt_tokens": 512,
+      "prompt_tps": 25.686052,
+      "decode_tokens": 128,
+      "decode_tps": 10.530261
+    },
+    "cpu": {
+      "artifact": "/mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cpu_p512_tg128_r1.json",
+      "prompt_tokens": 512,
+      "prompt_tps": 25.268101,
+      "decode_tokens": 128,
+      "decode_tps": 8.3872
+    }
+  },
+  "realistic_structured_copy_cli": {
+    "note": "Same 120-row JSON-copy prompt, deterministic sampling, MI210 full offload. Output still contained empty <think> tags despite reasoning-off, so this is speed-only.",
+    "mi210_baseline": {
+      "artifact": "/mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cli_realistic/mi210_cli_baseline.stdout",
+      "spec_type": "none",
+      "prompt_tps": 25.5,
+      "generation_tps": 9.8,
+      "wall_start": "2026-07-17T16:55:04+00:00",
+      "wall_end": "2026-07-17T16:59:09+00:00"
+    },
+    "mi210_ngram_mod": {
+      "artifact": "/mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cli_realistic/mi210_cli_ngram_mod.stdout",
+      "spec_type": "ngram-mod",
+      "prompt_tps": 25.6,
+      "generation_tps": 22.9,
+      "wall_start": "2026-07-17T16:59:09+00:00",
+      "wall_end": "2026-07-17T17:02:14+00:00",
+      "generation_speedup_vs_cli_baseline": 2.3367
+    },
+    "cpu_baseline_timeout": {
+      "artifact": "/mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cli_realistic/cpu_cli_baseline.stdout",
+      "stderr": "/mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cli_realistic/cpu_cli_baseline.stderr",
+      "timeout_s": 600,
+      "result": "timed_out_before_timing_line"
+    }
+  }
+}

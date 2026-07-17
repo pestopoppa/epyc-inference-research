@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Dry-run-first Bonsai-27B Q1_0 quality gate planner.
+"""Dry-run-first Bonsai/Ternary quality gate planner.
 
-This planner turns the documented "Bonsai Q1 quality gate before role claim"
-into an executable plan without loading any model. It writes a manifest and a
+This planner turns the documented "Bonsai quality gate before role claim" into
+an executable plan without loading any model. It writes a manifest and a
 companion shell script that pin the experimental v7 build-hip tree only.
 
 The gate is intentionally narrow:
-  - model: Bonsai-27B-Q1_0.gguf
+  - models: Bonsai-27B-Q1_0.gguf or Ternary-Bonsai-27B-Q2_g64.gguf
   - prompts: small deterministic prompt-obedience probes
   - command templates: CPU-only and MI210 experimental-v7 llama-cli invocations
   - default mode: dry-run only
@@ -17,6 +17,7 @@ No production v6 path is used as a default fallback.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import re
 import shlex
@@ -34,7 +35,6 @@ EXPERIMENTAL_BIN_DIR = EXPERIMENTAL_ROOT / "build-hip" / "bin"
 EXPERIMENTAL_LLAMA_CLI = EXPERIMENTAL_BIN_DIR / "llama-cli"
 EXPERIMENTAL_LD_LIBRARY_PATH = str(EXPERIMENTAL_BIN_DIR)
 
-MODEL_PATH = Path("/mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf")
 DEFAULT_THREADS = 96
 DEFAULT_CONTEXT = 2048
 DEFAULT_MAX_TOKENS = 64
@@ -43,6 +43,39 @@ DEFAULT_MI210_NGL = 99
 DEFAULT_TIMEOUT_S = 300
 GLM_PATTERN = "hf download unsloth/GLM-5.2-GGUF"
 AUTOPILOT_PATTERN = "scripts/autopilot/autopilot.py start"
+
+
+@dataclasses.dataclass(frozen=True)
+class ModelSpec:
+    key: str
+    gate_id: str
+    title: str
+    model_path: Path
+    output_subdir: str
+    arm_prefix: str
+    role_claim_label: str
+
+
+MODEL_SPECS: dict[str, ModelSpec] = {
+    "bonsai_q1": ModelSpec(
+        key="bonsai_q1",
+        gate_id="bonsai_q1_role_claim_gate",
+        title="Bonsai-27B Q1_0 quality/prompting gate",
+        model_path=Path("/mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf"),
+        output_subdir="bonsai_q1_quality_gate",
+        arm_prefix="bonsai_q1",
+        role_claim_label="Bonsai-27B Q1_0",
+    ),
+    "ternary_q2_g64": ModelSpec(
+        key="ternary_q2_g64",
+        gate_id="ternary_q2_g64_quality_gate",
+        title="Ternary Bonsai-27B Q2_g64 quality/throughput gate",
+        model_path=Path("/mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-Q2_g64.gguf"),
+        output_subdir="ternary_q2_g64_quality_gate",
+        arm_prefix="ternary_q2_g64",
+        role_claim_label="Ternary Bonsai-27B Q2_g64",
+    ),
+}
 
 PROBES = [
     {
@@ -170,7 +203,7 @@ def _base_prefix() -> list[str]:
     ]
 
 
-def _cpu_command(probe: dict[str, Any]) -> list[str]:
+def _cpu_command(probe: dict[str, Any], model: ModelSpec) -> list[str]:
     return _base_prefix() + [
         "--device",
         "none",
@@ -193,7 +226,7 @@ def _cpu_command(probe: dict[str, Any]) -> list[str]:
         "--seed",
         "1",
         "-m",
-        str(MODEL_PATH),
+        str(model.model_path),
         "-t",
         str(DEFAULT_THREADS),
         "-c",
@@ -207,7 +240,7 @@ def _cpu_command(probe: dict[str, Any]) -> list[str]:
     ]
 
 
-def _mi210_command(probe: dict[str, Any]) -> list[str]:
+def _mi210_command(probe: dict[str, Any], model: ModelSpec) -> list[str]:
     return _base_prefix() + [
         "--device",
         "ROCm0",
@@ -228,7 +261,7 @@ def _mi210_command(probe: dict[str, Any]) -> list[str]:
         "--seed",
         "1",
         "-m",
-        str(MODEL_PATH),
+        str(model.model_path),
         "-t",
         str(DEFAULT_THREADS),
         "-c",
@@ -246,14 +279,14 @@ def _template_shell(argv: list[str]) -> str:
     return shlex.join(argv)
 
 
-def _command_templates() -> list[dict[str, Any]]:
+def _command_templates(model: ModelSpec) -> list[dict[str, Any]]:
     commands: list[dict[str, Any]] = []
     for probe in PROBES:
-        cpu_argv = _cpu_command(probe)
-        mi210_argv = _mi210_command(probe)
+        cpu_argv = _cpu_command(probe, model)
+        mi210_argv = _mi210_command(probe, model)
         commands.extend([
             {
-                "arm": f"bonsai_q1_cpu_{probe['id']}",
+                "arm": f"{model.arm_prefix}_cpu_{probe['id']}",
                 "device": "none",
                 "role": "cpu_quality_baseline",
                 "probe_id": probe["id"],
@@ -263,7 +296,7 @@ def _command_templates() -> list[dict[str, Any]]:
                 "shell": _template_shell(cpu_argv),
             },
             {
-                "arm": f"bonsai_q1_mi210_{probe['id']}",
+                "arm": f"{model.arm_prefix}_mi210_{probe['id']}",
                 "device": "ROCm0",
                 "role": "gpu_quality_probe",
                 "probe_id": probe["id"],
@@ -276,16 +309,17 @@ def _command_templates() -> list[dict[str, Any]]:
     return commands
 
 
-def build_manifest(guards: GuardState, *, execute: bool = False) -> dict[str, Any]:
+def build_manifest(guards: GuardState, *, execute: bool = False, model_key: str = "bonsai_q1") -> dict[str, Any]:
+    model = MODEL_SPECS[model_key]
     blockers = list(guards.quiet_host_blockers)
     blockers.extend(guards.glm_download_blockers)
 
-    if not MODEL_PATH.is_file():
-        blockers.append(f"missing Bonsai Q1_0 model artifact: {MODEL_PATH}")
+    if not model.model_path.is_file():
+        blockers.append(f"missing {model.role_claim_label} model artifact: {model.model_path}")
     if not EXPERIMENTAL_LLAMA_CLI.is_file():
         blockers.append(f"missing experimental v7 llama-cli: {EXPERIMENTAL_LLAMA_CLI}")
 
-    command_templates = _command_templates()
+    command_templates = _command_templates(model)
     status = "ready" if not blockers else "blocked"
 
     return {
@@ -297,10 +331,11 @@ def build_manifest(guards: GuardState, *, execute: bool = False) -> dict[str, An
             "experimental_root": str(EXPERIMENTAL_ROOT),
             "experimental_binary": str(EXPERIMENTAL_LLAMA_CLI),
             "experimental_ld_library_path": EXPERIMENTAL_LD_LIBRARY_PATH,
-            "model_path": str(MODEL_PATH),
+            "model": model.key,
+            "model_path": str(model.model_path),
             "probe_count": len(PROBES),
             "role_claim_policy": (
-                "Do not claim Bonsai-27B Q1_0 as role-ready until every CPU and MI210 "
+                f"Do not claim {model.role_claim_label} as role-ready until every CPU and MI210 "
                 "probe satisfies its expected output without reasoning preambles, markdown, "
                 "or extra explanatory text."
             ),
@@ -318,12 +353,13 @@ def build_manifest(guards: GuardState, *, execute: bool = False) -> dict[str, An
             },
         },
         "gate": {
-            "gate_id": "bonsai_q1_role_claim_gate",
-            "title": "Bonsai-27B Q1_0 quality/prompting gate",
+            "gate_id": model.gate_id,
+            "title": model.title,
             "status": status,
             "dry_run_only": not execute,
             "exact_command_known": True,
-            "model_path": str(MODEL_PATH),
+            "model": model.key,
+            "model_path": str(model.model_path),
             "blockers": blockers,
             "acceptance_rule": (
                 "Every command template must satisfy its probe-specific expected output "
@@ -514,11 +550,17 @@ def run_execute(output_dir: Path, manifest: dict[str, Any], selected: list[str] 
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Dry-run-first Bonsai Q1_0 quality gate planner")
+    parser = argparse.ArgumentParser(description="Dry-run-first Bonsai/Ternary quality gate planner")
+    parser.add_argument(
+        "--model",
+        choices=sorted(MODEL_SPECS),
+        default="bonsai_q1",
+        help="Model artifact/gate to target. Default: bonsai_q1.",
+    )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=RESEARCH_ROOT / "data" / "bonsai_q1_quality_gate" / _utc_stamp(),
+        default=None,
         help="Directory for manifest.json, gate.json, and commands.sh",
     )
     parser.add_argument("--execute", action="store_true", help="Run the generated command templates after writing the plan")
@@ -527,21 +569,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def default_output_dir(model_key: str) -> Path:
+    return RESEARCH_ROOT / "data" / MODEL_SPECS[model_key].output_subdir / _utc_stamp()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    output_dir = args.output_dir or default_output_dir(args.model)
     guards = collect_guard_state()
-    manifest = build_manifest(guards, execute=args.execute)
-    write_artifacts(args.output_dir, manifest)
+    manifest = build_manifest(guards, execute=args.execute, model_key=args.model)
+    write_artifacts(output_dir, manifest)
 
-    print("Bonsai Q1_0 quality gate planner")
+    print("Bonsai/Ternary quality gate planner")
     print(f"mode: {'execute' if args.execute else 'dry_run'}")
-    print(f"output_dir: {args.output_dir}")
+    print(f"model: {args.model}")
+    print(f"output_dir: {output_dir}")
     print(f"experimental_binary: {EXPERIMENTAL_LLAMA_CLI}")
     print(f"experimental_ld_library_path: {EXPERIMENTAL_LD_LIBRARY_PATH}")
     print(f"quiet_host_ready: {guards.quiet_host_ready}")
     print(f"glm_download_active: {guards.glm_download_active}")
-    print(f"plan_file: {args.output_dir / 'manifest.json'}")
-    print(f"commands_file: {args.output_dir / 'commands.sh'}")
+    print(f"plan_file: {output_dir / 'manifest.json'}")
+    print(f"commands_file: {output_dir / 'commands.sh'}")
     if not args.execute:
         print("Dry run only. No inference was launched.")
         return 0
@@ -557,8 +605,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"FATAL: unknown --only arm(s): {', '.join(unknown)}", file=sys.stderr)
         return 2
 
-    summary = run_execute(args.output_dir, manifest, args.only, args.timeout)
-    print(f"summary_file: {args.output_dir / 'summary.json'}")
+    summary = run_execute(output_dir, manifest, args.only, args.timeout)
+    print(f"summary_file: {output_dir / 'summary.json'}")
     print(f"passed: {summary['passed']}/{summary['total']}")
     print(f"status: {summary['status']}")
     return 0

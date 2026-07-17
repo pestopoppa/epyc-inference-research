@@ -1,0 +1,20 @@
+{
+  "acceptance": {
+    "generated_text": "95",
+    "normalized_stdout": "95",
+    "passed": true,
+    "reason": "exact integer"
+  },
+  "arm": "ternary_q2_g64_mi210_simple_math",
+  "command": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-cli --device ROCm0 --simple-io --no-warmup --single-turn --no-display-prompt --no-show-timings --color off -no-cnv --reasoning off --reasoning-budget 0 --temp 0 --seed 1 -m /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-Q2_g64.gguf -t 96 -c 2048 -ngl 99 -n 32 -p 'Answer with only the integer result: 37 + 58'",
+  "device": "ROCm0",
+  "expected": "exact integer 95",
+  "probe_id": "simple_math",
+  "prompt": "Answer with only the integer result: 37 + 58",
+  "returncode": 0,
+  "role": "gpu_quality_probe",
+  "status": "pass",
+  "stderr_path": "data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/arms/ternary_q2_g64_mi210_simple_math/stderr.txt",
+  "stdout_path": "data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/arms/ternary_q2_g64_mi210_simple_math/stdout.txt",
+  "timeout_s": 420
+}

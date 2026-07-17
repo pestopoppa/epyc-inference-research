@@ -1,0 +1,20 @@
+{
+  "acceptance": {
+    "generated_text": "prevents overfitting, ensures generalization, measures true performance.",
+    "normalized_stdout": "prevents overfitting, ensures generalization, measures true performance.",
+    "passed": false,
+    "reason": "stdout was not exactly six lowercase words"
+  },
+  "arm": "ternary_q2_g64_mi210_short_instruction",
+  "command": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-cli --device ROCm0 --simple-io --no-warmup --single-turn --no-display-prompt --no-show-timings --color off -no-cnv --reasoning off --reasoning-budget 0 --temp 0 --seed 1 -m /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-Q2_g64.gguf -t 96 -c 2048 -ngl 99 -n 48 -p 'In exactly six lowercase words, describe why benchmarks need held-out tests.'",
+  "device": "ROCm0",
+  "expected": "six lowercase words, no punctuation-heavy explanation",
+  "probe_id": "short_instruction",
+  "prompt": "In exactly six lowercase words, describe why benchmarks need held-out tests.",
+  "returncode": 0,
+  "role": "gpu_quality_probe",
+  "status": "fail",
+  "stderr_path": "data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/arms/ternary_q2_g64_mi210_short_instruction/stderr.txt",
+  "stdout_path": "data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/arms/ternary_q2_g64_mi210_short_instruction/stdout.txt",
+  "timeout_s": 420
+}

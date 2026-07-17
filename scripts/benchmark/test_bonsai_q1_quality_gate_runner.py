@@ -37,6 +37,18 @@ def _fake_runner_factory(mapping: dict[str, list[str]]):
 
 
 class BonsaiQ1QualityGateRunnerTests(unittest.TestCase):
+    def _model_spec(self, key: str, model_path: Path) -> runner.ModelSpec:
+        base = runner.MODEL_SPECS[key]
+        return runner.ModelSpec(
+            key=base.key,
+            gate_id=base.gate_id,
+            title=base.title,
+            model_path=model_path,
+            output_subdir=base.output_subdir,
+            arm_prefix=base.arm_prefix,
+            role_claim_label=base.role_claim_label,
+        )
+
     def test_build_manifest_emits_pinned_experimental_v7_commands(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             model = Path(tmpdir) / "Bonsai-27B-Q1_0.gguf"
@@ -47,7 +59,7 @@ class BonsaiQ1QualityGateRunnerTests(unittest.TestCase):
             with (
                 mock.patch.object(runner, "EXPERIMENTAL_ROOT", Path(tmpdir)),
                 mock.patch.object(runner, "EXPERIMENTAL_BIN_DIR", binary.parent),
-                mock.patch.object(runner, "MODEL_PATH", model),
+                mock.patch.dict(runner.MODEL_SPECS, {"bonsai_q1": self._model_spec("bonsai_q1", model)}),
                 mock.patch.object(runner, "EXPERIMENTAL_LLAMA_CLI", binary),
                 mock.patch.object(runner, "EXPERIMENTAL_LD_LIBRARY_PATH", str(binary.parent)),
             ):
@@ -83,6 +95,28 @@ class BonsaiQ1QualityGateRunnerTests(unittest.TestCase):
                 self.assertIn("probe-specific expected output", manifest["gate"]["acceptance_rule"])
                 self.assertTrue(any(command["probe_id"] == "strict_json" for command in manifest["gate"]["command_templates"]))
 
+    def test_build_manifest_can_target_ternary_q2_g64(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model = Path(tmpdir) / "Ternary-Bonsai-27B-Q2_g64.gguf"
+            model.write_text("placeholder", encoding="utf-8")
+            binary = Path(tmpdir) / "llama-cli"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+
+            with (
+                mock.patch.object(runner, "EXPERIMENTAL_ROOT", Path(tmpdir)),
+                mock.patch.object(runner, "EXPERIMENTAL_BIN_DIR", binary.parent),
+                mock.patch.dict(runner.MODEL_SPECS, {"ternary_q2_g64": self._model_spec("ternary_q2_g64", model)}),
+                mock.patch.object(runner, "EXPERIMENTAL_LLAMA_CLI", binary),
+                mock.patch.object(runner, "EXPERIMENTAL_LD_LIBRARY_PATH", str(binary.parent)),
+            ):
+                guards = runner.GuardState([], False, [])
+                manifest = runner.build_manifest(guards, model_key="ternary_q2_g64")
+
+        self.assertEqual(manifest["gate"]["gate_id"], "ternary_q2_g64_quality_gate")
+        self.assertEqual(manifest["meta"]["model"], "ternary_q2_g64")
+        self.assertEqual(manifest["gate"]["model_path"], str(model))
+        self.assertTrue(all(command["arm"].startswith("ternary_q2_g64_") for command in manifest["gate"]["command_templates"]))
+
     def test_collect_guard_state_detects_glm_and_quiet_host_blockers(self):
         fake_runner = _fake_runner_factory(
             {
@@ -109,7 +143,7 @@ class BonsaiQ1QualityGateRunnerTests(unittest.TestCase):
             with (
                 mock.patch.object(runner, "EXPERIMENTAL_ROOT", Path(tmpdir)),
                 mock.patch.object(runner, "EXPERIMENTAL_BIN_DIR", binary.parent),
-                mock.patch.object(runner, "MODEL_PATH", model),
+                mock.patch.dict(runner.MODEL_SPECS, {"bonsai_q1": self._model_spec("bonsai_q1", model)}),
                 mock.patch.object(runner, "EXPERIMENTAL_LLAMA_CLI", binary),
                 mock.patch.object(runner, "EXPERIMENTAL_LD_LIBRARY_PATH", str(binary.parent)),
             ):
@@ -167,7 +201,7 @@ Exiting...
             with (
                 mock.patch.object(runner, "EXPERIMENTAL_ROOT", Path(tmpdir)),
                 mock.patch.object(runner, "EXPERIMENTAL_BIN_DIR", binary.parent),
-                mock.patch.object(runner, "MODEL_PATH", model),
+                mock.patch.dict(runner.MODEL_SPECS, {"bonsai_q1": self._model_spec("bonsai_q1", model)}),
                 mock.patch.object(runner, "EXPERIMENTAL_LLAMA_CLI", binary),
                 mock.patch.object(runner, "EXPERIMENTAL_LD_LIBRARY_PATH", str(binary.parent)),
                 mock.patch.object(runner.subprocess, "run", side_effect=fake_run),

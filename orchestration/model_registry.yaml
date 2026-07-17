@@ -6173,7 +6173,7 @@ roles:
 
   ternary_bonsai_27b_q2_g64:
     tier: C
-    description: PrismML Ternary Bonsai-27B Q2_g64 - staged variant; runtime support requires explicit v7/upstream check.
+    description: PrismML Ternary Bonsai-27B Q2_g64 - staged variant; runtime and preliminary throughput observed, quality gate blocks role claims.
     model:
       name: Ternary-Bonsai-27B-Q2_g64
       path: /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-Q2_g64.gguf
@@ -6199,9 +6199,9 @@ roles:
       forbid:
       - production_stack_registration_without_runtime_support_check
       - production_stack_registration_without_quality_gate
-      reason: "Variant-specific quant/runtime support is smoke-passed only on experimental v7; quality and throughput are not proven."
+      reason: "Variant-specific quant/runtime support is smoke-passed on experimental v7 and throughput has preliminary observations, but strict quality passed only 6/8 and blocks role registration."
     performance:
-      benchmark_status: experimental_v7_cpu_mi210_runtime_smoke_pass_quality_open
+      benchmark_status: experimental_v7_quality_throughput_partial_not_role_ready
       observed_date: 2026-07-17
       runtime_observation: >
         Pinned experimental-v7 direct `llama-cli` smoke at
@@ -6210,10 +6210,47 @@ roles:
         from both arms. Smoke stdout reports build `b10088-d1e5a20eb`; pinned
         version artifact reports `10088 (d1e5a20eb)`. Timing was intentionally
         suppressed for this runtime/coherence gate.
+      quality_observation: >
+        The generalized Bonsai/Ternary strict-output gate at
+        data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/summary.json
+        passed 6/8 probes: exact `ok`, minified JSON, and simple math passed on
+        CPU and MI210, while the short six-word instruction failed on both
+        devices. This blocks any role-ready claim.
+      control_llama_bench_observation:
+        class: observation
+        note: "Raw p512/tg128 control for apples-to-apples kernel sanity, not a realistic serving verdict."
+        mi210:
+          artifact: /mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/mi210_p512_tg128_r1.json
+          prompt_tps: 25.686052
+          decode_tps: 10.530261
+        cpu:
+          artifact: /mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cpu_p512_tg128_r1.json
+          prompt_tps: 25.268101
+          decode_tps: 8.3872
+      realistic_structured_copy_cli_observation:
+        class: observation
+        note: "120-row JSON-copy prompt; speed-only because both MI210 arms retained empty <think> tags despite reasoning-off."
+        mi210_baseline:
+          artifact: /mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cli_realistic/mi210_cli_baseline.stdout
+          spec_type: none
+          prompt_tps: 25.5
+          generation_tps: 9.8
+        mi210_ngram_mod:
+          artifact: /mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cli_realistic/mi210_cli_ngram_mod.stdout
+          spec_type: ngram-mod
+          prompt_tps: 25.6
+          generation_tps: 22.9
+          generation_speedup_vs_cli_baseline: 2.3367
+        cpu_baseline:
+          artifact: /mnt/raid0/llm/tmp/ternary-q2-g64-throughput-20260717Tcodex/cli_realistic/cpu_cli_baseline.stdout
+          result: timed_out_before_timing_line
+          timeout_s: 600
       evidence:
       - /mnt/raid0/llm/tmp/ternary-q2-g64-smoke-20260717T113848Z/cpu.stdout
       - /mnt/raid0/llm/tmp/ternary-q2-g64-smoke-20260717T113848Z/mi210.stdout
       - /mnt/raid0/llm/tmp/ternary-q2-g64-smoke-20260717T113848Z/version.pinned.txt
+      - data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/summary.json
+      - data/ternary_q2_g64_quality_gate/ternary_q2_g64_quality_20260717Tcodex/throughput_observation.json
     memory:
       residency: cold
       pinned: false
@@ -6221,8 +6258,8 @@ roles:
       gpu_only_candidate: true
       hybrid_candidate: false
     benchmark_plan:
-      cpu_only: "Runtime smoke passed; next CPU work is quality/throughput only if this variant remains useful."
-      gpu_only: "Runtime smoke passed; next MI210 work is quality/throughput only if this variant remains useful."
+      cpu_only: "Runtime and strict-output quality gate ran; CPU CLI structured-copy control timed out, while raw p512/tg128 control was 8.39 decode t/s. Reopen only for a narrower CPU lane or quality fix."
+      gpu_only: "Runtime and strict-output quality gate ran; MI210 ngram-mod structured-copy speedup is positive, but quality failure and <think> leakage block role use."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   bonsai_8b_local_orphan:
