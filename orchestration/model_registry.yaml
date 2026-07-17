@@ -6562,7 +6562,7 @@ roles:
 
   minicpm_o_45_local_multimodal:
     tier: C
-    description: MiniCPM-o-4_5 local multimodal/audio bundle; catalogue-only until runtime feature coverage is mapped.
+    description: MiniCPM-o-4_5 local multimodal/audio bundle; reasoning-off vision lane is K35 quality-clean with a frontdoor co-residency smoke, while audio/TTS coverage remains catalogue-only.
     model:
       name: MiniCPM-o-4_5
       huggingface_id: openbmb/MiniCPM-o-4_5-gguf
@@ -6611,16 +6611,17 @@ roles:
       type: none
     constraints:
       forbid:
-      - production_stack_registration_without_multimodal_runtime_gate
-      reason: "Bundle needs explicit llama.cpp modality support mapping and task-level smoke before stack use."
+      - production_stack_registration_without_activation_decision
+      reason: "Reasoning-off vision lane has runtime, task-level, and frontdoor co-residency smoke evidence; production stack use still needs an explicit activation/capacity decision."
     performance:
-      benchmark_status: k35_vision_candidate_pass_reasoning_off_gpu_service_policy_open
+      benchmark_status: k35_vision_candidate_pass_reasoning_off_coresidency_smoke_pass_activation_decision_open
       observed_date: 2026-07-17
       cpu_observation: "Text smoke passed during active GLM download: prompt 67.6 t/s, generation 9.5 t/s, returned `ok`."
       mi210_observation: "Text smoke passed during active GLM download: prompt 423.3 t/s, generation 107.2 t/s, returned `ok` plus stray `</think>`."
       long_cpu_observation: "2026-07-16 longer CPU server run generated 768 completion tokens at 7.69 t/s after a 62-token prompt; response had empty message.content despite nonzero completion tokens, so treat as throughput-only."
       long_mi210_observation: "2026-07-16 longer MI210 server run generated 1472 tokens at 107.20 t/s after an 84-token prompt."
-      k35_vision_observation: "2026-07-17 K35 fixed OCR/chart candidate gate: default reasoning mode routed correct answers into reasoning_content and failed message.content scoring (`0/4`) on CPU and MI210. With --reasoning off, CPU passed `4/4` at 11.98-14.13 t/s decode, and MI210 passed `4/4` at 110.81-122.18 t/s decode with 11% VRAM and ~0.96-1.20 GiB host RSS. This is the first quality-clean fast MiniCPM-o vision candidate, but production stack replacement remains gated on GPU service/concurrency policy."
+      k35_vision_observation: "2026-07-17 K35 fixed OCR/chart candidate gate: default reasoning mode routed correct answers into reasoning_content and failed message.content scoring (`0/4`) on CPU and MI210. With --reasoning off, CPU passed `4/4` at 11.98-14.13 t/s decode, and MI210 passed `4/4` at 110.81-122.18 t/s decode with 11% VRAM and ~0.96-1.20 GiB host RSS. This is the first quality-clean fast MiniCPM-o vision candidate."
+      k35_coresidency_observation: "2026-07-17 targeted service-policy smoke passed at /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/: MiniCPM-o reasoning-off MI210 server co-resided with the fastest validated MI210 frontdoor Qwen3.6 lane at 66% VRAM, both handled concurrent requests, MiniCPM-o answered the chart fixture as Tanzania, frontdoor decoded 512 text tokens at 99.97 t/s, and post-cleanup verification showed no llama-server/AutoPilot process plus 0% VRAM/no KFD PIDs. This is a co-residency smoke, not a broad service-level concurrency matrix or automatic live routing flip."
       evidence:
       - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/minicpm_q4_cpu_text_v7/minicpm_q4_cpu_text_v7.stdout
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-minicpm_q4_mi210_text_v7/minicpm_q4_mi210_text_v7.stdout
@@ -6628,6 +6629,8 @@ roles:
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/minicpm_q4_mi210/summary.txt
       - /mnt/raid0/llm/tmp/k35-minicpm-o45-candidate-20260717T1909Z/summary.json
       - /mnt/raid0/llm/tmp/k35-minicpm-o45-reasoning-off-20260717T1911Z/summary.json
+      - /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/summary.json
+      - /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/post_cleanup_verification.txt
     memory:
       residency: cold
       pinned: false

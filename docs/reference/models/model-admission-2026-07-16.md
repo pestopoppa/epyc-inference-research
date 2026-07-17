@@ -361,7 +361,9 @@ Evidence lives under `/mnt/raid0/llm/tmp/k35-minicpm-o45-candidate-20260717T1909
 
 The realistic lane is `--reasoning off`. With that flag, CPU MiniCPM-o passed the four fixed K35 OCR/chart fixtures (`7500`, `43.36`, `Tanzania`, `CS00012465`) at `11.98-14.13 t/s` decode. MI210 MiniCPM-o also passed `4/4` at `110.81-122.18 t/s` decode with about `11%` MI210 VRAM during requests and roughly `0.96-1.20 GiB` host RSS.
 
-Disposition: MiniCPM-o is now the first fast quality-clean `vision_escalation` candidate on the K35 fixture set, but it is an MI210 lane and should not be flipped into the live stack until GPU service/concurrency policy is checked against frontdoor residency. The CPU lane is quality-clean but slower than the current Qwen2.5-VL safety alias.
+Follow-up co-residency smoke lives under `/mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/`. It launched the fastest validated MI210 frontdoor lane beside MiniCPM-o `--reasoning off`; both servers were healthy together at `66%` MI210 VRAM, handled concurrent requests, and cleaned up fully. Frontdoor decoded `512` tokens at `99.97 t/s`; MiniCPM-o answered the chart fixture as `Tanzania`.
+
+Disposition: MiniCPM-o is now the first fast quality-clean `vision_escalation` candidate on the K35 fixture set, and the targeted frontdoor co-residency smoke passed. It is still not an automatic live-stack flip because a single smoke is not a broad service-level concurrency matrix. The remaining decision is whether to activate the MI210 lane now, keep the Qwen2.5-VL CPU safety alias, or require broader service/text-tax data first.
 
 ## Qwen3-VL-8B Image Runtime Smoke
 
@@ -400,7 +402,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 3. Investigate the Ternary Bonsai Q2_0 artifact/runtime offset mismatch before retrying. Q2_g64 is CPU+MI210 runtime-smoke passed and has preliminary throughput observations, including a positive MI210 `ngram-mod` structured-copy speed signal, but the strict quality gate passed only 6/8 and blocks any role claim; dspark variants failed separately.
 4. Qwable IQ4_XS standalone routing and broader representative quality are closed for the research registry: plain reasoning-off IQ4_XS is the preferred reasoning-heavy route, `ngram-mod` is neutral on the expanded slice, and scaffold remains only the beneficiary-must-answer fallback. Remaining work is production hosting/composite-route wiring, not model admission.
 5. Treat Nemotron-Nano BF16 as a quality-ceiling arm only after Q8_0 merits comparison. Nemotron-Cascade-2 is now historical/catalogue only; do not schedule inference absent an explicit Mamba2-hybrid revival study.
-6. Move beyond speed-only admission observations for Qwen3.5-9B MTP, Bonsai, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible. MiniCPM-o now has a K35 quality-clean vision candidate result gated on GPU service policy; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure.
+6. Move beyond speed-only admission observations for Qwen3.5-9B MTP, Bonsai, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible. MiniCPM-o now has a K35 quality-clean vision candidate result plus a targeted frontdoor co-residency smoke; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure.
 7. Keep generic GLM hot-expert offload/REAP deprioritized after the production-representative skew profile; reopen only with a narrower role-specific corpus or different placement mechanism.
 
 Opt-in command file: `docs/data/model_admission_smoke_commands_20260716.sh`.
