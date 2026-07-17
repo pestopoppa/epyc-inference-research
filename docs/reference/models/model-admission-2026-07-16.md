@@ -276,7 +276,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 2. Run Hy3 task-level quality / architecture-fit probes if the 295B/21B-active candidate remains interesting. MTP-on/off functional closure is done, and `draft-mtp` regressed vs no-spec in both CPU and MI210-hybrid samples.
 3. Investigate Ternary Bonsai Q2_0 and Q2_g64 artifact/runtime compatibility before retrying; ordinary Q1_0 and Bonsai-8B load/decode are already smoke-passed, while dspark variants failed.
 4. Run Qwable IQ4_XS vs Q8_0 standalone quality gates first; use scaffold only as the fallback path when the beneficiary must answer. Long MI210/CPU speed observations and strict-IQ4 prompt-only JSON are recorded; schema-mode acceptance still needs the bounded K22 follow-up.
-5. Treat Nemotron-Nano BF16 as a quality-ceiling arm only after Q8_0 merits comparison, and decide whether Nemotron-Cascade-2 remains active or historical catalogue.
+5. Treat Nemotron-Nano BF16 as a quality-ceiling arm only after Q8_0 merits comparison. Nemotron-Cascade-2 is now historical/catalogue only; do not schedule inference absent an explicit Mamba2-hybrid revival study.
 6. Move beyond speed-only admission observations for MiniCPM-o, Qwen3-VL-8B, Qwen3.5-9B MTP, Bonsai, Qwable, and Nemotron by adding task-level quality/acceptance probes where role candidacy remains plausible.
 7. Schedule exact-path DeepSeek/offload-style smokes only after the GLM DSA gate or when resource ownership is explicit; the GLM download itself is no longer active.
 

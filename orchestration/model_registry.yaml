@@ -1060,16 +1060,22 @@ roles:
       Elaborate on specialist outputs when presenting to users.
       Be direct — avoid filler, repetition, and unnecessary preamble.
   nemotron_cascade_2:
-    tier: B
-    description: Nemotron-Cascade 2 30B-A3B — Mamba2 hybrid MoE, 88% recurrent. FRONTDOOR CANDIDATE (2×48t = 51.1 t/s agg).
+    tier: D
+    deprecated: true
+    deprecated_date: 2026-07-17
+    deprecated_reason: >
+      Historical/catalogue artifact only. The old frontdoor-candidate posture
+      was based on observation-only TPS notes with no attached evidence bundle
+      or current quality/coherence gate. Do not schedule inference unless a
+      fresh Mamba2-hybrid study explicitly reopens this model.
+    description: Nemotron-Cascade 2 30B-A3B — Mamba2 hybrid MoE, 88% recurrent; historical/catalogue artifact.
     model:
       name: nvidia_Nemotron-Cascade-2-30B-A3B-Q4_K_M
       path: /mnt/raid0/llm/models/nemotron-cascade-2/nvidia_Nemotron-Cascade-2-30B-A3B-Q4_K_M.gguf
       quant: Q4_K_M
       size_gb: 24
       architecture: nemotron_h_moe
-    candidate_roles:
-    - frontdoor
+    candidate_roles: []
     acceleration:
       type: none  # tekken tokenizer — no compatible drafters. No spec decode.
     performance:
@@ -1077,6 +1083,7 @@ roles:
       numa_2x48t_agg: 51.1  # 2×48t same NUMA node, aggregate
       numa_2x48t_per_inst: 25.6
       numa_4x48t_agg: 40.6  # 4×48t, 75% degradation — cross-NUMA kills perf
+      evidence_status: observation_only_legacy_no_protocol
     memory:
       residency: warm
       pinned: false
@@ -1084,6 +1091,12 @@ roles:
       n_tokens: -1
       temperature: 0.2
     notes: |
+      2026-07-17 disposition: historical/catalogue only. July admission review
+      found no current loader/coherence smoke, no task-quality gate, no active
+      handoff driving promotion, and no decision-grade evidence bundle. The
+      Mamba2-hybrid architecture may be worth a future dedicated study, but this
+      row must not allocate backlog inference by default.
+
       Tokenizer is tekken (Mistral-family), NOT Qwen. No compatible draft models exist.
       Deploy as 2×48t on single NUMA node (taskset -c 0-47 / 48-95) with round-robin routing.
       Do NOT deploy 4×48t — cross-NUMA memory access causes 4x per-instance degradation.
