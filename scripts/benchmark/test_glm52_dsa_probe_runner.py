@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import json
+import io
 import tempfile
 import unittest
 from pathlib import Path
+from urllib.error import HTTPError
 
 import sys
 
@@ -229,6 +231,62 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
             self.assertIn("tokenstream", long_stage["prompt"]["task_line"])
             self.assertEqual(long_stage["prompt"]["answer_instruction"], runner.LONG_OUTPUT_ANSWER_INSTRUCTION)
 
+    def test_long_context_needle_options_are_reflected_in_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            model_dir = _make_shard_dir(tmp_path)
+            binary_dir = tmp_path / "bin"
+            binary_dir.mkdir()
+            binary = binary_dir / "llama-server"
+            binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            binary.chmod(0o755)
+
+            args = runner.parse_args(
+                [
+                    "--output",
+                    str(tmp_path / "plan.json"),
+                    "--model-dir",
+                    str(model_dir),
+                    "--binary",
+                    str(binary),
+                    "--library-path",
+                    str(binary_dir),
+                    "--long-task-line",
+                    "Return only the recovery code hidden in the context.",
+                    "--long-answer-instruction",
+                    "Answer with the recovery code only.",
+                    "--long-needle-text",
+                    "Recovery code: GLM52-NEEDLE-7F3A.",
+                    "--long-needle-depth",
+                    "0.75",
+                    "--long-expected-substring",
+                    "GLM52-NEEDLE-7F3A",
+                ]
+            )
+            inventory = runner.collect_inventory(model_dir)
+            plan = runner.build_plan(args, inventory, runner.resolve_binary(binary), runner.resolve_library_path(binary, binary_dir))
+
+            long_prompt = plan["stages"][2]["prompt"]
+
+            self.assertEqual(long_prompt["task_line"], "Return only the recovery code hidden in the context.")
+            self.assertEqual(long_prompt["answer_instruction"], "Answer with the recovery code only.")
+            self.assertEqual(long_prompt["needle_text"], "Recovery code: GLM52-NEEDLE-7F3A.")
+            self.assertEqual(long_prompt["needle_depth"], 0.75)
+            self.assertEqual(long_prompt["expected_substring"], "GLM52-NEEDLE-7F3A")
+
+    def test_prompt_builder_inserts_needle_text(self) -> None:
+        prompt = runner._build_prompt_from_chars(
+            "Return the recovery code.",
+            4000,
+            answer_instruction="Answer with only the code.",
+            needle_text="Recovery code: GLM52-NEEDLE-7F3A.",
+            needle_depth=0.5,
+        )
+
+        self.assertIn("--- NEEDLE RECORD ---", prompt)
+        self.assertIn("GLM52-NEEDLE-7F3A", prompt)
+        self.assertIn("Return the recovery code.", prompt)
+
     def test_prompt_token_floor_expands_until_live_tokenizer_count_passes_minimum(self) -> None:
         counts: list[int] = []
 
@@ -297,6 +355,67 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
         self.assertEqual(result["stages"][1], expected)
         self.assertEqual(result["stages"][2]["reason"], "not selected")
 
+    def test_run_execution_fails_on_acceptance_failure(self) -> None:
+        plan = {
+            "selected_stages": ["long_context_dsa_probe"],
+            "stages": [
+                {
+                    "name": "long_context_dsa_probe",
+                    "kind": "long_context_probe",
+                    "status": "ready",
+                    "prompt": {"task_line": "x", "context_length": 1, "kind": "long_context_probe"},
+                    "server": {"server_command": [], "port": 1, "context_length": 1, "log_file": None},
+                    "request": {"max_tokens": 1, "temperature": 0.0, "seed": 1},
+                },
+            ],
+        }
+        expected = {
+            "name": "long_context_dsa_probe",
+            "status": "failed_acceptance",
+            "port": 1,
+            "context_length": 1,
+            "prompt_kind": "long_context_probe",
+        }
+        original = runner.run_stage
+        try:
+            runner.run_stage = lambda stage: expected  # type: ignore[assignment]
+            result = runner.run_execution(plan)
+        finally:
+            runner.run_stage = original  # type: ignore[assignment]
+
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["stages"][0], expected)
+
+    def test_run_execution_fails_on_nested_kv_series_failure(self) -> None:
+        plan = {
+            "selected_stages": ["kv_length_scaling"],
+            "stages": [
+                {
+                    "name": "kv_length_scaling",
+                    "kind": "kv_length_scaling",
+                    "status": "ready",
+                    "fixed_indexer_top_k": 32,
+                    "series": [
+                        {
+                            "prompt": {"task_line": "x", "context_length": 1, "kind": "kv_length_scaling"},
+                            "server": {"server_command": [], "port": 1, "context_length": 1, "log_file": None},
+                            "request": {"max_tokens": 1, "temperature": 0.0, "seed": 1},
+                        }
+                    ],
+                },
+            ],
+        }
+        original = runner.run_stage
+        try:
+            runner.run_stage = lambda stage: {"name": "kv_length_scaling", "status": "failed_acceptance"}  # type: ignore[assignment]
+            result = runner.run_execution(plan)
+        finally:
+            runner.run_stage = original  # type: ignore[assignment]
+
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["stages"][0]["status"], "ok")
+        self.assertEqual(result["stages"][0]["series"][0]["status"], "failed_acceptance")
+
     def test_run_stage_records_completion_floor_pass(self) -> None:
         stage = {
             "name": "long_context_dsa_probe",
@@ -353,6 +472,128 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
         self.assertEqual(result["completion_token_min"], 2)
         self.assertEqual(result["completion_token_count"], 3)
         self.assertTrue(result["completion_token_min_passed"])
+        self.assertIsNone(result["expected_substring_passed"])
+
+    def test_run_stage_rejects_missing_expected_substring(self) -> None:
+        stage = {
+            "name": "long_context_dsa_probe",
+            "prompt": {
+                "task_line": "Return the hidden code.",
+                "context_length": 4096,
+                "kind": "long_context_probe",
+                "answer_instruction": runner.SHORT_ANSWER_INSTRUCTION,
+                "needle_text": "Recovery code: GLM52-NEEDLE-7F3A.",
+                "needle_depth": 0.5,
+                "expected_substring": "GLM52-NEEDLE-7F3A",
+            },
+            "server": {"server_command": [], "port": 1, "context_length": 4096, "log_file": None, "metrics": False},
+            "request": {
+                "max_tokens": 16,
+                "temperature": 0.0,
+                "seed": 1,
+                "timeout_s": 60,
+                "min_completion_tokens": 1,
+                "progress_poll_interval_s": 0,
+                "purpose": "coherence_plus_throughput",
+            },
+        }
+
+        class FakeProc:
+            pid = None
+
+        originals = (
+            runner.launch_server,
+            runner.wait_for_health,
+            runner.count_prompt_tokens,
+            runner.call_completion,
+            runner.terminate_server,
+        )
+        try:
+            runner.launch_server = lambda command: FakeProc()  # type: ignore[assignment]
+            runner.wait_for_health = lambda port: None  # type: ignore[assignment]
+            runner.count_prompt_tokens = lambda port, prompt, timeout_s: 100  # type: ignore[assignment]
+            runner.call_completion = lambda port, prompt, max_tokens, temperature, seed, timeout_s: {  # type: ignore[assignment]
+                "usage": {"prompt_tokens": 100, "completion_tokens": 3},
+                "timings": {"predicted_per_second": 12.5},
+                "choices": [{"message": {"content": "READY"}, "finish_reason": "stop"}],
+            }
+            runner.terminate_server = lambda proc: None  # type: ignore[assignment]
+            result = runner.run_stage(stage)
+        finally:
+            (
+                runner.launch_server,
+                runner.wait_for_health,
+                runner.count_prompt_tokens,
+                runner.call_completion,
+                runner.terminate_server,
+            ) = originals  # type: ignore[assignment]
+
+        self.assertEqual(result["status"], "failed_acceptance")
+        self.assertFalse(result["expected_substring_passed"])
+
+    def test_run_stage_records_http_500_as_failed_request(self) -> None:
+        stage = {
+            "name": "long_context_dsa_probe",
+            "prompt": {
+                "task_line": "Return the hidden code.",
+                "context_length": 4096,
+                "kind": "long_context_probe",
+                "answer_instruction": runner.SHORT_ANSWER_INSTRUCTION,
+                "needle_text": "Recovery code: GLM52-NEEDLE-7F3A.",
+                "needle_depth": 0.5,
+                "expected_substring": "GLM52-NEEDLE-7F3A",
+            },
+            "server": {"server_command": [], "port": 1, "context_length": 4096, "log_file": None, "metrics": False},
+            "request": {
+                "max_tokens": 16,
+                "temperature": 0.0,
+                "seed": 1,
+                "timeout_s": 60,
+                "min_completion_tokens": 1,
+                "progress_poll_interval_s": 0,
+                "purpose": "coherence_plus_throughput",
+            },
+        }
+
+        class FakeProc:
+            pid = None
+
+        def fake_completion(port, prompt, max_tokens, temperature, seed, timeout_s):
+            raise HTTPError(
+                url="http://127.0.0.1:1/v1/chat/completions",
+                code=500,
+                msg="Internal Server Error",
+                hdrs={},
+                fp=io.BytesIO(b'{"error":{"message":"bad peg-native"}}'),
+            )
+
+        originals = (
+            runner.launch_server,
+            runner.wait_for_health,
+            runner.count_prompt_tokens,
+            runner.call_completion,
+            runner.terminate_server,
+        )
+        try:
+            runner.launch_server = lambda command: FakeProc()  # type: ignore[assignment]
+            runner.wait_for_health = lambda port: None  # type: ignore[assignment]
+            runner.count_prompt_tokens = lambda port, prompt, timeout_s: 100  # type: ignore[assignment]
+            runner.call_completion = fake_completion  # type: ignore[assignment]
+            runner.terminate_server = lambda proc: None  # type: ignore[assignment]
+            result = runner.run_stage(stage)
+        finally:
+            (
+                runner.launch_server,
+                runner.wait_for_health,
+                runner.count_prompt_tokens,
+                runner.call_completion,
+                runner.terminate_server,
+            ) = originals  # type: ignore[assignment]
+
+        self.assertEqual(result["status"], "failed_request")
+        self.assertEqual(result["request_error"]["http_code"], 500)
+        self.assertIn("bad peg-native", result["request_error"]["body_preview"])
+        self.assertFalse(result["expected_substring_passed"])
 
     def test_run_stage_streaming_falls_back_to_completion_tokenize_count(self) -> None:
         stage = {

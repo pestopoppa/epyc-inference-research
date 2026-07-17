@@ -12,7 +12,7 @@ This checkpoint records local artifact admission for the quiet-window model back
 
 | Candidate | Local artifact state | Manifest/source evidence | First runnable gate |
 |---|---:|---|---|
-| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement; ✅ stale-binary true >64K CPU DSA probe processed `65,969` prompt tokens with Lightning Indexer enabled; ✅ current-source DSA cache/runtime wiring smoke passed after experimental-v7 `3dee86a5a`. Sparse-vs-dense classification and quality/needle gates remain open because prefill tapered to dense-looking speeds and current-source >64K quality is unmeasured. |
+| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement; ✅ stale-binary true >64K CPU DSA probe processed `65,969` prompt tokens with Lightning Indexer enabled; ✅ current-source DSA cache/runtime wiring smoke passed after experimental-v7 `3dee86a5a`; ❌ current-source 32K needle/coherence failed in both default-reasoning and reasoning-off modes with malformed `peg-native` output after full prompt ingest and 64-token decode. Sparse final-attention and viable acceleration remain useful only if output/task quality is recovered. |
 | Hy3 AngelSlim IQ1_M-mtp | Complete: `Hy3-IQ1_M-mtp.gguf`, 91,756,066,624 bytes, plus license, README, chat template, recipes, and two Hy3 llama.cpp patches. Experimental v7 commit `98a1ad8cf` now loads it after the Hy3 router-bias tensor-name fix. | HF metadata sidecar revision `218c93f0fb5227553b67e556b01dfe70fb70cf30`, LFS hash `f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13`. Capped CPU smoke loaded the model and returned `OK`; follow-up CPU and MI210-hybrid MTP/no-spec A/Bs both produced coherent output. | ✅ MTP-on/off functional closure recorded; no-spec is faster than `draft-mtp` in the measured CPU and MI210-hybrid samples. Next gate is task quality / architecture fit, not more first-load smoke. |
 | Bonsai-27B Q1_0 | Complete: `Bonsai-27B-Q1_0.gguf`, 3,803,452,480 bytes. | HF metadata sidecar revision `0cf7e3d21581b169b4df1de8bf01316000e2fbb7`, LFS hash `17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0`. | Text load smoke on production v6 is valid; public quality is contested, so quality gate before any role claim. |
 | Ternary Bonsai-27B Q2_0 | Complete: `Ternary-Bonsai-27B-Q2_0.gguf`, 7,165,121,600 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757`. | Runtime support check on refreshed v7/experimental before load smoke. Production v6 does not advertise Q2_0. |
@@ -118,6 +118,19 @@ Evidence:
 Both CPU-only current-source runs processed the same server-side prompt length (`11952` tokens) and decoded `512` tokens with streaming enabled. Baseline/no-spec recorded prompt eval `18.50 t/s` and decode `2.53 t/s`. The `ngram-mod` arm recorded prompt eval `18.75 t/s` and decode `2.54 t/s`; the server initialized `ngram-mod`, but final speculation stats were `#gen drafts = 0`, `#acc drafts = 0`, `#gen tokens = 0`, and `#acc tokens = 0`.
 
 Interpretation: baseline-only remains a control row, not a realistic operating target. However, `ngram-mod` is not a useful GLM-5.2 acceleration lane on this prompt/output shape. The next realistic speed path is native GLM-MTP/NEXTN, a real sparse final-attention path, or a different routing/quality role; do not schedule more GLM n-gram retests without a prompt class expected to repeat prompt text.
+
+## GLM-5.2 Current-Source 32K Needle/Coherence Probe
+
+Tracked summary: `data/glm52_dsa_probe/current_source_32k_needle_20260717T1755Z/summary.json`.
+
+Two CPU-only current-source 32K needle probes used the instrumented runner with `--min-prompt-tokens 24000`, fixed `glm-dsa.attention.indexer.top_k=32`, retained trace logs, and the hidden code `GLM52-NEEDLE-7F3A` inserted into the long-context filler.
+
+| Arm | Evidence | Result | Prompt eval | Decode |
+|---|---|---|---:|---:|
+| Default reasoning | `/mnt/raid0/llm/tmp/glm52-current-source-32k-needle-20260717T1723Z/logs/long_context_dsa_probe.server.log` | ❌ HTTP 500: generated output did not match expected `peg-native`; hidden code absent | `24041` tokens at `15.00 t/s` | `64` tokens at `2.49 t/s` |
+| `--reasoning off --reasoning-budget 0` | `/mnt/raid0/llm/tmp/glm52-current-source-32k-needle-reasoning-off-20260717T1755Z/plan.json` | ❌ `failed_request`; same `peg-native` parse failure; `expected_substring_passed=false` | `24034` server tokens at `15.41 t/s` | `64` tokens at `2.50 t/s` |
+
+Interpretation: current-source GLM-5.2 can ingest a 24K-token prompt through the DSA cache/runtime path, but it does not pass the long-context needle/coherence gate. This is acceptance evidence, not optimized-serving throughput evidence. Do not promote GLM into reviewer, architect, or long-context roles from load/runnability alone; the next useful GLM work is output-format/root-cause isolation, then task quality, before spending more effort on native GLM-MTP/NEXTN or sparse final attention.
 
 ## GLM-5.2 Expert-Routing Skew
 
@@ -366,7 +379,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 
 ## Next Queue
 
-1. Classify GLM-5.2 DSA sparse-vs-dense scaling and run a needle/coherence task. True >64K prompt execution is now recorded, but the prefill curve tapered to dense-looking speeds and the 16-token response was reasoning-only.
+1. Root-cause GLM-5.2 current-source 32K malformed `peg-native` output before any role claim. True >64K prompt execution is recorded as stale-binary runnability, current-source 32K needle/coherence now fails, and the prefill curve remains dense-looking.
 2. Run Hy3 task-level quality / architecture-fit probes if the 295B/21B-active candidate remains interesting. MTP-on/off functional closure is done, and `draft-mtp` regressed vs no-spec in both CPU and MI210-hybrid samples.
 3. Investigate the Ternary Bonsai Q2_0 artifact/runtime offset mismatch before retrying. Q2_g64 is CPU+MI210 runtime-smoke passed and has preliminary throughput observations, including a positive MI210 `ngram-mod` structured-copy speed signal, but the strict quality gate passed only 6/8 and blocks any role claim; dspark variants failed separately.
 4. Codify Qwable IQ4_XS standalone routing for reasoning-heavy tasks and run a broader representative quality suite. The first IQ4_XS vs Q8_0 task-quality slice passed `6/6` for both quants on MI210 and CPU; use scaffold only as the fallback path when the beneficiary must answer.

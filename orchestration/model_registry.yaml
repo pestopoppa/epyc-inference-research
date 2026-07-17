@@ -5617,7 +5617,7 @@ roles:
 
   glm_52_ud_iq2m:
     tier: B
-    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, and true >64K CPU DSA/indexer probe completed.
+    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, and current-source 32K needle/coherence failed on malformed peg-native output.
     model:
       name: GLM-5.2-UD-IQ2_M
       huggingface_id: unsloth/GLM-5.2-GGUF
@@ -5655,7 +5655,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Next classify sparse final attention, run current-source long-context needle/coherence through the instrumented long-output runner, and finish native GLM-MTP/NEXTN if GLM remains a realistic serving candidate; the blind current-source 96K attempt is explicitly excluded as non-evidence."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence now fails in both default-reasoning and reasoning-off modes with malformed peg-native output after full prompt ingest and 64-token decode. Next classify/fix the output-format failure before reviewer/task quality work, and only pursue native GLM-MTP/NEXTN or sparse final attention if quality is recovered; the blind current-source 96K attempt is explicitly excluded as non-evidence."
     candidate_roles:
     - architect
     - ingest
@@ -5668,9 +5668,9 @@ roles:
       forbid:
       - production_stack_registration
       - production_role_claim_without_dsa_quality_gate
-      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded, but sparse-vs-dense final-attention scaling, current-source long-context quality, viable acceleration, and reviewer/task quality are still unverified."
+      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded, but current-source 32K needle/coherence failed with malformed peg-native output; sparse final-attention, viable acceleration, and reviewer/task quality remain blocked."
     performance:
-      benchmark_status: current_source_dsa_cache_runtime_smoke_stale_true64k_engagement_quality_open
+      benchmark_status: current_source_32k_needle_failed_malformed_peg_native_quality_blocked
       short_smoke_observation: >
         2026-07-16 experimental v7 b10077-da1bf5e2f CPU-only llama-server
         loaded the six-shard UD-IQ2_M artifact. With reasoning auto, the model
@@ -5748,6 +5748,21 @@ roles:
         zero generated tokens, and zero accepted tokens. This rules out
         ngram-mod as a useful GLM acceleration lane for this prompt/output
         shape; baseline remains a control row only.
+      current_source_32k_needle_observation: >
+        2026-07-17 current-source CPU-only 32K needle/coherence probes failed
+        in both default-reasoning and reasoning-off modes. The default arm at
+        /mnt/raid0/llm/tmp/glm52-current-source-32k-needle-20260717T1723Z/
+        processed 24041 server-side prompt tokens at 15.00 t/s and decoded 64
+        tokens at 2.49 t/s before llama-server returned HTTP 500 because the
+        generated text did not match the expected peg-native format. The
+        reasoning-off arm at
+        /mnt/raid0/llm/tmp/glm52-current-source-32k-needle-reasoning-off-20260717T1755Z/plan.json
+        processed 24034 server-side prompt tokens at 15.41 t/s and decoded 64
+        tokens at 2.50 t/s, then failed the same peg-native parse path; the
+        expected substring GLM52-NEEDLE-7F3A was absent. Tracked summary:
+        data/glm52_dsa_probe/current_source_32k_needle_20260717T1755Z/summary.json.
+        This is long-context quality/acceptance evidence, not optimized
+        serving-throughput evidence.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated

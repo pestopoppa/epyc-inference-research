@@ -1,0 +1,57 @@
+{
+  "schema": "glm52_dsa_probe_summary.v1",
+  "model": "GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "kernel": {
+    "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+    "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+    "production_v6_touched": false
+  },
+  "classification": "current_source_32k_needle_failed_malformed_peg_native",
+  "decision_scope": "long_context_quality_acceptance_only_not_optimized_serving_throughput",
+  "expected_substring": "GLM52-NEEDLE-7F3A",
+  "arms": [
+    {
+      "name": "default_reasoning",
+      "artifact_dir": "/mnt/raid0/llm/tmp/glm52-current-source-32k-needle-20260717T1723Z",
+      "server_log": "/mnt/raid0/llm/tmp/glm52-current-source-32k-needle-20260717T1723Z/logs/long_context_dsa_probe.server.log",
+      "reasoning": "default",
+      "status": "failed_request",
+      "failure": "llama-server HTTP 500: generated output did not match expected peg-native format",
+      "expected_substring_passed": false,
+      "server_prompt_tokens": 24041,
+      "prompt_eval_tps": 15.0,
+      "decode_tokens": 64,
+      "decode_tps": 2.49,
+      "notes": "The pre-patch runner crashed on HTTPError before writing an execution block; the server log retains prompt/decode timing and the peg-native parse failure."
+    },
+    {
+      "name": "reasoning_off",
+      "artifact_dir": "/mnt/raid0/llm/tmp/glm52-current-source-32k-needle-reasoning-off-20260717T1755Z",
+      "plan": "/mnt/raid0/llm/tmp/glm52-current-source-32k-needle-reasoning-off-20260717T1755Z/plan.json",
+      "server_log": "/mnt/raid0/llm/tmp/glm52-current-source-32k-needle-reasoning-off-20260717T1755Z/logs/long_context_dsa_probe.server.log",
+      "reasoning": "off",
+      "extra_server_args": [
+        "--reasoning",
+        "off",
+        "--reasoning-budget",
+        "0"
+      ],
+      "status": "failed_request",
+      "failure": "llama-server HTTP 500: generated output did not match expected peg-native format",
+      "expected_substring_passed": false,
+      "runner_prompt_tokens": 24028,
+      "server_prompt_tokens": 24034,
+      "prompt_eval_tps": 15.41,
+      "decode_tokens": 64,
+      "decode_tps": 2.5,
+      "request_error": {
+        "type": "HTTPError",
+        "http_code": 500,
+        "message": "The model produced output that does not match the expected peg-native format"
+      },
+      "notes": "The patched runner retained a failed execution block with server-log timing and the HTTP 500 body."
+    }
+  ],
+  "interpretation": "Current-source GLM-5.2 DSA cache/runtime can process a 24K-token prompt, but the 32K-context needle/coherence gate failed in both default-reasoning and reasoning-off modes. This is not a speed decision; GLM optimized-serving work remains native GLM-MTP/NEXTN or real sparse final attention if quality is recovered."
+}

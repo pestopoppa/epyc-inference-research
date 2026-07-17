@@ -324,9 +324,19 @@ def _build_prompt_from_chars(
     task_line: str,
     target_chars: int,
     answer_instruction: str = SHORT_ANSWER_INSTRUCTION,
+    needle_text: str | None = None,
+    needle_depth: float = 0.5,
 ) -> str:
-    repeats = max(1, target_chars // len(FILLER_TEXT) + 1)
-    filler = (FILLER_TEXT * repeats)[:target_chars]
+    needle_block = ""
+    if needle_text:
+        needle_block = f"\n\n--- NEEDLE RECORD ---\n{needle_text}\n--- END NEEDLE RECORD ---\n\n"
+    filler_target_chars = max(0, target_chars - len(needle_block))
+    repeats = max(1, filler_target_chars // len(FILLER_TEXT) + 1)
+    filler = (FILLER_TEXT * repeats)[:filler_target_chars]
+    if needle_block:
+        depth = min(1.0, max(0.0, needle_depth))
+        insert_at = int(len(filler) * depth)
+        filler = f"{filler[:insert_at]}{needle_block}{filler[insert_at:]}"
     return (
         f"{filler}\n\n--- TASK ---\n"
         f"{task_line}\n"
@@ -338,11 +348,15 @@ def _build_prompt(
     task_line: str,
     context_length: int,
     answer_instruction: str = SHORT_ANSWER_INSTRUCTION,
+    needle_text: str | None = None,
+    needle_depth: float = 0.5,
 ) -> str:
     return _build_prompt_from_chars(
         task_line,
         _target_prompt_chars(context_length),
         answer_instruction=answer_instruction,
+        needle_text=needle_text,
+        needle_depth=needle_depth,
     )
 
 
@@ -353,8 +367,11 @@ def _prompt_spec(
     min_prompt_tokens: int,
     prompt_context_guard_tokens: int,
     answer_instruction: str = SHORT_ANSWER_INSTRUCTION,
+    needle_text: str | None = None,
+    needle_depth: float = 0.5,
+    expected_substring: str | None = None,
 ) -> dict[str, Any]:
-    return {
+    spec = {
         "kind": kind,
         "context_length": context_length,
         "task_line": task_line,
@@ -363,6 +380,12 @@ def _prompt_spec(
         "min_prompt_tokens": min_prompt_tokens,
         "prompt_context_guard_tokens": prompt_context_guard_tokens,
     }
+    if needle_text:
+        spec["needle_text"] = needle_text
+        spec["needle_depth"] = needle_depth
+    if expected_substring:
+        spec["expected_substring"] = expected_substring
+    return spec
 
 
 def _request_spec(
@@ -442,8 +465,14 @@ def selected_stage_names(args: argparse.Namespace) -> set[str] | None:
 
 def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path, library_path: Path) -> dict[str, Any]:
     short_task = "Return READY after the short load/decode smoke."
-    long_task = LONG_OUTPUT_TASK_LINE if args.long_output else "Return READY after the long-context DSA probe."
-    long_answer_instruction = LONG_OUTPUT_ANSWER_INSTRUCTION if args.long_output else SHORT_ANSWER_INSTRUCTION
+    long_task = (
+        args.long_task_line
+        or (LONG_OUTPUT_TASK_LINE if args.long_output else "Return READY after the long-context DSA probe.")
+    )
+    long_answer_instruction = (
+        args.long_answer_instruction
+        or (LONG_OUTPUT_ANSWER_INSTRUCTION if args.long_output else SHORT_ANSWER_INSTRUCTION)
+    )
     long_max_tokens = args.throughput_max_tokens if args.long_output else args.max_tokens
     long_min_completion_tokens = args.min_completion_tokens if args.long_output else 0
     long_progress_poll_interval = args.progress_poll_interval if args.long_output else 0
@@ -511,6 +540,9 @@ def build_plan(args: argparse.Namespace, inventory: dict[str, Any], binary: Path
                 args.min_prompt_tokens,
                 args.prompt_context_guard_tokens,
                 answer_instruction=long_answer_instruction,
+                needle_text=args.long_needle_text,
+                needle_depth=args.long_needle_depth,
+                expected_substring=args.long_expected_substring,
             ),
             "server": _server_spec(
                 binary=binary,
@@ -838,6 +870,7 @@ def _response_summary(response: dict[str, Any]) -> dict[str, Any]:
     content = message.get("content", "") if isinstance(message, dict) else ""
     reasoning_content = message.get("reasoning_content") if isinstance(message, dict) else None
     return {
+        "request_error": response.get("request_error"),
         "usage": response.get("usage", {}),
         "timings": response.get("timings", {}),
         "streaming": response.get("streaming", {}),
@@ -863,6 +896,21 @@ def _response_completion_text(response: dict[str, Any]) -> str:
     return "".join(parts)
 
 
+def _request_error_payload(exc: BaseException) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "type": type(exc).__name__,
+        "message": str(exc),
+    }
+    if isinstance(exc, urllib.error.HTTPError):
+        payload["http_code"] = exc.code
+        payload["http_reason"] = exc.reason
+        try:
+            payload["body_preview"] = exc.read().decode("utf-8", errors="replace")[:1000]
+        except Exception as body_exc:  # pragma: no cover - defensive only
+            payload["body_read_error"] = f"{type(body_exc).__name__}: {body_exc}"
+    return payload
+
+
 def build_prompt_with_token_floor(
     *,
     task_line: str,
@@ -872,6 +920,8 @@ def build_prompt_with_token_floor(
     prompt_context_guard_tokens: int,
     token_counter: Callable[[str], int],
     answer_instruction: str = SHORT_ANSWER_INSTRUCTION,
+    needle_text: str | None = None,
+    needle_depth: float = 0.5,
 ) -> dict[str, Any]:
     max_prompt_tokens = context_length - max_completion_tokens - prompt_context_guard_tokens
     if max_prompt_tokens <= 0:
@@ -887,7 +937,13 @@ def build_prompt_with_token_floor(
         )
 
     target_chars = _target_prompt_chars(context_length)
-    prompt = _build_prompt_from_chars(task_line, target_chars, answer_instruction=answer_instruction)
+    prompt = _build_prompt_from_chars(
+        task_line,
+        target_chars,
+        answer_instruction=answer_instruction,
+        needle_text=needle_text,
+        needle_depth=needle_depth,
+    )
     token_count = token_counter(prompt)
     attempts = 1
 
@@ -900,7 +956,13 @@ def build_prompt_with_token_floor(
         observed_chars_per_token = max(1.0, len(prompt) / max(token_count, 1))
         deficit = min_prompt_tokens - token_count
         target_chars += int(deficit * observed_chars_per_token * 1.10) + len(FILLER_TEXT)
-        prompt = _build_prompt_from_chars(task_line, target_chars, answer_instruction=answer_instruction)
+        prompt = _build_prompt_from_chars(
+            task_line,
+            target_chars,
+            answer_instruction=answer_instruction,
+            needle_text=needle_text,
+            needle_depth=needle_depth,
+        )
         token_count = token_counter(prompt)
         attempts += 1
 
@@ -1044,6 +1106,7 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
     stop_event = threading.Event()
     poll_thread: threading.Thread | None = None
     completion_tokens_from_tokenize: int | None = None
+    request_error: dict[str, Any] | None = None
     try:
         wait_for_health(stage["server"]["port"])
         tokenize_timeout = max(60, min(stage["request"]["timeout_s"], 600))
@@ -1054,6 +1117,8 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
             max_completion_tokens=stage["request"]["max_tokens"],
             prompt_context_guard_tokens=int(stage["prompt"].get("prompt_context_guard_tokens", 0)),
             answer_instruction=str(stage["prompt"].get("answer_instruction", SHORT_ANSWER_INSTRUCTION)),
+            needle_text=stage["prompt"].get("needle_text"),
+            needle_depth=float(stage["prompt"].get("needle_depth", 0.5)),
             token_counter=lambda prompt: count_prompt_tokens(stage["server"]["port"], prompt, tokenize_timeout),
         )
         poll_interval = int(stage["request"].get("progress_poll_interval_s", 0) or 0)
@@ -1069,25 +1134,34 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
                 daemon=True,
             )
             poll_thread.start()
-        if stage["request"].get("stream"):
-            response = call_completion_streaming(
-                stage["server"]["port"],
-                prompt_info["prompt"],
-                stage["request"]["max_tokens"],
-                stage["request"]["temperature"],
-                stage["request"]["seed"],
-                stage["request"]["timeout_s"],
-                progress_callback=lambda sample: stream_progress_samples.append(sample),
-            )
-        else:
-            response = call_completion(
-                stage["server"]["port"],
-                prompt_info["prompt"],
-                stage["request"]["max_tokens"],
-                stage["request"]["temperature"],
-                stage["request"]["seed"],
-                stage["request"]["timeout_s"],
-            )
+        try:
+            if stage["request"].get("stream"):
+                response = call_completion_streaming(
+                    stage["server"]["port"],
+                    prompt_info["prompt"],
+                    stage["request"]["max_tokens"],
+                    stage["request"]["temperature"],
+                    stage["request"]["seed"],
+                    stage["request"]["timeout_s"],
+                    progress_callback=lambda sample: stream_progress_samples.append(sample),
+                )
+            else:
+                response = call_completion(
+                    stage["server"]["port"],
+                    prompt_info["prompt"],
+                    stage["request"]["max_tokens"],
+                    stage["request"]["temperature"],
+                    stage["request"]["seed"],
+                    stage["request"]["timeout_s"],
+                )
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            request_error = _request_error_payload(exc)
+            response = {
+                "request_error": request_error,
+                "usage": {},
+                "timings": {},
+                "choices": [],
+            }
         min_completion_tokens = int(stage["request"].get("min_completion_tokens", 0) or 0)
         response_usage = response.get("usage", {}) if isinstance(response, dict) else {}
         response_completion_tokens = (
@@ -1126,11 +1200,21 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
         completion_tokens = completion_tokens_from_tokenize
         completion_token_count_source = "tokenize_completion_text"
     min_completion_tokens = int(stage["request"].get("min_completion_tokens", 0) or 0)
+    completion_text = _response_completion_text(response)
+    expected_substring = stage["prompt"].get("expected_substring")
+    expected_substring_passed = (
+        None if not expected_substring else str(expected_substring) in completion_text
+    )
     completion_token_min_passed = (
         min_completion_tokens == 0
         or (isinstance(completion_tokens, int) and completion_tokens >= min_completion_tokens)
     )
-    status = "ok" if completion_token_min_passed else "failed_completion_floor"
+    acceptance_passed = completion_token_min_passed and expected_substring_passed is not False
+    status = "ok" if acceptance_passed else "failed_acceptance"
+    if completion_token_min_passed is False:
+        status = "failed_completion_floor"
+    if request_error is not None:
+        status = "failed_request"
     return {
         "name": stage["name"],
         "status": status,
@@ -1147,6 +1231,8 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
         "completion_token_count": completion_tokens,
         "completion_token_count_source": completion_token_count_source,
         "completion_token_min_passed": completion_token_min_passed,
+        "expected_substring": expected_substring,
+        "expected_substring_passed": expected_substring_passed,
         "progress_metrics_samples": progress_samples,
         "stream_progress_samples_tail": stream_progress_samples[-120:],
         **summary,
@@ -1156,6 +1242,17 @@ def run_stage(stage: dict[str, Any]) -> dict[str, Any]:
 
 def _stage_selected(stage_name: str, selected: set[str] | None) -> bool:
     return selected is None or stage_name in selected
+
+
+def _execution_result_failed(result: dict[str, Any]) -> bool:
+    status = result.get("status")
+    if isinstance(status, str) and status.startswith("failed"):
+        return True
+    return any(
+        _execution_result_failed(item)
+        for item in result.get("series", [])
+        if isinstance(item, dict)
+    )
 
 
 def run_execution(plan: dict[str, Any]) -> dict[str, Any]:
@@ -1190,7 +1287,7 @@ def run_execution(plan: dict[str, Any]) -> dict[str, Any]:
             continue
         results.append(run_stage(stage))
     return {
-        "status": "ok" if all(result.get("status") != "failed_completion_floor" for result in results) else "failed",
+        "status": "failed" if any(_execution_result_failed(result) for result in results) else "ok",
         "stages": results,
     }
 
@@ -1267,6 +1364,32 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=DEFAULT_PROGRESS_POLL_INTERVAL,
         help="Seconds between /metrics samples during --long-output completion calls",
+    )
+    parser.add_argument(
+        "--long-task-line",
+        default=None,
+        help="Override the long-context task line; used for explicit needle/coherence probes.",
+    )
+    parser.add_argument(
+        "--long-answer-instruction",
+        default=None,
+        help="Override the long-context answer instruction.",
+    )
+    parser.add_argument(
+        "--long-needle-text",
+        default=None,
+        help="Needle text to insert into the long-context filler.",
+    )
+    parser.add_argument(
+        "--long-needle-depth",
+        type=float,
+        default=0.5,
+        help="Approximate insertion depth for --long-needle-text, in [0.0, 1.0].",
+    )
+    parser.add_argument(
+        "--long-expected-substring",
+        default=None,
+        help="Substring that must appear in the long-context completion for acceptance.",
     )
     parser.add_argument(
         "--only-stage",
