@@ -6775,6 +6775,311 @@ roles:
       gpu_only: "MI210 scaffold-generator throughput/quality smoke if the 4B treatment is revived."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
+  gemma4_26b_a4b_orig_q8_local:
+    tier: C
+    description: Gemma 4 26B-A4B ORIG Q8_0 exact local artifact; catalogue-only precision row.
+    model:
+      name: gemma-4-26B-A4B-it-ORIG-Q8_0
+      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 25.02
+      architecture: gemma4
+      reasoning: "off"
+    artifact_status:
+      download: present
+      observed_date: 2026-07-17
+      file_bytes: 26859859872
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - worker
+    - general
+    acceleration:
+      type: speculative_decoding_candidate
+      draft_role: draft_gemma4_26b_a4b_assistant_q8
+    constraints:
+      forbid:
+      - production_stack_registration_without_quality_speed_gate
+      reason: "The live worker uses the ORIG Q4_K_M row; Q8_0 needs matched speed/quality evidence before routing use."
+    performance:
+      benchmark_status: not_run_exact_artifact
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: true
+
+  gemma4_26b_a4b_orig_bf16_local:
+    tier: C
+    description: Gemma 4 26B-A4B ORIG bf16 exact local artifact; catalogue-only precision row.
+    model:
+      name: gemma-4-26B-A4B-it-ORIG-bf16
+      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-bf16.gguf
+      quant: bf16
+      size_gb: 47.04
+      architecture: gemma4
+      reasoning: "off"
+    artifact_status:
+      download: present
+      observed_date: 2026-07-17
+      file_bytes: 50505136032
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - quality_reference
+    - worker
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration_without_memory_plan
+      reason: "bf16 target is a quality/reference artifact; memory footprint is high and not a live worker candidate without a specific gate."
+    performance:
+      benchmark_status: not_run_exact_artifact
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: false
+      hybrid_candidate: true
+
+  gemma4_26b_a4b_ud_iq4xs_local:
+    tier: C
+    description: Gemma 4 26B-A4B UD-IQ4_XS exact local artifact; catalogue-only compression candidate.
+    model:
+      name: gemma-4-26B-A4B-it-UD-IQ4_XS
+      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf
+      quant: UD-IQ4_XS
+      size_gb: 12.66
+      architecture: gemma4
+      reasoning: "off"
+    artifact_status:
+      download: present
+      observed_date: 2026-07-17
+      file_bytes: 13597175584
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - worker
+    - compression_candidate
+    acceleration:
+      type: speculative_decoding_candidate
+      draft_role: draft_gemma4_26b_a4b_assistant_q8
+    constraints:
+      forbid:
+      - production_stack_registration_without_quality_retention_gate
+      reason: "Compression artifact may improve residency, but quality retention versus ORIG Q4_K_M is unmeasured."
+    performance:
+      benchmark_status: not_run_exact_artifact
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+
+  gemma4_26b_a4b_q4km_current_local:
+    tier: C
+    description: Gemma 4 26B-A4B Q4_K_M-current exact local artifact; catalogue-only row distinct from live ORIG Q4_K_M.
+    model:
+      name: gemma-4-26B-A4B-it-Q4_K_M-current
+      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M-current.gguf
+      quant: Q4_K_M
+      size_gb: 13.27
+      architecture: gemma4
+      reasoning: "off"
+    artifact_status:
+      download: present
+      observed_date: 2026-07-17
+      file_bytes: 14249045120
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - worker
+    - regression_control
+    acceleration:
+      type: speculative_decoding_candidate
+      draft_role: draft_gemma4_26b_a4b_assistant_q8
+    constraints:
+      forbid:
+      - production_stack_registration_without_v6_loader_quality_gate
+      reason: "The live row explicitly uses ORIG Q4_K_M because the older non-ORIG Q4 artifact garbled on v6; this exact artifact needs a fresh v7/v6 loader and quality gate."
+    performance:
+      benchmark_status: not_run_exact_artifact
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+
+  draft_gemma4_26b_a4b_assistant_v6_f16_local:
+    tier: C
+    description: Gemma 4 26B-A4B assistant v6 f16 exact local draft artifact; catalogue-only precision row.
+    model:
+      name: gemma-4-26B-A4B-it-assistant-v6-f16
+      path: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-f16.gguf
+      quant: f16
+      size_gb: 0.80
+      architecture: gemma4-assistant
+    artifact_status:
+      download: present
+      observed_date: 2026-07-17
+      file_bytes: 855228640
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - draft
+    acceleration:
+      type: draft_mtp_candidate
+    constraints:
+      forbid:
+      - production_stack_registration_without_draft_acceptance_gate
+      reason: "The live worker draft uses assistant v6 Q8_0; f16 draft needs acceptance/speed comparison before use."
+    performance:
+      benchmark_status: not_run_exact_artifact
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+
+  qwen36_27b_mtp_q8_local:
+    tier: C
+    description: Qwen3.6-27B MTP Q8_0 exact local artifact; catalogue-only MTP comparison row.
+    model:
+      name: Qwen3.6-27B-MTP-Q8_0
+      path: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 27.05
+      architecture: qwen35
+      mtp_capable: true
+    artifact_status:
+      download: present
+      observed_date: 2026-07-17
+      file_bytes: 29047084160
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - frontdoor
+    - worker
+    - reasoning
+    acceleration:
+      type: speculative_decoding
+      spec_type: native_mtp_candidate
+    constraints:
+      forbid:
+      - production_stack_registration_without_mtp_quality_gate
+      reason: "Exact MTP artifact is separate from the non-MTP Qwen3.6-27B rows and needs MTP acceptance plus quality evidence."
+    performance:
+      benchmark_status: not_run_exact_artifact
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: true
+
+  qwen36_27b_mtp_q4km_local:
+    tier: C
+    description: Qwen3.6-27B MTP Q4_K_M exact local artifact; catalogue-only MTP comparison row.
+    model:
+      name: Qwen3.6-27B-MTP-Q4_K_M
+      path: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 15.93
+      architecture: qwen35
+      mtp_capable: true
+    artifact_status:
+      download: present
+      observed_date: 2026-07-17
+      file_bytes: 17106773120
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - frontdoor
+    - worker
+    - reasoning
+    acceleration:
+      type: speculative_decoding
+      spec_type: native_mtp_candidate
+    constraints:
+      forbid:
+      - production_stack_registration_without_mtp_quality_gate
+      reason: "Exact MTP artifact is separate from the non-MTP Qwen3.6-27B rows and needs MTP acceptance plus quality evidence."
+    performance:
+      benchmark_status: not_run_exact_artifact
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+
+  qwen36_27b_mtp_f16_upcast_local:
+    tier: C
+    description: Qwen3.6-27B MTP f16-upcast exact local artifact; catalogue-only quality/reference row.
+    model:
+      name: Qwen3.6-27B-MTP-f16-upcast
+      path: /mnt/raid0/llm/models/Qwen3.6-27B-MTP-f16-upcast.gguf
+      quant: f16_upcast
+      size_gb: 50.90
+      architecture: qwen35
+      mtp_capable: true
+    artifact_status:
+      download: present
+      observed_date: 2026-07-17
+      file_bytes: 54657733760
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - quality_reference
+    - reasoning
+    acceleration:
+      type: speculative_decoding
+      spec_type: native_mtp_candidate
+    constraints:
+      forbid:
+      - production_stack_registration_without_memory_plan
+      reason: "f16-upcast artifact is too large for casual GPU residency and needs explicit CPU/GPU/hybrid memory planning before benchmarks."
+    performance:
+      benchmark_status: not_run_exact_artifact
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: false
+      hybrid_candidate: true
+
+  qwen35_27b_mtp_q4km_local:
+    tier: C
+    description: Qwen3.5-27B MTP Q4_K_M exact local artifact; catalogue-only MTP comparison row.
+    model:
+      name: Qwen3.5-27B-MTP-Q4_K_M
+      path: /mnt/raid0/llm/models/Qwen3.5-27B-MTP-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 15.93
+      architecture: qwen35
+      mtp_capable: true
+    artifact_status:
+      download: present
+      observed_date: 2026-07-17
+      file_bytes: 17106773056
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - frontdoor
+    - worker
+    - reasoning
+    acceleration:
+      type: speculative_decoding
+      spec_type: native_mtp_candidate
+    constraints:
+      forbid:
+      - production_stack_registration_without_mtp_quality_gate
+      reason: "Exact MTP artifact is separate from the non-MTP Qwen3.5-27B rows and needs MTP acceptance plus quality evidence."
+    performance:
+      benchmark_status: not_run_exact_artifact
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: false
+
   # =============================================================================
   # EXTERNAL API BACKENDS
   # =============================================================================
