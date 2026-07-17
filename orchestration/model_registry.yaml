@@ -6764,7 +6764,7 @@ roles:
 
   qwen35_9b_mtp_local_q4km:
     tier: C
-    description: Qwen3.5-9B MTP local Q4_K_M candidate; catalogue-only MTP comparison artifact.
+    description: Qwen3.5-9B MTP local Q4_K_M candidate; research-only MTP comparison artifact.
     model:
       name: Qwen3.5-9B-Q4_K_M
       path: /mnt/raid0/llm/models/Qwen3.5-9B-MTP-GGUF/Qwen3.5-9B-Q4_K_M.gguf
@@ -6788,9 +6788,9 @@ roles:
     constraints:
       forbid:
       - production_stack_registration_without_mtp_gate
-      reason: "MTP first acceptance/quality slice is task-class dependent: no-spec wins tiny completions, MTP wins long repetitive structured output. Broader role niche versus existing 35B frontdoor and worker models remains open."
+      reason: "MTP evidence is task-class dependent: no-spec wins tiny completions, MTP wins long repetitive structured output, and the broader 18-task slice kept the same 13/18 quality profile while improving speed modestly. Do not claim a broad frontdoor/worker role."
     performance:
-      benchmark_status: quiet_host_mi210_matched_mtp_ab_task_class_dependent_quality_open
+      benchmark_status: quiet_host_mi210_matched_mtp_task_class_dependent_structured_output_niche
       observed_date: 2026-07-17
       cpu_observation: "MTP smoke passed during active GLM download: prompt 35.8 t/s, generation 11.4 t/s; exact-output prompt emitted reasoning text."
       mi210_observation: "MTP smoke passed during active GLM download: prompt 114.6 t/s, generation 113.7 t/s; exact-output prompt emitted reasoning text."
@@ -6798,6 +6798,7 @@ roles:
       long_mi210_observation: "2026-07-16 longer MI210 server run with draft-mtp generated 1197 tokens at 99.44 t/s after an 84-token prompt; server reported draft acceptance 632/1128 (0.56028), mean length 2.12."
       quiet_mi210_short_task_ab: "2026-07-17 reasoning-off matched server A/B: no-spec and draft-mtp n=2 both passed 5/6 short exact tasks with reasoning_len=0; no-spec mean decode 124.77 t/s, MTP 109.28 t/s; MTP draft acceptance 30/30."
       quiet_mi210_long_structured_ab: "2026-07-17 reasoning-off matched long-output A/B: no-spec 95.08 t/s vs draft-mtp n=2 140.50 t/s over 1024 completion tokens; both produced all requested repeated tokens; MTP draft acceptance 682/682."
+      quiet_mi210_broader_task_ab: "2026-07-17 broader default+expanded deterministic slice: no-spec, draft-mtp n=2, and ngram-mod,draft-mtp n=2 all passed 13/18 with identical failed task ids; mean decode no-spec 105.88 t/s, draft-mtp 114.09 t/s, combined ngram->MTP 113.24 t/s; MTP acceptance 858/1160."
       evidence:
       - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/qwen35_9b_mtp_cpu_v7/qwen35_9b_mtp_cpu_v7.stdout
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-qwen35_9b_mtp_mi210_v7/qwen35_9b_mtp_mi210_v7.stdout
@@ -6805,6 +6806,7 @@ roles:
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwen35_9b_mtp_mi210/summary.txt
       - /mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-quality-20260717T202549Z/summary.json
       - /mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-longoutput-20260717T202636Z/summary.json
+      - /mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-broad-20260717T212947Z/summary.json
     memory:
       residency: cold
       pinned: false
@@ -6813,7 +6815,7 @@ roles:
       hybrid_candidate: false
     benchmark_plan:
       cpu_only: "CPU remains a control/regression guard; do not use CPU baseline as the serving metric unless no optimized lane exists."
-      gpu_only: "Broader MI210 role-quality/niche gate. Prefer no-spec for tiny completions; use native MTP for longer repetitive/structured outputs where acceptance amortizes overhead."
+      gpu_only: "Structured-output niche only. Prefer no-spec for tiny completions; use native MTP for longer repetitive/structured outputs where acceptance amortizes overhead. Combined ngram->MTP is safe/neutral on the broad slice, not preferred."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   qwen3_vl_8b_local_q4km:
