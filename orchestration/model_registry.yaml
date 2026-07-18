@@ -6407,7 +6407,8 @@ roles:
         mi210_hybrid_repaired_strict_suite_mean_prompt_tps: 22.33
         mi210_hybrid_repaired_strict_suite_mean_generation_tps: 11.43
         mi210_hybrid_context_sweep_evidence_dir: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3_mi210_hybrid_context_sweep_20260718Tmain
-        mi210_hybrid_context_sweep_observation: "2026-07-18 server/chat context sweep under the production-shaped hybrid lane measured nominal 2K at 1562 prompt / 310 completion tokens, prompt 71.31 t/s and decode 9.62 t/s; nominal 8K at 6030 prompt / 258 completion tokens, prompt 82.65 t/s and decode 9.37 t/s. 32K was skipped in this main-thread sweep and queued separately. Cleanup returned MI210 to 0% VRAM/no KFD PIDs."
+        mi210_hybrid_context_sweep_observation: "2026-07-18 server/chat context sweep under the production-shaped hybrid lane measured nominal 2K at 1562 prompt / 310 completion tokens, prompt 71.31 t/s and decode 9.62 t/s; nominal 8K at 6030 prompt / 258 completion tokens, prompt 82.65 t/s and decode 9.37 t/s. Follow-up 32K worker row measured 20171 prompt / 334 completion tokens, prompt 72.34 t/s and decode 8.61 t/s, with the requested marker present. Cleanup returned MI210 to 0% VRAM/no KFD PIDs."
+        mi210_hybrid_context32k_evidence_dir: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3_mi210_hybrid_context32k_20260718T201619Z
         task_quality_failed_task: lowercase_six_words
         classification: "draft-mtp functional but slower than no-spec; full MI210 residency is not feasible for the 91.8GB artifact. CPU and MI210-hybrid no-spec passed the first task-quality slice 5/6, a later CPU-only strict slice reproduced 5/6, and repaired strict-suite probes passed 7/7 on both CPU-only and production-shaped MI210-hybrid lanes. Hy3 remains research-only until broader role-policy/admission and context-throughput evidence land."
       hf_metadata:
@@ -7046,7 +7047,15 @@ roles:
         0-95 are still positive but observation-grade: pass@1 45/96, oracle
         pass@5 53/96, verifier-selected 49/96, selection accuracy 49/53
         (92.45%), and gap recovered 0.5. This supports miss analysis and a
-        repeated/decision-grade gate, not a deployment decision yet.
+        repeated/decision-grade gate, not a deployment decision yet. The
+        verifier-only known-miss replay at
+        /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_replay_known_misses_20260718T_main/summary.json
+        regenerated no beneficiary candidates, enabled solve-first judging, and
+        replayed 10 candidate-order permutations over the two known misses. It
+        recovered both `cruxeval_output_0057` and `cruxeval_output_0081` with
+        10/10 selected candidates passing. The exact selected source candidate
+        varied when multiple candidates were correct, so order sensitivity is
+        present but did not change pass/fail on this miss replay.
       long_decode_observation: >
         2026-07-16 longer server runs during active GLM download: CPU generated
         616 tokens at 13.71 t/s; MI210 generated 1322 tokens at 98.32 t/s.

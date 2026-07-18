@@ -176,3 +176,94 @@ class TestQwableVerifierSelectorRunner(TestCase):
         plan = runner.build_plan(args)
         self.assertFalse(plan["request"]["verifier_thinking"])
         self.assertFalse(plan["request"]["verifier_solve_first"])
+
+    def test_replay_plan_uses_existing_candidates_without_beneficiary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact = Path(tmp) / "artifact"
+            artifact.mkdir()
+            row = {
+                "status": "ok",
+                "qid": "cruxeval_output_0057",
+                "suite": "cruxeval",
+                "tier": 1,
+                "has_passing": True,
+                "n_passing": 1,
+                "verifier_selected_index": 0,
+                "verifier_selected_passing": False,
+                "candidates": [
+                    {"index": 0, "correct": False, "verifier_excerpt": "Extracted final answer:\nno"},
+                    {"index": 1, "correct": True, "verifier_excerpt": "Extracted final answer:\n1"},
+                ],
+            }
+            (artifact / "results.jsonl").write_text(json.dumps(row) + "\n", encoding="utf-8")
+            args = runner.parse_args([
+                "--replay-artifact",
+                str(artifact),
+                "--replay-known-misses",
+                "--replay-permute-solvable",
+            ])
+
+            plan = runner.build_replay_plan(args)
+
+            self.assertEqual(plan["schema"], "qwable_verifier_selector_replay_plan.v1")
+            self.assertTrue(plan["replay"]["no_beneficiary_regeneration"])
+            self.assertEqual(set(plan["servers"]), {"verifier"})
+            self.assertEqual(plan["replay"]["source_rows"], 1)
+            self.assertEqual(plan["replay"]["planned_cases"], 2)
+            self.assertEqual(plan["replay_cases"][0]["source_order"], [0, 1])
+            self.assertIn([1, 0], [case["source_order"] for case in plan["replay_cases"]])
+
+    def test_replay_only_misses_filters_non_misses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            artifact = Path(tmp) / "artifact"
+            artifact.mkdir()
+            rows = [
+                {
+                    "status": "ok",
+                    "qid": "miss",
+                    "has_passing": True,
+                    "verifier_selected_passing": False,
+                    "candidates": [{"index": 0, "correct": False}, {"index": 1, "correct": True}],
+                },
+                {
+                    "status": "ok",
+                    "qid": "hit",
+                    "has_passing": True,
+                    "verifier_selected_passing": True,
+                    "candidates": [{"index": 0, "correct": True}],
+                },
+                {
+                    "status": "ok",
+                    "qid": "unsolved",
+                    "has_passing": False,
+                    "verifier_selected_passing": None,
+                    "candidates": [{"index": 0, "correct": False}],
+                },
+            ]
+            (artifact / "results.jsonl").write_text(
+                "".join(json.dumps(row) + "\n" for row in rows),
+                encoding="utf-8",
+            )
+            args = runner.parse_args(["--replay-artifact", str(artifact), "--replay-only-misses"])
+
+            cases = runner.build_replay_cases(args)
+
+            self.assertEqual([case["qid"] for case in cases], ["miss"])
+
+    def test_replay_case_payload_uses_relabelled_candidates(self) -> None:
+        args = runner.parse_args(["--replay-artifact", "/tmp/nonexistent"])
+        question = {"prompt": "Choose the exact answer."}
+        case = {
+            "qid": "q1",
+            "candidates": [
+                {"index": 0, "source_index": 3, "verifier_excerpt": "Extracted final answer:\n1"},
+                {"index": 1, "source_index": 0, "verifier_excerpt": "Extracted final answer:\nno"},
+            ],
+        }
+
+        payload = runner.replay_case_payload(case, args, {"q1": question})
+
+        user_prompt = payload["messages"][1]["content"]
+        self.assertIn("### Candidate 0\nExtracted final answer:\n1", user_prompt)
+        self.assertIn("### Candidate 1\nExtracted final answer:\nno", user_prompt)
+        self.assertIn("First solve the problem independently", user_prompt)

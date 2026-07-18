@@ -57,6 +57,7 @@ DEFAULT_VERIFIER_MAX_TOKENS = 4096
 DEFAULT_REQUEST_TIMEOUT_S = 1200
 DEFAULT_STARTUP_TIMEOUT_S = 900
 DEFAULT_SEED = 42
+KNOWN_SELECTOR_MISSES = frozenset({"cruxeval_output_0057", "cruxeval_output_0081"})
 
 SANITIZED_ENV = {
     "HOME": "/tmp",
@@ -112,6 +113,34 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--request-timeout", type=int, default=DEFAULT_REQUEST_TIMEOUT_S)
     parser.add_argument("--startup-timeout", type=int, default=DEFAULT_STARTUP_TIMEOUT_S)
     parser.add_argument("--beneficiary-thinking", action="store_true")
+    replay = parser.add_argument_group("verifier-only replay")
+    replay.add_argument(
+        "--replay-artifact",
+        action="append",
+        type=Path,
+        help="Existing verifier_selector artifact directory to replay without regenerating beneficiary candidates.",
+    )
+    replay.add_argument(
+        "--replay-only-misses",
+        action="store_true",
+        help="Replay only rows with a passing candidate where the prior verifier selected a failing candidate.",
+    )
+    replay.add_argument(
+        "--replay-known-misses",
+        action="store_true",
+        help="Replay only the currently known selector misses from the 2026-07-18 rows 48-95 slice.",
+    )
+    replay.add_argument(
+        "--replay-permute-solvable",
+        action="store_true",
+        help="For rows with a passing candidate, add reverse and passing-candidate-first order permutations.",
+    )
+    replay.add_argument(
+        "--replay-max-rows",
+        type=int,
+        default=0,
+        help="Cap replay source rows after filters; 0 means all selected rows.",
+    )
     return parser.parse_args(argv)
 
 
@@ -250,6 +279,21 @@ def write_plan(args: argparse.Namespace, plan: dict[str, Any]) -> None:
         commands.append(spec["launch"])
     commands.append("")
     (args.output_dir / "plan.json").write_text(json.dumps(plan, indent=2, sort_keys=True), encoding="utf-8")
+    (args.output_dir / "commands.sh").write_text("\n".join(commands), encoding="utf-8")
+
+
+def write_replay_plan(args: argparse.Namespace, plan: dict[str, Any]) -> None:
+    args.output_dir.mkdir(parents=True, exist_ok=True)
+    (args.output_dir / "plan.json").write_text(json.dumps(plan, indent=2, sort_keys=True), encoding="utf-8")
+    verifier = plan["servers"]["verifier"]
+    commands = [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        "",
+        "# Verifier-only replay: beneficiary candidates are loaded from existing artifacts.",
+        verifier["launch"],
+        "",
+    ]
     (args.output_dir / "commands.sh").write_text("\n".join(commands), encoding="utf-8")
 
 
@@ -512,6 +556,140 @@ def verifier_payload(question: dict[str, Any], candidates: list[dict[str, Any]],
     }
 
 
+def load_replay_rows(artifact_dirs: list[Path]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for artifact_dir in artifact_dirs:
+        results_path = artifact_dir / "results.jsonl"
+        if not results_path.exists():
+            raise FileNotFoundError(results_path)
+        with results_path.open("r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                row["_artifact_dir"] = str(artifact_dir)
+                row["_artifact_line"] = line_number
+                rows.append(row)
+    return rows
+
+
+def filter_replay_rows(rows: list[dict[str, Any]], args: argparse.Namespace) -> list[dict[str, Any]]:
+    selected = [row for row in rows if row.get("status", "ok") == "ok"]
+    if args.replay_known_misses:
+        selected = [row for row in selected if row.get("qid") in KNOWN_SELECTOR_MISSES]
+    if args.replay_only_misses:
+        selected = [
+            row
+            for row in selected
+            if bool(row.get("has_passing")) and not bool(row.get("verifier_selected_passing"))
+        ]
+    if args.replay_max_rows:
+        selected = selected[: args.replay_max_rows]
+    return selected
+
+
+def replay_orders(row: dict[str, Any], *, permute_solvable: bool) -> list[list[int]]:
+    candidates = row.get("candidates") or []
+    base = [int(candidate.get("index", index)) for index, candidate in enumerate(candidates)]
+    orders = [base]
+    if not permute_solvable or not bool(row.get("has_passing")):
+        return orders
+    reverse = list(reversed(base))
+    if reverse != base:
+        orders.append(reverse)
+    for candidate in candidates:
+        source_index = int(candidate.get("index", 0))
+        if not bool(candidate.get("correct")) or source_index not in base:
+            continue
+        order = [source_index, *[index for index in base if index != source_index]]
+        if order not in orders:
+            orders.append(order)
+    return orders
+
+
+def relabel_candidates(row: dict[str, Any], order: list[int]) -> list[dict[str, Any]]:
+    by_index = {int(candidate.get("index", index)): candidate for index, candidate in enumerate(row.get("candidates") or [])}
+    relabeled: list[dict[str, Any]] = []
+    for label, source_index in enumerate(order):
+        source = dict(by_index[source_index])
+        source["source_index"] = source_index
+        source["index"] = label
+        relabeled.append(source)
+    return relabeled
+
+
+def build_replay_cases(args: argparse.Namespace) -> list[dict[str, Any]]:
+    if not args.replay_artifact:
+        return []
+    rows = filter_replay_rows(load_replay_rows(args.replay_artifact), args)
+    cases: list[dict[str, Any]] = []
+    for row in rows:
+        for permutation_id, order in enumerate(replay_orders(row, permute_solvable=args.replay_permute_solvable)):
+            relabeled = relabel_candidates(row, order)
+            cases.append(
+                {
+                    "qid": row.get("qid"),
+                    "suite": row.get("suite"),
+                    "tier": row.get("tier"),
+                    "source_artifact": row.get("_artifact_dir"),
+                    "source_line": row.get("_artifact_line"),
+                    "known_selector_miss": row.get("qid") in KNOWN_SELECTOR_MISSES,
+                    "prior_selected_index": row.get("verifier_selected_index"),
+                    "prior_selected_passing": row.get("verifier_selected_passing"),
+                    "has_passing": row.get("has_passing"),
+                    "n_passing": row.get("n_passing"),
+                    "permutation_id": permutation_id,
+                    "source_order": order,
+                    "candidates": relabeled,
+                }
+            )
+    return cases
+
+
+def build_replay_plan(args: argparse.Namespace) -> dict[str, Any]:
+    verifier_spec = server_specs(args)[1]
+    cases = build_replay_cases(args)
+    return {
+        "schema": "qwable_verifier_selector_replay_plan.v1",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "replay_execute" if args.execute else "replay_dry_run",
+        "evidence_grade": "observation",
+        "replay": {
+            "artifact_dirs": [str(path) for path in args.replay_artifact or []],
+            "only_misses": args.replay_only_misses,
+            "known_misses": args.replay_known_misses,
+            "permute_solvable": args.replay_permute_solvable,
+            "max_rows": args.replay_max_rows,
+            "source_rows": len({(case["source_artifact"], case["source_line"]) for case in cases}),
+            "planned_cases": len(cases),
+            "no_beneficiary_regeneration": True,
+            "known_selector_miss_ids": sorted(KNOWN_SELECTOR_MISSES),
+        },
+        "question_pool": str(args.question_pool),
+        "request": {
+            "seed": args.seed,
+            "verifier_max_tokens": args.verifier_max_tokens,
+            "verifier_temperature": args.verifier_temperature,
+            "verifier_thinking": args.verifier_thinking,
+            "verifier_solve_first": args.verifier_solve_first,
+            "request_timeout_s": args.request_timeout,
+            "startup_timeout_s": args.startup_timeout,
+        },
+        "servers": {
+            "verifier": {
+                "model_path": str(verifier_spec.model_path),
+                "port": verifier_spec.port,
+                "device": verifier_spec.device,
+                "ngl": verifier_spec.ngl,
+                "context": verifier_spec.context,
+                "threads": verifier_spec.threads,
+                "launch": shell_command(launch_argv(verifier_spec)),
+            }
+        },
+        "replay_cases": cases,
+    }
+
+
 INDEX_PATTERNS = [
     r"FINAL\s*[:\-]?\s*\[?\(?(\d+)",
     r"best\s+candidate\s*(?:is|:)?\s*\[?\(?(\d+)",
@@ -691,10 +869,136 @@ def execute(args: argparse.Namespace, plan: dict[str, Any]) -> int:
     return 0
 
 
+def question_lookup(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
+    questions = load_questions(args.question_pool, args.suite, args.tier)
+    return {str(question.get("id")): question for question in questions}
+
+
+def replay_case_payload(case: dict[str, Any], args: argparse.Namespace, questions: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    qid = str(case.get("qid"))
+    question = questions.get(qid)
+    if question is None:
+        raise KeyError(f"replay question {qid!r} not found in {args.question_pool}")
+    return verifier_payload(question, case["candidates"], args)
+
+
+def execute_replay(args: argparse.Namespace, plan: dict[str, Any]) -> int:
+    verifier = server_specs(args)[1]
+    if not verifier.model_path.exists():
+        raise FileNotFoundError(verifier.model_path)
+    response_dir = args.output_dir / "replay_responses"
+    response_dir.mkdir(parents=True, exist_ok=True)
+    results_path = args.output_dir / "results.jsonl"
+    questions = question_lookup(args)
+    rows: list[dict[str, Any]] = []
+    proc: subprocess.Popen[str] | None = None
+    try:
+        proc = launch_server(verifier, args.output_dir / "logs" / "verifier_replay.server.log")
+        wait_for_health(verifier, args.startup_timeout, proc.pid)
+        with results_path.open("w", encoding="utf-8") as handle:
+            for case in plan["replay_cases"]:
+                started = time.monotonic()
+                try:
+                    payload = replay_case_payload(case, args, questions)
+                    response = chat(verifier.port, payload, args.request_timeout)
+                    verifier_text = message_text(response)
+                    selected, parse_mode = parse_index(verifier_text, len(case["candidates"]))
+                    source_index = case["candidates"][selected]["source_index"]
+                    selected_passing = bool(case["candidates"][selected].get("correct"))
+                    row = {
+                        "status": "ok",
+                        "qid": case["qid"],
+                        "source_artifact": case["source_artifact"],
+                        "source_line": case["source_line"],
+                        "permutation_id": case["permutation_id"],
+                        "source_order": case["source_order"],
+                        "selected_label": selected,
+                        "selected_source_index": source_index,
+                        "selected_passing": selected_passing,
+                        "has_passing": bool(case["has_passing"]),
+                        "known_selector_miss": bool(case["known_selector_miss"]),
+                        "verifier_parse": parse_mode,
+                        "verifier_finish_reason": ((response.get("choices") or [{}])[0].get("finish_reason")),
+                        "verifier_usage": usage(response),
+                        "verifier_text_sha256": sha256_text(verifier_text),
+                        "verifier_head": verifier_text[:240],
+                        "verifier_tail": verifier_text[-360:],
+                    }
+                    response_path = response_dir / f"{case['qid']}.perm{case['permutation_id']}.verifier.json"
+                    response_path.write_text(json.dumps(response, indent=2, sort_keys=True), encoding="utf-8")
+                    row["response_path"] = str(response_path)
+                except Exception as exc:
+                    row = {
+                        "status": "error",
+                        "qid": case.get("qid"),
+                        "permutation_id": case.get("permutation_id"),
+                        "error": str(exc),
+                    }
+                row["wall_seconds"] = round(time.monotonic() - started, 3)
+                rows.append(row)
+                handle.write(json.dumps(row, sort_keys=True) + "\n")
+                handle.flush()
+    finally:
+        if proc is not None:
+            try:
+                terminate_server(proc)
+            finally:
+                log_handle = getattr(proc, "_qwable_verifier_log_handle", None)
+                if log_handle is not None:
+                    log_handle.close()
+        (args.output_dir / "post_pgrep.txt").write_text(process_snapshot(), encoding="utf-8")
+
+    ok_rows = [row for row in rows if row.get("status") == "ok"]
+    solvable_rows = [row for row in ok_rows if row.get("has_passing")]
+    selected_passing = sum(int(bool(row.get("selected_passing"))) for row in solvable_rows)
+    order_groups: dict[str, set[int]] = {}
+    for row in ok_rows:
+        order_groups.setdefault(str(row.get("qid")), set()).add(int(row.get("selected_source_index", -1)))
+    summary = {
+        "schema": "qwable_verifier_selector_replay_execute.v1",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "plan_path": str(args.output_dir / "plan.json"),
+        "results_path": str(results_path),
+        "replay": plan["replay"],
+        "metrics": {
+            "n_cases": len(rows),
+            "ok_cases": len(ok_rows),
+            "selection_accuracy_numerator": selected_passing,
+            "selection_accuracy_denominator": len(solvable_rows),
+            "selection_accuracy": (selected_passing / len(solvable_rows)) if solvable_rows else None,
+            "known_miss_recovered": sorted(
+                {
+                    str(row.get("qid"))
+                    for row in solvable_rows
+                    if row.get("known_selector_miss") and row.get("selected_passing")
+                }
+            ),
+            "order_sensitive_qids": sorted(qid for qid, selected in order_groups.items() if len(selected) > 1),
+        },
+        "plan": plan,
+    }
+    (args.output_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     (args.output_dir / "logs").mkdir(parents=True, exist_ok=True)
+    if args.replay_artifact:
+        plan = build_replay_plan(args)
+        write_replay_plan(args, plan)
+        print("Qwable verifier/selector replay runner")
+        print(f"mode: {'replay_execute' if args.execute else 'replay_dry_run'}")
+        print(f"output_dir: {args.output_dir}")
+        print(f"replay_artifacts: {', '.join(plan['replay']['artifact_dirs'])}")
+        print(f"planned_cases: {plan['replay']['planned_cases']}")
+        print("beneficiary_regeneration: false")
+        if not args.execute:
+            print(f"Plan written to {args.output_dir / 'plan.json'}")
+            print(f"Commands written to {args.output_dir / 'commands.sh'}")
+            return 0
+        return execute_replay(args, plan)
     plan = build_plan(args)
     write_plan(args, plan)
     print("Qwable verifier/selector runner")
