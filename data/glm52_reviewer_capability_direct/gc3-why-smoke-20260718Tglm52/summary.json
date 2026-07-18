@@ -1,0 +1,459 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "execution": {
+    "elapsed_s": 166.191,
+    "lanes": [
+      {
+        "context_length": 4096,
+        "elapsed_s": 166.19,
+        "grammar_constrained": false,
+        "indexer_top_k": 4096,
+        "lane": "free",
+        "score": {
+          "architecture": "glm_moe_dsa",
+          "kind": "glm_capability_result",
+          "model_key": "glm_52_ud_iq2m",
+          "model_name": "GLM-5.2-UD-IQ2_M",
+          "n": 3,
+          "n_tasks": 3,
+          "n_that_detected": 3,
+          "n_why_matched": 0,
+          "observation_only": true,
+          "per_task": [
+            {
+              "task_id": "wd-00",
+              "that_detected": true,
+              "why_matched": false
+            },
+            {
+              "task_id": "wd-01",
+              "that_detected": true,
+              "why_matched": false
+            },
+            {
+              "task_id": "wd-02",
+              "that_detected": true,
+              "why_matched": false
+            }
+          ],
+          "probe": "why_diagnosis",
+          "quant": "UD-IQ2_M",
+          "runner_version": "glm-reviewer-capability-probe-v1",
+          "that_detection_rate": 1.0,
+          "that_minus_why_gap": 1.0,
+          "why_match_rate": 0.0
+        },
+        "server_log": {
+          "bytes": 34044,
+          "decode_tokens": 25,
+          "decode_tps": 2.4,
+          "line_count": 384,
+          "matched_line_count": 152,
+          "matched_lines_tail": [
+            "0.07.557.961 I llama_kv_cache_dsa: creating indexer KV cache, size = 4096 cells",
+            "0.07.567.387 I resolve_fused_ops: resolving fused Lightning Indexer support:",
+            "0.07.568.447 I resolve_fused_ops: Lightning Indexer enabled",
+            "0.08.659.444 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 4096, kv_unified = 'true'",
+            "0.08.659.469 I slot   load_model: id  0 | task -1 | new slot, n_ctx = 4096",
+            "0.08.659.475 I slot   load_model: id  1 | task -1 | new slot, n_ctx = 4096",
+            "0.08.659.475 I slot   load_model: id  2 | task -1 | new slot, n_ctx = 4096",
+            "0.08.659.475 I slot   load_model: id  3 | task -1 | new slot, n_ctx = 4096",
+            "0.08.659.548 I srv          init: idle slots will be saved to prompt cache and cleared upon starting a new task",
+            "0.08.680.177 I srv  update_slots: all slots are idle",
+            "0.10.139.466 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1",
+            "0.10.139.486 I srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 4096 tokens, 8589934592 est)",
+            "0.10.139.515 I cmn  common_reaso: activated, budget=0 tokens",
+            "0.10.139.544 I slot launch_slot_: id  3 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+            "0.10.139.554 I slot launch_slot_: id  3 | task -1 | sampler params: ",
+            "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+            "0.10.139.557 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0",
+            "0.10.139.558 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+            "0.10.139.559 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+            "0.10.139.570 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+            "0.10.139.572 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+            "0.10.139.577 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+            "0.10.139.578 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+            "0.10.139.600 I slot   operator(): id  3 | task 0 | new prompt, n_ctx_slot = 4096, n_keep = 0, task.n_tokens = 2932",
+            "0.10.139.607 I slot   operator(): id  3 | task 0 | cached n_tokens = 0, memory_seq_rm [0, end)",
+            "1.28.479.104 I slot print_timing: id  3 | task 0 | prompt processing, n_tokens =   2048, progress = 0.70, t =  78.34 s / 26.14 tokens per second",
+            "1.28.479.112 I slot   operator(): id  3 | task 0 | cached n_tokens = 2048, memory_seq_rm [2048, end)",
+            "1.28.479.540 I slot init_sampler: id  3 | task 0 | init sampler, took 0.40 ms, tokens: text = 2932, total = 2932",
+            "2.19.448.692 I slot print_timing: id  3 | task 0 | prompt eval time =  118414.35 ms /  2932 tokens (   40.39 ms per token,    24.76 tokens per second)",
+            "2.19.448.699 I slot print_timing: id  3 | task 0 |        eval time =   10894.73 ms /    26 tokens (  419.03 ms per token,     2.39 tokens per second)",
+            "2.19.448.700 I slot print_timing: id  3 | task 0 |       total time =  129309.07 ms /  2958 tokens",
+            "2.19.448.705 I slot print_timing: id  3 | task 0 |    graphs reused =         25",
+            "2.19.448.806 I slot      release: id  3 | task 0 | stop processing: n_tokens = 2957, truncated = 0",
+            "2.19.448.819 I srv  update_slots: all slots are idle",
+            "2.19.468.168 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.992",
+            "2.19.468.197 I cmn  common_reaso: activated, budget=0 tokens",
+            "2.19.468.227 I slot launch_slot_: id  3 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+            "2.19.468.235 I slot launch_slot_: id  3 | task -1 | sampler params: ",
+            "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+            "2.19.468.239 I slot launch_slot_: id  3 | task 30 | processing task, is_child = 0",
+            "2.19.468.240 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+            "2.19.468.242 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+            "2.19.468.258 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+            "2.19.468.260 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+            "2.19.468.269 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+            "2.19.468.271 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+            "2.19.468.283 I slot   operator(): id  3 | task 30 | new prompt, n_ctx_slot = 4096, n_keep = 0, task.n_tokens = 2932",
+            "2.19.468.288 W slot   operator(): id  3 | task 30 | need to evaluate at least 1 token for each active slot (n_past = 2932, task.n_tokens() = 2932)",
+            "2.19.468.289 W slot   operator(): id  3 | task 30 | n_past was set to 2931",
+            "2.19.468.291 I slot   operator(): id  3 | task 30 | cached n_tokens = 2931, memory_seq_rm [2931, end)",
+            "2.19.468.803 I slot init_sampler: id  3 | task 30 | init sampler, took 0.48 ms, tokens: text = 2932, total = 2932",
+            "2.30.309.400 I slot print_timing: id  3 | task 30 | prompt eval time =     438.05 ms /     1 tokens (  438.05 ms per token,     2.28 tokens per second)",
+            "2.30.309.406 I slot print_timing: id  3 | task 30 |        eval time =   10403.06 ms /    25 tokens (  416.12 ms per token,     2.40 tokens per second)",
+            "2.30.309.407 I slot print_timing: id  3 | task 30 |       total time =   10841.11 ms /    26 tokens",
+            "2.30.309.408 I slot print_timing: id  3 | task 30 |    graphs reused =         50",
+            "2.30.309.486 I slot      release: id  3 | task 30 | stop processing: n_tokens = 2956, truncated = 0",
+            "2.30.309.498 I srv  update_slots: all slots are idle",
+            "2.30.329.177 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.992",
+            "2.30.329.198 I cmn  common_reaso: activated, budget=0 tokens",
+            "2.30.329.221 I slot launch_slot_: id  3 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+            "2.30.329.229 I slot launch_slot_: id  3 | task -1 | sampler params: ",
+            "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+            "2.30.329.233 I slot launch_slot_: id  3 | task 56 | processing task, is_child = 0",
+            "2.30.329.233 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+            "2.30.329.235 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+            "2.30.329.252 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+            "2.30.329.253 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+            "2.30.329.266 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+            "2.30.329.267 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+            "2.30.329.282 I slot   operator(): id  3 | task 56 | new prompt, n_ctx_slot = 4096, n_keep = 0, task.n_tokens = 2932",
+            "2.30.329.288 W slot   operator(): id  3 | task 56 | need to evaluate at least 1 token for each active slot (n_past = 2932, task.n_tokens() = 2932)",
+            "2.30.329.290 W slot   operator(): id  3 | task 56 | n_past was set to 2931",
+            "2.30.329.290 I slot   operator(): id  3 | task 56 | cached n_tokens = 2931, memory_seq_rm [2931, end)",
+            "2.30.329.804 I slot init_sampler: id  3 | task 56 | init sampler, took 0.48 ms, tokens: text = 2932, total = 2932",
+            "2.41.163.345 I slot print_timing: id  3 | task 56 | prompt eval time =     435.99 ms /     1 tokens (  435.99 ms per token,     2.29 tokens per second)",
+            "2.41.163.350 I slot print_timing: id  3 | task 56 |        eval time =   10398.06 ms /    25 tokens (  415.92 ms per token,     2.40 tokens per second)",
+            "2.41.163.351 I slot print_timing: id  3 | task 56 |       total time =   10834.05 ms /    26 tokens",
+            "2.41.163.352 I slot print_timing: id  3 | task 56 |    graphs reused =         75",
+            "2.41.163.428 I slot      release: id  3 | task 56 | stop processing: n_tokens = 2956, truncated = 0",
+            "2.41.163.444 I srv  update_slots: all slots are idle"
+          ],
+          "max_decoded_checkpoint": null,
+          "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/logs/why_diagnosis__free__p2168_tk4096.server.log",
+          "prompt_eval_tokens": 1,
+          "prompt_eval_tps": 2.29,
+          "status": "ok"
+        },
+        "status": "ok",
+        "task_results": [
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/artifacts/free__wd-00.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/artifacts/free__wd-00.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/artifacts/free__wd-00.response.json"
+            },
+            "channels": {
+              "combined": "The candidate text is truncated mid-word at the end, indicating the root failure cause is an incomplete generation or output truncation.",
+              "content": "The candidate text is truncated mid-word at the end, indicating the root failure cause is an incomplete generation or output truncation.",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "finish_reason": "stop",
+            "prompt_char_count": 15850,
+            "prompt_token_count": 2926,
+            "prompt_token_min": 2168,
+            "request_error": null,
+            "scoring_text": "The candidate text is truncated mid-word at the end, indicating the root failure cause is an incomplete generation or output truncation.",
+            "status": "ok",
+            "task_id": "wd-00",
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 10894.728,
+              "predicted_n": 26,
+              "predicted_per_second": 2.386475366801264,
+              "predicted_per_token_ms": 419.02799999999996,
+              "prompt_ms": 118414.347,
+              "prompt_n": 2932,
+              "prompt_per_second": 24.760513183423626,
+              "prompt_per_token_ms": 40.38688506139154
+            },
+            "usage": {
+              "completion_tokens": 26,
+              "prompt_tokens": 2932,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 2958
+            }
+          },
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/artifacts/free__wd-01.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/artifacts/free__wd-01.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/artifacts/free__wd-01.response.json"
+            },
+            "channels": {
+              "combined": "The candidate text is truncated mid-word at the end, indicating the root failure cause is an incomplete generation or output cutoff.",
+              "content": "The candidate text is truncated mid-word at the end, indicating the root failure cause is an incomplete generation or output cutoff.",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "finish_reason": "stop",
+            "prompt_char_count": 15850,
+            "prompt_token_count": 2926,
+            "prompt_token_min": 2168,
+            "request_error": null,
+            "scoring_text": "The candidate text is truncated mid-word at the end, indicating the root failure cause is an incomplete generation or output cutoff.",
+            "status": "ok",
+            "task_id": "wd-01",
+            "timings": {
+              "cache_n": 2931,
+              "predicted_ms": 10403.058,
+              "predicted_n": 25,
+              "predicted_per_second": 2.403139538393422,
+              "predicted_per_token_ms": 416.12232000000006,
+              "prompt_ms": 438.047,
+              "prompt_n": 1,
+              "prompt_per_second": 2.2828600583955603,
+              "prompt_per_token_ms": 438.047
+            },
+            "usage": {
+              "completion_tokens": 25,
+              "prompt_tokens": 2932,
+              "prompt_tokens_details": {
+                "cached_tokens": 2931
+              },
+              "total_tokens": 2957
+            }
+          },
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/artifacts/free__wd-02.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/artifacts/free__wd-02.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/artifacts/free__wd-02.response.json"
+            },
+            "channels": {
+              "combined": "The candidate text is truncated mid-word at the end, indicating the root failure cause is an incomplete generation or output cutoff.",
+              "content": "The candidate text is truncated mid-word at the end, indicating the root failure cause is an incomplete generation or output cutoff.",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "finish_reason": "stop",
+            "prompt_char_count": 15850,
+            "prompt_token_count": 2926,
+            "prompt_token_min": 2168,
+            "request_error": null,
+            "scoring_text": "The candidate text is truncated mid-word at the end, indicating the root failure cause is an incomplete generation or output cutoff.",
+            "status": "ok",
+            "task_id": "wd-02",
+            "timings": {
+              "cache_n": 2931,
+              "predicted_ms": 10398.063,
+              "predicted_n": 25,
+              "predicted_per_second": 2.404293953595011,
+              "predicted_per_token_ms": 415.92252,
+              "prompt_ms": 435.988,
+              "prompt_n": 1,
+              "prompt_per_second": 2.2936411093883318,
+              "prompt_per_token_ms": 435.988
+            },
+            "usage": {
+              "completion_tokens": 25,
+              "prompt_tokens": 2932,
+              "prompt_tokens_details": {
+                "cached_tokens": 2931
+              },
+              "total_tokens": 2957
+            }
+          }
+        ]
+      }
+    ],
+    "post_processes": [
+      {
+        "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+        "pid": 1849379
+      },
+      {
+        "command": "python3 scripts/benchmark/glm52_reviewer_capability_direct_runner.py --execute --probe why_diagnosis --m 3 --output-dir /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52",
+        "pid": 2472168
+      }
+    ],
+    "status": "ok"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-18T02:24:44.076659+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "k": 2,
+  "lanes": [
+    {
+      "band": {
+        "context_length": 4096,
+        "indexer_top_k": 4096,
+        "min_prompt_tokens": 2168,
+        "name": "p2168_tk4096",
+        "prompt_context_guard_tokens": 128
+      },
+      "grammar_constrained": false,
+      "lane": "free",
+      "request": {
+        "endpoint": "chat",
+        "max_tokens": 192,
+        "seed": 42,
+        "temperature": 0.0,
+        "timeout_s": 1800
+      },
+      "server": {
+        "context_length": 4096,
+        "extra_args": [
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "indexer_top_k": 4096,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:4096",
+        "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/logs/why_diagnosis__free__p2168_tk4096.server.log",
+        "metrics": false,
+        "port": 19520,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:4096",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19520",
+          "-c",
+          "4096",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/logs/why_diagnosis__free__p2168_tk4096.server.log",
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:4096 --device none -ngl 0 --host 127.0.0.1 --port 19520 -c 4096 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/logs/why_diagnosis__free__p2168_tk4096.server.log --reasoning-format deepseek --reasoning off --reasoning-budget 0",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      }
+    }
+  ],
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "m": 3,
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "n_tasks": 3,
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52",
+  "preexisting_processes": [
+    {
+      "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+      "pid": 1849379
+    },
+    {
+      "command": "python3 scripts/benchmark/glm52_reviewer_capability_direct_runner.py --execute --probe why_diagnosis --m 3 --output-dir /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52",
+      "pid": 2472168
+    }
+  ],
+  "probe": "why_diagnosis",
+  "refusal_reasons": [],
+  "schema": "glm52_reviewer_capability_direct.v1",
+  "task_parse_errors": [],
+  "task_set_id": null,
+  "tasks": [
+    {
+      "prompt_sha256": "1be158448acaf2068a21b1d92ce9dc32ab9453af0e6c1f32b8c380b5ff7c4397",
+      "task_id": "wd-00"
+    },
+    {
+      "prompt_sha256": "1be158448acaf2068a21b1d92ce9dc32ab9453af0e6c1f32b8c380b5ff7c4397",
+      "task_id": "wd-01"
+    },
+    {
+      "prompt_sha256": "1be158448acaf2068a21b1d92ce9dc32ab9453af0e6c1f32b8c380b5ff7c4397",
+      "task_id": "wd-02"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"schema_version\": \"1.0.0\",\n  \"rubric_id\": \"glm_dsa_probe_rubric\",\n  \"version\": \"1.0.0\",\n  \"domain\": \"qa\",\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Does the response provide a valid JSON object that conforms to the requested schema?\",\n      \"axis\": \"format\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R2\",\n      \"text\": \"Does the response include the required top-level fields: schema_version, rubric_id, version, domain, and items?\",\n      \"axis\": \"completeness\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R3\",\n      \"text\": \"Does each item in the items array include the required fields: id, text, axis, and weight?\",\n      \"axis\": \"completeness\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R4\",\n      \"text\": \"Is each item's text phrased as a checkable question?\",\n      \"axis\": \"quality\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R5\",\n      \"text\": \"Does the rubric address the key concepts from the task description, such as deterministic context, shard integrity, load behavior, KV scaling, and fixed indexer configuration?\",\n      \"axis\": \"relevance\",\n      \"weight\": 1\n    }\n  ]\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784341314,
+  "id": "chatcmpl-o9yg31Dd5uOuNZDA4vwFhMzdOgF5dPNZ",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 2963,
+    "predicted_ms": 140124.316,
+    "predicted_n": 321,
+    "predicted_per_second": 2.290822957522947,
+    "predicted_per_token_ms": 436.5243489096573,
+    "prompt_ms": 450.499,
+    "prompt_n": 1,
+    "prompt_per_second": 2.2197607541859137,
+    "prompt_per_token_ms": 450.499
+  },
+  "usage": {
+    "completion_tokens": 321,
+    "prompt_tokens": 2964,
+    "prompt_tokens_details": {
+      "cached_tokens": 2963
+    },
+    "total_tokens": 3285
+  }
+}

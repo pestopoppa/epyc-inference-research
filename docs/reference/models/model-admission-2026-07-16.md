@@ -23,7 +23,7 @@ Admission and serving decisions should use the fastest quality-clean lane that w
 
 | Candidate | Local artifact state | Manifest/source evidence | First runnable gate |
 |---|---:|---|---|
-| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement; ✅ stale-binary true >64K CPU DSA probe processed `65,969` prompt tokens with Lightning Indexer enabled; ✅ current-source DSA cache/runtime wiring smoke passed after experimental-v7 `3dee86a5a`; ✅ top-k cap schedule sweep shows the observed safe caps are next power-of-two bands (`2048`, `4096`, `16384`) for the tested 2K/3K/12K prompts; ❌ non-power-of-two caps `3072` and `12288`, plus `8192` at 12K, still produce preamble/filler or length-capped malformed output. Sparse final-attention and viable acceleration remain useful only after task quality passes under the schedule. |
+| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement; ✅ stale-binary true >64K CPU DSA probe processed `65,969` prompt tokens with Lightning Indexer enabled; ✅ current-source DSA cache/runtime wiring smoke passed after experimental-v7 `3dee86a5a`; ✅ top-k cap schedule sweep shows the observed safe caps are next power-of-two bands (`2048`, `4096`, `16384`) for the tested 2K/3K/12K prompts; ✅ reviewer-serving chat/free+schema matrix passed under the schedule; ⚠️ GC-1/2/3 reviewer-capability smokes are mixed (`3/3` strict-IF grammar but `0/3` free schema, shallow rubric axes, `0/3` why root-cause match). Sparse final-attention and viable acceleration remain useful only after claim-grade reviewer quality passes under the schedule. |
 | Hy3 AngelSlim IQ1_M-mtp | Complete: `Hy3-IQ1_M-mtp.gguf`, 91,756,066,624 bytes, plus license, README, chat template, recipes, and two Hy3 llama.cpp patches. Experimental v7 commit `98a1ad8cf` now loads it after the Hy3 router-bias tensor-name fix. | HF metadata sidecar revision `218c93f0fb5227553b67e556b01dfe70fb70cf30`, LFS hash `f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13`. Capped CPU smoke loaded the model and returned `OK`; follow-up CPU and MI210-hybrid MTP/no-spec A/Bs both produced coherent output. | ✅ MTP-on/off functional closure recorded; no-spec is faster than `draft-mtp` in the measured CPU and MI210-hybrid samples. Next gate is task quality / architecture fit, not more first-load smoke. |
 | Bonsai-27B Q1_0 | Complete: `Bonsai-27B-Q1_0.gguf`, 3,803,452,480 bytes. | HF metadata sidecar revision `0cf7e3d21581b169b4df1de8bf01316000e2fbb7`, LFS hash `17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0`. | Text load smoke on production v6 is valid; public quality is contested, so quality gate before any role claim. |
 | Ternary Bonsai-27B Q2_0 | Complete: `Ternary-Bonsai-27B-Q2_0.gguf`, 7,165,121,600 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757`. | Runtime support check on refreshed v7/experimental before load smoke. Production v6 does not advertise Q2_0. |
@@ -111,7 +111,7 @@ Interpretation: this closes stale-binary "can GLM-5.2 process a true >64K prompt
 
 Experimental-v7 commit `3dee86a5a` closes the current-source cache/runtime gap found after the stale-binary long probes. The patch routes `LLM_ARCH_GLM_DSA` through `llama_kv_cache_dsa`, aliases GLM to `llama_model_deepseek32::graph`, requires live GLM indexer tensors, and force-builds GLM indexer Hadamard rotation tensors. Validation passed `test-llama-archs --arch glm-dsa`, `test-llama-archs --arch deepseek32`, ASAN `glm-dsa`, and rebuilt `build-hip` server/CLI. The current-source exact-output smoke at `/mnt/raid0/llm/tmp/glm52-current-source-ready-smoke-20260717T092344/` returned `READY` and logs main + indexer DSA caches plus `Lightning Indexer enabled`; `/mnt/raid0/llm/tmp/glm52-current-source-short-smoke-20260717T092045/` is a longer runner-shaped cache/runtime log but not a quality proof.
 
-Interpretation: GLM DSA cache/runtime wiring is closed. The current-source long-context needle/coherence gate was executed next and failed under the unsafe low `indexer_top_k` path; the remaining GLM gates are task-quality/reviewer probes under the recovered top-k schedule and chat channel, CPU throughput only after quality is meaningful, and sparse final-attention/native GLM-MTP only if quality recovers.
+Interpretation: GLM DSA cache/runtime wiring is closed. The current-source long-context needle/coherence gate was executed next and failed under the unsafe low `indexer_top_k` path; later top-k/protocol recovery and GC-1/2/3 smokes narrow the remaining GLM gates to reviewer-quality repair or claim-grade reruns under the recovered schedule and chat channel. CPU throughput is useful only after quality is meaningful, and sparse final-attention/native GLM-MTP only if quality recovers.
 
 ## GLM-5.2 Aborted Current-Source 96K Attempt
 
@@ -190,7 +190,24 @@ Evidence: `data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260
 | free-text chat | `12044` | `16384` | ✅ exact `READY` | `16.68` |
 | JSON-schema chat | `12045` | `16384` | ✅ exact `{"decision":"allow"}` | `16.42` |
 
-Disposition: GC-0d is closed for the chat/free+schema reviewer-serving channel at the tested prompt bands. This is not broad GLM quality; next work is GC-1/2/3 reviewer task probes under this schedule.
+Disposition: GC-0d is closed for the chat/free+schema reviewer-serving channel at the tested prompt bands. This is not broad GLM quality; the follow-up GC-1/2/3 smokes below are the first reviewer task probes under this schedule.
+
+## GLM-5.2 Reviewer-Capability Direct Smokes
+
+Evidence:
+- `data/glm52_reviewer_capability_direct/gc1-strict-if-smoke-20260718Tglm52/summary.json`
+- `data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/summary.json`
+- `data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/summary.json`
+
+The direct runner (`scripts/benchmark/glm52_reviewer_capability_direct_runner.py`) keeps GLM-5.2 research-only while exercising the same GC-1/2/3 scorer contracts through a direct CPU-only `llama-server` launch. Runs used chat/completions, `--reasoning-format deepseek --reasoning off --reasoning-budget 0`, and the recovered p2168/`indexer_top_k=4096` band.
+
+| Gate | Result | First uncached prompt / decode |
+|---|---|---:|
+| GC-1 strict-IF | Grammar/schema lane passed `3/3` (`emission_rate=1.0`); free lane parsed JSON but failed schema validity `0/3` by emitting `blocking.tripwire=null`. | `24.34 t/s`; ~`2.41 t/s` over 21 tokens. |
+| GC-2 rubric authoring | Grammar/schema lane emitted valid rubrics for `3/3`, but breadth was weak: `mean_composite=0.75`, `mean_axis_coverage=0.25`, `mean_grounding_rate=1.0`. | `24.39 t/s`; ~`2.29 t/s` over 300-321 tokens. |
+| GC-3 why diagnosis | Detected that a defect existed in `3/3`, but matched the intended root cause in `0/3` (`that_minus_why_gap=1.0`). | `24.76 t/s`; ~`2.39-2.40 t/s` over 25-26 tokens. |
+
+Disposition: GC-1/2/3 smoke execution is complete, but GLM-5.2 is still reviewer-quality blocked. The schema-constrained typed-decision path is viable; rubric-authoring and why-diagnosis need repair or broader claim-grade reruns before any reviewer-role claim, native GLM-MTP/NEXTN spend, or sparse-final-attention investment is justified.
 
 ## GLM-5.2 Expert-Routing Skew
 

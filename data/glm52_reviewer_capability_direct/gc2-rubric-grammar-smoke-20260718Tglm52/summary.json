@@ -1,0 +1,503 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "execution": {
+    "elapsed_s": 548.947,
+    "lanes": [
+      {
+        "context_length": 4096,
+        "elapsed_s": 548.945,
+        "grammar_constrained": true,
+        "indexer_top_k": 4096,
+        "lane": "grammar",
+        "score": {
+          "architecture": "glm_moe_dsa",
+          "kind": "glm_capability_result",
+          "mean_axis_coverage": 0.25,
+          "mean_composite": 0.75,
+          "mean_count_ratio": 1.0,
+          "mean_grounding_rate": 1.0,
+          "model_key": "glm_52_ud_iq2m",
+          "model_name": "GLM-5.2-UD-IQ2_M",
+          "n_tasks": 3,
+          "observation_only": true,
+          "per_task": [
+            {
+              "axes_covered": [
+                "completeness"
+              ],
+              "axis_coverage": 0.25,
+              "composite": 0.75,
+              "count_ratio": 1.0,
+              "criteria_count": 5,
+              "grounding_rate": 1.0,
+              "probe": "rubric_authoring",
+              "reference_axes": [
+                "completeness",
+                "grounding",
+                "integrity",
+                "question-alignment"
+              ],
+              "reference_criteria_count": 4,
+              "task_id": "ra-00"
+            },
+            {
+              "axes_covered": [
+                "completeness"
+              ],
+              "axis_coverage": 0.25,
+              "composite": 0.75,
+              "count_ratio": 1.0,
+              "criteria_count": 5,
+              "grounding_rate": 1.0,
+              "probe": "rubric_authoring",
+              "reference_axes": [
+                "completeness",
+                "grounding",
+                "integrity",
+                "question-alignment"
+              ],
+              "reference_criteria_count": 4,
+              "task_id": "ra-01"
+            },
+            {
+              "axes_covered": [
+                "completeness"
+              ],
+              "axis_coverage": 0.25,
+              "composite": 0.75,
+              "count_ratio": 1.0,
+              "criteria_count": 5,
+              "grounding_rate": 1.0,
+              "probe": "rubric_authoring",
+              "reference_axes": [
+                "completeness",
+                "grounding",
+                "integrity",
+                "question-alignment"
+              ],
+              "reference_criteria_count": 4,
+              "task_id": "ra-02"
+            }
+          ],
+          "probe": "rubric_authoring",
+          "quant": "UD-IQ2_M",
+          "runner_version": "glm-reviewer-capability-probe-v1"
+        },
+        "server_log": {
+          "bytes": 44086,
+          "decode_tokens": 321,
+          "decode_tps": 2.29,
+          "line_count": 476,
+          "matched_line_count": 245,
+          "matched_lines_tail": [
+            "5.46.253.212 I slot print_timing: id  3 | task 304 | n_decoded =    191, tg =   2.30 t/s, tg_3s =   2.29 t/s",
+            "5.49.316.615 I slot print_timing: id  3 | task 304 | n_decoded =    198, tg =   2.30 t/s, tg_3s =   2.29 t/s",
+            "5.52.381.283 I slot print_timing: id  3 | task 304 | n_decoded =    205, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "5.55.445.462 I slot print_timing: id  3 | task 304 | n_decoded =    212, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "5.58.517.503 I slot print_timing: id  3 | task 304 | n_decoded =    219, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "6.01.591.225 I slot print_timing: id  3 | task 304 | n_decoded =    226, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "6.04.659.463 I slot print_timing: id  3 | task 304 | n_decoded =    233, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "6.07.731.367 I slot print_timing: id  3 | task 304 | n_decoded =    240, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "6.10.816.355 I slot print_timing: id  3 | task 304 | n_decoded =    247, tg =   2.30 t/s, tg_3s =   2.27 t/s",
+            "6.13.892.265 I slot print_timing: id  3 | task 304 | n_decoded =    254, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "6.16.965.677 I slot print_timing: id  3 | task 304 | n_decoded =    261, tg =   2.29 t/s, tg_3s =   2.28 t/s",
+            "6.20.042.752 I slot print_timing: id  3 | task 304 | n_decoded =    268, tg =   2.29 t/s, tg_3s =   2.27 t/s",
+            "6.23.123.223 I slot print_timing: id  3 | task 304 | n_decoded =    275, tg =   2.29 t/s, tg_3s =   2.27 t/s",
+            "6.26.198.439 I slot print_timing: id  3 | task 304 | n_decoded =    282, tg =   2.29 t/s, tg_3s =   2.28 t/s",
+            "6.29.277.044 I slot print_timing: id  3 | task 304 | n_decoded =    289, tg =   2.29 t/s, tg_3s =   2.27 t/s",
+            "6.32.348.259 I slot print_timing: id  3 | task 304 | n_decoded =    296, tg =   2.29 t/s, tg_3s =   2.28 t/s",
+            "6.35.450.281 I slot print_timing: id  3 | task 304 | n_decoded =    303, tg =   2.29 t/s, tg_3s =   2.26 t/s",
+            "6.38.528.404 I slot print_timing: id  3 | task 304 | n_decoded =    310, tg =   2.29 t/s, tg_3s =   2.27 t/s",
+            "6.41.602.258 I slot print_timing: id  3 | task 304 | n_decoded =    317, tg =   2.29 t/s, tg_3s =   2.28 t/s",
+            "6.43.363.916 I slot print_timing: id  3 | task 304 | prompt eval time =     450.50 ms /     1 tokens (  450.50 ms per token,     2.22 tokens per second)",
+            "6.43.363.921 I slot print_timing: id  3 | task 304 |        eval time =  140124.32 ms /   321 tokens (  436.52 ms per token,     2.29 tokens per second)",
+            "6.43.363.921 I slot print_timing: id  3 | task 304 |       total time =  140574.82 ms /   322 tokens",
+            "6.43.363.923 I slot print_timing: id  3 | task 304 |    graphs reused =        617",
+            "6.43.364.022 I slot      release: id  3 | task 304 | stop processing: n_tokens = 3284, truncated = 0",
+            "6.43.364.037 I srv  update_slots: all slots are idle",
+            "6.43.383.367 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.903",
+            "6.43.383.486 I cmn  common_reaso: activated, budget=0 tokens",
+            "6.43.383.515 I slot launch_slot_: id  3 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+            "6.43.383.523 I slot launch_slot_: id  3 | task -1 | sampler params: ",
+            "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+            "6.43.383.527 I slot launch_slot_: id  3 | task 628 | processing task, is_child = 0",
+            "6.43.383.529 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+            "6.43.383.529 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+            "6.43.383.545 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+            "6.43.383.546 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+            "6.43.383.555 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+            "6.43.383.555 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+            "6.43.383.571 I slot   operator(): id  3 | task 628 | new prompt, n_ctx_slot = 4096, n_keep = 0, task.n_tokens = 2964",
+            "6.43.383.577 W slot   operator(): id  3 | task 628 | need to evaluate at least 1 token for each active slot (n_past = 2964, task.n_tokens() = 2964)",
+            "6.43.383.578 W slot   operator(): id  3 | task 628 | n_past was set to 2963",
+            "6.43.383.579 I slot   operator(): id  3 | task 628 | cached n_tokens = 2963, memory_seq_rm [2963, end)",
+            "6.43.384.181 I slot init_sampler: id  3 | task 628 | init sampler, took 0.49 ms, tokens: text = 2964, total = 2964",
+            "7.27.058.650 I slot print_timing: id  3 | task 628 | n_decoded =    100, tg =   2.31 t/s, tg_3s =   2.31 t/s",
+            "7.30.114.687 I slot print_timing: id  3 | task 628 | n_decoded =    107, tg =   2.31 t/s, tg_3s =   2.29 t/s",
+            "7.33.188.365 I slot print_timing: id  3 | task 628 | n_decoded =    114, tg =   2.31 t/s, tg_3s =   2.28 t/s",
+            "7.36.246.137 I slot print_timing: id  3 | task 628 | n_decoded =    121, tg =   2.31 t/s, tg_3s =   2.29 t/s",
+            "7.39.305.085 I slot print_timing: id  3 | task 628 | n_decoded =    128, tg =   2.31 t/s, tg_3s =   2.29 t/s",
+            "7.42.363.444 I slot print_timing: id  3 | task 628 | n_decoded =    135, tg =   2.31 t/s, tg_3s =   2.29 t/s",
+            "7.45.424.613 I slot print_timing: id  3 | task 628 | n_decoded =    142, tg =   2.31 t/s, tg_3s =   2.29 t/s",
+            "7.48.481.848 I slot print_timing: id  3 | task 628 | n_decoded =    149, tg =   2.30 t/s, tg_3s =   2.29 t/s",
+            "7.51.549.585 I slot print_timing: id  3 | task 628 | n_decoded =    156, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "7.54.611.412 I slot print_timing: id  3 | task 628 | n_decoded =    163, tg =   2.30 t/s, tg_3s =   2.29 t/s",
+            "7.57.673.794 I slot print_timing: id  3 | task 628 | n_decoded =    170, tg =   2.30 t/s, tg_3s =   2.29 t/s",
+            "8.00.738.262 I slot print_timing: id  3 | task 628 | n_decoded =    177, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "8.03.802.264 I slot print_timing: id  3 | task 628 | n_decoded =    184, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "8.06.862.634 I slot print_timing: id  3 | task 628 | n_decoded =    191, tg =   2.30 t/s, tg_3s =   2.29 t/s",
+            "8.09.924.037 I slot print_timing: id  3 | task 628 | n_decoded =    198, tg =   2.30 t/s, tg_3s =   2.29 t/s",
+            "8.12.984.998 I slot print_timing: id  3 | task 628 | n_decoded =    205, tg =   2.30 t/s, tg_3s =   2.29 t/s",
+            "8.16.050.895 I slot print_timing: id  3 | task 628 | n_decoded =    212, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "8.19.130.389 I slot print_timing: id  3 | task 628 | n_decoded =    219, tg =   2.30 t/s, tg_3s =   2.27 t/s",
+            "8.22.199.776 I slot print_timing: id  3 | task 628 | n_decoded =    226, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "8.25.276.471 I slot print_timing: id  3 | task 628 | n_decoded =    233, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "8.28.347.894 I slot print_timing: id  3 | task 628 | n_decoded =    240, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "8.31.418.094 I slot print_timing: id  3 | task 628 | n_decoded =    247, tg =   2.30 t/s, tg_3s =   2.28 t/s",
+            "8.34.497.480 I slot print_timing: id  3 | task 628 | n_decoded =    254, tg =   2.30 t/s, tg_3s =   2.27 t/s",
+            "8.37.569.353 I slot print_timing: id  3 | task 628 | n_decoded =    261, tg =   2.29 t/s, tg_3s =   2.28 t/s",
+            "8.40.644.644 I slot print_timing: id  3 | task 628 | n_decoded =    268, tg =   2.29 t/s, tg_3s =   2.28 t/s",
+            "8.43.724.654 I slot print_timing: id  3 | task 628 | n_decoded =    275, tg =   2.29 t/s, tg_3s =   2.27 t/s",
+            "8.46.805.598 I slot print_timing: id  3 | task 628 | n_decoded =    282, tg =   2.29 t/s, tg_3s =   2.27 t/s",
+            "8.49.886.154 I slot print_timing: id  3 | task 628 | n_decoded =    289, tg =   2.29 t/s, tg_3s =   2.27 t/s",
+            "8.52.958.128 I slot print_timing: id  3 | task 628 | n_decoded =    296, tg =   2.29 t/s, tg_3s =   2.28 t/s",
+            "8.56.062.015 I slot print_timing: id  3 | task 628 | n_decoded =    303, tg =   2.29 t/s, tg_3s =   2.26 t/s",
+            "8.59.137.016 I slot print_timing: id  3 | task 628 | n_decoded =    310, tg =   2.29 t/s, tg_3s =   2.28 t/s",
+            "9.02.206.480 I slot print_timing: id  3 | task 628 | n_decoded =    317, tg =   2.29 t/s, tg_3s =   2.28 t/s",
+            "9.03.967.127 I slot print_timing: id  3 | task 628 | prompt eval time =     447.26 ms /     1 tokens (  447.26 ms per token,     2.24 tokens per second)",
+            "9.03.967.132 I slot print_timing: id  3 | task 628 |        eval time =  140136.28 ms /   321 tokens (  436.56 ms per token,     2.29 tokens per second)",
+            "9.03.967.132 I slot print_timing: id  3 | task 628 |       total time =  140583.55 ms /   322 tokens",
+            "9.03.967.134 I slot print_timing: id  3 | task 628 |    graphs reused =        936",
+            "9.03.967.209 I slot      release: id  3 | task 628 | stop processing: n_tokens = 3284, truncated = 0",
+            "9.03.967.225 I srv  update_slots: all slots are idle"
+          ],
+          "max_decoded_checkpoint": 317,
+          "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/logs/rubric_authoring__grammar__p2168_tk4096.server.log",
+          "prompt_eval_tokens": 1,
+          "prompt_eval_tps": 2.24,
+          "status": "ok"
+        },
+        "status": "ok",
+        "task_results": [
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/artifacts/grammar__ra-00.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/artifacts/grammar__ra-00.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/artifacts/grammar__ra-00.response.json"
+            },
+            "channels": {
+              "combined": "{\n  \"schema_version\": \"1.0.0\",\n  \"rubric_id\": \"glm_dsa_probe_rubric\",\n  \"version\": \"1.0.0\",\n  \"domain\": \"qa\",\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Does the response correctly identify the role of the GLM DSA probe in keeping the context deterministic?\",\n      \"axis\": \"accuracy\",\n     ",
+              "content": "{\n  \"schema_version\": \"1.0.0\",\n  \"rubric_id\": \"glm_dsa_probe_rubric\",\n  \"version\": \"1.0.0\",\n  \"domain\": \"qa\",\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Does the response correctly identify the role of the GLM DSA probe in keeping the context deterministic?\",\n      \"axis\": \"accuracy\",\n     ",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "finish_reason": "stop",
+            "prompt_char_count": 15998,
+            "prompt_token_count": 2958,
+            "prompt_token_min": 2168,
+            "request_error": null,
+            "scoring_text": "{\n  \"schema_version\": \"1.0.0\",\n  \"rubric_id\": \"glm_dsa_probe_rubric\",\n  \"version\": \"1.0.0\",\n  \"domain\": \"qa\",\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Does the response correctly identify the role of the GLM DSA probe in keeping the context deterministic?\",\n      \"axis\": \"accuracy\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R2\",\n      \"text\": \"Does the response accurately list the three checks performed by the runner: shard integrity, load behavior, and KV scaling?\",\n      \"axis\": \"completeness\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R3\",\n      \"text\": \"Does the response acknowledge that the indexer configuration is fixed during the checks?\",\n      \"axis\": \"accuracy\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R4\",\n      \"text\": \"Is the response free of any contradictions or hallucinated information not present in the source text?\",\n      \"axis\": \"faithfulness\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R5\",\n      \"text\": \"Is the response concise and free of unnecessary repetition?\",\n      \"axis\": \"conciseness\",\n      \"weight\": 1\n    }\n  ]\n}",
+            "status": "ok",
+            "task_id": "ra-00",
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 130953.944,
+              "predicted_n": 300,
+              "predicted_per_second": 2.2908817469445593,
+              "predicted_per_token_ms": 436.51314666666667,
+              "prompt_ms": 121505.295,
+              "prompt_n": 2964,
+              "prompt_per_second": 24.393998631911476,
+              "prompt_per_token_ms": 40.99368927125506
+            },
+            "usage": {
+              "completion_tokens": 300,
+              "prompt_tokens": 2964,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 3264
+            }
+          },
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/artifacts/grammar__ra-01.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/artifacts/grammar__ra-01.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/artifacts/grammar__ra-01.response.json"
+            },
+            "channels": {
+              "combined": "{\n  \"schema_version\": \"1.0.0\",\n  \"rubric_id\": \"glm_dsa_probe_rubric\",\n  \"version\": \"1.0.0\",\n  \"domain\": \"qa\",\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Does the response provide a valid JSON object that conforms to the requested schema?\",\n      \"axis\": \"format\",\n      \"weight\": 1\n    },\n  ",
+              "content": "{\n  \"schema_version\": \"1.0.0\",\n  \"rubric_id\": \"glm_dsa_probe_rubric\",\n  \"version\": \"1.0.0\",\n  \"domain\": \"qa\",\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Does the response provide a valid JSON object that conforms to the requested schema?\",\n      \"axis\": \"format\",\n      \"weight\": 1\n    },\n  ",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "finish_reason": "stop",
+            "prompt_char_count": 15998,
+            "prompt_token_count": 2958,
+            "prompt_token_min": 2168,
+            "request_error": null,
+            "scoring_text": "{\n  \"schema_version\": \"1.0.0\",\n  \"rubric_id\": \"glm_dsa_probe_rubric\",\n  \"version\": \"1.0.0\",\n  \"domain\": \"qa\",\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Does the response provide a valid JSON object that conforms to the requested schema?\",\n      \"axis\": \"format\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R2\",\n      \"text\": \"Does the response include the required top-level fields: schema_version, rubric_id, version, domain, and items?\",\n      \"axis\": \"completeness\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R3\",\n      \"text\": \"Does each item in the items array include the required fields: id, text, axis, and weight?\",\n      \"axis\": \"completeness\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R4\",\n      \"text\": \"Is each item's text phrased as a checkable question?\",\n      \"axis\": \"quality\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R5\",\n      \"text\": \"Does the rubric address the key concepts from the task description, such as deterministic context, shard integrity, load behavior, KV scaling, and fixed indexer configuration?\",\n      \"axis\": \"relevance\",\n      \"weight\": 1\n    }\n  ]\n}",
+            "status": "ok",
+            "task_id": "ra-01",
+            "timings": {
+              "cache_n": 2963,
+              "predicted_ms": 140124.316,
+              "predicted_n": 321,
+              "predicted_per_second": 2.290822957522947,
+              "predicted_per_token_ms": 436.5243489096573,
+              "prompt_ms": 450.499,
+              "prompt_n": 1,
+              "prompt_per_second": 2.2197607541859137,
+              "prompt_per_token_ms": 450.499
+            },
+            "usage": {
+              "completion_tokens": 321,
+              "prompt_tokens": 2964,
+              "prompt_tokens_details": {
+                "cached_tokens": 2963
+              },
+              "total_tokens": 3285
+            }
+          },
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/artifacts/grammar__ra-02.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/artifacts/grammar__ra-02.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/artifacts/grammar__ra-02.response.json"
+            },
+            "channels": {
+              "combined": "{\n  \"schema_version\": \"1.0.0\",\n  \"rubric_id\": \"glm_dsa_probe_rubric\",\n  \"version\": \"1.0.0\",\n  \"domain\": \"qa\",\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Does the response provide a valid JSON object that conforms to the requested schema?\",\n      \"axis\": \"format\",\n      \"weight\": 1\n    },\n  ",
+              "content": "{\n  \"schema_version\": \"1.0.0\",\n  \"rubric_id\": \"glm_dsa_probe_rubric\",\n  \"version\": \"1.0.0\",\n  \"domain\": \"qa\",\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Does the response provide a valid JSON object that conforms to the requested schema?\",\n      \"axis\": \"format\",\n      \"weight\": 1\n    },\n  ",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "finish_reason": "stop",
+            "prompt_char_count": 15998,
+            "prompt_token_count": 2958,
+            "prompt_token_min": 2168,
+            "request_error": null,
+            "scoring_text": "{\n  \"schema_version\": \"1.0.0\",\n  \"rubric_id\": \"glm_dsa_probe_rubric\",\n  \"version\": \"1.0.0\",\n  \"domain\": \"qa\",\n  \"items\": [\n    {\n      \"id\": \"R1\",\n      \"text\": \"Does the response provide a valid JSON object that conforms to the requested schema?\",\n      \"axis\": \"format\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R2\",\n      \"text\": \"Does the response include the required top-level fields: schema_version, rubric_id, version, domain, and items?\",\n      \"axis\": \"completeness\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R3\",\n      \"text\": \"Does each item in the items array include the required fields: id, text, axis, and weight?\",\n      \"axis\": \"completeness\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R4\",\n      \"text\": \"Is each item's text phrased as a checkable question?\",\n      \"axis\": \"quality\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R5\",\n      \"text\": \"Does the rubric address the key concepts from the task description, such as deterministic context, shard integrity, load behavior, KV scaling, and fixed indexer configuration?\",\n      \"axis\": \"relevance\",\n      \"weight\": 1\n    }\n  ]\n}",
+            "status": "ok",
+            "task_id": "ra-02",
+            "timings": {
+              "cache_n": 2963,
+              "predicted_ms": 140136.28,
+              "predicted_n": 321,
+              "predicted_per_second": 2.2906273807182553,
+              "predicted_per_token_ms": 436.5616199376947,
+              "prompt_ms": 447.265,
+              "prompt_n": 1,
+              "prompt_per_second": 2.235810984539367,
+              "prompt_per_token_ms": 447.265
+            },
+            "usage": {
+              "completion_tokens": 321,
+              "prompt_tokens": 2964,
+              "prompt_tokens_details": {
+                "cached_tokens": 2963
+              },
+              "total_tokens": 3285
+            }
+          }
+        ]
+      }
+    ],
+    "post_processes": [
+      {
+        "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+        "pid": 1849379
+      },
+      {
+        "command": "python3 scripts/benchmark/glm52_reviewer_capability_direct_runner.py --execute --probe rubric_authoring --lanes grammar --m 3 --output-dir /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52",
+        "pid": 2469701
+      }
+    ],
+    "status": "ok"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-18T02:15:11.155422+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "k": 2,
+  "lanes": [
+    {
+      "band": {
+        "context_length": 4096,
+        "indexer_top_k": 4096,
+        "min_prompt_tokens": 2168,
+        "name": "p2168_tk4096",
+        "prompt_context_guard_tokens": 128
+      },
+      "grammar_constrained": true,
+      "lane": "grammar",
+      "request": {
+        "endpoint": "chat",
+        "max_tokens": 768,
+        "seed": 42,
+        "temperature": 0.0,
+        "timeout_s": 1800
+      },
+      "server": {
+        "context_length": 4096,
+        "extra_args": [
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0",
+          "--json-schema",
+          "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"schema_version\",\"rubric_id\",\"version\",\"domain\",\"items\"],\"properties\":{\"schema_version\":{\"type\":\"string\",\"pattern\":\"^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$\"},\"rubric_id\":{\"type\":\"string\",\"minLength\":1},\"version\":{\"type\":\"string\",\"pattern\":\"^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$\"},\"domain\":{\"type\":\"string\",\"enum\":[\"code\",\"qa\",\"math\",\"summarize\",\"reasoning\",\"tool_use\",\"vision\",\"general\"]},\"title\":{\"type\":\"string\"},\"items\":{\"type\":\"array\",\"minItems\":1,\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"id\",\"text\",\"axis\",\"weight\"],\"properties\":{\"id\":{\"type\":\"string\",\"pattern\":\"^R[0-9]+$\"},\"text\":{\"type\":\"string\",\"minLength\":1},\"axis\":{\"type\":\"string\",\"minLength\":1},\"weight\":{\"type\":\"integer\",\"enum\":[1,2,3]}}}}}}"
+        ],
+        "indexer_top_k": 4096,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:4096",
+        "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/logs/rubric_authoring__grammar__p2168_tk4096.server.log",
+        "metrics": false,
+        "port": 19520,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:4096",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19520",
+          "-c",
+          "4096",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/logs/rubric_authoring__grammar__p2168_tk4096.server.log",
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0",
+          "--json-schema",
+          "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"schema_version\",\"rubric_id\",\"version\",\"domain\",\"items\"],\"properties\":{\"schema_version\":{\"type\":\"string\",\"pattern\":\"^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$\"},\"rubric_id\":{\"type\":\"string\",\"minLength\":1},\"version\":{\"type\":\"string\",\"pattern\":\"^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$\"},\"domain\":{\"type\":\"string\",\"enum\":[\"code\",\"qa\",\"math\",\"summarize\",\"reasoning\",\"tool_use\",\"vision\",\"general\"]},\"title\":{\"type\":\"string\"},\"items\":{\"type\":\"array\",\"minItems\":1,\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"id\",\"text\",\"axis\",\"weight\"],\"properties\":{\"id\":{\"type\":\"string\",\"pattern\":\"^R[0-9]+$\"},\"text\":{\"type\":\"string\",\"minLength\":1},\"axis\":{\"type\":\"string\",\"minLength\":1},\"weight\":{\"type\":\"integer\",\"enum\":[1,2,3]}}}}}}"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:4096 --device none -ngl 0 --host 127.0.0.1 --port 19520 -c 4096 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/logs/rubric_authoring__grammar__p2168_tk4096.server.log --reasoning-format deepseek --reasoning off --reasoning-budget 0 --json-schema '{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"schema_version\",\"rubric_id\",\"version\",\"domain\",\"items\"],\"properties\":{\"schema_version\":{\"type\":\"string\",\"pattern\":\"^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$\"},\"rubric_id\":{\"type\":\"string\",\"minLength\":1},\"version\":{\"type\":\"string\",\"pattern\":\"^[0-9]+\\\\.[0-9]+\\\\.[0-9]+$\"},\"domain\":{\"type\":\"string\",\"enum\":[\"code\",\"qa\",\"math\",\"summarize\",\"reasoning\",\"tool_use\",\"vision\",\"general\"]},\"title\":{\"type\":\"string\"},\"items\":{\"type\":\"array\",\"minItems\":1,\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"id\",\"text\",\"axis\",\"weight\"],\"properties\":{\"id\":{\"type\":\"string\",\"pattern\":\"^R[0-9]+$\"},\"text\":{\"type\":\"string\",\"minLength\":1},\"axis\":{\"type\":\"string\",\"minLength\":1},\"weight\":{\"type\":\"integer\",\"enum\":[1,2,3]}}}}}}'",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      }
+    }
+  ],
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "m": 3,
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "n_tasks": 3,
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52",
+  "preexisting_processes": [
+    {
+      "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+      "pid": 1849379
+    },
+    {
+      "command": "python3 scripts/benchmark/glm52_reviewer_capability_direct_runner.py --execute --probe rubric_authoring --lanes grammar --m 3 --output-dir /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52",
+      "pid": 2469701
+    }
+  ],
+  "probe": "rubric_authoring",
+  "refusal_reasons": [],
+  "schema": "glm52_reviewer_capability_direct.v1",
+  "task_parse_errors": [],
+  "task_set_id": null,
+  "tasks": [
+    {
+      "prompt_sha256": "96133f37222023b7b97491094baa4ca991438af9c7c9b33150a142e6a28f437b",
+      "task_id": "ra-00"
+    },
+    {
+      "prompt_sha256": "96133f37222023b7b97491094baa4ca991438af9c7c9b33150a142e6a28f437b",
+      "task_id": "ra-01"
+    },
+    {
+      "prompt_sha256": "96133f37222023b7b97491094baa4ca991438af9c7c9b33150a142e6a28f437b",
+      "task_id": "ra-02"
+    }
+  ]
+}

@@ -5639,7 +5639,7 @@ roles:
 
   glm_52_ud_iq2m:
     tier: B
-    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, current-source runner-shaped quality recovered only under the observed next-power-of-two DSA top-k schedule, and chat/free+JSON-schema protocol matrix passed at ~2.9K/~12.0K prompt tokens.
+    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, current-source runner-shaped quality recovered only under the observed next-power-of-two DSA top-k schedule, chat/free+JSON-schema protocol matrix passed at ~2.9K/~12.0K prompt tokens, and GC-1/2/3 reviewer-capability smokes executed with mixed quality.
     model:
       name: GLM-5.2-UD-IQ2_M
       huggingface_id: unsloth/GLM-5.2-GGUF
@@ -5677,7 +5677,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence failed under unsafe low top_k. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. Source/runtime evidence narrows malformed output to the DSA final-attention selection cap, and the observed safe caps are next power-of-two bands 2048, 4096, and 16384 for the tested prompt shapes. A 2026-07-18 chat-only protocol matrix passed exact READY and JSON-schema {decision:allow} at ~2.9K/4096 and ~12.0K/16384 prompt bands. Next run GC-1/2/3 reviewer/task-quality probes under that schedule; raw /completion and /v1/completions remain unvalidated and should be probed only narrowly."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence failed under unsafe low top_k. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. Source/runtime evidence narrows malformed output to the DSA final-attention selection cap, and the observed safe caps are next power-of-two bands 2048, 4096, and 16384 for the tested prompt shapes. A 2026-07-18 chat-only protocol matrix passed exact READY and JSON-schema {decision:allow} at ~2.9K/4096 and ~12.0K/16384 prompt bands. GC-1/2/3 direct reviewer-capability smokes then showed strict-IF requires grammar/schema (3/3 grammar, 0/3 free), rubric authoring is schema-valid but shallow (mean_axis_coverage 0.25), and why-diagnosis detects defects without matching root causes (0/3). Next run claim-grade/repair reviewer probes under that schedule; raw /completion and /v1/completions remain unvalidated and should be probed only narrowly."
     candidate_roles:
     - architect
     - ingest
@@ -5690,9 +5690,9 @@ roles:
       forbid:
       - production_stack_registration
       - production_role_claim_without_dsa_quality_gate
-      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated and the observed next-power-of-two top_k schedule recovers runner-shaped prompts through 12K. Chat free-text and JSON-schema channels now pass at ~2.9K/~12.0K, but production-quality serving still needs reviewer/task-quality gates under that schedule before role claims."
+      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated and the observed next-power-of-two top_k schedule recovers runner-shaped prompts through 12K. Chat free-text and JSON-schema channels pass at ~2.9K/~12.0K, but GC-1/2/3 reviewer smokes are mixed and production-quality serving still needs claim-grade/repair gates under that schedule before role claims."
     performance:
-      benchmark_status: current_source_chat_protocol_matrix_passed_task_quality_blocked
+      benchmark_status: current_source_reviewer_smokes_mixed_task_quality_blocked
       short_smoke_observation: >
         2026-07-16 experimental v7 b10077-da1bf5e2f CPU-only llama-server
         loaded the six-shard UD-IQ2_M artifact. With reasoning auto, the model
@@ -5861,6 +5861,23 @@ roles:
         broad task quality. The first all-endpoint attempt was aborted after
         raw completion endpoints proved too costly/pathological for this model;
         raw /completion and /v1/completions remain unvalidated.
+      reviewer_capability_direct_smoke_observation: >
+        2026-07-18 direct reviewer-capability smokes used
+        scripts/benchmark/glm52_reviewer_capability_direct_runner.py, current-source
+        experimental v7 CPU-only GLM, chat/completions, reasoning off, and the
+        recovered p2168_tk4096 band. Evidence:
+        data/glm52_reviewer_capability_direct/gc1-strict-if-smoke-20260718Tglm52/summary.json,
+        data/glm52_reviewer_capability_direct/gc2-rubric-grammar-smoke-20260718Tglm52/summary.json,
+        and data/glm52_reviewer_capability_direct/gc3-why-smoke-20260718Tglm52/summary.json.
+        GC-1 strict-IF grammar/schema passed 3/3 with emission_rate=1.0, while
+        the free lane parsed JSON but failed schema validity 0/3 by emitting
+        blocking.tripwire=null. GC-2 rubric authoring emitted schema-valid
+        rubrics for 3/3 tasks but had mean_axis_coverage=0.25 and
+        mean_composite=0.75. GC-3 why-diagnosis detected defects in 3/3 tasks
+        but matched the intended root cause in 0/3. First uncached prompt rates
+        were 24.34-24.76 t/s, and decode was roughly 2.29-2.41 t/s depending
+        on output length. This is observation-grade smoke evidence, not
+        production reviewer admission.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
