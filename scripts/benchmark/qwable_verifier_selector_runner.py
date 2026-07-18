@@ -609,6 +609,13 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     has_passing = sum(int(bool(row.get("has_passing"))) for row in rows)
     selected_passing = sum(int(bool(row.get("verifier_selected_passing"))) for row in rows)
     gap = oracle - pass1
+    verifier_parse_modes: dict[str, int] = {}
+    verifier_finish_reasons: dict[str, int] = {}
+    for row in rows:
+        parse_mode = str(row.get("verifier_parse") or "missing")
+        finish_reason = str(row.get("verifier_finish_reason") or "missing")
+        verifier_parse_modes[parse_mode] = verifier_parse_modes.get(parse_mode, 0) + 1
+        verifier_finish_reasons[finish_reason] = verifier_finish_reasons.get(finish_reason, 0) + 1
     return {
         "n": n,
         "pass_at_1": pass1,
@@ -618,6 +625,8 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "selection_accuracy_denominator": has_passing,
         "gap_recovered": ((verifier - pass1) / gap) if gap else None,
         "selection_accuracy": (selected_passing / has_passing) if has_passing else None,
+        "verifier_finish_reasons": verifier_finish_reasons,
+        "verifier_parse_modes": verifier_parse_modes,
     }
 
 

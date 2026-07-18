@@ -56,9 +56,33 @@ class TestQwableVerifierSelectorRunner(TestCase):
 
     def test_summarize_rows_gap_recovered(self) -> None:
         rows = [
-            {"pass_at_1": False, "verifier_pass": True, "oracle_pass_at_n": True, "has_passing": True, "verifier_selected_passing": True},
-            {"pass_at_1": True, "verifier_pass": True, "oracle_pass_at_n": True, "has_passing": True, "verifier_selected_passing": True},
-            {"pass_at_1": False, "verifier_pass": False, "oracle_pass_at_n": True, "has_passing": True, "verifier_selected_passing": False},
+            {
+                "pass_at_1": False,
+                "verifier_pass": True,
+                "oracle_pass_at_n": True,
+                "has_passing": True,
+                "verifier_selected_passing": True,
+                "verifier_parse": "marker",
+                "verifier_finish_reason": "stop",
+            },
+            {
+                "pass_at_1": True,
+                "verifier_pass": True,
+                "oracle_pass_at_n": True,
+                "has_passing": True,
+                "verifier_selected_passing": True,
+                "verifier_parse": "lastint",
+                "verifier_finish_reason": "length",
+            },
+            {
+                "pass_at_1": False,
+                "verifier_pass": False,
+                "oracle_pass_at_n": True,
+                "has_passing": True,
+                "verifier_selected_passing": False,
+                "verifier_parse": "marker",
+                "verifier_finish_reason": "stop",
+            },
         ]
         summary = runner.summarize_rows(rows)
         self.assertEqual(summary["n"], 3)
@@ -67,6 +91,8 @@ class TestQwableVerifierSelectorRunner(TestCase):
         self.assertEqual(summary["oracle_pass_at_n"], 3)
         self.assertEqual(summary["gap_recovered"], 0.5)
         self.assertEqual(summary["selection_accuracy"], 2 / 3)
+        self.assertEqual(summary["verifier_parse_modes"], {"marker": 2, "lastint": 1})
+        self.assertEqual(summary["verifier_finish_reasons"], {"stop": 2, "length": 1})
 
     def test_load_questions_filters_fixture(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
