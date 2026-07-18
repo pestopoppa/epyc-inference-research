@@ -94,6 +94,15 @@ class TestQwableVerifierSelectorRunner(TestCase):
         self.assertIn("### Candidate 0\nabcdefghi", prompt)
         self.assertIn("### Candidate 1\nxyz", prompt)
         self.assertNotIn("candidate['text']", prompt)
+        self.assertIn("First solve the problem independently", prompt)
+
+    def test_verifier_prompt_can_skip_solve_first(self) -> None:
+        args = runner.parse_args(["--no-verifier-solve-first"])
+        question = {"prompt": "Pick the exact answer."}
+        candidates = [{"index": 0, "verifier_excerpt": "Extracted final answer:\nA"}]
+        prompt = runner.verifier_prompt(question, candidates, args)
+        self.assertIn("Do not solve the problem from scratch", prompt)
+        self.assertNotIn("First solve the problem independently", prompt)
 
     def test_extract_final_answer_uses_scoring_pattern(self) -> None:
         question = {
@@ -115,3 +124,29 @@ class TestQwableVerifierSelectorRunner(TestCase):
         self.assertEqual(answer, "correct-answer")
         self.assertIn("Extracted final answer:\ncorrec", excerpt)
         self.assertIn("Bounded candidate context:\nabcdefgh", excerpt)
+
+    def test_verifier_payload_defaults_to_thinking_enabled(self) -> None:
+        args = runner.parse_args([])
+        payload = runner.verifier_payload(
+            {"prompt": "Pick."},
+            [{"index": 0, "verifier_excerpt": "Extracted final answer:\nok"}],
+            args,
+        )
+        self.assertTrue(payload["chat_template_kwargs"]["enable_thinking"])
+        self.assertNotIn("Do not explain", payload["messages"][0]["content"])
+
+    def test_verifier_payload_can_disable_thinking(self) -> None:
+        args = runner.parse_args(["--no-verifier-thinking"])
+        payload = runner.verifier_payload(
+            {"prompt": "Pick."},
+            [{"index": 0, "verifier_excerpt": "Extracted final answer:\nok"}],
+            args,
+        )
+        self.assertFalse(payload["chat_template_kwargs"]["enable_thinking"])
+        self.assertIn("Do not explain", payload["messages"][0]["content"])
+
+    def test_plan_records_verifier_controls(self) -> None:
+        args = runner.parse_args(["--no-verifier-thinking", "--no-verifier-solve-first"])
+        plan = runner.build_plan(args)
+        self.assertFalse(plan["request"]["verifier_thinking"])
+        self.assertFalse(plan["request"]["verifier_solve_first"])

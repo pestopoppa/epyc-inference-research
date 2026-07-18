@@ -107,6 +107,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--candidate-chars", type=int, default=1600)
     parser.add_argument("--candidate-answer-chars", type=int, default=320)
+    parser.add_argument("--verifier-thinking", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--verifier-solve-first", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--request-timeout", type=int, default=DEFAULT_REQUEST_TIMEOUT_S)
     parser.add_argument("--startup-timeout", type=int, default=DEFAULT_STARTUP_TIMEOUT_S)
     parser.add_argument("--beneficiary-thinking", action="store_true")
@@ -221,6 +223,8 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "candidate_chars_shown_to_verifier": args.candidate_chars,
             "candidate_answer_chars_shown_to_verifier": args.candidate_answer_chars,
             "beneficiary_thinking": args.beneficiary_thinking,
+            "verifier_thinking": args.verifier_thinking,
+            "verifier_solve_first": args.verifier_solve_first,
             "request_timeout_s": args.request_timeout,
             "startup_timeout_s": args.startup_timeout,
         },
@@ -463,25 +467,36 @@ def verifier_prompt(question: dict[str, Any], candidates: list[dict[str, Any]], 
     for candidate in candidates:
         shown = str(candidate.get("verifier_excerpt", ""))
         parts.append(f"\n### Candidate {candidate['index']}\n{shown}")
-    parts.append(
-        "\n\nFirst solve the problem independently. Then judge only final-answer correctness. "
-        "Prefer each candidate's extracted final answer; use the bounded context only when the extracted answer is absent or ambiguous. "
-        "Ignore verbosity, markdown, and explanation length. On the last line output exactly:\n"
-        f"FINAL: <index>\n(index 0 to {args.n_candidates - 1})."
-    )
+    if args.verifier_solve_first:
+        parts.append(
+            "\n\nFirst solve the problem independently. Then judge only final-answer correctness. "
+            "Prefer each candidate's extracted final answer; use the bounded context only when the extracted answer is absent or ambiguous. "
+            "Ignore verbosity, markdown, and explanation length. On the last line output exactly:\n"
+            f"FINAL: <index>\n(index 0 to {args.n_candidates - 1})."
+        )
+    else:
+        parts.append(
+            "\n\nDo not solve the problem from scratch and do not write reasoning. "
+            "Compare only the extracted final answers unless they are absent or ambiguous. "
+            "Output exactly one line and nothing else:\n"
+            f"FINAL: <index>\n(index 0 to {args.n_candidates - 1})."
+        )
     return "\n".join(parts)
 
 
 def verifier_payload(question: dict[str, Any], candidates: list[dict[str, Any]], args: argparse.Namespace) -> dict[str, Any]:
+    system_prompt = (
+        "You are a strict verifier. Another model produced several candidate answers. "
+        "Select the candidate most likely to be correct."
+    )
+    if not args.verifier_thinking:
+        system_prompt += " Do not explain. Return only the final line: FINAL: <index>."
     return {
         "model": "auto",
         "messages": [
             {
                 "role": "system",
-                "content": (
-                    "You are a strict verifier. Another model produced several candidate answers. "
-                    "Select the candidate most likely to be correct."
-                ),
+                "content": system_prompt,
             },
             {"role": "user", "content": verifier_prompt(question, candidates, args)},
         ],
@@ -493,7 +508,7 @@ def verifier_payload(question: dict[str, Any], candidates: list[dict[str, Any]],
         "stream": False,
         "cache_prompt": True,
         "reasoning_format": "none",
-        "chat_template_kwargs": {"enable_thinking": True},
+        "chat_template_kwargs": {"enable_thinking": bool(args.verifier_thinking)},
     }
 
 
