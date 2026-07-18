@@ -1,0 +1,17 @@
+{
+  "endpoint": "chat",
+  "payload": {
+    "max_tokens": 128,
+    "messages": [
+      {
+        "content": "You are a strict reviewer. Decide whether the CANDIDATE adequately satisfies the TASK. Approve only when the candidate is acceptable for the task. Reject when it is incomplete, wrong, unsafe, non-executing, or likely to fail the objective check. Return exactly one ReviewDecision JSON object. Use decision 'approve' or 'reject'. confidence must be a JSON number from 0.0 to 1.0. blocking.tripwire must be true iff the candidate is rejected.\n\nTASK:\n# Bug Fixing Task (JAVA)\n\n## Problem Description\nGiven two integer arrays inorder and postorder where inorder is the inorder traversal of a binary tree and postorder is the postorder traversal of the same tree, construct and return the binary tree.\n\n## Examples\n```\nInput: inorder = [9,3,15,20,7], postorder = [9,15,7,20,3]\nOutput: [3,9,20,null,null,15,7]\n```\n```\nInput: inorder = [-1], postorder = [-1]\nOutput: [-1]\n```\n\n## Constraints\n1 <= inorder.length <= 3000\npostorder.length == inorder.length\n-3000 <= inorder[i], postorder[i] <= 3000\ninorder and postorder consist of unique values.\nEach value of postorder also appears in inorder\n\n## Buggy Code\n```java\n\n\n\nclass Solution {\n    int index;\n    public TreeNode buildTree(int[] inorder, int[] postorder) {\n        Map<Integer, Integer> m = new HashMap<>();\n\n        for(int i = 0; i < inorder.length; i++) {\n            m.put(inorder[i], i);\n        }\n        index = postorder.length - 1;\n        \n        return buildTree(0, postorder.length - 2, postorder, m;\n    }\n\n    private TreeNode buildTree(int l, int r, int postorder[] , Map<Integer, Integer> m) {\n        if(l > r) return null;\n\n        int val = postorder[index];\n        index--;\n\n        TreeNode root = new TreeNode(val);\n        if(l == r) return root;\n\n        int in = m.get(val);\n\n        root.right = buildNewTree(in + 1, r, postorder, m); \n        root.left = buildTree(l, in - 1, postorder, m);\n\n        return root;\n    }\n}\n\n```\n\nFind and fix the bug(s) in the code above. Provide the corrected code. Fix ONLY the bug — do NOT rewrite, rename variables, change data structures, or optimize. Keep the original code structure.\n\nCANDIDATE:\n/**\n * Definition for a binary tree node.\n * public class TreeNode {\n *     int val;\n *     TreeNode\n\nReviewDecision JSON only:",
+        "role": "user"
+      }
+    ],
+    "model": "auto",
+    "seed": 42,
+    "stream": false,
+    "temperature": 0.0
+  },
+  "url": "http://127.0.0.1:19560/v1/chat/completions"
+}

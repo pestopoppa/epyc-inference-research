@@ -1,0 +1,17 @@
+{
+  "endpoint": "chat",
+  "payload": {
+    "max_tokens": 128,
+    "messages": [
+      {
+        "content": "You are a strict reviewer. Decide whether the CANDIDATE adequately satisfies the TASK. Approve only when the candidate is acceptable for the task. Reject when it is incomplete, wrong, unsafe, non-executing, or likely to fail the objective check. Return exactly one ReviewDecision JSON object. Use decision 'approve' or 'reject'. confidence must be a JSON number from 0.0 to 1.0. blocking.tripwire must be true iff the candidate is rejected.\n\nTASK:\n# Bug Fixing Task (CPP)\n\n## Problem Description\nYou are given two non-empty linked lists representing two non-negative integers. The digits are stored in reverse order, and each of their nodes contains a single digit. Add the two numbers and return the sum as a linked list.\nYou may assume the two numbers do not contain any leading zero, except the number 0 itself.\n\n## Examples\n```\nInput: l1 = [2,4,3], l2 = [5,6,4]\nOutput: [7,0,8]\nExplanation: 342 + 465 = 807.\n```\n```\nInput: l1 = [0], l2 = [0]\nOutput: [0]\n```\n\n## Constraints\nThe number of nodes in each linked list is in the range [1, 100].\n0 <= Node.val <= 9\nIt is guaranteed that the list represents a number that does not have leading zeros.\n\n## Buggy Code\n```cpp\n\n/**\n * Definition for singly-linked list.\n * struct ListNode {\n *     int val;\n *     ListNode *next;\n *     ListNode() : val(0), next(nullptr) {}\n *     ListNode(int x) : val(x), next(nullptr) {}\n *     ListNode(int x, ListNode *next) : val(x), next(next) {}\n * };\n */\nclass Solution {\npublic:\n    ListNode* addTwoNumbers(ListNode* l1, ListNode* l2) {\n        //initializing tem and temp so that l1 and l2 reamins preserved,\n        //though this isn't needed but it a good practice\n        ListNode* temp=l1;\n        ListNode* tem=l2;\n        ListNode *ans;\n        ListNode *head;\n        int carry=0;\n        int valu;\n        //initiallize the first node of answer\n        int sum=tem->val+temp->val+carry;\n        valu=sum%10;\n        carry=sum/10;\n        ListNode* node =new ListNode(\"valu);\n        ans=node;\n        head=ans;\n        tem=tem->next;\n        temp=temp->next;\n        while(tem!=NULL && temp!=NULL)\n        {\n            sum=tem->val+temp->val+carry;\n            valu=sum%10;\n```\n\nFind and fix the bug(s) in the code above. Provide the corrected code. Fix ONLY the bug — do NOT rewrite, rename variables, change data structures, or optimize. Keep the original code structure.\n\nCANDIDATE:\nclass Solution {\npublic:\n    bool isBoomerang(vector<vector<int>>& points) {\n        float a,b,c,d;\n\n\nReviewDecision JSON only:",
+        "role": "user"
+      }
+    ],
+    "model": "auto",
+    "seed": 42,
+    "stream": false,
+    "temperature": 0.0
+  },
+  "url": "http://127.0.0.1:19560/v1/chat/completions"
+}

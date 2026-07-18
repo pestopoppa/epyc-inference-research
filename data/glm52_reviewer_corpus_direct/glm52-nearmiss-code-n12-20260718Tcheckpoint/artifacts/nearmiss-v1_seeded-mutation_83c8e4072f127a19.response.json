@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784344991,
+  "id": "chatcmpl-q0BpeTwuk5fNVtwSDoYPsWMwSL47cQ6k",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 109,
+    "predicted_ms": 12840.255,
+    "predicted_n": 33,
+    "predicted_per_second": 2.570042417381898,
+    "predicted_per_token_ms": 389.09863636363633,
+    "prompt_ms": 16283.772,
+    "prompt_n": 466,
+    "prompt_per_second": 28.61744809494999,
+    "prompt_per_token_ms": 34.94371673819742
+  },
+  "usage": {
+    "completion_tokens": 33,
+    "prompt_tokens": 575,
+    "prompt_tokens_details": {
+      "cached_tokens": 109
+    },
+    "total_tokens": 608
+  }
+}

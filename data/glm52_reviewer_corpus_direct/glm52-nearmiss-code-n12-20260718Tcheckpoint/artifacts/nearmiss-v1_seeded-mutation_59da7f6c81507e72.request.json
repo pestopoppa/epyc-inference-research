@@ -1,0 +1,17 @@
+{
+  "endpoint": "chat",
+  "payload": {
+    "max_tokens": 128,
+    "messages": [
+      {
+        "content": "You are a strict reviewer. Decide whether the CANDIDATE adequately satisfies the TASK. Approve only when the candidate is acceptable for the task. Reject when it is incomplete, wrong, unsafe, non-executing, or likely to fail the objective check. Return exactly one ReviewDecision JSON object. Use decision 'approve' or 'reject'. confidence must be a JSON number from 0.0 to 1.0. blocking.tripwire must be true iff the candidate is rejected.\n\nTASK:\n# Bug Fixing Task (CPP)\n\n## Problem Description\nYou are given a positive integer n representing the number of nodes of a Directed Acyclic Graph (DAG). The nodes are numbered from 0 to n - 1 (inclusive).\nYou are also given a 2D integer array edges, where edges[i] = [fromi, toi] denotes that there is a unidirectional edge from fromi to toi in the graph.\nReturn a list answer, where answer[i] is the list of ancestors of the ith node, sorted in ascending order.\nA node u is an ancestor of another node v if u can reach v via a set of edges.\n\n## Examples\n```\nInput: n = 8, edgeList = [[0,3],[0,4],[1,3],[2,4],[2,7],[3,5],[3,6],[3,7],[4,6]]\nOutput: [[],[],[],[0,1],[0,2],[0,1,3],[0,1,2,3,4],[0,1,2,3]]\nExplanation:\nThe above diagram represents the input graph.\n```\n```\nInput: n = 5, edgeList = [[0,1],[0,2],[0,3],[0,4],[1,2],[1,3],[1,4],[2,3],[2,4],[3,4]]\nOutput: [[],[0],[0,1],[0,1,2],[0,1,2,3]]\nExplanation:\nThe above diagram represents the input graph.\n- Node 0 does\n```\n\n## Constraints\n1 <= n <= 1000\n0 <= edges.length <= min(2000, n * (n - 1) / 2)\nedges[i].length == 2\n0 <= fromi, toi <= n - 1\nfromi != toi\nThere are no duplicate edges.\nThe graph is directed and acyclic.\n\n## Buggy Code\n```cpp\n\nclass Solution {\npublic:\n   \n    void dfs(int i,int ansc,vector<vector<int>>&ans,vector<int>&vis,vector<vector<int>>&res){\n             \n        vis[i]=1;\n        for(auto t:ans[i]){\n            if(!vis[t])\n                dfs(t,ansc,ans,vis,res)\n        }\n        if(i!=ansc)\n            res[i].push_back(ansc);\n    }\n    \n    vector<vector<int>> getAncestors(int n, vector<vector<int>>& edges) {\n        \n        vector<vector<int>>ans(n),result(n);\n        \n        for(auto a:edges){\n            ans[a[0]].push_back(a[1]);\n        }\n        \n        for(int i=0;i<n;i++){\n            vector<int>visited(n);\n            dfs(i,i,ans,visited,result);\n        }\n      \n        return result;\n    }\n};\n\n```\n\nFind and fix the bug(s) in the code above. Provide the corrected code. Fix ONLY the bug — do NOT rewrite, rename variables, change data structures, or optimize. Keep the original code structure.\n\nCANDIDATE:\nclass Solution {\npublic:\n   \n    void dfs(int i,int ansc,vector<vector<int>>&ans,vector<int>&vis,vec\n\nReviewDecision JSON only:",
+        "role": "user"
+      }
+    ],
+    "model": "auto",
+    "seed": 42,
+    "stream": false,
+    "temperature": 0.0
+  },
+  "url": "http://127.0.0.1:19560/v1/chat/completions"
+}

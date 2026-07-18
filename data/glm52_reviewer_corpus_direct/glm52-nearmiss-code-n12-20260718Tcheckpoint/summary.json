@@ -1,0 +1,1177 @@
+{
+  "band": {
+    "context_length": 16384,
+    "indexer_top_k": 16384,
+    "min_prompt_tokens": 12000,
+    "name": "p12000_tk16384",
+    "prompt_context_guard_tokens": 512
+  },
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "corpus": {
+    "available_counts": {
+      "('code', 'accept', 'multi_oracle')": 719,
+      "('code', 'reject', 'multi_oracle')": 1706
+    },
+    "domain_filter": "code",
+    "gold_confidence": [
+      "multi_oracle"
+    ],
+    "n_judgeable_available": 2425,
+    "n_requested": 12,
+    "n_selected": 12,
+    "path": "/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl",
+    "selected_label_counts": {
+      "accept": 6,
+      "reject": 6
+    },
+    "selected_row_ids": [
+      "nearmiss-v1:seeded-mutation:946d50e882055cd4",
+      "nearmiss-v1:c-crab:c7b60daa9aa5eadd",
+      "nearmiss-v1:seeded-mutation:e28ab732eb2d397e",
+      "nearmiss-v1:seeded-mutation:690316597ed2056e",
+      "nearmiss-v1:seeded-mutation:dc9c45b95c44d3a1",
+      "nearmiss-v1:seeded-mutation:07138f919a293eb1",
+      "nearmiss-v1:seeded-mutation:59da7f6c81507e72",
+      "nearmiss-v1:seeded-mutation:83c8e4072f127a19",
+      "nearmiss-v1:seeded-mutation:9c16408ca2c5e668",
+      "nearmiss-v1:seeded-mutation:87791ed41a3ab6f0",
+      "nearmiss-v1:seeded-mutation:ee6bc7044b71054b",
+      "nearmiss-v1:seeded-mutation:4e21113352e74956"
+    ]
+  },
+  "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/decisions.jsonl",
+  "execution": {
+    "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/decisions.jsonl",
+    "elapsed_s": 553.61,
+    "post_processes": [
+      {
+        "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+        "pid": 1849379
+      },
+      {
+        "command": "python3 scripts/benchmark/glm52_reviewer_corpus_direct_runner.py --execute --domain code --n 12 --output-dir data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint",
+        "pid": 2510604
+      }
+    ],
+    "progress_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/progress.jsonl",
+    "run_manifest": {
+      "calibration_command": "python3 /mnt/raid0/llm/epyc-orchestrator/scripts/analysis/reviewer_calibration_report.py --decisions /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/decisions.jsonl --corpus /mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl --k 2 --print",
+      "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/decisions.jsonl",
+      "generated_at": "2026-07-18T03:24:44.151229+00:00",
+      "n_scored": 12,
+      "observation_only": true,
+      "schema": "glm52_reviewer_corpus_direct_run_manifest.v1"
+    },
+    "score": {
+      "decision_counts": {
+        "approve": 3,
+        "reject": 9
+      },
+      "fa_rate": 0.16666666666666666,
+      "false_accepts": 1,
+      "false_rejects": 4,
+      "fr_rate": 0.6666666666666666,
+      "n": 12,
+      "n_bad": 6,
+      "n_golded": 12,
+      "n_good": 6,
+      "parse_failure_rate": 0.0,
+      "parse_failures": 0
+    },
+    "server_log": {
+      "bytes": 70926,
+      "decode_tokens": 19,
+      "decode_tps": 2.87,
+      "line_count": 762,
+      "matched_line_count": 423,
+      "matched_lines_tail": [
+        "7.52.775.929 I slot launch_slot_: id  0 | task 251 | processing task, is_child = 0",
+        "7.52.775.930 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+        "7.52.775.931 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+        "7.52.775.947 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+        "7.52.775.948 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+        "7.52.775.963 I slot process_sing: id  3 | task -1 | saving idle slot to prompt cache",
+        "7.52.775.964 I slot prompt_clear: id  3 | task -1 | clearing prompt with 0 tokens",
+        "7.52.775.989 I slot   operator(): id  0 | task 251 | new prompt, n_ctx_slot = 16384, n_keep = 0, task.n_tokens = 539",
+        "7.52.775.993 I slot   operator(): id  0 | task 251 | cached n_tokens = 103, memory_seq_rm [103, end)",
+        "7.52.776.098 I slot init_sampler: id  0 | task 251 | init sampler, took 0.05 ms, tokens: text = 539, total = 539",
+        "8.18.114.746 I slot print_timing: id  0 | task 251 | prompt eval time =   15375.06 ms /   436 tokens (   35.26 ms per token,    28.36 tokens per second)",
+        "8.18.114.752 I slot print_timing: id  0 | task 251 |        eval time =    9963.69 ms /    26 tokens (  383.22 ms per token,     2.61 tokens per second)",
+        "8.18.114.753 I slot print_timing: id  0 | task 251 |       total time =   25338.74 ms /   462 tokens",
+        "8.18.114.754 I slot print_timing: id  0 | task 251 |    graphs reused =        247",
+        "8.18.114.806 I slot      release: id  0 | task 251 | stop processing: n_tokens = 564, truncated = 0",
+        "8.18.114.817 I srv  update_slots: all slots are idle",
+        "8.18.131.412 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 0.135 (> 0.100 thold), f_keep = 0.193",
+        "8.18.139.758 I srv        update:  - cache state: 10 prompts, 1169.368 MiB (limits: 8192.000 MiB, 16384 tokens, 77207 est)",
+        "8.18.139.759 I srv        update:    - prompt 0x64e2ed9d39b0:    1166 tokens, checkpoints:  0,   123.717 MiB",
+        "8.18.139.760 I srv        update:    - prompt 0x64e2ef844f70:    2052 tokens, checkpoints:  0,   217.723 MiB",
+        "8.18.139.760 I srv        update:    - prompt 0x64e2ef7b1210:     682 tokens, checkpoints:  0,    72.363 MiB",
+        "8.18.139.761 I srv        update:    - prompt 0x64e2ef7bd1a0:     600 tokens, checkpoints:  0,    63.663 MiB",
+        "8.18.139.761 I srv        update:    - prompt 0x64e2efa56300:    1893 tokens, checkpoints:  0,   200.853 MiB",
+        "8.18.139.761 I srv        update:    - prompt 0x64e2ef87efc0:    2431 tokens, checkpoints:  0,   257.936 MiB",
+        "8.18.139.762 I srv        update:    - prompt 0x64e2efacded0:     805 tokens, checkpoints:  0,    85.414 MiB",
+        "8.18.139.762 I srv        update:    - prompt 0x64e2efa5ca10:     607 tokens, checkpoints:  0,    64.406 MiB",
+        "8.18.139.762 I srv        update:    - prompt 0x64e2ef9a0be0:     221 tokens, checkpoints:  0,    23.450 MiB",
+        "8.18.139.763 I srv        update:    - prompt 0x64e2ef8212d0:     564 tokens, checkpoints:  0,    59.843 MiB",
+        "8.18.139.886 I cmn  common_reaso: activated, budget=0 tokens",
+        "8.18.139.914 I slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+        "8.18.139.919 I slot launch_slot_: id  0 | task -1 | sampler params: ",
+        "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+        "8.18.139.922 I slot launch_slot_: id  0 | task 278 | processing task, is_child = 0",
+        "8.18.139.923 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+        "8.18.139.923 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+        "8.18.139.942 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+        "8.18.139.943 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+        "8.18.139.955 I slot process_sing: id  3 | task -1 | saving idle slot to prompt cache",
+        "8.18.139.956 I slot prompt_clear: id  3 | task -1 | clearing prompt with 0 tokens",
+        "8.18.139.975 I slot   operator(): id  0 | task 278 | new prompt, n_ctx_slot = 16384, n_keep = 0, task.n_tokens = 807",
+        "8.18.139.978 I slot   operator(): id  0 | task 278 | cached n_tokens = 109, memory_seq_rm [109, end)",
+        "8.18.140.166 I slot init_sampler: id  0 | task 278 | init sampler, took 0.08 ms, tokens: text = 807, total = 807",
+        "8.56.937.003 I slot print_timing: id  0 | task 278 | prompt eval time =   25884.17 ms /   698 tokens (   37.08 ms per token,    26.97 tokens per second)",
+        "8.56.937.010 I slot print_timing: id  0 | task 278 |        eval time =   12912.84 ms /    33 tokens (  391.30 ms per token,     2.56 tokens per second)",
+        "8.56.937.011 I slot print_timing: id  0 | task 278 |       total time =   38797.01 ms /   731 tokens",
+        "8.56.937.012 I slot print_timing: id  0 | task 278 |    graphs reused =        278",
+        "8.56.937.078 I slot      release: id  0 | task 278 | stop processing: n_tokens = 839, truncated = 0",
+        "8.56.937.091 I srv  update_slots: all slots are idle",
+        "8.56.952.146 I slot get_availabl: id  0 | task -1 | selected slot by LCP similarity, sim_best = 0.481 (> 0.100 thold), f_keep = 0.123",
+        "8.56.965.920 I srv        update:  - cache state: 10 prompts, 1234.940 MiB (limits: 8192.000 MiB, 16384 tokens, 77207 est)",
+        "8.56.965.923 I srv        update:    - prompt 0x64e2ed9d39b0:    1166 tokens, checkpoints:  0,   123.717 MiB",
+        "8.56.965.923 I srv        update:    - prompt 0x64e2ef844f70:    2052 tokens, checkpoints:  0,   217.723 MiB",
+        "8.56.965.923 I srv        update:    - prompt 0x64e2ef7b1210:     682 tokens, checkpoints:  0,    72.363 MiB",
+        "8.56.965.924 I srv        update:    - prompt 0x64e2ef7bd1a0:     600 tokens, checkpoints:  0,    63.663 MiB",
+        "8.56.965.924 I srv        update:    - prompt 0x64e2efa56300:    1893 tokens, checkpoints:  0,   200.853 MiB",
+        "8.56.965.925 I srv        update:    - prompt 0x64e2ef87efc0:    2431 tokens, checkpoints:  0,   257.936 MiB",
+        "8.56.965.926 I srv        update:    - prompt 0x64e2efacded0:     805 tokens, checkpoints:  0,    85.414 MiB",
+        "8.56.965.926 I srv        update:    - prompt 0x64e2efa5ca10:     607 tokens, checkpoints:  0,    64.406 MiB",
+        "8.56.965.926 I srv        update:    - prompt 0x64e2ef8212d0:     564 tokens, checkpoints:  0,    59.843 MiB",
+        "8.56.965.926 I srv        update:    - prompt 0x64e2ef8316e0:     839 tokens, checkpoints:  0,    89.021 MiB",
+        "8.56.966.050 I cmn  common_reaso: activated, budget=0 tokens",
+        "8.56.966.077 I slot launch_slot_: id  0 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+        "8.56.966.083 I slot launch_slot_: id  0 | task -1 | sampler params: ",
+        "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+        "8.56.966.086 I slot launch_slot_: id  0 | task 312 | processing task, is_child = 0",
+        "8.56.966.087 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+        "8.56.966.088 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+        "8.56.966.105 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+        "8.56.966.105 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+        "8.56.966.118 I slot process_sing: id  3 | task -1 | saving idle slot to prompt cache",
+        "8.56.966.119 I slot prompt_clear: id  3 | task -1 | clearing prompt with 0 tokens",
+        "8.56.966.138 I slot   operator(): id  0 | task 312 | new prompt, n_ctx_slot = 16384, n_keep = 0, task.n_tokens = 214",
+        "8.56.966.142 I slot   operator(): id  0 | task 312 | cached n_tokens = 122, memory_seq_rm [122, end)",
+        "8.56.966.202 I slot init_sampler: id  0 | task 312 | init sampler, took 0.02 ms, tokens: text = 214, total = 214",
+        "9.08.431.078 I slot print_timing: id  0 | task 312 | prompt eval time =    4854.74 ms /    92 tokens (   52.77 ms per token,    18.95 tokens per second)",
+        "9.08.431.085 I slot print_timing: id  0 | task 312 |        eval time =    6610.18 ms /    19 tokens (  347.90 ms per token,     2.87 tokens per second)",
+        "9.08.431.086 I slot print_timing: id  0 | task 312 |       total time =   11464.92 ms /   111 tokens",
+        "9.08.431.088 I slot print_timing: id  0 | task 312 |    graphs reused =        295",
+        "9.08.431.125 I slot      release: id  0 | task 312 | stop processing: n_tokens = 232, truncated = 0",
+        "9.08.431.137 I srv  update_slots: all slots are idle"
+      ],
+      "max_decoded_checkpoint": null,
+      "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/logs/glm52_corpus__p12000_tk16384.server.log",
+      "prompt_eval_tokens": 92,
+      "prompt_eval_tps": 18.95,
+      "status": "ok"
+    },
+    "status": "ok",
+    "task_results": [
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_946d50e882055cd4.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_946d50e882055cd4.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_946d50e882055cd4.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\":\"reject\",\"confidence\":0.95,\"blocking\":{\"tripwire\":true}}",
+          "content": "{\"decision\":\"reject\",\"confidence\":0.95,\"blocking\":{\"tripwire\":true}}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 51090.508,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 0.95,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 4114,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 4920,
+            "prompt_token_count": 1142,
+            "task_chars_original": 318,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1142,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:946d50e882055cd4",
+        "scoring_text": "{\"decision\":\"reject\",\"confidence\":0.95,\"blocking\":{\"tripwire\":true}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 7414.794,
+          "predicted_n": 19,
+          "predicted_per_second": 2.5624447557140493,
+          "predicted_per_token_ms": 390.2523157894737,
+          "prompt_ms": 43663.845,
+          "prompt_n": 1148,
+          "prompt_per_second": 26.291775266241437,
+          "prompt_per_token_ms": 38.03470818815331
+        },
+        "truncation": {
+          "candidate_chars_original": 4114,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 4920,
+          "task_chars_original": 318,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 1148,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1167
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_c-crab_c7b60daa9aa5eadd.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_c-crab_c7b60daa9aa5eadd.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_c-crab_c7b60daa9aa5eadd.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\":\"reject\",\"confidence\":0.95,\"blocking\":{\"tripwire\":true}}",
+          "content": "{\"decision\":\"reject\",\"confidence\":0.95,\"blocking\":{\"tripwire\":true}}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 84190.069,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 0.95,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 6553,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 7648,
+            "prompt_token_count": 2028,
+            "task_chars_original": 607,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2028,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:c7b60daa9aa5eadd",
+        "scoring_text": "{\"decision\":\"reject\",\"confidence\":0.95,\"blocking\":{\"tripwire\":true}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 7710.668,
+          "predicted_n": 19,
+          "predicted_per_second": 2.4641185432961192,
+          "predicted_per_token_ms": 405.82463157894733,
+          "prompt_ms": 76450.194,
+          "prompt_n": 2034,
+          "prompt_per_second": 26.605557076807415,
+          "prompt_per_token_ms": 37.58613274336283
+        },
+        "truncation": {
+          "candidate_chars_original": 6553,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 7648,
+          "task_chars_original": 607,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 2034,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2053
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_e28ab732eb2d397e.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_e28ab732eb2d397e.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_e28ab732eb2d397e.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 33419.79,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2510,
+            "prompt_token_count": 644,
+            "task_chars_original": 1922,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 644,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:e28ab732eb2d397e",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 103,
+          "predicted_ms": 12952.572,
+          "predicted_n": 33,
+          "predicted_per_second": 2.54775653823812,
+          "predicted_per_token_ms": 392.50218181818184,
+          "prompt_ms": 20429.043,
+          "prompt_n": 547,
+          "prompt_per_second": 26.77560569038892,
+          "prompt_per_token_ms": 37.34742778793419
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2510,
+          "task_chars_original": 1922,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 650,
+          "prompt_tokens_details": {
+            "cached_tokens": 103
+          },
+          "total_tokens": 683
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_690316597ed2056e.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_690316597ed2056e.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_690316597ed2056e.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+          "content": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 23806.049,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2269,
+            "prompt_token_count": 576,
+            "task_chars_original": 1681,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 576,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:690316597ed2056e",
+        "scoring_text": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 109,
+          "predicted_ms": 7200.994,
+          "predicted_n": 19,
+          "predicted_per_second": 2.6385246259058124,
+          "predicted_per_token_ms": 378.9996842105263,
+          "prompt_ms": 16584.532,
+          "prompt_n": 473,
+          "prompt_per_second": 28.520551559730478,
+          "prompt_per_token_ms": 35.0624355179704
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2269,
+          "task_chars_original": 1681,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 582,
+          "prompt_tokens_details": {
+            "cached_tokens": 109
+          },
+          "total_tokens": 601
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_dc9c45b95c44d3a1.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_dc9c45b95c44d3a1.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_dc9c45b95c44d3a1.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 83780.91,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 0.9,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 20025,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8107,
+            "prompt_token_count": 1855,
+            "task_chars_original": 575,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1855,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:dc9c45b95c44d3a1",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 13556.862,
+          "predicted_n": 33,
+          "predicted_per_second": 2.434191629301825,
+          "predicted_per_token_ms": 410.81399999999996,
+          "prompt_ms": 70202.149,
+          "prompt_n": 1861,
+          "prompt_per_second": 26.50915999736703,
+          "prompt_per_token_ms": 37.72280977968834
+        },
+        "truncation": {
+          "candidate_chars_original": 20025,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8107,
+          "task_chars_original": 575,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1861,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1894
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_07138f919a293eb1.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_07138f919a293eb1.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_07138f919a293eb1.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 107716.084,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.9,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 20025,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8726,
+            "prompt_token_count": 2393,
+            "task_chars_original": 1194,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2393,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:07138f919a293eb1",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 13850.539,
+          "predicted_n": 33,
+          "predicted_per_second": 2.3825787574043145,
+          "predicted_per_token_ms": 419.71330303030305,
+          "prompt_ms": 93826.566,
+          "prompt_n": 2399,
+          "prompt_per_second": 25.56845147673847,
+          "prompt_per_token_ms": 39.110698624426846
+        },
+        "truncation": {
+          "candidate_chars_original": 20025,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8726,
+          "task_chars_original": 1194,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2399,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2432
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_59da7f6c81507e72.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_59da7f6c81507e72.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_59da7f6c81507e72.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 38347.316,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2686,
+            "prompt_token_count": 767,
+            "task_chars_original": 2098,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 767,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:59da7f6c81507e72",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 103,
+          "predicted_ms": 12879.897,
+          "predicted_n": 33,
+          "predicted_per_second": 2.562132290343626,
+          "predicted_per_token_ms": 390.2999090909091,
+          "prompt_ms": 25424.407,
+          "prompt_n": 670,
+          "prompt_per_second": 26.35263036813405,
+          "prompt_per_token_ms": 37.94687611940299
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2686,
+          "task_chars_original": 2098,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 773,
+          "prompt_tokens_details": {
+            "cached_tokens": 103
+          },
+          "total_tokens": 806
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_83c8e4072f127a19.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_83c8e4072f127a19.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_83c8e4072f127a19.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 29146.569,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2241,
+            "prompt_token_count": 569,
+            "task_chars_original": 1653,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 569,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:83c8e4072f127a19",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 109,
+          "predicted_ms": 12840.255,
+          "predicted_n": 33,
+          "predicted_per_second": 2.570042417381898,
+          "predicted_per_token_ms": 389.09863636363633,
+          "prompt_ms": 16283.772,
+          "prompt_n": 466,
+          "prompt_per_second": 28.61744809494999,
+          "prompt_per_token_ms": 34.94371673819742
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2241,
+          "task_chars_original": 1653,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 575,
+          "prompt_tokens_details": {
+            "cached_tokens": 109
+          },
+          "total_tokens": 608
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_9c16408ca2c5e668.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_9c16408ca2c5e668.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_9c16408ca2c5e668.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+          "content": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 11834.175,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 1.0,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 8,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 817,
+            "prompt_token_count": 197,
+            "task_chars_original": 321,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 197,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:9c16408ca2c5e668",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 103,
+          "predicted_ms": 6605.758,
+          "predicted_n": 19,
+          "predicted_per_second": 2.876278543658427,
+          "predicted_per_token_ms": 347.6714736842105,
+          "prompt_ms": 5209.738,
+          "prompt_n": 100,
+          "prompt_per_second": 19.194823232953365,
+          "prompt_per_token_ms": 52.09738
+        },
+        "truncation": {
+          "candidate_chars_original": 8,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 817,
+          "task_chars_original": 321,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 203,
+          "prompt_tokens_details": {
+            "cached_tokens": 103
+          },
+          "total_tokens": 222
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_87791ed41a3ab6f0.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_87791ed41a3ab6f0.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_87791ed41a3ab6f0.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\": \"reject\", \"confidence\": 1.0, \"blocking\": { \"tripwire\": true } }",
+          "content": "{\"decision\": \"reject\", \"confidence\": 1.0, \"blocking\": { \"tripwire\": true } }",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 25353.731,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2061,
+            "prompt_token_count": 533,
+            "task_chars_original": 1473,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 533,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:87791ed41a3ab6f0",
+        "scoring_text": "{\"decision\": \"reject\", \"confidence\": 1.0, \"blocking\": { \"tripwire\": true } }",
+        "status": "ok",
+        "timings": {
+          "cache_n": 103,
+          "predicted_ms": 9963.687,
+          "predicted_n": 26,
+          "predicted_per_second": 2.6094757894341725,
+          "predicted_per_token_ms": 383.2187307692308,
+          "prompt_ms": 15375.055,
+          "prompt_n": 436,
+          "prompt_per_second": 28.35762213533545,
+          "prompt_per_token_ms": 35.2638876146789
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2061,
+          "task_chars_original": 1473,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 26,
+          "prompt_tokens": 539,
+          "prompt_tokens_details": {
+            "cached_tokens": 103
+          },
+          "total_tokens": 565
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_ee6bc7044b71054b.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_ee6bc7044b71054b.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_ee6bc7044b71054b.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 38817.72,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2906,
+            "prompt_token_count": 801,
+            "task_chars_original": 2318,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 801,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:ee6bc7044b71054b",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 109,
+          "predicted_ms": 12912.842,
+          "predicted_n": 33,
+          "predicted_per_second": 2.555595429728018,
+          "predicted_per_token_ms": 391.29824242424246,
+          "prompt_ms": 25884.172,
+          "prompt_n": 698,
+          "prompt_per_second": 26.966286578531466,
+          "prompt_per_token_ms": 37.083340974212035
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2906,
+          "task_chars_original": 2318,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 807,
+          "prompt_tokens_details": {
+            "cached_tokens": 109
+          },
+          "total_tokens": 840
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_4e21113352e74956.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_4e21113352e74956.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/artifacts/nearmiss-v1_seeded-mutation_4e21113352e74956.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+          "content": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 11490.372,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 1.0,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 14,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 832,
+            "prompt_token_count": 208,
+            "task_chars_original": 330,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 208,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:4e21113352e74956",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 122,
+          "predicted_ms": 6610.181,
+          "predicted_n": 19,
+          "predicted_per_second": 2.874353970035011,
+          "predicted_per_token_ms": 347.9042631578947,
+          "prompt_ms": 4854.744,
+          "prompt_n": 92,
+          "prompt_per_second": 18.9505358058015,
+          "prompt_per_token_ms": 52.76895652173913
+        },
+        "truncation": {
+          "candidate_chars_original": 14,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 832,
+          "task_chars_original": 330,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 214,
+          "prompt_tokens_details": {
+            "cached_tokens": 122
+          },
+          "total_tokens": 233
+        }
+      }
+    ]
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-18T03:15:30.376458+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "measurement_note": "pre-P-REV-1 observation; non-decision-gating",
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "observation_only": true,
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint",
+  "preexisting_processes": [
+    {
+      "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+      "pid": 1849379
+    },
+    {
+      "command": "python3 scripts/benchmark/glm52_reviewer_corpus_direct_runner.py --execute --domain code --n 12 --output-dir data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint",
+      "pid": 2510604
+    }
+  ],
+  "refusal_reasons": [],
+  "request": {
+    "endpoint": "chat",
+    "era": "pre_p_rev1_observation",
+    "max_field_chars": 7000,
+    "max_tokens": 128,
+    "rubric_version": "glm52_direct_nearmiss_review_v1+gbnf_on",
+    "seed": 42,
+    "temperature": 0.0,
+    "timeout_s": 1800
+  },
+  "schema": "glm52_reviewer_corpus_direct.v1",
+  "server": {
+    "context_length": 16384,
+    "extra_args": [
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\",\"reject_to_empty\",\"request_changes\",\"request_evidence\",\"abstain\",\"escalate\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"},\"blocking_issues\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"summary\"],\"properties\":{\"summary\":{\"type\":\"string\"}}}}}},\"advisory\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"score\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"feedback\":{\"type\":\"string\"}}}}}"
+    ],
+    "indexer_top_k": 16384,
+    "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:16384",
+    "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/logs/glm52_corpus__p12000_tk16384.server.log",
+    "metrics": false,
+    "port": 19560,
+    "server_command": [
+      "env",
+      "-i",
+      "PATH=/usr/bin:/bin",
+      "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+      "OMP_NUM_THREADS=1",
+      "numactl",
+      "--interleave=all",
+      "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+      "-m",
+      "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "--override-kv",
+      "glm-dsa.attention.indexer.top_k=int:16384",
+      "--device",
+      "none",
+      "-ngl",
+      "0",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "19560",
+      "-c",
+      "16384",
+      "-t",
+      "96",
+      "-ub",
+      "512",
+      "--log-verbosity",
+      "4",
+      "--log-file",
+      "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/logs/glm52_corpus__p12000_tk16384.server.log",
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\",\"reject_to_empty\",\"request_changes\",\"request_evidence\",\"abstain\",\"escalate\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"},\"blocking_issues\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"summary\"],\"properties\":{\"summary\":{\"type\":\"string\"}}}}}},\"advisory\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"score\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"feedback\":{\"type\":\"string\"}}}}}"
+    ],
+    "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:16384 --device none -ngl 0 --host 127.0.0.1 --port 19560 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/logs/glm52_corpus__p12000_tk16384.server.log --reasoning-format deepseek --reasoning off --reasoning-budget 0 --json-schema '{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\",\"reject_to_empty\",\"request_changes\",\"request_evidence\",\"abstain\",\"escalate\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"},\"blocking_issues\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"summary\"],\"properties\":{\"summary\":{\"type\":\"string\"}}}}}},\"advisory\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"score\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"feedback\":{\"type\":\"string\"}}}}}'",
+    "threads": 96,
+    "trace_logs": true,
+    "ubatch": 512
+  }
+}

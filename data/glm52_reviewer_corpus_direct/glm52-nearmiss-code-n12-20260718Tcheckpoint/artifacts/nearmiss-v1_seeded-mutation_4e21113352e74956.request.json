@@ -1,0 +1,17 @@
+{
+  "endpoint": "chat",
+  "payload": {
+    "max_tokens": 128,
+    "messages": [
+      {
+        "content": "You are a strict reviewer. Decide whether the CANDIDATE adequately satisfies the TASK. Approve only when the candidate is acceptable for the task. Reject when it is incomplete, wrong, unsafe, non-executing, or likely to fail the objective check. Return exactly one ReviewDecision JSON object. Use decision 'approve' or 'reject'. confidence must be a JSON number from 0.0 to 1.0. blocking.tripwire must be true iff the candidate is rejected.\n\nTASK:\nWhat does the following Python code print when called with the given input?\n\n```python\ndef f(s):\n    count = 0\n    digits = \"\"\n    for c in s:\n        if c.isdigit():\n            count += 1\n            digits += c\n    return [digits, count]\n```\n\nInput: `\"qwfasgahh329kn12a23\"`\n\nGive the exact output inside <answer></answer> tags.\n\nCANDIDATE:\n['3291223', 7]\n\nReviewDecision JSON only:",
+        "role": "user"
+      }
+    ],
+    "model": "auto",
+    "seed": 42,
+    "stream": false,
+    "temperature": 0.0
+  },
+  "url": "http://127.0.0.1:19560/v1/chat/completions"
+}

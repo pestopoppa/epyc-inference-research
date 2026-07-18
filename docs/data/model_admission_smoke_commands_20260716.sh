@@ -107,19 +107,13 @@ bonsai_dspark_mi210_v7() {
 }
 
 ternary_q2_0_mi210_v7() {
-  require_no_glm_download
-  v7_mi210_llama \
-    -m /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-Q2_0.gguf \
-    -ngl 99 -c 2048 -n 64 \
-    -p 'Return exactly: ok'
+  echo "blocked: Ternary-Bonsai-27B-Q2_0 uses noncanonical 17-byte/block Q2_0 packing under GGML_TYPE_Q2_0; v7 expects standard 18-byte/block Q2_0 and fails offset validation before prompt execution." >&2
+  return 75
 }
 
 ternary_q2_0_cpu_v7() {
-  require_no_glm_download
-  v7_cpu_llama \
-    -m /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-Q2_0.gguf \
-    -ngl 0 -t "${THREADS:-96}" -c 2048 -n 64 \
-    -p 'Return exactly: ok'
+  echo "blocked: Ternary-Bonsai-27B-Q2_0 uses noncanonical 17-byte/block Q2_0 packing under GGML_TYPE_Q2_0; v7 expects standard 18-byte/block Q2_0 and fails offset validation before prompt execution." >&2
+  return 75
 }
 
 ternary_bonsai_dspark_cpu_v7() {
@@ -354,7 +348,7 @@ case "${1:-}" in
   qwen3_4b_thinking_cpu_v7) qwen3_4b_thinking_cpu_v7 ;;
   qwen3_4b_thinking_mi210_v7) qwen3_4b_thinking_mi210_v7 ;;
   *)
-    echo "usage: $0 {glm_status|registry_gap_status|bonsai_q1_cpu|bonsai_q1_mi210_v7|bonsai_dspark_cpu_v7|bonsai_dspark_mi210_v7|ternary_q2_0_cpu_v7|ternary_q2_0_mi210_v7|ternary_bonsai_dspark_cpu_v7|ternary_bonsai_dspark_mi210_v7|bonsai_8b_cpu_v7|bonsai_8b_mi210_v7|qwable_iq4xs_cpu_v7|qwable_iq4xs_mi210_v7|qwable_q8_mi210_v7|hy3_build_cpu_runtime|hy3_cpu_smoke|deepseek_v4_flash_cpu_v7|nemotron_diff14_q8_cpu_v7|nemotron_diff14_q8_mi210_v7|nemotron_nano_9b_q8_cpu_v7|nemotron_nano_9b_q8_mi210_v7|minicpm_q4_cpu_text_v7|minicpm_q4_mi210_text_v7|qwen25_coder14_cpu_v7|qwen25_coder14_mi210_v7|qwen35_9b_mtp_cpu_v7|qwen35_9b_mtp_mi210_v7|qwen3_vl8_cpu_text_v7|qwen3_vl8_mi210_text_v7|qwen3_4b_thinking_cpu_v7|qwen3_4b_thinking_mi210_v7}" >&2
+    echo "usage: $0 {glm_status|registry_gap_status|bonsai_q1_cpu|bonsai_q1_mi210_v7|bonsai_dspark_cpu_v7|bonsai_dspark_mi210_v7|ternary_q2_0_cpu_v7(blocked)|ternary_q2_0_mi210_v7(blocked)|ternary_bonsai_dspark_cpu_v7|ternary_bonsai_dspark_mi210_v7|bonsai_8b_cpu_v7|bonsai_8b_mi210_v7|qwable_iq4xs_cpu_v7|qwable_iq4xs_mi210_v7|qwable_q8_mi210_v7|hy3_build_cpu_runtime|hy3_cpu_smoke|deepseek_v4_flash_cpu_v7|nemotron_diff14_q8_cpu_v7|nemotron_diff14_q8_mi210_v7|nemotron_nano_9b_q8_cpu_v7|nemotron_nano_9b_q8_mi210_v7|minicpm_q4_cpu_text_v7|minicpm_q4_mi210_text_v7|qwen25_coder14_cpu_v7|qwen25_coder14_mi210_v7|qwen35_9b_mtp_cpu_v7|qwen35_9b_mtp_mi210_v7|qwen3_vl8_cpu_text_v7|qwen3_vl8_mi210_text_v7|qwen3_4b_thinking_cpu_v7|qwen3_4b_thinking_mi210_v7}" >&2
     exit 64
     ;;
 esac

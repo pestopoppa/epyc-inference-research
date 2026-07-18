@@ -14,8 +14,6 @@ QUEUE=(
   bonsai_q1_mi210_v7
   bonsai_dspark_cpu_v7
   bonsai_dspark_mi210_v7
-  ternary_q2_0_cpu_v7
-  ternary_q2_0_mi210_v7
   ternary_bonsai_dspark_cpu_v7
   ternary_bonsai_dspark_mi210_v7
   bonsai_8b_cpu_v7
