@@ -1,0 +1,432 @@
+{
+  "files": [
+    {
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "matched_tensor_count": 0,
+      "tensor_count": 0
+    },
+    {
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+      "matched_tensor_count": 0,
+      "tensor_count": 412
+    },
+    {
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+      "matched_tensor_count": 0,
+      "tensor_count": 368
+    },
+    {
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+      "matched_tensor_count": 0,
+      "tensor_count": 368
+    },
+    {
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+      "matched_tensor_count": 0,
+      "tensor_count": 368
+    },
+    {
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "matched_tensor_count": 27,
+      "tensor_count": 293
+    }
+  ],
+  "metadata": {
+    "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf": {
+      "general.architecture": "glm-dsa",
+      "glm-dsa.attention.head_count": 64,
+      "glm-dsa.attention.head_count_kv": 1,
+      "glm-dsa.attention.indexer.head_count": 32,
+      "glm-dsa.attention.indexer.key_length": 128,
+      "glm-dsa.attention.indexer.top_k": 2048,
+      "glm-dsa.attention.key_length": 576,
+      "glm-dsa.attention.key_length_mla": 256,
+      "glm-dsa.attention.kv_lora_rank": 512,
+      "glm-dsa.attention.layer_norm_rms_epsilon": 9.999999747378752e-06,
+      "glm-dsa.attention.q_lora_rank": 2048,
+      "glm-dsa.attention.value_length": 512,
+      "glm-dsa.attention.value_length_mla": 256,
+      "glm-dsa.block_count": 79,
+      "glm-dsa.context_length": 1048576,
+      "glm-dsa.embedding_length": 6144,
+      "glm-dsa.expert_count": 256,
+      "glm-dsa.expert_feed_forward_length": 2048,
+      "glm-dsa.expert_gating_func": 2,
+      "glm-dsa.expert_group_count": 1,
+      "glm-dsa.expert_group_used_count": 1,
+      "glm-dsa.expert_shared_count": 1,
+      "glm-dsa.expert_used_count": 8,
+      "glm-dsa.expert_weights_norm": true,
+      "glm-dsa.expert_weights_scale": 2.5,
+      "glm-dsa.feed_forward_length": 12288,
+      "glm-dsa.leading_dense_block_count": 3,
+      "glm-dsa.nextn_predict_layers": 1,
+      "glm-dsa.rope.dimension_count": 64,
+      "glm-dsa.rope.freq_base": 8000000.0,
+      "glm-dsa.vocab_size": 154880
+    }
+  },
+  "summary": {
+    "file_count": 6,
+    "layer_end": 79,
+    "layer_start": 78,
+    "matched_tensors": 27,
+    "metadata_regexes": [
+      "general\\.architecture",
+      "(nextn|block_count|attention\\.indexer)",
+      "general\\.architecture|glm-dsa\\.|nextn|block_count|attention\\.indexer"
+    ],
+    "tensor_regexes": [
+      "blk\\.78\\."
+    ],
+    "total_tensors": 1809
+  },
+  "tensors": [
+    {
+      "data_offset": 38158933696,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 6684672,
+      "n_elements": 6291456,
+      "name": "blk.78.attn_k_b.weight",
+      "shape": [
+        192,
+        512,
+        64
+      ],
+      "tensor_type": "Q8_0"
+    },
+    {
+      "data_offset": 38165618368,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 3760128,
+      "n_elements": 3538944,
+      "name": "blk.78.attn_kv_a_mqa.weight",
+      "shape": [
+        6144,
+        576
+      ],
+      "tensor_type": "Q8_0"
+    },
+    {
+      "data_offset": 38169378496,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 2048,
+      "n_elements": 512,
+      "name": "blk.78.attn_kv_a_norm.weight",
+      "shape": [
+        512
+      ],
+      "tensor_type": "F32"
+    },
+    {
+      "data_offset": 38169380544,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 24576,
+      "n_elements": 6144,
+      "name": "blk.78.attn_norm.weight",
+      "shape": [
+        6144
+      ],
+      "tensor_type": "F32"
+    },
+    {
+      "data_offset": 38169405120,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 69206016,
+      "n_elements": 100663296,
+      "name": "blk.78.attn_output.weight",
+      "shape": [
+        16384,
+        6144
+      ],
+      "tensor_type": "Q5_K"
+    },
+    {
+      "data_offset": 38238611136,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 8650752,
+      "n_elements": 12582912,
+      "name": "blk.78.attn_q_a.weight",
+      "shape": [
+        6144,
+        2048
+      ],
+      "tensor_type": "Q5_K"
+    },
+    {
+      "data_offset": 38247261888,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 8192,
+      "n_elements": 2048,
+      "name": "blk.78.attn_q_a_norm.weight",
+      "shape": [
+        2048
+      ],
+      "tensor_type": "F32"
+    },
+    {
+      "data_offset": 38247270080,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 35651584,
+      "n_elements": 33554432,
+      "name": "blk.78.attn_q_b.weight",
+      "shape": [
+        2048,
+        16384
+      ],
+      "tensor_type": "Q8_0"
+    },
+    {
+      "data_offset": 38282921664,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 8912896,
+      "n_elements": 8388608,
+      "name": "blk.78.attn_v_b.weight",
+      "shape": [
+        512,
+        256,
+        64
+      ],
+      "tensor_type": "Q8_0"
+    },
+    {
+      "data_offset": 38291834560,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 1024,
+      "n_elements": 256,
+      "name": "blk.78.exp_probs_b.bias",
+      "shape": [
+        256
+      ],
+      "tensor_type": "F32"
+    },
+    {
+      "data_offset": 38291835584,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 1384120320,
+      "n_elements": 3221225472,
+      "name": "blk.78.ffn_down_exps.weight",
+      "shape": [
+        2048,
+        6144,
+        256
+      ],
+      "tensor_type": "Q3_K"
+    },
+    {
+      "data_offset": 39675955904,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 10321920,
+      "n_elements": 12582912,
+      "name": "blk.78.ffn_down_shexp.weight",
+      "shape": [
+        2048,
+        6144
+      ],
+      "tensor_type": "Q6_K"
+    },
+    {
+      "data_offset": 39686277824,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 1056964608,
+      "n_elements": 3221225472,
+      "name": "blk.78.ffn_gate_exps.weight",
+      "shape": [
+        6144,
+        2048,
+        256
+      ],
+      "tensor_type": "Q2_K"
+    },
+    {
+      "data_offset": 40743242432,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 6291456,
+      "n_elements": 1572864,
+      "name": "blk.78.ffn_gate_inp.weight",
+      "shape": [
+        6144,
+        256
+      ],
+      "tensor_type": "F32"
+    },
+    {
+      "data_offset": 40749533888,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 8650752,
+      "n_elements": 12582912,
+      "name": "blk.78.ffn_gate_shexp.weight",
+      "shape": [
+        6144,
+        2048
+      ],
+      "tensor_type": "Q5_K"
+    },
+    {
+      "data_offset": 40758184640,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 24576,
+      "n_elements": 6144,
+      "name": "blk.78.ffn_norm.weight",
+      "shape": [
+        6144
+      ],
+      "tensor_type": "F32"
+    },
+    {
+      "data_offset": 40758209216,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 1056964608,
+      "n_elements": 3221225472,
+      "name": "blk.78.ffn_up_exps.weight",
+      "shape": [
+        6144,
+        2048,
+        256
+      ],
+      "tensor_type": "Q2_K"
+    },
+    {
+      "data_offset": 41815173824,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 8650752,
+      "n_elements": 12582912,
+      "name": "blk.78.ffn_up_shexp.weight",
+      "shape": [
+        6144,
+        2048
+      ],
+      "tensor_type": "Q5_K"
+    },
+    {
+      "data_offset": 41823824576,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 835584,
+      "n_elements": 786432,
+      "name": "blk.78.indexer.attn_k.weight",
+      "shape": [
+        6144,
+        128
+      ],
+      "tensor_type": "Q8_0"
+    },
+    {
+      "data_offset": 41824660160,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 8912896,
+      "n_elements": 8388608,
+      "name": "blk.78.indexer.attn_q_b.weight",
+      "shape": [
+        2048,
+        4096
+      ],
+      "tensor_type": "Q8_0"
+    },
+    {
+      "data_offset": 41833573056,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 512,
+      "n_elements": 128,
+      "name": "blk.78.indexer.k_norm.bias",
+      "shape": [
+        128
+      ],
+      "tensor_type": "F32"
+    },
+    {
+      "data_offset": 41833573568,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 512,
+      "n_elements": 128,
+      "name": "blk.78.indexer.k_norm.weight",
+      "shape": [
+        128
+      ],
+      "tensor_type": "F32"
+    },
+    {
+      "data_offset": 41833574080,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 786432,
+      "n_elements": 196608,
+      "name": "blk.78.indexer.proj.weight",
+      "shape": [
+        6144,
+        32
+      ],
+      "tensor_type": "F32"
+    },
+    {
+      "data_offset": 41834360512,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 80216064,
+      "n_elements": 75497472,
+      "name": "blk.78.nextn.eh_proj.weight",
+      "shape": [
+        12288,
+        6144
+      ],
+      "tensor_type": "Q8_0"
+    },
+    {
+      "data_offset": 41914576576,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 24576,
+      "n_elements": 6144,
+      "name": "blk.78.nextn.enorm.weight",
+      "shape": [
+        6144
+      ],
+      "tensor_type": "F32"
+    },
+    {
+      "data_offset": 41914601152,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 24576,
+      "n_elements": 6144,
+      "name": "blk.78.nextn.hnorm.weight",
+      "shape": [
+        6144
+      ],
+      "tensor_type": "F32"
+    },
+    {
+      "data_offset": 41914625728,
+      "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+      "layer": 78,
+      "n_bytes": 24576,
+      "n_elements": 6144,
+      "name": "blk.78.nextn.shared_head_norm.weight",
+      "shape": [
+        6144
+      ],
+      "tensor_type": "F32"
+    }
+  ]
+}
