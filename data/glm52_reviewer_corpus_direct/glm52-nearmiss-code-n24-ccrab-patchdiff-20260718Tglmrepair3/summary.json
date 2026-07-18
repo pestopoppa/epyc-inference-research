@@ -1,0 +1,1974 @@
+{
+  "band": {
+    "context_length": 16384,
+    "indexer_top_k": 16384,
+    "min_prompt_tokens": 12000,
+    "name": "p12000_tk16384",
+    "prompt_context_guard_tokens": 512
+  },
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "corpus": {
+    "available_counts": {
+      "('code', 'accept', 'observation', 'python', None)": 410,
+      "('code', 'reject', 'multi_oracle', 'python', None)": 485
+    },
+    "available_summary": {
+      "by_label_representation_counts": {
+        "('accept', 'c-crab|python|no_scoring_method')": 410,
+        "('reject', 'c-crab|python|no_scoring_method')": 485
+      },
+      "candidate_chars": {
+        "max": 20030,
+        "min": 501,
+        "p50": 9011
+      },
+      "label_counts": {
+        "accept": 410,
+        "reject": 485
+      },
+      "representation_counts": {
+        "c-crab|python|no_scoring_method": 895
+      }
+    },
+    "domain_filter": "code",
+    "gold_confidence": [
+      "multi_oracle",
+      "observation"
+    ],
+    "n_judgeable_available": 895,
+    "n_requested": 24,
+    "n_selected": 24,
+    "path": "/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl",
+    "provenance_scoring_method_filter": [
+      "all"
+    ],
+    "selected_label_counts": {
+      "accept": 12,
+      "reject": 12
+    },
+    "selected_row_ids": [
+      "nearmiss-v1:c-crab:c7b60daa9aa5eadd",
+      "nearmiss-v1:c-crab:6b710a8f003b6d7f",
+      "nearmiss-v1:c-crab:647899c8f3fb6291",
+      "nearmiss-v1:c-crab:8dc1180c48a1b3b6",
+      "nearmiss-v1:c-crab:28cdbe123c730a18",
+      "nearmiss-v1:c-crab:f879b4017123dc9f",
+      "nearmiss-v1:c-crab:1b63b0ef41d1cd2c",
+      "nearmiss-v1:c-crab:1a06ca93c57f49ac",
+      "nearmiss-v1:c-crab:4b06087c8562e486",
+      "nearmiss-v1:c-crab:e44abdf36f469146",
+      "nearmiss-v1:c-crab:660688d73003ed0a",
+      "nearmiss-v1:c-crab:3ba0458d6811d621",
+      "nearmiss-v1:c-crab:04e7c10ace73a71f",
+      "nearmiss-v1:c-crab:2b3fc5eb0ec4cae5",
+      "nearmiss-v1:c-crab:f0cc324a44e67375",
+      "nearmiss-v1:c-crab:34224c9c98534550",
+      "nearmiss-v1:c-crab:0bba7015c58af460",
+      "nearmiss-v1:c-crab:1c8613da318282a0",
+      "nearmiss-v1:c-crab:8f3c0663c47de1ed",
+      "nearmiss-v1:c-crab:74d37c7877c3c037",
+      "nearmiss-v1:c-crab:5df8ae04380b00e8",
+      "nearmiss-v1:c-crab:45aa7d4d1370e3e7",
+      "nearmiss-v1:c-crab:fe1359e0bad78184",
+      "nearmiss-v1:c-crab:0e49d06ddc8f2635"
+    ],
+    "selected_summary": {
+      "by_label_representation_counts": {
+        "('accept', 'c-crab|python|no_scoring_method')": 12,
+        "('reject', 'c-crab|python|no_scoring_method')": 12
+      },
+      "candidate_chars": {
+        "max": 20029,
+        "min": 1311,
+        "p50": 6838
+      },
+      "label_counts": {
+        "accept": 12,
+        "reject": 12
+      },
+      "representation_counts": {
+        "c-crab|python|no_scoring_method": 24
+      }
+    },
+    "source_benchmark_filter": [
+      "c-crab"
+    ],
+    "source_suite_filter": [
+      "python"
+    ]
+  },
+  "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/decisions.jsonl",
+  "execution": {
+    "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/decisions.jsonl",
+    "elapsed_s": 2719.599,
+    "post_processes": [
+      {
+        "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+        "pid": 1849379
+      }
+    ],
+    "progress_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/progress.jsonl",
+    "run_manifest": {
+      "calibration_command": "python3 /mnt/raid0/llm/epyc-orchestrator/scripts/analysis/reviewer_calibration_report.py --decisions /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/decisions.jsonl --corpus /mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl --k 2 --print",
+      "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/decisions.jsonl",
+      "generated_at": "2026-07-18T06:02:23.167337+00:00",
+      "n_scored": 24,
+      "observation_only": true,
+      "schema": "glm52_reviewer_corpus_direct_run_manifest.v1"
+    },
+    "score": {
+      "decision_counts": {
+        "approve": 21,
+        "reject": 3
+      },
+      "fa_rate": 0.9166666666666666,
+      "false_accepts": 11,
+      "false_rejects": 2,
+      "fr_rate": 0.16666666666666666,
+      "n": 24,
+      "n_bad": 12,
+      "n_golded": 24,
+      "n_good": 12,
+      "parse_failure_rate": 0.0,
+      "parse_failures": 0
+    },
+    "server_log": {
+      "path": null,
+      "status": "disabled"
+    },
+    "status": "ok",
+    "task_results": [
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_c7b60daa9aa5eadd.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_c7b60daa9aa5eadd.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_c7b60daa9aa5eadd.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 112581.674,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.9,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 6553,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 7843,
+            "prompt_token_count": 2062,
+            "task_chars_original": 607,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2062,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:c7b60daa9aa5eadd",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14618.274,
+          "predicted_n": 33,
+          "predicted_per_second": 2.257448451164618,
+          "predicted_per_token_ms": 442.978,
+          "prompt_ms": 97949.409,
+          "prompt_n": 2068,
+          "prompt_per_second": 21.112940048469305,
+          "prompt_per_token_ms": 47.364317698259185
+        },
+        "truncation": {
+          "candidate_chars_original": 6553,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 7843,
+          "task_chars_original": 607,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2068,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2101
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_6b710a8f003b6d7f.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_6b710a8f003b6d7f.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_6b710a8f003b6d7f.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 208567.661,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.8,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 16466,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 14771,
+            "prompt_token_count": 3818,
+            "task_chars_original": 8027,
+            "task_truncated": true
+          }
+        ],
+        "prompt_token_count": 3818,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:6b710a8f003b6d7f",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 15395.191,
+          "predicted_n": 33,
+          "predicted_per_second": 2.1435265077256918,
+          "predicted_per_token_ms": 466.52093939393944,
+          "prompt_ms": 193129.031,
+          "prompt_n": 3824,
+          "prompt_per_second": 19.800233968967618,
+          "prompt_per_token_ms": 50.50445371338912
+        },
+        "truncation": {
+          "candidate_chars_original": 16466,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 14771,
+          "task_chars_original": 8027,
+          "task_truncated": true
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 3824,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 3857
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_647899c8f3fb6291.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_647899c8f3fb6291.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_647899c8f3fb6291.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 126496.71,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.8,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 15458,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 9720,
+            "prompt_token_count": 2420,
+            "task_chars_original": 1993,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2420,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:647899c8f3fb6291",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14727.193,
+          "predicted_n": 33,
+          "predicted_per_second": 2.240752871236223,
+          "predicted_per_token_ms": 446.2785757575757,
+          "prompt_ms": 111705.528,
+          "prompt_n": 2426,
+          "prompt_per_second": 21.717815075364935,
+          "prompt_per_token_ms": 46.04514756801319
+        },
+        "truncation": {
+          "candidate_chars_original": 15458,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 9720,
+          "task_chars_original": 1993,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2426,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2459
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_8dc1180c48a1b3b6.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_8dc1180c48a1b3b6.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_8dc1180c48a1b3b6.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 161707.967,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.8,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 20028,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 12098,
+            "prompt_token_count": 3025,
+            "task_chars_original": 4371,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 3025,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:8dc1180c48a1b3b6",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 15254.482,
+          "predicted_n": 33,
+          "predicted_per_second": 2.16329862921599,
+          "predicted_per_token_ms": 462.2570303030303,
+          "prompt_ms": 146406.303,
+          "prompt_n": 3031,
+          "prompt_per_second": 20.702660595152107,
+          "prompt_per_token_ms": 48.30297030682944
+        },
+        "truncation": {
+          "candidate_chars_original": 20028,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 12098,
+          "task_chars_original": 4371,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 3031,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 3064
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_28cdbe123c730a18.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_28cdbe123c730a18.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_28cdbe123c730a18.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 148046.558,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.95,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 3651,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8760,
+            "prompt_token_count": 2695,
+            "task_chars_original": 4426,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2695,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:28cdbe123c730a18",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14866.51,
+          "predicted_n": 33,
+          "predicted_per_second": 2.21975433373401,
+          "predicted_per_token_ms": 450.50030303030303,
+          "prompt_ms": 133125.397,
+          "prompt_n": 2701,
+          "prompt_per_second": 20.28914137247606,
+          "prompt_per_token_ms": 49.287447982228805
+        },
+        "truncation": {
+          "candidate_chars_original": 3651,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 8760,
+          "task_chars_original": 4426,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2701,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2734
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_f879b4017123dc9f.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_f879b4017123dc9f.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_f879b4017123dc9f.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 129389.711,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.95,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 7188,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8357,
+            "prompt_token_count": 2428,
+            "task_chars_original": 630,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2428,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:f879b4017123dc9f",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14784.765,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2320273605972094,
+          "predicted_per_token_ms": 448.0231818181818,
+          "prompt_ms": 114554.995,
+          "prompt_n": 2434,
+          "prompt_per_second": 21.24743665695241,
+          "prompt_per_token_ms": 47.06450082169268
+        },
+        "truncation": {
+          "candidate_chars_original": 7188,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8357,
+          "task_chars_original": 630,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2434,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2467
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_1b63b0ef41d1cd2c.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_1b63b0ef41d1cd2c.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_1b63b0ef41d1cd2c.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 80506.808,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 0.95,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 4614,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 5852,
+            "prompt_token_count": 1487,
+            "task_chars_original": 555,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1487,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:1b63b0ef41d1cd2c",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14400.005,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2916658709493505,
+          "predicted_per_token_ms": 436.36378787878783,
+          "prompt_ms": 66062.289,
+          "prompt_n": 1493,
+          "prompt_per_second": 22.59988296802734,
+          "prompt_per_token_ms": 44.248016744809114
+        },
+        "truncation": {
+          "candidate_chars_original": 4614,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 5852,
+          "task_chars_original": 555,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1493,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1526
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_1a06ca93c57f49ac.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_1a06ca93c57f49ac.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_1a06ca93c57f49ac.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 92824.988,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.9,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 5524,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 7020,
+            "prompt_token_count": 1685,
+            "task_chars_original": 813,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1685,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:1a06ca93c57f49ac",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14439.449,
+          "predicted_n": 33,
+          "predicted_per_second": 2.28540576582943,
+          "predicted_per_token_ms": 437.5590606060606,
+          "prompt_ms": 78352.83,
+          "prompt_n": 1691,
+          "prompt_per_second": 21.581862454744776,
+          "prompt_per_token_ms": 46.33520402128918
+        },
+        "truncation": {
+          "candidate_chars_original": 5524,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 7020,
+          "task_chars_original": 813,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1691,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1724
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_4b06087c8562e486.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_4b06087c8562e486.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_4b06087c8562e486.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.7,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.7,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 60646.344,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.7,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 3594,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 4973,
+            "prompt_token_count": 1173,
+            "task_chars_original": 696,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1173,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:4b06087c8562e486",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.7,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 14133.832,
+          "predicted_n": 33,
+          "predicted_per_second": 2.3348232807634903,
+          "predicted_per_token_ms": 428.29793939393943,
+          "prompt_ms": 46477.485,
+          "prompt_n": 1042,
+          "prompt_per_second": 22.41945750722097,
+          "prompt_per_token_ms": 44.604112284069096
+        },
+        "truncation": {
+          "candidate_chars_original": 3594,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 4973,
+          "task_chars_original": 696,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1179,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 1212
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_e44abdf36f469146.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_e44abdf36f469146.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_e44abdf36f469146.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 98821.135,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.8,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 13391,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8315,
+            "prompt_token_count": 1864,
+            "task_chars_original": 588,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1864,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:e44abdf36f469146",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14474.199,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2799189095023493,
+          "predicted_per_token_ms": 438.6120909090909,
+          "prompt_ms": 84316.752,
+          "prompt_n": 1870,
+          "prompt_per_second": 22.178273660256743,
+          "prompt_per_token_ms": 45.08917219251337
+        },
+        "truncation": {
+          "candidate_chars_original": 13391,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8315,
+          "task_chars_original": 588,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1870,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1903
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_660688d73003ed0a.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_660688d73003ed0a.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_660688d73003ed0a.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 98423.077,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.9,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 4843,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 5831,
+            "prompt_token_count": 1839,
+            "task_chars_original": 305,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1839,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:660688d73003ed0a",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14462.748,
+          "predicted_n": 33,
+          "predicted_per_second": 2.281724054100922,
+          "predicted_per_token_ms": 438.2650909090909,
+          "prompt_ms": 83922.212,
+          "prompt_n": 1845,
+          "prompt_per_second": 21.98464454201946,
+          "prompt_per_token_ms": 45.48629376693767
+        },
+        "truncation": {
+          "candidate_chars_original": 4843,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 5831,
+          "task_chars_original": 305,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1845,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1878
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_3ba0458d6811d621.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_3ba0458d6811d621.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_3ba0458d6811d621.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 133032.484,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.8,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 5975,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 10295,
+            "prompt_token_count": 2512,
+            "task_chars_original": 3637,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2512,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:3ba0458d6811d621",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14886.449,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2167811813280656,
+          "predicted_per_token_ms": 451.10451515151516,
+          "prompt_ms": 118106.316,
+          "prompt_n": 2518,
+          "prompt_per_second": 21.319774295559267,
+          "prompt_per_token_ms": 46.9048117553614
+        },
+        "truncation": {
+          "candidate_chars_original": 5975,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 10295,
+          "task_chars_original": 3637,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2518,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2551
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_04e7c10ace73a71f.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_04e7c10ace73a71f.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_04e7c10ace73a71f.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.7,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.7,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 77771.47,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.7,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 4598,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 5862,
+            "prompt_token_count": 1412,
+            "task_chars_original": 581,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1412,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:04e7c10ace73a71f",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.7,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14341.727,
+          "predicted_n": 33,
+          "predicted_per_second": 2.3009781179072784,
+          "predicted_per_token_ms": 434.5977878787879,
+          "prompt_ms": 63384.112,
+          "prompt_n": 1418,
+          "prompt_per_second": 22.37153689239979,
+          "prompt_per_token_ms": 44.699655853314525
+        },
+        "truncation": {
+          "candidate_chars_original": 4598,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 5862,
+          "task_chars_original": 581,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1418,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1451
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_2b3fc5eb0ec4cae5.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_2b3fc5eb0ec4cae5.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_2b3fc5eb0ec4cae5.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 129959.417,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.8,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 20027,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8374,
+            "prompt_token_count": 2441,
+            "task_chars_original": 647,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2441,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:2b3fc5eb0ec4cae5",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14810.772,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2281080283998698,
+          "predicted_per_token_ms": 448.81127272727275,
+          "prompt_ms": 115115.791,
+          "prompt_n": 2447,
+          "prompt_per_second": 21.25685780155044,
+          "prompt_per_token_ms": 47.04364160196158
+        },
+        "truncation": {
+          "candidate_chars_original": 20027,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8374,
+          "task_chars_original": 647,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2447,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2480
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_f0cc324a44e67375.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_f0cc324a44e67375.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_f0cc324a44e67375.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 138712.122,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.95,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 11496,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 10084,
+            "prompt_token_count": 2591,
+            "task_chars_original": 2357,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2591,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:f0cc324a44e67375",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14878.734,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2179306384535136,
+          "predicted_per_token_ms": 450.87072727272727,
+          "prompt_ms": 123786.316,
+          "prompt_n": 2597,
+          "prompt_per_second": 20.979701827462094,
+          "prompt_per_token_ms": 47.665119753561804
+        },
+        "truncation": {
+          "candidate_chars_original": 11496,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 10084,
+          "task_chars_original": 2357,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2597,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2630
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_34224c9c98534550.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_34224c9c98534550.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_34224c9c98534550.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 110867.377,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.9,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 6838,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8088,
+            "prompt_token_count": 2057,
+            "task_chars_original": 567,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2057,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:34224c9c98534550",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14654.764,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2518274603398596,
+          "predicted_per_token_ms": 444.08375757575755,
+          "prompt_ms": 96164.371,
+          "prompt_n": 2063,
+          "prompt_per_second": 21.45285180516597,
+          "prompt_per_token_ms": 46.61384924866699
+        },
+        "truncation": {
+          "candidate_chars_original": 6838,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 8088,
+          "task_chars_original": 567,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2063,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2096
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_0bba7015c58af460.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_0bba7015c58af460.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_0bba7015c58af460.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 84724.539,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 0.9,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 1905,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 5872,
+            "prompt_token_count": 1551,
+            "task_chars_original": 3284,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1551,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:0bba7015c58af460",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14372.166,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2961048459918985,
+          "predicted_per_token_ms": 435.5201818181818,
+          "prompt_ms": 70310.887,
+          "prompt_n": 1557,
+          "prompt_per_second": 22.144508004855634,
+          "prompt_per_token_ms": 45.157923570969814
+        },
+        "truncation": {
+          "candidate_chars_original": 1905,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 5872,
+          "task_chars_original": 3284,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1557,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1590
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_1c8613da318282a0.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_1c8613da318282a0.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_1c8613da318282a0.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 91282.289,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.8,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 5297,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 7044,
+            "prompt_token_count": 1685,
+            "task_chars_original": 1064,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1685,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:1c8613da318282a0",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14463.06,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2816748322969,
+          "predicted_per_token_ms": 438.27454545454543,
+          "prompt_ms": 76784.177,
+          "prompt_n": 1691,
+          "prompt_per_second": 22.022766487423574,
+          "prompt_per_token_ms": 45.407555884092254
+        },
+        "truncation": {
+          "candidate_chars_original": 5297,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 7044,
+          "task_chars_original": 1064,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1691,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1724
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_8f3c0663c47de1ed.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_8f3c0663c47de1ed.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_8f3c0663c47de1ed.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 100507.908,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.8,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 20027,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8329,
+            "prompt_token_count": 1897,
+            "task_chars_original": 602,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1897,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:8f3c0663c47de1ed",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14537.442,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2700004581273654,
+          "predicted_per_token_ms": 440.52854545454545,
+          "prompt_ms": 85933.084,
+          "prompt_n": 1903,
+          "prompt_per_second": 22.145137954085296,
+          "prompt_per_token_ms": 45.156638991066735
+        },
+        "truncation": {
+          "candidate_chars_original": 20027,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8329,
+          "task_chars_original": 602,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1903,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1936
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_74d37c7877c3c037.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_74d37c7877c3c037.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_74d37c7877c3c037.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 56395.484,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 0.85,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 1311,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 4098,
+            "prompt_token_count": 1103,
+            "task_chars_original": 2104,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1103,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:74d37c7877c3c037",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 13978.852,
+          "predicted_n": 33,
+          "predicted_per_second": 2.360708876522908,
+          "predicted_per_token_ms": 423.6015757575758,
+          "prompt_ms": 42378.014,
+          "prompt_n": 972,
+          "prompt_per_second": 22.93642170206466,
+          "prompt_per_token_ms": 43.59877983539095
+        },
+        "truncation": {
+          "candidate_chars_original": 1311,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 4098,
+          "task_chars_original": 2104,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1109,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 1142
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_5df8ae04380b00e8.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_5df8ae04380b00e8.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_5df8ae04380b00e8.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 121886.398,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.9,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 20029,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8187,
+            "prompt_token_count": 2271,
+            "task_chars_original": 460,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2271,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:5df8ae04380b00e8",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14709.618,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2434301149084903,
+          "predicted_per_token_ms": 445.74600000000004,
+          "prompt_ms": 107146.536,
+          "prompt_n": 2277,
+          "prompt_per_second": 21.251270316382417,
+          "prompt_per_token_ms": 47.05601054018445
+        },
+        "truncation": {
+          "candidate_chars_original": 20029,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8187,
+          "task_chars_original": 460,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2277,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2310
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_45aa7d4d1370e3e7.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_45aa7d4d1370e3e7.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_45aa7d4d1370e3e7.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 143721.068,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.95,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 9991,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8893,
+            "prompt_token_count": 2628,
+            "task_chars_original": 1166,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2628,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:45aa7d4d1370e3e7",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14961.06,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2057260648643884,
+          "predicted_per_token_ms": 453.36545454545455,
+          "prompt_ms": 128715.412,
+          "prompt_n": 2634,
+          "prompt_per_second": 20.463749904323812,
+          "prompt_per_token_ms": 48.86689901290812
+        },
+        "truncation": {
+          "candidate_chars_original": 9991,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8893,
+          "task_chars_original": 1166,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2634,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2667
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_fe1359e0bad78184.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_fe1359e0bad78184.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_fe1359e0bad78184.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 106287.948,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.9,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 12095,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8576,
+            "prompt_token_count": 1976,
+            "task_chars_original": 849,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1976,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:fe1359e0bad78184",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14609.007,
+          "predicted_n": 33,
+          "predicted_per_second": 2.2588804290394275,
+          "predicted_per_token_ms": 442.69718181818183,
+          "prompt_ms": 91630.119,
+          "prompt_n": 1982,
+          "prompt_per_second": 21.630442278482686,
+          "prompt_per_token_ms": 46.23113975782039
+        },
+        "truncation": {
+          "candidate_chars_original": 12095,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8576,
+          "task_chars_original": 849,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1982,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2015
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_0e49d06ddc8f2635.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_0e49d06ddc8f2635.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3/artifacts/nearmiss-v1_c-crab_0e49d06ddc8f2635.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 91501.333,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.85,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 4686,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 6454,
+            "prompt_token_count": 1669,
+            "task_chars_original": 1085,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1669,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:0e49d06ddc8f2635",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 14415.658,
+          "predicted_n": 33,
+          "predicted_per_second": 2.289177504072308,
+          "predicted_per_token_ms": 436.8381212121212,
+          "prompt_ms": 77044.88,
+          "prompt_n": 1675,
+          "prompt_per_second": 21.740575103757706,
+          "prompt_per_token_ms": 45.99694328358209
+        },
+        "truncation": {
+          "candidate_chars_original": 4686,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 6454,
+          "task_chars_original": 1085,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1675,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1708
+        }
+      }
+    ]
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-18T05:17:03.402812+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "measurement_note": "pre-P-REV-1 observation; non-decision-gating",
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "observation_only": true,
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-ccrab-patchdiff-20260718Tglmrepair3",
+  "preexisting_processes": [
+    {
+      "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+      "pid": 1849379
+    }
+  ],
+  "refusal_reasons": [],
+  "request": {
+    "endpoint": "chat",
+    "era": "pre_p_rev1_observation",
+    "max_field_chars": 7000,
+    "max_tokens": 128,
+    "rubric_version": "glm52_direct_nearmiss_review_v2+binary_schema",
+    "seed": 42,
+    "temperature": 0.0,
+    "timeout_s": 1800
+  },
+  "schema": "glm52_reviewer_corpus_direct.v1",
+  "server": {
+    "context_length": 16384,
+    "extra_args": [
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}}}}"
+    ],
+    "indexer_top_k": 16384,
+    "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:16384",
+    "log_file": null,
+    "metrics": false,
+    "port": 19560,
+    "server_command": [
+      "env",
+      "-i",
+      "PATH=/usr/bin:/bin",
+      "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+      "OMP_NUM_THREADS=1",
+      "numactl",
+      "--interleave=all",
+      "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+      "-m",
+      "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "--override-kv",
+      "glm-dsa.attention.indexer.top_k=int:16384",
+      "--device",
+      "none",
+      "-ngl",
+      "0",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "19560",
+      "-c",
+      "16384",
+      "-t",
+      "96",
+      "-ub",
+      "512",
+      "--log-disable",
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}}}}"
+    ],
+    "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:16384 --device none -ngl 0 --host 127.0.0.1 --port 19560 -c 16384 -t 96 -ub 512 --log-disable --reasoning-format deepseek --reasoning off --reasoning-budget 0 --json-schema '{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}}}}'",
+    "threads": 96,
+    "trace_logs": false,
+    "ubatch": 512
+  }
+}
