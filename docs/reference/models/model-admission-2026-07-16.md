@@ -583,6 +583,25 @@ structured-output prompt, but the lane remains much slower than frontdoor and
 worker. The 14K/32K rows are not part of this run because the production-shaped
 architect server uses two slots under a 16K context cap.
 
+## K35 Ingest Long-Context Curve
+
+The production-shaped CPU ingest lane was measured at 2K, 8K, and 32K nominal
+contexts with 1024 generated tokens in
+`data/k35_stack_context_matrix/ingest_long_context_curve_20260718Tcodex/`.
+This is Qwen3-Next with default expert count, q4_0 KV, flash attention, jinja,
+mlock, and no speculative decoding.
+
+| Nominal context | Prompt tokens | Completion tokens | Prompt t/s | Generation t/s | Draft accepted |
+|---:|---:|---:|---:|---:|---:|
+| 2048 | 128 | 1024 | 150.96 | 20.52 | 0 / 0 |
+| 8192 | 6208 | 1024 | 172.45 | 15.93 | 0 / 0 |
+| 32768 | 30785 | 1024 | 96.71 | 9.72 | 0 / 0 |
+
+Interpretation: ingest-long-context has the steepest context-depth decode slope
+among the measured K35 CPU text lanes so far. The 32K cell is runnable and
+clean, but at 9.72 t/s it is the first concrete target for sparse/final-attention
+or residency/offload work once quality gates permit acceleration spend.
+
 ## MI210 Context-Size Sweep
 
 The context sweep at `/mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/` measured prompt and decode behavior at short, mid, and long prompts for three representative candidates. All cases wrote cleanup logs. The measured prompt-token counts differ from nominal context sizes because the prompt body is tokenizer-dependent.
