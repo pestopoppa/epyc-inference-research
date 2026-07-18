@@ -9,6 +9,7 @@ Public surface:
     from odl_bench.backends import resolve_backend, availability_report, register_backend
     from odl_bench.manifest_stubs import model_gated_stubs, model_gated_manifest
     from odl_bench.paddleocr_vl import PaddleOcrVlProducer
+    from odl_bench.comparison import build_existing_comparison
 """
 
 from __future__ import annotations
@@ -21,4 +22,5 @@ __all__ = [
     "manifest_stubs",
     "bootstrap",
     "paddleocr_vl",
+    "comparison",
 ]

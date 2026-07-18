@@ -1,0 +1,313 @@
+{
+  "comparison_rows": [
+    {
+      "engine": "paddleocr_vl_default",
+      "metrics": {
+        "reading_order": {
+          "detail": "normalized edit distance; LOWER is better",
+          "engine": "paddleocr_vl_default",
+          "metric_family": "reading_order",
+          "metric_name": "reading_order.Edit_dist.ALL_page_avg",
+          "n": 0,
+          "value": 0.33731788904532656
+        },
+        "speed": {
+          "detail": "median per-page extraction latency (ms); mean=2834.398",
+          "engine": "paddleocr_vl_default",
+          "metric_family": "speed",
+          "metric_name": "latency_ms_median",
+          "n": 18,
+          "value": 2918.779006926343
+        },
+        "structural_fidelity": {
+          "detail": "normalized edit distance; LOWER is better",
+          "engine": "paddleocr_vl_default",
+          "metric_family": "structural_fidelity",
+          "metric_name": "text_block.Edit_dist.ALL_page_avg",
+          "n": 0,
+          "value": 0.3430194505039449
+        },
+        "table_fidelity": {
+          "detail": "TEDS; HIGHER is better; TEDS_structure_only=0.0",
+          "engine": "paddleocr_vl_default",
+          "metric_family": "table_fidelity",
+          "metric_name": "table.TEDS.all",
+          "n": 0,
+          "value": 0.0
+        }
+      },
+      "source_refs": [
+        1
+      ]
+    },
+    {
+      "engine": "paddleocr_vl_html_tables",
+      "metrics": {
+        "reading_order": {
+          "detail": "normalized edit distance; LOWER is better",
+          "engine": "paddleocr_vl_html_tables",
+          "metric_family": "reading_order",
+          "metric_name": "reading_order.Edit_dist.ALL_page_avg",
+          "n": 0,
+          "value": 0.28575267455706616
+        },
+        "speed": {
+          "detail": "median per-page extraction latency (ms); mean=3220.940",
+          "engine": "paddleocr_vl_html_tables",
+          "metric_family": "speed",
+          "metric_name": "latency_ms_median",
+          "n": 18,
+          "value": 3245.5979044316337
+        },
+        "structural_fidelity": {
+          "detail": "normalized edit distance; LOWER is better",
+          "engine": "paddleocr_vl_html_tables",
+          "metric_family": "structural_fidelity",
+          "metric_name": "text_block.Edit_dist.ALL_page_avg",
+          "n": 0,
+          "value": 0.42906216255138685
+        },
+        "table_fidelity": {
+          "detail": "TEDS; HIGHER is better; TEDS_structure_only=0.0",
+          "engine": "paddleocr_vl_html_tables",
+          "metric_family": "table_fidelity",
+          "metric_name": "table.TEDS.all",
+          "n": 0,
+          "value": 0.0
+        }
+      },
+      "source_refs": [
+        2
+      ]
+    },
+    {
+      "engine": "paddleocr_vl_postprocessed",
+      "metrics": {
+        "reading_order": {
+          "detail": "normalized edit distance; LOWER is better",
+          "engine": "paddleocr_vl_postprocessed",
+          "metric_family": "reading_order",
+          "metric_name": "reading_order.Edit_dist.ALL_page_avg",
+          "n": 0,
+          "value": 0.3501384018658394
+        },
+        "speed": null,
+        "structural_fidelity": {
+          "detail": "normalized edit distance; LOWER is better",
+          "engine": "paddleocr_vl_postprocessed",
+          "metric_family": "structural_fidelity",
+          "metric_name": "text_block.Edit_dist.ALL_page_avg",
+          "n": 0,
+          "value": 0.3435395989228812
+        },
+        "table_fidelity": {
+          "detail": "TEDS; HIGHER is better; TEDS_structure_only=0.06666666666666668",
+          "engine": "paddleocr_vl_postprocessed",
+          "metric_family": "table_fidelity",
+          "metric_name": "table.TEDS.all",
+          "n": 0,
+          "value": 0.05833333333333333
+        }
+      },
+      "source_refs": [
+        3
+      ]
+    },
+    {
+      "engine": "opendataloader_end2end",
+      "metrics": {
+        "reading_order": {
+          "detail": "normalized edit distance; LOWER is better",
+          "engine": "opendataloader_end2end",
+          "metric_family": "reading_order",
+          "metric_name": "reading_order.Edit_dist.ALL_page_avg",
+          "n": 0,
+          "value": 0.21699615743733391
+        },
+        "speed": null,
+        "structural_fidelity": {
+          "detail": "normalized edit distance; LOWER is better",
+          "engine": "opendataloader_end2end",
+          "metric_family": "structural_fidelity",
+          "metric_name": "text_block.Edit_dist.ALL_page_avg",
+          "n": 0,
+          "value": 0.35612553465615604
+        },
+        "table_fidelity": {
+          "detail": "TEDS; HIGHER is better; TEDS_structure_only=0.9115886967813946",
+          "engine": "opendataloader_end2end",
+          "metric_family": "table_fidelity",
+          "metric_name": "table.TEDS.all",
+          "n": 0,
+          "value": 0.7838125415599836
+        }
+      },
+      "source_refs": [
+        4
+      ]
+    }
+  ],
+  "gt_json": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/OmniDocBench_demo.json",
+  "metric_directions": {
+    "reading_order": "lower_better",
+    "speed": "lower_better",
+    "structural_fidelity": "lower_better",
+    "table_fidelity": "higher_better"
+  },
+  "metric_rows": [
+    {
+      "detail": "median per-page extraction latency (ms); mean=2834.398",
+      "engine": "paddleocr_vl_default",
+      "metric_family": "speed",
+      "metric_name": "latency_ms_median",
+      "n": 18,
+      "value": 2918.779006926343
+    },
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "paddleocr_vl_default",
+      "metric_family": "structural_fidelity",
+      "metric_name": "text_block.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.3430194505039449
+    },
+    {
+      "detail": "TEDS; HIGHER is better; TEDS_structure_only=0.0",
+      "engine": "paddleocr_vl_default",
+      "metric_family": "table_fidelity",
+      "metric_name": "table.TEDS.all",
+      "n": 0,
+      "value": 0.0
+    },
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "paddleocr_vl_default",
+      "metric_family": "reading_order",
+      "metric_name": "reading_order.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.33731788904532656
+    },
+    {
+      "detail": "median per-page extraction latency (ms); mean=3220.940",
+      "engine": "paddleocr_vl_html_tables",
+      "metric_family": "speed",
+      "metric_name": "latency_ms_median",
+      "n": 18,
+      "value": 3245.5979044316337
+    },
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "paddleocr_vl_html_tables",
+      "metric_family": "structural_fidelity",
+      "metric_name": "text_block.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.42906216255138685
+    },
+    {
+      "detail": "TEDS; HIGHER is better; TEDS_structure_only=0.0",
+      "engine": "paddleocr_vl_html_tables",
+      "metric_family": "table_fidelity",
+      "metric_name": "table.TEDS.all",
+      "n": 0,
+      "value": 0.0
+    },
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "paddleocr_vl_html_tables",
+      "metric_family": "reading_order",
+      "metric_name": "reading_order.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.28575267455706616
+    },
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "paddleocr_vl_postprocessed",
+      "metric_family": "structural_fidelity",
+      "metric_name": "text_block.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.3435395989228812
+    },
+    {
+      "detail": "TEDS; HIGHER is better; TEDS_structure_only=0.06666666666666668",
+      "engine": "paddleocr_vl_postprocessed",
+      "metric_family": "table_fidelity",
+      "metric_name": "table.TEDS.all",
+      "n": 0,
+      "value": 0.05833333333333333
+    },
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "paddleocr_vl_postprocessed",
+      "metric_family": "reading_order",
+      "metric_name": "reading_order.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.3501384018658394
+    },
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "opendataloader_end2end",
+      "metric_family": "structural_fidelity",
+      "metric_name": "text_block.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.35612553465615604
+    },
+    {
+      "detail": "TEDS; HIGHER is better; TEDS_structure_only=0.9115886967813946",
+      "engine": "opendataloader_end2end",
+      "metric_family": "table_fidelity",
+      "metric_name": "table.TEDS.all",
+      "n": 0,
+      "value": 0.7838125415599836
+    },
+    {
+      "detail": "normalized edit distance; LOWER is better",
+      "engine": "opendataloader_end2end",
+      "metric_family": "reading_order",
+      "metric_name": "reading_order.Edit_dist.ALL_page_avg",
+      "n": 0,
+      "value": 0.21699615743733391
+    }
+  ],
+  "notes": [],
+  "schema": "odl_bench.existing_comparison.v1",
+  "sources": [
+    {
+      "engines": [
+        "paddleocr_vl_default"
+      ],
+      "gt_json": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/OmniDocBench_demo.json",
+      "kind": "row_set",
+      "path": "/mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-20260717T200212Z/model_gated_row_set.json",
+      "prediction_dirs": {
+        "paddleocr_vl_1_6": "/mnt/raid0/llm/tmp/odl-paddleocr-vl-demo-20260717T200212Z/predictions/paddleocr_vl_1_6"
+      }
+    },
+    {
+      "engines": [
+        "paddleocr_vl_html_tables"
+      ],
+      "gt_json": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/OmniDocBench_demo.json",
+      "kind": "row_set",
+      "path": "/mnt/raid0/llm/tmp/odl-paddleocr-vl-htmltables-20260717T201106Z/model_gated_row_set.json",
+      "prediction_dirs": {
+        "paddleocr_vl_1_6": "/mnt/raid0/llm/tmp/odl-paddleocr-vl-htmltables-20260717T201106Z/predictions/paddleocr_vl_1_6"
+      }
+    },
+    {
+      "engine": "paddleocr_vl_postprocessed",
+      "engines": [
+        "paddleocr_vl_postprocessed"
+      ],
+      "kind": "metric_result",
+      "path": "/mnt/raid0/llm/opendataloader-bench/result/paddleocr_vl_1_6_postprocessed_20260717T211432Z_quick_match_metric_result.json"
+    },
+    {
+      "engine": "opendataloader_end2end",
+      "engines": [
+        "opendataloader_end2end"
+      ],
+      "kind": "metric_result",
+      "path": "/mnt/raid0/llm/opendataloader-bench/result/end2end_quick_match_metric_result.json"
+    }
+  ]
+}

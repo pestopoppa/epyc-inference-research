@@ -329,9 +329,9 @@ def _main(argv=None):
     parser = argparse.ArgumentParser(description="ODL structural bench adapter (Wave-2 B3)")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_av = sub.add_parser("availability", help="report deterministic engine availability here")
+    sub.add_parser("availability", help="report deterministic engine availability here")
 
-    p_stub = sub.add_parser("stubs", help="print model-gated Wave-3 manifest stubs (JSON)")
+    sub.add_parser("stubs", help="print model-gated Wave-3 manifest stubs (JSON)")
 
     p_run = sub.add_parser("run", help="generate predictions (+optional score) for engines")
     p_run.add_argument("--engine", action="append", help="engine(s); default = all deterministic")
@@ -370,6 +370,39 @@ def _main(argv=None):
     )
     p_model.add_argument("--prompt-file", type=Path, default=None, help="override prompt text from file")
 
+    p_compare = sub.add_parser(
+        "compare-existing",
+        help="materialize JSON/Markdown comparison from existing scored artifacts only",
+    )
+    p_compare.add_argument(
+        "--artifact",
+        action="append",
+        default=[],
+        help=(
+            "existing row-set/summary JSON path, ENGINE=artifact alias, or "
+            "ENGINE=raw_metric_result.json; "
+            "may be repeated"
+        ),
+    )
+    p_compare.add_argument(
+        "--prediction-dir",
+        action="append",
+        default=[],
+        help=(
+            "ENGINE=prediction_dir; infers the existing metric result from --result-dir "
+            "using the quick_match save-name convention"
+        ),
+    )
+    p_compare.add_argument(
+        "--result-dir",
+        default=None,
+        help="directory containing existing *_metric_result.json files; default = bench result dir",
+    )
+    p_compare.add_argument("--gt", default=None, help="optional GT JSON path label for output")
+    p_compare.add_argument("--out-dir", required=True, help="directory for comparison JSON/Markdown")
+    p_compare.add_argument("--match-method", default="quick_match")
+    p_compare.add_argument("--force", action="store_true", help="overwrite existing comparison outputs")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "availability":
@@ -392,6 +425,27 @@ def _main(argv=None):
         out.write_text(json.dumps(row_set.to_dict(), indent=2), encoding="utf-8")
         print(f"[odl_bench] wrote {out}")
         print(json.dumps([r.to_dict() for r in row_set.metric_rows], indent=2))
+        return 0
+    if args.cmd == "compare-existing":
+        from .comparison import (
+            build_existing_comparison,
+            parse_engine_path_specs,
+            write_existing_comparison,
+        )
+
+        if not args.artifact and not args.prediction_dir:
+            parser.error("compare-existing requires at least one --artifact or --prediction-dir")
+        payload = build_existing_comparison(
+            artifacts=parse_engine_path_specs(args.artifact),
+            prediction_dirs=parse_engine_path_specs(args.prediction_dir),
+            result_dir=args.result_dir,
+            gt_json=args.gt,
+            match_method=args.match_method,
+        )
+        json_path, md_path = write_existing_comparison(payload, args.out_dir, force=args.force)
+        print(f"[odl_bench] wrote {json_path}")
+        print(f"[odl_bench] wrote {md_path}")
+        print(json.dumps(payload["comparison_rows"], indent=2))
         return 0
     if args.cmd == "run-model":
         if not args.allow_inference:
