@@ -89,6 +89,30 @@ def split_csv(value: str) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
+def optional_filter(value: str | None) -> set[str] | None:
+    if value is None:
+        return None
+    parts = {part.lower() for part in split_csv(value)}
+    if not parts or "all" in parts:
+        return None
+    return parts
+
+
+def provenance_scoring_method(row: dict[str, Any]) -> str:
+    provenance = row.get("provenance") if isinstance(row.get("provenance"), dict) else {}
+    return str(provenance.get("scoring_method") or "").strip().lower()
+
+
+def representation_key(row: dict[str, Any]) -> str:
+    return "|".join(
+        [
+            str(row.get("source_benchmark") or "").strip().lower() or "unknown_benchmark",
+            str(row.get("source_suite") or "").strip().lower() or "unknown_suite",
+            provenance_scoring_method(row) or "no_scoring_method",
+        ]
+    )
+
+
 def load_review_ledger_module() -> Any:
     module_path = ORCH_ROOT / "src" / "trace" / "review_ledger.py"
     spec = importlib.util.spec_from_file_location("review_ledger_direct_corpus", module_path)
@@ -111,6 +135,9 @@ def is_judgeable_row(
     *,
     domain: str | None = None,
     gold_confidence: set[str] | None = None,
+    source_suites: set[str] | None = None,
+    source_benchmarks: set[str] | None = None,
+    scoring_methods: set[str] | None = None,
 ) -> bool:
     if domain and domain != "all" and str(row.get("domain")) != domain:
         return False
@@ -118,9 +145,15 @@ def is_judgeable_row(
         return False
     if str(row.get("gold_label") or "").strip().lower() not in GOLD_LABELS:
         return False
-    if gold_confidence is None:
-        return True
-    return str(row.get("gold_confidence") or "").strip().lower() in gold_confidence
+    if gold_confidence is not None and str(row.get("gold_confidence") or "").strip().lower() not in gold_confidence:
+        return False
+    if source_suites is not None and str(row.get("source_suite") or "").strip().lower() not in source_suites:
+        return False
+    if source_benchmarks is not None and str(row.get("source_benchmark") or "").strip().lower() not in source_benchmarks:
+        return False
+    if scoring_methods is not None and provenance_scoring_method(row) not in scoring_methods:
+        return False
+    return True
 
 
 def iter_judgeable_rows(
@@ -128,6 +161,9 @@ def iter_judgeable_rows(
     *,
     domain: str | None,
     gold_confidence: set[str],
+    source_suites: set[str] | None = None,
+    source_benchmarks: set[str] | None = None,
+    scoring_methods: set[str] | None = None,
 ) -> Iterable[CorpusRow]:
     with corpus_path.open("r", encoding="utf-8") as fh:
         for line in fh:
@@ -139,7 +175,14 @@ def iter_judgeable_rows(
             except json.JSONDecodeError:
                 continue
             row_id = str(row.get("row_id") or row.get("candidate_id") or "")
-            if row_id and is_judgeable_row(row, domain=domain, gold_confidence=gold_confidence):
+            if row_id and is_judgeable_row(
+                row,
+                domain=domain,
+                gold_confidence=gold_confidence,
+                source_suites=source_suites,
+                source_benchmarks=source_benchmarks,
+                scoring_methods=scoring_methods,
+            ):
                 yield CorpusRow(row_id=row_id, raw=row)
 
 
@@ -175,6 +218,29 @@ def select_balanced_rows(rows: list[CorpusRow], *, n: int, seed_key: str) -> lis
 
     selected.sort(key=lambda r: stable_row_hash(seed_key, r.row_id))
     return selected[:n]
+
+
+def summarize_row_set(rows: list[CorpusRow]) -> dict[str, Any]:
+    label_counts = Counter(row.raw.get("gold_label") for row in rows)
+    representation_counts = Counter(representation_key(row.raw) for row in rows)
+    by_label_representation = Counter(
+        (row.raw.get("gold_label"), representation_key(row.raw)) for row in rows
+    )
+    candidate_lengths = sorted(len(str(row.raw.get("candidate") or "")) for row in rows)
+    if candidate_lengths:
+        length_summary = {
+            "min": candidate_lengths[0],
+            "p50": candidate_lengths[len(candidate_lengths) // 2],
+            "max": candidate_lengths[-1],
+        }
+    else:
+        length_summary = {"min": None, "p50": None, "max": None}
+    return {
+        "label_counts": dict(label_counts),
+        "representation_counts": dict(representation_counts),
+        "by_label_representation_counts": {str(key): value for key, value in by_label_representation.items()},
+        "candidate_chars": length_summary,
+    }
 
 
 def truncate_middle(text: str, max_chars: int) -> tuple[str, bool]:
@@ -456,13 +522,35 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     inventory = base.collect_inventory(args.model_dir)
     primary_shard = Path(inventory["primary_shard"]) if inventory["primary_shard"] else args.model_dir
     gold_conf = set(split_csv(args.gold_confidence))
-    rows = list(iter_judgeable_rows(args.corpus, domain=args.domain, gold_confidence=gold_conf))
+    source_suites = optional_filter(args.source_suite)
+    source_benchmarks = optional_filter(args.source_benchmark)
+    scoring_methods = optional_filter(args.provenance_scoring_method)
+    rows = list(
+        iter_judgeable_rows(
+            args.corpus,
+            domain=args.domain,
+            gold_confidence=gold_conf,
+            source_suites=source_suites,
+            source_benchmarks=source_benchmarks,
+            scoring_methods=scoring_methods,
+        )
+    )
     selected = select_balanced_rows(rows, n=args.n, seed_key=f"{args.seed}:glm52")
     counts = Counter(
-        (row.raw.get("domain"), row.raw.get("gold_label"), row.raw.get("gold_confidence"))
+        (
+            row.raw.get("domain"),
+            row.raw.get("gold_label"),
+            row.raw.get("gold_confidence"),
+            row.raw.get("source_suite"),
+            provenance_scoring_method(row.raw) or None,
+        )
         for row in rows
     )
+    available_summary = summarize_row_set(rows)
+    selected_summary = summarize_row_set(selected)
     selected_counts = Counter(row.raw.get("gold_label") for row in selected)
+    selected_representations = selected_summary["representation_counts"]
+    mixed_representation = len(selected_representations) > 1
     server = build_server_spec(
         args,
         band=band,
@@ -480,11 +568,16 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "path": str(args.corpus),
             "domain_filter": args.domain or "all",
             "gold_confidence": sorted(gold_conf),
+            "source_suite_filter": sorted(source_suites) if source_suites else ["all"],
+            "source_benchmark_filter": sorted(source_benchmarks) if source_benchmarks else ["all"],
+            "provenance_scoring_method_filter": sorted(scoring_methods) if scoring_methods else ["all"],
             "n_judgeable_available": len(rows),
             "available_counts": {str(key): value for key, value in counts.items()},
+            "available_summary": available_summary,
             "n_requested": args.n,
             "n_selected": len(selected),
             "selected_label_counts": dict(selected_counts),
+            "selected_summary": selected_summary,
             "selected_row_ids": [row.row_id for row in selected],
         },
         "request": {
@@ -504,8 +597,20 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "model_path": str(primary_shard),
         "output_dir": str(args.output_dir),
         "decisions_path": str(args.output_dir / "decisions.jsonl"),
-        "execution_allowed": inventory["status"] == "ready" and len(selected) > 0,
-        "refusal_reasons": list(inventory["refusal_reasons"]) + ([] if selected else ["no selected judgeable rows"]),
+        "execution_allowed": (
+            inventory["status"] == "ready"
+            and len(selected) > 0
+            and set(selected_counts) == set(GOLD_LABELS)
+            and (args.allow_mixed_representation or not mixed_representation)
+        ),
+        "refusal_reasons": list(inventory["refusal_reasons"])
+        + ([] if selected else ["no selected judgeable rows"])
+        + ([] if set(selected_counts) == set(GOLD_LABELS) else ["selected rows do not cover both accept/reject labels"])
+        + (
+            []
+            if args.allow_mixed_representation or not mixed_representation
+            else ["selected rows mix source_suite/scoring representations; rerun with explicit filters or --allow-mixed-representation"]
+        ),
         "inventory": inventory,
         "preexisting_processes": runtime_processes("llama-server|llama-cli|autopilot|glm52"),
         "server": server,
@@ -706,6 +811,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--band", choices=tuple(smoke.PROMPT_BANDS), default="p12000_tk16384")
     parser.add_argument("--domain", default="code")
     parser.add_argument("--gold-confidence", default=",".join(DEFAULT_GOLD_CONFIDENCE))
+    parser.add_argument("--source-suite", default=None, help="Comma-separated source_suite filter, or all.")
+    parser.add_argument("--source-benchmark", default=None, help="Comma-separated source_benchmark filter, or all.")
+    parser.add_argument(
+        "--provenance-scoring-method",
+        default=None,
+        help="Comma-separated provenance.scoring_method filter, or all.",
+    )
+    parser.add_argument(
+        "--allow-mixed-representation",
+        action="store_true",
+        help="Allow selected rows to mix source benchmark/suite/scoring-method representations.",
+    )
     parser.add_argument("--n", type=int, default=DEFAULT_N)
     parser.add_argument("--threads", type=int, default=base.DEFAULT_THREADS)
     parser.add_argument("--ubatch", type=int, default=base.DEFAULT_UBATCH)
@@ -752,7 +869,16 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     gold_conf = set(split_csv(args.gold_confidence))
-    rows = list(iter_judgeable_rows(args.corpus, domain=args.domain, gold_confidence=gold_conf))
+    rows = list(
+        iter_judgeable_rows(
+            args.corpus,
+            domain=args.domain,
+            gold_confidence=gold_conf,
+            source_suites=optional_filter(args.source_suite),
+            source_benchmarks=optional_filter(args.source_benchmark),
+            scoring_methods=optional_filter(args.provenance_scoring_method),
+        )
+    )
     rows_by_id = {row.row_id: row for row in rows}
     plan["execution"] = run_execution(plan, rows_by_id)
     write_json(args.output_dir / "summary.json", plan)

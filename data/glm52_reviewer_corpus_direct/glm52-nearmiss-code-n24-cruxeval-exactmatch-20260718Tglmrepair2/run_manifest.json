@@ -1,0 +1,8 @@
+{
+  "calibration_command": "python3 /mnt/raid0/llm/epyc-orchestrator/scripts/analysis/reviewer_calibration_report.py --decisions /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-cruxeval-exactmatch-20260718Tglmrepair2/decisions.jsonl --corpus /mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl --k 2 --print",
+  "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-cruxeval-exactmatch-20260718Tglmrepair2/decisions.jsonl",
+  "generated_at": "2026-07-18T05:07:27.869173+00:00",
+  "n_scored": 24,
+  "observation_only": true,
+  "schema": "glm52_reviewer_corpus_direct_run_manifest.v1"
+}

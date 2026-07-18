@@ -24,6 +24,9 @@ def _row(row_id: str, *, label: str, candidate: str = "patch", domain: str = "co
         "gold_confidence": "multi_oracle",
         "gold_source": "synthetic",
         "gold_instrument_version": "v1",
+        "source_benchmark": "seeded-mutation",
+        "source_suite": "debugbench",
+        "provenance": {"scoring_method": "substring"},
         "task": "Fix the bug.",
         "candidate": candidate,
     }
@@ -49,6 +52,27 @@ def test_iter_judgeable_rows_filters_candidate_gold_and_domain(tmp_path):
     assert [row.row_id for row in got] == ["a", "b"]
 
 
+def test_iter_judgeable_rows_filters_source_representation(tmp_path):
+    corpus = tmp_path / "rows.jsonl"
+    rows = [
+        _row("dbg", label="accept"),
+        {**_row("crux", label="accept"), "source_suite": "cruxeval", "provenance": {"scoring_method": "exact_match"}},
+        {**_row("ccrab", label="reject"), "source_benchmark": "c-crab", "source_suite": "python", "provenance": {}},
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    got = list(
+        runner.iter_judgeable_rows(
+            corpus,
+            domain="code",
+            gold_confidence={"multi_oracle"},
+            source_suites={"cruxeval"},
+            source_benchmarks={"seeded-mutation"},
+            scoring_methods={"exact_match"},
+        )
+    )
+    assert [row.row_id for row in got] == ["crux"]
+
+
 def test_select_balanced_rows_prefers_accept_reject_balance():
     rows = [
         runner.CorpusRow("a1", _row("a1", label="accept")),
@@ -63,6 +87,23 @@ def test_select_balanced_rows_prefers_accept_reject_balance():
     assert [row.row_id for row in selected] == [
         row.row_id for row in runner.select_balanced_rows(rows, n=4, seed_key="seed")
     ]
+
+
+def test_summarize_row_set_records_representation_counts():
+    rows = [
+        runner.CorpusRow("a", _row("a", label="accept", candidate="abc")),
+        runner.CorpusRow(
+            "r",
+            {**_row("r", label="reject", candidate="abcd"), "source_suite": "cruxeval", "provenance": {"scoring_method": "exact_match"}},
+        ),
+    ]
+    summary = runner.summarize_row_set(rows)
+    assert summary["label_counts"] == {"accept": 1, "reject": 1}
+    assert summary["representation_counts"] == {
+        "seeded-mutation|debugbench|substring": 1,
+        "seeded-mutation|cruxeval|exact_match": 1,
+    }
+    assert summary["candidate_chars"] == {"min": 3, "p50": 4, "max": 4}
 
 
 def test_fit_prompt_to_budget_truncates_candidate_until_token_budget_fits():
@@ -168,3 +209,81 @@ def test_build_plan_records_selected_rows_without_inference(tmp_path, monkeypatc
     assert plan["corpus"]["n_selected"] == 2
     assert set(plan["corpus"]["selected_label_counts"]) == {"accept", "reject"}
     assert plan["request"]["rubric_version"] == runner.DEFAULT_RUBRIC_VERSION
+
+
+def test_build_plan_refuses_mixed_representation_by_default(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    rows = [
+        _row("a", label="accept"),
+        {**_row("r", label="reject"), "source_suite": "cruxeval", "provenance": {"scoring_method": "exact_match"}},
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--n",
+            "2",
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(
+        runner.base,
+        "collect_inventory",
+        lambda model_dir: {
+            "status": "ready",
+            "primary_shard": "/tmp/glm.gguf",
+            "refusal_reasons": [],
+        },
+    )
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+    plan = runner.build_plan(args)
+    assert plan["execution_allowed"] is False
+    assert any("mix source_suite/scoring" in reason for reason in plan["refusal_reasons"])
+
+
+def test_build_plan_allows_explicit_representation_filter(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    rows = [
+        {**_row("a", label="accept"), "source_suite": "cruxeval", "provenance": {"scoring_method": "exact_match"}},
+        {**_row("r", label="reject"), "source_suite": "cruxeval", "provenance": {"scoring_method": "exact_match"}},
+        _row("other", label="reject"),
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--n",
+            "2",
+            "--source-suite",
+            "cruxeval",
+            "--provenance-scoring-method",
+            "exact_match",
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(
+        runner.base,
+        "collect_inventory",
+        lambda model_dir: {
+            "status": "ready",
+            "primary_shard": "/tmp/glm.gguf",
+            "refusal_reasons": [],
+        },
+    )
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+    plan = runner.build_plan(args)
+    assert plan["execution_allowed"] is True
+    assert plan["corpus"]["n_selected"] == 2
+    assert plan["corpus"]["selected_summary"]["representation_counts"] == {
+        "seeded-mutation|cruxeval|exact_match": 2
+    }
