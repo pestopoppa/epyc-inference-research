@@ -128,6 +128,30 @@ def optional_filter(value: str | None) -> set[str] | None:
     return parts
 
 
+def read_row_ids_file(path: Path) -> list[str]:
+    row_ids: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        row_ids.append(stripped.split("#", 1)[0].strip())
+    return [row_id for row_id in row_ids if row_id]
+
+
+def requested_row_ids(args: argparse.Namespace) -> list[str]:
+    row_ids: list[str] = []
+    for row_id_file in args.row_ids_file or []:
+        row_ids.extend(read_row_ids_file(row_id_file.expanduser().resolve()))
+    row_ids.extend(args.row_id or [])
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for row_id in row_ids:
+        if row_id not in seen:
+            ordered.append(row_id)
+            seen.add(row_id)
+    return ordered
+
+
 def provenance_scoring_method(row: dict[str, Any]) -> str:
     provenance = row.get("provenance") if isinstance(row.get("provenance"), dict) else {}
     return str(provenance.get("scoring_method") or "").strip().lower()
@@ -606,7 +630,15 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             scoring_methods=scoring_methods,
         )
     )
-    selected = select_balanced_rows(rows, n=args.n, seed_key=f"{args.seed}:glm52")
+    explicit_row_ids = requested_row_ids(args)
+    rows_by_id = {row.row_id: row for row in rows}
+    missing_explicit_row_ids = [row_id for row_id in explicit_row_ids if row_id not in rows_by_id]
+    if explicit_row_ids:
+        selected = [rows_by_id[row_id] for row_id in explicit_row_ids if row_id in rows_by_id]
+        selection_mode = "explicit_row_ids"
+    else:
+        selected = select_balanced_rows(rows, n=args.n, seed_key=f"{args.seed}:glm52")
+        selection_mode = "balanced_seeded"
     counts = Counter(
         (
             row.raw.get("domain"),
@@ -646,10 +678,13 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "source_suite_filter": sorted(source_suites) if source_suites else ["all"],
             "source_benchmark_filter": sorted(source_benchmarks) if source_benchmarks else ["all"],
             "provenance_scoring_method_filter": sorted(scoring_methods) if scoring_methods else ["all"],
+            "selection_mode": selection_mode,
+            "explicit_row_ids": explicit_row_ids,
+            "missing_explicit_row_ids": missing_explicit_row_ids,
             "n_judgeable_available": len(rows),
             "available_counts": {str(key): value for key, value in counts.items()},
             "available_summary": available_summary,
-            "n_requested": args.n,
+            "n_requested": len(explicit_row_ids) if explicit_row_ids else args.n,
             "n_selected": len(selected),
             "selected_label_counts": dict(selected_counts),
             "selected_summary": selected_summary,
@@ -675,12 +710,18 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "execution_allowed": (
             inventory["status"] == "ready"
             and len(selected) > 0
+            and not missing_explicit_row_ids
             and set(selected_counts) == set(GOLD_LABELS)
             and (args.allow_mixed_representation or not mixed_representation)
             and not fragment_refusals
         ),
         "refusal_reasons": list(inventory["refusal_reasons"])
         + ([] if selected else ["no selected judgeable rows"])
+        + (
+            []
+            if not missing_explicit_row_ids
+            else [f"explicit row ids not found after filters: {', '.join(missing_explicit_row_ids)}"]
+        )
         + ([] if set(selected_counts) == set(GOLD_LABELS) else ["selected rows do not cover both accept/reject labels"])
         + (
             []
@@ -890,6 +931,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--gold-confidence", default=",".join(DEFAULT_GOLD_CONFIDENCE))
     parser.add_argument("--source-suite", default=None, help="Comma-separated source_suite filter, or all.")
     parser.add_argument("--source-benchmark", default=None, help="Comma-separated source_benchmark filter, or all.")
+    parser.add_argument(
+        "--row-id",
+        action="append",
+        default=[],
+        help="Explicit corpus row id to include. Repeat to build a pinned audited slice.",
+    )
+    parser.add_argument(
+        "--row-ids-file",
+        type=Path,
+        action="append",
+        default=[],
+        help="File containing explicit row ids, one per line. Blank lines and # comments are ignored.",
+    )
     parser.add_argument(
         "--provenance-scoring-method",
         default=None,

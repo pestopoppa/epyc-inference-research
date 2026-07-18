@@ -66,6 +66,33 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
         self.assertNotIn("--device-draft", argv)
         self.assertNotIn("--spec-draft-ngl", argv)
 
+    def test_build_server_argv_can_disable_draft_backend_sampling(self) -> None:
+        args = runner.parse_args(["--draft-backend-sampling", "off"])
+        argv = runner.build_server_argv(args, 31337)
+
+        self.assertIn("--no-spec-draft-backend-sampling", argv)
+        self.assertNotIn("--spec-draft-backend-sampling", argv)
+
+    def test_apply_request_sampler_mode_explicit_greedy(self) -> None:
+        payload = {"temperature": 0.0, "top_k": 1, "top_p": 1.0}
+
+        runner.apply_request_sampler_mode(payload, "explicit-greedy")
+
+        self.assertEqual(payload["samplers"], ["temperature"])
+        self.assertEqual(payload["top_k"], 0)
+        self.assertEqual(payload["min_p"], 0.0)
+        self.assertIs(payload["backend_sampling"], False)
+
+    def test_apply_request_sampler_mode_cpu_top_k(self) -> None:
+        payload = {"temperature": 0.0, "top_k": 1, "top_p": 1.0}
+
+        runner.apply_request_sampler_mode(payload, "cpu-top-k")
+
+        self.assertEqual(payload["samplers"], ["top_k", "temperature"])
+        self.assertEqual(payload["top_k"], 1)
+        self.assertEqual(payload["min_p"], 0.0)
+        self.assertIs(payload["backend_sampling"], False)
+
     def test_score_word_task(self) -> None:
         passed = runner.score_word_task("benchmark benchmark", "benchmark", 2)
         failed = runner.score_word_task("benchmark other", "benchmark", 2)
@@ -107,6 +134,25 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
         self.assertEqual(seen["payload"]["top_k"], 1)
         self.assertEqual(response["choices"][0]["message"]["content"], "OK")
         self.assertEqual(json.loads(raw)["timings"]["draft_n_accepted"], 4)
+
+    def test_query_chat_can_send_explicit_greedy_payload(self) -> None:
+        seen = {}
+
+        def fake_urlopen(req, timeout):  # noqa: ANN001
+            seen["payload"] = json.loads(req.data.decode("utf-8"))
+            return _FakeResponse(
+                {
+                    "choices": [{"message": {"content": "OK", "reasoning_content": ""}}],
+                    "timings": {},
+                }
+            )
+
+        with mock.patch.object(runner.urllib.request, "urlopen", fake_urlopen):
+            runner.query_chat(18080, "prompt", 64, 0.0, 42, 5, "explicit-greedy")
+
+        self.assertEqual(seen["payload"]["samplers"], ["temperature"])
+        self.assertEqual(seen["payload"]["top_k"], 0)
+        self.assertIs(seen["payload"]["backend_sampling"], False)
 
     def test_terminate_server_stops_process_group(self) -> None:
         proc = subprocess.Popen(["sleep", "30"], start_new_session=True)

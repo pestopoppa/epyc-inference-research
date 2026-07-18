@@ -271,6 +271,123 @@ def test_build_plan_records_selected_rows_without_inference(tmp_path, monkeypatc
     assert plan["corpus"]["n_selected"] == 2
     assert set(plan["corpus"]["selected_label_counts"]) == {"accept", "reject"}
     assert plan["request"]["rubric_version"] == runner.DEFAULT_RUBRIC_VERSION
+    assert plan["corpus"]["selection_mode"] == "balanced_seeded"
+
+
+def test_read_row_ids_file_ignores_blank_lines_and_comments(tmp_path):
+    row_ids_file = tmp_path / "rows.txt"
+    row_ids_file.write_text(
+        "\n"
+        "# reviewed controls\n"
+        "row-a\n"
+        "row-b  # keep this one\n"
+        "   \n"
+        "row-a\n",
+        encoding="utf-8",
+    )
+
+    assert runner.read_row_ids_file(row_ids_file) == ["row-a", "row-b", "row-a"]
+
+
+def test_requested_row_ids_dedupes_files_and_cli(tmp_path):
+    row_ids_file = tmp_path / "rows.txt"
+    row_ids_file.write_text("row-a\nrow-b\n", encoding="utf-8")
+    args = runner.parse_args(
+        [
+            "--row-ids-file",
+            str(row_ids_file),
+            "--row-id",
+            "row-b",
+            "--row-id",
+            "row-c",
+        ]
+    )
+
+    assert runner.requested_row_ids(args) == ["row-a", "row-b", "row-c"]
+
+
+def test_build_plan_uses_explicit_row_ids_in_order(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    rows = [
+        {**_row("accept-a", label="accept"), "provenance": {}},
+        {**_row("reject-a", label="reject"), "provenance": {}},
+        {**_row("accept-b", label="accept"), "provenance": {}},
+        {**_row("reject-b", label="reject"), "provenance": {}},
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--n",
+            "99",
+            "--row-id",
+            "reject-b",
+            "--row-id",
+            "accept-a",
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(
+        runner.base,
+        "collect_inventory",
+        lambda model_dir: {
+            "status": "ready",
+            "primary_shard": "/tmp/glm.gguf",
+            "refusal_reasons": [],
+        },
+    )
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+    plan = runner.build_plan(args)
+
+    assert plan["execution_allowed"] is True
+    assert plan["corpus"]["selection_mode"] == "explicit_row_ids"
+    assert plan["corpus"]["n_requested"] == 2
+    assert plan["corpus"]["selected_row_ids"] == ["reject-b", "accept-a"]
+    assert plan["corpus"]["explicit_row_ids"] == ["reject-b", "accept-a"]
+
+
+def test_build_plan_refuses_missing_explicit_row_id(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    rows = [
+        {**_row("accept-a", label="accept"), "provenance": {}},
+        {**_row("reject-a", label="reject"), "provenance": {}},
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--row-id",
+            "accept-a",
+            "--row-id",
+            "missing-row",
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(
+        runner.base,
+        "collect_inventory",
+        lambda model_dir: {
+            "status": "ready",
+            "primary_shard": "/tmp/glm.gguf",
+            "refusal_reasons": [],
+        },
+    )
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+    plan = runner.build_plan(args)
+
+    assert plan["execution_allowed"] is False
+    assert plan["corpus"]["missing_explicit_row_ids"] == ["missing-row"]
+    assert any("explicit row ids not found" in reason for reason in plan["refusal_reasons"])
 
 
 def test_build_plan_refuses_mixed_representation_by_default(tmp_path, monkeypatch):

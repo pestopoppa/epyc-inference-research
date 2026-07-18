@@ -57,6 +57,8 @@ DEFAULT_N_GPU_LAYERS = 99
 DEFAULT_SPEC_DRAFT_N_MAX = 2
 DEFAULT_REPEATS = 2
 DEFAULT_SLOTS = 4
+DEFAULT_REQUEST_SAMPLER_MODE = "current"
+DEFAULT_DRAFT_BACKEND_SAMPLING = "default"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -102,6 +104,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         help="Optional exact repeated word count to score in message.content",
+    )
+    parser.add_argument(
+        "--request-sampler-mode",
+        choices=("current", "explicit-greedy", "cpu-top-k"),
+        default=DEFAULT_REQUEST_SAMPLER_MODE,
+        help=(
+            "Request sampler payload mode. current keeps the historical top_k=1 shape; "
+            "explicit-greedy uses samplers=[temperature], top_k=0, backend_sampling=false; "
+            "cpu-top-k uses samplers=[top_k,temperature], top_k=1, backend_sampling=false."
+        ),
+    )
+    parser.add_argument(
+        "--draft-backend-sampling",
+        choices=("default", "on", "off"),
+        default=DEFAULT_DRAFT_BACKEND_SAMPLING,
+        help="Server-side speculative draft backend sampling toggle for K11 diagnostics.",
     )
     parser.add_argument(
         "--target-model",
@@ -177,7 +195,30 @@ def wait_for_health(port: int, timeout_s: int, pid: int | None = None) -> None:
     raise RuntimeError(f"server on port {port} did not become healthy within {timeout_s}s")
 
 
-def query_chat(port: int, prompt: str, max_tokens: int, temperature: float, seed: int, timeout_s: int) -> tuple[dict[str, Any], str]:
+def apply_request_sampler_mode(payload: dict[str, Any], mode: str) -> None:
+    if mode == "current":
+        return
+    payload["min_p"] = 0.0
+    payload["backend_sampling"] = False
+    if mode == "explicit-greedy":
+        payload["samplers"] = ["temperature"]
+        payload["top_k"] = 0
+    elif mode == "cpu-top-k":
+        payload["samplers"] = ["top_k", "temperature"]
+        payload["top_k"] = 1
+    else:
+        raise ValueError(f"unknown request sampler mode: {mode}")
+
+
+def query_chat(
+    port: int,
+    prompt: str,
+    max_tokens: int,
+    temperature: float,
+    seed: int,
+    timeout_s: int,
+    request_sampler_mode: str = DEFAULT_REQUEST_SAMPLER_MODE,
+) -> tuple[dict[str, Any], str]:
     payload = {
         "model": "auto",
         "messages": [{"role": "user", "content": prompt}],
@@ -188,6 +229,7 @@ def query_chat(port: int, prompt: str, max_tokens: int, temperature: float, seed
         "seed": seed,
         "stream": False,
     }
+    apply_request_sampler_mode(payload, request_sampler_mode)
     req = urllib.request.Request(
         f"http://127.0.0.1:{port}/v1/chat/completions",
         data=canonical_json(payload).encode("utf-8"),
@@ -244,6 +286,10 @@ def build_server_argv(args: argparse.Namespace, port: int | str) -> list[str]:
                 str(args.n_gpu_layers),
             ]
         )
+        if args.draft_backend_sampling == "on":
+            argv.append("--spec-draft-backend-sampling")
+        elif args.draft_backend_sampling == "off":
+            argv.append("--no-spec-draft-backend-sampling")
     else:
         argv.extend(["--spec-type", "none"])
     return argv
@@ -339,6 +385,8 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "slots": args.slots,
             "expected_word": args.expected_word,
             "expected_word_count": args.expected_word_count,
+            "request_sampler_mode": args.request_sampler_mode,
+            "draft_backend_sampling": args.draft_backend_sampling,
             "threads": args.threads,
             "context": args.context,
             "ubatch": args.ubatch,
@@ -433,6 +481,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
                 temperature=args.temperature,
                 seed=args.seed,
                 timeout_s=args.request_timeout,
+                request_sampler_mode=args.request_sampler_mode,
             )
             raw_response_path.write_text(raw_response, encoding="utf-8")
             choices = response.get("choices", [])
@@ -519,6 +568,8 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         "slots": args.slots,
         "expected_word": args.expected_word,
         "expected_word_count": args.expected_word_count,
+        "request_sampler_mode": args.request_sampler_mode,
+        "draft_backend_sampling": args.draft_backend_sampling,
         "runs": results,
         "unique_output_hashes": unique_hashes,
         "deterministic": deterministic,
@@ -554,6 +605,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"spec_type: {args.spec_type}")
     print(f"spec_draft_n_max: {args.spec_draft_n_max}")
     print(f"slots: {args.slots}")
+    print(f"request_sampler_mode: {args.request_sampler_mode}")
+    print(f"draft_backend_sampling: {args.draft_backend_sampling}")
     if args.expected_word is not None or args.expected_word_count is not None:
         print(f"expected_word: {args.expected_word}")
         print(f"expected_word_count: {args.expected_word_count}")
