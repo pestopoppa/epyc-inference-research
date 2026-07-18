@@ -74,6 +74,8 @@ def test_cli_writes_json_and_row_ids(tmp_path):
 
     assert rc == 0
     report = json.loads(json_out.read_text(encoding="utf-8"))
+    assert report["matching_pool_n"] == 1
+    assert report["hard_accept_control_pool_n"] == 0
     assert report["selected_row_ids"] == ["a"]
     assert report["decision_grade"] is False
     assert row_ids_out.read_text(encoding="utf-8") == "a\n"

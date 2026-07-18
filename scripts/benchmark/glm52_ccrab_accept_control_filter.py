@@ -101,12 +101,12 @@ def is_candidate(row: dict[str, Any], *, max_chars: int) -> bool:
     return True
 
 
-def select_rows(rows: Iterable[dict[str, Any]], *, n: int, max_chars: int) -> list[AcceptControlRow]:
-    selected: list[AcceptControlRow] = []
+def matching_rows(rows: Iterable[dict[str, Any]], *, max_chars: int) -> list[AcceptControlRow]:
+    matches: list[AcceptControlRow] = []
     for row in rows:
         if not is_candidate(row, max_chars=max_chars):
             continue
-        selected.append(
+        matches.append(
             AcceptControlRow(
                 row_id=row_id(row),
                 gold_confidence=str(row.get("gold_confidence") or "").lower(),
@@ -115,19 +115,34 @@ def select_rows(rows: Iterable[dict[str, Any]], *, n: int, max_chars: int) -> li
                 instance_id=instance_id(row),
             )
         )
-    selected.sort(key=lambda row: row.row_id)
-    return selected[:n]
+    matches.sort(key=lambda row: row.row_id)
+    return matches
 
 
-def build_report(selected: list[AcceptControlRow], *, corpus: Path, n: int, max_chars: int) -> dict[str, Any]:
+def select_rows(rows: Iterable[dict[str, Any]], *, n: int, max_chars: int) -> list[AcceptControlRow]:
+    return matching_rows(rows, max_chars=max_chars)[:n]
+
+
+def build_report(
+    selected: list[AcceptControlRow],
+    *,
+    pool: list[AcceptControlRow],
+    corpus: Path,
+    n: int,
+    max_chars: int,
+) -> dict[str, Any]:
     hard = [row for row in selected if row.hard_accept_control]
+    hard_pool = [row for row in pool if row.hard_accept_control]
     return {
         "schema": "glm52_ccrab_accept_control_filter.v1",
         "corpus": str(corpus),
         "requested_n": n,
+        "matching_pool_n": len(pool),
         "selected_n": len(selected),
         "max_candidate_chars": max_chars,
         "decision_grade": len(hard) == len(selected) and len(selected) == n,
+        "hard_accept_control_pool_n": len(hard_pool),
+        "observation_only_pool_n": len(pool) - len(hard_pool),
         "hard_accept_control_n": len(hard),
         "observation_only_n": len(selected) - len(hard),
         "filter": {
@@ -166,8 +181,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.n <= 0:
         print("--n must be positive", file=sys.stderr)
         return 2
-    selected = select_rows(read_rows(args.corpus), n=args.n, max_chars=args.max_candidate_chars)
-    report = build_report(selected, corpus=args.corpus, n=args.n, max_chars=args.max_candidate_chars)
+    pool = matching_rows(read_rows(args.corpus), max_chars=args.max_candidate_chars)
+    selected = pool[:args.n]
+    report = build_report(selected, pool=pool, corpus=args.corpus, n=args.n, max_chars=args.max_candidate_chars)
     if args.json_out:
         write_text(args.json_out, json.dumps(report, indent=2, sort_keys=True) + "\n")
     if args.row_ids_out:

@@ -13,8 +13,11 @@
     "source_suite": "python"
   },
   "hard_accept_control_n": 0,
+  "hard_accept_control_pool_n": 0,
+  "matching_pool_n": 151,
   "max_candidate_chars": 15000,
   "observation_only_n": 24,
+  "observation_only_pool_n": 151,
   "requested_n": 24,
   "schema": "glm52_ccrab_accept_control_filter.v1",
   "selected_n": 24,
