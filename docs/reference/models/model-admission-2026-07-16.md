@@ -565,6 +565,24 @@ Interpretation: the worker's composed spec path remains acceptance-stable across
 the measured contexts, but decode still falls with depth. This is the current
 optimized worker curve for the K35 stack table, not a raw no-spec baseline.
 
+## K35 Architect-General Context Curve
+
+The production-shaped CPU architect lane was measured at 2K and 8K nominal
+contexts with 1024 generated tokens in
+`data/k35_stack_context_matrix/architect_general_context_curve_20260718Tcodex/`.
+This is Qwen3.5-122B with native NEXTN/draft-MTP, q4_0/f16 KV, jinja, mlock,
+and thinking disabled.
+
+| Nominal context | Prompt tokens | Completion tokens | Prompt t/s | Generation t/s | Draft accepted |
+|---:|---:|---:|---:|---:|---:|
+| 2048 | 134 | 1024 | 89.69 | 23.89 | 818 / 820 |
+| 8192 | 6214 | 1024 | 143.02 | 20.72 | 818 / 819 |
+
+Interpretation: architect native MTP acceptance is effectively saturated on this
+structured-output prompt, but the lane remains much slower than frontdoor and
+worker. The 14K/32K rows are not part of this run because the production-shaped
+architect server uses two slots under a 16K context cap.
+
 ## MI210 Context-Size Sweep
 
 The context sweep at `/mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/` measured prompt and decode behavior at short, mid, and long prompts for three representative candidates. All cases wrote cleanup logs. The measured prompt-token counts differ from nominal context sizes because the prompt body is tokenizer-dependent.
