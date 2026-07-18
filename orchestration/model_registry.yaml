@@ -5390,6 +5390,148 @@ roles:
       - CLS pooling (standard BERT approach)
       - Source: CompendiumLabs/bge-large-en-v1.5-gguf
 
+  # Catalogue-only embedding candidates. These rows are NOT production stack
+  # models; keep them fail-closed until embedder recall and service gates pass.
+  embedder_granite_97m_r2_q8_local:
+    tier: D
+    description: Granite Embedding 97M multilingual r2 Q8_0 - local embedding candidate; benchmark-gated catalogue entry.
+    model:
+      name: granite-embedding-97m-multilingual-r2-Q8_0
+      path: /mnt/raid0/llm/models/granite-embedding-97m-multilingual-r2-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 0.11
+      architecture: bert
+      embedding_dim: 768
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-18
+      file_bytes: 115061120
+      provenance: local_file_named_by_embedder_recall_bench_planned_specs
+    candidate_roles:
+    - embedder
+    - research_recall_bench
+    constraints:
+      forbid:
+      - production_stack_registration
+      - embedding_service_activation_without_recall_gate
+      reason: "Catalogue-only local artifact named by scripts/benchmark/embedder_recall_bench.py; no recall or service gate has promoted it into the production stack."
+    performance:
+      benchmark_status: artifact_registered_benchmark_gated
+      evidence:
+      - /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/embedder_recall_bench.py
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_plan:
+      cpu_only: "Use embedder_recall_bench.py strict/dry-run planning only unless explicitly executing the embedding recall gate."
+      gpu_only: "No production GPU service claim; evaluate only through the gated embedder recall harness."
+      cpu_gpu_hybrid: "Candidate for multilingual retrieval comparison after recall@k/MRR evidence exists."
+
+  embedder_granite_97m_r2_q4km_local:
+    tier: D
+    description: Granite Embedding 97M multilingual r2 Q4_K_M - local embedding candidate; benchmark-gated catalogue entry.
+    model:
+      name: granite-embedding-97m-multilingual-r2-Q4_K_M
+      path: /mnt/raid0/llm/models/granite-embedding-97m-multilingual-r2-Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 0.10
+      architecture: bert
+      embedding_dim: 768
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-18
+      file_bytes: 105467264
+      provenance: local_file_named_by_embedder_recall_bench_planned_specs
+    candidate_roles:
+    - embedder
+    - research_recall_bench
+    constraints:
+      forbid:
+      - production_stack_registration
+      - embedding_service_activation_without_recall_gate
+      reason: "Catalogue-only local artifact named by scripts/benchmark/embedder_recall_bench.py; no recall or service gate has promoted it into the production stack."
+    performance:
+      benchmark_status: artifact_registered_benchmark_gated
+      evidence:
+      - /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/embedder_recall_bench.py
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_plan:
+      cpu_only: "Use embedder_recall_bench.py strict/dry-run planning only unless explicitly executing the embedding recall gate."
+      gpu_only: "No production GPU service claim; evaluate only through the gated embedder recall harness."
+      cpu_gpu_hybrid: "Candidate for Q8_0-vs-Q4_K_M multilingual retrieval comparison after recall@k/MRR evidence exists."
+
+  embedder_bge_m3_q8_local:
+    tier: D
+    description: BGE-M3 Q8_0 - local multilingual embedding candidate; benchmark-gated catalogue entry.
+    model:
+      name: bge-m3-Q8_0
+      path: /mnt/raid0/llm/models/bge-m3-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 0.59
+      architecture: bert
+      embedding_dim: 1024
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-18
+      file_bytes: 634553760
+      provenance: local_file_named_by_embedder_recall_bench_planned_specs
+    candidate_roles:
+    - embedder
+    - research_recall_bench
+    constraints:
+      forbid:
+      - production_stack_registration
+      - embedding_service_activation_without_recall_gate
+      reason: "Catalogue-only local artifact named by scripts/benchmark/embedder_recall_bench.py; no recall or service gate has promoted it into the production stack."
+    performance:
+      benchmark_status: artifact_registered_benchmark_gated
+      evidence:
+      - /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/embedder_recall_bench.py
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_plan:
+      cpu_only: "Use embedder_recall_bench.py strict/dry-run planning only unless explicitly executing the embedding recall gate."
+      gpu_only: "No production GPU service claim; evaluate only through the gated embedder recall harness."
+      cpu_gpu_hybrid: "Candidate for multilingual retrieval comparison against Granite r2, E5-base, and BGE-large reference after recall@k/MRR evidence exists."
+
+  embedder_multilingual_e5_base_q8_local:
+    tier: D
+    description: Multilingual E5-base Q8_0 - local multilingual embedding candidate; benchmark-gated catalogue entry.
+    model:
+      name: multilingual-e5-base-Q8_0
+      path: /mnt/raid0/llm/models/multilingual-e5-base-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 0.28
+      architecture: bert
+      embedding_dim: 768
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-18
+      file_bytes: 303138656
+      provenance: local_file_named_by_embedder_recall_bench_planned_specs
+    candidate_roles:
+    - embedder
+    - research_recall_bench
+    constraints:
+      forbid:
+      - production_stack_registration
+      - embedding_service_activation_without_recall_gate
+      reason: "Catalogue-only local artifact named by scripts/benchmark/embedder_recall_bench.py; no recall or service gate has promoted it into the production stack."
+    performance:
+      benchmark_status: artifact_registered_benchmark_gated
+      evidence:
+      - /mnt/raid0/llm/epyc-inference-research/scripts/benchmark/embedder_recall_bench.py
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_plan:
+      cpu_only: "Use embedder_recall_bench.py strict/dry-run planning only unless explicitly executing the embedding recall gate."
+      gpu_only: "No production GPU service claim; evaluate only through the gated embedder recall harness."
+      cpu_gpu_hybrid: "Candidate for multilingual retrieval comparison against Granite r2, BGE-M3, and BGE-large reference after recall@k/MRR evidence exists."
+
   thinking_qwen3_30b_a3b_thinking_2507_q4ks:
     tier: B
     deprecated: true
