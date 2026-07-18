@@ -5652,6 +5652,187 @@ roles:
   # copied into epyc-orchestrator/orchestration/model_registry.yaml unless a
   # promotion handoff explicitly moves them into the live topology.
 
+  qwen3_next_80b_a3b_instruct_iq2m_local:
+    tier: C
+    description: Qwen3-Next-80B-A3B-Instruct i1-IQ2_M - local compression candidate; catalogue-only until quality and replacement gates pass.
+    model:
+      name: Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M
+      path: /mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf
+      quant: IQ2_M
+      size_gb: 26.1
+      architecture: qwen3next
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-18
+      file_bytes: 26056028768
+      provenance: local_file_with_prior_mi210_observation_artifacts
+    candidate_roles:
+    - compression_candidate
+    - research_smoke_only
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration
+      - ingest_replacement_without_quality_gate
+      reason: "Local artifact is present, but the IQ2_M compression candidate cannot replace a higher-precision ingest/frontdoor lane without fresh task-quality and throughput evidence."
+    performance:
+      benchmark_status: observation_artifacts_present_not_role_ready
+      evidence:
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen3next-80b-iq2m-2026-07-05/
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_plan:
+      cpu_only: "Optional load/coherence only after higher-priority v7/K35 gates."
+      gpu_only: "MI210 observation artifacts exist; rerun only under an explicit candidate-quality gate."
+      cpu_gpu_hybrid: "Possible compression/residency study arm; blocked on quality gate."
+
+  gemma4_31b_q8_local:
+    tier: C
+    description: Gemma 4 31B-it Q8_0 - local precision/reference candidate for the registered Gemma 4 31B Q4_K_M + MTP target.
+    model:
+      name: gemma-4-31B-it-Q8_0
+      path: /mnt/raid0/llm/models/gemma-4-31B-it-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 32.6
+      architecture: gemma4
+      use_chat_api: true
+      reasoning: "off"
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-18
+      file_bytes: 32635675648
+      provenance: local_file_under_registered_precision_reference
+    candidate_roles:
+    - precision_reference
+    - research_smoke_only
+    acceleration:
+      type: none
+      notes: "The Q4_K_M production-candidate target already has a registered MTP drafter; this Q8_0 file is a precision/reference arm only until separately benchmarked."
+    constraints:
+      forbid:
+      - production_stack_registration
+      - routing_without_speed_quality_gate
+      reason: "Q8_0 target is larger than the registered Q4_K_M MTP arm and has no current role-quality or throughput gate."
+    performance:
+      benchmark_status: local_artifact_registered_benchmark_pending
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_plan:
+      cpu_only: "Precision/reference control only if Gemma 4 quality deltas justify the run."
+      gpu_only: "Candidate graph/reference arm; no routing without fresh speed/quality gate."
+      cpu_gpu_hybrid: "Not a primary path unless precision reference work needs hybrid memory characterization."
+
+  eagle3_qwen36_27b_prism_q8_local:
+    tier: D
+    description: EAGLE3 Qwen3.6-27B PRISM Q8_0 draft artifact - catalogue-only draft candidate.
+    model:
+      name: Ex0bit-Qwen3.6-27B-PRISM-EAGLE3-Q8_0
+      path: /mnt/raid0/llm/models/eagle3/Ex0bit-Qwen3.6-27B-PRISM-EAGLE3-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 1.8
+      architecture: eagle3
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-18
+      file_bytes: 1768536640
+    candidate_roles:
+    - draft
+    - research_smoke_only
+    compatible_targets:
+    - qwen3.6-27b
+    acceleration:
+      type: eagle3_pending
+    constraints:
+      forbid:
+      - production_stack_registration
+      - target_compatibility_claim_without_acceptance_gate
+      reason: "Draft artifact is present, but target compatibility, acceptance, and quality preservation have not been proven."
+    performance:
+      benchmark_status: draft_artifact_registered_no_acceptance_evidence
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_plan:
+      cpu_only: "Metadata/loader smoke only if EAGLE3 runtime support is reopened."
+      gpu_only: "Acceptance gate only after target compatibility is wired."
+      cpu_gpu_hybrid: "Not applicable until EAGLE3 target wiring exists."
+
+  dflash_qwen36_27b_f16_local:
+    tier: D
+    description: DFlash Qwen3.6-27B F16 converted GGUF - catalogue-only draft artifact.
+    model:
+      name: Qwen3.6-27B-DFlash-f16
+      path: /mnt/raid0/llm/models/dflash/Qwen3.6-27B-DFlash/Qwen3.6-27B-DFlash-f16.gguf
+      quant: f16
+      size_gb: 8.6
+      architecture: dflash
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-18
+      file_bytes: 8558077216
+      provenance: converted_local_gguf
+    candidate_roles:
+    - draft
+    - research_smoke_only
+    compatible_targets:
+    - qwen3.6-27b
+    acceleration:
+      type: dflash_pending
+    constraints:
+      forbid:
+      - production_stack_registration
+      - benchmark_claim_without_dflash_runtime
+      reason: "Converted artifact exists, but DFlash runtime/harness support is not available in the current stack."
+    performance:
+      benchmark_status: converted_artifact_blocked_on_runtime
+      evidence:
+      - /mnt/raid0/llm/epyc-root/progress/2026-07/2026-07-03.md
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_plan:
+      cpu_only: "Blocked until DFlash runtime/harness support exists."
+      gpu_only: "Blocked until DFlash runtime/harness support exists."
+      cpu_gpu_hybrid: "Blocked until DFlash runtime/harness support exists."
+
+  strand_rust_coder_14b_q4km_local:
+    tier: C
+    description: Strand-Rust-Coder-14B-v1 Q4_K_M - Rust-focused Qwen2.5-Coder fine-tune; benchmark-gated catalogue entry.
+    model:
+      name: Strand-Rust-Coder-14B-v1.Q4_K_M
+      path: /mnt/raid0/llm/models/strand-rust/Strand-Rust-Coder-14B-v1.Q4_K_M.gguf
+      quant: Q4_K_M
+      size_gb: 9.0
+      architecture: qwen2.5-coder
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-18
+      file_bytes: 8988111296
+    candidate_roles:
+    - rust_coder
+    - research_smoke_only
+    acceleration:
+      type: none
+    constraints:
+      forbid:
+      - production_stack_registration
+      - rustevo_routing_without_benchmark_gate
+      reason: "Local artifact is present, but RustEvo2/Strand routing requires the owning verification handoff and task-quality gate."
+    performance:
+      benchmark_status: artifact_registered_benchmark_gated
+      evidence:
+      - /mnt/raid0/llm/epyc-root/handoffs/active/strand-rust-coder-rustevo2-verification.md
+    memory:
+      residency: cold
+      pinned: false
+    benchmark_plan:
+      cpu_only: "RustEvo2 verification gate decides whether CPU smoke is useful."
+      gpu_only: "Only if RustEvo2/Strand handoff promotes this as a candidate."
+      cpu_gpu_hybrid: "Not a primary path."
+
   glm_52_ud_iq2m:
     tier: B
     description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, current-source runner-shaped quality recovered only under the observed next-power-of-two DSA top-k schedule, chat/free+JSON-schema protocol matrix passed at ~2.9K/~12.0K prompt tokens, synthetic GC-1/2/3 reviewer repairs passed, and the near-miss corpus shadow/replay/binary-schema repair are parse-clean but quality-blocked.
@@ -6047,7 +6228,7 @@ roles:
         commit: 98a1ad8cf
         binaries:
         - llama-cli
-        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The 2026-07-18 task-quality / architecture-fit first slice passed 5/6 on both CPU no-spec and MI210-hybrid no-spec, failing only exact six-word instruction. A later CPU-only strict slice reproduced 5/6, failed exact word count, and exposed a code-only/no-fence strictness smell. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
+        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The 2026-07-18 task-quality / architecture-fit first slice passed 5/6 on both CPU no-spec and MI210-hybrid no-spec, failing only exact six-word instruction. A later CPU-only strict slice reproduced 5/6, failed exact word count, and exposed a code-only/no-fence strictness smell; a bounded CPU prompt-repair probe then passed 2/2 repaired six-word variants in the same throughput band. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
       runtime_observations:
         evidence_dir: /mnt/raid0/llm/tmp/hy3-mtp-closure-20260716T234610Z
         current_source_cpuonly_load_probe: "2026-07-18 rebuilt experimental-v7 `d1e5a20eb` CPU-only n=0 load probe with `-dev none -ngl 0 --no-op-offload -nkvo` reached about 175 GiB RSS and timed out after 300s without reproducing the old tensor-count mismatch; no decode/quality claim. Artifact: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3-iq1m-mtp-load-n0-cpuonly-20260718T162550Z/summary.json"
@@ -6068,8 +6249,13 @@ roles:
         cpu_strict_slice_total: 6
         cpu_strict_slice_mean_prompt_tps: 27.208
         cpu_strict_slice_mean_generation_tps: 5.257
+        cpu_strict_prompt_repair_evidence_dir: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3_cpu_strict_prompt_repair_20260718T1932Z
+        cpu_strict_prompt_repair_passed: 2
+        cpu_strict_prompt_repair_total: 2
+        cpu_strict_prompt_repair_mean_prompt_tps: 26.078
+        cpu_strict_prompt_repair_mean_generation_tps: 4.985
         task_quality_failed_task: lowercase_six_words
-        classification: "draft-mtp functional but slower than no-spec; full MI210 residency is not feasible for the 91.8GB artifact. CPU and MI210-hybrid no-spec passed the first task-quality slice 5/6, and a later CPU-only strict slice reproduced 5/6, but the shared exact short-instruction miss plus code-only/fence strictness smell block any production role claim."
+        classification: "draft-mtp functional but slower than no-spec; full MI210 residency is not feasible for the 91.8GB artifact. CPU and MI210-hybrid no-spec passed the first task-quality slice 5/6, and a later CPU-only strict slice reproduced 5/6. A focused prompt-repair probe passed 2/2 repaired six-word variants, but role readiness still needs a full repaired strict-suite check including the code-only/no-fence smell."
       hf_metadata:
         path: /mnt/raid0/llm/models/hy3-angelslim/.cache/huggingface/download/Hy3-IQ1_M-mtp.gguf.metadata
         revision: 218c93f0fb5227553b67e556b01dfe70fb70cf30
@@ -6686,8 +6872,16 @@ roles:
         /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_20260718T191709Z
         then ran 12 rows cleanly: pass@1 6/12, oracle pass@5 7/12,
         verifier-selected 7/12, selection accuracy 7/7, gap recovered 1.0,
-        verifier finish reasons stop=12, parse modes marker=12. This supports
-        larger/decision-grade follow-up rather than blocking on mechanics.
+        verifier finish reasons stop=12, parse modes marker=12. The continuation
+        at
+        /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start12_20260718T192418Z
+        covered rows 12-23: pass@1 2/12, oracle pass@5 6/12,
+        verifier-selected 4/12, selection accuracy 4/6, gap recovered 0.5,
+        stop=12, marker=12. Combined rows 0-23 are positive observation-grade
+        evidence: pass@1 8/24, oracle pass@5 13/24, verifier-selected 11/24,
+        selection accuracy 11/13, gap recovered 0.6, with stable stop/marker
+        telemetry across all verifier calls. This supports a larger or repeated
+        decision-grade gate, not a deployment decision yet.
       long_decode_observation: >
         2026-07-16 longer server runs during active GLM download: CPU generated
         616 tokens at 13.71 t/s; MI210 generated 1322 tokens at 98.32 t/s.
@@ -6724,6 +6918,7 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_extracted_answer_gpu_20260718T1851Z_limit6/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_no_solve_first_gpu_20260718Tcapcontrol_limit6/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_20260718T191709Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start12_20260718T192418Z/summary.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_iq4xs_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_iq4xs_mi210/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c2048/summary.txt
