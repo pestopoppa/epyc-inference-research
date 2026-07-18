@@ -1,0 +1,1 @@
+/mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q4_K_M.gguf

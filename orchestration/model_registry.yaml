@@ -7923,7 +7923,19 @@ roles:
       - production_stack_registration_without_mtp_quality_gate
       reason: "Exact MTP artifact is separate from the non-MTP Qwen3.6-27B rows and needs MTP acceptance plus quality evidence."
     performance:
-      benchmark_status: not_run_exact_artifact
+      benchmark_status: current_v7_mi210_context_observation_quality_gate_open
+      current_v7_mi210_context_observation: >
+        2026-07-18 current experimental-v7 `cf051d3e1` MI210 llama-bench
+        run on the exact MTP Q4_K_M artifact with `-dev ROCm0 -ngl 99 -fa
+        on` measured base benchmark throughput: prompt-only `pp512 781.20
+        t/s`, decode-only `tg128 34.80 t/s`, and paired context rows
+        `pp2048+tg512 146.40 t/s`, `pp8192+tg512 327.54 t/s`,
+        `pp32768+tg512 471.50 t/s`. `llama-bench` exposed no MTP/ngram
+        selector, so this is not native-MTP acceptance evidence or a default
+        acceleration claim.
+      evidence:
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-mtp-q4km-v7-context-20260718T223647Z/metrics_summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-mtp-q4km-v7-context-20260718T223647Z/summary.md
     memory:
       residency: cold
       pinned: false
