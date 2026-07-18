@@ -1,0 +1,4 @@
+benchmark_exit_code=0
+llama_bench_dead=true
+llama_processes_dead=true
+kfd_handles_present=true

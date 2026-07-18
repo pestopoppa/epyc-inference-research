@@ -1,0 +1,13 @@
+measurement: qwen3.6-27b-dense-v7-context
+date_utc: 2026-07-18T22:20:28Z
+artifact_dir: /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-dense-v7-context-20260718T2225Z
+classification: observation-only (P-GPU-1 deferred; not decision-gating)
+model: /mnt/raid0/llm/models/Qwen_Qwen3.6-27B-Q8_0.gguf
+model_role: Qwen3.6-27B dense Q8_0
+kernel_repo: /mnt/raid0/llm/llama.cpp-experimental
+kernel_commit: cf051d3e18c7d8d898581f42a468602c7f6bade0
+kernel_commit_required: cf051d3e1 or later
+binary: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench
+device: ROCm0 / AMD Instinct MI210
+gpu_only: all layers offloaded (-ngl 99), no CPU offload/hybrid
+protocol_note: P-GPU-1 deferred; rows are local observations only

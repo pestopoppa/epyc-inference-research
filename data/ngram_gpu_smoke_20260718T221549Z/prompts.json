@@ -1,0 +1,6 @@
+[
+  "Complete this Python function and return only code:\\n\\ndef lru_cache_get(cache, key):\\n    # TODO\\n",
+  "Return a JSON object with exactly these keys and valid JSON only: {\\\"name\\\": string, \\\"items\\\": [string], \\\"count\\\": integer}. Use three sample items.",
+  "Continue this repetitive YAML configuration, returning only YAML:\\nservices:\\n  api:\\n    image: app:latest\\n    environment:\\n      LOG_LEVEL: info\\n      PORT: 8080\\n",
+  "Write a SQL query, code only, that lists the five most recent orders per customer using ROW_NUMBER() and filters rn <= 5."
+]

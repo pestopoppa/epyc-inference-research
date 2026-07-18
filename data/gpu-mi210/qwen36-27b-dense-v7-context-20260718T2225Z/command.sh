@@ -1,0 +1,1 @@
+export LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin:${LD_LIBRARY_PATH:-}; export HIP_VISIBLE_DEVICES=0; /usr/bin/timeout --signal=TERM --kill-after=30s 2700s /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Qwen_Qwen3.6-27B-Q8_0.gguf -dev ROCm0 -ngl 99 -fa on -p 2048,8192,32768 -n 512 -r 2 -o json -oe json

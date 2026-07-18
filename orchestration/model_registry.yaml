@@ -2678,6 +2678,16 @@ roles:
       ngram_tested: true
     performance:
       baseline_tps: 4.9  # numactl --interleave=all -t 96
+      benchmark_status: current_v7_mi210_context_observation_quality_gate_open
+      current_v7_mi210_context_observation: >
+        2026-07-18 current experimental-v7 `cf051d3e1` MI210 llama-bench
+        baseline with `-dev ROCm0 -ngl 99 -fa on`, contexts
+        `2048/8192/32768`, `n_gen=512`, and two reps measured prompt
+        `854.17/807.61/666.62 t/s` and decode `29.64 t/s`. Speed-only
+        observation; `llama-bench` exposed no native-MTP or ngram selector, so
+        this is not a spec-dec/NEXTN boosted role claim.
+      evidence:
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-dense-v7-context-20260718T2225Z/summary.json
       quality_score: null  # benchmark pending
     benchmark_date: 2026-04-23
     notes: >
@@ -3067,7 +3077,14 @@ roles:
       protocol_correction_observation: "2026-07-17 protocol probe showed the earlier exact-output concern was harness/protocol-specific: llama-cli must use -f for prompt files, not -p @file; --reasoning-format none leaves thought text in the content channel. A server/API probe with --reasoning-format deepseek --reasoning off returned message.content exactly 'ok' while separating message.reasoning_content, prompt 201.34 t/s and generation 83.11 t/s on MI210. Treat old CLI exactness rows as load/throughput controls only."
       task_quality_channel_observation: "2026-07-18 protocol/channel follow-up keeps Q8_0 research-only but no longer first-pass quality-blocked under the bounded lane. With the strict system prompt, 512-token deepseek and deepseek-legacy arms reached only 2/5 in message.content and 4/5 with content_or_reasoning fallback; reasoning-format none failed 0/5. Removing the system prompt improved deepseek to 4/5 in message.content with clean host cleanup and uncontaminated observational throughput (82.73 t/s mean decode). A current-v7 clean-host rerun showed the token budget boundary directly: conservative task caps failed 0/5 at 83.56 t/s; `--ignore-task-token-caps --max-tokens 512` improved to 4/5 at 81.43 t/s; the 1024-token no-system deepseek lane then passed 5/5 at mean decode 81.42 t/s. Any role claim must preserve that serving contract: no system prompt, deepseek reasoning extraction, and 1024-token task budget."
       current_v7_llama_bench_observation: "2026-07-18 current experimental-v7 `d1e5a20eb` MI210 llama-bench: `pp2048 2066.77 t/s`, `pp8192 1978.87 t/s`, `tg1024 84.00 t/s`; 32K rider `pp32768 1696.72 t/s`, `tg512 84.50 t/s`. Speed-only context evidence, not role admission."
-      current_v7_cpu_llama_bench_observation: "2026-07-18 current experimental-v7 CPU-only llama-bench with `-dev none -ngl 0 -fa off -t 16`: `pp2048 135.85 t/s`, `pp8192 126.51 t/s`, `tg512 5.44 t/s`. MI210 decode is about 15.5x faster than this CPU control for the comparable tg512 row."
+      current_v7_cpu_llama_bench_observation: >
+        2026-07-18 current experimental-v7 CPU-only llama-bench with
+        `-dev none -ngl 0 -fa off -t 16`: `pp2048 135.85 t/s`,
+        `pp8192 126.51 t/s`, `tg512 5.44 t/s`. A later bounded CPU-only
+        sidecar on source `cf051d3e18c7` (binary self-reported build
+        `9882c2c69`) measured `pp2048 136.09 t/s`, `pp8192 127.50 t/s`,
+        `tg512 5.395 t/s` over 512 generated tokens. MI210 decode is about
+        15.5x faster than these CPU controls for comparable tg512 rows.
       evidence:
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/summary.tsv
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/nemotron_nano_9b_q8_cpu_v7.stdout
@@ -3091,6 +3108,7 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-512tok-current-v7-20260718T1525Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-current-v7-20260718T155941Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron/cpu-v7-nemotron-nano-9b-q8_0-20260718T155831Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron/cpu-v7-nemotron-nano-9b-q8_0-20260718T2215Z/llama_bench.json
     benchmark_date: 2026-04-23
     notes: |
       Reasoning-mode toggle (default AUTO/ON per user preference):
@@ -7846,7 +7864,20 @@ roles:
       - production_stack_registration_without_mtp_quality_gate
       reason: "Exact MTP artifact is separate from the non-MTP Qwen3.6-27B rows and needs MTP acceptance plus quality evidence."
     performance:
-      benchmark_status: not_run_exact_artifact
+      benchmark_status: ngram_smoke_observation_quality_gate_open
+      ngram_gpu_smoke_observation: >
+        2026-07-18 bounded MI210 server/chat smoke on experimental-v7
+        `cf051d3e18c7` used the exact MTP Q8 artifact after DR-0 scheduling
+        found no aggressive same-model IQ drafter available. Four prompts per
+        arm, 256-token cap, seed 42, temperature 0: no-spec baseline mean
+        `31.37 t/s`; `ngram-simple` mean `33.40 t/s`, median `31.29 t/s`,
+        `34/58` accepted drafts (`58.6%`), output matched baseline on `4/4`;
+        `ngram-cache` mean `29.11 t/s`, `8/17` accepted (`47.1%`), output
+        matched baseline on `3/4`. Observation-only; not a role or default
+        acceleration claim.
+      evidence:
+      - /mnt/raid0/llm/epyc-inference-research/data/ngram_gpu_smoke_20260718T221549Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/ngram_gpu_smoke_20260718T221549Z/dr0_blocker.txt
     memory:
       residency: cold
       pinned: false

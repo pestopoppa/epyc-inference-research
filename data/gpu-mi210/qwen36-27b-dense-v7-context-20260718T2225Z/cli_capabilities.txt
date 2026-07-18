@@ -1,0 +1,32 @@
+native_speculation_flags:
+361-                                        (env: LLAMA_ARG_SPEC_DRAFT_MODEL)
+362:--spec-type none,draft-simple,draft-eagle3,draft-mtp,draft-dflash,ngram-simple,ngram-map-k,ngram-map-k4v,ngram-mod,ngram-cache,draft-tree
+363-                                        comma-separated list of types of speculative decoding to use (default:
+--
+366-                                        (env: LLAMA_ARG_SPEC_TYPE)
+367:--spec-ngram-mod-n-min N                minimum number of ngram tokens to use for ngram-based speculative
+368-                                        decoding (default: 48)
+369:--spec-ngram-mod-n-max N                maximum number of ngram tokens to use for ngram-based speculative
+370-                                        decoding (default: 64)
+371:--spec-ngram-mod-n-match N              ngram-mod lookup length (default: 24)
+372:--spec-ngram-simple-size-n N            ngram size N for ngram-simple speculative decoding, length of lookup
+373-                                        n-gram (default: 12)
+374:--spec-ngram-simple-size-m N            ngram size M for ngram-simple speculative decoding, length of draft
+375-                                        m-gram (default: 48)
+376:--spec-ngram-simple-min-hits N          minimum hits for ngram-simple speculative decoding (default: 1)
+377:--spec-ngram-map-k-size-n N             ngram size N for ngram-map-k speculative decoding, length of lookup
+378-                                        n-gram (default: 12)
+379:--spec-ngram-map-k-size-m N             ngram size M for ngram-map-k speculative decoding, length of draft
+380-                                        m-gram (default: 48)
+381:--spec-ngram-map-k-min-hits N           minimum hits for ngram-map-k speculative decoding (default: 1)
+382:--spec-ngram-map-k4v-size-n N           ngram size N for ngram-map-k4v speculative decoding, length of lookup
+383-                                        n-gram (default: 12)
+384:--spec-ngram-map-k4v-size-m N           ngram size M for ngram-map-k4v speculative decoding, length of draft
+385-                                        m-gram (default: 48)
+386:--spec-ngram-map-k4v-min-hits N         minimum hits for ngram-map-k4v speculative decoding (default: 1)
+387---draft, --draft-n, --draft-max N       the argument has been removed. use --spec-draft-n-max or
+388:                                        --spec-ngram-mod-n-max
+389-                                        (env: LLAMA_ARG_DRAFT_MAX)
+390---draft-min, --draft-n-min N            the argument has been removed. use --spec-draft-n-min or
+391:                                        --spec-ngram-mod-n-min
+392-                                        (env: LLAMA_ARG_DRAFT_MIN)

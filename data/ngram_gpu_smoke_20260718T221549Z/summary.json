@@ -1,0 +1,38 @@
+{
+  "arms": {
+    "spec_off": {
+      "n": 4,
+      "decode_tps_mean": 31.369,
+      "decode_tps_median": 31.346,
+      "prompt_tps_mean": 250.282,
+      "completion_tokens": 242,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "errors": 0,
+      "acceptance_rate": null
+    },
+    "ngram_simple": {
+      "n": 4,
+      "decode_tps_mean": 33.399,
+      "decode_tps_median": 31.289,
+      "prompt_tps_mean": 246.35,
+      "completion_tokens": 242,
+      "draft_n": 58,
+      "draft_n_accepted": 34,
+      "errors": 0,
+      "acceptance_rate": 0.5862
+    },
+    "ngram_cache": {
+      "n": 4,
+      "decode_tps_mean": 29.114,
+      "decode_tps_median": 30.228,
+      "prompt_tps_mean": 236.796,
+      "completion_tokens": 257,
+      "draft_n": 17,
+      "draft_n_accepted": 8,
+      "errors": 0,
+      "acceptance_rate": 0.4706
+    }
+  },
+  "rows": 12
+}

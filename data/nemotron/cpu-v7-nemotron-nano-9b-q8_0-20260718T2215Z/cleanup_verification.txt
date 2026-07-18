@@ -1,0 +1,5 @@
+benchmark_pid=4037535
+benchmark_pid_gone=true
+any_llama_bench_gone=true
+llama_processes_gone=true
+kfd_handles_present=true

@@ -1,0 +1,1 @@
+/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-27B-MTP-Q8_0.gguf --device ROCm0 -ngl 99 -c 8192 -ub 512 -b 512 -t 96 -np 1 --port 19173 --metrics --jinja --reasoning off --spec-type ngram-simple --spec-ngram-simple-size-n 12 --spec-ngram-simple-size-m 48 --spec-ngram-simple-min-hits 1
