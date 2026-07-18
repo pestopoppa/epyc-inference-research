@@ -17,6 +17,15 @@ from typing import Any, Sequence
 
 
 DEFAULT_GGUF_PY = Path("/mnt/raid0/llm/llama.cpp-experimental/gguf-py")
+GLM_NEXTN_METADATA_REGEX = r"general\.architecture|glm-dsa\.|glm4-moe\."
+GLM_NEXTN_CORE_SUFFIX_SHAPES = {
+    "nextn.eh_proj.weight": lambda n_embd: [2 * n_embd, n_embd],
+    "nextn.enorm.weight": lambda n_embd: [n_embd],
+    "nextn.hnorm.weight": lambda n_embd: [n_embd],
+}
+GLM_NEXTN_OPTIONAL_SUFFIX_SHAPES = {
+    "nextn.shared_head_norm.weight": lambda n_embd: [n_embd],
+}
 
 
 @dataclass(frozen=True)
@@ -164,10 +173,164 @@ def read_contract(
     }
 
 
+def scalar_value(value: Any) -> Any:
+    if isinstance(value, list) and len(value) == 1:
+        return value[0]
+    return value
+
+
+def metadata_lookup(contract: dict[str, Any], key: str) -> Any | None:
+    for file_metadata in contract.get("metadata", {}).values():
+        if key in file_metadata:
+            return scalar_value(file_metadata[key])
+    return None
+
+
+def int_metadata(contract: dict[str, Any], key: str, errors: list[str]) -> int | None:
+    value = metadata_lookup(contract, key)
+    if value is None:
+        errors.append(f"missing metadata key: {key}")
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        errors.append(f"metadata key {key} is not an integer: {value!r}")
+        return None
+
+
+def tensor_by_name(contract: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {str(tensor["name"]): tensor for tensor in contract.get("tensors", [])}
+
+
+def classify_glm_tail_tensor(name: str, tail_layers: set[int]) -> str | None:
+    layer = layer_index(name)
+    if layer not in tail_layers:
+        return None
+    if ".nextn." in name:
+        return "nextn"
+    if ".indexer." in name:
+        return "indexer"
+    if ".attn_" in name or ".attn." in name:
+        return "attention"
+    if ".ffn_" in name or ".exp_probs_" in name:
+        return "ffn"
+    return "other"
+
+
+def validate_glm_nextn_contract(contract: dict[str, Any]) -> dict[str, Any]:
+    """Validate the GLM physical NextN tail needed before a decoder-MTP port."""
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    arch = metadata_lookup(contract, "general.architecture")
+    if arch is None:
+        errors.append("missing metadata key: general.architecture")
+        arch_prefix = "glm-dsa"
+    else:
+        arch = str(arch)
+        arch_prefix = arch
+        if arch not in {"glm-dsa", "glm4-moe"}:
+            errors.append(f"unsupported GLM NextN architecture: {arch}")
+
+    block_count = int_metadata(contract, f"{arch_prefix}.block_count", errors)
+    nextn_layers = int_metadata(contract, f"{arch_prefix}.nextn_predict_layers", errors)
+    n_embd = int_metadata(contract, f"{arch_prefix}.embedding_length", errors)
+
+    facts: dict[str, Any] = {
+        "architecture": arch,
+        "block_count": block_count,
+        "nextn_predict_layers": nextn_layers,
+        "embedding_length": n_embd,
+    }
+
+    if block_count is None or nextn_layers is None or n_embd is None:
+        return {"passed": False, "errors": errors, "warnings": warnings, "facts": facts}
+    if nextn_layers <= 0:
+        errors.append(f"{arch_prefix}.nextn_predict_layers must be > 0, got {nextn_layers}")
+        return {"passed": False, "errors": errors, "warnings": warnings, "facts": facts}
+    if nextn_layers >= block_count:
+        errors.append(
+            f"{arch_prefix}.nextn_predict_layers must be smaller than block_count "
+            f"({nextn_layers} >= {block_count})"
+        )
+        return {"passed": False, "errors": errors, "warnings": warnings, "facts": facts}
+    if nextn_layers != 1:
+        warnings.append(
+            "current qwen35-style decoder-MTP reference supports one NextN block; "
+            f"artifact advertises {nextn_layers}"
+        )
+
+    tail_layers = list(range(block_count - nextn_layers, block_count))
+    tail_layer_set = set(tail_layers)
+    facts["tail_layers"] = tail_layers
+
+    tensors = tensor_by_name(contract)
+    group_counts = {"attention": 0, "ffn": 0, "indexer": 0, "nextn": 0, "other": 0}
+    for name in tensors:
+        group = classify_glm_tail_tensor(name, tail_layer_set)
+        if group:
+            group_counts[group] += 1
+    facts["tail_group_counts"] = group_counts
+
+    for tail_layer in tail_layers:
+        prefix = f"blk.{tail_layer}."
+        if not any(name.startswith(prefix) for name in tensors):
+            errors.append(
+                f"missing descriptors for physical NextN tail layer {tail_layer}; "
+                "rerun with a tensor regex/layer range that includes the tail"
+            )
+            continue
+        for suffix, expected_shape_fn in GLM_NEXTN_CORE_SUFFIX_SHAPES.items():
+            name = prefix + suffix
+            tensor = tensors.get(name)
+            if tensor is None:
+                errors.append(f"missing required NextN tensor: {name}")
+                continue
+            expected_shape = expected_shape_fn(n_embd)
+            if list(tensor["shape"]) != expected_shape:
+                errors.append(
+                    f"wrong shape for {name}: expected {expected_shape}, got {tensor['shape']}"
+                )
+        for suffix, expected_shape_fn in GLM_NEXTN_OPTIONAL_SUFFIX_SHAPES.items():
+            name = prefix + suffix
+            tensor = tensors.get(name)
+            if tensor is None:
+                warnings.append(f"optional NextN tensor absent: {name}")
+                continue
+            expected_shape = expected_shape_fn(n_embd)
+            if list(tensor["shape"]) != expected_shape:
+                errors.append(
+                    f"wrong shape for optional {name}: expected {expected_shape}, got {tensor['shape']}"
+                )
+
+    if arch == "glm-dsa":
+        for group in ("attention", "ffn", "indexer"):
+            if group_counts[group] == 0:
+                errors.append(
+                    f"glm-dsa tail has no {group} tensors in this descriptor set; "
+                    "the MTP graph cannot be treated as a dense Qwen clone"
+                )
+
+    return {
+        "passed": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "facts": facts,
+        "required_nextn_suffixes": sorted(GLM_NEXTN_CORE_SUFFIX_SHAPES),
+        "optional_nextn_suffixes": sorted(GLM_NEXTN_OPTIONAL_SUFFIX_SHAPES),
+    }
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("paths", nargs="+", type=Path, help="GGUF file(s) or directories")
     parser.add_argument("--gguf-py", type=Path, default=DEFAULT_GGUF_PY)
+    parser.add_argument(
+        "--contract",
+        choices=["glm-nextn"],
+        default=None,
+        help="Run a fail-closed contract validator and include its result in the JSON.",
+    )
     parser.add_argument(
         "--tensor-regex",
         action="append",
@@ -186,25 +349,36 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def unique_patterns(patterns: Sequence[str]) -> list[str]:
+    return list(dict.fromkeys(patterns))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     files = discover_gguf_files(args.paths)
     if not files:
         raise SystemExit("no GGUF files found")
+    metadata_patterns = list(args.metadata_regex)
+    if args.contract == "glm-nextn":
+        metadata_patterns.append(GLM_NEXTN_METADATA_REGEX)
     contract = read_contract(
         files,
         gguf_py=args.gguf_py,
         tensor_patterns=args.tensor_regex,
-        metadata_patterns=args.metadata_regex,
+        metadata_patterns=unique_patterns(metadata_patterns),
         layer_start=args.layer_start,
         layer_end=args.layer_end,
     )
+    if args.contract == "glm-nextn":
+        contract["contract"] = {"glm_nextn": validate_glm_nextn_contract(contract)}
     payload = json.dumps(contract, indent=2, sort_keys=True) + "\n"
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(payload)
     else:
         print(payload, end="")
+    if args.contract == "glm-nextn" and not contract["contract"]["glm_nextn"]["passed"]:
+        return 1
     return 0
 
 

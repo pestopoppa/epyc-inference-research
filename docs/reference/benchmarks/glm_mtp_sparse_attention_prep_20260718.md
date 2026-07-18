@@ -72,12 +72,28 @@ Implementation sequence:
 ### GLM-5.2 NextN Tensor Contract
 
 Artifact: `docs/data/glm52_nextn_tensor_contract_20260718.json`, generated with
-`scripts/benchmark/gguf_tensor_contract.py` against
-`/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/`.
+`scripts/benchmark/gguf_tensor_contract.py --contract glm-nextn` against
+`/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/`. The contract helper is fail-closed:
+future GLM-MTP loader/graph changes should run this preflight first and refuse the port if
+required `nextn` tensors or the physical tail-layer invariant are missing.
 
 Result: the GLM-5.2 GGUF is `general.architecture=glm-dsa`, `glm-dsa.block_count=79`,
-and `glm-dsa.nextn_predict_layers=1`. The appended `blk.78.*` tail is entirely in shard
-`GLM-5.2-UD-IQ2_M-00006-of-00006.gguf` and contains 27 tensors:
+and `glm-dsa.nextn_predict_layers=1`. The validator passes with physical tail layer
+`[78]` and tail group counts `attention=9`, `ffn=9`, `indexer=5`, `nextn=4`,
+`other=0`. The appended `blk.78.*` tail is entirely in shard
+`GLM-5.2-UD-IQ2_M-00006-of-00006.gguf` and contains 27 tensors.
+
+Required NextN tensors and shapes:
+
+- `nextn.eh_proj.weight [12288, 6144]`
+- `nextn.enorm.weight [6144]`
+- `nextn.hnorm.weight [6144]`
+
+Optional NextN tensor present:
+
+- `nextn.shared_head_norm.weight [6144]`
+
+Other tail tensor groups:
 
 - Full MLA/DSA attention fields: `attn_q_a`, `attn_q_a_norm`, `attn_q_b`,
   `attn_kv_a_mqa`, `attn_kv_a_norm`, `attn_k_b`, `attn_v_b`, `attn_output`,
@@ -86,9 +102,6 @@ and `glm-dsa.nextn_predict_layers=1`. The appended `blk.78.*` tail is entirely i
   `ffn_gate_inp`, `ffn_norm`, and `exp_probs_b`.
 - DSA indexer fields: `indexer.attn_q_b`, `indexer.attn_k`, `indexer.k_norm.*`,
   and `indexer.proj`.
-- NextN projection/norm fields: `nextn.eh_proj.weight [12288, 6144]`,
-  `nextn.enorm.weight [6144]`, `nextn.hnorm.weight [6144]`, and
-  `nextn.shared_head_norm.weight [6144]`.
 
 Port implication: GLM-MTP is not a trivial dense Qwen35 clone. The tail is a full
 GLM-DSA/MLA/MoE block plus NextN projection/norm tensors. The contract does **not**

@@ -1,4 +1,35 @@
 {
+  "contract": {
+    "glm_nextn": {
+      "errors": [],
+      "facts": {
+        "architecture": "glm-dsa",
+        "block_count": 79,
+        "embedding_length": 6144,
+        "nextn_predict_layers": 1,
+        "tail_group_counts": {
+          "attention": 9,
+          "ffn": 9,
+          "indexer": 5,
+          "nextn": 4,
+          "other": 0
+        },
+        "tail_layers": [
+          78
+        ]
+      },
+      "optional_nextn_suffixes": [
+        "nextn.shared_head_norm.weight"
+      ],
+      "passed": true,
+      "required_nextn_suffixes": [
+        "nextn.eh_proj.weight",
+        "nextn.enorm.weight",
+        "nextn.hnorm.weight"
+      ],
+      "warnings": []
+    }
+  },
   "files": [
     {
       "file": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
@@ -74,7 +105,7 @@
     "metadata_regexes": [
       "general\\.architecture",
       "(nextn|block_count|attention\\.indexer)",
-      "general\\.architecture|glm-dsa\\.|nextn|block_count|attention\\.indexer"
+      "general\\.architecture|glm-dsa\\.|glm4-moe\\."
     ],
     "tensor_regexes": [
       "blk\\.78\\."
