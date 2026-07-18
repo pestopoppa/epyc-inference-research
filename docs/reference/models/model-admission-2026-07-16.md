@@ -520,6 +520,32 @@ Evidence lives under `/mnt/raid0/llm/tmp/qwen35-9b-mtp-mi210-quality-20260717T20
 
 Interpretation: Qwen3.5-9B native MTP is runnable and acceptance-clean on long structured output, and the broader slice shows a modest same-quality speed win. It is not a broad frontdoor/worker replacement: the same five deterministic probes failed across no-spec, MTP, and combined ngram→MTP. Use no-spec for tiny verifier-style completions and MTP for longer structured/repetitive generation if a router can identify that task class.
 
+## K35 Frontdoor Context-Edge Extension
+
+The frontdoor Gate-R candidate row at
+`data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/`
+captured the quiet-host 8K/1024-token median comparison. The context-edge
+extension at
+`data/k35_stack_context_matrix/frontdoor_context_edges_20260718Tcodex/`
+then ran the same optimized frontdoor lanes at nominal 2K and 32K with one
+fresh server per cell and 1024 generated tokens.
+
+| Scenario | Nominal context | Prompt tokens | Completion tokens | Prompt t/s | Generation t/s | Draft accepted |
+|---|---:|---:|---:|---:|---:|---:|
+| CPU no-spec | 2048 | 134 | 1024 | 182.23 | 21.63 | 0 / 0 |
+| CPU no-spec | 32768 | 30791 | 1024 | 114.20 | 10.15 | 0 / 0 |
+| MI210 no-spec | 2048 | 134 | 1024 | 674.96 | 101.52 | 0 / 0 |
+| MI210 no-spec | 32768 | 30791 | 1024 | 1765.07 | 78.14 | 0 / 0 |
+| MI210 native MTP | 2048 | 134 | 1024 | 592.39 | 123.55 | 767 / 767 |
+| MI210 native MTP | 32768 | 30791 | 1024 | 1681.27 | 105.17 | 767 / 767 |
+
+Interpretation: native MTP is the fastest measured MI210 frontdoor lane on
+this long repetitive structured-output shape at 2K, 8K, and 32K. This does not
+reverse the earlier task-class caution: no-spec remains the safer default for
+tiny verifier-style completions unless routing can identify an amortizing
+generation shape. These rows are observation-grade until `P-GPU-1` is ratified
+or explicitly retro-certified.
+
 ## MI210 Context-Size Sweep
 
 The context sweep at `/mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/` measured prompt and decode behavior at short, mid, and long prompts for three representative candidates. All cases wrote cleanup logs. The measured prompt-token counts differ from nominal context sizes because the prompt body is tokenizer-dependent.
