@@ -83,6 +83,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS, help="Max completion tokens")
     parser.add_argument("--prompt", default=DEFAULT_PROMPT, help="Prompt to send on each run")
     parser.add_argument(
+        "--stop",
+        action="append",
+        default=[],
+        help="Stop string to send in the chat-completions payload; may be repeated",
+    )
+    parser.add_argument(
         "--spec-type",
         choices=("draft-mtp", "none"),
         default="draft-mtp",
@@ -218,6 +224,7 @@ def query_chat(
     seed: int,
     timeout_s: int,
     request_sampler_mode: str = DEFAULT_REQUEST_SAMPLER_MODE,
+    stop: list[str] | None = None,
 ) -> tuple[dict[str, Any], str]:
     payload = {
         "model": "auto",
@@ -229,6 +236,8 @@ def query_chat(
         "seed": seed,
         "stream": False,
     }
+    if stop:
+        payload["stop"] = list(stop)
     apply_request_sampler_mode(payload, request_sampler_mode)
     req = urllib.request.Request(
         f"http://127.0.0.1:{port}/v1/chat/completions",
@@ -380,6 +389,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "temperature": args.temperature,
             "max_tokens": args.max_tokens,
             "prompt": args.prompt,
+            "stop": args.stop,
             "spec_type": args.spec_type,
             "spec_draft_n_max": args.spec_draft_n_max,
             "slots": args.slots,
@@ -468,6 +478,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
                 "temperature": args.temperature,
                 "max_tokens": args.max_tokens,
                 "prompt": args.prompt,
+                "stop": args.stop,
             },
         }
         try:
@@ -482,6 +493,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
                 seed=args.seed,
                 timeout_s=args.request_timeout,
                 request_sampler_mode=args.request_sampler_mode,
+                stop=args.stop,
             )
             raw_response_path.write_text(raw_response, encoding="utf-8")
             choices = response.get("choices", [])
@@ -566,6 +578,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         "draft_model": str(args.draft_model),
         "spec_type": args.spec_type,
         "slots": args.slots,
+        "stop": args.stop,
         "expected_word": args.expected_word,
         "expected_word_count": args.expected_word_count,
         "request_sampler_mode": args.request_sampler_mode,
@@ -602,6 +615,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"seed: {args.seed}")
     print(f"temperature: {args.temperature}")
     print(f"max_tokens: {args.max_tokens}")
+    print(f"stop: {args.stop}")
     print(f"spec_type: {args.spec_type}")
     print(f"spec_draft_n_max: {args.spec_draft_n_max}")
     print(f"slots: {args.slots}")

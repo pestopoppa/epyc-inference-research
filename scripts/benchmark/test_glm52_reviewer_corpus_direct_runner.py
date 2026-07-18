@@ -202,6 +202,9 @@ def test_patch_diff_prompt_requires_negative_evidence_scrutiny():
     prompt, meta = runner.build_review_prompt(row, max_field_chars=1000)
     assert meta["review_mode"] == "patch_diff_strict"
     assert "Start from reject" in prompt
+    assert "changed test/assertion that would fail without the fix" in prompt
+    assert "nearby/pass-only behavior" in prompt
+    assert "helper/API changes are not tied to the rule path" in prompt
     assert "misspelled or likely undefined identifiers" in prompt
     assert "evidence.basis" in prompt
     assert "under 20 words each" in prompt

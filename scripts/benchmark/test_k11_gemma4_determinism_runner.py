@@ -135,6 +135,18 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
         self.assertEqual(response["choices"][0]["message"]["content"], "OK")
         self.assertEqual(json.loads(raw)["timings"]["draft_n_accepted"], 4)
 
+    def test_query_chat_sends_stop_strings(self) -> None:
+        seen = {}
+
+        def fake_urlopen(req, timeout):  # noqa: ANN001
+            seen["payload"] = json.loads(req.data.decode("utf-8"))
+            return _FakeResponse({"choices": [{"message": {"content": "OK"}}]})
+
+        with mock.patch.object(runner.urllib.request, "urlopen", fake_urlopen):
+            runner.query_chat(18080, "prompt", 64, 0.0, 42, 5, stop=["DONE", "END"])
+
+        self.assertEqual(seen["payload"]["stop"], ["DONE", "END"])
+
     def test_query_chat_can_send_explicit_greedy_payload(self) -> None:
         seen = {}
 
@@ -175,6 +187,10 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
                     str(output_dir),
                     "--runs",
                     "2",
+                    "--stop",
+                    "DONE",
+                    "--stop",
+                    "END",
                 ],
                 check=True,
                 capture_output=True,
@@ -190,6 +206,7 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
             self.assertEqual(plan["meta"]["mode"], "dry_run")
             self.assertEqual(plan["meta"]["spec_type"], "draft-mtp")
             self.assertEqual(plan["meta"]["seed"], 42)
+            self.assertEqual(plan["meta"]["stop"], ["DONE", "END"])
             self.assertEqual(plan["meta"]["slots"], runner.DEFAULT_SLOTS)
             self.assertEqual(len(plan["runs"]), 2)
             self.assertEqual(plan["runs"][0]["label"], "run_01")

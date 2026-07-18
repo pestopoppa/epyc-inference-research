@@ -43,7 +43,7 @@ import glm52_reviewer_capability_direct_runner as smoke
 SCHEMA = "glm52_reviewer_corpus_direct.v1"
 DEFAULT_CORPUS = Path("/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl")
 DEFAULT_N = 12
-DEFAULT_RUBRIC_VERSION = "glm52_direct_nearmiss_review_v3+binary_schema+negative_evidence"
+DEFAULT_RUBRIC_VERSION = "glm52_direct_nearmiss_review_v4+binary_schema+task_test_alignment"
 DEFAULT_ERA = "pre_p_rev1_observation"
 DEFAULT_MAX_FIELD_CHARS = 24000
 ANSWER_FRAGMENT_SCORING_METHODS = frozenset({"substring", "exact_match"})
@@ -71,7 +71,11 @@ PATCH_DIFF_PROMPT_HEADER = (
     "patch should be accepted for the TASK. Start from reject unless the diff shows "
     "positive, task-grounded evidence. Approve only when the changed hunks plausibly "
     "implement the requested behavior and any included tests or assertions exercise "
-    "that behavior. Reject for any concrete blocker: misspelled or likely undefined "
+    "that behavior. Before approving, identify both the exact task behavior fixed "
+    "and the changed test/assertion that would fail without the fix. Reject if tests "
+    "only cover a nearby/pass-only behavior, or if helper/API changes are not tied "
+    "to the rule path that caused the reported failure. Reject for any concrete "
+    "blocker: misspelled or likely undefined "
     "identifiers, wrong object/field names, missing persistence or side effects "
     "required by the task, tests that do not cover the requested behavior, docs-only "
     "changes for a code fix, unsafe broad changes, or patch content unrelated to the "
