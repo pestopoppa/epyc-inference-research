@@ -6406,6 +6406,8 @@ roles:
         mi210_hybrid_repaired_strict_suite_total: 7
         mi210_hybrid_repaired_strict_suite_mean_prompt_tps: 22.33
         mi210_hybrid_repaired_strict_suite_mean_generation_tps: 11.43
+        mi210_hybrid_context_sweep_evidence_dir: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3_mi210_hybrid_context_sweep_20260718Tmain
+        mi210_hybrid_context_sweep_observation: "2026-07-18 server/chat context sweep under the production-shaped hybrid lane measured nominal 2K at 1562 prompt / 310 completion tokens, prompt 71.31 t/s and decode 9.62 t/s; nominal 8K at 6030 prompt / 258 completion tokens, prompt 82.65 t/s and decode 9.37 t/s. 32K was skipped in this main-thread sweep and queued separately. Cleanup returned MI210 to 0% VRAM/no KFD PIDs."
         task_quality_failed_task: lowercase_six_words
         classification: "draft-mtp functional but slower than no-spec; full MI210 residency is not feasible for the 91.8GB artifact. CPU and MI210-hybrid no-spec passed the first task-quality slice 5/6, a later CPU-only strict slice reproduced 5/6, and repaired strict-suite probes passed 7/7 on both CPU-only and production-shaped MI210-hybrid lanes. Hy3 remains research-only until broader role-policy/admission and context-throughput evidence land."
       hf_metadata:

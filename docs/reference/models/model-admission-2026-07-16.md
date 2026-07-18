@@ -514,6 +514,8 @@ Current-source load recheck: a rebuilt experimental-v7 `d1e5a20eb` CPU-only n=0 
 
 Prompt/template repair closure: the CPU repaired strict-suite gate at `data/hy3_current_v7/hy3_cpu_repaired_strict_suite_20260718T193122Z/` passed `7/7`, including repaired six-word and explicit code-only/no-fence prompts, with mean prompt `26.806 t/s` and mean decode `5.167 t/s`. The production-shaped MI210-hybrid rerun at `data/hy3_current_v7/hy3_mi210_hybrid_repaired_strict_suite_20260718T200124Z/summary.json` also passed `7/7` under `--device ROCm0 -ngl 99 --cpu-moe --fit on`, with mean prompt `22.33 t/s` and mean decode `11.43 t/s`. This clears the old exact-count prompt blocker for the repaired template, but Hy3 remains research-only pending broader role-policy/admission and context-throughput evidence.
 
+Context-throughput follow-up: `data/hy3_current_v7/hy3_mi210_hybrid_context_sweep_20260718Tmain/summary.json` used the same production-shaped MI210-hybrid server/chat lane. Nominal 2K produced `1562` prompt tokens and `310` completion tokens at prompt `71.31 t/s`, decode `9.62 t/s`; nominal 8K produced `6030` prompt tokens and `258` completion tokens at prompt `82.65 t/s`, decode `9.37 t/s`. Both responses stopped cleanly and included the requested marker. The 32K row was skipped in this main-thread sweep and queued separately; post-run cleanup showed no `llama-server` PIDs and no KFD PIDs.
+
 ## Qwable Server/Chat Reasoning-Economics Smoke
 
 The server/chat-based Qwable runner was used instead of the old direct CLI path to avoid the prior interactive/simple-IO runaway. During the active GLM download, a single IQ4_XS MI210 arm was executed with `--allow-glm-download` because it uses a local 18 GB artifact and the runner owns/cleans its server process.
