@@ -7024,10 +7024,14 @@ roles:
         /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start12_20260718T192418Z
         covered rows 12-23: pass@1 2/12, oracle pass@5 6/12,
         verifier-selected 4/12, selection accuracy 4/6, gap recovered 0.5,
-        stop=12, marker=12. Combined rows 0-23 are positive observation-grade
-        evidence: pass@1 8/24, oracle pass@5 13/24, verifier-selected 11/24,
-        selection accuracy 11/13, gap recovered 0.6, with stable stop/marker
-        telemetry across all verifier calls. This supports a larger or repeated
+        stop=12, marker=12. The rows 24-47 expansion at
+        /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start24_20260718T193035Z
+        scored pass@1 15/24, oracle pass@5 15/24, verifier-selected 15/24,
+        and selection accuracy 15/15, with no selector misses among solvable
+        rows. Combined rows 0-47 are positive observation-grade evidence:
+        pass@1 23/48, oracle pass@5 28/48, verifier-selected 26/48,
+        selection accuracy 26/28, gap recovered 0.6, and stable stop/marker
+        telemetry across all verifier calls. This supports a repeated or
         decision-grade gate, not a deployment decision yet.
       long_decode_observation: >
         2026-07-16 longer server runs during active GLM download: CPU generated
@@ -7066,6 +7070,7 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_no_solve_first_gpu_20260718Tcapcontrol_limit6/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_20260718T191709Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start12_20260718T192418Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start24_20260718T193035Z/summary.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_iq4xs_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_iq4xs_mi210/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c2048/summary.txt
