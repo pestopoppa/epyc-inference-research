@@ -5884,7 +5884,8 @@ roles:
         experimental v7 CPU-only GLM, chat/completions, JSON schema, reasoning
         off, and the recovered p12000_tk16384 band. Evidence:
         data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/summary.json,
-        decisions.jsonl, and reviewer_calibration_report.md. The selected
+        decisions.jsonl, reviewer_calibration_report.md, and
+        raw_prompt_and_server_log_artifacts.tar.gz. The selected
         nearmiss-v1 code slice was balanced 6 accept / 6 reject with multi_oracle
         gold rows. The run emitted 12/12 parse-valid ledger decisions, but
         reviewer calibration reported FA=16.7%, FR=66.7%, FA/FR=0.25, accept=25.0%,
@@ -5974,6 +5975,7 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/decisions.jsonl
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/reviewer_calibration_report.md
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/raw_prompt_and_server_log_artifacts.tar.gz
     memory:
       residency: cold
       pinned: false

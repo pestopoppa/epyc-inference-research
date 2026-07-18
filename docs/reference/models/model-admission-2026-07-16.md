@@ -215,6 +215,7 @@ Evidence:
 - `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/summary.json`
 - `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/decisions.jsonl`
 - `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/reviewer_calibration_report.md`
+- `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/raw_prompt_and_server_log_artifacts.tar.gz`
 
 The direct corpus runner (`scripts/benchmark/glm52_reviewer_corpus_direct_runner.py`) keeps GLM-5.2 out of the production orchestration registry while emitting ledger-shaped decisions for `scripts/analysis/reviewer_calibration_report.py`. This run used CPU-only current-source experimental v7, chat/completions, JSON schema, `--reasoning off --reasoning-budget 0`, and the recovered `p12000_tk16384` band. It selected a deterministic balanced `nearmiss-v1` code slice (`n=12`, `6 accept / 6 reject`, `multi_oracle` rows).
 
@@ -227,7 +228,7 @@ The direct corpus runner (`scripts/benchmark/glm52_reviewer_corpus_direct_runner
 | ECE / AUC / Brier | `0.392 / 0.414 / 0.402` |
 | Aggregate prompt / decode | `26.37 t/s` / `2.56 t/s` |
 
-Disposition: this is pre-P-REV-1 observation-grade evidence and cannot gate deployment, but it is a strong warning that the repaired synthetic smokes did not transfer to real near-miss review. GLM is parse-clean under schema, but it over-rejects heavily; fix reviewer policy/prompting or calibration before any claim-grade rerun or acceleration spend.
+Disposition: this is pre-P-REV-1 observation-grade evidence and cannot gate deployment, but it is a strong warning that the repaired synthetic smokes did not transfer to real near-miss review. GLM is parse-clean under schema, but it over-rejects heavily; fix reviewer policy/prompting or calibration before any claim-grade rerun or acceleration spend. The raw prompt text files and raw server log are preserved in the compressed archive above; expanded `artifacts/*.prompt.txt` and `logs/` copies are local scratch and ignored to avoid whitespace-only artifact churn.
 
 ## GLM-5.2 Expert-Routing Skew
 
