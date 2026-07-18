@@ -59,6 +59,8 @@ DEFAULT_REPEATS = 2
 DEFAULT_SLOTS = 4
 DEFAULT_REQUEST_SAMPLER_MODE = "current"
 DEFAULT_DRAFT_BACKEND_SAMPLING = "default"
+DEFAULT_SCHEMA_TASK = "none"
+SCHEMA_TASK_WORD_ARRAY_200 = "word-array-200"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -110,6 +112,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=None,
         help="Optional exact repeated word count to score in message.content",
+    )
+    parser.add_argument(
+        "--schema-task",
+        choices=(DEFAULT_SCHEMA_TASK, SCHEMA_TASK_WORD_ARRAY_200),
+        default=DEFAULT_SCHEMA_TASK,
+        help=(
+            "Optional request-level JSON schema task. word-array-200 constrains the response "
+            "to a JSON object with 200 benchmark entries and done=END."
+        ),
     )
     parser.add_argument(
         "--request-sampler-mode",
@@ -216,6 +227,27 @@ def apply_request_sampler_mode(payload: dict[str, Any], mode: str) -> None:
         raise ValueError(f"unknown request sampler mode: {mode}")
 
 
+def json_schema_for_schema_task(schema_task: str) -> dict[str, Any] | None:
+    if schema_task == DEFAULT_SCHEMA_TASK:
+        return None
+    if schema_task == SCHEMA_TASK_WORD_ARRAY_200:
+        return {
+            "type": "object",
+            "properties": {
+                "words": {
+                    "type": "array",
+                    "minItems": 200,
+                    "maxItems": 200,
+                    "items": {"type": "string", "enum": ["benchmark"]},
+                },
+                "done": {"type": "string", "enum": ["END"]},
+            },
+            "required": ["words", "done"],
+            "additionalProperties": False,
+        }
+    raise ValueError(f"unknown schema task: {schema_task}")
+
+
 def query_chat(
     port: int,
     prompt: str,
@@ -225,6 +257,7 @@ def query_chat(
     timeout_s: int,
     request_sampler_mode: str = DEFAULT_REQUEST_SAMPLER_MODE,
     stop: list[str] | None = None,
+    json_schema: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str]:
     payload = {
         "model": "auto",
@@ -238,6 +271,8 @@ def query_chat(
     }
     if stop:
         payload["stop"] = list(stop)
+    if json_schema is not None:
+        payload["json_schema"] = json_schema
     apply_request_sampler_mode(payload, request_sampler_mode)
     req = urllib.request.Request(
         f"http://127.0.0.1:{port}/v1/chat/completions",
@@ -395,6 +430,8 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "slots": args.slots,
             "expected_word": args.expected_word,
             "expected_word_count": args.expected_word_count,
+            "schema_task": args.schema_task,
+            "json_schema": json_schema_for_schema_task(args.schema_task),
             "request_sampler_mode": args.request_sampler_mode,
             "draft_backend_sampling": args.draft_backend_sampling,
             "threads": args.threads,
@@ -450,6 +487,38 @@ def score_word_task(content: str, expected_word: str | None, expected_count: int
     }
 
 
+def score_schema_task(content: str, schema_task: str) -> dict[str, Any] | None:
+    if schema_task == DEFAULT_SCHEMA_TASK:
+        return None
+    if schema_task != SCHEMA_TASK_WORD_ARRAY_200:
+        raise ValueError(f"unknown schema task: {schema_task}")
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError as exc:
+        return {
+            "schema_task": schema_task,
+            "json_ok": False,
+            "parse_error": str(exc),
+            "passed": False,
+        }
+    words = parsed.get("words") if isinstance(parsed, dict) else None
+    done = parsed.get("done") if isinstance(parsed, dict) else None
+    words_ok = isinstance(words, list) and len(words) == 200 and all(word == "benchmark" for word in words)
+    done_ok = done == "END"
+    return {
+        "schema_task": schema_task,
+        "json_ok": True,
+        "observed_word_count": len(words) if isinstance(words, list) else None,
+        "bad_word_count": (
+            sum(1 for word in words if word != "benchmark") if isinstance(words, list) else None
+        ),
+        "done": done,
+        "words_ok": words_ok,
+        "done_ok": done_ok,
+        "passed": words_ok and done_ok,
+    }
+
+
 def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     runs_dir = output_dir / "runs"
@@ -459,6 +528,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         directory.mkdir(parents=True, exist_ok=True)
 
     results: list[dict[str, Any]] = []
+    json_schema = json_schema_for_schema_task(args.schema_task)
     for index in range(1, args.runs + 1):
         label = f"run_{index:02d}"
         port = pick_ephemeral_port()
@@ -479,6 +549,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
                 "max_tokens": args.max_tokens,
                 "prompt": args.prompt,
                 "stop": args.stop,
+                "schema_task": args.schema_task,
             },
         }
         try:
@@ -494,6 +565,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
                 timeout_s=args.request_timeout,
                 request_sampler_mode=args.request_sampler_mode,
                 stop=args.stop,
+                json_schema=json_schema,
             )
             raw_response_path.write_text(raw_response, encoding="utf-8")
             choices = response.get("choices", [])
@@ -522,11 +594,13 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
             draft_n = int(timings.get("draft_n") or 0)
             draft_accepted = int(timings.get("draft_n_accepted") or 0)
             acceptance_rate = (draft_accepted / draft_n) if draft_n > 0 else 0.0
-            task_eval = score_word_task(
-                semantic_output["content"],
-                args.expected_word,
-                args.expected_word_count,
-            )
+            task_eval = score_schema_task(semantic_output["content"], args.schema_task)
+            if task_eval is None:
+                task_eval = score_word_task(
+                    semantic_output["content"],
+                    args.expected_word,
+                    args.expected_word_count,
+                )
             run_record.update(
                 {
                     "status": "ok",
@@ -581,6 +655,8 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         "stop": args.stop,
         "expected_word": args.expected_word,
         "expected_word_count": args.expected_word_count,
+        "schema_task": args.schema_task,
+        "json_schema": json_schema,
         "request_sampler_mode": args.request_sampler_mode,
         "draft_backend_sampling": args.draft_backend_sampling,
         "runs": results,
@@ -621,6 +697,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"slots: {args.slots}")
     print(f"request_sampler_mode: {args.request_sampler_mode}")
     print(f"draft_backend_sampling: {args.draft_backend_sampling}")
+    print(f"schema_task: {args.schema_task}")
     if args.expected_word is not None or args.expected_word_count is not None:
         print(f"expected_word: {args.expected_word}")
         print(f"expected_word_count: {args.expected_word_count}")

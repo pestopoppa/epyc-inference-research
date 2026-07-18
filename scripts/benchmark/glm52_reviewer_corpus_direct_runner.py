@@ -43,7 +43,7 @@ import glm52_reviewer_capability_direct_runner as smoke
 SCHEMA = "glm52_reviewer_corpus_direct.v1"
 DEFAULT_CORPUS = Path("/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl")
 DEFAULT_N = 12
-DEFAULT_RUBRIC_VERSION = "glm52_direct_nearmiss_review_v4+binary_schema+task_test_alignment"
+DEFAULT_RUBRIC_VERSION = "glm52_direct_nearmiss_review_v5+binary_schema+task_test_alignment+oracle_notes"
 DEFAULT_ERA = "pre_p_rev1_observation"
 DEFAULT_MAX_FIELD_CHARS = 24000
 ANSWER_FRAGMENT_SCORING_METHODS = frozenset({"substring", "exact_match"})
@@ -140,6 +140,32 @@ def read_row_ids_file(path: Path) -> list[str]:
             continue
         row_ids.append(stripped.split("#", 1)[0].strip())
     return [row_id for row_id in row_ids if row_id]
+
+
+def read_oracle_notes_file(path: Path) -> dict[str, str]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"oracle notes file must be a JSON object: {path}")
+    notes: dict[str, str] = {}
+    for key, value in data.items():
+        row_id = str(key).strip()
+        note = str(value).strip() if isinstance(value, str) else ""
+        if not row_id:
+            raise ValueError(f"oracle notes file contains an empty row id: {path}")
+        if not note:
+            raise ValueError(f"oracle note for {row_id!r} must be a non-empty string")
+        notes[row_id] = note
+    return notes
+
+
+def load_oracle_notes(paths: Iterable[Path]) -> dict[str, str]:
+    notes: dict[str, str] = {}
+    for path in paths:
+        for row_id, note in read_oracle_notes_file(path.expanduser().resolve()).items():
+            if row_id in notes and notes[row_id] != note:
+                raise ValueError(f"conflicting oracle notes for row id {row_id!r}")
+            notes[row_id] = note
+    return notes
 
 
 def requested_row_ids(args: argparse.Namespace) -> list[str]:
@@ -334,20 +360,31 @@ def truncate_middle(text: str, max_chars: int) -> tuple[str, bool]:
 def build_review_prompt(row: dict[str, Any], *, max_field_chars: int) -> tuple[str, dict[str, Any]]:
     task, task_truncated = truncate_middle(str(row.get("task") or ""), max_field_chars)
     candidate, candidate_truncated = truncate_middle(str(row.get("candidate") or ""), max_field_chars)
+    oracle_note_raw = str(row.get("oracle_note") or "").strip()
+    oracle_note, oracle_note_truncated = truncate_middle(oracle_note_raw, 2000)
     review_mode = review_mode_for_row(row)
     header = PATCH_DIFF_PROMPT_HEADER if review_mode == "patch_diff_strict" else GENERIC_PROMPT_HEADER
+    oracle_section = (
+        f"CURATED REVIEW CONSTRAINT:\n{oracle_note}\n\n"
+        if oracle_note
+        else ""
+    )
     prompt = (
         f"{header}\n\n"
         f"TASK:\n{task}\n\n"
         f"CANDIDATE:\n{candidate}\n\n"
+        f"{oracle_section}"
         "ReviewDecision JSON only:"
     )
     return prompt, {
         "task_truncated": task_truncated,
         "candidate_truncated": candidate_truncated,
+        "oracle_note_present": bool(oracle_note),
+        "oracle_note_truncated": oracle_note_truncated,
         "max_field_chars": max_field_chars,
         "task_chars_original": len(str(row.get("task") or "")),
         "candidate_chars_original": len(str(row.get("candidate") or "")),
+        "oracle_note_chars_original": len(oracle_note_raw),
         "prompt_chars": len(prompt),
         "review_mode": review_mode,
     }
@@ -624,6 +661,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     source_suites = optional_filter(args.source_suite)
     source_benchmarks = optional_filter(args.source_benchmark)
     scoring_methods = optional_filter(args.provenance_scoring_method)
+    oracle_notes = load_oracle_notes(args.oracle_notes_file or [])
     rows = list(
         iter_judgeable_rows(
             args.corpus,
@@ -704,6 +742,13 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "rubric_version": args.rubric_version,
             "era": args.era,
         },
+        "review_hints": {
+            "oracle_notes_files": [str(path.expanduser().resolve()) for path in args.oracle_notes_file or []],
+            "oracle_notes_row_ids": sorted(oracle_notes),
+            "selected_oracle_note_row_ids": sorted(row.row_id for row in selected if row.row_id in oracle_notes),
+            "unused_oracle_note_row_ids": sorted(row_id for row_id in oracle_notes if row_id not in rows_by_id),
+            "oracle_notes_by_row_id": oracle_notes,
+        },
         "band": band.__dict__,
         "binary": str(binary),
         "library_path": str(library_path),
@@ -756,8 +801,12 @@ def call_row(
             max(60, min(int(plan["request"]["timeout_s"]), 600)),
         )
 
+    oracle_notes = plan.get("review_hints", {}).get("oracle_notes_by_row_id", {})
+    prompt_row = dict(row.raw)
+    if isinstance(oracle_notes, dict) and row.row_id in oracle_notes:
+        prompt_row["oracle_note"] = oracle_notes[row.row_id]
     prompt_info = fit_prompt_to_budget(
-        row.raw,
+        prompt_row,
         context_length=int(band["context_length"]),
         max_completion_tokens=int(plan["request"]["max_tokens"]),
         prompt_context_guard_tokens=int(band["prompt_context_guard_tokens"]),
@@ -947,6 +996,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="append",
         default=[],
         help="File containing explicit row ids, one per line. Blank lines and # comments are ignored.",
+    )
+    parser.add_argument(
+        "--oracle-notes-file",
+        type=Path,
+        action="append",
+        default=[],
+        help=(
+            "JSON object mapping row id to a curated review constraint. Notes are prompt hints, "
+            "not gold labels, and selected note ids are recorded in the run plan."
+        ),
     )
     parser.add_argument(
         "--provenance-scoring-method",

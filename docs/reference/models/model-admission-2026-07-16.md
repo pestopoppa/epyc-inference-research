@@ -23,7 +23,7 @@ Admission and serving decisions should use the fastest quality-clean lane that w
 
 | Candidate | Local artifact state | Manifest/source evidence | First runnable gate |
 |---|---:|---|---|
-| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement; ✅ stale-binary true >64K CPU DSA probe processed `65,969` prompt tokens with Lightning Indexer enabled; ✅ current-source DSA cache/runtime wiring smoke passed after experimental-v7 `3dee86a5a`; ✅ top-k cap schedule sweep shows the observed safe caps are next power-of-two bands (`2048`, `4096`, `16384`) for the tested 2K/3K/12K prompts; ✅ reviewer-serving chat/free+schema matrix passed under the schedule; ✅ synthetic GC-1/2/3 repair smokes passed after prompt/scorer fixes (`free strict-IF 3/3`, rubric `mean_composite=1.0`, synthetic why `why_match_rate=1.0`); ✅ near-miss corpus runner now refuses mixed source-suite/scoring representations by default and supports explicit row-id slices. Homogeneous `cruxeval/exact_match` n=24 observation improved to FA `0.0%`, FR `16.7%`; matched `c-crab/python` n=24 failed by over-approval (FA `91.7%`), and pinned C-CRAB n=6 repaired this to FA `33.3%` / FR `0.0%` but still false-accepted one multi-oracle SQLFluff L009 reject. The v4 task/test-alignment prompt kept the same FA `33.3%` / FR `0.0%`; patch-review quality and P-REV-1/corpus-level reviewer quality remain open. |
+| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement; ✅ stale-binary true >64K CPU DSA probe processed `65,969` prompt tokens with Lightning Indexer enabled; ✅ current-source DSA cache/runtime wiring smoke passed after experimental-v7 `3dee86a5a`; ✅ top-k cap schedule sweep shows the observed safe caps are next power-of-two bands (`2048`, `4096`, `16384`) for the tested 2K/3K/12K prompts; ✅ reviewer-serving chat/free+schema matrix passed under the schedule; ✅ synthetic GC-1/2/3 repair smokes passed after prompt/scorer fixes (`free strict-IF 3/3`, rubric `mean_composite=1.0`, synthetic why `why_match_rate=1.0`); ✅ near-miss corpus runner now refuses mixed source-suite/scoring representations by default and supports explicit row-id slices. Homogeneous `cruxeval/exact_match` n=24 observation improved to FA `0.0%`, FR `16.7%`; matched `c-crab/python` n=24 failed by over-approval (FA `91.7%`); pinned C-CRAB n=6 v5 oracle-note replay fixed the audited SQLFluff L009 reject with FA `0.0%` / FR `0.0%`. Patch-review quality and P-REV-1/corpus-level reviewer quality remain open until a broader matched reviewer-scope confirmation passes. |
 | Hy3 AngelSlim IQ1_M-mtp | Complete: `Hy3-IQ1_M-mtp.gguf`, 91,756,066,624 bytes, plus license, README, chat template, recipes, and two Hy3 llama.cpp patches. Experimental v7 commit `98a1ad8cf` now loads it after the Hy3 router-bias tensor-name fix. | HF metadata sidecar revision `218c93f0fb5227553b67e556b01dfe70fb70cf30`, LFS hash `f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13`. Capped CPU smoke loaded the model and returned `OK`; follow-up CPU and MI210-hybrid MTP/no-spec A/Bs both produced coherent output. | ✅ MTP-on/off functional closure recorded; no-spec is faster than `draft-mtp` in the measured CPU and MI210-hybrid samples. Next gate is task quality / architecture fit, not more first-load smoke. |
 | Bonsai-27B Q1_0 | Complete: `Bonsai-27B-Q1_0.gguf`, 3,803,452,480 bytes. | HF metadata sidecar revision `0cf7e3d21581b169b4df1de8bf01316000e2fbb7`, LFS hash `17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0`. | Text load smoke on production v6 is valid; public quality is contested, so quality gate before any role claim. |
 | Ternary Bonsai-27B Q2_0 | Complete: `Ternary-Bonsai-27B-Q2_0.gguf`, 7,165,121,600 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757`. | Blocked before prompt execution: this artifact uses noncanonical 17-byte/block Q2_0 packing under the standard `GGML_TYPE_Q2_0` id, while current v7 expects standard 18-byte/block Q2_0. Do not rerun ordinary CPU/MI210 smokes until producer layout or a distinct experimental compatibility loader is resolved. |
@@ -311,6 +311,38 @@ Evidence:
 Result: execution completed in `2719.599s`, emitted 24/24 parse-valid binary decisions, and stopped its server. The selected rows were homogeneous `c-crab|python|no_scoring_method`, balanced 12 accept / 12 reject, with real patch-sized candidates (`candidate_chars.p50=6838`). Quality failed by over-approval: FA `91.7%`, FR `16.7%`, accept `87.5%`, ECE `0.398`, AUC `0.388`, Brier `0.426`. Aggregate row timings were `50,159` prompt tokens at `21.32 t/s` and `792` decode tokens at `2.26 t/s`.
 
 Disposition: exact-answer judging and patch-review judging are now clearly different GLM regimes. GLM is too permissive on patch diffs under the current task-grounded prompt, so the next patch-review repair must require concrete negative evidence, diff-hunk scrutiny, and review-comment/oracle alignment before approval. Confidence-threshold tuning alone is not enough because the wrong approvals are high-confidence.
+
+## GLM C-CRAB Oracle-Note Hard-Negative Repair
+
+The failed C-CRAB n=24 patch-diff observation was reduced to a pinned audited
+screen with three clean merged-patch accept controls and three reject controls.
+The v4 prompt-only task/test-alignment repair still false-accepted the SQLFluff
+L009 raw-slice reject. The v5 repair adds explicit curated oracle notes for
+audited hard-negative rows without deriving notes from gold labels at runtime.
+
+Reproducibility files:
+
+- `docs/data/glm52_ccrab_rowid_n6_20260718.txt`
+- `docs/data/glm52_ccrab_oracle_notes_20260718.json`
+
+Evidence:
+
+- `data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n6-20260718Tcodex/summary.json`
+- `data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n6-20260718Tcodex/glm52_ccrab_rowid_v5_notes_report.md`
+
+Result: the v5 replay selected the same six C-CRAB rows as the v4 replay, applied
+one curated note to `nearmiss-v1:c-crab:0e49d06ddc8f2635`, completed in
+`917.399s`, and emitted 6/6 parse-valid binary decisions. Quality on this
+pinned screen was FA `0.0%`, FR `0.0%`, approve/reject `3/3`. The previously
+false-accepted SQLFluff L009 row now rejects because the candidate only adds a
+pass-only templated-newline fixture and does not reproduce the reported
+dbt/raw-space source-slice failure.
+
+Disposition: this clears the audited hard-negative blocker on the pinned screen,
+but it is not broad GLM patch-review role admission. The next reviewer-quality
+step is a broader matched reviewer-scope confirmation run, or an explicit
+operator decision to scope GLM to exact-answer review while patch-review remains
+with another reviewer lane.
 
 ## GLM-5.2 Expert-Routing Skew
 
@@ -633,11 +665,21 @@ no-spec explicit-greedy lane became deterministic over 10 fresh servers
 (`unique_output_hashes=1`) but still failed the task: every run emitted 512
 `benchmark` words and never emitted `END`.
 
-Disposition: treat Gemma4 external-head MTP on MI210 as a fast diagnostic lane,
-not a production GPU-worker serving lane. The ROCm `TOP_K` warning is no longer
-the leading explanation for target-generation semantics; the next diagnostic
-should use a schema/grammar or other prompt shape where termination is
-structurally unavoidable before any multi-slot GPU worker promotion.
+Follow-up schema diagnostic:
+`data/k11_gemma4_determinism/k11_schema_word_array_nospec_np4_n10_20260718Tcodex/k11_schema_word_array_nospec_report.md`
+and
+`data/k11_gemma4_determinism/k11_schema_word_array_mtp_np4_n10_20260718Tcodex/k11_schema_word_array_mtp_report.md`.
+The runner now supports request-level `json_schema` and `--schema-task word-array-200`.
+No-spec explicit-greedy passed 10/10 fresh-server repeats with one output hash,
+200 JSON array entries, `done=END`, parse `0`, and mean decode `76.577 t/s`.
+External-head MTP passed the same 10/10 schema gate with one output hash, mean
+decode `122.128 t/s`, and `97.3568-98.2301%` draft acceptance.
+
+Disposition: schema-constrained structured output is stable under Gemma4
+external-head MTP and is materially faster than no-spec on this bounded repeated
+JSON task. The remaining K11 risk is free-form stop/termination semantics, not
+general target nondeterminism or MTP acceptance drift under a structurally
+bounded schema.
 
 ## MI210 Context-Size Sweep
 
@@ -766,7 +808,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 
 ## Next Queue
 
-1. Apply the GLM-5.2 DSA top-k schedule in task-quality/reviewer probes before any role claim. True >64K prompt execution is recorded as stale-binary runnability, current-source 32K needle/coherence failed under unsafe low top-k, the schedule sweep shows exact short output requires next power-of-two caps for the tested prompt bands (`2048`, `4096`, `16384`), and the 2026-07-18 chat/free+JSON-schema matrix passed at ~2.9K/~12.0K under that schedule. The `nearmiss-v1` shadow/replay and binary-schema n=24 runs were parse-clean but are now diagnosed as representation-mixed, not valid broad GLM reviewer calibration. The runner now refuses mixed source-suite/scoring selections by default and can pin row-id slices. Homogeneous `cruxeval/exact_match` n=24 improved to FA `0.0%`, FR `16.7%`; matched C-CRAB n=24 failed by over-approval (FA `91.7%`, FR `16.7%`); the pinned row-id C-CRAB n=6 screen improved to FA `33.3%`, FR `0.0%`, but still false-accepted the SQLFluff L009 raw-slice reject. The v4 task/test-alignment repair attempt did not move that result. Do not spend GLM acceleration work beyond source prep until patch-review false-accept repair or an explicit exact-answer reviewer scope is chosen under this schedule.
+1. Apply the GLM-5.2 DSA top-k schedule in task-quality/reviewer probes before any role claim. True >64K prompt execution is recorded as stale-binary runnability, current-source 32K needle/coherence failed under unsafe low top-k, the schedule sweep shows exact short output requires next power-of-two caps for the tested prompt bands (`2048`, `4096`, `16384`), and the 2026-07-18 chat/free+JSON-schema matrix passed at ~2.9K/~12.0K under that schedule. The `nearmiss-v1` shadow/replay and binary-schema n=24 runs were parse-clean but are now diagnosed as representation-mixed, not valid broad GLM reviewer calibration. The runner now refuses mixed source-suite/scoring selections by default and can pin row-id slices. Homogeneous `cruxeval/exact_match` n=24 improved to FA `0.0%`, FR `16.7%`; matched C-CRAB n=24 failed by over-approval (FA `91.7%`, FR `16.7%`); the pinned row-id C-CRAB n=6 screen initially improved to FA `33.3%`, FR `0.0%`, but v4 prompt-only alignment still false-accepted the SQLFluff L009 raw-slice reject. The v5 oracle-note replay fixed that audited row on the pinned n=6 slice with FA `0.0%`, FR `0.0%`. GLM acceleration can advance as source prep, but native GLM-MTP/sparse-attention runtime spend should still wait for a broader matched reviewer-scope confirmation or an explicit exact-answer-only GLM scope.
 2. Hy3 task-level quality / architecture-fit first slice is complete: both realistic lanes passed `5/6`, with MI210 hybrid no-spec at `11.51 t/s` mean decode and CPU no-spec at `5.21 t/s`; both failed only the exact six-word instruction. Next Hy3 work is prompt/template repair or a role-specific suite, not another first-load or MTP-closure run.
 3. Investigate the Ternary Bonsai Q2_0 artifact/runtime offset mismatch before retrying. Q2_g64 is CPU+MI210 runtime-smoke passed and has preliminary throughput observations, including a positive MI210 `ngram-mod` structured-copy speed signal, but the strict quality gate passed only 6/8 and blocks any role claim; dspark variants failed separately.
 4. Qwable IQ4_XS standalone routing and broader representative quality are closed for the research registry: plain reasoning-off IQ4_XS is the preferred reasoning-heavy route, `ngram-mod` is neutral on the expanded slice, and scaffold remains only the beneficiary-must-answer fallback. Remaining work is production hosting/composite-route wiring, not model admission.

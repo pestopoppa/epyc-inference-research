@@ -1,0 +1,3 @@
+{
+  "nearmiss-v1:c-crab:0e49d06ddc8f2635": "For this SQLFluff L009 patch review, the added test must reproduce the reported dbt/raw-space source-slice failure. Do not treat a pass-only templated-newline fixture as sufficient evidence. Raw-slice helper/API changes alone are insufficient unless tied to the failing rule path."
+}

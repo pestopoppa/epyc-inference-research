@@ -1,0 +1,7 @@
+# Pinned C-CRAB patch-review slice used for GLM reviewer hard-negative repair.
+nearmiss-v1:c-crab:6b710a8f003b6d7f
+nearmiss-v1:c-crab:28cdbe123c730a18
+nearmiss-v1:c-crab:34224c9c98534550
+nearmiss-v1:c-crab:c7b60daa9aa5eadd
+nearmiss-v1:c-crab:74d37c7877c3c037
+nearmiss-v1:c-crab:0e49d06ddc8f2635

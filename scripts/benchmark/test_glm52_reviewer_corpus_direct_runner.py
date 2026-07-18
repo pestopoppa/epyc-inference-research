@@ -210,6 +210,21 @@ def test_patch_diff_prompt_requires_negative_evidence_scrutiny():
     assert "under 20 words each" in prompt
 
 
+def test_build_review_prompt_includes_oracle_note_only_when_present():
+    row = _row("ordinary", label="reject")
+    plain_prompt, plain_meta = runner.build_review_prompt(row, max_field_chars=1000)
+    noted_prompt, noted_meta = runner.build_review_prompt(
+        {**row, "oracle_note": "The added test must reproduce the reported dbt raw-space failure."},
+        max_field_chars=1000,
+    )
+
+    assert "CURATED REVIEW CONSTRAINT" not in plain_prompt
+    assert plain_meta["oracle_note_present"] is False
+    assert "CURATED REVIEW CONSTRAINT" in noted_prompt
+    assert "dbt raw-space failure" in noted_prompt
+    assert noted_meta["oracle_note_present"] is True
+
+
 def test_ledger_row_for_parse_error_marks_parse_error():
     row = runner.CorpusRow("r1", _row("r1", label="reject"))
     ledger = runner.ledger_row_for_result(
@@ -292,6 +307,27 @@ def test_read_row_ids_file_ignores_blank_lines_and_comments(tmp_path):
     assert runner.read_row_ids_file(row_ids_file) == ["row-a", "row-b", "row-a"]
 
 
+def test_read_oracle_notes_file_requires_row_id_mapping(tmp_path):
+    notes_file = tmp_path / "notes.json"
+    notes_file.write_text(json.dumps({"row-a": "Check the exact failing path."}), encoding="utf-8")
+
+    assert runner.read_oracle_notes_file(notes_file) == {"row-a": "Check the exact failing path."}
+
+
+def test_load_oracle_notes_refuses_conflicting_duplicates(tmp_path):
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text(json.dumps({"row-a": "first"}), encoding="utf-8")
+    second.write_text(json.dumps({"row-a": "second"}), encoding="utf-8")
+
+    try:
+        runner.load_oracle_notes([first, second])
+    except ValueError as exc:
+        assert "conflicting oracle notes" in str(exc)
+    else:
+        raise AssertionError("expected conflicting oracle notes to fail")
+
+
 def test_requested_row_ids_dedupes_files_and_cli(tmp_path):
     row_ids_file = tmp_path / "rows.txt"
     row_ids_file.write_text("row-a\nrow-b\n", encoding="utf-8")
@@ -352,6 +388,51 @@ def test_build_plan_uses_explicit_row_ids_in_order(tmp_path, monkeypatch):
     assert plan["corpus"]["n_requested"] == 2
     assert plan["corpus"]["selected_row_ids"] == ["reject-b", "accept-a"]
     assert plan["corpus"]["explicit_row_ids"] == ["reject-b", "accept-a"]
+
+
+def test_build_plan_records_selected_oracle_notes(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    rows = [
+        {**_row("accept-a", label="accept"), "provenance": {}},
+        {**_row("reject-a", label="reject"), "provenance": {}},
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    notes_file = tmp_path / "notes.json"
+    notes_file.write_text(json.dumps({"reject-a": "Check the exact patched failing path."}), encoding="utf-8")
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--row-id",
+            "reject-a",
+            "--row-id",
+            "accept-a",
+            "--oracle-notes-file",
+            str(notes_file),
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(
+        runner.base,
+        "collect_inventory",
+        lambda model_dir: {
+            "status": "ready",
+            "primary_shard": "/tmp/glm.gguf",
+            "refusal_reasons": [],
+        },
+    )
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+    plan = runner.build_plan(args)
+
+    assert plan["execution_allowed"] is True
+    assert plan["review_hints"]["selected_oracle_note_row_ids"] == ["reject-a"]
+    assert plan["review_hints"]["oracle_notes_by_row_id"] == {
+        "reject-a": "Check the exact patched failing path."
+    }
 
 
 def test_build_plan_refuses_missing_explicit_row_id(tmp_path, monkeypatch):

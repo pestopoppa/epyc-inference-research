@@ -102,6 +102,29 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
         self.assertEqual(failed["bad_word_count"], 1)
         self.assertFalse(failed["passed"])
 
+    def test_schema_task_builds_word_array_schema(self) -> None:
+        schema = runner.json_schema_for_schema_task("word-array-200")
+
+        self.assertEqual(schema["properties"]["words"]["minItems"], 200)
+        self.assertEqual(schema["properties"]["words"]["maxItems"], 200)
+        self.assertEqual(schema["properties"]["words"]["items"]["enum"], ["benchmark"])
+        self.assertEqual(schema["properties"]["done"]["enum"], ["END"])
+        self.assertFalse(schema["additionalProperties"])
+
+    def test_score_schema_task(self) -> None:
+        passed_payload = {"words": ["benchmark"] * 200, "done": "END"}
+        failed_payload = {"words": ["benchmark"] * 199 + ["other"], "done": "END"}
+
+        passed = runner.score_schema_task(json.dumps(passed_payload), "word-array-200")
+        failed = runner.score_schema_task(json.dumps(failed_payload), "word-array-200")
+        parse_failed = runner.score_schema_task("not json", "word-array-200")
+
+        self.assertTrue(passed["passed"])
+        self.assertEqual(passed["observed_word_count"], 200)
+        self.assertFalse(failed["passed"])
+        self.assertEqual(failed["bad_word_count"], 1)
+        self.assertFalse(parse_failed["json_ok"])
+
     def test_query_chat_parses_semantic_response(self) -> None:
         seen = {}
 
@@ -147,6 +170,19 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
 
         self.assertEqual(seen["payload"]["stop"], ["DONE", "END"])
 
+    def test_query_chat_sends_json_schema(self) -> None:
+        seen = {}
+
+        def fake_urlopen(req, timeout):  # noqa: ANN001
+            seen["payload"] = json.loads(req.data.decode("utf-8"))
+            return _FakeResponse({"choices": [{"message": {"content": "OK"}}]})
+
+        schema = runner.json_schema_for_schema_task("word-array-200")
+        with mock.patch.object(runner.urllib.request, "urlopen", fake_urlopen):
+            runner.query_chat(18080, "prompt", 64, 0.0, 42, 5, json_schema=schema)
+
+        self.assertEqual(seen["payload"]["json_schema"], schema)
+
     def test_query_chat_can_send_explicit_greedy_payload(self) -> None:
         seen = {}
 
@@ -191,6 +227,8 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
                     "DONE",
                     "--stop",
                     "END",
+                    "--schema-task",
+                    "word-array-200",
                 ],
                 check=True,
                 capture_output=True,
@@ -207,6 +245,8 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
             self.assertEqual(plan["meta"]["spec_type"], "draft-mtp")
             self.assertEqual(plan["meta"]["seed"], 42)
             self.assertEqual(plan["meta"]["stop"], ["DONE", "END"])
+            self.assertEqual(plan["meta"]["schema_task"], "word-array-200")
+            self.assertEqual(plan["meta"]["json_schema"]["properties"]["done"]["enum"], ["END"])
             self.assertEqual(plan["meta"]["slots"], runner.DEFAULT_SLOTS)
             self.assertEqual(len(plan["runs"]), 2)
             self.assertEqual(plan["runs"][0]["label"], "run_01")
