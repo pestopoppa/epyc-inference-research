@@ -6370,7 +6370,7 @@ roles:
         commit: 98a1ad8cf
         binaries:
         - llama-cli
-        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The 2026-07-18 task-quality / architecture-fit first slice passed 5/6 on both CPU no-spec and MI210-hybrid no-spec, failing only exact six-word instruction. A later CPU-only strict slice reproduced 5/6, failed exact word count, and exposed a code-only/no-fence strictness smell; a bounded CPU prompt-repair probe then passed 2/2 repaired six-word variants in the same throughput band. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
+        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The 2026-07-18 task-quality / architecture-fit first slice passed 5/6 on both CPU no-spec and MI210-hybrid no-spec, failing only exact six-word instruction. A later CPU-only strict slice reproduced 5/6, failed exact word count, and exposed a code-only/no-fence strictness smell; a bounded CPU prompt-repair probe passed 2/2 repaired six-word variants, then a CPU repaired strict-suite probe passed 7/7 including an explicit code-only/no-fence prompt. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
       runtime_observations:
         evidence_dir: /mnt/raid0/llm/tmp/hy3-mtp-closure-20260716T234610Z
         current_source_cpuonly_load_probe: "2026-07-18 rebuilt experimental-v7 `d1e5a20eb` CPU-only n=0 load probe with `-dev none -ngl 0 --no-op-offload -nkvo` reached about 175 GiB RSS and timed out after 300s without reproducing the old tensor-count mismatch; no decode/quality claim. Artifact: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3-iq1m-mtp-load-n0-cpuonly-20260718T162550Z/summary.json"
@@ -6396,8 +6396,13 @@ roles:
         cpu_strict_prompt_repair_total: 2
         cpu_strict_prompt_repair_mean_prompt_tps: 26.078
         cpu_strict_prompt_repair_mean_generation_tps: 4.985
+        cpu_repaired_strict_suite_evidence_dir: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3_cpu_repaired_strict_suite_20260718T193122Z
+        cpu_repaired_strict_suite_passed: 7
+        cpu_repaired_strict_suite_total: 7
+        cpu_repaired_strict_suite_mean_prompt_tps: 26.806
+        cpu_repaired_strict_suite_mean_generation_tps: 5.167
         task_quality_failed_task: lowercase_six_words
-        classification: "draft-mtp functional but slower than no-spec; full MI210 residency is not feasible for the 91.8GB artifact. CPU and MI210-hybrid no-spec passed the first task-quality slice 5/6, and a later CPU-only strict slice reproduced 5/6. A focused prompt-repair probe passed 2/2 repaired six-word variants, but role readiness still needs a full repaired strict-suite check including the code-only/no-fence smell."
+        classification: "draft-mtp functional but slower than no-spec; full MI210 residency is not feasible for the 91.8GB artifact. CPU and MI210-hybrid no-spec passed the first task-quality slice 5/6, a later CPU-only strict slice reproduced 5/6, and a CPU repaired strict-suite probe passed 7/7. The remaining role-readiness question is whether the repaired prompts hold in the production-shaped MI210-hybrid lane and a broader role-quality gate."
       hf_metadata:
         path: /mnt/raid0/llm/models/hy3-angelslim/.cache/huggingface/download/Hy3-IQ1_M-mtp.gguf.metadata
         revision: 218c93f0fb5227553b67e556b01dfe70fb70cf30
