@@ -1,0 +1,79 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z",
+  "benchmark": "Nemotron-Nano-9B-v2 BF16 MI210 throughput",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench",
+  "model": "/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-bf16.gguf",
+  "experimental_branch": "experimental-v7-refresh-20260716",
+  "experimental_commit": "d1e5a20ebebe567f0da6bc64ca7ea7ecd521fc24",
+  "device": "AMD Instinct MI210 / ROCm0",
+  "standard_exit_code": 0,
+  "rider_32k_exit_code": 0,
+  "rows": [
+    {
+      "test": "pp2048",
+      "throughput_tps": 2297.215884,
+      "stddev_tps": 0.035694,
+      "repetitions": 2,
+      "model_type": "nemotron_h 9B BF16",
+      "build_commit": "d1e5a20eb",
+      "build_number": 10088
+    },
+    {
+      "test": "pp8192",
+      "throughput_tps": 2194.736094,
+      "stddev_tps": 1.040285,
+      "repetitions": 2,
+      "model_type": "nemotron_h 9B BF16",
+      "build_commit": "d1e5a20eb",
+      "build_number": 10088
+    },
+    {
+      "test": "tg1024",
+      "throughput_tps": 59.028786,
+      "stddev_tps": 0.668192,
+      "repetitions": 2,
+      "model_type": "nemotron_h 9B BF16",
+      "build_commit": "d1e5a20eb",
+      "build_number": 10088
+    }
+  ],
+  "rows_32k": [
+    {
+      "test": "pp32768",
+      "throughput_tps": 1851.766747,
+      "stddev_tps": 0.000000,
+      "repetitions": 1,
+      "model_type": "nemotron_h 9B BF16",
+      "build_commit": "d1e5a20eb",
+      "build_number": 10088
+    },
+    {
+      "test": "tg512",
+      "throughput_tps": 57.312706,
+      "stddev_tps": 0.000000,
+      "repetitions": 1,
+      "model_type": "nemotron_h 9B BF16",
+      "build_commit": "d1e5a20eb",
+      "build_number": 10088
+    }
+  ],
+  "initial_attempt": {
+    "exit_code": 1,
+    "error": "invalid device: ROCm0 because inherited library path resolved production v6 libraries; no GPU work performed"
+  },
+  "cleanup": {
+    "final_rocm_kfd_pids": "verified_no_kfd_pids",
+    "verification_file": "/mnt/raid0/llm/epyc-inference-research/data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/final_rocm_smi.txt"
+  },
+  "raw_artifacts": [
+    "llama_bench_retry.json",
+    "llama_bench_retry_32k.json",
+    "llama_bench_retry.stderr.txt",
+    "llama_bench_retry_32k.stderr.txt",
+    "command.sh",
+    "command_32k.sh",
+    "device_list_experimental.txt",
+    "ldd_experimental.txt",
+    "sha256.txt"
+  ]
+}

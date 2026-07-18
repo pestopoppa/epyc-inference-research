@@ -1,0 +1,65 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z",
+  "exit_code": 0,
+  "exit_code_32k": 0,
+  "build": "d1e5a20eb (10088)",
+  "rows": [
+    {
+      "model": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "size": "17.63 GiB",
+      "params": "34.66 B",
+      "backend": "ROCm",
+      "ngl": "99",
+      "fa": "1",
+      "dev": "ROCm0",
+      "test": "pp2048",
+      "tps": "2049.95 \u00b1 6.04"
+    },
+    {
+      "model": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "size": "17.63 GiB",
+      "params": "34.66 B",
+      "backend": "ROCm",
+      "ngl": "99",
+      "fa": "1",
+      "dev": "ROCm0",
+      "test": "pp8192",
+      "tps": "1951.43 \u00b1 6.99"
+    },
+    {
+      "model": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "size": "17.63 GiB",
+      "params": "34.66 B",
+      "backend": "ROCm",
+      "ngl": "99",
+      "fa": "1",
+      "dev": "ROCm0",
+      "test": "tg1024",
+      "tps": "91.54 \u00b1 12.87"
+    }
+  ],
+  "rows_32k": [
+    {
+      "model": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "size": "17.63 GiB",
+      "params": "34.66 B",
+      "backend": "ROCm",
+      "ngl": "99",
+      "fa": "1",
+      "dev": "ROCm0",
+      "test": "pp32768",
+      "tps": "1763.72 \u00b1 0.00"
+    },
+    {
+      "model": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "size": "17.63 GiB",
+      "params": "34.66 B",
+      "backend": "ROCm",
+      "ngl": "99",
+      "fa": "1",
+      "dev": "ROCm0",
+      "test": "tg512",
+      "tps": "100.32 \u00b1 0.00"
+    }
+  ]
+}

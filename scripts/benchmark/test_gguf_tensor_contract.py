@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+import struct
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -107,6 +109,59 @@ class GgufTensorContractTests(unittest.TestCase):
 
         self.assertTrue(result["passed"], result)
         self.assertIn("optional NextN tensor absent: blk.78.nextn.shared_head_norm.weight", result["warnings"])
+
+    def test_align_offset(self) -> None:
+        self.assertEqual(contract.align_offset(0, 32), 0)
+        self.assertEqual(contract.align_offset(31, 32), 32)
+        self.assertEqual(contract.align_offset(32, 32), 32)
+        self.assertEqual(contract.align_offset(33, 32), 64)
+
+    def test_q2_layout_contract_passes_standard_span(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "standard.gguf"
+            write_minimal_q2_gguf(path, physical_span=36, include_next_tensor=True)
+
+            result = contract.validate_q2_layout_contract([path])
+
+        self.assertTrue(result["passed"], result)
+        self.assertEqual(result["files"][0]["q2_0_tensor_count"], 1)
+        self.assertEqual(result["files"][0]["q2_0_mismatch_count"], 0)
+
+    def test_q2_layout_contract_fails_short_span(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "short.gguf"
+            write_minimal_q2_gguf(path, physical_span=34, include_next_tensor=True)
+
+            result = contract.validate_q2_layout_contract([path])
+
+        self.assertFalse(result["passed"], result)
+        self.assertEqual(result["files"][0]["q2_0_mismatch_count"], 1)
+        self.assertEqual(result["files"][0]["mismatches"][0]["span_delta"], -2)
+        self.assertIn("Q2_0 tensor output.weight is 2 bytes short", result["errors"][0])
+
+
+def pack_string(value: str) -> bytes:
+    raw = value.encode("utf-8")
+    return struct.pack("<Q", len(raw)) + raw
+
+
+def write_minimal_q2_gguf(path: Path, *, physical_span: int, include_next_tensor: bool) -> None:
+    header = bytearray()
+    header += struct.pack("<IIQQ", contract.GGUF_MAGIC, 3, 2 if include_next_tensor else 1, 1)
+    header += pack_string("general.alignment")
+    header += struct.pack("<I", 4)  # UINT32
+    header += struct.pack("<I", 2)
+    header += pack_string("output.weight")
+    header += struct.pack("<IQQIQ", 2, 64, 2, 42, 0)  # 128 elems -> 2 q2_0 blocks -> 36 bytes.
+    if include_next_tensor:
+        header += pack_string("output_norm.weight")
+        header += struct.pack("<IQIQ", 1, 1, 0, physical_span)  # F32 one scalar.
+    data_start = contract.align_offset(len(header), 2)
+    payload = bytearray(data_start - len(header))
+    payload += b"\0" * physical_span
+    if include_next_tensor:
+        payload += b"\0" * 4
+    path.write_bytes(bytes(header + payload))
 
 
 if __name__ == "__main__":

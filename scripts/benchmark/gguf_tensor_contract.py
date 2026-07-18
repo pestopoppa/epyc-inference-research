@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
+import struct
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -26,6 +28,31 @@ GLM_NEXTN_CORE_SUFFIX_SHAPES = {
 GLM_NEXTN_OPTIONAL_SUFFIX_SHAPES = {
     "nextn.shared_head_norm.weight": lambda n_embd: [n_embd],
 }
+GGUF_MAGIC = 0x46554747
+GGUF_DEFAULT_ALIGNMENT = 32
+GGUF_VALUE_SCALAR_SIZES = {
+    0: 1,   # UINT8
+    1: 1,   # INT8
+    2: 2,   # UINT16
+    3: 2,   # INT16
+    4: 4,   # UINT32
+    5: 4,   # INT32
+    6: 4,   # FLOAT32
+    7: 1,   # BOOL
+    10: 8,  # UINT64
+    11: 8,  # INT64
+    12: 8,  # FLOAT64
+}
+GGML_QUANT_SIZE_BY_ID = {
+    0: ("F32", 1, 4),
+    1: ("F16", 1, 2),
+    2: ("Q4_0", 32, 18),
+    8: ("Q8_0", 32, 34),
+    30: ("BF16", 1, 2),
+    35: ("TQ2_0", 256, 66),
+    41: ("Q1_0", 128, 18),
+    42: ("Q2_0", 64, 18),
+}
 
 
 @dataclass(frozen=True)
@@ -38,6 +65,34 @@ class TensorDescriptor:
     n_bytes: int
     tensor_type: str
     data_offset: int
+
+
+@dataclass(frozen=True)
+class RawGgufTensorInfo:
+    name: str
+    shape: list[int]
+    n_elements: int
+    type_id: int
+    type_name: str
+    data_offset: int
+    expected_nbytes: int | None
+    expected_span: int | None
+    physical_span: int | None
+    span_delta: int | None
+
+
+@dataclass(frozen=True)
+class RawGgufHeader:
+    file: str
+    file_bytes: int
+    version: int
+    tensor_count: int
+    kv_count: int
+    alignment: int
+    tensor_info_end: int
+    data_start: int
+    metadata: dict[str, Any]
+    tensors: list[RawGgufTensorInfo]
 
 
 def import_gguf_reader(gguf_py: Path) -> Any:
@@ -94,6 +149,225 @@ def discover_gguf_files(paths: Sequence[Path]) -> list[Path]:
     for file in files:
         unique[str(file.resolve())] = file
     return [unique[key] for key in sorted(unique)]
+
+
+def align_offset(offset: int, alignment: int) -> int:
+    if alignment <= 0:
+        raise ValueError(f"alignment must be positive, got {alignment}")
+    return ((offset + alignment - 1) // alignment) * alignment
+
+
+def read_u32(data: bytes, offset: int) -> tuple[int, int]:
+    return struct.unpack_from("<I", data, offset)[0], offset + 4
+
+
+def read_u64(data: bytes, offset: int) -> tuple[int, int]:
+    return struct.unpack_from("<Q", data, offset)[0], offset + 8
+
+
+def read_gguf_string(data: bytes, offset: int) -> tuple[str, int]:
+    length, offset = read_u64(data, offset)
+    end = offset + length
+    if end > len(data):
+        raise ValueError("truncated GGUF string")
+    return data[offset:end].decode("utf-8"), end
+
+
+def skip_gguf_value(
+    data: bytes,
+    offset: int,
+    value_type: int,
+    *,
+    retain: bool = False,
+) -> tuple[Any | None, int]:
+    if value_type == 8:  # STRING
+        value, offset = read_gguf_string(data, offset)
+        return (value if retain else None), offset
+    if value_type == 9:  # ARRAY
+        element_type, offset = read_u32(data, offset)
+        count, offset = read_u64(data, offset)
+        values: list[Any] = []
+        for _ in range(count):
+            value, offset = skip_gguf_value(data, offset, element_type, retain=retain)
+            if retain:
+                values.append(value)
+        return values if retain else None, offset
+    size = GGUF_VALUE_SCALAR_SIZES.get(value_type)
+    if size is None:
+        raise ValueError(f"unsupported GGUF metadata value type {value_type}")
+    raw = data[offset:offset + size]
+    if len(raw) != size:
+        raise ValueError("truncated GGUF metadata value")
+    offset += size
+    if value_type in {0, 1, 2, 3, 4, 5, 10, 11}:
+        signed = value_type in {1, 3, 5, 11}
+        value = int.from_bytes(raw, "little", signed=signed)
+        return (value if retain else None), offset
+    if value_type == 6:
+        value = struct.unpack("<f", raw)[0]
+        return (value if retain else None), offset
+    if value_type == 12:
+        value = struct.unpack("<d", raw)[0]
+        return (value if retain else None), offset
+    if value_type == 7:
+        value = bool(raw[0])
+        return (value if retain else None), offset
+    return None, offset
+
+
+def expected_ggml_nbytes(type_id: int, n_elements: int) -> int | None:
+    quant = GGML_QUANT_SIZE_BY_ID.get(type_id)
+    if quant is None:
+        return None
+    _name, block_size, type_size = quant
+    return math.ceil(n_elements / block_size) * type_size
+
+
+def read_raw_gguf_header(path: Path) -> RawGgufHeader:
+    data = path.read_bytes()
+    offset = 0
+    magic, offset = read_u32(data, offset)
+    if magic != GGUF_MAGIC:
+        raise ValueError(f"GGUF magic invalid: 0x{magic:08x}")
+    version, offset = read_u32(data, offset)
+    if version not in {2, 3}:
+        raise ValueError(f"unsupported GGUF version {version}")
+    tensor_count, offset = read_u64(data, offset)
+    kv_count, offset = read_u64(data, offset)
+
+    metadata: dict[str, Any] = {}
+    alignment = GGUF_DEFAULT_ALIGNMENT
+    for _ in range(kv_count):
+        key, offset = read_gguf_string(data, offset)
+        value_type, offset = read_u32(data, offset)
+        keep_value = key in {"general.architecture", "general.alignment"}
+        value, offset = skip_gguf_value(data, offset, value_type, retain=keep_value)
+        if key in {"general.architecture", "general.alignment"}:
+            metadata[key] = value
+        if key == "general.alignment" and isinstance(value, int):
+            alignment = value
+
+    tensor_records: list[dict[str, Any]] = []
+    for _ in range(tensor_count):
+        name, offset = read_gguf_string(data, offset)
+        n_dims, offset = read_u32(data, offset)
+        shape: list[int] = []
+        for _dim in range(n_dims):
+            dim, offset = read_u64(data, offset)
+            shape.append(int(dim))
+        type_id, offset = read_u32(data, offset)
+        tensor_offset, offset = read_u64(data, offset)
+        n_elements = math.prod(shape) if shape else 1
+        expected = expected_ggml_nbytes(type_id, n_elements)
+        tensor_records.append({
+            "name": name,
+            "shape": shape,
+            "n_elements": n_elements,
+            "type_id": type_id,
+            "type_name": GGML_QUANT_SIZE_BY_ID.get(type_id, (f"TYPE_{type_id}", 1, 1))[0],
+            "data_offset": int(tensor_offset),
+            "expected_nbytes": expected,
+        })
+
+    tensor_info_end = offset
+    data_start = align_offset(tensor_info_end, alignment)
+    sorted_records = sorted(tensor_records, key=lambda item: int(item["data_offset"]))
+    tensors: list[RawGgufTensorInfo] = []
+    for idx, item in enumerate(sorted_records):
+        expected_nbytes = item["expected_nbytes"]
+        expected_span = (
+            align_offset(expected_nbytes, alignment) if expected_nbytes is not None else None
+        )
+        if idx + 1 < len(sorted_records):
+            physical_span = int(sorted_records[idx + 1]["data_offset"]) - int(item["data_offset"])
+        else:
+            physical_span = len(data) - data_start - int(item["data_offset"])
+        span_delta = None
+        if expected_span is not None and physical_span is not None:
+            span_delta = physical_span - expected_span
+        tensors.append(RawGgufTensorInfo(
+            name=str(item["name"]),
+            shape=[int(dim) for dim in item["shape"]],
+            n_elements=int(item["n_elements"]),
+            type_id=int(item["type_id"]),
+            type_name=str(item["type_name"]),
+            data_offset=int(item["data_offset"]),
+            expected_nbytes=expected_nbytes,
+            expected_span=expected_span,
+            physical_span=physical_span,
+            span_delta=span_delta,
+        ))
+
+    return RawGgufHeader(
+        file=str(path),
+        file_bytes=len(data),
+        version=version,
+        tensor_count=tensor_count,
+        kv_count=kv_count,
+        alignment=alignment,
+        tensor_info_end=tensor_info_end,
+        data_start=data_start,
+        metadata=metadata,
+        tensors=tensors,
+    )
+
+
+def validate_q2_layout_contract(files: Sequence[Path]) -> dict[str, Any]:
+    """Validate Q2_0 physical tensor spans without gguf-py or llama.cpp loading."""
+    file_reports: list[dict[str, Any]] = []
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    for file in files:
+        header = read_raw_gguf_header(file)
+        q2_tensors = [tensor for tensor in header.tensors if tensor.type_name == "Q2_0"]
+        mismatches = [
+            tensor for tensor in q2_tensors
+            if tensor.span_delta is not None and tensor.span_delta != 0
+        ]
+        short = [tensor for tensor in mismatches if tensor.span_delta is not None and tensor.span_delta < 0]
+        long = [tensor for tensor in mismatches if tensor.span_delta is not None and tensor.span_delta > 0]
+        if short:
+            first = short[0]
+            errors.append(
+                f"{file}: Q2_0 tensor {first.name} is {-int(first.span_delta)} bytes short "
+                f"(physical {first.physical_span}, expected {first.expected_span})"
+            )
+        if long:
+            warnings.append(
+                f"{file}: {len(long)} Q2_0 tensor(s) have extra physical span; inspect before loader work"
+            )
+
+        file_reports.append({
+            "file": header.file,
+            "file_bytes": header.file_bytes,
+            "version": header.version,
+            "tensor_count": header.tensor_count,
+            "kv_count": header.kv_count,
+            "alignment": header.alignment,
+            "tensor_info_end": header.tensor_info_end,
+            "data_start": header.data_start,
+            "metadata": header.metadata,
+            "q2_0_tensor_count": len(q2_tensors),
+            "q2_0_mismatch_count": len(mismatches),
+            "q2_0_short_count": len(short),
+            "q2_0_long_count": len(long),
+            "first_q2_0_tensors": [asdict(tensor) for tensor in q2_tensors[:5]],
+            "mismatches": [asdict(tensor) for tensor in mismatches[:20]],
+        })
+
+    return {
+        "schema": "epyc.gguf_q2_layout_contract.v1",
+        "passed": not errors,
+        "errors": errors,
+        "warnings": warnings,
+        "assumptions": {
+            "gguf_parser": "raw header/tensor-info parser; does not use gguf-py tensor array reshape or llama.cpp model loading",
+            "q2_0_current_v7_layout": {"block_size": 64, "type_size": 18},
+            "span_comparison": "next tensor offset minus current tensor offset compared to alignment-padded expected bytes",
+        },
+        "files": file_reports,
+    }
 
 
 def field_value(field: Any) -> Any:
@@ -327,7 +601,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--gguf-py", type=Path, default=DEFAULT_GGUF_PY)
     parser.add_argument(
         "--contract",
-        choices=["glm-nextn"],
+        choices=["glm-nextn", "q2-layout"],
         default=None,
         help="Run a fail-closed contract validator and include its result in the JSON.",
     )
@@ -358,6 +632,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     files = discover_gguf_files(args.paths)
     if not files:
         raise SystemExit("no GGUF files found")
+    if args.contract == "q2-layout":
+        contract = validate_q2_layout_contract(files)
+        payload = json.dumps(contract, indent=2, sort_keys=True) + "\n"
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(payload)
+        else:
+            print(payload, end="")
+        return 0 if contract["passed"] else 1
+
     metadata_patterns = list(args.metadata_regex)
     if args.contract == "glm-nextn":
         metadata_patterns.append(GLM_NEXTN_METADATA_REGEX)

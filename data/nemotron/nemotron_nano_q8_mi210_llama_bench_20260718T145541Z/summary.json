@@ -1,0 +1,6 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/nemotron/nemotron_nano_q8_mi210_llama_bench_20260718T145541Z",
+  "exit_code": 1,
+  "build": null,
+  "rows": []
+}

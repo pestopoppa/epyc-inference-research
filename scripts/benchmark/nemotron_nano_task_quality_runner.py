@@ -35,7 +35,7 @@ EXPERIMENTAL_ROOT = Path("/mnt/raid0/llm/llama.cpp-experimental")
 EXPERIMENTAL_BIN_DIR = EXPERIMENTAL_ROOT / "build-hip" / "bin"
 SERVER_BIN = EXPERIMENTAL_BIN_DIR / "llama-server"
 SERVER_LIB_DIR = EXPERIMENTAL_BIN_DIR
-MODEL_PATH = Path(
+DEFAULT_MODEL_PATH = Path(
     "/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/"
     "nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf"
 )
@@ -147,6 +147,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Nemotron-Nano Q8 MI210 quality gate runner")
     parser.add_argument("--execute", action="store_true", help="Run the live gate after writing the plan")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--model-path",
+        type=Path,
+        default=DEFAULT_MODEL_PATH,
+        help="GGUF model path to serve. Defaults to the Nemotron-Nano Q8 reference path.",
+    )
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--threads", type=int, default=DEFAULT_THREADS)
     parser.add_argument("--context", type=int, default=DEFAULT_CONTEXT)
@@ -289,7 +295,7 @@ def launch_argv(
         "--interleave=all",
         str(_validated_server_bin()),
         "-m",
-        str(MODEL_PATH),
+        str(args.model_path),
         "--host",
         "127.0.0.1",
         "--port",
@@ -551,6 +557,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "port": chosen_port,
             "device": "ROCm0",
             "ngl": 99,
+            "model_path": str(args.model_path),
             "kv_cache": "q8_0/q8_0" if q8_kv_supported else "server_default",
             "q8_kv_supported": q8_kv_supported,
             "argv": launch,
@@ -564,7 +571,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "classification": "quality-only protocol matrix; throughput is observational unless the host is otherwise quiet",
         "experimental_root": str(EXPERIMENTAL_ROOT),
         "server_bin": str(_validated_server_bin()),
-        "model_path": str(MODEL_PATH),
+        "model_path": str(args.model_path),
         "request_endpoint": "/v1/chat/completions",
         "message_inspection": {
             "score_sources": list(SCORE_SOURCES),
@@ -721,7 +728,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]
         "mode": "execute",
         "quality_gate_passed": passed == len(TASKS),
         "classification": plan["classification"],
-        "model_path": str(MODEL_PATH),
+        "model_path": plan["model_path"],
         "server_pid": None,
         "server_port": plan["server"]["port"],
         "q8_kv_supported": plan["server"]["q8_kv_supported"],

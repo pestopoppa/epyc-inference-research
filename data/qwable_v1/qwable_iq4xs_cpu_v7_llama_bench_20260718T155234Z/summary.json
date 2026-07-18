@@ -1,0 +1,64 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z",
+  "model": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench",
+  "experimental_branch": "experimental-v7-refresh-20260716",
+  "experimental_commit": "d1e5a20ebebe567f0da6bc64ca7ea7ecd521fc24",
+  "cpu_only": {
+    "device": "none",
+    "n_gpu_layers": 0,
+    "threads": 16,
+    "flash_attention": "off",
+    "repetitions": 1,
+    "contexts": [
+      2048,
+      8192
+    ],
+    "generation": 512
+  },
+  "exit_code": 0,
+  "duration_seconds": 223.48,
+  "rows": [
+    {
+      "model": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "size": "17.63 GiB",
+      "params": "34.66 B",
+      "backend": "ROCm",
+      "ngl": 0,
+      "threads": 16,
+      "fa": 0,
+      "device": "none",
+      "test": "pp2048",
+      "throughput_tps": "116.13 \u00b1 0.00"
+    },
+    {
+      "model": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "size": "17.63 GiB",
+      "params": "34.66 B",
+      "backend": "ROCm",
+      "ngl": 0,
+      "threads": 16,
+      "fa": 0,
+      "device": "none",
+      "test": "pp8192",
+      "throughput_tps": "110.76 \u00b1 0.00"
+    },
+    {
+      "model": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "size": "17.63 GiB",
+      "params": "34.66 B",
+      "backend": "ROCm",
+      "ngl": 0,
+      "threads": 16,
+      "fa": 0,
+      "device": "none",
+      "test": "tg512",
+      "throughput_tps": "13.99 \u00b1 0.00"
+    }
+  ],
+  "cleanup": {
+    "launched_pids_gone": true,
+    "verification_file": "final_kfd_process_check.txt",
+    "note": "GPU sidecar KFD activity was pre-existing and not launched by this run."
+  }
+}

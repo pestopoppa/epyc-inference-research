@@ -54,6 +54,8 @@ DEFAULT_THREADS = 96
 DEFAULT_CONTEXT = 16384
 DEFAULT_UBATCH = 512
 DEFAULT_N_GPU_LAYERS = 99
+DEFAULT_TARGET_DEVICE = "ROCm0"
+DEFAULT_DRAFT_DEVICE = "ROCm0"
 DEFAULT_SPEC_DRAFT_N_MAX = 2
 DEFAULT_REPEATS = 2
 DEFAULT_SLOTS = 4
@@ -158,6 +160,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=int,
         default=DEFAULT_N_GPU_LAYERS,
         help="Target model GPU layers",
+    )
+    parser.add_argument(
+        "--target-device",
+        default=DEFAULT_TARGET_DEVICE,
+        help="Target model device argument for llama-server --device; use 'none' for CPU-only controls.",
+    )
+    parser.add_argument(
+        "--draft-device",
+        default=DEFAULT_DRAFT_DEVICE,
+        help="Draft model device argument for --device-draft when --spec-type=draft-mtp.",
     )
     parser.add_argument(
         "--spec-draft-n-max",
@@ -297,7 +309,7 @@ def build_server_argv(args: argparse.Namespace, port: int | str) -> list[str]:
         "-np",
         str(args.slots),
         "--device",
-        "ROCm0",
+        str(args.target_device),
         "-ngl",
         str(args.n_gpu_layers),
         "-t",
@@ -325,7 +337,7 @@ def build_server_argv(args: argparse.Namespace, port: int | str) -> list[str]:
                 "--spec-draft-n-max",
                 str(args.spec_draft_n_max),
                 "--device-draft",
-                "ROCm0",
+                str(args.draft_device),
                 "--spec-draft-ngl",
                 str(args.n_gpu_layers),
             ]
@@ -438,6 +450,8 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "context": args.context,
             "ubatch": args.ubatch,
             "n_gpu_layers": args.n_gpu_layers,
+            "target_device": args.target_device,
+            "draft_device": args.draft_device,
         },
         "runs": [
             {

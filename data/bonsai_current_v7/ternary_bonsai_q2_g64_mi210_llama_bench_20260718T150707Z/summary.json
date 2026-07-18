@@ -1,0 +1,18 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/ternary_bonsai_q2_g64_mi210_llama_bench_20260718T150707Z",
+  "exit_code": 125,
+  "build": null,
+  "rows": [
+    {
+      "model": "qwen35 27B Q2_0",
+      "size": "7.05 GiB",
+      "params": "26.90 B",
+      "backend": "ROCm",
+      "ngl": "99",
+      "fa": "1",
+      "dev": "ROCm0",
+      "test": "pp2048",
+      "tps": "25.68 \u00b1 0.01"
+    }
+  ]
+}

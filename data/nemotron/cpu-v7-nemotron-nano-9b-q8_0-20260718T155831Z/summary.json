@@ -1,0 +1,65 @@
+{
+  "command": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf -dev none -ngl 0 -fa off -t 16 -p 2048,8192 -n 512 -r 1",
+  "start_utc": "2026-07-18T15:58:39Z",
+  "end_utc": "2026-07-18T16:02:54Z",
+  "duration_seconds": 255.149,
+  "exit_status": 0,
+  "cpu_only": true,
+  "device": "none",
+  "n_gpu_layers": 0,
+  "flash_attention": "off",
+  "threads": 16,
+  "prompts": [
+    2048,
+    8192
+  ],
+  "generation_tokens": 512,
+  "repetitions": 1,
+  "throughput_rows": [
+    [
+      "nemotron_h 9B Q8_0",
+      "8.80 GiB",
+      "8.89 B",
+      "CPU",
+      "16",
+      "0",
+      "none",
+      "pp2048",
+      "135.85 \u00b1 0.00"
+    ],
+    [
+      "nemotron_h 9B Q8_0",
+      "8.80 GiB",
+      "8.89 B",
+      "CPU",
+      "16",
+      "0",
+      "none",
+      "pp8192",
+      "126.51 \u00b1 0.00"
+    ],
+    [
+      "nemotron_h 9B Q8_0",
+      "8.80 GiB",
+      "8.89 B",
+      "CPU",
+      "16",
+      "0",
+      "none",
+      "tg512",
+      "5.44 \u00b1 0.00"
+    ]
+  ],
+  "stdout": "stdout.txt",
+  "stderr": "stderr.txt",
+  "preflight": "preflight.txt",
+  "postflight": "postflight.txt",
+  "cleanup_verification": {
+    "benchmark_pid": 2972547,
+    "benchmark_pid_gone": true,
+    "timeout_pid_gone": true,
+    "kfd_attribution_method": "/proc/*/fd readlink against /dev/kfd",
+    "kfd_pids_attributable_to_benchmark": [],
+    "separate_gpu_work_left_untouched": true
+  }
+}

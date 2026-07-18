@@ -51,8 +51,8 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
             argv[argv.index("--spec-draft-n-max") + 1],
             str(runner.DEFAULT_SPEC_DRAFT_N_MAX),
         )
-        self.assertEqual(argv[argv.index("--device") + 1], "ROCm0")
-        self.assertEqual(argv[argv.index("--device-draft") + 1], "ROCm0")
+        self.assertEqual(argv[argv.index("--device") + 1], runner.DEFAULT_TARGET_DEVICE)
+        self.assertEqual(argv[argv.index("--device-draft") + 1], runner.DEFAULT_DRAFT_DEVICE)
         self.assertEqual(argv[argv.index("-rea") + 1], "off")
         self.assertEqual(argv[argv.index("--port") + 1], "31337")
 
@@ -63,6 +63,25 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
         self.assertEqual(argv[argv.index("-np") + 1], "1")
         self.assertEqual(argv[argv.index("--spec-type") + 1], "none")
         self.assertNotIn("-md", argv)
+        self.assertNotIn("--device-draft", argv)
+        self.assertNotIn("--spec-draft-ngl", argv)
+
+    def test_build_server_argv_supports_cpu_no_spec_control(self) -> None:
+        args = runner.parse_args(
+            [
+                "--spec-type",
+                "none",
+                "--target-device",
+                "none",
+                "--n-gpu-layers",
+                "0",
+            ]
+        )
+        argv = runner.build_server_argv(args, 31337)
+
+        self.assertEqual(argv[argv.index("--device") + 1], "none")
+        self.assertEqual(argv[argv.index("-ngl") + 1], "0")
+        self.assertEqual(argv[argv.index("--spec-type") + 1], "none")
         self.assertNotIn("--device-draft", argv)
         self.assertNotIn("--spec-draft-ngl", argv)
 
@@ -248,6 +267,8 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
             self.assertEqual(plan["meta"]["schema_task"], "word-array-200")
             self.assertEqual(plan["meta"]["json_schema"]["properties"]["done"]["enum"], ["END"])
             self.assertEqual(plan["meta"]["slots"], runner.DEFAULT_SLOTS)
+            self.assertEqual(plan["meta"]["target_device"], runner.DEFAULT_TARGET_DEVICE)
+            self.assertEqual(plan["meta"]["draft_device"], runner.DEFAULT_DRAFT_DEVICE)
             self.assertEqual(len(plan["runs"]), 2)
             self.assertEqual(plan["runs"][0]["label"], "run_01")
 

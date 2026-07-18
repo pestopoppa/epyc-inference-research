@@ -42,7 +42,25 @@ class NemotronNanoTaskQualityRunnerTests(unittest.TestCase):
         self.assertEqual(plan["concurrent_glm_probe_pids"], [2362944])
         self.assertEqual(plan["server"]["kv_cache"], "q8_0/q8_0")
         self.assertEqual(plan["server"]["port"], 19122)
+        self.assertEqual(plan["model_path"], str(runner.DEFAULT_MODEL_PATH))
+        self.assertEqual(plan["server"]["model_path"], str(runner.DEFAULT_MODEL_PATH))
         self.assertEqual(list(plan["servers"]), ["deepseek"])
+
+    def test_build_plan_records_explicit_model_path(self) -> None:
+        explicit_model = Path("/tmp/nemotron-nano-bf16.gguf")
+        args = runner.parse_args(["--model-path", str(explicit_model), "--port", "19122"])
+        with (
+            mock.patch.object(runner, "detect_glm_pids", return_value=[]),
+            mock.patch.object(runner, "list_llama_server_pids", return_value=[]),
+            mock.patch.object(runner, "detect_q8_kv_support", return_value=True),
+            mock.patch.object(runner, "pick_available_port", return_value=19122),
+        ):
+            plan = runner.build_plan(args)
+
+        self.assertEqual(plan["model_path"], str(explicit_model))
+        self.assertEqual(plan["server"]["model_path"], str(explicit_model))
+        self.assertIn(str(explicit_model), plan["server"]["argv"])
+        self.assertIn(str(explicit_model), plan["server"]["command"])
 
     def test_protocol_matrix_records_all_server_arms(self) -> None:
         args = runner.parse_args(["--port", "19122", "--protocol-matrix"])
@@ -97,6 +115,7 @@ class NemotronNanoTaskQualityRunnerTests(unittest.TestCase):
             args = runner.parse_args(["--output-dir", tmp, "--max-tokens", "160"])
             plan = {
                 "classification": "quality-only gate; throughput is contaminated/non-decision while concurrent CPU GLM work is active",
+                "model_path": str(runner.DEFAULT_MODEL_PATH),
                 "server": {
                     "argv": ["numactl", "--interleave=all", str(runner.SERVER_BIN)],
                     "port": 19122,
@@ -148,6 +167,7 @@ class NemotronNanoTaskQualityRunnerTests(unittest.TestCase):
                 summary = runner.run_execute(args, output_dir, plan)
 
             self.assertTrue(summary["quality_gate_passed"])
+            self.assertEqual(summary["model_path"], str(runner.DEFAULT_MODEL_PATH))
             self.assertTrue(summary["cleanup"]["passed"])
             self.assertFalse(summary["throughput_observation"]["contaminated"])
             self.assertTrue((output_dir / "summary.json").exists())

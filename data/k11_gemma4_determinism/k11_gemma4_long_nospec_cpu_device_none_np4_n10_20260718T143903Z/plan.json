@@ -1,0 +1,42 @@
+{
+  "created_at": "2026-07-18T14:39:03.678018+00:00",
+  "runs": 10,
+  "server_argv_base": [
+    "env",
+    "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+    "numactl",
+    "--interleave=all",
+    "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+    "-m",
+    "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+    "-np",
+    "4",
+    "--device",
+    "none",
+    "-ngl",
+    "0",
+    "-t",
+    "96",
+    "-ub",
+    "512",
+    "-c",
+    "16384",
+    "-fa",
+    "on",
+    "-rea",
+    "off",
+    "--spec-type",
+    "none",
+    "--host",
+    "127.0.0.1"
+  ],
+  "prompt": "Return exactly 200 words. Every word must be benchmark. Use single spaces between words. Do not output punctuation, numbering, markdown, or any other word.",
+  "max_tokens": 512,
+  "request": {
+    "temperature": 0.0,
+    "top_p": 1.0,
+    "top_k": 1,
+    "seed": 42,
+    "stream": false
+  }
+}
