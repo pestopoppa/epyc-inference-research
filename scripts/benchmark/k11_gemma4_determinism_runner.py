@@ -56,6 +56,7 @@ DEFAULT_UBATCH = 512
 DEFAULT_N_GPU_LAYERS = 99
 DEFAULT_SPEC_DRAFT_N_MAX = 2
 DEFAULT_REPEATS = 2
+DEFAULT_SLOTS = 4
 
 
 @dataclasses.dataclass(frozen=True)
@@ -79,6 +80,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE, help="Request temperature")
     parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS, help="Max completion tokens")
     parser.add_argument("--prompt", default=DEFAULT_PROMPT, help="Prompt to send on each run")
+    parser.add_argument(
+        "--spec-type",
+        choices=("draft-mtp", "none"),
+        default="draft-mtp",
+        help="Speculative mode for the server under test",
+    )
+    parser.add_argument(
+        "--slots",
+        type=int,
+        default=DEFAULT_SLOTS,
+        help="Server parallel slots (-np). Defaults to the historical runner shape.",
+    )
+    parser.add_argument(
+        "--expected-word",
+        default=None,
+        help="Optional exact repeated word to score in message.content",
+    )
+    parser.add_argument(
+        "--expected-word-count",
+        type=int,
+        default=None,
+        help="Optional exact repeated word count to score in message.content",
+    )
     parser.add_argument(
         "--target-model",
         type=Path,
@@ -176,7 +200,7 @@ def query_chat(port: int, prompt: str, max_tokens: int, temperature: float, seed
 
 
 def build_server_argv(args: argparse.Namespace, port: int | str) -> list[str]:
-    return [
+    argv = [
         "env",
         f"LD_LIBRARY_PATH={SERVER_LIB_DIR}",
         "numactl",
@@ -184,19 +208,11 @@ def build_server_argv(args: argparse.Namespace, port: int | str) -> list[str]:
         str(SERVER_BIN),
         "-m",
         str(args.target_model),
-        "-md",
-        str(args.draft_model),
-        "--spec-type",
-        "draft-mtp",
-        "--spec-draft-n-max",
-        str(args.spec_draft_n_max),
+        "-np",
+        str(args.slots),
         "--device",
         "ROCm0",
-        "--device-draft",
-        "ROCm0",
         "-ngl",
-        str(args.n_gpu_layers),
-        "--spec-draft-ngl",
         str(args.n_gpu_layers),
         "-t",
         str(args.threads),
@@ -213,6 +229,24 @@ def build_server_argv(args: argparse.Namespace, port: int | str) -> list[str]:
         "--port",
         str(port),
     ]
+    if args.spec_type == "draft-mtp":
+        argv.extend(
+            [
+                "-md",
+                str(args.draft_model),
+                "--spec-type",
+                "draft-mtp",
+                "--spec-draft-n-max",
+                str(args.spec_draft_n_max),
+                "--device-draft",
+                "ROCm0",
+                "--spec-draft-ngl",
+                str(args.n_gpu_layers),
+            ]
+        )
+    else:
+        argv.extend(["--spec-type", "none"])
+    return argv
 
 
 def launch_server(argv: list[str], log_path: Path) -> subprocess.Popen[str]:
@@ -300,8 +334,11 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "temperature": args.temperature,
             "max_tokens": args.max_tokens,
             "prompt": args.prompt,
-            "spec_type": "draft-mtp",
+            "spec_type": args.spec_type,
             "spec_draft_n_max": args.spec_draft_n_max,
+            "slots": args.slots,
+            "expected_word": args.expected_word,
+            "expected_word_count": args.expected_word_count,
             "threads": args.threads,
             "context": args.context,
             "ubatch": args.ubatch,
@@ -335,6 +372,24 @@ def render_commands(args: argparse.Namespace, output_dir: Path) -> str:
         lines.append(" ".join(shlex.quote(part) for part in argv))
         lines.append("")
     return "\n".join(lines)
+
+
+def score_word_task(content: str, expected_word: str | None, expected_count: int | None) -> dict[str, Any] | None:
+    if expected_word is None and expected_count is None:
+        return None
+    words = content.split()
+    bad_words = [word for word in words if expected_word is not None and word != expected_word]
+    count_ok = expected_count is None or len(words) == expected_count
+    word_ok = expected_word is None or not bad_words
+    return {
+        "expected_word": expected_word,
+        "expected_word_count": expected_count,
+        "observed_word_count": len(words),
+        "bad_word_count": len(bad_words),
+        "count_ok": count_ok,
+        "word_ok": word_ok,
+        "passed": count_ok and word_ok,
+    }
 
 
 def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
@@ -406,6 +461,11 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
             draft_n = int(timings.get("draft_n") or 0)
             draft_accepted = int(timings.get("draft_n_accepted") or 0)
             acceptance_rate = (draft_accepted / draft_n) if draft_n > 0 else 0.0
+            task_eval = score_word_task(
+                semantic_output["content"],
+                args.expected_word,
+                args.expected_word_count,
+            )
             run_record.update(
                 {
                     "status": "ok",
@@ -418,6 +478,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
                     "draft_n": draft_n,
                     "draft_n_accepted": draft_accepted,
                     "acceptance_rate": round(acceptance_rate, 6),
+                    "task_eval": task_eval,
                     "response_path": str(raw_response_path),
                 }
             )
@@ -445,6 +506,8 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     hashes = [r.get("output_sha256") for r in results if r.get("status") == "ok"]
     unique_hashes = sorted({h for h in hashes if h})
     deterministic = len(unique_hashes) <= 1 and len(hashes) == args.runs and all(r.get("status") == "ok" for r in results)
+    task_evals = [r.get("task_eval") for r in results if r.get("task_eval") is not None]
+    task_passed = all(e.get("passed") for e in task_evals) if task_evals else None
     summary = {
         "mode": "execute",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -452,9 +515,14 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         "ld_library_path": str(SERVER_LIB_DIR),
         "target_model": str(args.target_model),
         "draft_model": str(args.draft_model),
+        "spec_type": args.spec_type,
+        "slots": args.slots,
+        "expected_word": args.expected_word,
+        "expected_word_count": args.expected_word_count,
         "runs": results,
         "unique_output_hashes": unique_hashes,
         "deterministic": deterministic,
+        "task_passed": task_passed,
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
     return summary
@@ -483,8 +551,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"seed: {args.seed}")
     print(f"temperature: {args.temperature}")
     print(f"max_tokens: {args.max_tokens}")
-    print(f"spec_type: draft-mtp")
+    print(f"spec_type: {args.spec_type}")
     print(f"spec_draft_n_max: {args.spec_draft_n_max}")
+    print(f"slots: {args.slots}")
+    if args.expected_word is not None or args.expected_word_count is not None:
+        print(f"expected_word: {args.expected_word}")
+        print(f"expected_word_count: {args.expected_word_count}")
 
     if not args.execute:
         print("Dry run only. No server will be launched.")

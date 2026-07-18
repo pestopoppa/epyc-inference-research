@@ -45,6 +45,7 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
         self.assertIn(str(runner.SERVER_BIN), argv)
         self.assertEqual(argv[argv.index("-m") + 1], str(runner.DEFAULT_TARGET_MODEL))
         self.assertEqual(argv[argv.index("-md") + 1], str(runner.DEFAULT_DRAFT_MODEL))
+        self.assertEqual(argv[argv.index("-np") + 1], str(runner.DEFAULT_SLOTS))
         self.assertEqual(argv[argv.index("--spec-type") + 1], "draft-mtp")
         self.assertEqual(
             argv[argv.index("--spec-draft-n-max") + 1],
@@ -54,6 +55,25 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
         self.assertEqual(argv[argv.index("--device-draft") + 1], "ROCm0")
         self.assertEqual(argv[argv.index("-rea") + 1], "off")
         self.assertEqual(argv[argv.index("--port") + 1], "31337")
+
+    def test_build_server_argv_supports_no_spec_control(self) -> None:
+        args = runner.parse_args(["--spec-type", "none", "--slots", "1"])
+        argv = runner.build_server_argv(args, 31337)
+
+        self.assertEqual(argv[argv.index("-np") + 1], "1")
+        self.assertEqual(argv[argv.index("--spec-type") + 1], "none")
+        self.assertNotIn("-md", argv)
+        self.assertNotIn("--device-draft", argv)
+        self.assertNotIn("--spec-draft-ngl", argv)
+
+    def test_score_word_task(self) -> None:
+        passed = runner.score_word_task("benchmark benchmark", "benchmark", 2)
+        failed = runner.score_word_task("benchmark other", "benchmark", 2)
+
+        self.assertEqual(passed["observed_word_count"], 2)
+        self.assertTrue(passed["passed"])
+        self.assertEqual(failed["bad_word_count"], 1)
+        self.assertFalse(failed["passed"])
 
     def test_query_chat_parses_semantic_response(self) -> None:
         seen = {}
@@ -124,12 +144,14 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
             self.assertEqual(plan["meta"]["mode"], "dry_run")
             self.assertEqual(plan["meta"]["spec_type"], "draft-mtp")
             self.assertEqual(plan["meta"]["seed"], 42)
+            self.assertEqual(plan["meta"]["slots"], runner.DEFAULT_SLOTS)
             self.assertEqual(len(plan["runs"]), 2)
             self.assertEqual(plan["runs"][0]["label"], "run_01")
 
             commands = (output_dir / "commands.sh").read_text()
             self.assertIn(str(runner.SERVER_BIN), commands)
             self.assertIn("LD_LIBRARY_PATH", commands)
+            self.assertIn("-np 4", commands)
             self.assertIn("--device ROCm0", commands)
             self.assertIn("--device-draft ROCm0", commands)
             self.assertIn("--spec-type draft-mtp", commands)

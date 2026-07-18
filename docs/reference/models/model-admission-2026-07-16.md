@@ -602,6 +602,28 @@ among the measured K35 CPU text lanes so far. The 32K cell is runnable and
 clean, but at 9.72 t/s it is the first concrete target for sparse/final-attention
 or residency/offload work once quality gates permit acceleration spend.
 
+## K11 Gemma4 Long Stop-Condition Determinism
+
+Evidence report:
+`data/k11_gemma4_determinism/k11_long_stop_condition_20260718Tcodex/k11_long_stop_condition_report.md`.
+
+The K11 runner now supports explicit no-spec controls, slot count, and
+repeated-word task scoring. A longer exact-stop task overturned the broad reading
+of the earlier short JSON K11 closure. Single-slot external-head MTP passed `3/3`
+fresh-server repeats with one output hash, exact 200-word task compliance, and
+`~158 t/s` decode with `133/134` drafts accepted in each run. Multi-slot MTP
+also passed a short scored `3/3` repeat, but the longer `n=10` repeat failed
+determinism and task compliance in `2/10` runs: one run continued to the
+512-token cap and one stopped at 289 words. No-spec GPU controls failed the same
+long stop-condition task repeatedly, including with `--slots 1`, so the issue is
+not isolated to the external draft head.
+
+Disposition: treat Gemma4 external-head MTP on MI210 as a fast diagnostic lane,
+not a production GPU-worker serving lane. K11 remains open for sampler/stop-count
+root cause before multi-slot GPU worker promotion. Server logs consistently warn
+that ROCm0 lacks `TOP_K` support for the `top-k` sampler, which is the first
+root-cause lead.
+
 ## MI210 Context-Size Sweep
 
 The context sweep at `/mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/` measured prompt and decode behavior at short, mid, and long prompts for three representative candidates. All cases wrote cleanup logs. The measured prompt-token counts differ from nominal context sizes because the prompt body is tokenizer-dependent.
