@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "The root failure cause is missing None-guard before attribute access on an unvalidated user parameter.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784343524,
+  "id": "chatcmpl-CFqdiK6QaG9TB79dkR1ds49WmxBms9tN",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 50,
+    "predicted_ms": 8745.228,
+    "predicted_n": 19,
+    "predicted_per_second": 2.1726134527310212,
+    "predicted_per_token_ms": 460.2751578947368,
+    "prompt_ms": 3572.642,
+    "prompt_n": 44,
+    "prompt_per_second": 12.31581557849905,
+    "prompt_per_token_ms": 81.19640909090909
+  },
+  "usage": {
+    "completion_tokens": 19,
+    "prompt_tokens": 94,
+    "prompt_tokens_details": {
+      "cached_tokens": 50
+    },
+    "total_tokens": 113
+  }
+}

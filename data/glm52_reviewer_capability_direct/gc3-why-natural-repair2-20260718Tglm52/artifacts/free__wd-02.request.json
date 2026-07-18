@@ -1,0 +1,17 @@
+{
+  "endpoint": "chat",
+  "payload": {
+    "max_tokens": 192,
+    "messages": [
+      {
+        "content": "--- TASK ---\nDiagnose the root failure cause for the candidate below. Name the cause, not just that a defect exists. Use the most specific fault phrase supported by the candidate.\n\nCANDIDATE:\nCANDIDATE: distance(dx, dy) computes sqrt(dx * dx - dy * dy). Symptom: valid inputs can produce a negative value under sqrt and the distance is mathematically wrong.\nAnswer in one concise sentence that includes the root-cause phrase.",
+        "role": "user"
+      }
+    ],
+    "model": "auto",
+    "seed": 42,
+    "stream": false,
+    "temperature": 0.0
+  },
+  "url": "http://127.0.0.1:19580/v1/chat/completions"
+}

@@ -1,0 +1,6 @@
+--- TASK ---
+Diagnose the root failure cause for the candidate below. Name the cause, not just that a defect exists. Use the most specific fault phrase supported by the candidate.
+
+CANDIDATE:
+CANDIDATE: In binary_search, the branch for arr[mid] < target sets left = mid. Symptom: with adjacent bounds, mid repeats and the loop never advances when the target is larger than arr[mid].
+Answer in one concise sentence that includes the root-cause phrase.

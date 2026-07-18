@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"schema_version\": \"1.0.0\",\n  \"rubric_id\": \"qa_json_schema_rubric\",\n  \"version\": \"1.0.0\",\n  \"domain\": \"qa\",\n  \"items\": [\n    {\n      \"id\": \"R001\",\n      \"text\": \"Does the response directly answer the question or prompt provided in the QA task?\",\n      \"axis\": \"question-alignment\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R002\",\n      \"text\": \"Is the answer supported by accurate and relevant evidence or context where applicable?\",\n      \"axis\": \"grounding\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R003\",\n      \"text\": \"Does the response adhere to the required JSON schema without introducing syntax errors or unsupported fields?\",\n      \"axis\": \"integrity\",\n      \"weight\": 1\n    },\n    {\n      \"id\": \"R004\",\n      \"text\": \"Does the response address all components or sub-questions required by the task?\",\n      \"axis\": \"completeness\",\n      \"weight\": 1\n    }\n  ]\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784343151,
+  "id": "chatcmpl-5yEsOQiXH2jttZOaDfq9WfLuCVgtYNOB",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 120,
+    "predicted_ms": 120119.041,
+    "predicted_n": 247,
+    "predicted_per_second": 2.056293473072267,
+    "predicted_per_token_ms": 486.3119068825911,
+    "prompt_ms": 418.924,
+    "prompt_n": 1,
+    "prompt_per_second": 2.387067821370941,
+    "prompt_per_token_ms": 418.924
+  },
+  "usage": {
+    "completion_tokens": 247,
+    "prompt_tokens": 121,
+    "prompt_tokens_details": {
+      "cached_tokens": 120
+    },
+    "total_tokens": 368
+  }
+}

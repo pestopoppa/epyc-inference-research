@@ -1,0 +1,6 @@
+--- TASK ---
+Diagnose the root failure cause for the candidate below. Name the cause, not just that a defect exists. Use the most specific fault phrase supported by the candidate.
+
+CANDIDATE:
+CANDIDATE: distance(dx, dy) computes sqrt(dx * dx - dy * dy). Symptom: valid inputs can produce a negative value under sqrt and the distance is mathematically wrong.
+Answer in one concise sentence that includes the root-cause phrase.

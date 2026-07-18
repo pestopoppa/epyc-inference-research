@@ -1,0 +1,479 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "execution": {
+    "elapsed_s": 70.392,
+    "lanes": [
+      {
+        "context_length": 4096,
+        "elapsed_s": 70.39,
+        "grammar_constrained": false,
+        "indexer_top_k": 4096,
+        "lane": "free",
+        "score": {
+          "architecture": "glm_moe_dsa",
+          "emission_rate": 0.0,
+          "grammar_constrained": false,
+          "k": 2,
+          "kind": "glm_capability_result",
+          "m": 3,
+          "model_key": "glm_52_ud_iq2m",
+          "model_name": "GLM-5.2-UD-IQ2_M",
+          "n": 3,
+          "n_parsed": 3,
+          "n_tasks": 3,
+          "n_valid": 0,
+          "observation_only": true,
+          "passed": false,
+          "per_item": [
+            {
+              "decision": "abstain",
+              "errors": [
+                "confidence_not_a_number"
+              ],
+              "parsed": true,
+              "schema_valid": false
+            },
+            {
+              "decision": "abstain",
+              "errors": [
+                "confidence_not_a_number"
+              ],
+              "parsed": true,
+              "schema_valid": false
+            },
+            {
+              "decision": "abstain",
+              "errors": [
+                "confidence_not_a_number"
+              ],
+              "parsed": true,
+              "schema_valid": false
+            }
+          ],
+          "probe": "strict_if",
+          "quant": "UD-IQ2_M",
+          "runner_version": "glm-reviewer-capability-probe-v1"
+        },
+        "server_log": {
+          "bytes": 33719,
+          "decode_tokens": 33,
+          "decode_tps": 2.24,
+          "line_count": 381,
+          "matched_line_count": 150,
+          "matched_lines_tail": [
+            "0.00.427.811 W model has unused tensor blk.78.nextn.shared_head_norm.weight (size = 24576 bytes) -- ignoring",
+            "0.07.557.746 I llama_kv_cache_dsa: creating main KV cache, size = 4096 cells",
+            "0.07.578.621 I llama_kv_cache_dsa: creating indexer KV cache, size = 4096 cells",
+            "0.07.587.717 I resolve_fused_ops: resolving fused Lightning Indexer support:",
+            "0.07.588.712 I resolve_fused_ops: Lightning Indexer enabled",
+            "0.10.252.275 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 4096, kv_unified = 'true'",
+            "0.10.252.299 I slot   load_model: id  0 | task -1 | new slot, n_ctx = 4096",
+            "0.10.252.305 I slot   load_model: id  1 | task -1 | new slot, n_ctx = 4096",
+            "0.10.252.305 I slot   load_model: id  2 | task -1 | new slot, n_ctx = 4096",
+            "0.10.252.306 I slot   load_model: id  3 | task -1 | new slot, n_ctx = 4096",
+            "0.10.252.381 I srv          init: idle slots will be saved to prompt cache and cleared upon starting a new task",
+            "0.10.273.839 I srv  update_slots: all slots are idle",
+            "0.12.168.680 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1",
+            "0.12.168.699 I srv        update:  - cache state: 0 prompts, 0.000 MiB (limits: 8192.000 MiB, 4096 tokens, 8589934592 est)",
+            "0.12.168.731 I cmn  common_reaso: activated, budget=0 tokens",
+            "0.12.168.767 I slot launch_slot_: id  3 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+            "0.12.168.783 I slot launch_slot_: id  3 | task -1 | sampler params: ",
+            "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+            "0.12.168.786 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0",
+            "0.12.168.787 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+            "0.12.168.789 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+            "0.12.168.799 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+            "0.12.168.800 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+            "0.12.168.806 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+            "0.12.168.807 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+            "0.12.168.830 I slot   operator(): id  3 | task 0 | new prompt, n_ctx_slot = 4096, n_keep = 0, task.n_tokens = 116",
+            "0.12.168.837 I slot   operator(): id  3 | task 0 | cached n_tokens = 0, memory_seq_rm [0, end)",
+            "0.12.168.887 I slot init_sampler: id  3 | task 0 | init sampler, took 0.03 ms, tokens: text = 116, total = 116",
+            "0.35.066.339 I slot print_timing: id  3 | task 0 | prompt eval time =    7737.26 ms /   116 tokens (   66.70 ms per token,    14.99 tokens per second)",
+            "0.35.066.356 I slot print_timing: id  3 | task 0 |        eval time =   15160.22 ms /    33 tokens (  459.40 ms per token,     2.18 tokens per second)",
+            "0.35.066.357 I slot print_timing: id  3 | task 0 |       total time =   22897.48 ms /   149 tokens",
+            "0.35.066.364 I slot print_timing: id  3 | task 0 |    graphs reused =         32",
+            "0.35.066.423 I slot      release: id  3 | task 0 | stop processing: n_tokens = 148, truncated = 0",
+            "0.35.066.436 I srv  update_slots: all slots are idle",
+            "0.35.081.503 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.784",
+            "0.35.081.524 I cmn  common_reaso: activated, budget=0 tokens",
+            "0.35.081.550 I slot launch_slot_: id  3 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+            "0.35.081.554 I slot launch_slot_: id  3 | task -1 | sampler params: ",
+            "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+            "0.35.081.556 I slot launch_slot_: id  3 | task 34 | processing task, is_child = 0",
+            "0.35.081.556 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+            "0.35.081.557 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+            "0.35.081.566 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+            "0.35.081.566 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+            "0.35.081.570 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+            "0.35.081.570 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+            "0.35.081.579 I slot   operator(): id  3 | task 34 | new prompt, n_ctx_slot = 4096, n_keep = 0, task.n_tokens = 116",
+            "0.35.081.582 W slot   operator(): id  3 | task 34 | need to evaluate at least 1 token for each active slot (n_past = 116, task.n_tokens() = 116)",
+            "0.35.081.582 W slot   operator(): id  3 | task 34 | n_past was set to 115",
+            "0.35.081.583 I slot   operator(): id  3 | task 34 | cached n_tokens = 115, memory_seq_rm [115, end)",
+            "0.35.081.614 I slot init_sampler: id  3 | task 34 | init sampler, took 0.01 ms, tokens: text = 116, total = 116",
+            "0.50.139.854 I slot print_timing: id  3 | task 34 | prompt eval time =     402.63 ms /     1 tokens (  402.63 ms per token,     2.48 tokens per second)",
+            "0.50.139.928 I slot print_timing: id  3 | task 34 |        eval time =   14655.62 ms /    33 tokens (  444.11 ms per token,     2.25 tokens per second)",
+            "0.50.139.935 I slot print_timing: id  3 | task 34 |       total time =   15058.26 ms /    34 tokens",
+            "0.50.139.942 I slot print_timing: id  3 | task 34 |    graphs reused =         65",
+            "0.50.139.989 I slot      release: id  3 | task 34 | stop processing: n_tokens = 148, truncated = 0",
+            "0.50.140.273 I srv  update_slots: all slots are idle",
+            "0.50.154.765 I slot get_availabl: id  3 | task -1 | selected slot by LCP similarity, sim_best = 1.000 (> 0.100 thold), f_keep = 0.784",
+            "0.50.154.782 I cmn  common_reaso: activated, budget=0 tokens",
+            "0.50.154.802 I slot launch_slot_: id  3 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+            "0.50.154.806 I slot launch_slot_: id  3 | task -1 | sampler params: ",
+            "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+            "0.50.154.807 I slot launch_slot_: id  3 | task 68 | processing task, is_child = 0",
+            "0.50.154.808 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+            "0.50.154.809 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+            "0.50.154.818 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+            "0.50.154.818 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+            "0.50.154.821 I slot process_sing: id  2 | task -1 | saving idle slot to prompt cache",
+            "0.50.154.821 I slot prompt_clear: id  2 | task -1 | clearing prompt with 0 tokens",
+            "0.50.154.830 I slot   operator(): id  3 | task 68 | new prompt, n_ctx_slot = 4096, n_keep = 0, task.n_tokens = 116",
+            "0.50.154.833 W slot   operator(): id  3 | task 68 | need to evaluate at least 1 token for each active slot (n_past = 116, task.n_tokens() = 116)",
+            "0.50.154.833 W slot   operator(): id  3 | task 68 | n_past was set to 115",
+            "0.50.154.834 I slot   operator(): id  3 | task 68 | cached n_tokens = 115, memory_seq_rm [115, end)",
+            "0.50.154.867 I slot init_sampler: id  3 | task 68 | init sampler, took 0.01 ms, tokens: text = 116, total = 116",
+            "1.05.313.021 I slot print_timing: id  3 | task 68 | prompt eval time =     403.92 ms /     1 tokens (  403.92 ms per token,     2.48 tokens per second)",
+            "1.05.313.036 I slot print_timing: id  3 | task 68 |        eval time =   14754.25 ms /    33 tokens (  447.10 ms per token,     2.24 tokens per second)",
+            "1.05.313.036 I slot print_timing: id  3 | task 68 |       total time =   15158.17 ms /    34 tokens",
+            "1.05.313.038 I slot print_timing: id  3 | task 68 |    graphs reused =         98",
+            "1.05.313.078 I slot      release: id  3 | task 68 | stop processing: n_tokens = 148, truncated = 0",
+            "1.05.313.092 I srv  update_slots: all slots are idle"
+          ],
+          "max_decoded_checkpoint": null,
+          "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/logs/strict_if__free__p2168_tk4096.server.log",
+          "prompt_eval_tokens": 1,
+          "prompt_eval_tps": 2.48,
+          "status": "ok"
+        },
+        "status": "ok",
+        "task_results": [
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/artifacts/free__si-00.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/artifacts/free__si-00.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/artifacts/free__si-00.response.json"
+            },
+            "channels": {
+              "combined": "{\n  \"decision\": \"abstain\",\n  \"confidence\": \"low\",\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+              "content": "{\n  \"decision\": \"abstain\",\n  \"confidence\": \"low\",\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "finish_reason": "stop",
+            "prompt_char_count": 525,
+            "prompt_token_count": 110,
+            "prompt_token_min": 0,
+            "request_error": null,
+            "scoring_text": "{\n  \"decision\": \"abstain\",\n  \"confidence\": \"low\",\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+            "status": "ok",
+            "task_id": "si-00",
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 15160.222,
+              "predicted_n": 33,
+              "predicted_per_second": 2.1767491267608086,
+              "predicted_per_token_ms": 459.40066666666667,
+              "prompt_ms": 7737.257,
+              "prompt_n": 116,
+              "prompt_per_second": 14.992393299072267,
+              "prompt_per_token_ms": 66.70049137931034
+            },
+            "usage": {
+              "completion_tokens": 33,
+              "prompt_tokens": 116,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 149
+            }
+          },
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/artifacts/free__si-01.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/artifacts/free__si-01.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/artifacts/free__si-01.response.json"
+            },
+            "channels": {
+              "combined": "{\n  \"decision\": \"abstain\",\n  \"confidence\": \"low\",\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+              "content": "{\n  \"decision\": \"abstain\",\n  \"confidence\": \"low\",\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "finish_reason": "stop",
+            "prompt_char_count": 525,
+            "prompt_token_count": 110,
+            "prompt_token_min": 0,
+            "request_error": null,
+            "scoring_text": "{\n  \"decision\": \"abstain\",\n  \"confidence\": \"low\",\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+            "status": "ok",
+            "task_id": "si-01",
+            "timings": {
+              "cache_n": 115,
+              "predicted_ms": 14655.622,
+              "predicted_n": 33,
+              "predicted_per_second": 2.251695629158558,
+              "predicted_per_token_ms": 444.10975757575756,
+              "prompt_ms": 402.634,
+              "prompt_n": 1,
+              "prompt_per_second": 2.4836451963818256,
+              "prompt_per_token_ms": 402.634
+            },
+            "usage": {
+              "completion_tokens": 33,
+              "prompt_tokens": 116,
+              "prompt_tokens_details": {
+                "cached_tokens": 115
+              },
+              "total_tokens": 149
+            }
+          },
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/artifacts/free__si-02.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/artifacts/free__si-02.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/artifacts/free__si-02.response.json"
+            },
+            "channels": {
+              "combined": "{\n  \"decision\": \"abstain\",\n  \"confidence\": \"low\",\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+              "content": "{\n  \"decision\": \"abstain\",\n  \"confidence\": \"low\",\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "finish_reason": "stop",
+            "prompt_char_count": 525,
+            "prompt_token_count": 110,
+            "prompt_token_min": 0,
+            "request_error": null,
+            "scoring_text": "{\n  \"decision\": \"abstain\",\n  \"confidence\": \"low\",\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+            "status": "ok",
+            "task_id": "si-02",
+            "timings": {
+              "cache_n": 115,
+              "predicted_ms": 14754.251,
+              "predicted_n": 33,
+              "predicted_per_second": 2.2366435273467964,
+              "predicted_per_token_ms": 447.09851515151513,
+              "prompt_ms": 403.923,
+              "prompt_n": 1,
+              "prompt_per_second": 2.475719382159471,
+              "prompt_per_token_ms": 403.923
+            },
+            "usage": {
+              "completion_tokens": 33,
+              "prompt_tokens": 116,
+              "prompt_tokens_details": {
+                "cached_tokens": 115
+              },
+              "total_tokens": 149
+            }
+          }
+        ]
+      }
+    ],
+    "post_processes": [
+      {
+        "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+        "pid": 1849379
+      },
+      {
+        "command": "uv run python scripts/benchmark/glm52_reviewer_capability_direct_runner.py --execute --probe strict_if --lanes free --m 3 --k 2 --prompt-style natural --threads 192 --band p2168_tk4096 --output-dir data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52 --request-timeout 3600 --port-base 19560",
+        "pid": 2491321
+      },
+      {
+        "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 scripts/benchmark/glm52_reviewer_capability_direct_runner.py --execute --probe strict_if --lanes free --m 3 --k 2 --prompt-style natural --threads 192 --band p2168_tk4096 --output-dir data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52 --request-timeout 3600 --port-base 19560",
+        "pid": 2491336
+      }
+    ],
+    "status": "ok"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-18T02:45:03.407541+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "k": 2,
+  "lanes": [
+    {
+      "band": {
+        "context_length": 4096,
+        "indexer_top_k": 4096,
+        "min_prompt_tokens": 2168,
+        "name": "p2168_tk4096",
+        "prompt_context_guard_tokens": 128
+      },
+      "grammar_constrained": false,
+      "lane": "free",
+      "request": {
+        "endpoint": "chat",
+        "max_tokens": 256,
+        "prompt_style": "natural",
+        "seed": 42,
+        "temperature": 0.0,
+        "timeout_s": 3600
+      },
+      "server": {
+        "context_length": 4096,
+        "extra_args": [
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "indexer_top_k": 4096,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:4096",
+        "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/logs/strict_if__free__p2168_tk4096.server.log",
+        "metrics": false,
+        "port": 19560,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:4096",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19560",
+          "-c",
+          "4096",
+          "-t",
+          "192",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/logs/strict_if__free__p2168_tk4096.server.log",
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:4096 --device none -ngl 0 --host 127.0.0.1 --port 19560 -c 4096 -t 192 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52/logs/strict_if__free__p2168_tk4096.server.log --reasoning-format deepseek --reasoning off --reasoning-budget 0",
+        "threads": 192,
+        "trace_logs": true,
+        "ubatch": 512
+      }
+    }
+  ],
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "m": 3,
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "n_tasks": 3,
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52",
+  "preexisting_processes": [
+    {
+      "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+      "pid": 1849379
+    },
+    {
+      "command": "uv run python scripts/benchmark/glm52_reviewer_capability_direct_runner.py --execute --probe strict_if --lanes free --m 3 --k 2 --prompt-style natural --threads 192 --band p2168_tk4096 --output-dir data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52 --request-timeout 3600 --port-base 19560",
+      "pid": 2491321
+    },
+    {
+      "command": "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python3 scripts/benchmark/glm52_reviewer_capability_direct_runner.py --execute --probe strict_if --lanes free --m 3 --k 2 --prompt-style natural --threads 192 --band p2168_tk4096 --output-dir data/glm52_reviewer_capability_direct/gc1-free-natural-repair-20260718Tglm52 --request-timeout 3600 --port-base 19560",
+      "pid": 2491336
+    }
+  ],
+  "probe": "strict_if",
+  "refusal_reasons": [],
+  "schema": "glm52_reviewer_capability_direct.v1",
+  "task_parse_errors": [],
+  "task_set_id": null,
+  "tasks": [
+    {
+      "prompt_sha256": "335a346a7247bb41626332f9b288638f41f7462ec6da2328d34e52c024beffbe",
+      "task_id": "si-00"
+    },
+    {
+      "prompt_sha256": "335a346a7247bb41626332f9b288638f41f7462ec6da2328d34e52c024beffbe",
+      "task_id": "si-01"
+    },
+    {
+      "prompt_sha256": "335a346a7247bb41626332f9b288638f41f7462ec6da2328d34e52c024beffbe",
+      "task_id": "si-02"
+    }
+  ]
+}

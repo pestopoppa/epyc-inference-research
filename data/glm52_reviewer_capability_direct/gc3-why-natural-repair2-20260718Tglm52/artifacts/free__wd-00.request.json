@@ -1,0 +1,17 @@
+{
+  "endpoint": "chat",
+  "payload": {
+    "max_tokens": 192,
+    "messages": [
+      {
+        "content": "--- TASK ---\nDiagnose the root failure cause for the candidate below. Name the cause, not just that a defect exists. Use the most specific fault phrase supported by the candidate.\n\nCANDIDATE:\nCANDIDATE: In binary_search, the branch for arr[mid] < target sets left = mid. Symptom: with adjacent bounds, mid repeats and the loop never advances when the target is larger than arr[mid].\nAnswer in one concise sentence that includes the root-cause phrase.",
+        "role": "user"
+      }
+    ],
+    "model": "auto",
+    "seed": 42,
+    "stream": false,
+    "temperature": 0.0
+  },
+  "url": "http://127.0.0.1:19580/v1/chat/completions"
+}

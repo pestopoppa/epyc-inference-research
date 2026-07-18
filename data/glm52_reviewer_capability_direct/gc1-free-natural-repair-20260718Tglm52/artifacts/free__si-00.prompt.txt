@@ -1,0 +1,6 @@
+--- TASK ---
+Review the candidate package below. Return exactly one ReviewDecision JSON object. Required fields: decision, confidence, blocking.tripwire. Allowed decisions: approve, reject, reject_to_empty, request_changes, request_evidence, abstain, escalate. blocking.tripwire must be a JSON boolean true or false, never null. Do not use markdown or prose.
+
+CANDIDATE_PACKAGE:
+Review the CANDIDATE and emit a single JSON review_decision object with fields decision, confidence, blocking.tripwire.
+Emit only the JSON object.

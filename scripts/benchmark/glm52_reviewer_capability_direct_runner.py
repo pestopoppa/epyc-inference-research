@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import math
 import sys
 import time
 import urllib.error
@@ -40,6 +39,7 @@ import glm52_dsa_probe_runner as base
 SCHEMA = "glm52_reviewer_capability_direct.v1"
 PROBES = ("strict_if", "rubric_authoring", "why_diagnosis")
 LANES = ("grammar", "free")
+PROMPT_STYLES = ("context_fill", "natural")
 DEFAULT_SMOKE_M = 3
 DEFAULT_SMOKE_K = 2
 
@@ -174,6 +174,8 @@ def prompt_for_task(probe: str, task: dict[str, Any], *, grammar_constrained: bo
             "Review the candidate package below. Return exactly one ReviewDecision JSON object. "
             "Required fields: decision, confidence, blocking.tripwire. Allowed decisions: "
             "approve, reject, reject_to_empty, request_changes, request_evidence, abstain, escalate. "
+            "confidence must be a JSON number from 0.0 to 1.0, never a string or word. "
+            "blocking.tripwire must be a JSON boolean true or false, never null. "
             "Do not use markdown or prose.\n\n"
             f"CANDIDATE_PACKAGE:\n{task_prompt}"
         )
@@ -182,17 +184,19 @@ def prompt_for_task(probe: str, task: dict[str, Any], *, grammar_constrained: bo
         task_line = (
             "Author a ReviewRubric JSON object for the task below. Include schema_version, "
             "rubric_id, version, domain, and items. Each item must have id, text, axis, and "
-            "weight; each text must be a checkable question.\n\n"
+            "weight; each text must be a checkable question. Use at least four distinct "
+            "review axes when warranted, preferring these exact axis labels: question-alignment, "
+            "grounding, integrity, completeness.\n\n"
             f"TASK:\n{task_prompt}"
         )
         answer_instruction = "Emit only the rubric JSON object."
     elif probe == "why_diagnosis":
         task_line = (
             "Diagnose the root failure cause for the candidate below. Name the cause, not just "
-            "that a defect exists.\n\n"
+            "that a defect exists. Use the most specific fault phrase supported by the candidate.\n\n"
             f"CANDIDATE:\n{task_prompt}"
         )
-        answer_instruction = "Answer in one concise sentence."
+        answer_instruction = "Answer in one concise sentence that includes the root-cause phrase."
     else:
         raise ValueError(f"unknown probe: {probe}")
 
@@ -258,6 +262,40 @@ def channel_preview(response: dict[str, Any]) -> dict[str, str]:
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(canonical_json(payload) + "\n", encoding="utf-8")
+
+
+def build_natural_prompt(
+    *,
+    task_line: str,
+    context_length: int,
+    max_completion_tokens: int,
+    prompt_context_guard_tokens: int,
+    token_counter: Any,
+    answer_instruction: str,
+) -> dict[str, Any]:
+    max_prompt_tokens = context_length - max_completion_tokens - prompt_context_guard_tokens
+    if max_prompt_tokens <= 0:
+        raise ValueError(
+            "prompt token budget is non-positive: "
+            f"context_length={context_length}, max_completion_tokens={max_completion_tokens}, "
+            f"prompt_context_guard_tokens={prompt_context_guard_tokens}"
+        )
+    prompt = f"--- TASK ---\n{task_line}\n{answer_instruction}"
+    token_count = token_counter(prompt)
+    if token_count > max_prompt_tokens:
+        raise ValueError(
+            f"natural prompt token count {token_count} exceeds safe prompt budget "
+            f"{max_prompt_tokens} for context_length={context_length}"
+        )
+    return {
+        "prompt": prompt,
+        "prompt_token_count": token_count,
+        "prompt_char_count": len(prompt),
+        "prompt_token_min": 0,
+        "prompt_token_max": max_prompt_tokens,
+        "prompt_token_adjustment_attempts": 0,
+        "prompt_style": "natural",
+    }
 
 
 def write_task_artifacts(
@@ -335,6 +373,7 @@ def build_lane_spec(
             "temperature": args.temperature,
             "seed": args.seed,
             "timeout_s": args.request_timeout,
+            "prompt_style": args.prompt_style,
         },
     }
 
@@ -414,19 +453,32 @@ def call_task(
         task,
         grammar_constrained=grammar_constrained,
     )
-    prompt_info = base.build_prompt_with_token_floor(
-        task_line=task_line,
-        context_length=int(band["context_length"]),
-        min_prompt_tokens=int(band["min_prompt_tokens"]),
-        max_completion_tokens=int(lane_spec["request"]["max_tokens"]),
-        prompt_context_guard_tokens=int(band["prompt_context_guard_tokens"]),
-        token_counter=lambda prompt: base.count_prompt_tokens(
+    def token_counter(prompt: str) -> int:
+        return base.count_prompt_tokens(
             port,
             prompt,
             max(60, min(int(lane_spec["request"]["timeout_s"]), 600)),
-        ),
-        answer_instruction=answer_instruction,
-    )
+        )
+
+    if lane_spec["request"].get("prompt_style") == "natural":
+        prompt_info = build_natural_prompt(
+            task_line=task_line,
+            context_length=int(band["context_length"]),
+            max_completion_tokens=int(lane_spec["request"]["max_tokens"]),
+            prompt_context_guard_tokens=int(band["prompt_context_guard_tokens"]),
+            token_counter=token_counter,
+            answer_instruction=answer_instruction,
+        )
+    else:
+        prompt_info = base.build_prompt_with_token_floor(
+            task_line=task_line,
+            context_length=int(band["context_length"]),
+            min_prompt_tokens=int(band["min_prompt_tokens"]),
+            max_completion_tokens=int(lane_spec["request"]["max_tokens"]),
+            prompt_context_guard_tokens=int(band["prompt_context_guard_tokens"]),
+            token_counter=token_counter,
+            answer_instruction=answer_instruction,
+        )
     payload = base.build_request_payload(
         "chat",
         prompt_info["prompt"],
@@ -588,6 +640,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--request-timeout", type=int, default=1800)
     parser.add_argument("--port-base", type=int, default=19520)
+    parser.add_argument("--prompt-style", choices=PROMPT_STYLES, default="context_fill")
     parser.add_argument("--trace-logs", dest="trace_logs", action="store_true")
     parser.add_argument("--no-trace-logs", dest="trace_logs", action="store_false")
     parser.set_defaults(trace_logs=True)

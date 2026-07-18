@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "The root failure cause is an incorrect midpoint update that assigns `left = mid` instead of `left = mid + 1`, causing `mid` to repeat and the loop to never advance when the target is larger than `arr[mid]`.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784343384,
+  "id": "chatcmpl-cZL0iTXIKwMBJlFMNzVgT3zHty15MbEK",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 24553.888,
+    "predicted_n": 50,
+    "predicted_per_second": 2.036337381680653,
+    "predicted_per_token_ms": 491.07775999999996,
+    "prompt_ms": 7635.019,
+    "prompt_n": 106,
+    "prompt_per_second": 13.883397015776909,
+    "prompt_per_token_ms": 72.02848113207547
+  },
+  "usage": {
+    "completion_tokens": 50,
+    "prompt_tokens": 106,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 156
+  }
+}

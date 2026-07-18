@@ -29,6 +29,7 @@ def test_parse_args_defaults_to_small_strict_if_smoke(tmp_path):
     assert args.band == "p2168_tk4096"
     assert args.max_tokens == 256
     assert args.trace_logs is True
+    assert args.prompt_style == "context_fill"
 
 
 def test_rubric_default_keeps_schema_and_free_lanes(tmp_path):
@@ -51,8 +52,25 @@ def test_prompt_for_strict_if_names_review_decision_contract():
     )
     assert "ReviewDecision JSON object" in prompt
     assert "blocking.tripwire" in prompt
+    assert "confidence must be a JSON number" in prompt
+    assert "never null" in prompt
     assert "candidate has missing tests" in prompt
     assert "Emit only the JSON object" in answer
+
+
+def test_build_natural_prompt_does_not_inject_dsa_filler():
+    prompt_info = runner.build_natural_prompt(
+        task_line="Review candidate X.",
+        context_length=4096,
+        max_completion_tokens=256,
+        prompt_context_guard_tokens=128,
+        token_counter=lambda prompt: len(prompt.split()),
+        answer_instruction="Emit JSON only.",
+    )
+    assert prompt_info["prompt_style"] == "natural"
+    assert prompt_info["prompt_token_min"] == 0
+    assert "Review candidate X." in prompt_info["prompt"]
+    assert "The GLM DSA probe keeps the context deterministic" not in prompt_info["prompt"]
 
 
 def test_response_text_prefers_message_content_over_reasoning():
@@ -110,7 +128,20 @@ def test_score_lane_strict_if_reuses_orchestrator_model_indexed_scorer():
 
 
 def test_build_plan_records_topk_schedule_without_inference(tmp_path, monkeypatch):
-    args = runner.parse_args(["--probe", "strict_if", "--output-dir", str(tmp_path), "--m", "2", "--k", "1"])
+    args = runner.parse_args(
+        [
+            "--probe",
+            "strict_if",
+            "--output-dir",
+            str(tmp_path),
+            "--m",
+            "2",
+            "--k",
+            "1",
+            "--prompt-style",
+            "natural",
+        ]
+    )
 
     monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
     monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
@@ -132,3 +163,4 @@ def test_build_plan_records_topk_schedule_without_inference(tmp_path, monkeypatc
     assert plan["lanes"][0]["server"]["context_length"] == 4096
     assert "--json-schema" in plan["lanes"][0]["server"]["server_command"]
     assert "--json-schema" not in plan["lanes"][1]["server"]["server_command"]
+    assert plan["lanes"][0]["request"]["prompt_style"] == "natural"

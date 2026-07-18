@@ -1,0 +1,6 @@
+--- TASK ---
+Diagnose the root failure cause for the candidate below. Name the cause, not just that a defect exists. Use the most specific fault phrase supported by the candidate.
+
+CANDIDATE:
+CANDIDATE: render_user(user) returns user.name.upper() without checking user. Symptom: AttributeError/NoneType crash when the caller passes user=None.
+Answer in one concise sentence that includes the root-cause phrase.
