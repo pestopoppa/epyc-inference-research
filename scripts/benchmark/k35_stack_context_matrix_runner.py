@@ -8,8 +8,8 @@ server/version/host state, raw responses, timing summaries, and cleanup proof.
 The scenario list intentionally starts with only configurations that already
 have enough prior evidence to call them "optimized" rather than baseline:
 
-* frontdoor: MI210-resident Qwen3.6-35B no-spec, because Stage-2 showed it was
-  faster than native MTP or external draft-tree on the measured workload.
+* frontdoor: CPU re-anchor, MI210-resident no-spec, and MI210-resident native
+  MTP arms for Gate R / P-GPU-1-candidate rows.
 * worker_general: CPU composed ngram-mod,draft-mtp with the live Gemma4
   assistant head, q8 KV, reasoning off, and production-shaped thread flags.
 * architect_general: CPU native NEXTN/draft-mtp, same-file draft head, q4/f16 KV,
@@ -33,6 +33,7 @@ import shlex
 import shutil
 import signal
 import socket
+import statistics
 import subprocess
 import sys
 import time
@@ -59,6 +60,7 @@ DEFAULT_REQUEST_TIMEOUT_S = 900
 DEFAULT_STARTUP_TIMEOUT_S = 300
 DEFAULT_MIN_COMPLETION_TOKENS = 128
 DEFAULT_BASE_PORT = 19100
+DEFAULT_REPS = 1
 
 BLOCKER_BASENAMES = {"llama-server", "llama-cli", "llama-bench", "llama-mtmd-cli"}
 AUTOPILOT_MARKERS = (
@@ -101,6 +103,29 @@ class Scenario:
 
 SCENARIOS: tuple[Scenario, ...] = (
     Scenario(
+        name="frontdoor_cpu_no_spec",
+        role="frontdoor",
+        description=(
+            "CPU re-anchor for Gate R / P-GPU-1 candidate rows: Qwen3.6-35B "
+            "frontdoor with the same prompt shape, q8 KV, reasoning off, and speculation disabled."
+        ),
+        model=Path("/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf"),
+        max_context=32768,
+        threads=96,
+        ubatch=512,
+        device="none",
+        n_gpu_layers=0,
+        kv_k="q8_0",
+        kv_v="q8_0",
+        reasoning="off",
+        enable_thinking=False,
+        spec_type="none",
+        prior_evidence=(
+            "Gate R needs a fresh CPU re-anchor in the same quiet window as MI210 "
+            "frontdoor residency rows; historical frontier/replay numbers are not enough."
+        ),
+    ),
+    Scenario(
         name="frontdoor_gpu_resident_no_spec",
         role="frontdoor",
         description=(
@@ -120,6 +145,31 @@ SCENARIOS: tuple[Scenario, ...] = (
         prior_evidence=(
             "data/specdec_frontdoor_alpha/stage2_mi210_gpu_residency_20260717T0510Z/"
             "summary.json: gpu_no_spec 101.64 t/s vs native MTP 96.40 and external 36.06"
+        ),
+    ),
+    Scenario(
+        name="frontdoor_gpu_native_mtp",
+        role="frontdoor",
+        description=(
+            "MI210-resident Qwen3.6-35B frontdoor with native same-file NEXTN/draft-MTP; "
+            "included because findings-02 Gate R explicitly asks for plain plus draft-MTP."
+        ),
+        model=Path("/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf"),
+        max_context=32768,
+        threads=96,
+        ubatch=512,
+        device="ROCm0",
+        n_gpu_layers=99,
+        kv_k="q8_0",
+        kv_v="q8_0",
+        reasoning="off",
+        enable_thinking=False,
+        spec_type="draft-mtp",
+        spec_draft_n_max=3,
+        prior_evidence=(
+            "data/specdec_frontdoor_alpha/stage2_mi210_gpu_residency_20260717T0510Z/"
+            "summary.json: native MTP was slower than no-spec on the measured short prompt pack, "
+            "but Gate R still requires a same-window draft-MTP arm."
         ),
     ),
     Scenario(
@@ -626,7 +676,9 @@ def summarize_response(
 def render_commands(plan: dict[str, Any]) -> str:
     lines = ["#!/bin/bash", "set -euo pipefail", ""]
     for cell in plan["cells"]:
-        lines.append(f"# {cell['scenario']} nominal_context={cell['nominal_context']}")
+        lines.append(
+            f"# {cell['scenario']} nominal_context={cell['nominal_context']} rep={cell.get('rep', 1)}"
+        )
         lines.append(shlex.join(cell["server_argv"]))
         lines.append("")
     return "\n".join(lines)
@@ -641,33 +693,36 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         for nominal_context in contexts:
             if nominal_context > scenario.max_context // scenario.parallel:
                 continue
-            cell_port = port
-            port += 1
-            cells.append(
-                {
-                    "scenario": scenario.name,
-                    "role": scenario.role,
-                    "description": scenario.description,
-                    "prior_evidence": scenario.prior_evidence,
-                    "nominal_context": nominal_context,
-                    "server_context": server_context(scenario, nominal_context, args.max_tokens),
-                    "max_tokens": args.max_tokens,
-                    "server_argv": build_server_argv(
-                        scenario,
-                        binary=args.binary,
-                        port=cell_port,
-                        nominal_context=nominal_context,
-                        max_tokens=args.max_tokens,
-                    ),
-                    "port": cell_port,
-                }
-            )
+            for rep in range(1, args.reps + 1):
+                cell_port = port
+                port += 1
+                cells.append(
+                    {
+                        "scenario": scenario.name,
+                        "role": scenario.role,
+                        "description": scenario.description,
+                        "prior_evidence": scenario.prior_evidence,
+                        "nominal_context": nominal_context,
+                        "rep": rep,
+                        "server_context": server_context(scenario, nominal_context, args.max_tokens),
+                        "max_tokens": args.max_tokens,
+                        "server_argv": build_server_argv(
+                            scenario,
+                            binary=args.binary,
+                            port=cell_port,
+                            nominal_context=nominal_context,
+                            max_tokens=args.max_tokens,
+                        ),
+                        "port": cell_port,
+                    }
+                )
     return {
         "schema": "epyc.k35_stack_context_matrix.plan.v1",
         "created_at": utc_now(),
         "execute": args.execute,
         "binary": str(args.binary),
         "contexts": contexts,
+        "reps": args.reps,
         "max_tokens": args.max_tokens,
         "cells": cells,
     }
@@ -675,7 +730,8 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
 
 def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     scenario = scenario_by_name(cell["scenario"])
-    cell_dir = output_dir / "runs" / f"{scenario.name}_ctx{cell['nominal_context']}"
+    rep = int(cell.get("rep", 1))
+    cell_dir = output_dir / "runs" / f"{scenario.name}_ctx{cell['nominal_context']}_rep{rep}"
     cell_dir.mkdir(parents=True, exist_ok=True)
     server_log = cell_dir / "server.stderr"
     response_path = cell_dir / "response.json"
@@ -722,9 +778,12 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
             "scenario": scenario.name,
             "role": scenario.role,
             "nominal_context": cell["nominal_context"],
+            "rep": rep,
             "status": "error",
             "error": repr(exc),
         }
+    else:
+        result["rep"] = rep
     finally:
         if proc.poll() is None:
             memory_samples.append(collect_resident_memory_sample(proc.pid, "before_cleanup"))
@@ -736,6 +795,56 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
     result["response_path"] = str(response_path)
     write_json(result_path, result)
     return result
+
+
+def _median_mad(values: list[float]) -> dict[str, float | int | None]:
+    if not values:
+        return {"n": 0, "median": None, "mad": None, "min": None, "max": None}
+    median = float(statistics.median(values))
+    mad = float(statistics.median([abs(value - median) for value in values]))
+    return {
+        "n": len(values),
+        "median": median,
+        "mad": mad,
+        "min": min(values),
+        "max": max(values),
+    }
+
+
+def summarize_results_by_scenario(results: list[dict[str, Any]]) -> dict[str, Any]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for result in results:
+        grouped.setdefault(str(result.get("scenario")), []).append(result)
+
+    summaries: dict[str, Any] = {}
+    for scenario, rows in grouped.items():
+        ok_rows = [row for row in rows if row.get("status") == "ok"]
+        draft_n = sum(int(row.get("draft_n") or 0) for row in ok_rows)
+        draft_n_accepted = sum(int(row.get("draft_n_accepted") or 0) for row in ok_rows)
+        summaries[scenario] = {
+            "rows": len(rows),
+            "ok_rows": len(ok_rows),
+            "all_ok": len(ok_rows) == len(rows),
+            "completion_tokens": sum(int(row.get("completion_tokens") or 0) for row in ok_rows),
+            "prompt_tokens": sum(int(row.get("prompt_tokens") or 0) for row in ok_rows),
+            "decode_tps": _median_mad([float(row["decode_tps"]) for row in ok_rows if row.get("decode_tps") is not None]),
+            "prompt_tps": _median_mad([float(row["prompt_tps"]) for row in ok_rows if row.get("prompt_tps") is not None]),
+            "elapsed_s": _median_mad([float(row["elapsed_s"]) for row in ok_rows if row.get("elapsed_s") is not None]),
+            "draft_n": draft_n,
+            "draft_n_accepted": draft_n_accepted,
+            "draft_acceptance_rate": (draft_n_accepted / draft_n) if draft_n else None,
+        }
+
+    cpu = summaries.get("frontdoor_cpu_no_spec")
+    if cpu:
+        cpu_decode = (cpu.get("decode_tps") or {}).get("median")
+        if cpu_decode:
+            for scenario, summary in summaries.items():
+                decode = (summary.get("decode_tps") or {}).get("median")
+                summary["decode_speedup_vs_frontdoor_cpu_no_spec"] = (
+                    float(decode) / float(cpu_decode) if decode is not None else None
+                )
+    return summaries
 
 
 def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
@@ -760,6 +869,7 @@ def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Pat
         "created_at": utc_now(),
         "status": "ok" if all(result.get("status") == "ok" for result in results) else "partial",
         "results": results,
+        "scenario_summaries": summarize_results_by_scenario(results),
         "cleanup_process_blockers": cleanup_guard,
     }
     write_json(output_dir / "summary.json", summary)
@@ -789,7 +899,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--request-timeout", type=int, default=DEFAULT_REQUEST_TIMEOUT_S)
     parser.add_argument("--startup-timeout", type=int, default=DEFAULT_STARTUP_TIMEOUT_S)
     parser.add_argument("--allow-dirty-host", action="store_true")
-    return parser.parse_args(argv)
+    parser.add_argument("--reps", type=int, default=DEFAULT_REPS, help="Sequential fresh-server repetitions per scenario/context")
+    args = parser.parse_args(argv)
+    if args.reps <= 0:
+        parser.error("--reps must be positive")
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:

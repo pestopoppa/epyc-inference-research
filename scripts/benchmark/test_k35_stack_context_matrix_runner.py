@@ -44,6 +44,39 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
         self.assertIn("--reasoning off", joined)
         self.assertEqual(scenario.enable_thinking, False)
 
+    def test_frontdoor_cpu_anchor_uses_no_gpu_no_spec(self):
+        scenario = k35.scenario_by_name("frontdoor_cpu_no_spec")
+        argv = k35.build_server_argv(
+            scenario,
+            binary=Path("/tmp/llama-server"),
+            port=19124,
+            nominal_context=8192,
+            max_tokens=256,
+        )
+        joined = " ".join(argv)
+        self.assertIn("--device none", joined)
+        self.assertIn("-ngl 0", joined)
+        self.assertIn("--spec-type none", joined)
+        self.assertIn("-ctk q8_0 -ctv q8_0", joined)
+        self.assertEqual(scenario.enable_thinking, False)
+
+    def test_frontdoor_gpu_native_mtp_uses_same_file_draft(self):
+        scenario = k35.scenario_by_name("frontdoor_gpu_native_mtp")
+        argv = k35.build_server_argv(
+            scenario,
+            binary=Path("/tmp/llama-server"),
+            port=19124,
+            nominal_context=8192,
+            max_tokens=256,
+        )
+        joined = " ".join(argv)
+        self.assertIn("--device ROCm0", joined)
+        self.assertIn("-ngl 99", joined)
+        self.assertIn("--spec-type draft-mtp", joined)
+        self.assertIn("--spec-draft-n-max 3", joined)
+        self.assertNotIn("-md", argv)
+        self.assertEqual(scenario.enable_thinking, False)
+
     def test_architect_command_preserves_native_mtp_and_thinking_off(self):
         scenario = k35.scenario_by_name("architect_general_cpu_native_mtp")
         argv = k35.build_server_argv(
@@ -124,6 +157,26 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             plan = k35.build_plan(args)
             self.assertEqual([cell["nominal_context"] for cell in plan["cells"]], [8192])
 
+    def test_plan_expands_reps_with_unique_ports(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = k35.parse_args(
+                [
+                    "--only",
+                    "frontdoor_gpu_resident_no_spec",
+                    "--context",
+                    "8192",
+                    "--reps",
+                    "3",
+                    "--output-dir",
+                    tmp,
+                ]
+            )
+            plan = k35.build_plan(args)
+            self.assertEqual(plan["reps"], 3)
+            self.assertEqual([cell["rep"] for cell in plan["cells"]], [1, 2, 3])
+            self.assertEqual([cell["nominal_context"] for cell in plan["cells"]], [8192, 8192, 8192])
+            self.assertEqual(len({cell["port"] for cell in plan["cells"]}), 3)
+
     def test_main_dry_run_writes_plan_and_commands(self):
         with tempfile.TemporaryDirectory() as tmp:
             rc = k35.main(
@@ -139,7 +192,47 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             plan = json.loads((Path(tmp) / "plan.json").read_text())
             self.assertEqual(len(plan["cells"]), 1)
+            self.assertEqual(plan["reps"], 1)
             self.assertTrue((Path(tmp) / "commands.sh").exists())
+
+    def test_summarize_results_by_scenario_reports_medians_and_speedups(self):
+        summary = k35.summarize_results_by_scenario(
+            [
+                {
+                    "scenario": "frontdoor_cpu_no_spec",
+                    "status": "ok",
+                    "completion_tokens": 10,
+                    "prompt_tokens": 20,
+                    "decode_tps": 10.0,
+                    "prompt_tps": 100.0,
+                    "elapsed_s": 1.0,
+                },
+                {
+                    "scenario": "frontdoor_cpu_no_spec",
+                    "status": "ok",
+                    "completion_tokens": 10,
+                    "prompt_tokens": 20,
+                    "decode_tps": 12.0,
+                    "prompt_tps": 102.0,
+                    "elapsed_s": 1.1,
+                },
+                {
+                    "scenario": "frontdoor_gpu_native_mtp",
+                    "status": "ok",
+                    "completion_tokens": 10,
+                    "prompt_tokens": 20,
+                    "decode_tps": 44.0,
+                    "prompt_tps": 200.0,
+                    "elapsed_s": 0.5,
+                    "draft_n": 8,
+                    "draft_n_accepted": 6,
+                },
+            ]
+        )
+        self.assertEqual(summary["frontdoor_cpu_no_spec"]["decode_tps"]["median"], 11.0)
+        self.assertEqual(summary["frontdoor_cpu_no_spec"]["decode_tps"]["mad"], 1.0)
+        self.assertEqual(summary["frontdoor_gpu_native_mtp"]["draft_acceptance_rate"], 0.75)
+        self.assertEqual(summary["frontdoor_gpu_native_mtp"]["decode_speedup_vs_frontdoor_cpu_no_spec"], 4.0)
 
     def test_proc_memory_parsers_extract_resident_fields(self):
         status = k35.parse_proc_status(
