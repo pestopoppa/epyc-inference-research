@@ -5795,9 +5795,10 @@ roles:
         gibberish. Templated chat with the same runner-shaped filler at
         /mnt/raid0/llm/tmp/glm52-chat-short-runner-control-20260717T210356Z/plan.json
         processed 1389 server prompt tokens and decoded 64 tokens at 2.69 t/s
-        into gibberish. Do not schedule more long baseline GLM passes until the
-        protocol/output-format sensitivity is isolated; no realistic optimized
-        GLM serving lane is validated yet.
+        into gibberish. Do not schedule more long baseline GLM passes without
+        the recovered top-k schedule and reviewer-serving chat channel. This
+        control predates the later GC-0d pass; the validated lane is narrow
+        chat/free+schema at tested prompt bands, not broad GLM quality.
       current_source_topk2048_recovery_observation: >
         2026-07-17 metadata-default indexer_top_k=2048 recovered the 1.4K
         runner-shaped chat prompt that the old low-top-k default corrupted.

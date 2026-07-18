@@ -111,7 +111,7 @@ Interpretation: this closes stale-binary "can GLM-5.2 process a true >64K prompt
 
 Experimental-v7 commit `3dee86a5a` closes the current-source cache/runtime gap found after the stale-binary long probes. The patch routes `LLM_ARCH_GLM_DSA` through `llama_kv_cache_dsa`, aliases GLM to `llama_model_deepseek32::graph`, requires live GLM indexer tensors, and force-builds GLM indexer Hadamard rotation tensors. Validation passed `test-llama-archs --arch glm-dsa`, `test-llama-archs --arch deepseek32`, ASAN `glm-dsa`, and rebuilt `build-hip` server/CLI. The current-source exact-output smoke at `/mnt/raid0/llm/tmp/glm52-current-source-ready-smoke-20260717T092344/` returned `READY` and logs main + indexer DSA caches plus `Lightning Indexer enabled`; `/mnt/raid0/llm/tmp/glm52-current-source-short-smoke-20260717T092045/` is a longer runner-shaped cache/runtime log but not a quality proof.
 
-Interpretation: GLM DSA cache/runtime wiring is closed. Remaining GLM gates are sparse final-attention profiling/implementation, current-source long-context needle/coherence, task quality, CPU throughput, and native GLM-MTP.
+Interpretation: GLM DSA cache/runtime wiring is closed. The current-source long-context needle/coherence gate was executed next and failed under the unsafe low `indexer_top_k` path; the remaining GLM gates are task-quality/reviewer probes under the recovered top-k schedule and chat channel, CPU throughput only after quality is meaningful, and sparse final-attention/native GLM-MTP only if quality recovers.
 
 ## GLM-5.2 Aborted Current-Source 96K Attempt
 
@@ -152,7 +152,7 @@ The exact tiny chat smoke at `/mnt/raid0/llm/tmp/glm52-current-source-ready-smok
 | Raw `/completion`, no chat template | `/mnt/raid0/llm/tmp/glm52-raw-completion-smoke-20260717T210058Z/plan.json` | `1383 / 64` | Gibberish token stream (`0:. 0 a GL 1 ...`), decode `2.69 t/s` |
 | Chat endpoint, runner-shaped prompt | `/mnt/raid0/llm/tmp/glm52-chat-short-runner-control-20260717T210356Z/plan.json` | `1389 / 64` server tokens | Gibberish token stream (`0 ... . 1 context Sa0 ...`), decode `2.69 t/s` |
 
-Interpretation: raw completion is an invalid serving protocol for GLM-5.2, and even templated chat can fail on runner-shaped filler at only ~1.4K prompt tokens. Stop scheduling long baseline GLM throughput passes until this output-format/protocol sensitivity is isolated. Baseline remains a control row; no realistic optimized GLM lane is validated yet.
+Interpretation: raw completion is an invalid serving protocol for GLM-5.2 in this control, and even templated chat can fail on runner-shaped filler at only ~1.4K prompt tokens when the final-attention cap is too low. Stop scheduling long baseline GLM throughput passes without the recovered top-k schedule and reviewer-serving chat channel. Baseline remains a control row; the later GC-0d matrix validates only the narrow chat/free+schema reviewer-serving lane at the tested prompt bands, not broad GLM quality.
 
 ## GLM-5.2 `indexer_top_k` Sensitivity
 
