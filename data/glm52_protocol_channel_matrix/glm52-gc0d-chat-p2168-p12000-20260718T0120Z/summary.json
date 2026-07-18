@@ -1,0 +1,729 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "cells": [
+    {
+      "band": {
+        "context_length": 4096,
+        "indexer_top_k": 4096,
+        "min_prompt_tokens": 2168,
+        "name": "p2168_tk4096",
+        "prompt_context_guard_tokens": 128
+      },
+      "mode": {
+        "answer_instruction": "Do not explain. Do not use markdown.",
+        "expected": "READY",
+        "extra_args": [
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "name": "free_reasoning_off",
+        "task_line": "Return exactly READY and nothing else.",
+        "validator": "exact_ready"
+      },
+      "request": {
+        "endpoints": [
+          "chat"
+        ],
+        "max_tokens": 64,
+        "seed": 42,
+        "temperature": 0.0,
+        "timeout_s": 3600
+      },
+      "server": {
+        "context_length": 4096,
+        "extra_args": [
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "indexer_top_k": 4096,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:4096",
+        "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p2168_tk4096__free_reasoning_off.server.log",
+        "metrics": true,
+        "port": 19420,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:4096",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19420",
+          "-c",
+          "4096",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p2168_tk4096__free_reasoning_off.server.log",
+          "--metrics",
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:4096 --device none -ngl 0 --host 127.0.0.1 --port 19420 -c 4096 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p2168_tk4096__free_reasoning_off.server.log --metrics --reasoning-format deepseek --reasoning off --reasoning-budget 0",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      }
+    },
+    {
+      "band": {
+        "context_length": 4096,
+        "indexer_top_k": 4096,
+        "min_prompt_tokens": 2168,
+        "name": "p2168_tk4096",
+        "prompt_context_guard_tokens": 128
+      },
+      "mode": {
+        "answer_instruction": "Do not explain. Do not use markdown.",
+        "expected": "{\"decision\":\"allow\"}",
+        "extra_args": [
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0",
+          "--json-schema",
+          "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\"],\"properties\":{\"decision\":{\"enum\":[\"allow\"]}}}"
+        ],
+        "name": "json_reasoning_off",
+        "task_line": "Return exactly {\"decision\":\"allow\"} and nothing else.",
+        "validator": "json_decision_allow"
+      },
+      "request": {
+        "endpoints": [
+          "chat"
+        ],
+        "max_tokens": 64,
+        "seed": 42,
+        "temperature": 0.0,
+        "timeout_s": 3600
+      },
+      "server": {
+        "context_length": 4096,
+        "extra_args": [
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0",
+          "--json-schema",
+          "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\"],\"properties\":{\"decision\":{\"enum\":[\"allow\"]}}}"
+        ],
+        "indexer_top_k": 4096,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:4096",
+        "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p2168_tk4096__json_reasoning_off.server.log",
+        "metrics": true,
+        "port": 19421,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:4096",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19421",
+          "-c",
+          "4096",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p2168_tk4096__json_reasoning_off.server.log",
+          "--metrics",
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0",
+          "--json-schema",
+          "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\"],\"properties\":{\"decision\":{\"enum\":[\"allow\"]}}}"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:4096 --device none -ngl 0 --host 127.0.0.1 --port 19421 -c 4096 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p2168_tk4096__json_reasoning_off.server.log --metrics --reasoning-format deepseek --reasoning off --reasoning-budget 0 --json-schema '{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\"],\"properties\":{\"decision\":{\"enum\":[\"allow\"]}}}'",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      }
+    },
+    {
+      "band": {
+        "context_length": 16384,
+        "indexer_top_k": 16384,
+        "min_prompt_tokens": 12000,
+        "name": "p12000_tk16384",
+        "prompt_context_guard_tokens": 512
+      },
+      "mode": {
+        "answer_instruction": "Do not explain. Do not use markdown.",
+        "expected": "READY",
+        "extra_args": [
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "name": "free_reasoning_off",
+        "task_line": "Return exactly READY and nothing else.",
+        "validator": "exact_ready"
+      },
+      "request": {
+        "endpoints": [
+          "chat"
+        ],
+        "max_tokens": 64,
+        "seed": 42,
+        "temperature": 0.0,
+        "timeout_s": 3600
+      },
+      "server": {
+        "context_length": 16384,
+        "extra_args": [
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "indexer_top_k": 16384,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:16384",
+        "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p12000_tk16384__free_reasoning_off.server.log",
+        "metrics": true,
+        "port": 19422,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:16384",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19422",
+          "-c",
+          "16384",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p12000_tk16384__free_reasoning_off.server.log",
+          "--metrics",
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:16384 --device none -ngl 0 --host 127.0.0.1 --port 19422 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p12000_tk16384__free_reasoning_off.server.log --metrics --reasoning-format deepseek --reasoning off --reasoning-budget 0",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      }
+    },
+    {
+      "band": {
+        "context_length": 16384,
+        "indexer_top_k": 16384,
+        "min_prompt_tokens": 12000,
+        "name": "p12000_tk16384",
+        "prompt_context_guard_tokens": 512
+      },
+      "mode": {
+        "answer_instruction": "Do not explain. Do not use markdown.",
+        "expected": "{\"decision\":\"allow\"}",
+        "extra_args": [
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0",
+          "--json-schema",
+          "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\"],\"properties\":{\"decision\":{\"enum\":[\"allow\"]}}}"
+        ],
+        "name": "json_reasoning_off",
+        "task_line": "Return exactly {\"decision\":\"allow\"} and nothing else.",
+        "validator": "json_decision_allow"
+      },
+      "request": {
+        "endpoints": [
+          "chat"
+        ],
+        "max_tokens": 64,
+        "seed": 42,
+        "temperature": 0.0,
+        "timeout_s": 3600
+      },
+      "server": {
+        "context_length": 16384,
+        "extra_args": [
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0",
+          "--json-schema",
+          "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\"],\"properties\":{\"decision\":{\"enum\":[\"allow\"]}}}"
+        ],
+        "indexer_top_k": 16384,
+        "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:16384",
+        "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p12000_tk16384__json_reasoning_off.server.log",
+        "metrics": true,
+        "port": 19423,
+        "server_command": [
+          "env",
+          "-i",
+          "PATH=/usr/bin:/bin",
+          "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+          "OMP_NUM_THREADS=1",
+          "numactl",
+          "--interleave=all",
+          "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+          "-m",
+          "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "--override-kv",
+          "glm-dsa.attention.indexer.top_k=int:16384",
+          "--device",
+          "none",
+          "-ngl",
+          "0",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "19423",
+          "-c",
+          "16384",
+          "-t",
+          "96",
+          "-ub",
+          "512",
+          "--log-verbosity",
+          "4",
+          "--log-file",
+          "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p12000_tk16384__json_reasoning_off.server.log",
+          "--metrics",
+          "--reasoning-format",
+          "deepseek",
+          "--reasoning",
+          "off",
+          "--reasoning-budget",
+          "0",
+          "--json-schema",
+          "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\"],\"properties\":{\"decision\":{\"enum\":[\"allow\"]}}}"
+        ],
+        "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:16384 --device none -ngl 0 --host 127.0.0.1 --port 19423 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p12000_tk16384__json_reasoning_off.server.log --metrics --reasoning-format deepseek --reasoning off --reasoning-budget 0 --json-schema '{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\"],\"properties\":{\"decision\":{\"enum\":[\"allow\"]}}}'",
+        "threads": 96,
+        "trace_logs": true,
+        "ubatch": 512
+      }
+    }
+  ],
+  "execution": {
+    "cells": [
+      {
+        "band": "p2168_tk4096",
+        "context_length": 4096,
+        "endpoints": [
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p2168_tk4096__free_reasoning_off__chat.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p2168_tk4096__free_reasoning_off__chat.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p2168_tk4096__free_reasoning_off__chat.response.json"
+            },
+            "channels": {
+              "combined": "READY",
+              "content": "READY",
+              "raw_content": "",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "endpoint": "chat",
+            "request_error": null,
+            "status": "ok",
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 431.046,
+              "predicted_n": 2,
+              "predicted_per_second": 4.639876022512679,
+              "predicted_per_token_ms": 215.523,
+              "prompt_ms": 117121.568,
+              "prompt_n": 2894,
+              "prompt_per_second": 24.709368645064586,
+              "prompt_per_token_ms": 40.4704796129924
+            },
+            "usage": {
+              "completion_tokens": 2,
+              "prompt_tokens": 2894,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 2896
+            },
+            "validation": {
+              "combined_contains_expected": true,
+              "combined_exact": true,
+              "passed": true,
+              "primary_text": "READY",
+              "validator": "exact_ready"
+            }
+          }
+        ],
+        "indexer_top_k": 4096,
+        "mode": "free_reasoning_off",
+        "port": 19420,
+        "prompt_char_count": 15706,
+        "prompt_token_count": 2888,
+        "prompt_token_min": 2168,
+        "server_log": {
+          "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p2168_tk4096__free_reasoning_off.server.log",
+          "status": "missing"
+        },
+        "status": "ok"
+      },
+      {
+        "band": "p2168_tk4096",
+        "context_length": 4096,
+        "endpoints": [
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p2168_tk4096__json_reasoning_off__chat.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p2168_tk4096__json_reasoning_off__chat.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p2168_tk4096__json_reasoning_off__chat.response.json"
+            },
+            "channels": {
+              "combined": "{\"decision\":\"allow\"}",
+              "content": "{\"decision\":\"allow\"}",
+              "raw_content": "",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "endpoint": "chat",
+            "request_error": null,
+            "status": "ok",
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 2168.873,
+              "predicted_n": 6,
+              "predicted_per_second": 2.7664137088709206,
+              "predicted_per_token_ms": 361.47883333333334,
+              "prompt_ms": 117763.545,
+              "prompt_n": 2898,
+              "prompt_per_second": 24.60863419150638,
+              "prompt_per_token_ms": 40.63614389233955
+            },
+            "usage": {
+              "completion_tokens": 6,
+              "prompt_tokens": 2898,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 2904
+            },
+            "validation": {
+              "json_error": null,
+              "parsed": {
+                "decision": "allow"
+              },
+              "passed": true,
+              "primary_text": "{\"decision\":\"allow\"}",
+              "validator": "json_decision_allow"
+            }
+          }
+        ],
+        "indexer_top_k": 4096,
+        "mode": "json_reasoning_off",
+        "port": 19421,
+        "prompt_char_count": 15721,
+        "prompt_token_count": 2892,
+        "prompt_token_min": 2168,
+        "server_log": {
+          "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p2168_tk4096__json_reasoning_off.server.log",
+          "status": "missing"
+        },
+        "status": "ok"
+      },
+      {
+        "band": "p12000_tk16384",
+        "context_length": 16384,
+        "endpoints": [
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p12000_tk16384__free_reasoning_off__chat.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p12000_tk16384__free_reasoning_off__chat.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p12000_tk16384__free_reasoning_off__chat.response.json"
+            },
+            "channels": {
+              "combined": "READY",
+              "content": "READY",
+              "raw_content": "",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "endpoint": "chat",
+            "request_error": null,
+            "status": "ok",
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 579.334,
+              "predicted_n": 2,
+              "predicted_per_second": 3.4522399859148614,
+              "predicted_per_token_ms": 289.667,
+              "prompt_ms": 721928.728,
+              "prompt_n": 12044,
+              "prompt_per_second": 16.683087308862433,
+              "prompt_per_token_ms": 59.94094387246762
+            },
+            "usage": {
+              "completion_tokens": 2,
+              "prompt_tokens": 12044,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 12046
+            },
+            "validation": {
+              "combined_contains_expected": true,
+              "combined_exact": true,
+              "passed": true,
+              "primary_text": "READY",
+              "validator": "exact_ready"
+            }
+          }
+        ],
+        "indexer_top_k": 16384,
+        "mode": "free_reasoning_off",
+        "port": 19422,
+        "prompt_char_count": 65561,
+        "prompt_token_count": 12038,
+        "prompt_token_min": 12000,
+        "server_log": {
+          "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p12000_tk16384__free_reasoning_off.server.log",
+          "status": "missing"
+        },
+        "status": "ok"
+      },
+      {
+        "band": "p12000_tk16384",
+        "context_length": 16384,
+        "endpoints": [
+          {
+            "artifacts": {
+              "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p12000_tk16384__json_reasoning_off__chat.prompt.txt",
+              "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p12000_tk16384__json_reasoning_off__chat.request.json",
+              "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/artifacts/p12000_tk16384__json_reasoning_off__chat.response.json"
+            },
+            "channels": {
+              "combined": "{\"decision\":\"allow\"}",
+              "content": "{\"decision\":\"allow\"}",
+              "raw_content": "",
+              "reasoning_content": "",
+              "text": ""
+            },
+            "endpoint": "chat",
+            "request_error": null,
+            "status": "ok",
+            "timings": {
+              "cache_n": 0,
+              "predicted_ms": 2926.623,
+              "predicted_n": 6,
+              "predicted_per_second": 2.050144483932505,
+              "predicted_per_token_ms": 487.7705,
+              "prompt_ms": 733724.979,
+              "prompt_n": 12045,
+              "prompt_per_second": 16.41623270944957,
+              "prompt_per_token_ms": 60.915315815691166
+            },
+            "usage": {
+              "completion_tokens": 6,
+              "prompt_tokens": 12045,
+              "prompt_tokens_details": {
+                "cached_tokens": 0
+              },
+              "total_tokens": 12051
+            },
+            "validation": {
+              "json_error": null,
+              "parsed": {
+                "decision": "allow"
+              },
+              "passed": true,
+              "primary_text": "{\"decision\":\"allow\"}",
+              "validator": "json_decision_allow"
+            }
+          }
+        ],
+        "indexer_top_k": 16384,
+        "mode": "json_reasoning_off",
+        "port": 19423,
+        "prompt_char_count": 65552,
+        "prompt_token_count": 12039,
+        "prompt_token_min": 12000,
+        "server_log": {
+          "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/logs/p12000_tk16384__json_reasoning_off.server.log",
+          "status": "missing"
+        },
+        "status": "ok"
+      }
+    ],
+    "elapsed_s": 1756.929,
+    "post_processes": [
+      {
+        "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+        "pid": 1849379
+      },
+      {
+        "command": "python3 scripts/benchmark/glm52_protocol_channel_matrix_runner.py --execute --bands p2168_tk4096,p12000_tk16384 --modes free_reasoning_off,json_reasoning_off --endpoints chat --trace-logs --metrics --request-timeout 3600 --output-dir data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z",
+        "pid": 2442868
+      }
+    ],
+    "status": "ok"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-18T01:11:16.287976+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z",
+  "preexisting_processes": [
+    {
+      "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+      "pid": 1849379
+    },
+    {
+      "command": "python3 scripts/benchmark/glm52_protocol_channel_matrix_runner.py --execute --bands p2168_tk4096,p12000_tk16384 --modes free_reasoning_off,json_reasoning_off --endpoints chat --trace-logs --metrics --request-timeout 3600 --output-dir data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z",
+      "pid": 2442868
+    }
+  ],
+  "refusal_reasons": [],
+  "schema": "glm52_protocol_channel_matrix.v1"
+}

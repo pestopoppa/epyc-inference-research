@@ -1,0 +1,1552 @@
+{
+  "best_protocol_source": [
+    2,
+    "deepseek_legacy",
+    "reasoning_content"
+  ],
+  "classification": "quality-only protocol matrix; throughput is observational unless the host is otherwise quiet",
+  "cleanup": {
+    "allowed_pids": [],
+    "extra_pids": [],
+    "missing_allowed_pids": [],
+    "observed_pids": [],
+    "passed": true
+  },
+  "created_at": "2026-07-18T00:10:10.605410+00:00",
+  "mode": "execute",
+  "model_path": "/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf",
+  "passed": 0,
+  "protocol_summaries": [
+    {
+      "passed_by_source": {
+        "content": 0,
+        "content_or_reasoning": 2,
+        "reasoning_content": 2
+      },
+      "protocol": "deepseek",
+      "quality_gate_passed_by_source": {
+        "content": false,
+        "content_or_reasoning": false,
+        "reasoning_content": false
+      },
+      "results": [
+        {
+          "content": "",
+          "finish_reason": "stop",
+          "prompt": "Return exactly: ok",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "ok\n",
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek/exact_ok.raw.json",
+          "score": {
+            "expected": "ok",
+            "observed": "",
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "ok",
+              "observed": "",
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": "ok",
+              "observed": "ok",
+              "passed": true
+            },
+            "reasoning_content": {
+              "expected": "ok",
+              "observed": "ok",
+              "passed": true
+            }
+          },
+          "task_id": "exact_ok",
+          "timings": {
+            "cache_n": 0,
+            "predicted_ms": 28.963,
+            "predicted_n": 3,
+            "predicted_per_second": 103.58043020405344,
+            "predicted_per_token_ms": 9.654333333333334,
+            "prompt_ms": 96.676,
+            "prompt_n": 31,
+            "prompt_per_second": 320.6586950225495,
+            "prompt_per_token_ms": 3.1185806451612903
+          },
+          "usage": {
+            "completion_tokens": 3,
+            "prompt_tokens": 31,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 34
+          }
+        },
+        {
+          "content": "",
+          "finish_reason": "stop",
+          "prompt": "Return exactly this minified JSON and nothing else: {\"status\":\"ok\",\"model\":\"nemotron\"}",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "{\"status\":\"ok\",\"model\":\"nemotron\"}\n",
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek/strict_json.raw.json",
+          "score": {
+            "expected": {
+              "model": "nemotron",
+              "status": "ok"
+            },
+            "json_mode": "empty",
+            "observed": null,
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "empty",
+              "observed": null,
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "strict",
+              "observed": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "passed": true
+            },
+            "reasoning_content": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "strict",
+              "observed": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "passed": true
+            }
+          },
+          "task_id": "strict_json",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 125.822,
+            "predicted_n": 11,
+            "predicted_per_second": 87.42509259112079,
+            "predicted_per_token_ms": 11.438363636363636,
+            "prompt_ms": 95.948,
+            "prompt_n": 29,
+            "prompt_per_second": 302.2470504856798,
+            "prompt_per_token_ms": 3.308551724137931
+          },
+          "usage": {
+            "completion_tokens": 11,
+            "prompt_tokens": 46,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 57
+          }
+        },
+        {
+          "content": "",
+          "finish_reason": "stop",
+          "prompt": "Answer with only the integer result: 37 + 58",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "65\n",
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek/simple_math.raw.json",
+          "score": {
+            "expected": "95",
+            "observed": "",
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "95",
+              "observed": "",
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": "95",
+              "observed": "65",
+              "passed": false
+            },
+            "reasoning_content": {
+              "expected": "95",
+              "observed": "65",
+              "passed": false
+            }
+          },
+          "task_id": "simple_math",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 40.342,
+            "predicted_n": 4,
+            "predicted_per_second": 99.15224827722969,
+            "predicted_per_token_ms": 10.0855,
+            "prompt_ms": 94.836,
+            "prompt_n": 24,
+            "prompt_per_second": 253.06845501708213,
+            "prompt_per_token_ms": 3.9515
+          },
+          "usage": {
+            "completion_tokens": 4,
+            "prompt_tokens": 41,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 45
+          }
+        },
+        {
+          "content": "",
+          "finish_reason": "length",
+          "prompt": "In exactly five lowercase words, describe why held-out tests matter. Return only the five words.",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "Okay, the user wants exactly five lowercase words explaining why held-out tests matter. Let me start by recalling what held-out tests are. They're a validation ",
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek/five_lowercase_words.raw.json",
+          "score": {
+            "expected_word_count": 5,
+            "observed_words": [],
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected_word_count": 5,
+              "observed_words": [],
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected_word_count": 5,
+              "observed_words": [
+                "Okay,",
+                "the",
+                "user",
+                "wants",
+                "exactly",
+                "five",
+                "lowercase",
+                "words",
+                "explaining",
+                "why",
+                "held-out",
+                "tests",
+                "matter.",
+                "Let",
+                "me",
+                "start",
+                "by",
+                "recalling",
+                "what",
+                "held-out",
+                "tests",
+                "are.",
+                "They're",
+                "a",
+                "validation",
+                "method",
+                "where",
+                "data",
+                "is",
+                "split",
+                "into",
+                "training",
+                "and",
+                "test",
+                "sets.",
+                "The",
+                "key",
+                "point",
+                "is",
+                "that"
+              ],
+              "passed": false
+            },
+            "reasoning_content": {
+              "expected_word_count": 5,
+              "observed_words": [
+                "Okay,",
+                "the",
+                "user",
+                "wants",
+                "exactly",
+                "five",
+                "lowercase",
+                "words",
+                "explaining",
+                "why",
+                "held-out",
+                "tests",
+                "matter.",
+                "Let",
+                "me",
+                "start",
+                "by",
+                "recalling",
+                "what",
+                "held-out",
+                "tests",
+                "are.",
+                "They're",
+                "a",
+                "validation",
+                "method",
+                "where",
+                "data",
+                "is",
+                "split",
+                "into",
+                "training",
+                "and",
+                "test",
+                "sets.",
+                "The",
+                "key",
+                "point",
+                "is",
+                "that"
+              ],
+              "passed": false
+            }
+          },
+          "task_id": "five_lowercase_words",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 577.737,
+            "predicted_n": 48,
+            "predicted_per_second": 83.08278680437638,
+            "predicted_per_token_ms": 12.036187499999999,
+            "prompt_ms": 96.028,
+            "prompt_n": 28,
+            "prompt_per_second": 291.5816220269088,
+            "prompt_per_token_ms": 3.4295714285714287
+          },
+          "usage": {
+            "completion_tokens": 48,
+            "prompt_tokens": 45,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 93
+          }
+        },
+        {
+          "content": "",
+          "finish_reason": "length",
+          "prompt": "Read the full passage, then answer with only the project code.\n\nStatus notes: alpha reports remain internal. Audit reviewers asked for a longer context check to confirm the chat endpoint still returns the answer in message.content without mixing in reasoning-only fields. The archive repeats the same operational warning for scanning depth. Line 1: ignore incidental numbers like 104, 205, or 999.\nLine 2: only one project code is authoritative.\nLine 3: the project code appears once and should be copied exactly.\nLine 4: filler text discusses ports, GPUs, and cache settings.\nLine 5: project summaries remain provisional pending the quality gate.\nLine 6: the canonical project code is NN-4242-DELTA.\nLine 7: later lines mention unrelated strings such as AA-1000 or test-draft.\nLine 8: answer with the code only.\n\nQuestion: what is the project code?",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "Okay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooki",
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek/long_context_needle.raw.json",
+          "score": {
+            "expected": "NN-4242-DELTA",
+            "observed": "",
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "NN-4242-DELTA",
+              "observed": "",
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": "NN-4242-DELTA",
+              "observed": "Okay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooking at Line 6, it says: \"the canonical project code is NN",
+              "passed": false
+            },
+            "reasoning_content": {
+              "expected": "NN-4242-DELTA",
+              "observed": "Okay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooking at Line 6, it says: \"the canonical project code is NN",
+              "passed": false
+            }
+          },
+          "task_id": "long_context_needle",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 580.581,
+            "predicted_n": 48,
+            "predicted_per_second": 82.67580234282555,
+            "predicted_per_token_ms": 12.095437500000001,
+            "prompt_ms": 204.684,
+            "prompt_n": 207,
+            "prompt_per_second": 1011.3150026382132,
+            "prompt_per_token_ms": 0.9888115942028985
+          },
+          "usage": {
+            "completion_tokens": 48,
+            "prompt_tokens": 224,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 272
+          }
+        }
+      ],
+      "server": {
+        "log_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/logs/nemotron_nano_q8_mi210.deepseek.server.log",
+        "port": 19122,
+        "reasoning": "off",
+        "reasoning_format": "deepseek"
+      }
+    },
+    {
+      "passed_by_source": {
+        "content": 0,
+        "content_or_reasoning": 0,
+        "reasoning_content": 0
+      },
+      "protocol": "none",
+      "quality_gate_passed_by_source": {
+        "content": false,
+        "content_or_reasoning": false,
+        "reasoning_content": false
+      },
+      "results": [
+        {
+          "content": "<think>\nok\n",
+          "finish_reason": "stop",
+          "prompt": "Return exactly: ok",
+          "reasoning_content_observed": false,
+          "reasoning_content_preview": null,
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/none/exact_ok.raw.json",
+          "score": {
+            "expected": "ok",
+            "observed": "<think>\nok",
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "ok",
+              "observed": "<think>\nok",
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": "ok",
+              "observed": "<think>\nok",
+              "passed": false
+            },
+            "reasoning_content": {
+              "expected": "ok",
+              "observed": "",
+              "passed": false
+            }
+          },
+          "task_id": "exact_ok",
+          "timings": {
+            "cache_n": 0,
+            "predicted_ms": 28.937,
+            "predicted_n": 3,
+            "predicted_per_second": 103.67349759823064,
+            "predicted_per_token_ms": 9.645666666666667,
+            "prompt_ms": 96.791,
+            "prompt_n": 31,
+            "prompt_per_second": 320.2777117707225,
+            "prompt_per_token_ms": 3.122290322580645
+          },
+          "usage": {
+            "completion_tokens": 3,
+            "prompt_tokens": 31,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 34
+          }
+        },
+        {
+          "content": "<think>\n{\"status\":\"ok\",\"model\":\"nemotron\"}\n",
+          "finish_reason": "stop",
+          "prompt": "Return exactly this minified JSON and nothing else: {\"status\":\"ok\",\"model\":\"nemotron\"}",
+          "reasoning_content_observed": false,
+          "reasoning_content_preview": null,
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/none/strict_json.raw.json",
+          "score": {
+            "expected": {
+              "model": "nemotron",
+              "status": "ok"
+            },
+            "json_mode": "non_json",
+            "observed": null,
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "non_json",
+              "observed": null,
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "non_json",
+              "observed": null,
+              "passed": false
+            },
+            "reasoning_content": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "empty",
+              "observed": null,
+              "passed": false
+            }
+          },
+          "task_id": "strict_json",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 125.448,
+            "predicted_n": 11,
+            "predicted_per_second": 87.68573432816785,
+            "predicted_per_token_ms": 11.404363636363636,
+            "prompt_ms": 95.826,
+            "prompt_n": 29,
+            "prompt_per_second": 302.63185356792525,
+            "prompt_per_token_ms": 3.3043448275862066
+          },
+          "usage": {
+            "completion_tokens": 11,
+            "prompt_tokens": 46,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 57
+          }
+        },
+        {
+          "content": "<think>\n65\n",
+          "finish_reason": "stop",
+          "prompt": "Answer with only the integer result: 37 + 58",
+          "reasoning_content_observed": false,
+          "reasoning_content_preview": null,
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/none/simple_math.raw.json",
+          "score": {
+            "expected": "95",
+            "observed": "<think>\n65",
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "95",
+              "observed": "<think>\n65",
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": "95",
+              "observed": "<think>\n65",
+              "passed": false
+            },
+            "reasoning_content": {
+              "expected": "95",
+              "observed": "",
+              "passed": false
+            }
+          },
+          "task_id": "simple_math",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 40.382,
+            "predicted_n": 4,
+            "predicted_per_second": 99.05403397553366,
+            "predicted_per_token_ms": 10.0955,
+            "prompt_ms": 95.266,
+            "prompt_n": 24,
+            "prompt_per_second": 251.9261856276111,
+            "prompt_per_token_ms": 3.969416666666667
+          },
+          "usage": {
+            "completion_tokens": 4,
+            "prompt_tokens": 41,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 45
+          }
+        },
+        {
+          "content": "<think>\nOkay, the user wants exactly five lowercase words explaining why held-out tests matter. Let me start by recalling what held-out tests are. They're a validation method where data is split into training and test sets. The key point is that",
+          "finish_reason": "length",
+          "prompt": "In exactly five lowercase words, describe why held-out tests matter. Return only the five words.",
+          "reasoning_content_observed": false,
+          "reasoning_content_preview": null,
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/none/five_lowercase_words.raw.json",
+          "score": {
+            "expected_word_count": 5,
+            "observed_words": [
+              "<think>",
+              "Okay,",
+              "the",
+              "user",
+              "wants",
+              "exactly",
+              "five",
+              "lowercase",
+              "words",
+              "explaining",
+              "why",
+              "held-out",
+              "tests",
+              "matter.",
+              "Let",
+              "me",
+              "start",
+              "by",
+              "recalling",
+              "what",
+              "held-out",
+              "tests",
+              "are.",
+              "They're",
+              "a",
+              "validation",
+              "method",
+              "where",
+              "data",
+              "is",
+              "split",
+              "into",
+              "training",
+              "and",
+              "test",
+              "sets.",
+              "The",
+              "key",
+              "point",
+              "is",
+              "that"
+            ],
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected_word_count": 5,
+              "observed_words": [
+                "<think>",
+                "Okay,",
+                "the",
+                "user",
+                "wants",
+                "exactly",
+                "five",
+                "lowercase",
+                "words",
+                "explaining",
+                "why",
+                "held-out",
+                "tests",
+                "matter.",
+                "Let",
+                "me",
+                "start",
+                "by",
+                "recalling",
+                "what",
+                "held-out",
+                "tests",
+                "are.",
+                "They're",
+                "a",
+                "validation",
+                "method",
+                "where",
+                "data",
+                "is",
+                "split",
+                "into",
+                "training",
+                "and",
+                "test",
+                "sets.",
+                "The",
+                "key",
+                "point",
+                "is",
+                "that"
+              ],
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected_word_count": 5,
+              "observed_words": [
+                "<think>",
+                "Okay,",
+                "the",
+                "user",
+                "wants",
+                "exactly",
+                "five",
+                "lowercase",
+                "words",
+                "explaining",
+                "why",
+                "held-out",
+                "tests",
+                "matter.",
+                "Let",
+                "me",
+                "start",
+                "by",
+                "recalling",
+                "what",
+                "held-out",
+                "tests",
+                "are.",
+                "They're",
+                "a",
+                "validation",
+                "method",
+                "where",
+                "data",
+                "is",
+                "split",
+                "into",
+                "training",
+                "and",
+                "test",
+                "sets.",
+                "The",
+                "key",
+                "point",
+                "is",
+                "that"
+              ],
+              "passed": false
+            },
+            "reasoning_content": {
+              "expected_word_count": 5,
+              "observed_words": [],
+              "passed": false
+            }
+          },
+          "task_id": "five_lowercase_words",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 574.093,
+            "predicted_n": 48,
+            "predicted_per_second": 83.61014678806396,
+            "predicted_per_token_ms": 11.960270833333333,
+            "prompt_ms": 95.978,
+            "prompt_n": 28,
+            "prompt_per_second": 291.7335222655192,
+            "prompt_per_token_ms": 3.427785714285714
+          },
+          "usage": {
+            "completion_tokens": 48,
+            "prompt_tokens": 45,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 93
+          }
+        },
+        {
+          "content": "<think>\nOkay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooking at Line 6, it says: \"the canonical project code is NN",
+          "finish_reason": "length",
+          "prompt": "Read the full passage, then answer with only the project code.\n\nStatus notes: alpha reports remain internal. Audit reviewers asked for a longer context check to confirm the chat endpoint still returns the answer in message.content without mixing in reasoning-only fields. The archive repeats the same operational warning for scanning depth. Line 1: ignore incidental numbers like 104, 205, or 999.\nLine 2: only one project code is authoritative.\nLine 3: the project code appears once and should be copied exactly.\nLine 4: filler text discusses ports, GPUs, and cache settings.\nLine 5: project summaries remain provisional pending the quality gate.\nLine 6: the canonical project code is NN-4242-DELTA.\nLine 7: later lines mention unrelated strings such as AA-1000 or test-draft.\nLine 8: answer with the code only.\n\nQuestion: what is the project code?",
+          "reasoning_content_observed": false,
+          "reasoning_content_preview": null,
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/none/long_context_needle.raw.json",
+          "score": {
+            "expected": "NN-4242-DELTA",
+            "observed": "<think>\nOkay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooking at Line 6, it says: \"the canonical project code is NN",
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "NN-4242-DELTA",
+              "observed": "<think>\nOkay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooking at Line 6, it says: \"the canonical project code is NN",
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": "NN-4242-DELTA",
+              "observed": "<think>\nOkay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooking at Line 6, it says: \"the canonical project code is NN",
+              "passed": false
+            },
+            "reasoning_content": {
+              "expected": "NN-4242-DELTA",
+              "observed": "",
+              "passed": false
+            }
+          },
+          "task_id": "long_context_needle",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 577.709,
+            "predicted_n": 48,
+            "predicted_per_second": 83.08681360338856,
+            "predicted_per_token_ms": 12.035604166666666,
+            "prompt_ms": 203.898,
+            "prompt_n": 207,
+            "prompt_per_second": 1015.21348909749,
+            "prompt_per_token_ms": 0.9850144927536232
+          },
+          "usage": {
+            "completion_tokens": 48,
+            "prompt_tokens": 224,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 272
+          }
+        }
+      ],
+      "server": {
+        "log_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/logs/nemotron_nano_q8_mi210.none.server.log",
+        "port": 19123,
+        "reasoning": "off",
+        "reasoning_format": "none"
+      }
+    },
+    {
+      "passed_by_source": {
+        "content": 0,
+        "content_or_reasoning": 2,
+        "reasoning_content": 2
+      },
+      "protocol": "deepseek_legacy",
+      "quality_gate_passed_by_source": {
+        "content": false,
+        "content_or_reasoning": false,
+        "reasoning_content": false
+      },
+      "results": [
+        {
+          "content": "",
+          "finish_reason": "stop",
+          "prompt": "Return exactly: ok",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "ok\n",
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek_legacy/exact_ok.raw.json",
+          "score": {
+            "expected": "ok",
+            "observed": "",
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "ok",
+              "observed": "",
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": "ok",
+              "observed": "ok",
+              "passed": true
+            },
+            "reasoning_content": {
+              "expected": "ok",
+              "observed": "ok",
+              "passed": true
+            }
+          },
+          "task_id": "exact_ok",
+          "timings": {
+            "cache_n": 0,
+            "predicted_ms": 29.15,
+            "predicted_n": 3,
+            "predicted_per_second": 102.91595197255576,
+            "predicted_per_token_ms": 9.716666666666667,
+            "prompt_ms": 96.739,
+            "prompt_n": 31,
+            "prompt_per_second": 320.449870269488,
+            "prompt_per_token_ms": 3.1206129032258065
+          },
+          "usage": {
+            "completion_tokens": 3,
+            "prompt_tokens": 31,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 34
+          }
+        },
+        {
+          "content": "",
+          "finish_reason": "stop",
+          "prompt": "Return exactly this minified JSON and nothing else: {\"status\":\"ok\",\"model\":\"nemotron\"}",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "{\"status\":\"ok\",\"model\":\"nemotron\"}\n",
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek_legacy/strict_json.raw.json",
+          "score": {
+            "expected": {
+              "model": "nemotron",
+              "status": "ok"
+            },
+            "json_mode": "empty",
+            "observed": null,
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "empty",
+              "observed": null,
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "strict",
+              "observed": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "passed": true
+            },
+            "reasoning_content": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "strict",
+              "observed": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "passed": true
+            }
+          },
+          "task_id": "strict_json",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 126.223,
+            "predicted_n": 11,
+            "predicted_per_second": 87.14735032442582,
+            "predicted_per_token_ms": 11.474818181818181,
+            "prompt_ms": 95.923,
+            "prompt_n": 29,
+            "prompt_per_second": 302.32582383786996,
+            "prompt_per_token_ms": 3.307689655172414
+          },
+          "usage": {
+            "completion_tokens": 11,
+            "prompt_tokens": 46,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 57
+          }
+        },
+        {
+          "content": "",
+          "finish_reason": "stop",
+          "prompt": "Answer with only the integer result: 37 + 58",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "65\n",
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek_legacy/simple_math.raw.json",
+          "score": {
+            "expected": "95",
+            "observed": "",
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "95",
+              "observed": "",
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": "95",
+              "observed": "65",
+              "passed": false
+            },
+            "reasoning_content": {
+              "expected": "95",
+              "observed": "65",
+              "passed": false
+            }
+          },
+          "task_id": "simple_math",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 40.369,
+            "predicted_n": 4,
+            "predicted_per_second": 99.08593227476528,
+            "predicted_per_token_ms": 10.09225,
+            "prompt_ms": 94.689,
+            "prompt_n": 24,
+            "prompt_per_second": 253.46133130564272,
+            "prompt_per_token_ms": 3.945375
+          },
+          "usage": {
+            "completion_tokens": 4,
+            "prompt_tokens": 41,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 45
+          }
+        },
+        {
+          "content": "",
+          "finish_reason": "length",
+          "prompt": "In exactly five lowercase words, describe why held-out tests matter. Return only the five words.",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "Okay, the user wants exactly five lowercase words explaining why held-out tests matter. Let me start by recalling what held-out tests are. They're a validation ",
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek_legacy/five_lowercase_words.raw.json",
+          "score": {
+            "expected_word_count": 5,
+            "observed_words": [],
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected_word_count": 5,
+              "observed_words": [],
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected_word_count": 5,
+              "observed_words": [
+                "Okay,",
+                "the",
+                "user",
+                "wants",
+                "exactly",
+                "five",
+                "lowercase",
+                "words",
+                "explaining",
+                "why",
+                "held-out",
+                "tests",
+                "matter.",
+                "Let",
+                "me",
+                "start",
+                "by",
+                "recalling",
+                "what",
+                "held-out",
+                "tests",
+                "are.",
+                "They're",
+                "a",
+                "validation",
+                "method",
+                "where",
+                "data",
+                "is",
+                "split",
+                "into",
+                "training",
+                "and",
+                "test",
+                "sets.",
+                "The",
+                "key",
+                "point",
+                "is",
+                "that"
+              ],
+              "passed": false
+            },
+            "reasoning_content": {
+              "expected_word_count": 5,
+              "observed_words": [
+                "Okay,",
+                "the",
+                "user",
+                "wants",
+                "exactly",
+                "five",
+                "lowercase",
+                "words",
+                "explaining",
+                "why",
+                "held-out",
+                "tests",
+                "matter.",
+                "Let",
+                "me",
+                "start",
+                "by",
+                "recalling",
+                "what",
+                "held-out",
+                "tests",
+                "are.",
+                "They're",
+                "a",
+                "validation",
+                "method",
+                "where",
+                "data",
+                "is",
+                "split",
+                "into",
+                "training",
+                "and",
+                "test",
+                "sets.",
+                "The",
+                "key",
+                "point",
+                "is",
+                "that"
+              ],
+              "passed": false
+            }
+          },
+          "task_id": "five_lowercase_words",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 578.048,
+            "predicted_n": 48,
+            "predicted_per_second": 83.03808680248007,
+            "predicted_per_token_ms": 12.042666666666667,
+            "prompt_ms": 95.843,
+            "prompt_n": 28,
+            "prompt_per_second": 292.1444445603748,
+            "prompt_per_token_ms": 3.422964285714286
+          },
+          "usage": {
+            "completion_tokens": 48,
+            "prompt_tokens": 45,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 93
+          }
+        },
+        {
+          "content": "",
+          "finish_reason": "length",
+          "prompt": "Read the full passage, then answer with only the project code.\n\nStatus notes: alpha reports remain internal. Audit reviewers asked for a longer context check to confirm the chat endpoint still returns the answer in message.content without mixing in reasoning-only fields. The archive repeats the same operational warning for scanning depth. Line 1: ignore incidental numbers like 104, 205, or 999.\nLine 2: only one project code is authoritative.\nLine 3: the project code appears once and should be copied exactly.\nLine 4: filler text discusses ports, GPUs, and cache settings.\nLine 5: project summaries remain provisional pending the quality gate.\nLine 6: the canonical project code is NN-4242-DELTA.\nLine 7: later lines mention unrelated strings such as AA-1000 or test-draft.\nLine 8: answer with the code only.\n\nQuestion: what is the project code?",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "Okay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooki",
+          "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek_legacy/long_context_needle.raw.json",
+          "score": {
+            "expected": "NN-4242-DELTA",
+            "observed": "",
+            "passed": false
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "NN-4242-DELTA",
+              "observed": "",
+              "passed": false
+            },
+            "content_or_reasoning": {
+              "expected": "NN-4242-DELTA",
+              "observed": "Okay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooking at Line 6, it says: \"the canonical project code is NN",
+              "passed": false
+            },
+            "reasoning_content": {
+              "expected": "NN-4242-DELTA",
+              "observed": "Okay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooking at Line 6, it says: \"the canonical project code is NN",
+              "passed": false
+            }
+          },
+          "task_id": "long_context_needle",
+          "timings": {
+            "cache_n": 17,
+            "predicted_ms": 581.945,
+            "predicted_n": 48,
+            "predicted_per_second": 82.48202149687684,
+            "predicted_per_token_ms": 12.123854166666668,
+            "prompt_ms": 203.592,
+            "prompt_n": 207,
+            "prompt_per_second": 1016.7393610750912,
+            "prompt_per_token_ms": 0.983536231884058
+          },
+          "usage": {
+            "completion_tokens": 48,
+            "prompt_tokens": 224,
+            "prompt_tokens_details": {
+              "cached_tokens": 17
+            },
+            "total_tokens": 272
+          }
+        }
+      ],
+      "server": {
+        "log_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/logs/nemotron_nano_q8_mi210.deepseek_legacy.server.log",
+        "port": 19124,
+        "reasoning": "off",
+        "reasoning_format": "deepseek-legacy"
+      }
+    }
+  ],
+  "q8_kv_supported": true,
+  "quality_gate_passed": false,
+  "results": [
+    {
+      "content": "",
+      "finish_reason": "stop",
+      "prompt": "Return exactly: ok",
+      "reasoning_content_observed": true,
+      "reasoning_content_preview": "ok\n",
+      "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek/exact_ok.raw.json",
+      "score": {
+        "expected": "ok",
+        "observed": "",
+        "passed": false
+      },
+      "scores_by_source": {
+        "content": {
+          "expected": "ok",
+          "observed": "",
+          "passed": false
+        },
+        "content_or_reasoning": {
+          "expected": "ok",
+          "observed": "ok",
+          "passed": true
+        },
+        "reasoning_content": {
+          "expected": "ok",
+          "observed": "ok",
+          "passed": true
+        }
+      },
+      "task_id": "exact_ok",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 28.963,
+        "predicted_n": 3,
+        "predicted_per_second": 103.58043020405344,
+        "predicted_per_token_ms": 9.654333333333334,
+        "prompt_ms": 96.676,
+        "prompt_n": 31,
+        "prompt_per_second": 320.6586950225495,
+        "prompt_per_token_ms": 3.1185806451612903
+      },
+      "usage": {
+        "completion_tokens": 3,
+        "prompt_tokens": 31,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 34
+      }
+    },
+    {
+      "content": "",
+      "finish_reason": "stop",
+      "prompt": "Return exactly this minified JSON and nothing else: {\"status\":\"ok\",\"model\":\"nemotron\"}",
+      "reasoning_content_observed": true,
+      "reasoning_content_preview": "{\"status\":\"ok\",\"model\":\"nemotron\"}\n",
+      "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek/strict_json.raw.json",
+      "score": {
+        "expected": {
+          "model": "nemotron",
+          "status": "ok"
+        },
+        "json_mode": "empty",
+        "observed": null,
+        "passed": false
+      },
+      "scores_by_source": {
+        "content": {
+          "expected": {
+            "model": "nemotron",
+            "status": "ok"
+          },
+          "json_mode": "empty",
+          "observed": null,
+          "passed": false
+        },
+        "content_or_reasoning": {
+          "expected": {
+            "model": "nemotron",
+            "status": "ok"
+          },
+          "json_mode": "strict",
+          "observed": {
+            "model": "nemotron",
+            "status": "ok"
+          },
+          "passed": true
+        },
+        "reasoning_content": {
+          "expected": {
+            "model": "nemotron",
+            "status": "ok"
+          },
+          "json_mode": "strict",
+          "observed": {
+            "model": "nemotron",
+            "status": "ok"
+          },
+          "passed": true
+        }
+      },
+      "task_id": "strict_json",
+      "timings": {
+        "cache_n": 17,
+        "predicted_ms": 125.822,
+        "predicted_n": 11,
+        "predicted_per_second": 87.42509259112079,
+        "predicted_per_token_ms": 11.438363636363636,
+        "prompt_ms": 95.948,
+        "prompt_n": 29,
+        "prompt_per_second": 302.2470504856798,
+        "prompt_per_token_ms": 3.308551724137931
+      },
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 46,
+        "prompt_tokens_details": {
+          "cached_tokens": 17
+        },
+        "total_tokens": 57
+      }
+    },
+    {
+      "content": "",
+      "finish_reason": "stop",
+      "prompt": "Answer with only the integer result: 37 + 58",
+      "reasoning_content_observed": true,
+      "reasoning_content_preview": "65\n",
+      "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek/simple_math.raw.json",
+      "score": {
+        "expected": "95",
+        "observed": "",
+        "passed": false
+      },
+      "scores_by_source": {
+        "content": {
+          "expected": "95",
+          "observed": "",
+          "passed": false
+        },
+        "content_or_reasoning": {
+          "expected": "95",
+          "observed": "65",
+          "passed": false
+        },
+        "reasoning_content": {
+          "expected": "95",
+          "observed": "65",
+          "passed": false
+        }
+      },
+      "task_id": "simple_math",
+      "timings": {
+        "cache_n": 17,
+        "predicted_ms": 40.342,
+        "predicted_n": 4,
+        "predicted_per_second": 99.15224827722969,
+        "predicted_per_token_ms": 10.0855,
+        "prompt_ms": 94.836,
+        "prompt_n": 24,
+        "prompt_per_second": 253.06845501708213,
+        "prompt_per_token_ms": 3.9515
+      },
+      "usage": {
+        "completion_tokens": 4,
+        "prompt_tokens": 41,
+        "prompt_tokens_details": {
+          "cached_tokens": 17
+        },
+        "total_tokens": 45
+      }
+    },
+    {
+      "content": "",
+      "finish_reason": "length",
+      "prompt": "In exactly five lowercase words, describe why held-out tests matter. Return only the five words.",
+      "reasoning_content_observed": true,
+      "reasoning_content_preview": "Okay, the user wants exactly five lowercase words explaining why held-out tests matter. Let me start by recalling what held-out tests are. They're a validation ",
+      "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek/five_lowercase_words.raw.json",
+      "score": {
+        "expected_word_count": 5,
+        "observed_words": [],
+        "passed": false
+      },
+      "scores_by_source": {
+        "content": {
+          "expected_word_count": 5,
+          "observed_words": [],
+          "passed": false
+        },
+        "content_or_reasoning": {
+          "expected_word_count": 5,
+          "observed_words": [
+            "Okay,",
+            "the",
+            "user",
+            "wants",
+            "exactly",
+            "five",
+            "lowercase",
+            "words",
+            "explaining",
+            "why",
+            "held-out",
+            "tests",
+            "matter.",
+            "Let",
+            "me",
+            "start",
+            "by",
+            "recalling",
+            "what",
+            "held-out",
+            "tests",
+            "are.",
+            "They're",
+            "a",
+            "validation",
+            "method",
+            "where",
+            "data",
+            "is",
+            "split",
+            "into",
+            "training",
+            "and",
+            "test",
+            "sets.",
+            "The",
+            "key",
+            "point",
+            "is",
+            "that"
+          ],
+          "passed": false
+        },
+        "reasoning_content": {
+          "expected_word_count": 5,
+          "observed_words": [
+            "Okay,",
+            "the",
+            "user",
+            "wants",
+            "exactly",
+            "five",
+            "lowercase",
+            "words",
+            "explaining",
+            "why",
+            "held-out",
+            "tests",
+            "matter.",
+            "Let",
+            "me",
+            "start",
+            "by",
+            "recalling",
+            "what",
+            "held-out",
+            "tests",
+            "are.",
+            "They're",
+            "a",
+            "validation",
+            "method",
+            "where",
+            "data",
+            "is",
+            "split",
+            "into",
+            "training",
+            "and",
+            "test",
+            "sets.",
+            "The",
+            "key",
+            "point",
+            "is",
+            "that"
+          ],
+          "passed": false
+        }
+      },
+      "task_id": "five_lowercase_words",
+      "timings": {
+        "cache_n": 17,
+        "predicted_ms": 577.737,
+        "predicted_n": 48,
+        "predicted_per_second": 83.08278680437638,
+        "predicted_per_token_ms": 12.036187499999999,
+        "prompt_ms": 96.028,
+        "prompt_n": 28,
+        "prompt_per_second": 291.5816220269088,
+        "prompt_per_token_ms": 3.4295714285714287
+      },
+      "usage": {
+        "completion_tokens": 48,
+        "prompt_tokens": 45,
+        "prompt_tokens_details": {
+          "cached_tokens": 17
+        },
+        "total_tokens": 93
+      }
+    },
+    {
+      "content": "",
+      "finish_reason": "length",
+      "prompt": "Read the full passage, then answer with only the project code.\n\nStatus notes: alpha reports remain internal. Audit reviewers asked for a longer context check to confirm the chat endpoint still returns the answer in message.content without mixing in reasoning-only fields. The archive repeats the same operational warning for scanning depth. Line 1: ignore incidental numbers like 104, 205, or 999.\nLine 2: only one project code is authoritative.\nLine 3: the project code appears once and should be copied exactly.\nLine 4: filler text discusses ports, GPUs, and cache settings.\nLine 5: project summaries remain provisional pending the quality gate.\nLine 6: the canonical project code is NN-4242-DELTA.\nLine 7: later lines mention unrelated strings such as AA-1000 or test-draft.\nLine 8: answer with the code only.\n\nQuestion: what is the project code?",
+      "reasoning_content_observed": true,
+      "reasoning_content_preview": "Okay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooki",
+      "response_path": "data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/responses/deepseek/long_context_needle.raw.json",
+      "score": {
+        "expected": "NN-4242-DELTA",
+        "observed": "",
+        "passed": false
+      },
+      "scores_by_source": {
+        "content": {
+          "expected": "NN-4242-DELTA",
+          "observed": "",
+          "passed": false
+        },
+        "content_or_reasoning": {
+          "expected": "NN-4242-DELTA",
+          "observed": "Okay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooking at Line 6, it says: \"the canonical project code is NN",
+          "passed": false
+        },
+        "reasoning_content": {
+          "expected": "NN-4242-DELTA",
+          "observed": "Okay, let's see. The user provided a passage with several lines and specific instructions. The task is to find the project code based on the given lines.\n\nLooking at Line 6, it says: \"the canonical project code is NN",
+          "passed": false
+        }
+      },
+      "task_id": "long_context_needle",
+      "timings": {
+        "cache_n": 17,
+        "predicted_ms": 580.581,
+        "predicted_n": 48,
+        "predicted_per_second": 82.67580234282555,
+        "predicted_per_token_ms": 12.095437500000001,
+        "prompt_ms": 204.684,
+        "prompt_n": 207,
+        "prompt_per_second": 1011.3150026382132,
+        "prompt_per_token_ms": 0.9888115942028985
+      },
+      "usage": {
+        "completion_tokens": 48,
+        "prompt_tokens": 224,
+        "prompt_tokens_details": {
+          "cached_tokens": 17
+        },
+        "total_tokens": 272
+      }
+    }
+  ],
+  "schema": "nemotron_nano_task_quality_summary.v1",
+  "server_pid": null,
+  "server_port": 19122,
+  "throughput_observation": {
+    "contaminated": true,
+    "decision_use": "forbidden",
+    "mean_decode_tps": 91.17972862560629,
+    "mean_prompt_tps": 436.38496123787786
+  },
+  "total": 5
+}

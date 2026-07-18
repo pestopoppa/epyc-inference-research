@@ -42,6 +42,20 @@ class NemotronNanoTaskQualityRunnerTests(unittest.TestCase):
         self.assertEqual(plan["concurrent_glm_probe_pids"], [2362944])
         self.assertEqual(plan["server"]["kv_cache"], "q8_0/q8_0")
         self.assertEqual(plan["server"]["port"], 19122)
+        self.assertEqual(list(plan["servers"]), ["deepseek"])
+
+    def test_protocol_matrix_records_all_server_arms(self) -> None:
+        args = runner.parse_args(["--port", "19122", "--protocol-matrix"])
+        with (
+            mock.patch.object(runner, "detect_glm_pids", return_value=[]),
+            mock.patch.object(runner, "list_llama_server_pids", return_value=[]),
+            mock.patch.object(runner, "detect_q8_kv_support", return_value=True),
+            mock.patch.object(runner, "pick_available_port", side_effect=[19122, 19123, 19124]),
+        ):
+            plan = runner.build_plan(args)
+
+        self.assertEqual(list(plan["servers"]), ["deepseek", "none", "deepseek_legacy"])
+        self.assertIn("--reasoning-format deepseek-legacy", plan["servers"]["deepseek_legacy"]["command"])
 
     def test_score_task_json_and_word_count(self) -> None:
         self.assertTrue(runner.score_task(runner.TASKS[0], "ok\n")["passed"])
@@ -51,6 +65,30 @@ class NemotronNanoTaskQualityRunnerTests(unittest.TestCase):
         )
         self.assertFalse(
             runner.score_task(runner.TASKS[3], "Fresh benchmarks catch hidden leakage")["passed"]
+        )
+
+    def test_score_sources_can_fall_back_to_reasoning_content(self) -> None:
+        scores = runner.score_sources(runner.TASKS[0], "", "ok\n")
+
+        self.assertFalse(scores["content"]["passed"])
+        self.assertTrue(scores["reasoning_content"]["passed"])
+        self.assertTrue(scores["content_or_reasoning"]["passed"])
+
+    def test_task_payload_can_ignore_per_task_token_caps(self) -> None:
+        capped = runner.parse_args(["--max-tokens", "512"])
+        uncapped = runner.parse_args(["--max-tokens", "512", "--ignore-task-token-caps"])
+
+        self.assertEqual(runner.task_payload(runner.TASKS[0], capped)["max_tokens"], 24)
+        self.assertEqual(runner.task_payload(runner.TASKS[0], uncapped)["max_tokens"], 512)
+
+    def test_task_payload_can_omit_system_prompt(self) -> None:
+        default_args = runner.parse_args([])
+        no_system_args = runner.parse_args(["--no-system-prompt"])
+
+        self.assertEqual(runner.task_payload(runner.TASKS[0], default_args)["messages"][0]["role"], "system")
+        self.assertEqual(
+            runner.task_payload(runner.TASKS[0], no_system_args)["messages"],
+            [{"role": "user", "content": runner.TASKS[0].prompt}],
         )
 
     def test_run_execute_writes_summary_and_cleanup_proof(self) -> None:
@@ -64,6 +102,9 @@ class NemotronNanoTaskQualityRunnerTests(unittest.TestCase):
                     "port": 19122,
                     "q8_kv_supported": True,
                 },
+                "preexisting_server_pids": [],
+                "concurrent_glm_probe_pids": [],
+                "prompt_policy": {"system_prompt": runner.STRICT_SYSTEM_PROMPT, "no_system_prompt": False},
                 "cleanup_expectation": {"allowed_pids_after_run": [2362958]},
             }
             fake_proc = mock.Mock()
@@ -108,6 +149,7 @@ class NemotronNanoTaskQualityRunnerTests(unittest.TestCase):
 
             self.assertTrue(summary["quality_gate_passed"])
             self.assertTrue(summary["cleanup"]["passed"])
+            self.assertFalse(summary["throughput_observation"]["contaminated"])
             self.assertTrue((output_dir / "summary.json").exists())
 
 

@@ -1,0 +1,170 @@
+{
+  "classification": "quality-only protocol matrix; throughput is observational unless the host is otherwise quiet",
+  "cleanup_expectation": {
+    "allowed_pids_after_run": [],
+    "note": "no new llama-server may remain after cleanup; concurrent GLM server PID is preserved if present"
+  },
+  "concurrent_glm_probe_pids": [],
+  "created_at": "2026-07-18T01:00:03.202245+00:00",
+  "experimental_root": "/mnt/raid0/llm/llama.cpp-experimental",
+  "message_inspection": {
+    "primary_source": "content",
+    "score_sources": [
+      "content",
+      "reasoning_content",
+      "content_or_reasoning"
+    ]
+  },
+  "mode": "execute",
+  "model_path": "/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf",
+  "preexisting_server_pids": [],
+  "prompt_policy": {
+    "no_system_prompt": true,
+    "system_prompt": null
+  },
+  "request": {
+    "context": 8192,
+    "deterministic_sampling": {
+      "seed": 7,
+      "temperature": 0.0,
+      "top_k": 1,
+      "top_p": 1.0
+    },
+    "max_tokens": 512,
+    "request_timeout_s": 600,
+    "seed": 7,
+    "startup_timeout_s": 300,
+    "temperature": 0.0
+  },
+  "request_endpoint": "/v1/chat/completions",
+  "schema": "nemotron_nano_task_quality_plan.v1",
+  "server": {
+    "argv": [
+      "numactl",
+      "--interleave=all",
+      "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+      "-m",
+      "/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "19122",
+      "--device",
+      "ROCm0",
+      "-ngl",
+      "99",
+      "-t",
+      "96",
+      "-c",
+      "8192",
+      "-fa",
+      "on",
+      "--metrics",
+      "--temp",
+      "0",
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "-ctk",
+      "q8_0",
+      "-ctv",
+      "q8_0"
+    ],
+    "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf --host 127.0.0.1 --port 19122 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on --metrics --temp 0 --reasoning-format deepseek --reasoning off -ctk q8_0 -ctv q8_0",
+    "device": "ROCm0",
+    "kv_cache": "q8_0/q8_0",
+    "ngl": 99,
+    "port": 19122,
+    "protocol": "deepseek",
+    "q8_kv_supported": true,
+    "reasoning": "off",
+    "reasoning_format": "deepseek"
+  },
+  "server_bin": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "servers": {
+    "deepseek": {
+      "argv": [
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19122",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-c",
+        "8192",
+        "-fa",
+        "on",
+        "--metrics",
+        "--temp",
+        "0",
+        "--reasoning-format",
+        "deepseek",
+        "--reasoning",
+        "off",
+        "-ctk",
+        "q8_0",
+        "-ctv",
+        "q8_0"
+      ],
+      "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf --host 127.0.0.1 --port 19122 --device ROCm0 -ngl 99 -t 96 -c 8192 -fa on --metrics --temp 0 --reasoning-format deepseek --reasoning off -ctk q8_0 -ctv q8_0",
+      "device": "ROCm0",
+      "kv_cache": "q8_0/q8_0",
+      "ngl": 99,
+      "port": 19122,
+      "protocol": "deepseek",
+      "q8_kv_supported": true,
+      "reasoning": "off",
+      "reasoning_format": "deepseek"
+    }
+  },
+  "task_slice": [
+    {
+      "expected": "ok",
+      "max_tokens": 24,
+      "prompt": "Return exactly: ok",
+      "scorer": "exact",
+      "task_id": "exact_ok"
+    },
+    {
+      "expected": {
+        "model": "nemotron",
+        "status": "ok"
+      },
+      "max_tokens": 48,
+      "prompt": "Return exactly this minified JSON and nothing else: {\"status\":\"ok\",\"model\":\"nemotron\"}",
+      "scorer": "json_exact",
+      "task_id": "strict_json"
+    },
+    {
+      "expected": "95",
+      "max_tokens": 24,
+      "prompt": "Answer with only the integer result: 37 + 58",
+      "scorer": "exact",
+      "task_id": "simple_math"
+    },
+    {
+      "expected": 5,
+      "max_tokens": 48,
+      "prompt": "In exactly five lowercase words, describe why held-out tests matter. Return only the five words.",
+      "scorer": "lowercase_word_count",
+      "task_id": "five_lowercase_words"
+    },
+    {
+      "expected": "NN-4242-DELTA",
+      "max_tokens": 48,
+      "prompt": "Read the full passage, then answer with only the project code.\n\nStatus notes: alpha reports remain internal. Audit reviewers asked for a longer context check to confirm the chat endpoint still returns the answer in message.content without mixing in reasoning-only fields. The archive repeats the same operational warning for scanning depth. Line 1: ignore incidental numbers like 104, 205, or 999.\nLine 2: only one project code is authoritative.\nLine 3: the project code appears once and should be copied exactly.\nLine 4: filler text discusses ports, GPUs, and cache settings.\nLine 5: project summaries remain provisional pending the quality gate.\nLine 6: the canonical project code is NN-4242-DELTA.\nLine 7: later lines mention unrelated strings such as AA-1000 or test-draft.\nLine 8: answer with the code only.\n\nQuestion: what is the project code?",
+      "scorer": "exact",
+      "task_id": "long_context_needle"
+    }
+  ]
+}

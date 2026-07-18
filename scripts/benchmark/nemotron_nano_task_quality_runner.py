@@ -55,6 +55,14 @@ DEFAULT_STARTUP_TIMEOUT_S = 240
 DEFAULT_TEMPERATURE = 0.0
 DEFAULT_SEED = 7
 DEFAULT_MAX_TOKENS = 160
+DEFAULT_PROTOCOL = "deepseek"
+PROTOCOL_SPECS = {
+    "deepseek": {"reasoning_format": "deepseek", "reasoning": "off"},
+    "none": {"reasoning_format": "none", "reasoning": "off"},
+    "deepseek_legacy": {"reasoning_format": "deepseek-legacy", "reasoning": "off"},
+}
+SCORE_SOURCES = ("content", "reasoning_content", "content_or_reasoning")
+STRICT_SYSTEM_PROMPT = "Answer only with the requested final answer. Do not emit reasoning."
 
 SANITIZED_ENV = {
     "HOME": "/tmp",
@@ -147,6 +155,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--request-timeout", type=int, default=DEFAULT_REQUEST_TIMEOUT_S)
     parser.add_argument("--startup-timeout", type=int, default=DEFAULT_STARTUP_TIMEOUT_S)
+    parser.add_argument(
+        "--ignore-task-token-caps",
+        action="store_true",
+        help="Use --max-tokens for every task instead of the conservative per-task caps.",
+    )
+    parser.add_argument(
+        "--no-system-prompt",
+        action="store_true",
+        help="Omit the strict final-answer system message; useful for protocol-channel isolation.",
+    )
+    parser.add_argument(
+        "--protocol",
+        action="append",
+        choices=sorted(PROTOCOL_SPECS),
+        help="Protocol arm to run; repeat for multiple arms. Defaults to deepseek.",
+    )
+    parser.add_argument(
+        "--protocol-matrix",
+        action="store_true",
+        help="Run all known Nemotron protocol arms sequentially.",
+    )
     return parser.parse_args(argv)
 
 
@@ -240,7 +269,21 @@ def pick_available_port(preferred: int) -> int:
             return int(sock.getsockname()[1])
 
 
-def launch_argv(args: argparse.Namespace, port: int, q8_kv_supported: bool) -> list[str]:
+def selected_protocols(args: argparse.Namespace) -> tuple[str, ...]:
+    if args.protocol_matrix:
+        return tuple(PROTOCOL_SPECS)
+    if args.protocol:
+        return tuple(dict.fromkeys(args.protocol))
+    return (DEFAULT_PROTOCOL,)
+
+
+def launch_argv(
+    args: argparse.Namespace,
+    port: int,
+    q8_kv_supported: bool,
+    protocol: str = DEFAULT_PROTOCOL,
+) -> list[str]:
+    spec = PROTOCOL_SPECS[protocol]
     argv = [
         "numactl",
         "--interleave=all",
@@ -262,13 +305,15 @@ def launch_argv(args: argparse.Namespace, port: int, q8_kv_supported: bool) -> l
         "-fa",
         "on",
         "--metrics",
-        "--reasoning-format",
-        "deepseek",
-        "--reasoning",
-        "off",
         "--temp",
         "0",
     ]
+    reasoning_format = spec.get("reasoning_format")
+    if reasoning_format:
+        argv.extend(["--reasoning-format", reasoning_format])
+    reasoning = spec.get("reasoning")
+    if reasoning:
+        argv.extend(["--reasoning", reasoning])
     if q8_kv_supported:
         argv.extend(["-ctk", "q8_0", "-ctv", "q8_0"])
     return argv
@@ -282,16 +327,20 @@ def launch_command_string(argv: list[str]) -> str:
 
 
 def task_payload(task: TaskSpec, args: argparse.Namespace) -> dict[str, Any]:
-    return {
-        "model": "auto",
-        "messages": [
+    max_tokens = args.max_tokens if args.ignore_task_token_caps else min(args.max_tokens, task.max_tokens)
+    messages: list[dict[str, str]] = []
+    if not args.no_system_prompt:
+        messages.append(
             {
                 "role": "system",
-                "content": "Answer only with the requested final answer. Do not emit reasoning.",
-            },
-            {"role": "user", "content": task.prompt},
-        ],
-        "max_tokens": min(args.max_tokens, task.max_tokens),
+                "content": STRICT_SYSTEM_PROMPT,
+            }
+        )
+    messages.append({"role": "user", "content": task.prompt})
+    return {
+        "model": "auto",
+        "messages": messages,
+        "max_tokens": max_tokens,
         "temperature": args.temperature,
         "top_p": 1.0,
         "top_k": 1,
@@ -342,6 +391,33 @@ def extract_message_content(response: dict[str, Any]) -> str:
                 parts.append(item)
         return "".join(parts)
     return ""
+
+
+def extract_message_field(response: dict[str, Any], field: str) -> str:
+    choices = response.get("choices") or []
+    first = choices[0] if choices else {}
+    message = first.get("message") if isinstance(first, dict) else {}
+    if not isinstance(message, dict):
+        return ""
+    value = message.get(field)
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(
+            item.get("text", "") if isinstance(item, dict) else str(item)
+            for item in value
+        )
+    return ""
+
+
+def score_sources(task: TaskSpec, content: str, reasoning_content: str | None) -> dict[str, dict[str, Any]]:
+    reasoning_text = reasoning_content or ""
+    source_values = {
+        "content": content,
+        "reasoning_content": reasoning_text,
+        "content_or_reasoning": content if normalize_text(content) else reasoning_text,
+    }
+    return {source: score_task(task, value) for source, value in source_values.items()}
 
 
 def score_task(task: TaskSpec, content: str) -> dict[str, Any]:
@@ -463,32 +539,43 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     glm_pids = detect_glm_pids()
     preexisting_pids = list_llama_server_pids()
     q8_kv_supported = detect_q8_kv_support()
-    chosen_port = pick_available_port(args.port)
-    launch = launch_argv(args, chosen_port, q8_kv_supported)
+    protocols = selected_protocols(args)
+    servers: dict[str, dict[str, Any]] = {}
+    for idx, protocol in enumerate(protocols):
+        chosen_port = pick_available_port(args.port + idx)
+        launch = launch_argv(args, chosen_port, q8_kv_supported, protocol)
+        servers[protocol] = {
+            "protocol": protocol,
+            "reasoning_format": PROTOCOL_SPECS[protocol]["reasoning_format"],
+            "reasoning": PROTOCOL_SPECS[protocol]["reasoning"],
+            "port": chosen_port,
+            "device": "ROCm0",
+            "ngl": 99,
+            "kv_cache": "q8_0/q8_0" if q8_kv_supported else "server_default",
+            "q8_kv_supported": q8_kv_supported,
+            "argv": launch,
+            "command": launch_command_string(launch),
+        }
+    primary_server = servers[protocols[0]]
     return {
         "schema": "nemotron_nano_task_quality_plan.v1",
         "created_at": utc_now(),
         "mode": "execute" if args.execute else "dry_run",
-        "classification": "quality-only gate; throughput is contaminated/non-decision while concurrent CPU GLM work is active",
+        "classification": "quality-only protocol matrix; throughput is observational unless the host is otherwise quiet",
         "experimental_root": str(EXPERIMENTAL_ROOT),
         "server_bin": str(_validated_server_bin()),
         "model_path": str(MODEL_PATH),
         "request_endpoint": "/v1/chat/completions",
         "message_inspection": {
-            "read": "choices[0].message.content",
-            "ignore": "choices[0].message.reasoning_content",
+            "score_sources": list(SCORE_SOURCES),
+            "primary_source": "content",
         },
-        "server": {
-            "port": chosen_port,
-            "device": "ROCm0",
-            "ngl": 99,
-            "reasoning_format": "deepseek",
-            "reasoning": "off",
-            "kv_cache": "q8_0/q8_0" if q8_kv_supported else "server_default",
-            "q8_kv_supported": q8_kv_supported,
-            "argv": launch,
-            "command": launch_command_string(launch),
+        "prompt_policy": {
+            "system_prompt": None if args.no_system_prompt else STRICT_SYSTEM_PROMPT,
+            "no_system_prompt": args.no_system_prompt,
         },
+        "server": primary_server,
+        "servers": servers,
         "request": {
             "context": args.context,
             "max_tokens": args.max_tokens,
@@ -539,64 +626,95 @@ def run_execute(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]
         directory.mkdir(parents=True, exist_ok=True)
     proc: subprocess.Popen[str] | None = None
     log_path = output_dir / "logs" / "nemotron_nano_q8_mi210.server.log"
-    records: list[dict[str, Any]] = []
+    protocol_summaries: list[dict[str, Any]] = []
     cleanup_record: dict[str, Any] | None = None
     try:
-        proc = launch_server(plan["server"]["argv"], log_path)
-        wait_for_health(plan["server"]["port"], args.startup_timeout, pid=proc.pid)
-        for task in TASKS:
-            payload = task_payload(task, args)
-            response, raw = query_chat(plan["server"]["port"], payload, args.request_timeout)
-            raw_path = output_dir / "responses" / f"{task.task_id}.raw.json"
-            raw_path.write_text(raw, encoding="utf-8")
-            content = extract_message_content(response)
-            score = score_task(task, content)
-            choices = response.get("choices") or []
-            first = choices[0] if choices else {}
-            message = first.get("message") if isinstance(first, dict) else {}
-            reasoning_content = None
-            if isinstance(message, dict):
-                value = message.get("reasoning_content")
-                if isinstance(value, str):
-                    reasoning_content = value
-            record = {
-                "task_id": task.task_id,
-                "prompt": task.prompt,
-                "response_path": str(raw_path),
-                "content": content,
-                "score": score,
-                "usage": response.get("usage"),
-                "timings": response.get("timings"),
-                "finish_reason": first.get("finish_reason") if isinstance(first, dict) else None,
-                "reasoning_content_observed": bool(reasoning_content),
-                "reasoning_content_preview": reasoning_content[:160] if reasoning_content else None,
-            }
-            records.append(record)
-    finally:
-        if proc is not None:
+        servers = plan.get("servers") or {plan.get("server", {}).get("protocol", DEFAULT_PROTOCOL): plan["server"]}
+        for protocol, server in servers.items():
+            records: list[dict[str, Any]] = []
+            log_path = output_dir / "logs" / f"nemotron_nano_q8_mi210.{protocol}.server.log"
+            proc = None
             try:
-                terminate_server(proc)
+                proc = launch_server(server["argv"], log_path)
+                wait_for_health(server["port"], args.startup_timeout, pid=proc.pid)
+                response_dir = output_dir / "responses" / protocol
+                response_dir.mkdir(parents=True, exist_ok=True)
+                for task in TASKS:
+                    payload = task_payload(task, args)
+                    response, raw = query_chat(server["port"], payload, args.request_timeout)
+                    raw_path = response_dir / f"{task.task_id}.raw.json"
+                    raw_path.write_text(raw, encoding="utf-8")
+                    content = extract_message_content(response)
+                    reasoning_content = extract_message_field(response, "reasoning_content")
+                    scores_by_source = score_sources(task, content, reasoning_content)
+                    choices = response.get("choices") or []
+                    first = choices[0] if choices else {}
+                    record = {
+                        "task_id": task.task_id,
+                        "prompt": task.prompt,
+                        "response_path": str(raw_path),
+                        "content": content,
+                        "score": scores_by_source["content"],
+                        "scores_by_source": scores_by_source,
+                        "usage": response.get("usage"),
+                        "timings": response.get("timings"),
+                        "finish_reason": first.get("finish_reason") if isinstance(first, dict) else None,
+                        "reasoning_content_observed": bool(reasoning_content),
+                        "reasoning_content_preview": reasoning_content[:160] if reasoning_content else None,
+                    }
+                    records.append(record)
             finally:
-                log_handle = getattr(proc, "_nemotron_log_handle", None)
-                if log_handle is not None:
-                    log_handle.close()
+                if proc is not None:
+                    try:
+                        terminate_server(proc)
+                    finally:
+                        log_handle = getattr(proc, "_nemotron_log_handle", None)
+                        if log_handle is not None:
+                            log_handle.close()
+            passed_by_source = {
+                source: sum(1 for record in records if record["scores_by_source"][source]["passed"])
+                for source in SCORE_SOURCES
+            }
+            protocol_summaries.append(
+                {
+                    "protocol": protocol,
+                    "server": {
+                        "port": server["port"],
+                        "reasoning_format": server.get("reasoning_format"),
+                        "reasoning": server.get("reasoning"),
+                        "log_path": str(log_path),
+                    },
+                    "passed_by_source": passed_by_source,
+                    "quality_gate_passed_by_source": {
+                        source: passed == len(TASKS)
+                        for source, passed in passed_by_source.items()
+                    },
+                    "results": records,
+                }
+            )
+    finally:
         cleanup_record = verify_cleanup(plan["cleanup_expectation"]["allowed_pids_after_run"])
         if not cleanup_record["passed"]:
             raise RuntimeError(f"cleanup check failed: {cleanup_record}")
 
-    passed = sum(1 for record in records if record["score"]["passed"])
+    primary_protocol = protocol_summaries[0] if protocol_summaries else {"results": [], "passed_by_source": {"content": 0}}
+    primary_records = primary_protocol["results"]
+    passed = primary_protocol["passed_by_source"]["content"]
     decode_rates = [
         float(record["timings"]["predicted_per_second"])
-        for record in records
+        for protocol in protocol_summaries
+        for record in protocol["results"]
         if isinstance(record.get("timings"), dict)
         and isinstance(record["timings"].get("predicted_per_second"), (int, float))
     ]
     prompt_rates = [
         float(record["timings"]["prompt_per_second"])
-        for record in records
+        for protocol in protocol_summaries
+        for record in protocol["results"]
         if isinstance(record.get("timings"), dict)
         and isinstance(record["timings"].get("prompt_per_second"), (int, float))
     ]
+    throughput_contaminated = bool(plan["preexisting_server_pids"] or plan["concurrent_glm_probe_pids"])
     summary = {
         "schema": "nemotron_nano_task_quality_summary.v1",
         "created_at": utc_now(),
@@ -604,18 +722,28 @@ def run_execute(args: argparse.Namespace, output_dir: Path, plan: dict[str, Any]
         "quality_gate_passed": passed == len(TASKS),
         "classification": plan["classification"],
         "model_path": str(MODEL_PATH),
-        "server_pid": proc.pid if proc is not None else None,
+        "server_pid": None,
         "server_port": plan["server"]["port"],
         "q8_kv_supported": plan["server"]["q8_kv_supported"],
+        "prompt_policy": plan["prompt_policy"],
         "throughput_observation": {
-            "contaminated": True,
-            "decision_use": "forbidden",
+            "contaminated": throughput_contaminated,
+            "decision_use": "forbidden_contaminated" if throughput_contaminated else "observation_only_quality_gate",
             "mean_decode_tps": sum(decode_rates) / len(decode_rates) if decode_rates else None,
             "mean_prompt_tps": sum(prompt_rates) / len(prompt_rates) if prompt_rates else None,
         },
         "passed": passed,
         "total": len(TASKS),
-        "results": records,
+        "results": primary_records,
+        "protocol_summaries": protocol_summaries,
+        "best_protocol_source": max(
+            (
+                (protocol["passed_by_source"][source], protocol["protocol"], source)
+                for protocol in protocol_summaries
+                for source in SCORE_SOURCES
+            ),
+            default=(0, None, None),
+        ),
         "cleanup": cleanup_record,
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")

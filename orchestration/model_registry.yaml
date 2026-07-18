@@ -3065,7 +3065,7 @@ roles:
       context_sweep_observation: "2026-07-16 MI210 context sweep: generation t/s 80.68 at 1148 prompt tokens, 79.85 at 6428 prompt tokens, and 74.30 at 22428 prompt tokens."
       mi210_quiet_repeat_observation: "2026-07-17 quiet-host sidecar repeat with Firefox/MegaSync gone: stock experimental-v7 CLI prompt 448.9 t/s, generation 83.3 t/s over a 1536-token cap on MI210. Throughput-only: prompt drifted into meta/help text, and the invoked build-hip binary self-reported stale 9d70bae4b while source HEAD was 2e79e10cc."
       protocol_correction_observation: "2026-07-17 protocol probe showed the earlier exact-output concern was harness/protocol-specific: llama-cli must use -f for prompt files, not -p @file; --reasoning-format none leaves thought text in the content channel. A server/API probe with --reasoning-format deepseek --reasoning off returned message.content exactly 'ok' while separating message.reasoning_content, prompt 201.34 t/s and generation 83.11 t/s on MI210. Treat old CLI exactness rows as load/throughput controls only."
-      task_quality_channel_observation: "2026-07-17 broader MI210 server/chat task-quality follow-up under --reasoning-format deepseek --reasoning off failed 0/5. Exact ok, strict JSON, and needle answers landed in message.reasoning_content while message.content was empty; arithmetic also answered 65 instead of 95. Throughput is non-decision because a CPU GLM probe was active. Next step is a protocol-channel matrix before further quality scoring or BF16 ceiling comparison."
+      task_quality_channel_observation: "2026-07-18 protocol/channel follow-up keeps Q8_0 research-only. With the strict system prompt, 512-token deepseek and deepseek-legacy arms reached only 2/5 in message.content and 4/5 with content_or_reasoning fallback; reasoning-format none failed 0/5. Removing the system prompt improved deepseek to 4/5 in message.content with clean host cleanup and uncontaminated observational throughput (82.73 t/s mean decode), but strict_json still failed with empty content and explanatory reasoning to the 512-token cap. BF16 is deferred until Q8 has a clean content-channel task pass or a quantization-specific miss."
       evidence:
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/summary.tsv
       - /mnt/raid0/llm/tmp/nemotron-nano-admission-smoke-20260716/nemotron_nano_9b_q8_cpu_v7.stdout
@@ -3081,6 +3081,9 @@ roles:
       - /mnt/raid0/llm/tmp/nemotron-nano-cli-deepseek-20260717T215912Z/
       - /mnt/raid0/llm/tmp/nemotron-nano-cli-deepseek-budget0-20260717T220002Z/
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/nemotron-nano-quality-20260717T221952Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/protocol-matrix-mi210-20260718T001100Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/protocol-matrix-mi210-512tok-20260718T001900Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/deepseek-nosystem-mi210-512tok-20260718T010002Z/summary.json
     benchmark_date: 2026-04-23
     notes: |
       Reasoning-mode toggle (default AUTO/ON per user preference):
@@ -3097,6 +3100,8 @@ roles:
       - For exact-output scoring, prefer llama-server/chat with --reasoning-format deepseek
         and inspect message.content; direct llama-cli stdout includes reasoning markers and is
         suitable only for load/throughput smoke unless a parser strips reasoning explicitly.
+        No-system deepseek is the best observed Q8 channel, but it still failed strict JSON;
+        require a content-channel 5/5 pass before any role admission.
       - Only 4 attention layers use KV — CPU-friendly at long context
 
   nemotron_nano_9b_bf16:
@@ -3159,6 +3164,9 @@ roles:
     benchmark_date: null
     notes: >
       Full-precision BF16 reference. Same launch notes as nemotron_nano_9b_q8.
+      Defer live BF16 until Q8_0 either passes the content-channel task gate or
+      exposes a failure that is plausibly quantization-specific rather than
+      protocol/prompt/channel behavior.
 
   # --- SuperGemma4 (2026-04-17) ---
   supergemma4_31b_q4km:
@@ -5631,7 +5639,7 @@ roles:
 
   glm_52_ud_iq2m:
     tier: B
-    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, and current-source runner-shaped quality recovered only under the observed next-power-of-two DSA top-k schedule.
+    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, current-source runner-shaped quality recovered only under the observed next-power-of-two DSA top-k schedule, and chat/free+JSON-schema protocol matrix passed at ~2.9K/~12.0K prompt tokens.
     model:
       name: GLM-5.2-UD-IQ2_M
       huggingface_id: unsloth/GLM-5.2-GGUF
@@ -5669,7 +5677,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence failed under unsafe low top_k. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. Source/runtime evidence narrows the malformed output to the DSA final-attention selection cap: top_k=2048 passes at 2056 prompt tokens but fails at 2168/3045/12043; top_k=3072 fails strict exact output at 2.1K/3K; top_k=8192 and 12288 fail strict exact output at 12K; observed safe caps are next power-of-two bands 2048, 4096, and 16384 for the tested prompt shapes. Next run reviewer/task-quality probes under that schedule; only pursue native GLM-MTP/NEXTN or sparse final attention after quality is stable."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence failed under unsafe low top_k. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. Source/runtime evidence narrows malformed output to the DSA final-attention selection cap, and the observed safe caps are next power-of-two bands 2048, 4096, and 16384 for the tested prompt shapes. A 2026-07-18 chat-only protocol matrix passed exact READY and JSON-schema {decision:allow} at ~2.9K/4096 and ~12.0K/16384 prompt bands. Next run GC-1/2/3 reviewer/task-quality probes under that schedule; raw /completion and /v1/completions remain unvalidated and should be probed only narrowly."
     candidate_roles:
     - architect
     - ingest
@@ -5682,9 +5690,9 @@ roles:
       forbid:
       - production_stack_registration
       - production_role_claim_without_dsa_quality_gate
-      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated and the observed next-power-of-two top_k schedule recovers runner-shaped prompts through 12K, but production-quality serving still needs task-quality gates under that schedule before role claims."
+      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated and the observed next-power-of-two top_k schedule recovers runner-shaped prompts through 12K. Chat free-text and JSON-schema channels now pass at ~2.9K/~12.0K, but production-quality serving still needs reviewer/task-quality gates under that schedule before role claims."
     performance:
-      benchmark_status: current_source_topk_schedule_settled_task_quality_blocked
+      benchmark_status: current_source_chat_protocol_matrix_passed_task_quality_blocked
       short_smoke_observation: >
         2026-07-16 experimental v7 b10077-da1bf5e2f CPU-only llama-server
         loaded the six-shard UD-IQ2_M artifact. With reasoning auto, the model
@@ -5838,6 +5846,20 @@ roles:
         indexer_top_k is now an explicit stress knob, not the runner default;
         task-quality work should use the observed next-power-of-two cap
         schedule rather than a merely prompt-length-above cap.
+      protocol_channel_matrix_observation: >
+        2026-07-18 chat-only protocol/channel matrix passed on current-source
+        experimental v7 (server version d1e5a20eb) with CPU-only GLM and the
+        next-power-of-two top-k schedule. Evidence:
+        data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/summary.json.
+        Free-text chat returned exact READY at 2894 prompt tokens with
+        indexer_top_k=4096 (prompt 24.71 t/s) and at 12044 prompt tokens with
+        indexer_top_k=16384 (prompt 16.68 t/s). JSON-schema chat returned
+        exact {"decision":"allow"} at 2898 prompt tokens (prompt 24.61 t/s)
+        and at 12045 prompt tokens (prompt 16.42 t/s). This closes the
+        reviewer-serving chat/free+schema channel gate for these bands, not
+        broad task quality. The first all-endpoint attempt was aborted after
+        raw completion endpoints proved too costly/pathological for this model;
+        raw /completion and /v1/completions remain unvalidated.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
@@ -5914,6 +5936,8 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/logs/long_context_dsa_probe.server.log
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk16384-16k-coherence-20260718T000200Z/plan.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_dsa_probe/glm52-topk16384-16k-coherence-20260718T000200Z/logs/long_context_dsa_probe.server.log
+      protocol_channel_matrix:
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_protocol_channel_matrix/glm52-gc0d-chat-p2168-p12000-20260718T0120Z/summary.json
     memory:
       residency: cold
       pinned: false
