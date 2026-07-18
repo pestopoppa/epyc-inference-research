@@ -94,3 +94,24 @@ class TestQwableVerifierSelectorRunner(TestCase):
         self.assertIn("### Candidate 0\nabcdefghi", prompt)
         self.assertIn("### Candidate 1\nxyz", prompt)
         self.assertNotIn("candidate['text']", prompt)
+
+    def test_extract_final_answer_uses_scoring_pattern(self) -> None:
+        question = {
+            "scoring_config": {
+                "extract_pattern": "<answer>(.*?)</answer>",
+            }
+        }
+        text = "reasoning\n<answer>[(4, 1), (2, 3)]</answer>\nmore text"
+        self.assertEqual(runner.extract_final_answer(text, question), "[(4, 1), (2, 3)]")
+
+    def test_candidate_verifier_excerpt_prefers_extracted_answer(self) -> None:
+        args = runner.parse_args(["--candidate-chars", "8", "--candidate-answer-chars", "6"])
+        question = {
+            "scoring_config": {
+                "extract_pattern": "<answer>(.*?)</answer>",
+            }
+        }
+        answer, excerpt = runner.candidate_verifier_excerpt("abcdefghi\n<answer>correct-answer</answer>", question, args)
+        self.assertEqual(answer, "correct-answer")
+        self.assertIn("Extracted final answer:\ncorrec", excerpt)
+        self.assertIn("Bounded candidate context:\nabcdefgh", excerpt)

@@ -106,6 +106,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--verifier-temperature", type=float, default=0.6)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--candidate-chars", type=int, default=1600)
+    parser.add_argument("--candidate-answer-chars", type=int, default=320)
     parser.add_argument("--request-timeout", type=int, default=DEFAULT_REQUEST_TIMEOUT_S)
     parser.add_argument("--startup-timeout", type=int, default=DEFAULT_STARTUP_TIMEOUT_S)
     parser.add_argument("--beneficiary-thinking", action="store_true")
@@ -218,6 +219,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "candidate_temperature": args.candidate_temperature,
             "verifier_temperature": args.verifier_temperature,
             "candidate_chars_shown_to_verifier": args.candidate_chars,
+            "candidate_answer_chars_shown_to_verifier": args.candidate_answer_chars,
             "beneficiary_thinking": args.beneficiary_thinking,
             "request_timeout_s": args.request_timeout,
             "startup_timeout_s": args.startup_timeout,
@@ -405,6 +407,40 @@ def score_candidate(question: dict[str, Any], answer: str) -> bool:
     return bool(score_answer(answer, question.get("expected", ""), method, question.get("scoring_config") or {}))
 
 
+def extract_final_answer(text: str, question: dict[str, Any]) -> str:
+    stripped = strip_think(text)
+    cfg = question.get("scoring_config") or {}
+    pattern = cfg.get("extract_pattern")
+    patterns = [pattern] if isinstance(pattern, str) and pattern else []
+    patterns.extend([r"<answer>(.*?)</answer>", r"FINAL\s*[:\-]\s*(.*)"])
+    for candidate_pattern in patterns:
+        try:
+            matches = re.findall(candidate_pattern, stripped, re.IGNORECASE | re.DOTALL)
+        except re.error:
+            continue
+        if matches:
+            match = matches[-1]
+            if isinstance(match, tuple):
+                match = match[-1]
+            answer = str(match).strip()
+            if answer:
+                return answer
+
+    lines = [line.strip() for line in stripped.splitlines() if line.strip()]
+    return lines[-1] if lines else ""
+
+
+def candidate_verifier_excerpt(text: str, question: dict[str, Any], args: argparse.Namespace) -> tuple[str, str]:
+    stripped = strip_think(text)
+    answer = extract_final_answer(stripped, question)
+    if answer:
+        excerpt = f"Extracted final answer:\n{answer[: args.candidate_answer_chars]}"
+        if stripped and stripped != answer:
+            excerpt += f"\n\nBounded candidate context:\n{stripped[: args.candidate_chars]}"
+        return answer, excerpt
+    return "", stripped[: args.candidate_chars]
+
+
 def candidate_payload(question: dict[str, Any], args: argparse.Namespace, index: int) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": "auto",
@@ -429,6 +465,7 @@ def verifier_prompt(question: dict[str, Any], candidates: list[dict[str, Any]], 
         parts.append(f"\n### Candidate {candidate['index']}\n{shown}")
     parts.append(
         "\n\nFirst solve the problem independently. Then judge only final-answer correctness. "
+        "Prefer each candidate's extracted final answer; use the bounded context only when the extracted answer is absent or ambiguous. "
         "Ignore verbosity, markdown, and explanation length. On the last line output exactly:\n"
         f"FINAL: <index>\n(index 0 to {args.n_candidates - 1})."
     )
@@ -498,13 +535,16 @@ def run_question(
         response = chat(beneficiary.port, candidate_payload(question, args, index), args.request_timeout)
         text = message_text(response)
         stripped = strip_think(text)
+        extracted_answer, verifier_excerpt = candidate_verifier_excerpt(text, question, args)
         candidates.append(
             {
                 "index": index,
                 "seed": args.seed + index,
                 "correct": score_candidate(question, text),
                 "text_sha256": sha256_text(text),
-                "verifier_excerpt": stripped[: args.candidate_chars],
+                "extracted_answer": extracted_answer,
+                "extracted_answer_sha256": sha256_text(extracted_answer),
+                "verifier_excerpt": verifier_excerpt,
                 "text_tail": stripped[-240:],
                 "usage": usage(response),
                 "finish_reason": ((response.get("choices") or [{}])[0].get("finish_reason")),
