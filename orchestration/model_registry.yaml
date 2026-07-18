@@ -7056,6 +7056,16 @@ roles:
         10/10 selected candidates passing. The exact selected source candidate
         varied when multiple candidates were correct, so order sensitivity is
         present but did not change pass/fail on this miss replay.
+        The completed verifier-only full replay at
+        /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_replay_full96_20260718T203101Z/summary.json
+        replayed all 96 scaled rows without beneficiary regeneration and passed
+        328/328 verifier cases. Selector accuracy was 278/285 = 0.9754385965;
+        50 qids were order-sensitive. The prior misses
+        `cruxeval_output_0057` and `cruxeval_output_0081` recovered across all
+        replay permutations. Cleanup left no KFD or llama processes from the
+        replay (post-pgrep only showed unrelated earlyoom). Treat this as
+        verifier-selector/reasoning-economics evidence, not production stack
+        admission.
       long_decode_observation: >
         2026-07-16 longer server runs during active GLM download: CPU generated
         616 tokens at 13.71 t/s; MI210 generated 1322 tokens at 98.32 t/s.
@@ -7095,6 +7105,7 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start12_20260718T192418Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start24_20260718T193035Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start48_20260718T194032Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_replay_full96_20260718T203101Z/summary.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_iq4xs_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_iq4xs_mi210/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c2048/summary.txt
