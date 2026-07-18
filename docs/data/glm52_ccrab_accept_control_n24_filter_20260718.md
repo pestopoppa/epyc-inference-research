@@ -10,12 +10,20 @@ Generator:
 python3 scripts/benchmark/glm52_ccrab_accept_control_filter.py \
   --n 24 \
   --json-out docs/data/glm52_ccrab_accept_control_n24_filter_20260718.json \
-  --row-ids-out docs/data/glm52_ccrab_accept_control_n24_row_ids_20260718.txt
+  --row-ids-out docs/data/glm52_ccrab_accept_control_n24_row_ids_20260718.txt \
+  --audit-packet-out docs/data/glm52_ccrab_accept_control_n24_audit_packet_20260718.json
 ```
 
 Generated summary: `matching_pool_n=151`, `hard_accept_control_pool_n=0`,
 `selected_n=24`, `hard_accept_control_n=0`, `observation_only_n=24`,
 `decision_grade=false`.
+
+The audit packet `docs/data/glm52_ccrab_accept_control_n24_audit_packet_20260718.json`
+contains the full task/candidate context for the selected rows plus explicit unreviewed
+signoff placeholders. It is the input artifact for GC-shadow-repair4b.2b manual or
+executable-oracle hardening; it does not make the rows decision-grade by itself.
+Account-number-shaped 12-19 digit runs in embedded task/candidate text are redacted
+with per-row flags so the packet can live in-repo under the PII pre-commit guard.
 
 ## Why This Exists
 

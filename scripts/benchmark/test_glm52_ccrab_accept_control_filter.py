@@ -79,3 +79,69 @@ def test_cli_writes_json_and_row_ids(tmp_path):
     assert report["selected_row_ids"] == ["a"]
     assert report["decision_grade"] is False
     assert row_ids_out.read_text(encoding="utf-8") == "a\n"
+
+
+def test_cli_writes_audit_packet_with_full_candidate_context(tmp_path):
+    corpus = tmp_path / "rows.jsonl"
+    row = _row("a", candidate=GOOD_PATCH, confidence="multi_oracle")
+    row["task"] = "Fix the regression and keep the public API stable."
+    row["decontamination"] = {
+        "repo": "owner/repo",
+        "pull_number": 123,
+        "base_commit": "abc123",
+    }
+    corpus.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    audit_out = tmp_path / "audit.json"
+
+    rc = filter_mod.main([
+        "--corpus",
+        str(corpus),
+        "--audit-packet-out",
+        str(audit_out),
+    ])
+
+    assert rc == 0
+    packet = json.loads(audit_out.read_text(encoding="utf-8"))
+    assert packet["schema"] == "glm52_ccrab_accept_control_audit_packet.v1"
+    assert packet["decision_grade"] is False
+    assert packet["selected_n"] == 1
+    packet_row = packet["rows"][0]
+    assert packet_row["row_id"] == "a"
+    assert packet_row["hard_accept_control"] is True
+    assert packet_row["task"] == row["task"]
+    assert packet_row["candidate"] == GOOD_PATCH
+    assert packet_row["candidate_redacted_long_digit_runs"] is False
+    assert packet_row["repo"] == "owner/repo"
+    assert packet_row["signoff"]["status"] == "unreviewed"
+
+
+def test_audit_packet_can_truncate_large_fields():
+    row = _row("a", candidate=GOOD_PATCH + "x" * 50)
+    row["task"] = "y" * 50
+    selected = filter_mod.select_rows([row], n=1, max_chars=15000)
+
+    packet = filter_mod.build_audit_packet(
+        [row],
+        selected,
+        corpus=Path("rows.jsonl"),
+        max_row_chars=10,
+    )
+
+    packet_row = packet["rows"][0]
+    assert packet_row["task"] == "y" * 10
+    assert packet_row["task_truncated"] is True
+    assert packet_row["candidate"] == (GOOD_PATCH + "x" * 50)[:10]
+    assert packet_row["candidate_truncated"] is True
+
+
+def test_audit_packet_redacts_account_number_shaped_digit_runs():
+    long_digit_run = "123456" + "789012"
+    row = _row("a", candidate=GOOD_PATCH + f"\n+value = {long_digit_run}\n")
+    selected = filter_mod.select_rows([row], n=1, max_chars=15000)
+
+    packet = filter_mod.build_audit_packet([row], selected, corpus=Path("rows.jsonl"))
+
+    packet_row = packet["rows"][0]
+    assert long_digit_run not in packet_row["candidate"]
+    assert "[redacted-long-digit-run]" in packet_row["candidate"]
+    assert packet_row["candidate_redacted_long_digit_runs"] is True
