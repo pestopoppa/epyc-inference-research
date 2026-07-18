@@ -6047,7 +6047,7 @@ roles:
         commit: 98a1ad8cf
         binaries:
         - llama-cli
-        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The 2026-07-18 task-quality / architecture-fit first slice passed 5/6 on both CPU no-spec and MI210-hybrid no-spec, failing only exact six-word instruction. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
+        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The 2026-07-18 task-quality / architecture-fit first slice passed 5/6 on both CPU no-spec and MI210-hybrid no-spec, failing only exact six-word instruction. A later CPU-only strict slice reproduced 5/6, failed exact word count, and exposed a code-only/no-fence strictness smell. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
       runtime_observations:
         evidence_dir: /mnt/raid0/llm/tmp/hy3-mtp-closure-20260716T234610Z
         current_source_cpuonly_load_probe: "2026-07-18 rebuilt experimental-v7 `d1e5a20eb` CPU-only n=0 load probe with `-dev none -ngl 0 --no-op-offload -nkvo` reached about 175 GiB RSS and timed out after 300s without reproducing the old tensor-count mismatch; no decode/quality claim. Artifact: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3-iq1m-mtp-load-n0-cpuonly-20260718T162550Z/summary.json"
@@ -6063,8 +6063,13 @@ roles:
         task_quality_mi210_hybrid_no_spec_passed: 5
         task_quality_mi210_hybrid_no_spec_total: 6
         task_quality_mi210_hybrid_no_spec_mean_generation_tps: 11.51
+        cpu_strict_slice_evidence_dir: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3_cpu_strict_slice_20260718T1917Z
+        cpu_strict_slice_passed: 5
+        cpu_strict_slice_total: 6
+        cpu_strict_slice_mean_prompt_tps: 27.208
+        cpu_strict_slice_mean_generation_tps: 5.257
         task_quality_failed_task: lowercase_six_words
-        classification: "draft-mtp functional but slower than no-spec; full MI210 residency is not feasible for the 91.8GB artifact. CPU and MI210-hybrid no-spec passed the first task-quality slice 5/6, but the shared exact short-instruction miss blocks any production role claim."
+        classification: "draft-mtp functional but slower than no-spec; full MI210 residency is not feasible for the 91.8GB artifact. CPU and MI210-hybrid no-spec passed the first task-quality slice 5/6, and a later CPU-only strict slice reproduced 5/6, but the shared exact short-instruction miss plus code-only/fence strictness smell block any production role claim."
       hf_metadata:
         path: /mnt/raid0/llm/models/hy3-angelslim/.cache/huggingface/download/Hy3-IQ1_M-mtp.gguf.metadata
         revision: 218c93f0fb5227553b67e556b01dfe70fb70cf30
@@ -6187,9 +6192,14 @@ roles:
         exited 0 with `112.97 ms/step`, but emitted reasoning text for an
         exact-output prompt. A clean CPU-only throughput row at
         /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/cpu_dream_fix_clean_local_20260718T171131Z/summary.json
-        measured `pp512 157.57 t/s`, `tg256 2.69 t/s`. This is
-        speed/runnability evidence; task quality and production-role content
-        control remain open.
+        measured `pp512 157.57 t/s`, `tg256 2.69 t/s`. A later stock-v7
+        MI210 content-control slice at
+        /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/content_control_mi210_20260718T191331Z
+        exited 0 and measured diffusion total `3399.06ms` over a 128-token
+        budget (`106.22ms/step`, approximately `37.66 tok/s` equivalent), but
+        failed strict minified-JSON content control with prose/malformed target
+        text. This is speed/runnability evidence plus a failing quality verdict;
+        production-role content control remains open.
       fork_cpu_observation: >
         2026-07-16 scratch buun CPU llama-diffusion-cli self-spec smoke passed:
         one cycle, average 5.0 tokens/cycle, 100.0% draft accept, output ok,
@@ -6226,6 +6236,7 @@ roles:
         25.82 t/s with 22433 prompt tokens.
       evidence:
       - /mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716/nemotron_diff14_q8_cpu_v7.stderr
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/content_control_mi210_20260718T191331Z/report.md
       - /mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716-mi210-confirm/nemotron_diff14_q8_mi210_v7.stderr
       - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/cpu_selfspec.stderr
       - /mnt/raid0/llm/tmp/nemotron-diff14-buun-smoke-20260716/mi210_selfspec.stderr
@@ -6319,6 +6330,7 @@ roles:
       kv_quant_observation: "2026-07-16 MI210 default KV vs q4_0/q4_0 KV sweep showed no decode-speed improvement: 10.97 vs 10.93 t/s at 1285 prompt tokens, and 10.54 vs 10.54 t/s at 25225 prompt tokens."
       strict_output_gate: "2026-07-17 quiet-host gate with completion-mode, reasoning-off v7 CLI passed 6/8 CPU+MI210 probes: exact ok, strict minified JSON, and simple math passed on both devices; short six-word instruction failed on both, so Bonsai is loadable/partially coherent but not role-ready."
       current_v7_llama_bench_observation: "2026-07-18 current experimental-v7 `d1e5a20eb` MI210 llama-bench context probe: `pp2048 798.59 t/s`, `pp8192 759.19 t/s`, `tg1024 11.24 t/s`. This confirms the local Q1 path remains decode-slow and is speed-only evidence; the 6/8 strict-output gate still blocks role readiness."
+      cpu_prompt_repair_observation: "2026-07-18 bounded CPU-only prompt characterization at /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_repair_20260718T191220Z/ measured `pp512 84.63 t/s`, `tg128 9.58 t/s`; the direct six-word prompt failed with three words, while a repaired prompt passed with exactly six lowercase words. Observation-grade n=1 per prompt; informs prompt repair only, not role readiness."
       related_dspark_observation: "Bonsai-27B-dspark-Q4_1 failed on CPU and MI210 with `unknown model architecture: 'dspark'`; unsupported until dspark architecture support is added."
       evidence:
       - /mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_q1_cpu/bonsai_q1_cpu.stdout
@@ -6332,6 +6344,7 @@ roles:
       - /mnt/raid0/llm/tmp/bonsai-q1-kv-sweep-mi210-20260716T221907/q4kv-c32768/summary.txt
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_q1_quality_gate/bonsai_q1_quality_clean_20260717T0755Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_repair_20260718T191220Z/report.md
     memory:
       residency: cold
       pinned: false
@@ -6659,6 +6672,22 @@ roles:
         keep ngram-mod available only as a measured per-task experiment because
         it was neutral on the expanded gate. Keep scaffold delivery as a
         beneficiary-must-answer fallback for tools/context/role constraints.
+      verifier_selector_observation: >
+        2026-07-18 bounded best-of-N verifier/selector harness now exists at
+        scripts/benchmark/qwable_verifier_selector_runner.py. The representative
+        headroom slice with Qwen3.6-35B beneficiary + Qwable IQ4_XS verifier
+        scored pass@1 1/6, oracle pass@5 3/6, verifier-selected 2/6, gap
+        recovered 0.5, selection accuracy 2/3. Research commits `4bd5c35`,
+        `21ff0d7`, and `5095df2` then added extracted final-answer presentation,
+        verifier thinking/solve-first controls, and stop/parse histograms. On
+        the six-row control slice, disabling verifier solve-first plus thinking
+        stopped cleanly on 6/6 verifier calls and selected 3/3 rows with a
+        passing candidate. The first scaled slice at
+        /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_20260718T191709Z
+        then ran 12 rows cleanly: pass@1 6/12, oracle pass@5 7/12,
+        verifier-selected 7/12, selection accuracy 7/7, gap recovered 1.0,
+        verifier finish reasons stop=12, parse modes marker=12. This supports
+        larger/decision-grade follow-up rather than blocking on mechanics.
       long_decode_observation: >
         2026-07-16 longer server runs during active GLM download: CPU generated
         616 tokens at 13.71 t/s; MI210 generated 1322 tokens at 98.32 t/s.
@@ -6691,6 +6720,10 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_iq4_ngram_expanded_final_20260717T184106Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_iq4_cpu_expanded_final_20260717T184207Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_task_quality_20260718T160400Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_qwable_iq4_qwen35b_n5_limit6_20260718Theadroom/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_extracted_answer_gpu_20260718T1851Z_limit6/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_no_solve_first_gpu_20260718Tcapcontrol_limit6/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_20260718T191709Z/summary.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_iq4xs_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_iq4xs_mi210/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c2048/summary.txt
