@@ -546,6 +546,25 @@ tiny verifier-style completions unless routing can identify an amortizing
 generation shape. These rows are observation-grade until `P-GPU-1` is ratified
 or explicitly retro-certified.
 
+## K35 Worker-General Context Curve
+
+The optimized CPU worker lane was measured at 2K, 8K, and 14K nominal contexts
+with 1024 generated tokens in
+`data/k35_stack_context_matrix/worker_general_context_curve_20260718Tcodex/`.
+This is the production-shaped Gemma4 worker configuration: composed
+`ngram-mod,draft-mtp`, assistant v6 Q8 draft head, q8 KV, reasoning off, and
+`--spec-draft-n-max 2`.
+
+| Nominal context | Prompt tokens | Completion tokens | Prompt t/s | Generation t/s | Draft accepted |
+|---:|---:|---:|---:|---:|---:|
+| 2048 | 135 | 1024 | 199.59 | 175.75 | 996 / 1173 |
+| 8192 | 6215 | 1024 | 246.03 | 110.03 | 996 / 1173 |
+| 14000 | 12024 | 1024 | 233.55 | 97.57 | 996 / 1173 |
+
+Interpretation: the worker's composed spec path remains acceptance-stable across
+the measured contexts, but decode still falls with depth. This is the current
+optimized worker curve for the K35 stack table, not a raw no-spec baseline.
+
 ## MI210 Context-Size Sweep
 
 The context sweep at `/mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/` measured prompt and decode behavior at short, mid, and long prompts for three representative candidates. All cases wrote cleanup logs. The measured prompt-token counts differ from nominal context sizes because the prompt body is tokenizer-dependent.
