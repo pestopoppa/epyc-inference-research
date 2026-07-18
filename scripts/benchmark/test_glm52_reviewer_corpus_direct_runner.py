@@ -103,7 +103,21 @@ def test_summarize_row_set_records_representation_counts():
         "seeded-mutation|debugbench|substring": 1,
         "seeded-mutation|cruxeval|exact_match": 1,
     }
+    assert summary["candidate_payload_scope_counts"] == {"answer_fragment": 2}
     assert summary["candidate_chars"] == {"min": 3, "p50": 4, "max": 4}
+
+
+def test_candidate_payload_scope_marks_non_scorer_rows_as_full_candidate():
+    row = {**_row("patch", label="reject"), "provenance": {"candidate_is": "patch_to_review"}}
+    assert runner.candidate_payload_scope(row) == "full_candidate"
+
+
+def test_answer_fragment_refusal_requires_explicit_override():
+    rows = [runner.CorpusRow("a", _row("a", label="accept", candidate="abc"))]
+    reasons = runner.answer_fragment_refusal_reasons(rows, allow_answer_fragment_review=False)
+    assert reasons
+    assert "answer-fragment" in reasons[0]
+    assert runner.answer_fragment_refusal_reasons(rows, allow_answer_fragment_review=True) == []
 
 
 def test_fit_prompt_to_budget_truncates_candidate_until_token_budget_fits():
@@ -120,9 +134,26 @@ def test_fit_prompt_to_budget_truncates_candidate_until_token_budget_fits():
     assert any(attempt["candidate_truncated"] for attempt in prompt_info["prompt_fit_attempts"])
 
 
+def test_fit_prompt_to_budget_keeps_long_patch_when_budget_fits():
+    candidate = "x " * 8000
+    row = _row("r1", label="accept", candidate=candidate)
+    prompt_info = runner.fit_prompt_to_budget(
+        row,
+        context_length=12000,
+        max_completion_tokens=256,
+        prompt_context_guard_tokens=256,
+        max_field_chars=runner.DEFAULT_MAX_FIELD_CHARS,
+        token_counter=lambda prompt: len(prompt.split()),
+    )
+    assert prompt_info["prompt_token_count"] <= prompt_info["prompt_token_max"]
+    assert prompt_info["truncation"]["candidate_truncated"] is False
+    assert candidate in prompt_info["prompt"]
+
+
 def test_parse_review_decision_text_accepts_schema_valid_json():
     obj, failure = runner.parse_review_decision_text(
-        '{"decision":"approve","confidence":0.91,"blocking":{"tripwire":false}}'
+        '{"decision":"approve","confidence":0.91,"blocking":{"tripwire":false},'
+        '"evidence":{"basis":"diff implements the requested behavior","risk":"no blocker found"}}'
     )
     assert failure is None
     assert obj["decision"] == "approve"
@@ -131,21 +162,49 @@ def test_parse_review_decision_text_accepts_schema_valid_json():
 def test_binary_schema_allows_only_approve_reject():
     schema = runner.binary_review_decision_response_schema()
     assert schema["properties"]["decision"]["enum"] == ["approve", "reject"]
+    assert "evidence" in schema["required"]
+    assert schema["properties"]["evidence"]["required"] == ["basis", "risk"]
+    assert schema["properties"]["evidence"]["properties"]["basis"]["maxLength"] == 180
 
 
 def test_parse_review_decision_text_rejects_shared_review_actions():
     obj, failure = runner.parse_review_decision_text(
-        '{"decision":"request_changes","confidence":0.91,"blocking":{"tripwire":true}}'
+        '{"decision":"request_changes","confidence":0.91,"blocking":{"tripwire":true},'
+        '"evidence":{"basis":"bad hunk","risk":"wrong field"}}'
     )
     assert obj is None
     assert failure is not None
     assert failure["reason"] == "schema_invalid"
 
 
-def test_prompt_header_is_task_grounded_not_strict_by_default():
-    assert "strict reviewer" not in runner.PROMPT_HEADER.lower()
-    assert "speculative concerns" in runner.PROMPT_HEADER
-    assert "substantially satisfies" in runner.PROMPT_HEADER
+def test_parse_review_decision_text_requires_evidence():
+    obj, failure = runner.parse_review_decision_text(
+        '{"decision":"approve","confidence":0.91,"blocking":{"tripwire":false}}'
+    )
+    assert obj is None
+    assert failure is not None
+    assert "$.evidence" in "\n".join(failure["errors"])
+
+
+def test_generic_prompt_header_is_task_grounded_not_strict_by_default():
+    assert "strict reviewer" not in runner.GENERIC_PROMPT_HEADER.lower()
+    assert "speculative concerns" in runner.GENERIC_PROMPT_HEADER
+    assert "substantially satisfies" in runner.GENERIC_PROMPT_HEADER
+
+
+def test_patch_diff_prompt_requires_negative_evidence_scrutiny():
+    row = {
+        **_row("ccrab", label="reject", candidate="diff --git a/x b/x\n+broken"),
+        "source_benchmark": "c-crab",
+        "source_suite": "python",
+        "provenance": {"candidate_is": "patch_to_review"},
+    }
+    prompt, meta = runner.build_review_prompt(row, max_field_chars=1000)
+    assert meta["review_mode"] == "patch_diff_strict"
+    assert "Start from reject" in prompt
+    assert "misspelled or likely undefined identifiers" in prompt
+    assert "evidence.basis" in prompt
+    assert "under 20 words each" in prompt
 
 
 def test_ledger_row_for_parse_error_marks_parse_error():
@@ -179,7 +238,10 @@ def test_runtime_processes_excludes_current_runner(monkeypatch):
 
 def test_build_plan_records_selected_rows_without_inference(tmp_path, monkeypatch):
     corpus = tmp_path / "rows.jsonl"
-    rows = [_row("a", label="accept"), _row("r", label="reject")]
+    rows = [
+        {**_row("a", label="accept"), "provenance": {}},
+        {**_row("r", label="reject"), "provenance": {}},
+    ]
     corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
     args = runner.parse_args(
         [
@@ -246,7 +308,46 @@ def test_build_plan_refuses_mixed_representation_by_default(tmp_path, monkeypatc
     assert any("mix source_suite/scoring" in reason for reason in plan["refusal_reasons"])
 
 
-def test_build_plan_allows_explicit_representation_filter(tmp_path, monkeypatch):
+def test_build_plan_refuses_answer_fragment_without_override(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    rows = [
+        {**_row("a", label="accept"), "source_suite": "cruxeval", "provenance": {"scoring_method": "exact_match"}},
+        {**_row("r", label="reject"), "source_suite": "cruxeval", "provenance": {"scoring_method": "exact_match"}},
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--n",
+            "2",
+            "--source-suite",
+            "cruxeval",
+            "--provenance-scoring-method",
+            "exact_match",
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(
+        runner.base,
+        "collect_inventory",
+        lambda model_dir: {
+            "status": "ready",
+            "primary_shard": "/tmp/glm.gguf",
+            "refusal_reasons": [],
+        },
+    )
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+    plan = runner.build_plan(args)
+    assert plan["execution_allowed"] is False
+    assert any("answer-fragment" in reason for reason in plan["refusal_reasons"])
+
+
+def test_build_plan_allows_explicit_representation_filter_with_fragment_override(tmp_path, monkeypatch):
     corpus = tmp_path / "rows.jsonl"
     rows = [
         {**_row("a", label="accept"), "source_suite": "cruxeval", "provenance": {"scoring_method": "exact_match"}},
@@ -266,6 +367,7 @@ def test_build_plan_allows_explicit_representation_filter(tmp_path, monkeypatch)
             "cruxeval",
             "--provenance-scoring-method",
             "exact_match",
+            "--allow-answer-fragment-review",
         ]
     )
     monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))

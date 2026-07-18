@@ -43,9 +43,10 @@ import glm52_reviewer_capability_direct_runner as smoke
 SCHEMA = "glm52_reviewer_corpus_direct.v1"
 DEFAULT_CORPUS = Path("/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl")
 DEFAULT_N = 12
-DEFAULT_RUBRIC_VERSION = "glm52_direct_nearmiss_review_v2+binary_schema"
+DEFAULT_RUBRIC_VERSION = "glm52_direct_nearmiss_review_v3+binary_schema+negative_evidence"
 DEFAULT_ERA = "pre_p_rev1_observation"
-DEFAULT_MAX_FIELD_CHARS = 7000
+DEFAULT_MAX_FIELD_CHARS = 24000
+ANSWER_FRAGMENT_SCORING_METHODS = frozenset({"substring", "exact_match"})
 GOLD_LABELS = ("accept", "reject")
 DEFAULT_GOLD_CONFIDENCE = ("multi_oracle",)
 REVIEW_DECISIONS = (
@@ -53,7 +54,7 @@ REVIEW_DECISIONS = (
     "reject",
 )
 
-PROMPT_HEADER = (
+GENERIC_PROMPT_HEADER = (
     "You are a task-grounded reviewer. Decide whether the CANDIDATE substantially "
     "satisfies the TASK. Approve when it answers the task well enough to be useful, "
     "even if minor style or wording issues remain. Reject only for concrete "
@@ -64,6 +65,35 @@ PROMPT_HEADER = (
     "must be a JSON number from 0.0 to 1.0. blocking.tripwire must be true iff the "
     "candidate is rejected."
 )
+
+PATCH_DIFF_PROMPT_HEADER = (
+    "You are reviewing a code patch, not writing one. Decide whether the CANDIDATE "
+    "patch should be accepted for the TASK. Start from reject unless the diff shows "
+    "positive, task-grounded evidence. Approve only when the changed hunks plausibly "
+    "implement the requested behavior and any included tests or assertions exercise "
+    "that behavior. Reject for any concrete blocker: misspelled or likely undefined "
+    "identifiers, wrong object/field names, missing persistence or side effects "
+    "required by the task, tests that do not cover the requested behavior, docs-only "
+    "changes for a code fix, unsafe broad changes, or patch content unrelated to the "
+    "task. Do not approve just because a diff is long, formatted like a real patch, "
+    "or includes tests. Return exactly one ReviewDecision JSON object. Use decision "
+    "'approve' or 'reject'. confidence must be a JSON number from 0.0 to 1.0. "
+    "blocking.tripwire must be true iff the candidate is rejected. evidence.basis "
+    "must cite the concrete diff hunk or behavior that controls the decision in "
+    "one short sentence. "
+    "evidence.risk must name the blocking defect when rejecting, or say what blocker "
+    "was checked and not found when approving. Keep evidence.basis and evidence.risk "
+    "under 20 words each so the JSON closes."
+)
+
+
+def review_mode_for_row(row: dict[str, Any]) -> str:
+    provenance = row.get("provenance") if isinstance(row.get("provenance"), dict) else {}
+    candidate_is = str(provenance.get("candidate_is") or "").strip().lower()
+    source_benchmark = str(row.get("source_benchmark") or "").strip().lower()
+    if source_benchmark == "c-crab" or candidate_is in {"patch_to_review", "merged_patch"}:
+        return "patch_diff_strict"
+    return "generic"
 
 
 @dataclass(frozen=True)
@@ -111,6 +141,25 @@ def representation_key(row: dict[str, Any]) -> str:
             provenance_scoring_method(row) or "no_scoring_method",
         ]
     )
+
+
+def candidate_payload_scope(row: dict[str, Any]) -> str:
+    if provenance_scoring_method(row) in ANSWER_FRAGMENT_SCORING_METHODS:
+        return "answer_fragment"
+    return "full_candidate"
+
+
+def answer_fragment_refusal_reasons(rows: list[CorpusRow], *, allow_answer_fragment_review: bool) -> list[str]:
+    fragment_rows = [row.row_id for row in rows if candidate_payload_scope(row.raw) == "answer_fragment"]
+    if allow_answer_fragment_review or not fragment_rows:
+        return []
+    examples = ", ".join(fragment_rows[:3])
+    suffix = "" if len(fragment_rows) <= 3 else f", ... (+{len(fragment_rows) - 3} more)"
+    return [
+        "selected rows use answer-fragment scoring representations "
+        f"(substring/exact_match): {examples}{suffix}; this full-candidate reviewer "
+        "will treat them as incomplete unless --allow-answer-fragment-review is explicit"
+    ]
 
 
 def load_review_ledger_module() -> Any:
@@ -223,6 +272,7 @@ def select_balanced_rows(rows: list[CorpusRow], *, n: int, seed_key: str) -> lis
 def summarize_row_set(rows: list[CorpusRow]) -> dict[str, Any]:
     label_counts = Counter(row.raw.get("gold_label") for row in rows)
     representation_counts = Counter(representation_key(row.raw) for row in rows)
+    payload_scope_counts = Counter(candidate_payload_scope(row.raw) for row in rows)
     by_label_representation = Counter(
         (row.raw.get("gold_label"), representation_key(row.raw)) for row in rows
     )
@@ -238,6 +288,7 @@ def summarize_row_set(rows: list[CorpusRow]) -> dict[str, Any]:
     return {
         "label_counts": dict(label_counts),
         "representation_counts": dict(representation_counts),
+        "candidate_payload_scope_counts": dict(payload_scope_counts),
         "by_label_representation_counts": {str(key): value for key, value in by_label_representation.items()},
         "candidate_chars": length_summary,
     }
@@ -255,8 +306,10 @@ def truncate_middle(text: str, max_chars: int) -> tuple[str, bool]:
 def build_review_prompt(row: dict[str, Any], *, max_field_chars: int) -> tuple[str, dict[str, Any]]:
     task, task_truncated = truncate_middle(str(row.get("task") or ""), max_field_chars)
     candidate, candidate_truncated = truncate_middle(str(row.get("candidate") or ""), max_field_chars)
+    review_mode = review_mode_for_row(row)
+    header = PATCH_DIFF_PROMPT_HEADER if review_mode == "patch_diff_strict" else GENERIC_PROMPT_HEADER
     prompt = (
-        f"{PROMPT_HEADER}\n\n"
+        f"{header}\n\n"
         f"TASK:\n{task}\n\n"
         f"CANDIDATE:\n{candidate}\n\n"
         "ReviewDecision JSON only:"
@@ -268,6 +321,7 @@ def build_review_prompt(row: dict[str, Any], *, max_field_chars: int) -> tuple[s
         "task_chars_original": len(str(row.get("task") or "")),
         "candidate_chars_original": len(str(row.get("candidate") or "")),
         "prompt_chars": len(prompt),
+        "review_mode": review_mode,
     }
 
 
@@ -311,7 +365,7 @@ def binary_review_decision_response_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": ["decision", "confidence", "blocking"],
+        "required": ["decision", "confidence", "blocking", "evidence"],
         "properties": {
             "decision": {"type": "string", "enum": list(REVIEW_DECISIONS)},
             "confidence": {"type": "number", "minimum": 0, "maximum": 1},
@@ -320,6 +374,15 @@ def binary_review_decision_response_schema() -> dict[str, Any]:
                 "additionalProperties": False,
                 "required": ["tripwire"],
                 "properties": {"tripwire": {"type": "boolean"}},
+            },
+            "evidence": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["basis", "risk"],
+                "properties": {
+                    "basis": {"type": "string", "minLength": 3, "maxLength": 180},
+                    "risk": {"type": "string", "minLength": 3, "maxLength": 180},
+                },
             },
         },
     }
@@ -394,6 +457,7 @@ def parse_review_decision_minimal(text: str) -> tuple[dict[str, Any] | None, dic
     decision = obj.get("decision")
     confidence = obj.get("confidence")
     blocking = obj.get("blocking")
+    evidence = obj.get("evidence")
     if decision not in REVIEW_DECISIONS:
         errors.append("$.decision: invalid or missing decision")
     if not isinstance(confidence, (int, float)) or isinstance(confidence, bool) or not (0 <= confidence <= 1):
@@ -402,6 +466,13 @@ def parse_review_decision_minimal(text: str) -> tuple[dict[str, Any] | None, dic
         errors.append("$.blocking: must be an object")
     elif not isinstance(blocking.get("tripwire"), bool):
         errors.append("$.blocking.tripwire: must be boolean")
+    if not isinstance(evidence, dict):
+        errors.append("$.evidence: must be an object")
+    else:
+        for key in ("basis", "risk"):
+            value = evidence.get(key)
+            if not isinstance(value, str) or len(value.strip()) < 3:
+                errors.append(f"$.evidence.{key}: must be a non-empty string")
     if errors:
         return None, {"reason": "schema_invalid", "detail": f"{len(errors)} schema violation(s)", "errors": errors}
     return obj, None
@@ -551,6 +622,10 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     selected_counts = Counter(row.raw.get("gold_label") for row in selected)
     selected_representations = selected_summary["representation_counts"]
     mixed_representation = len(selected_representations) > 1
+    fragment_refusals = answer_fragment_refusal_reasons(
+        selected,
+        allow_answer_fragment_review=args.allow_answer_fragment_review,
+    )
     server = build_server_spec(
         args,
         band=band,
@@ -602,6 +677,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             and len(selected) > 0
             and set(selected_counts) == set(GOLD_LABELS)
             and (args.allow_mixed_representation or not mixed_representation)
+            and not fragment_refusals
         ),
         "refusal_reasons": list(inventory["refusal_reasons"])
         + ([] if selected else ["no selected judgeable rows"])
@@ -610,7 +686,8 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             []
             if args.allow_mixed_representation or not mixed_representation
             else ["selected rows mix source_suite/scoring representations; rerun with explicit filters or --allow-mixed-representation"]
-        ),
+        )
+        + fragment_refusals,
         "inventory": inventory,
         "preexisting_processes": runtime_processes("llama-server|llama-cli|autopilot|glm52"),
         "server": server,
@@ -823,10 +900,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Allow selected rows to mix source benchmark/suite/scoring-method representations.",
     )
+    parser.add_argument(
+        "--allow-answer-fragment-review",
+        action="store_true",
+        help=(
+            "Allow substring/exact_match answer-fragment rows. Default refuses them because "
+            "the full-candidate reviewer otherwise measures snippet incompleteness."
+        ),
+    )
     parser.add_argument("--n", type=int, default=DEFAULT_N)
     parser.add_argument("--threads", type=int, default=base.DEFAULT_THREADS)
     parser.add_argument("--ubatch", type=int, default=base.DEFAULT_UBATCH)
-    parser.add_argument("--max-tokens", type=int, default=128)
+    parser.add_argument("--max-tokens", type=int, default=256)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--request-timeout", type=int, default=1800)
