@@ -1,0 +1,241 @@
+{
+  "corpus": "/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl",
+  "decision_grade": false,
+  "filter": {
+    "ambiguous_tail": false,
+    "defect_origin": "natural",
+    "gold_label": "accept",
+    "gold_source": "merged_pr_accepted",
+    "provenance.clean_control": true,
+    "requires_added_test_or_assertion_evidence": true,
+    "requires_test_like_path": true,
+    "source_benchmark": "c-crab",
+    "source_suite": "python"
+  },
+  "hard_accept_control_n": 0,
+  "max_candidate_chars": 15000,
+  "observation_only_n": 24,
+  "requested_n": 24,
+  "schema": "glm52_ccrab_accept_control_filter.v1",
+  "selected_n": 24,
+  "selected_row_ids": [
+    "nearmiss-v1:c-crab:00710c9c18cd10fb",
+    "nearmiss-v1:c-crab:0110087826d99378",
+    "nearmiss-v1:c-crab:04b3b67ccf17ffe1",
+    "nearmiss-v1:c-crab:04d390e945dd768e",
+    "nearmiss-v1:c-crab:060c7e12cfd0cb06",
+    "nearmiss-v1:c-crab:0735945503ef9330",
+    "nearmiss-v1:c-crab:08cafcb6483d8389",
+    "nearmiss-v1:c-crab:09584d0209952576",
+    "nearmiss-v1:c-crab:0b5adcf2e8a30f49",
+    "nearmiss-v1:c-crab:0c6318021a8a500b",
+    "nearmiss-v1:c-crab:0e31e881b1af8ab5",
+    "nearmiss-v1:c-crab:0f20280ccef865cb",
+    "nearmiss-v1:c-crab:10070430d41b73e9",
+    "nearmiss-v1:c-crab:12dedf2f36029e2c",
+    "nearmiss-v1:c-crab:1600ca8239e2f6e0",
+    "nearmiss-v1:c-crab:19fd2cb501691488",
+    "nearmiss-v1:c-crab:1a3868334fafed91",
+    "nearmiss-v1:c-crab:1a64c956e9fceeda",
+    "nearmiss-v1:c-crab:1af8c54719aff460",
+    "nearmiss-v1:c-crab:200003ca11cb7699",
+    "nearmiss-v1:c-crab:20e3c97d771762dd",
+    "nearmiss-v1:c-crab:24fbdf7de1c6fa44",
+    "nearmiss-v1:c-crab:28cdbe123c730a18",
+    "nearmiss-v1:c-crab:29de0af708959323"
+  ],
+  "selected_rows": [
+    {
+      "candidate_chars": 2968,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "scikit-learn__scikit-learn-29401@819e167",
+      "row_id": "nearmiss-v1:c-crab:00710c9c18cd10fb"
+    },
+    {
+      "candidate_chars": 2343,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "sympy__sympy-18410@189871b",
+      "row_id": "nearmiss-v1:c-crab:0110087826d99378"
+    },
+    {
+      "candidate_chars": 13713,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "python__mypy-3005@3587549",
+      "row_id": "nearmiss-v1:c-crab:04b3b67ccf17ffe1"
+    },
+    {
+      "candidate_chars": 3466,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "scikit-learn__scikit-learn-10099@33f7ffa",
+      "row_id": "nearmiss-v1:c-crab:04d390e945dd768e"
+    },
+    {
+      "candidate_chars": 12811,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "dask__dask-10723@09b7b68",
+      "row_id": "nearmiss-v1:c-crab:060c7e12cfd0cb06"
+    },
+    {
+      "candidate_chars": 2288,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "ManimCommunity__manim-509@1cbc24f",
+      "row_id": "nearmiss-v1:c-crab:0735945503ef9330"
+    },
+    {
+      "candidate_chars": 8718,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "pandas-dev__pandas-33962@fc4993f",
+      "row_id": "nearmiss-v1:c-crab:08cafcb6483d8389"
+    },
+    {
+      "candidate_chars": 6927,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "numpy__numpy-14924@6a7e3f1",
+      "row_id": "nearmiss-v1:c-crab:09584d0209952576"
+    },
+    {
+      "candidate_chars": 2844,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "scikit-learn__scikit-learn-23548@cc5e175",
+      "row_id": "nearmiss-v1:c-crab:0b5adcf2e8a30f49"
+    },
+    {
+      "candidate_chars": 6266,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "pandas-dev__pandas-24968@0ea6653",
+      "row_id": "nearmiss-v1:c-crab:0c6318021a8a500b"
+    },
+    {
+      "candidate_chars": 11317,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "reflex-dev__reflex-4406@5ec2c11",
+      "row_id": "nearmiss-v1:c-crab:0e31e881b1af8ab5"
+    },
+    {
+      "candidate_chars": 3455,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "home-assistant__core-142977@fa60db7",
+      "row_id": "nearmiss-v1:c-crab:0f20280ccef865cb"
+    },
+    {
+      "candidate_chars": 2064,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "sympy__sympy-24666@7d194c7",
+      "row_id": "nearmiss-v1:c-crab:10070430d41b73e9"
+    },
+    {
+      "candidate_chars": 11363,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "scikit-learn__scikit-learn-29442@3a19575",
+      "row_id": "nearmiss-v1:c-crab:12dedf2f36029e2c"
+    },
+    {
+      "candidate_chars": 14542,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "python__mypy-11143@23a0e4b",
+      "row_id": "nearmiss-v1:c-crab:1600ca8239e2f6e0"
+    },
+    {
+      "candidate_chars": 2711,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "pandas-dev__pandas-61286@587e5d7",
+      "row_id": "nearmiss-v1:c-crab:19fd2cb501691488"
+    },
+    {
+      "candidate_chars": 5896,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "pandas-dev__pandas-18831@4821f05",
+      "row_id": "nearmiss-v1:c-crab:1a3868334fafed91"
+    },
+    {
+      "candidate_chars": 2256,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "pandas-dev__pandas-18604@8c9061b",
+      "row_id": "nearmiss-v1:c-crab:1a64c956e9fceeda"
+    },
+    {
+      "candidate_chars": 11722,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "spyder-ide__spyder-11708@0ab0410",
+      "row_id": "nearmiss-v1:c-crab:1af8c54719aff460"
+    },
+    {
+      "candidate_chars": 9716,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "jina-ai__serve-2037@792b165",
+      "row_id": "nearmiss-v1:c-crab:200003ca11cb7699"
+    },
+    {
+      "candidate_chars": 8710,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "numba__numba-4282@a062e23",
+      "row_id": "nearmiss-v1:c-crab:20e3c97d771762dd"
+    },
+    {
+      "candidate_chars": 2619,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "scipy__scipy-10410@3a58e13",
+      "row_id": "nearmiss-v1:c-crab:24fbdf7de1c6fa44"
+    },
+    {
+      "candidate_chars": 3651,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "pandas-dev__pandas-28802@33c889c",
+      "row_id": "nearmiss-v1:c-crab:28cdbe123c730a18"
+    },
+    {
+      "candidate_chars": 12647,
+      "executable_oracle": null,
+      "gold_confidence": "observation",
+      "hard_accept_control": false,
+      "instance_id": "dbt-labs__dbt-core-1453@70206b1",
+      "row_id": "nearmiss-v1:c-crab:29de0af708959323"
+    }
+  ]
+}

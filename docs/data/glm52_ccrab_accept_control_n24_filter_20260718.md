@@ -4,6 +4,18 @@ Purpose: deterministic full-candidate accept-control selection for the next GLM 
 confirmation run. This is a row-selection artifact only; it does not make the rows
 decision-grade by itself.
 
+Generator:
+
+```bash
+python3 scripts/benchmark/glm52_ccrab_accept_control_filter.py \
+  --n 24 \
+  --json-out docs/data/glm52_ccrab_accept_control_n24_filter_20260718.json \
+  --row-ids-out docs/data/glm52_ccrab_accept_control_n24_row_ids_20260718.txt
+```
+
+Generated summary: `selected_n=24`, `hard_accept_control_n=0`,
+`observation_only_n=24`, `decision_grade=false`.
+
 ## Why This Exists
 
 The targeted n=12 GLM C-CRAB confirmation rejected all six prior hard negatives, but
@@ -31,6 +43,7 @@ evidence. It should not be used as a hard accepted control.
 ```text
 nearmiss-v1:c-crab:00710c9c18cd10fb
 nearmiss-v1:c-crab:0110087826d99378
+nearmiss-v1:c-crab:04b3b67ccf17ffe1
 nearmiss-v1:c-crab:04d390e945dd768e
 nearmiss-v1:c-crab:060c7e12cfd0cb06
 nearmiss-v1:c-crab:0735945503ef9330
@@ -52,7 +65,6 @@ nearmiss-v1:c-crab:20e3c97d771762dd
 nearmiss-v1:c-crab:24fbdf7de1c6fa44
 nearmiss-v1:c-crab:28cdbe123c730a18
 nearmiss-v1:c-crab:29de0af708959323
-nearmiss-v1:c-crab:2b6c409775aad431
 ```
 
 ## Caveat
