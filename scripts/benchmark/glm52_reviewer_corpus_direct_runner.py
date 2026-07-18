@@ -43,7 +43,7 @@ import glm52_reviewer_capability_direct_runner as smoke
 SCHEMA = "glm52_reviewer_corpus_direct.v1"
 DEFAULT_CORPUS = Path("/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl")
 DEFAULT_N = 12
-DEFAULT_RUBRIC_VERSION = "glm52_direct_nearmiss_review_v1+gbnf_on"
+DEFAULT_RUBRIC_VERSION = "glm52_direct_nearmiss_review_v2+binary_schema"
 DEFAULT_ERA = "pre_p_rev1_observation"
 DEFAULT_MAX_FIELD_CHARS = 7000
 GOLD_LABELS = ("accept", "reject")
@@ -51,20 +51,18 @@ DEFAULT_GOLD_CONFIDENCE = ("multi_oracle",)
 REVIEW_DECISIONS = (
     "approve",
     "reject",
-    "reject_to_empty",
-    "request_changes",
-    "request_evidence",
-    "abstain",
-    "escalate",
 )
 
 PROMPT_HEADER = (
-    "You are a strict reviewer. Decide whether the CANDIDATE adequately satisfies "
-    "the TASK. Approve only when the candidate is acceptable for the task. Reject "
-    "when it is incomplete, wrong, unsafe, non-executing, or likely to fail the "
-    "objective check. Return exactly one ReviewDecision JSON object. Use decision "
-    "'approve' or 'reject'. confidence must be a JSON number from 0.0 to 1.0. "
-    "blocking.tripwire must be true iff the candidate is rejected."
+    "You are a task-grounded reviewer. Decide whether the CANDIDATE substantially "
+    "satisfies the TASK. Approve when it answers the task well enough to be useful, "
+    "even if minor style or wording issues remain. Reject only for concrete "
+    "task-grounded failures: missing required behavior, wrong output, unsafe or "
+    "non-executing content, or a clear objective-check failure. Do not reject for "
+    "speculative concerns or preferences not required by the task. Return exactly "
+    "one ReviewDecision JSON object. Use decision 'approve' or 'reject'. confidence "
+    "must be a JSON number from 0.0 to 1.0. blocking.tripwire must be true iff the "
+    "candidate is rejected."
 )
 
 
@@ -89,17 +87,6 @@ def write_json(path: Path, payload: Any) -> None:
 
 def split_csv(value: str) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
-
-
-def load_review_grammar_module() -> Any:
-    module_path = ORCH_ROOT / "src" / "proactive_delegation" / "review_grammar.py"
-    spec = importlib.util.spec_from_file_location("review_grammar_direct_corpus", module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"failed to load review grammar module: {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules.setdefault("review_grammar_direct_corpus", module)
-    spec.loader.exec_module(module)
-    return module
 
 
 def load_review_ledger_module() -> Any:
@@ -254,8 +241,25 @@ def fit_prompt_to_budget(
     )
 
 
+def binary_review_decision_response_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["decision", "confidence", "blocking"],
+        "properties": {
+            "decision": {"type": "string", "enum": list(REVIEW_DECISIONS)},
+            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            "blocking": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["tripwire"],
+                "properties": {"tripwire": {"type": "boolean"}},
+            },
+        },
+    }
+
+
 def server_extra_args() -> list[str]:
-    review_grammar = load_review_grammar_module()
     return [
         "--reasoning-format",
         "deepseek",
@@ -264,7 +268,7 @@ def server_extra_args() -> list[str]:
         "--reasoning-budget",
         "0",
         "--json-schema",
-        json.dumps(review_grammar.review_decision_response_schema(), separators=(",", ":")),
+        json.dumps(binary_review_decision_response_schema(), separators=(",", ":")),
     ]
 
 
@@ -278,16 +282,7 @@ def extract_response_text(response: dict[str, Any]) -> str:
 
 
 def parse_review_decision_text(text: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    review_grammar = load_review_grammar_module()
-    obj, failure = review_grammar.parse_review_decision(text)
-    if failure is None:
-        return obj, None
-    if failure.reason.value == "validator_unavailable":
-        fallback_obj, fallback_failure = parse_review_decision_minimal(text)
-        if fallback_failure is None:
-            return fallback_obj, None
-        return None, failure.to_dict()
-    return None, failure.to_dict()
+    return parse_review_decision_minimal(text)
 
 
 def extract_json_object(text: str) -> str | None:

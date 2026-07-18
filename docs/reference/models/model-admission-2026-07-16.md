@@ -23,7 +23,7 @@ Admission and serving decisions should use the fastest quality-clean lane that w
 
 | Candidate | Local artifact state | Manifest/source evidence | First runnable gate |
 |---|---:|---|---|
-| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement; ✅ stale-binary true >64K CPU DSA probe processed `65,969` prompt tokens with Lightning Indexer enabled; ✅ current-source DSA cache/runtime wiring smoke passed after experimental-v7 `3dee86a5a`; ✅ top-k cap schedule sweep shows the observed safe caps are next power-of-two bands (`2048`, `4096`, `16384`) for the tested 2K/3K/12K prompts; ✅ reviewer-serving chat/free+schema matrix passed under the schedule; ✅ synthetic GC-1/2/3 repair smokes passed after prompt/scorer fixes (`free strict-IF 3/3`, rubric `mean_composite=1.0`, synthetic why `why_match_rate=1.0`); ⚠ near-miss corpus shadow run is parse-clean but quality-blocked (`n=12`, FA `16.7%`, FR `66.7%`). Sparse final-attention and viable acceleration remain useful only after P-REV-1/corpus-level reviewer quality passes under the schedule. |
+| GLM-5.2 UD-IQ2_M | Complete: six public shards under `UD-IQ2_M/`, total `238,577,580,768` bytes. HF writer exited and `glm52_clean.log` reports `Fetching 6 files: 100%`. | Cached HF tree revision `abc55e72527792c6e77069c99b4cb7de16fa9f23` size-verifies all six local shards, including the intentionally tiny shard 1 (`9,423,744` bytes). Stale `.incomplete` cache markers remain but are ignored after manifest completion. | ✅ Short CPU load/coherence smoke passed on experimental v7; ✅ 4K/8K DSA trace shakedown logged Lightning Indexer enablement; ✅ stale-binary true >64K CPU DSA probe processed `65,969` prompt tokens with Lightning Indexer enabled; ✅ current-source DSA cache/runtime wiring smoke passed after experimental-v7 `3dee86a5a`; ✅ top-k cap schedule sweep shows the observed safe caps are next power-of-two bands (`2048`, `4096`, `16384`) for the tested 2K/3K/12K prompts; ✅ reviewer-serving chat/free+schema matrix passed under the schedule; ✅ synthetic GC-1/2/3 repair smokes passed after prompt/scorer fixes (`free strict-IF 3/3`, rubric `mean_composite=1.0`, synthetic why `why_match_rate=1.0`); ⚠ near-miss corpus remains parse-clean but quality-blocked. The original/replay n=12 was FR-heavy (FA `16.7%`, FR `66.7%`); the binary-schema/prompt repair n=24 fixed the action-space bug but still failed (FA `50.0%`, FR `75.0%`). Sparse final-attention and viable acceleration remain useful only after P-REV-1/corpus-level reviewer quality passes under the schedule. |
 | Hy3 AngelSlim IQ1_M-mtp | Complete: `Hy3-IQ1_M-mtp.gguf`, 91,756,066,624 bytes, plus license, README, chat template, recipes, and two Hy3 llama.cpp patches. Experimental v7 commit `98a1ad8cf` now loads it after the Hy3 router-bias tensor-name fix. | HF metadata sidecar revision `218c93f0fb5227553b67e556b01dfe70fb70cf30`, LFS hash `f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13`. Capped CPU smoke loaded the model and returned `OK`; follow-up CPU and MI210-hybrid MTP/no-spec A/Bs both produced coherent output. | ✅ MTP-on/off functional closure recorded; no-spec is faster than `draft-mtp` in the measured CPU and MI210-hybrid samples. Next gate is task quality / architecture fit, not more first-load smoke. |
 | Bonsai-27B Q1_0 | Complete: `Bonsai-27B-Q1_0.gguf`, 3,803,452,480 bytes. | HF metadata sidecar revision `0cf7e3d21581b169b4df1de8bf01316000e2fbb7`, LFS hash `17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0`. | Text load smoke on production v6 is valid; public quality is contested, so quality gate before any role claim. |
 | Ternary Bonsai-27B Q2_0 | Complete: `Ternary-Bonsai-27B-Q2_0.gguf`, 7,165,121,600 bytes. | HF metadata sidecar revision `20e435f518bd5b882795954aba81e80a91894321`, LFS hash `868c11714cf8fe47f5ec9eeb2be0ab1a337112886f92ee0ede6b855c4fa31757`. | Blocked before prompt execution: this artifact uses noncanonical 17-byte/block Q2_0 packing under the standard `GGML_TYPE_Q2_0` id, while current v7 expects standard 18-byte/block Q2_0. Do not rerun ordinary CPU/MI210 smokes until producer layout or a distinct experimental compatibility loader is resolved. |
@@ -220,6 +220,10 @@ Evidence:
 - `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/decisions.jsonl`
 - `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/reviewer_calibration_report.md`
 - `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/raw_prompt_artifacts.tar.gz`
+- `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/summary.json`
+- `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/decisions.jsonl`
+- `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/reviewer_calibration_report.md`
+- `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/raw_prompt_artifacts.tar.gz`
 
 The direct corpus runner (`scripts/benchmark/glm52_reviewer_corpus_direct_runner.py`) keeps GLM-5.2 out of the production orchestration registry while emitting ledger-shaped decisions for `scripts/analysis/reviewer_calibration_report.py`. This run used CPU-only current-source experimental v7, chat/completions, JSON schema, `--reasoning off --reasoning-budget 0`, and the recovered `p12000_tk16384` band. It selected a deterministic balanced `nearmiss-v1` code slice (`n=12`, `6 accept / 6 reject`, `multi_oracle` rows).
 
@@ -234,7 +238,19 @@ The direct corpus runner (`scripts/benchmark/glm52_reviewer_corpus_direct_runner
 
 Follow-up replay: the explicit `--gold-confidence multi_oracle` run in `glm52-nearmiss-code-n12-calibrated-20260718T034916Z` selected the same 12 row ids because `multi_oracle` was already the runner default. It reproduced the same report: parse failures `0.0%`, FA `16.7%`, FR `66.7%`, accept `25.0%`, ECE/AUC/Brier `0.392/0.414/0.402`; aggregate prompt/decode `26.73/2.59 t/s`. This run used `--no-trace-logs`, so raw prompts are preserved in `raw_prompt_artifacts.tar.gz` and there is no server-log archive.
 
-Disposition: this is pre-P-REV-1 observation-grade evidence and cannot gate deployment, but it is a strong warning that the repaired synthetic smokes did not transfer to real near-miss review. GLM is parse-clean under schema, but it over-rejects heavily; fix reviewer policy/prompting or calibration before any claim-grade rerun or acceleration spend. Unchanged same-row `multi_oracle` reruns are now retired as non-progress. The raw prompt text files and raw server log from the first shadow run are preserved in the compressed archive above; expanded `artifacts/*.prompt.txt` and `logs/` copies are local scratch and ignored to avoid whitespace-only artifact churn.
+Binary-schema/prompt repair: `glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation` changed the direct runner to a local binary `approve|reject` schema instead of the shared 7-way ReviewDecision enum, and softened the prompt from strict/default-reject to task-grounded rejection for concrete failures. This fixed the action-space problem but not the reviewer-quality problem:
+
+| Metric | Observation |
+|---|---:|
+| Rows | `24` |
+| Parse failures | `0.0%` |
+| False accept | `50.0%` |
+| False reject | `75.0%` |
+| Accept rate | `37.5%` |
+| ECE / AUC / Brier | `0.592 / 0.663 / 0.567` |
+| Aggregate prompt / decode | `22.39 t/s` / `2.10 t/s` |
+
+Disposition: this is pre-P-REV-1 observation-grade evidence and cannot gate deployment, but it is a strong warning that neither the repaired synthetic smokes nor the binary action-space fix transfer to real near-miss review. GLM is parse-clean under schema but still wrong on both classes; fix reviewer policy, prompt/rubric, thresholding, or add a calibration layer before any claim-grade rerun or acceleration spend. Unchanged same-row `multi_oracle` reruns and unchanged binary-schema reruns are non-progress. The raw prompt text files and raw server log from the first shadow run are preserved in the compressed archive above; expanded `artifacts/*.prompt.txt` and `logs/` copies are local scratch and ignored to avoid whitespace-only artifact churn.
 
 ## GLM-5.2 Expert-Routing Skew
 
@@ -337,6 +353,19 @@ The patched experimental v7 build `b10078-98a1ad8cf` was used for bounded CLI A/
 | MI210 hybrid `draft-mtp`, 12-sentence sample | PASS | 7.8 | 5.9 | MTP is a clear regression in this hybrid configuration. |
 
 Classification: Hy3 admission should treat `draft-mtp` as functional but not beneficial on the current CPU/hybrid configurations. The useful serving candidate is MI210 hybrid no-spec with CPU experts, pending task-level quality and a larger representative benchmark. The no-spec rows are the current realistic candidate lane; the MTP rows are rejected optimization attempts until a different prompt class proves otherwise. Full GPU residency is not feasible on a single MI210 for this artifact.
+
+## Hy3 Task-Quality / Architecture-Fit Slice
+
+Evidence directory: `data/hy3_task_quality/hy3_task_quality_20260718Tcontinuation/`.
+
+`scripts/benchmark/hy3_task_quality_runner.py --execute` ran a deterministic six-task server/chat slice against the two realistic Hy3 lanes on experimental v7: CPU-only no-spec and MI210 hybrid no-spec with CPU experts (`--device ROCm0 -ngl 99 --cpu-moe --fit on`). Full GPU-only remains non-runnable on one MI210 for the 91.8 GB IQ1_M artifact.
+
+| Arm | Result | Mean prompt t/s | Mean decode t/s | Miss |
+|---|---:|---:|---:|---|
+| MI210 hybrid no-spec | 5/6 | 24.79 | 11.51 | `lowercase_six_words` returned seven words. |
+| CPU no-spec | 5/6 | 27.49 | 5.21 | Same seven-word miss. |
+
+Classification: Hy3 is loadable and task-coherent on most of this slice, and hybrid no-spec roughly doubles decode speed over CPU-only on these short tasks. It is still not role-ready: both realistic lanes failed the exact short-instruction task, and the evidence does not justify production-stack registration. The next useful Hy3 work is prompt/template repair or a role-specific quality suite; do not rerun first-load or MTP-closure probes. Cleanup passed with no leftover `llama-server` PIDs.
 
 ## Qwable Server/Chat Reasoning-Economics Smoke
 
@@ -558,8 +587,8 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 
 ## Next Queue
 
-1. Apply the GLM-5.2 DSA top-k schedule in task-quality/reviewer probes before any role claim. True >64K prompt execution is recorded as stale-binary runnability, current-source 32K needle/coherence failed under unsafe low top-k, the schedule sweep shows exact short output requires next power-of-two caps for the tested prompt bands (`2048`, `4096`, `16384`), and the 2026-07-18 chat/free+JSON-schema matrix passed at ~2.9K/~12.0K under that schedule. The `nearmiss-v1` shadow corpus run and explicit same-row `multi_oracle` replay are parse-clean but FR-heavy (`66.7%` false rejects), so do not spend more GLM acceleration work until reviewer policy/prompting changes and real reviewer quality improves under this schedule.
-2. Run Hy3 task-level quality / architecture-fit probes if the 295B/21B-active candidate remains interesting. MTP-on/off functional closure is done, and `draft-mtp` regressed vs no-spec in both CPU and MI210-hybrid samples.
+1. Apply the GLM-5.2 DSA top-k schedule in task-quality/reviewer probes before any role claim. True >64K prompt execution is recorded as stale-binary runnability, current-source 32K needle/coherence failed under unsafe low top-k, the schedule sweep shows exact short output requires next power-of-two caps for the tested prompt bands (`2048`, `4096`, `16384`), and the 2026-07-18 chat/free+JSON-schema matrix passed at ~2.9K/~12.0K under that schedule. The `nearmiss-v1` shadow corpus and replay were parse-clean but FR-heavy, while the binary-schema/prompt repair n=24 was parse-clean but failed both classes (FA `50.0%`, FR `75.0%`). Do not spend more GLM acceleration work until reviewer policy/prompting/thresholding or calibration changes produce real corpus quality under this schedule.
+2. Hy3 task-level quality / architecture-fit first slice is complete: both realistic lanes passed `5/6`, with MI210 hybrid no-spec at `11.51 t/s` mean decode and CPU no-spec at `5.21 t/s`; both failed only the exact six-word instruction. Next Hy3 work is prompt/template repair or a role-specific suite, not another first-load or MTP-closure run.
 3. Investigate the Ternary Bonsai Q2_0 artifact/runtime offset mismatch before retrying. Q2_g64 is CPU+MI210 runtime-smoke passed and has preliminary throughput observations, including a positive MI210 `ngram-mod` structured-copy speed signal, but the strict quality gate passed only 6/8 and blocks any role claim; dspark variants failed separately.
 4. Qwable IQ4_XS standalone routing and broader representative quality are closed for the research registry: plain reasoning-off IQ4_XS is the preferred reasoning-heavy route, `ngram-mod` is neutral on the expanded slice, and scaffold remains only the beneficiary-must-answer fallback. Remaining work is production hosting/composite-route wiring, not model admission.
 5. Keep Nemotron-Nano BF16 deferred. Q8_0 is protocol-clean for a minimal exact-output probe and best observed no-system `deepseek` reaches `4/5`, but no channel/source reaches `5/5`; strict JSON remains the blocker. Run BF16 only after Q8_0 has a clean content-channel pass or a quantization-specific miss to isolate. Nemotron-Cascade-2 is now historical/catalogue only; do not schedule inference absent an explicit Mamba2-hybrid revival study. The legacy Cascade scaling runners are dry-run-first safety wrappers now, so `--help`/default invocations cannot start servers; live use requires `--execute --allow-historical-cascade`.

@@ -1,0 +1,255 @@
+{
+  "arm": "hybrid_nospec",
+  "device": "ROCm0",
+  "hybrid": true,
+  "mean_decode_tps": 11.507019596983575,
+  "mean_prompt_tps": 24.79344022923488,
+  "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+  "ngl": 99,
+  "pass_rate": 0.8333333333333334,
+  "passed": 5,
+  "port": 19240,
+  "resource_class": "MI210 + CPU experts",
+  "role": "mi210_hybrid_cpu_experts_nospec",
+  "tasks": [
+    {
+      "content": "{\"status\":\"ok\",\"model\":\"hy3\"}",
+      "prompt": "Return exactly this minified JSON and nothing else: {\"status\":\"ok\",\"model\":\"hy3\"}",
+      "response_path": "data/hy3_task_quality/hy3_task_quality_20260718Tcontinuation/responses/hybrid_nospec/strict_json.raw.json",
+      "score": {
+        "expected": {
+          "model": "hy3",
+          "status": "ok"
+        },
+        "json_mode": "strict",
+        "normalized": "{\"status\":\"ok\",\"model\":\"hy3\"}",
+        "observed": {
+          "model": "hy3",
+          "status": "ok"
+        },
+        "passed": true,
+        "scorer": "json_exact"
+      },
+      "task_id": "strict_json",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 1078.004,
+        "predicted_n": 11,
+        "predicted_per_second": 10.204043769781931,
+        "predicted_per_token_ms": 98.00036363636363,
+        "prompt_ms": 5130.618,
+        "prompt_n": 51,
+        "prompt_per_second": 9.940322978635322,
+        "prompt_per_token_ms": 100.60035294117648
+      },
+      "usage": {
+        "completion_tokens": 11,
+        "prompt_tokens": 51,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 62
+      }
+    },
+    {
+      "content": "95",
+      "prompt": "Answer with only the integer result: 37 + 58",
+      "response_path": "data/hy3_task_quality/hy3_task_quality_20260718Tcontinuation/responses/hybrid_nospec/simple_math.raw.json",
+      "score": {
+        "expected": "95",
+        "normalized": "95",
+        "observed": "95",
+        "passed": true,
+        "scorer": "exact"
+      },
+      "task_id": "simple_math",
+      "timings": {
+        "cache_n": 28,
+        "predicted_ms": 109.205,
+        "predicted_n": 2,
+        "predicted_per_second": 18.31417975367428,
+        "predicted_per_token_ms": 54.6025,
+        "prompt_ms": 572.106,
+        "prompt_n": 15,
+        "prompt_per_second": 26.21891747333536,
+        "prompt_per_token_ms": 38.1404
+      },
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 43,
+        "prompt_tokens_details": {
+          "cached_tokens": 28
+        },
+        "total_tokens": 45
+      }
+    },
+    {
+      "content": "reduces computation by skipping unnecessary node connections.",
+      "prompt": "In exactly six lowercase words, describe why sparse routing helps. Return only the six words.",
+      "response_path": "data/hy3_task_quality/hy3_task_quality_20260718Tcontinuation/responses/hybrid_nospec/lowercase_six_words.raw.json",
+      "score": {
+        "expected_word_count": 6,
+        "normalized": "reduces computation by skipping unnecessary node connections.",
+        "observed_words": [
+          "reduces",
+          "computation",
+          "by",
+          "skipping",
+          "unnecessary",
+          "node",
+          "connections."
+        ],
+        "passed": false,
+        "scorer": "five_lowercase_words"
+      },
+      "task_id": "lowercase_six_words",
+      "timings": {
+        "cache_n": 28,
+        "predicted_ms": 952.316,
+        "predicted_n": 10,
+        "predicted_per_second": 10.500716148841352,
+        "predicted_per_token_ms": 95.2316,
+        "prompt_ms": 730.31,
+        "prompt_n": 21,
+        "prompt_per_second": 28.754912297517496,
+        "prompt_per_token_ms": 34.776666666666664
+      },
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 49,
+        "prompt_tokens_details": {
+          "cached_tokens": 28
+        },
+        "total_tokens": 59
+      }
+    },
+    {
+      "content": "Dense inference activates all parameters per token, maximizing compute and memory bandwidth use but with no routing overhead. Sparse expert routing activates only selected experts, reducing compute and memory bandwidth per token, but adds routing overhead from the gating step. Dense inference avoids load balancing issues since all experts are always used; sparse routing risks imbalance where some experts are overloaded and others underused, hurting utilization. Overall, dense inference is simpler and uniformly utilized, while sparse routing saves compute/bandwidth at the cost of routing logic and potential load imbalance.",
+      "prompt": "Compare dense inference with sparse expert routing in under 140 words. Mention compute, memory bandwidth, load balancing, and routing overhead.",
+      "response_path": "data/hy3_task_quality/hy3_task_quality_20260718Tcontinuation/responses/hybrid_nospec/routing_tradeoffs.raw.json",
+      "score": {
+        "case_sensitive": false,
+        "expected_groups": [
+          [
+            "compute",
+            "computation"
+          ],
+          [
+            "memory bandwidth",
+            "bandwidth"
+          ],
+          [
+            "load balancing",
+            "load-balanced",
+            "imbalance"
+          ],
+          [
+            "routing overhead",
+            "router overhead",
+            "routing cost"
+          ]
+        ],
+        "matched_terms": [
+          "compute",
+          "memory bandwidth",
+          "load balancing",
+          "routing overhead"
+        ],
+        "missing_groups": [],
+        "normalized": "Dense inference activates all parameters per token, maximizing compute and memory bandwidth use but with no routing overhead. Sparse expert routing activates only selected experts, reducing compute and memory bandwidth per token, but adds routing overhead from the gating step. Dense inference avoids load balancing issues since all experts are always used; sparse routing risks imbalance where some experts are overloaded and others underused, hurting utilization. Overall, dense inference is simpler and uniformly utilized, while sparse routing saves compute/bandwidth at the cost of routing logic and potential load imbalance.",
+        "passed": true,
+        "scorer": "contains_all_groups"
+      },
+      "task_id": "routing_tradeoffs",
+      "timings": {
+        "cache_n": 28,
+        "predicted_ms": 10933.132,
+        "predicted_n": 107,
+        "predicted_per_second": 9.786765585561394,
+        "predicted_per_token_ms": 102.17880373831775,
+        "prompt_ms": 878.448,
+        "prompt_n": 30,
+        "prompt_per_second": 34.151139282006454,
+        "prompt_per_token_ms": 29.2816
+      },
+      "usage": {
+        "completion_tokens": 107,
+        "prompt_tokens": 58,
+        "prompt_tokens_details": {
+          "cached_tokens": 28
+        },
+        "total_tokens": 165
+      }
+    },
+    {
+      "content": "HY3-DELTA-9421",
+      "prompt": "Read the passage and answer with only the deployment code.\n\nOperators compared CPU-only and hybrid inference lanes. Several unrelated identifiers appear: HX-1000, ROUTE-77, and TEST-404. The deployment code to preserve is HY3-DELTA-9421. Later notes mention caches, ports, and throughput, but no other deployment code.\n\nQuestion: what is the deployment code?",
+      "response_path": "data/hy3_task_quality/hy3_task_quality_20260718Tcontinuation/responses/hybrid_nospec/needle_code.raw.json",
+      "score": {
+        "expected": "HY3-DELTA-9421",
+        "normalized": "HY3-DELTA-9421",
+        "observed": "HY3-DELTA-9421",
+        "passed": true,
+        "scorer": "exact"
+      },
+      "task_id": "needle_code",
+      "timings": {
+        "cache_n": 28,
+        "predicted_ms": 847.164,
+        "predicted_n": 9,
+        "predicted_per_second": 10.623680892955791,
+        "predicted_per_token_ms": 94.12933333333334,
+        "prompt_ms": 5119.329,
+        "prompt_n": 86,
+        "prompt_per_second": 16.799076597733805,
+        "prompt_per_token_ms": 59.52708139534884
+      },
+      "usage": {
+        "completion_tokens": 9,
+        "prompt_tokens": 114,
+        "prompt_tokens_details": {
+          "cached_tokens": 28
+        },
+        "total_tokens": 123
+      }
+    },
+    {
+      "content": "```python\ndef binary_search(arr, target):\n    if not arr:\n        return -1\n    low, high = 0, len(arr) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1\n```",
+      "prompt": "Write a Python binary_search(arr, target) function. Return code only. It must handle an empty array and return -1 when absent.",
+      "response_path": "data/hy3_task_quality/hy3_task_quality_20260718Tcontinuation/responses/hybrid_nospec/binary_search_code.raw.json",
+      "score": {
+        "case_sensitive": true,
+        "expected_terms": [
+          "def binary_search",
+          "while",
+          "return -1"
+        ],
+        "missing_terms": [],
+        "normalized": "```python\ndef binary_search(arr, target):\n    if not arr:\n        return -1\n    low, high = 0, len(arr) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1\n```",
+        "passed": true,
+        "scorer": "contains_all"
+      },
+      "task_id": "binary_search_code",
+      "timings": {
+        "cache_n": 28,
+        "predicted_ms": 10923.014,
+        "predicted_n": 105,
+        "predicted_per_second": 9.612731431086695,
+        "predicted_per_token_ms": 104.02870476190475,
+        "prompt_ms": 942.356,
+        "prompt_n": 31,
+        "prompt_per_second": 32.89627274618085,
+        "prompt_per_token_ms": 30.39858064516129
+      },
+      "usage": {
+        "completion_tokens": 105,
+        "prompt_tokens": 59,
+        "prompt_tokens_details": {
+          "cached_tokens": 28
+        },
+        "total_tokens": 164
+      }
+    }
+  ],
+  "total": 6
+}

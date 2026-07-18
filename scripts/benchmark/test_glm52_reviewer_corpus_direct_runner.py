@@ -87,6 +87,26 @@ def test_parse_review_decision_text_accepts_schema_valid_json():
     assert obj["decision"] == "approve"
 
 
+def test_binary_schema_allows_only_approve_reject():
+    schema = runner.binary_review_decision_response_schema()
+    assert schema["properties"]["decision"]["enum"] == ["approve", "reject"]
+
+
+def test_parse_review_decision_text_rejects_shared_review_actions():
+    obj, failure = runner.parse_review_decision_text(
+        '{"decision":"request_changes","confidence":0.91,"blocking":{"tripwire":true}}'
+    )
+    assert obj is None
+    assert failure is not None
+    assert failure["reason"] == "schema_invalid"
+
+
+def test_prompt_header_is_task_grounded_not_strict_by_default():
+    assert "strict reviewer" not in runner.PROMPT_HEADER.lower()
+    assert "speculative concerns" in runner.PROMPT_HEADER
+    assert "substantially satisfies" in runner.PROMPT_HEADER
+
+
 def test_ledger_row_for_parse_error_marks_parse_error():
     row = runner.CorpusRow("r1", _row("r1", label="reject"))
     ledger = runner.ledger_row_for_result(

@@ -1,0 +1,1928 @@
+{
+  "band": {
+    "context_length": 16384,
+    "indexer_top_k": 16384,
+    "min_prompt_tokens": 12000,
+    "name": "p12000_tk16384",
+    "prompt_context_guard_tokens": 512
+  },
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "corpus": {
+    "available_counts": {
+      "('code', 'accept', 'multi_oracle')": 719,
+      "('code', 'reject', 'multi_oracle')": 1706
+    },
+    "domain_filter": "code",
+    "gold_confidence": [
+      "multi_oracle"
+    ],
+    "n_judgeable_available": 2425,
+    "n_requested": 24,
+    "n_selected": 24,
+    "path": "/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl",
+    "selected_label_counts": {
+      "accept": 12,
+      "reject": 12
+    },
+    "selected_row_ids": [
+      "nearmiss-v1:seeded-mutation:946d50e882055cd4",
+      "nearmiss-v1:c-crab:c7b60daa9aa5eadd",
+      "nearmiss-v1:seeded-mutation:e28ab732eb2d397e",
+      "nearmiss-v1:seeded-mutation:690316597ed2056e",
+      "nearmiss-v1:seeded-mutation:dc9c45b95c44d3a1",
+      "nearmiss-v1:seeded-mutation:07138f919a293eb1",
+      "nearmiss-v1:seeded-mutation:ac15ae78a6d90a93",
+      "nearmiss-v1:seeded-mutation:8c5f9371d14a25b2",
+      "nearmiss-v1:seeded-mutation:5d04c3953846381d",
+      "nearmiss-v1:seeded-mutation:c11b36938e4d14ab",
+      "nearmiss-v1:seeded-mutation:8d1c42b4be00d521",
+      "nearmiss-v1:seeded-mutation:3878a2fb7c42b4c0",
+      "nearmiss-v1:seeded-mutation:59da7f6c81507e72",
+      "nearmiss-v1:seeded-mutation:83c8e4072f127a19",
+      "nearmiss-v1:seeded-mutation:9c16408ca2c5e668",
+      "nearmiss-v1:seeded-mutation:87791ed41a3ab6f0",
+      "nearmiss-v1:seeded-mutation:ee6bc7044b71054b",
+      "nearmiss-v1:seeded-mutation:4e21113352e74956",
+      "nearmiss-v1:seeded-mutation:0d67bca5bf93eef9",
+      "nearmiss-v1:seeded-mutation:06d223d5eaece5c5",
+      "nearmiss-v1:seeded-mutation:75df0d233dca39da",
+      "nearmiss-v1:seeded-mutation:9033cd927a00f362",
+      "nearmiss-v1:seeded-mutation:b1239d18fd1ae7de",
+      "nearmiss-v1:seeded-mutation:b25093ed16d2cafe"
+    ]
+  },
+  "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/decisions.jsonl",
+  "execution": {
+    "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/decisions.jsonl",
+    "elapsed_s": 1170.554,
+    "post_processes": [
+      {
+        "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+        "pid": 1849379
+      }
+    ],
+    "progress_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/progress.jsonl",
+    "run_manifest": {
+      "calibration_command": "python3 /mnt/raid0/llm/epyc-orchestrator/scripts/analysis/reviewer_calibration_report.py --decisions /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/decisions.jsonl --corpus /mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl --k 2 --print",
+      "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/decisions.jsonl",
+      "generated_at": "2026-07-18T04:41:35.899388+00:00",
+      "n_scored": 24,
+      "observation_only": true,
+      "schema": "glm52_reviewer_corpus_direct_run_manifest.v1"
+    },
+    "score": {
+      "decision_counts": {
+        "approve": 9,
+        "reject": 15
+      },
+      "fa_rate": 0.5,
+      "false_accepts": 6,
+      "false_rejects": 9,
+      "fr_rate": 0.75,
+      "n": 24,
+      "n_bad": 12,
+      "n_golded": 24,
+      "n_good": 12,
+      "parse_failure_rate": 0.0,
+      "parse_failures": 0
+    },
+    "server_log": {
+      "path": null,
+      "status": "disabled"
+    },
+    "status": "ok",
+    "task_results": [
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_946d50e882055cd4.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_946d50e882055cd4.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_946d50e882055cd4.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 59413.357,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.9,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 4114,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 5115,
+            "prompt_token_count": 1176,
+            "task_chars_original": 318,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1176,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:946d50e882055cd4",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 13292.628,
+          "predicted_n": 33,
+          "predicted_per_second": 2.4825790656294604,
+          "predicted_per_token_ms": 402.80690909090913,
+          "prompt_ms": 46108.947,
+          "prompt_n": 1182,
+          "prompt_per_second": 25.63493805226131,
+          "prompt_per_token_ms": 39.0092614213198
+        },
+        "truncation": {
+          "candidate_chars_original": 4114,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 5115,
+          "task_chars_original": 318,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1182,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1215
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_c-crab_c7b60daa9aa5eadd.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_c-crab_c7b60daa9aa5eadd.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_c-crab_c7b60daa9aa5eadd.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 97757.073,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.9,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 6553,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 7843,
+            "prompt_token_count": 2062,
+            "task_chars_original": 607,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2062,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:c-crab:c7b60daa9aa5eadd",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 13730.545,
+          "predicted_n": 33,
+          "predicted_per_second": 2.4034005933486253,
+          "predicted_per_token_ms": 416.0771212121212,
+          "prompt_ms": 83997.133,
+          "prompt_n": 2068,
+          "prompt_per_second": 24.619887919269814,
+          "prompt_per_token_ms": 40.61756914893617
+        },
+        "truncation": {
+          "candidate_chars_original": 6553,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 7843,
+          "task_chars_original": 607,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2068,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2101
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_e28ab732eb2d397e.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_e28ab732eb2d397e.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_e28ab732eb2d397e.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+          "content": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 28455.036,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2705,
+            "prompt_token_count": 678,
+            "task_chars_original": 1922,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 678,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:e28ab732eb2d397e",
+        "scoring_text": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 7345.822,
+          "predicted_n": 19,
+          "predicted_per_second": 2.586504274130247,
+          "predicted_per_token_ms": 386.62221052631577,
+          "prompt_ms": 21070.206,
+          "prompt_n": 547,
+          "prompt_per_second": 25.96082828995597,
+          "prompt_per_token_ms": 38.51957221206581
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2705,
+          "task_chars_original": 1922,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 684,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 703
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_690316597ed2056e.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_690316597ed2056e.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_690316597ed2056e.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+          "content": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 24380.077,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2464,
+            "prompt_token_count": 610,
+            "task_chars_original": 1681,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 610,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:690316597ed2056e",
+        "scoring_text": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 143,
+          "predicted_ms": 7268.778,
+          "predicted_n": 19,
+          "predicted_per_second": 2.6139194235949974,
+          "predicted_per_token_ms": 382.56726315789473,
+          "prompt_ms": 17090.777,
+          "prompt_n": 473,
+          "prompt_per_second": 27.675745813078017,
+          "prompt_per_token_ms": 36.13272093023255
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2464,
+          "task_chars_original": 1681,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 616,
+          "prompt_tokens_details": {
+            "cached_tokens": 143
+          },
+          "total_tokens": 635
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_dc9c45b95c44d3a1.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_dc9c45b95c44d3a1.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_dc9c45b95c44d3a1.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 87626.452,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.8,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 20025,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8302,
+            "prompt_token_count": 1889,
+            "task_chars_original": 575,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1889,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:dc9c45b95c44d3a1",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 13572.188,
+          "predicted_n": 33,
+          "predicted_per_second": 2.4314428889431827,
+          "predicted_per_token_ms": 411.27842424242425,
+          "prompt_ms": 74031.767,
+          "prompt_n": 1895,
+          "prompt_per_second": 25.59711967971803,
+          "prompt_per_token_ms": 39.06689551451188
+        },
+        "truncation": {
+          "candidate_chars_original": 20025,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8302,
+          "task_chars_original": 575,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1895,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1928
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_07138f919a293eb1.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_07138f919a293eb1.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_07138f919a293eb1.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 113101.844,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.95,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 20025,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8921,
+            "prompt_token_count": 2427,
+            "task_chars_original": 1194,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2427,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:07138f919a293eb1",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 13892.657,
+          "predicted_n": 33,
+          "predicted_per_second": 2.3753555565360895,
+          "predicted_per_token_ms": 420.98960606060604,
+          "prompt_ms": 99169.257,
+          "prompt_n": 2433,
+          "prompt_per_second": 24.5338129335788,
+          "prompt_per_token_ms": 40.76007274969174
+        },
+        "truncation": {
+          "candidate_chars_original": 20025,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8921,
+          "task_chars_original": 1194,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2433,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2466
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_ac15ae78a6d90a93.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_ac15ae78a6d90a93.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_ac15ae78a6d90a93.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 123531.211,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.8,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 18343,
+            "candidate_truncated": true,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 8172,
+            "prompt_token_count": 2115,
+            "task_chars_original": 445,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2115,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:ac15ae78a6d90a93",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 17411.875,
+          "predicted_n": 33,
+          "predicted_per_second": 1.8952582648336265,
+          "predicted_per_token_ms": 527.6325757575758,
+          "prompt_ms": 106072.142,
+          "prompt_n": 2121,
+          "prompt_per_second": 19.995825105521106,
+          "prompt_per_token_ms": 50.010439415370115
+        },
+        "truncation": {
+          "candidate_chars_original": 18343,
+          "candidate_truncated": true,
+          "max_field_chars": 7000,
+          "prompt_chars": 8172,
+          "task_chars_original": 445,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 2121,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2154
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_8c5f9371d14a25b2.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_8c5f9371d14a25b2.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_8c5f9371d14a25b2.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 27692.23,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 10,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 1440,
+            "prompt_token_count": 371,
+            "task_chars_original": 747,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 371,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:8c5f9371d14a25b2",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 16111.987,
+          "predicted_n": 33,
+          "predicted_per_second": 2.0481645125458456,
+          "predicted_per_token_ms": 488.2420303030303,
+          "prompt_ms": 11532.678,
+          "prompt_n": 240,
+          "prompt_per_second": 20.81043102044469,
+          "prompt_per_token_ms": 48.052825
+        },
+        "truncation": {
+          "candidate_chars_original": 10,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 1440,
+          "task_chars_original": 747,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 377,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 410
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_5d04c3953846381d.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_5d04c3953846381d.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_5d04c3953846381d.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+          "content": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 42955.201,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 3028,
+            "prompt_token_count": 817,
+            "task_chars_original": 2245,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 817,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:5d04c3953846381d",
+        "scoring_text": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 9310.12,
+          "predicted_n": 19,
+          "predicted_per_second": 2.0407900220405324,
+          "predicted_per_token_ms": 490.0063157894737,
+          "prompt_ms": 33626.375,
+          "prompt_n": 686,
+          "prompt_per_second": 20.400652761411244,
+          "prompt_per_token_ms": 49.01803935860058
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 3028,
+          "task_chars_original": 2245,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 823,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 842
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_c11b36938e4d14ab.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_c11b36938e4d14ab.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_c11b36938e4d14ab.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 90125.005,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.9,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 5337,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 6422,
+            "prompt_token_count": 1614,
+            "task_chars_original": 402,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1614,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:c11b36938e4d14ab",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 17167.414,
+          "predicted_n": 33,
+          "predicted_per_second": 1.9222464140493145,
+          "predicted_per_token_ms": 520.2246666666667,
+          "prompt_ms": 72925.174,
+          "prompt_n": 1483,
+          "prompt_per_second": 20.335913082634537,
+          "prompt_per_token_ms": 49.17408900876602
+        },
+        "truncation": {
+          "candidate_chars_original": 5337,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 6422,
+          "task_chars_original": 402,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 1620,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 1653
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_8d1c42b4be00d521.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_8d1c42b4be00d521.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_8d1c42b4be00d521.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+          "content": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 15697.543,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 3,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 1087,
+            "prompt_token_count": 237,
+            "task_chars_original": 401,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 237,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:8d1c42b4be00d521",
+        "scoring_text": "{\"decision\":\"reject\",\"confidence\":1.0,\"blocking\":{\"tripwire\":true}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 8666.453,
+          "predicted_n": 19,
+          "predicted_per_second": 2.1923617424568045,
+          "predicted_per_token_ms": 456.1291052631579,
+          "prompt_ms": 6992.193,
+          "prompt_n": 106,
+          "prompt_per_second": 15.159764611760574,
+          "prompt_per_token_ms": 65.96408490566039
+        },
+        "truncation": {
+          "candidate_chars_original": 3,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 1087,
+          "task_chars_original": 401,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 243,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 262
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_3878a2fb7c42b4c0.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_3878a2fb7c42b4c0.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_3878a2fb7c42b4c0.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "reject",
+        "latency_ms": 31487.599,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 1915,
+            "prompt_token_count": 463,
+            "task_chars_original": 1132,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 463,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:3878a2fb7c42b4c0",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 15886.101,
+          "predicted_n": 33,
+          "predicted_per_second": 2.077287560994356,
+          "predicted_per_token_ms": 481.397,
+          "prompt_ms": 15589.167,
+          "prompt_n": 332,
+          "prompt_per_second": 21.296840299420747,
+          "prompt_per_token_ms": 46.955322289156626
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 1915,
+          "task_chars_original": 1132,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 469,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 502
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_59da7f6c81507e72.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_59da7f6c81507e72.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_59da7f6c81507e72.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 49195.556,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2881,
+            "prompt_token_count": 801,
+            "task_chars_original": 2098,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 801,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:59da7f6c81507e72",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 143,
+          "predicted_ms": 16621.368,
+          "predicted_n": 33,
+          "predicted_per_second": 1.985396147898296,
+          "predicted_per_token_ms": 503.6778181818181,
+          "prompt_ms": 32553.635,
+          "prompt_n": 664,
+          "prompt_per_second": 20.397107726986558,
+          "prompt_per_token_ms": 49.026558734939755
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2881,
+          "task_chars_original": 2098,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 807,
+          "prompt_tokens_details": {
+            "cached_tokens": 143
+          },
+          "total_tokens": 840
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_83c8e4072f127a19.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_83c8e4072f127a19.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_83c8e4072f127a19.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 38154.905,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2436,
+            "prompt_token_count": 603,
+            "task_chars_original": 1653,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 603,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:83c8e4072f127a19",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 150,
+          "predicted_ms": 16585.525,
+          "predicted_n": 33,
+          "predicted_per_second": 1.9896867901377857,
+          "predicted_per_token_ms": 502.5916666666667,
+          "prompt_ms": 21539.437,
+          "prompt_n": 459,
+          "prompt_per_second": 21.309749182395063,
+          "prompt_per_token_ms": 46.926877995642705
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2436,
+          "task_chars_original": 1653,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 609,
+          "prompt_tokens_details": {
+            "cached_tokens": 150
+          },
+          "total_tokens": 642
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_9c16408ca2c5e668.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_9c16408ca2c5e668.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_9c16408ca2c5e668.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+          "content": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 15514.057,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 1.0,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 8,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 1012,
+            "prompt_token_count": 231,
+            "task_chars_original": 321,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 231,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:9c16408ca2c5e668",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 8831.024,
+          "predicted_n": 19,
+          "predicted_per_second": 2.1515058729316103,
+          "predicted_per_token_ms": 464.7907368421052,
+          "prompt_ms": 6661.124,
+          "prompt_n": 100,
+          "prompt_per_second": 15.012481377016854,
+          "prompt_per_token_ms": 66.61124
+        },
+        "truncation": {
+          "candidate_chars_original": 8,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 1012,
+          "task_chars_original": 321,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 237,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 256
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_87791ed41a3ab6f0.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_87791ed41a3ab6f0.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_87791ed41a3ab6f0.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 36780.034,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2256,
+            "prompt_token_count": 567,
+            "task_chars_original": 1473,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 567,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:87791ed41a3ab6f0",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 16540.71,
+          "predicted_n": 33,
+          "predicted_per_second": 1.9950775994500842,
+          "predicted_per_token_ms": 501.2336363636363,
+          "prompt_ms": 20226.41,
+          "prompt_n": 436,
+          "prompt_per_second": 21.555975578463997,
+          "prompt_per_token_ms": 46.39084862385321
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2256,
+          "task_chars_original": 1473,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 573,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 606
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_ee6bc7044b71054b.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_ee6bc7044b71054b.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_ee6bc7044b71054b.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 51164.731,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 3101,
+            "prompt_token_count": 835,
+            "task_chars_original": 2318,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 835,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:ee6bc7044b71054b",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 143,
+          "predicted_ms": 16760.872,
+          "predicted_n": 33,
+          "predicted_per_second": 1.9688713093208994,
+          "predicted_per_token_ms": 507.9052121212121,
+          "prompt_ms": 34382.532,
+          "prompt_n": 698,
+          "prompt_per_second": 20.301006336589754,
+          "prompt_per_token_ms": 49.258641833810884
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 3101,
+          "task_chars_original": 2318,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 841,
+          "prompt_tokens_details": {
+            "cached_tokens": 143
+          },
+          "total_tokens": 874
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_4e21113352e74956.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_4e21113352e74956.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_4e21113352e74956.response.json"
+        },
+        "channels": {
+          "combined": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+          "content": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 15966.352,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 1.0,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 14,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 1027,
+            "prompt_token_count": 242,
+            "task_chars_original": 330,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 242,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:4e21113352e74956",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 8833.081,
+          "predicted_n": 19,
+          "predicted_per_second": 2.1510048419118992,
+          "predicted_per_token_ms": 464.899,
+          "prompt_ms": 7108.973,
+          "prompt_n": 111,
+          "prompt_per_second": 15.614069711616573,
+          "prompt_per_token_ms": 64.0448018018018
+        },
+        "truncation": {
+          "candidate_chars_original": 14,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 1027,
+          "task_chars_original": 330,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 248,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 267
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_0d67bca5bf93eef9.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_0d67bca5bf93eef9.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_0d67bca5bf93eef9.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 25727.732,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": false
+          },
+          "confidence": 0.95,
+          "decision": "approve"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 7,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 1016,
+            "prompt_token_count": 313,
+            "task_chars_original": 326,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 313,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:0d67bca5bf93eef9",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 16003.808,
+          "predicted_n": 33,
+          "predicted_per_second": 2.0620092418004514,
+          "predicted_per_token_ms": 484.9638787878788,
+          "prompt_ms": 9712.099,
+          "prompt_n": 182,
+          "prompt_per_second": 18.739512437012845,
+          "prompt_per_token_ms": 53.36318131868132
+        },
+        "truncation": {
+          "candidate_chars_original": 7,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 1016,
+          "task_chars_original": 326,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 319,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 352
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_06d223d5eaece5c5.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_06d223d5eaece5c5.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_06d223d5eaece5c5.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 31146.118,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 1953,
+            "prompt_token_count": 444,
+            "task_chars_original": 1170,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 444,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:06d223d5eaece5c5",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 137,
+          "predicted_ms": 16529.626,
+          "predicted_n": 33,
+          "predicted_per_second": 1.996415405890006,
+          "predicted_per_token_ms": 500.89775757575757,
+          "prompt_ms": 14599.26,
+          "prompt_n": 313,
+          "prompt_per_second": 21.439442821074493,
+          "prompt_per_token_ms": 46.64300319488818
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 1953,
+          "task_chars_original": 1170,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 450,
+          "prompt_tokens_details": {
+            "cached_tokens": 137
+          },
+          "total_tokens": 483
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_75df0d233dca39da.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_75df0d233dca39da.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_75df0d233dca39da.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 32596.923,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 1769,
+            "prompt_token_count": 477,
+            "task_chars_original": 986,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 477,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:75df0d233dca39da",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 143,
+          "predicted_ms": 16523.964,
+          "predicted_n": 33,
+          "predicted_per_second": 1.9970994853293071,
+          "predicted_per_token_ms": 500.72618181818183,
+          "prompt_ms": 16054.158,
+          "prompt_n": 340,
+          "prompt_per_second": 21.178314054215736,
+          "prompt_per_token_ms": 47.21811176470588
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 1769,
+          "task_chars_original": 986,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 483,
+          "prompt_tokens_details": {
+            "cached_tokens": 143
+          },
+          "total_tokens": 516
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_9033cd927a00f362.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_9033cd927a00f362.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_9033cd927a00f362.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 37516.359,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2329,
+            "prompt_token_count": 611,
+            "task_chars_original": 1546,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 611,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:9033cd927a00f362",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 156,
+          "predicted_ms": 16554.699,
+          "predicted_n": 33,
+          "predicted_per_second": 1.9933917252134878,
+          "predicted_per_token_ms": 501.65754545454547,
+          "prompt_ms": 20942.968,
+          "prompt_n": 461,
+          "prompt_per_second": 22.01216179101262,
+          "prompt_per_token_ms": 45.429431670282
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2329,
+          "task_chars_original": 1546,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 617,
+          "prompt_tokens_details": {
+            "cached_tokens": 156
+          },
+          "total_tokens": 650
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_b1239d18fd1ae7de.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_b1239d18fd1ae7de.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_b1239d18fd1ae7de.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 41647.465,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2995,
+            "prompt_token_count": 668,
+            "task_chars_original": 2212,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 668,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:b1239d18fd1ae7de",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 149,
+          "predicted_ms": 16799.456,
+          "predicted_n": 33,
+          "predicted_per_second": 1.964349321787563,
+          "predicted_per_token_ms": 509.0744242424242,
+          "prompt_ms": 24822.647,
+          "prompt_n": 525,
+          "prompt_per_second": 21.15004092835063,
+          "prompt_per_token_ms": 47.28123238095238
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2995,
+          "task_chars_original": 2212,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 674,
+          "prompt_tokens_details": {
+            "cached_tokens": 149
+          },
+          "total_tokens": 707
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_b25093ed16d2cafe.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_b25093ed16d2cafe.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/artifacts/nearmiss-v1_seeded-mutation_b25093ed16d2cafe.response.json"
+        },
+        "channels": {
+          "combined": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+          "reasoning_content": "",
+          "text": ""
+        },
+        "domain": "code",
+        "finish_reason": "stop",
+        "gold_label": "accept",
+        "latency_ms": 37381.4,
+        "parse_failure": null,
+        "parsed_decision": {
+          "blocking": {
+            "tripwire": true
+          },
+          "confidence": 1.0,
+          "decision": "reject"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 100,
+            "candidate_truncated": false,
+            "field_chars": 7000,
+            "max_field_chars": 7000,
+            "prompt_chars": 2295,
+            "prompt_token_count": 598,
+            "task_chars_original": 1512,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 598,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "nearmiss-v1:seeded-mutation:b25093ed16d2cafe",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": true\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 149,
+          "predicted_ms": 16556.763,
+          "predicted_n": 33,
+          "predicted_per_second": 1.99314322491661,
+          "predicted_per_token_ms": 501.72009090909086,
+          "prompt_ms": 20798.641,
+          "prompt_n": 455,
+          "prompt_per_second": 21.87642933016633,
+          "prompt_per_token_ms": 45.7112989010989
+        },
+        "truncation": {
+          "candidate_chars_original": 100,
+          "candidate_truncated": false,
+          "max_field_chars": 7000,
+          "prompt_chars": 2295,
+          "task_chars_original": 1512,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 33,
+          "prompt_tokens": 604,
+          "prompt_tokens_details": {
+            "cached_tokens": 149
+          },
+          "total_tokens": 637
+        }
+      }
+    ]
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-18T04:22:05.180345+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "measurement_note": "pre-P-REV-1 observation; non-decision-gating",
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "observation_only": true,
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation",
+  "preexisting_processes": [
+    {
+      "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+      "pid": 1849379
+    }
+  ],
+  "refusal_reasons": [],
+  "request": {
+    "endpoint": "chat",
+    "era": "pre_p_rev1_observation",
+    "max_field_chars": 7000,
+    "max_tokens": 128,
+    "rubric_version": "glm52_direct_nearmiss_review_v2+binary_schema",
+    "seed": 42,
+    "temperature": 0.0,
+    "timeout_s": 1800
+  },
+  "schema": "glm52_reviewer_corpus_direct.v1",
+  "server": {
+    "context_length": 16384,
+    "extra_args": [
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}}}}"
+    ],
+    "indexer_top_k": 16384,
+    "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:16384",
+    "log_file": null,
+    "metrics": false,
+    "port": 19560,
+    "server_command": [
+      "env",
+      "-i",
+      "PATH=/usr/bin:/bin",
+      "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+      "OMP_NUM_THREADS=1",
+      "numactl",
+      "--interleave=all",
+      "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+      "-m",
+      "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "--override-kv",
+      "glm-dsa.attention.indexer.top_k=int:16384",
+      "--device",
+      "none",
+      "-ngl",
+      "0",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "19560",
+      "-c",
+      "16384",
+      "-t",
+      "96",
+      "-ub",
+      "512",
+      "--log-disable",
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}}}}"
+    ],
+    "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:16384 --device none -ngl 0 --host 127.0.0.1 --port 19560 -c 16384 -t 96 -ub 512 --log-disable --reasoning-format deepseek --reasoning off --reasoning-budget 0 --json-schema '{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}}}}'",
+    "threads": 96,
+    "trace_logs": false,
+    "ubatch": 512
+  }
+}
