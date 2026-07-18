@@ -6050,6 +6050,7 @@ roles:
         notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The 2026-07-18 task-quality / architecture-fit first slice passed 5/6 on both CPU no-spec and MI210-hybrid no-spec, failing only exact six-word instruction. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
       runtime_observations:
         evidence_dir: /mnt/raid0/llm/tmp/hy3-mtp-closure-20260716T234610Z
+        current_source_cpuonly_load_probe: "2026-07-18 rebuilt experimental-v7 `d1e5a20eb` CPU-only n=0 load probe with `-dev none -ngl 0 --no-op-offload -nkvo` reached about 175 GiB RSS and timed out after 300s without reproducing the old tensor-count mismatch; no decode/quality claim. Artifact: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3-iq1m-mtp-load-n0-cpuonly-20260718T162550Z/summary.json"
         cpu_no_spec_generation_tps: 3.9
         cpu_draft_mtp_generation_tps: 3.6
         mi210_hybrid_no_spec_generation_tps: 9.2
@@ -6143,25 +6144,53 @@ roles:
     acceleration:
       type: unified_diffusion_self_spec_fork_verified
       notes: >
-        Stock experimental v7 cannot load this GGUF. Scratch buun-llama-cpp
-        builds from rocm-fused-turbo-port can run diffusion self-spec on CPU
-        and MI210 after a local ROCm 6.2/gfx90a FP8 guard in vendors/hip.h.
+        Stock experimental v7 now loads this GGUF after the 2026-07-18 Dream
+        rectangular-attention tensor-shape fix. Scratch buun-llama-cpp builds
+        from rocm-fused-turbo-port remain the earlier self-spec reference path.
     constraints:
       forbid:
-      - production_stack_registration_without_fork_loader_quality_gate
+      - production_stack_registration_without_stock_v7_quality_gate
       - decision_grade_speed_claim_from_single_token_smoke
       - self_spec_production_claim_without_quality_throughput_gate
       reason: >
-        Downloaded artifact is research-only. Fork loader support is now smoke
-        verified, but stock v7 support, maintained loader path, task quality,
-        and throughput gates are still open.
+        Downloaded artifact is research-only. Stock v7 load/CLI runnability is
+        now smoke-verified and first MI210 synthetic throughput is observed,
+        but task quality, CPU throughput, and maintained production-role gates
+        are still open.
     performance:
-      benchmark_status: fork_selfspec_smoke_pass_stock_v7_loader_fail
+      benchmark_status: stock_v7_loader_shape_fixed_cli_runnable_quality_throughput_open
       prior_context: "July 11 download note says the 14B HF and Q8_0 GGUF downloads completed, but load/correctness remained deferred."
       stock_v7_observation: >
         2026-07-16 CPU and MI210 stock experimental v7 load smokes failed at
         check_tensor_dims for blk.0.attn_q.weight: expected 5120 x 5120, got
-        5120 x 4096.
+        5120 x 4096. 2026-07-18 current experimental-v7 `d1e5a20eb`
+        CPU-forced llama-bench retry with ROCm visible reproduced the same
+        tensor-shape failure in 1s and produced no throughput row; artifact
+        /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_cpu_v7/20260718T163424Z.
+        The same checkpoint found `llama-diffusion-cli --help` segfaulting
+        with exit 139, so stock-v7 diffusion CLI/harness support is also open.
+      stock_v7_shape_fix_observation: >
+        2026-07-18 experimental-v7 patched `src/models/dream.cpp` to size Dream
+        Q/O projections from `attention.key_length * n_head`, matching the GGUF
+        rectangular tensors. Build of `llama-bench` and `llama-diffusion-cli`
+        passed; `llama-diffusion-cli --help` exited 0 with experimental libs;
+        CPU-forced real-GGUF load smoke exited 0 at
+        /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_cpu_v7/dream-shape-fix-load-smoke-20260718T164925Z;
+        Dream-style CPU CLI smoke exited 0 at
+        /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_cpu_v7/dream-shape-fix-cli-smoke3-20260718T165101Z;
+        `test-llama-archs --arch dream` passed on MI210/CPU/meta. A first
+        stock-v7 MI210 synthetic throughput row at
+        /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/mi210_dream_fix_local_20260718T165819Z
+        measured `pp512 1700.42 t/s`, `tg512 69.05 t/s`. A stock MI210
+        `llama-diffusion-cli` probe at
+        /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/mi210_cli_dream_fix_local_20260718T170018Z
+        exited 0 with `112.97 ms/step`, but emitted reasoning text for an
+        exact-output prompt. A CPU-only observational throughput row at
+        /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/cpu_dream_fix_20260718T170001Z/summary.json
+        measured `pp512 45.33 t/s`, `tg256 2.45 t/s`, but overlapped another
+        CPU-only bench at start and is not decision-grade. This is
+        speed/runnability only; task quality and production-role content
+        control remain open.
       fork_cpu_observation: >
         2026-07-16 scratch buun CPU llama-diffusion-cli self-spec smoke passed:
         one cycle, average 5.0 tokens/cycle, 100.0% draft accept, output ok,
@@ -6206,6 +6235,9 @@ roles:
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/nemotron_diff14_buun_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/nemotron_diff14_q8_buun_mi210/summary.txt
       - /mnt/raid0/llm/tmp/nemotron-diff14-quality-mi210-20260717T0900Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/mi210_dream_fix_local_20260718T165819Z
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/mi210_cli_dream_fix_local_20260718T170018Z
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/cpu_dream_fix_20260718T170001Z/summary.json
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c2048/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c8192/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c32768/summary.txt
@@ -7277,9 +7309,15 @@ roles:
     constraints:
       forbid:
       - production_stack_registration_without_quality_retention_gate
-      reason: "Compression artifact may improve residency, but quality retention versus ORIG Q4_K_M is unmeasured."
+      reason: "Compression artifact is MI210-resident and speed/coherence-clean in first current-v7 probe, but quality retention versus ORIG Q4_K_M is still unmeasured."
     performance:
-      benchmark_status: not_run_exact_artifact
+      benchmark_status: current_v7_mi210_speed_coherence_pass_quality_retention_open
+      observed_date: 2026-07-18
+      current_v7_mi210_observation: "Experimental v7 `d1e5a20eb` MI210 probe at `data/gemma4_iq4_residency/gemma4_26b_ud_iq4xs_mi210_v7_20260718T162446Z/summary.json`: llama-bench `pp2048 2449.01 t/s`, `tg256 81.91 t/s`; server/chat 8K coherence probe processed 6971 prompt tokens at 2257.80 t/s and generated 201 tokens at 76.02 t/s with exact repeated-token compliance. Cleanup verified no KFD PIDs. Speed/coherence only; quality retention and optimized native-MTP lane remain open."
+      current_v7_cpu_observation: "Experimental v7 `d1e5a20eb` CPU-only control at `data/gemma4_iq4_residency/20260718T164058Z_cpu_only_v7_control`: llama-bench with `-dev none -ngl 0 -nkvo 1 -t 96`, q8 KV, measured `pp2048 261.26 t/s`, `tg512 11.15 t/s`; no KFD PIDs after cleanup."
+      evidence:
+      - /mnt/raid0/llm/epyc-inference-research/data/gemma4_iq4_residency/gemma4_26b_ud_iq4xs_mi210_v7_20260718T162446Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/gemma4_iq4_residency/20260718T164058Z_cpu_only_v7_control
     memory:
       residency: cold
       pinned: false

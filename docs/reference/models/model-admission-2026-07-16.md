@@ -32,7 +32,7 @@ Admission and serving decisions should use the fastest quality-clean lane that w
 | Qwable-v1 IQ4_XS | Complete: `Qwable-v1.IQ4_XS.gguf`, 18,939,313,056 bytes. | HF metadata/tree revision `f35ea1502056a2886dd88fb8a29272f8f3c9c3a5`, LFS hash `3921bb8f1fc26ddd80ee97d0f48ccf507bd1dab04dbe4fc475e2eae65a05f460`. | Standalone/scaffold reasoning-economics smoke; use as plain reasoner, not as MTP/draft model. |
 | Qwable-v1 Q8_0 | Complete: `Qwable-v1.Q8_0.gguf`, 36,903,140,256 bytes. | HF metadata/tree revision `f35ea1502056a2886dd88fb8a29272f8f3c9c3a5`, LFS hash `d7420a49e8c2c7adabafe199f20cac27a5b291173604cc758bf3d2f29a2334c0`. | Near-lossless Qwable quality arm; sequential or smaller-beneficiary MI210 use because it does not co-reside with a 35B beneficiary. |
 | Nemotron-Nano-9B-v2 BF16 | Complete: `nvidia_NVIDIA-Nemotron-Nano-9B-v2-bf16.gguf`, registered in research as the full-precision reference arm. | Local artifact path `/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-bf16.gguf`; same HF source family as the Q8_0 Nano entry. | ✅ Reference arm executed on current v7: no-system deepseek 512-token MI210 run passed `4/5` at mean decode `59.44 t/s`; `llama-bench` measured `tg1024 59.03 t/s` and `tg512 57.31 t/s`. BF16 fixed the strict-JSON cell that Q8 missed, but failed the five-word format cell on hyphenated `real-world`; not role-ready and slower than Q8. |
-| Nemotron-Labs-Diffusion-14B Q8_0 | Complete: GGUF `nemotron-diffusion-14b-Q8_0.gguf`, 14,359,313,600 bytes, plus HF reference weights under `/mnt/raid0/llm/hf-models/Nemotron-Labs-Diffusion-14B/`, 27,012,190,712 bytes. | GGUF HF metadata revision `7ec2bb277055ffbbcc8cb7e56e179216d3f4952d`, LFS hash `d25119a965e4781b5f1d4b5b2cf446e4102d949d9752d86144b94820368fa4d1`; HF reference includes `modeling_nemotron_labs_diffusion.py`, config, chat template, and `linear_spec_lora/adapter_model.safetensors`. | Stock experimental v7 loader fails this GGUF; scratch buun fork loader passes CPU/MI210 self-spec smoke. Next gate is maintained/upstreamable loader path plus task-level quality/throughput. |
+| Nemotron-Labs-Diffusion-14B Q8_0 | Complete: GGUF `nemotron-diffusion-14b-Q8_0.gguf`, 14,359,313,600 bytes, plus HF reference weights under `/mnt/raid0/llm/hf-models/Nemotron-Labs-Diffusion-14B/`, 27,012,190,712 bytes. | GGUF HF metadata revision `7ec2bb277055ffbbcc8cb7e56e179216d3f4952d`, LFS hash `d25119a965e4781b5f1d4b5b2cf446e4102d949d9752d86144b94820368fa4d1`; HF reference includes `modeling_nemotron_labs_diffusion.py`, config, chat template, and `linear_spec_lora/adapter_model.safetensors`. | Stock experimental v7 now loads after the 2026-07-18 Dream rectangular-Q/O fix; MI210 synthetic throughput is observed at `pp512 1700.42 t/s`, `tg512 69.05 t/s`. CPU-only observational row is `pp512 45.33 t/s`, `tg256 2.45 t/s` but not clean due overlapping CPU bench. Stock diffusion CLI exits cleanly but is not task-quality clean yet. |
 
 ## Additional Local Registry Gap Audit
 
@@ -51,6 +51,7 @@ The same sweep found stale zero-byte Hugging Face `.lock` files in Qwable, MiniC
 | Qwen3-VL-8B local Q4_K_M + mmproj | Present: 5,027,784,800-byte GGUF plus 1,159,029,824-byte mmproj. | Added `qwen3_vl_8b_local_q4km` with HF sidecar provenance. | Text + image smoke, then MI210 throughput/quality if coherent. |
 | Qwen3-4B-Thinking-2507 local Q8_0 | Present: 4,280,405,632-byte GGUF. | Added `qwen3_4b_thinking_2507_local_q8` with HF sidecar/tree provenance. | Small reasoning/verifier smoke and task-class quality gate. |
 | N5 aligned Qwen3.5-0.8B Q8 draft | Present: 811,843,904-byte scratch derivative at `/mnt/raid0/llm/scratch/n5/Qwen3.5-0.8B-Q8_0.frontdoor-mtp-specials.gguf`; historical non-MTP-aligned source remains at `frontdoor-specials.gguf`. | Added `draft_qwen35_0_8b_q8_0_frontdoor_mtp_specials` as a research-only external-draft artifact with active-MTP-frontdoor BOS/EOS/PAD `248044/248046/248055`. | Use only through the hardened N5 strict/execute harness in an isolated retest worktree/build; not a production-stack registry candidate. |
+| Gemma4 26B-A4B UD-IQ4_XS local | Present: 13,597,175,584-byte GGUF. | Updated `gemma4_26b_a4b_ud_iq4xs_local` from not-run to current-v7 speed/coherence observed; provenance remains local artifact only. | ✅ 2026-07-18 MI210 current-v7 probe passed load/coherence: `pp2048 2449.01 t/s`, `tg256 81.91 t/s`, 8K server/chat `6971` prompt tokens at `2257.80 t/s` and `201` completion tokens at `76.02 t/s`. ✅ CPU-only control measured `pp2048 261.26 t/s`, `tg512 11.15 t/s`. Quality retention versus ORIG Q4_K_M and optimized native-MTP speed remain open. |
 | Bonsai side artifacts | Present: `Bonsai-27B-dspark-Q4_1.gguf` (1,787,468,768 bytes), `Bonsai-27B-mmproj-Q8_0.gguf` (629,246,880 bytes), `Ternary-Bonsai-27B-dspark-Q4_1.gguf` (1,946,393,568 bytes), and `Ternary-Bonsai-27B-mmproj-Q8_0.gguf` (629,246,880 bytes). | Attached as `related_artifacts` under the Bonsai Q1_0 and Ternary Bonsai Q2_0 registry entries with HF sidecar provenance. | `dspark` text smokes after primary Bonsai Q1/Q2 gates; mmproj is support/provenance only until a multimodal Bonsai gate exists. |
 | Bonsai-8B local orphan | Present: `/mnt/raid0/llm/models/Bonsai-8B.gguf`, 1,158,654,496 bytes, no local HF sidecar. | Added `bonsai_8b_local_orphan` as research-only with `quant: unknown` and `provenance: local_orphan_no_hf_sidecar`. | Optional loader/provenance classification after primary Bonsai Q1/Q2 gates; no production claim. |
 
@@ -391,9 +392,9 @@ The production-representative repeat at `/mnt/raid0/llm/tmp/expert-routing-skew-
 
 Interpretation: the general GLM workload does **not** show a cacheable hot-expert set. Generic GLM hot-expert GPU residency / REAP should stay deprioritized unless a narrower role-specific corpus shows materially stronger skew. This does not close DSA sparse-vs-dense or long-context quality gates.
 
-## Nemotron-Labs-Diffusion Fork Loader Probe
+## Nemotron-Labs-Diffusion Stock Loader / Fork Loader Probe
 
-The stock experimental v7 loader cannot load the local Nemotron-Labs-Diffusion-14B Q8_0 GGUF. Both CPU and MI210 v7 smoke cases fail at model load with:
+The stock experimental v7 loader originally could not load the local Nemotron-Labs-Diffusion-14B Q8_0 GGUF. Both CPU and MI210 v7 smoke cases failed at model load with:
 
 ```text
 check_tensor_dims: tensor 'blk.0.attn_q.weight' has wrong shape; expected 5120, 5120, got 5120, 4096, 1, 1
@@ -403,6 +404,20 @@ Evidence:
 
 - CPU stock-v7 failure: `/mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716/nemotron_diff14_q8_cpu_v7.stderr`.
 - MI210 stock-v7 failure: `/mnt/raid0/llm/tmp/nemotron-admission-smoke-20260716-mi210-confirm/nemotron_diff14_q8_mi210_v7.stderr`.
+- Current-v7 CPU-forced retry before the fix: `/mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_cpu_v7/20260718T163424Z/` used experimental v7 `d1e5a20eb`, kept ROCm visible, forced `-ngl 0 -dev none`, and reproduced the same `blk.0.attn_q.weight` shape mismatch in one second. The dedicated stale/ABI-mismatched `llama-diffusion-cli --help` also segfaulted with exit `139`.
+
+2026-07-18 stock-v7 fix: `src/models/dream.cpp` now sizes Dream Q/O projections from `attention.key_length * n_head`, matching the local GGUF's rectangular tensors (`attn_q.weight` `5120 x 4096`, `attn_output.weight` `4096 x 5120`) instead of assuming square `5120 x 5120` attention. Validation:
+
+- rebuilt experimental `llama-bench` and `llama-diffusion-cli`
+- `llama-diffusion-cli --help` exits `0` and `ldd` resolves `libllama*.so` from `/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin`
+- CPU-forced real-GGUF `llama-bench -p 1 -n 0 -ngl 0 -dev none` exits `0`: `data/nemotron_diffusion_cpu_v7/dream-shape-fix-load-smoke-20260718T164925Z/summary.json`
+- CPU Dream-style CLI smoke exits `0` with `--diffusion-eps 0.001`: `data/nemotron_diffusion_cpu_v7/dream-shape-fix-cli-smoke3-20260718T165101Z/summary.json`
+- `test-llama-archs --arch dream` passes on MI210/CPU/meta
+- MI210 stock-v7 `llama-bench -ngl 99 -dev ROCm0 -p 512 -n 512` exits `0`: `data/nemotron_diffusion_stock_v7/mi210_dream_fix_local_20260718T165819Z/`, with `pp512 1700.42 t/s` and `tg512 69.05 t/s`
+- MI210 stock-v7 `llama-diffusion-cli -ngl 99 -dev ROCm0 --diffusion-steps 16 --diffusion-eps 0.001` exits `0`: `data/nemotron_diffusion_stock_v7/mi210_cli_dream_fix_local_20260718T170018Z/`, total diffusion time `1807.44 ms`, `112.97 ms/step`; the exact-output prompt was not task-clean because the model emitted reasoning text
+- CPU-only stock-v7 observational `llama-bench -dev none -ngl 0 --no-op-offload 1 --no-kv-offload 1 -p 512 -n 256` exits `0`: `data/nemotron_diffusion_stock_v7/cpu_dream_fix_20260718T170001Z/summary.json`, with `pp512 45.33 t/s` and `tg256 2.45 t/s`; this overlapped another CPU-only bench at start and is not a clean dedicated-machine benchmark
+
+This closes stock-v7 loader/CLI runnability and gives first MI210 plus observational CPU synthetic throughput rows. It does not close task quality or decision-grade CPU throughput. The CLI output was not task-clean.
 
 After the operator authorized a fork-specific loader if needed, `spiritbuun/buun-llama-cpp` branch tarball `rocm-fused-turbo-port` was procured into scratch at `/mnt/raid0/llm/tmp/buun-llama-cpp-src`. The CPU fork build produced `/mnt/raid0/llm/tmp/buun-llama-cpp-src/build-cpu/bin/llama-diffusion-cli`. The HIP fork build produced `/mnt/raid0/llm/tmp/buun-llama-cpp-src/build-hip/bin/llama-diffusion-cli` and `llama-server`.
 
@@ -492,6 +507,8 @@ Evidence directory: `data/hy3_task_quality/hy3_task_quality_20260718Tcontinuatio
 | CPU no-spec | 5/6 | 27.49 | 5.21 | Same seven-word miss. |
 
 Classification: Hy3 is loadable and task-coherent on most of this slice, and hybrid no-spec roughly doubles decode speed over CPU-only on these short tasks. It is still not role-ready: both realistic lanes failed the exact short-instruction task, and the evidence does not justify production-stack registration. The next useful Hy3 work is prompt/template repair or a role-specific quality suite; do not rerun first-load or MTP-closure probes. Cleanup passed with no leftover `llama-server` PIDs.
+
+Current-source load recheck: a rebuilt experimental-v7 `d1e5a20eb` CPU-only n=0 load probe ran with `-dev none -ngl 0 --no-op-offload -nkvo` at `data/hy3_current_v7/hy3-iq1m-mtp-load-n0-cpuonly-20260718T162550Z/summary.json`. It reached about 175 GiB RSS and timed out after 300 seconds without reproducing the old tensor-count mismatch. This is useful only as loader-regression evidence: it does not prove full load completion, decode speed, or task quality under current source.
 
 ## Qwable Server/Chat Reasoning-Economics Smoke
 
@@ -638,6 +655,22 @@ This is the production-shaped Gemma4 worker configuration: composed
 Interpretation: the worker's composed spec path remains acceptance-stable across
 the measured contexts, but decode still falls with depth. This is the current
 optimized worker curve for the K35 stack table, not a raw no-spec baseline.
+
+## Gemma4 UD-IQ4_XS Current-v7 Residency Probe
+
+Evidence lives at `data/gemma4_iq4_residency/gemma4_26b_ud_iq4xs_mi210_v7_20260718T162446Z/summary.json`. The run used experimental v7 `d1e5a20eb`, MI210 offload, q8 KV, and the local `gemma-4-26B-A4B-it-UD-IQ4_XS.gguf` artifact.
+
+`llama-bench` measured `pp2048 2449.01 t/s` and `tg256 81.91 t/s`. A server/chat 8K coherence probe processed `6971` prompt tokens at `2257.80 t/s` and generated `201` completion tokens at `76.02 t/s`; the output satisfied the exact repeated-token check. Cleanup proof showed the server PID dead and no KFD PIDs. The CPU-only control at `data/gemma4_iq4_residency/20260718T164058Z_cpu_only_v7_control` used `-dev none -ngl 0 -nkvo 1 -t 96`, q8 KV, and measured `pp2048 261.26 t/s`, `tg512 11.15 t/s`.
+
+Interpretation: UD-IQ4_XS is fully MI210-resident and runtime/coherence-clean on this current-v7 probe. It remains a compression candidate, not a production worker replacement: quality retention against ORIG Q4_K_M and optimized native-MTP speed/acceptance are still open.
+
+## Gemma4 Combined Ngram-Then-MTP Probe
+
+Evidence lives at `data/ngram_mtp_combined_quality/gemma4_26b_mi210_20260718T163351Z/summary.json`. The same experimental-v7 server accepted both `--spec-type draft-mtp` and `--spec-type ngram-mod,draft-mtp`; source inspection confirmed the composed path builds ngram implementations before draft implementations and stops after the first non-empty draft, so the combined lane is ngram-first with MTP fallback.
+
+On the small structured JSON slice, native MTP passed `1/2` tasks; the valid routing task decoded at `128.33` client completion tok/s and logged draft acceptance `221/232` (`0.95259`). Combined `ngram-mod,draft-mtp` also passed `1/2`; the valid routing task decoded at `118.22` tok/s and logged `244/871` accepted/generated (`0.28014`). The invoice task failed both arms by hitting the `512`-token cap before closing JSON.
+
+Interpretation: combined ngram->MTP is mechanically supported, but this Gemma4 26B structured-output slice is negative for making it the default. Native MTP was faster on the valid task and had much higher acceptance. Keep ngram composition task-gated rather than globally enabled.
 
 ## K35 Architect-General Context Curve
 
