@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "",
+        "reasoning_content": "TheThe GLM DSA probe keeps the context deterministic while the runner checks shard integrity, load behavior, load behavior, and KV scaling under a fixed indexer configuration.SAI-2 D2-2-2 D2-0-0-00.0.0-0.00-2-",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784334759,
+  "id": "chatcmpl-vjmodxNZQ68NvreUmxJpuxMTQTYaYO8A",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 34206.43,
+    "predicted_n": 64,
+    "predicted_per_second": 1.8709932606238067,
+    "predicted_per_token_ms": 534.47546875,
+    "prompt_ms": 724494.625,
+    "prompt_n": 12051,
+    "prompt_per_second": 16.63366377631856,
+    "prompt_per_token_ms": 60.119046137250024
+  },
+  "usage": {
+    "completion_tokens": 64,
+    "prompt_tokens": 12051,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 12115
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "",
+        "reasoning_content": "The user wants me to output \"READY\" after the long-context DSA probe.\nThe prompt is a repeated sentence: \"The GLM DSA probe keeps the context deterministic while the runner checks shard integrity, load behavior, and KV scaling under a fixed indexer configuration.\"\nThe prompt ends with \"The GLM DSA",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784335552,
+  "id": "chatcmpl-HQjEXIXbaUbaIfaSRnVnD07ZGSnJnvSl",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 35465.597,
+    "predicted_n": 64,
+    "predicted_per_second": 1.804565703490061,
+    "predicted_per_token_ms": 554.149953125,
+    "prompt_ms": 725209.252,
+    "prompt_n": 12051,
+    "prompt_per_second": 16.61727283093184,
+    "prompt_per_token_ms": 60.17834636129781
+  },
+  "usage": {
+    "completion_tokens": 64,
+    "prompt_tokens": 12051,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 12115
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "READY",
+        "reasoning_content": "The user wants me to return \"READY\" after the long-context DSA probe, and answer with a single short sentence.",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784333939,
+  "id": "chatcmpl-5nh0sMZguLT7izesA2Hy8FVrAikxpSfJ",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 11440.272,
+    "predicted_n": 28,
+    "predicted_per_second": 2.4474942553813404,
+    "predicted_per_token_ms": 408.5811428571429,
+    "prompt_ms": 83701.913,
+    "prompt_n": 2174,
+    "prompt_per_second": 25.973122024104754,
+    "prompt_per_token_ms": 38.50133992640294
+  },
+  "usage": {
+    "completion_tokens": 28,
+    "prompt_tokens": 2174,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 2202
+  }
+}

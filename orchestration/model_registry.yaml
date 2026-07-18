@@ -5631,7 +5631,7 @@ roles:
 
   glm_52_ud_iq2m:
     tier: B
-    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, and current-source runner-shaped quality recovered when the DSA top-k cap is at least the prompt length.
+    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, and current-source runner-shaped quality recovered only under the observed next-power-of-two DSA top-k schedule.
     model:
       name: GLM-5.2-UD-IQ2_M
       huggingface_id: unsloth/GLM-5.2-GGUF
@@ -5669,7 +5669,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence fails in both default-reasoning and reasoning-off modes with malformed peg-native output after full prompt ingest and 64-token decode. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. Source/runtime evidence now narrows the remaining malformed output to the DSA final-attention selection cap: top_k=2048 passes at 2056 prompt tokens but fails at 2168/3045/12043, while dense-by-construction caps recover 2168, 3045, and 12045 with exact READY. Next sweep the smallest safe prompt-length-aware top_k schedule before reviewer/task work; only pursue native GLM-MTP/NEXTN or sparse final attention after quality is stable."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence failed under unsafe low top_k. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. Source/runtime evidence narrows the malformed output to the DSA final-attention selection cap: top_k=2048 passes at 2056 prompt tokens but fails at 2168/3045/12043; top_k=3072 fails strict exact output at 2.1K/3K; top_k=8192 and 12288 fail strict exact output at 12K; observed safe caps are next power-of-two bands 2048, 4096, and 16384 for the tested prompt shapes. Next run reviewer/task-quality probes under that schedule; only pursue native GLM-MTP/NEXTN or sparse final attention after quality is stable."
     candidate_roles:
     - architect
     - ingest
@@ -5682,9 +5682,9 @@ roles:
       forbid:
       - production_stack_registration
       - production_role_claim_without_dsa_quality_gate
-      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated and dense-by-construction top_k recovers runner-shaped prompts through 12K, but production-quality serving still needs a smallest-safe top_k schedule plus task-quality gates before role claims."
+      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated and the observed next-power-of-two top_k schedule recovers runner-shaped prompts through 12K, but production-quality serving still needs task-quality gates under that schedule before role claims."
     performance:
-      benchmark_status: current_source_runner_shaped_output_malformed_quality_blocked
+      benchmark_status: current_source_topk_schedule_settled_task_quality_blocked
       short_smoke_observation: >
         2026-07-16 experimental v7 b10077-da1bf5e2f CPU-only llama-server
         loaded the six-shard UD-IQ2_M artifact. With reasoning auto, the model
@@ -5811,12 +5811,24 @@ roles:
         data/glm52_dsa_probe/glm52-topk2048-ctx2560-2100tok-20260717T234100Z/plan.json
         failed the same way. The 3045-token probe at
         data/glm52_dsa_probe/glm52-topk2048-4k-coherence-20260717T231535Z/plan.json
-        failed with malformed/filler output. The realistic 16K long-output
+        failed with malformed/filler output. The 2026-07-18 schedule sweep
+        rejected non-power-of-two caps: at 2168 prompt tokens,
+        data/glm52_dsa_probe/glm52-topk3072-ctx2560-2100tok-20260718T001714Z/plan.json
+        decoded a preamble plus READY instead of exact short output; at 3051
+        prompt tokens,
+        data/glm52_dsa_probe/glm52-topk3072-4k-coherence-20260718T001404Z/plan.json
+        failed the same strict-output criterion. The realistic 16K long-output
         follow-up at
         data/glm52_dsa_probe/glm52-topk2048-16k-long-20260717T230150Z/plan.json
         processed 12043 server prompt tokens at 16.64 t/s and decoded only 85
         tokens at 2.16 t/s before stopping with malformed content and no READY
-        or tokenstream. Dense-by-construction follow-ups recovered exact READY:
+        or tokenstream. The 12K cap checks at
+        data/glm52_dsa_probe/glm52-topk8192-16k-coherence-20260718T001950Z/plan.json
+        and
+        data/glm52_dsa_probe/glm52-topk12288-16k-coherence-20260718T003302Z/plan.json
+        processed 12051 server prompt tokens at 16.63 and 16.62 t/s, then
+        decoded 64 tokens with copied/explanatory filler and no exact READY.
+        Dense next-power-of-two follow-ups recovered exact READY:
         data/glm52_dsa_probe/glm52-topk4096-ctx2560-2100tok-20260717T234600Z/plan.json
         at 2168 prompt tokens, prompt 25.92 t/s and decode 4.73 t/s;
         data/glm52_dsa_probe/glm52-topk4096-4k-coherence-20260717T235100Z/plan.json
@@ -5824,7 +5836,8 @@ roles:
         data/glm52_dsa_probe/glm52-topk16384-16k-coherence-20260718T000200Z/plan.json
         at 12045 prompt tokens, prompt 16.37 t/s and decode 3.41 t/s. Low
         indexer_top_k is now an explicit stress knob, not the runner default;
-        serving work should sweep the smallest safe prompt-length-aware cap.
+        task-quality work should use the observed next-power-of-two cap
+        schedule rather than a merely prompt-length-above cap.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
