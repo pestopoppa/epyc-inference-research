@@ -6185,11 +6185,10 @@ roles:
         `llama-diffusion-cli` probe at
         /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/mi210_cli_dream_fix_local_20260718T170018Z
         exited 0 with `112.97 ms/step`, but emitted reasoning text for an
-        exact-output prompt. A CPU-only observational throughput row at
-        /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/cpu_dream_fix_20260718T170001Z/summary.json
-        measured `pp512 45.33 t/s`, `tg256 2.45 t/s`, but overlapped another
-        CPU-only bench at start and is not decision-grade. This is
-        speed/runnability only; task quality and production-role content
+        exact-output prompt. A clean CPU-only throughput row at
+        /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/cpu_dream_fix_clean_local_20260718T171131Z/summary.json
+        measured `pp512 157.57 t/s`, `tg256 2.69 t/s`. This is
+        speed/runnability evidence; task quality and production-role content
         control remain open.
       fork_cpu_observation: >
         2026-07-16 scratch buun CPU llama-diffusion-cli self-spec smoke passed:
@@ -6237,7 +6236,7 @@ roles:
       - /mnt/raid0/llm/tmp/nemotron-diff14-quality-mi210-20260717T0900Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/mi210_dream_fix_local_20260718T165819Z
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/mi210_cli_dream_fix_local_20260718T170018Z
-      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/cpu_dream_fix_20260718T170001Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/cpu_dream_fix_clean_local_20260718T171131Z/summary.json
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c2048/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c8192/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c32768/summary.txt
@@ -7314,9 +7313,11 @@ roles:
       benchmark_status: current_v7_mi210_speed_coherence_pass_quality_retention_open
       observed_date: 2026-07-18
       current_v7_mi210_observation: "Experimental v7 `d1e5a20eb` MI210 probe at `data/gemma4_iq4_residency/gemma4_26b_ud_iq4xs_mi210_v7_20260718T162446Z/summary.json`: llama-bench `pp2048 2449.01 t/s`, `tg256 81.91 t/s`; server/chat 8K coherence probe processed 6971 prompt tokens at 2257.80 t/s and generated 201 tokens at 76.02 t/s with exact repeated-token compliance. Cleanup verified no KFD PIDs. Speed/coherence only; quality retention and optimized native-MTP lane remain open."
+      current_v7_mi210_mtp_observation: "Follow-up `data/gemma4_iq4_residency/mtp_ab_local_20260718T170739Z/summary.json`: no-spec q8-KV control measured `pp2048 2450.51 t/s`, `tg512 81.41 t/s`; external assistant-head MTP with `--spec-type draft-mtp --spec-draft-n-max 2` decoded 542 eval tokens at `117.01 t/s` and accepted `360/362` drafts (`0.99448`). Strict JSON content was not clean because the response included channel markers, so this is speed-positive but not role-ready."
       current_v7_cpu_observation: "Experimental v7 `d1e5a20eb` CPU-only control at `data/gemma4_iq4_residency/20260718T164058Z_cpu_only_v7_control`: llama-bench with `-dev none -ngl 0 -nkvo 1 -t 96`, q8 KV, measured `pp2048 261.26 t/s`, `tg512 11.15 t/s`; no KFD PIDs after cleanup."
       evidence:
       - /mnt/raid0/llm/epyc-inference-research/data/gemma4_iq4_residency/gemma4_26b_ud_iq4xs_mi210_v7_20260718T162446Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/gemma4_iq4_residency/mtp_ab_local_20260718T170739Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/gemma4_iq4_residency/20260718T164058Z_cpu_only_v7_control
     memory:
       residency: cold
