@@ -448,7 +448,9 @@ These are admission observations gathered 2026-07-16 while GLM-5.2 was still dow
 | Qwable-v1 Q8_0 | PASS load/decode with output-quality warning; emitted reasoning preamble instead of clean one-sentence answer. | Prompt `169.8 t/s`, generation `102.5 t/s`. | `qwable_q8_0_reasoning_mi210_v7.log` |
 | Hy3 AngelSlim IQ1_M-mtp | PASS capped CPU load/decode on patched experimental v7. | Returned `OK`; prompt `20.2 t/s`. Generation t/s is not meaningful for the one-token cap. | `/mnt/raid0/llm/tmp/hy3-tensor-mismatch-20260716/patched-v7-hy3/smoke.stdout` |
 
-Follow-ups: investigate the Ternary Bonsai Q2_0 offset failure separately. Q2_g64 is runtime-smoke passed and has preliminary control/optimized throughput observations, but it failed the first strict quality gate and is not role-ready. The Qwable speed/load observations do not invalidate earlier successful v7/GPU Qwable work; the failed CPU direct-CLI runs were harness failures.
+Follow-ups: Q2_g64 is runtime-smoke passed and has preliminary control/optimized throughput observations, but it failed the first strict quality gate and is not role-ready. The Qwable speed/load observations do not invalidate earlier successful v7/GPU Qwable work; the failed CPU direct-CLI runs were harness failures.
+
+2026-07-18 Ternary Bonsai Q2_0 decision: treat the offset failure as a producer/export contract bug first, not a v7 loader bug. The raw layout verifier at `data/bonsai_current_v7/ternary_bonsai_q2_layout_contract_20260718Tcodex.json` found all `498/498` Q2_0 tensors physically short under current-v7's standard 18-byte/64-weight `GGML_TYPE_Q2_0` contract, while sibling Q2_g64 had `0/498` mismatches. The first mismatch is `output.weight`, short by exactly one byte per 64-value block. Next step is a canonical producer/export replacement, or a distinct metadata/type contract for the 17-byte layout. Do not rerun ordinary CPU/MI210 smokes until the raw layout verifier passes on a corrected artifact; blind padding transcode and a compatibility loader are both unsafe without documented layout semantics.
 
 ## Bonsai Q1_0 Quiet-Host Prompting Gate
 
