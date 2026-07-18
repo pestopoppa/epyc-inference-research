@@ -81,6 +81,17 @@ def runtime_env_prefix(binary: Path) -> list[str]:
     ]
 
 
+def scenario_device_env(scenario: "Scenario") -> list[str]:
+    uses_target_gpu = scenario.device != "none" or scenario.n_gpu_layers > 0
+    uses_draft_gpu = (
+        scenario.spec_draft_device not in (None, "none")
+        or (scenario.spec_draft_ngl is not None and scenario.spec_draft_ngl > 0)
+    )
+    if uses_target_gpu or uses_draft_gpu:
+        return ["ROCR_VISIBLE_DEVICES=0", "HIP_VISIBLE_DEVICES=0", "CUDA_VISIBLE_DEVICES=0"]
+    return ["ROCR_VISIBLE_DEVICES=-1", "HIP_VISIBLE_DEVICES=-1", "CUDA_VISIBLE_DEVICES="]
+
+
 @dataclasses.dataclass(frozen=True)
 class Scenario:
     name: str
@@ -354,8 +365,7 @@ def build_server_argv(
     argv = [
         *runtime_env_prefix(binary),
         "GGML_IQK=1",
-        "ROCR_VISIBLE_DEVICES=0",
-        "HIP_VISIBLE_DEVICES=0",
+        *scenario_device_env(scenario),
         "OMP_NUM_THREADS=1",
         "numactl",
         "--interleave=all",
