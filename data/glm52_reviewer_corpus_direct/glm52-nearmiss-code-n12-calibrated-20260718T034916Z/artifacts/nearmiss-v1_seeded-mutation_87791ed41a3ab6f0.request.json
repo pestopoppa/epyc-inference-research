@@ -1,0 +1,17 @@
+{
+  "endpoint": "chat",
+  "payload": {
+    "max_tokens": 128,
+    "messages": [
+      {
+        "content": "You are a strict reviewer. Decide whether the CANDIDATE adequately satisfies the TASK. Approve only when the candidate is acceptable for the task. Reject when it is incomplete, wrong, unsafe, non-executing, or likely to fail the objective check. Return exactly one ReviewDecision JSON object. Use decision 'approve' or 'reject'. confidence must be a JSON number from 0.0 to 1.0. blocking.tripwire must be true iff the candidate is rejected.\n\nTASK:\n# Bug Fixing Task (CPP)\n\n## Problem Description\nGiven an integer array nums, return an array answer such that answer[i] is equal to the product of all the elements of nums except nums[i].\nThe product of any prefix or suffix of nums is guaranteed to fit in a 32-bit integer.\nYou must write an algorithm that runs in O(n) time and without using the division operation.\n\n## Examples\n```\nInput: nums = [1,2,3,4]\nOutput: [24,12,8,6]\n```\n```\nInput: nums = [-1,1,0,-3,3]\nOutput: [0,0,9,0,0]\n```\n\n## Constraints\n2 <= nums.length <= 105\n-30 <= nums[i] <= 30\nThe product of any prefix or suffix of nums is guaranteed to fit in a 32-bit integer.\n\n## Buggy Code\n```cpp\n\nclass Solution {\npublic:\n    vector<int> productExceptSelf(vector<int>& nums) {\n        vector<int>prefVector(nums.size(),1);\n        vector<int>suffVector(nums.size(),1);\n        int prefPro=1;\n        for(int i=0;i<nums.size();i++)\n            prefVector[i]=prefPro;\n            prefPro*=nums[i];\n        }\n        int suffPro=1;\n        for(int i=nums.size()-1;i>=0;i--){\n            suffVector[i]=suffPro;\n            suffPro*=nums[i+1];\n        }\n        vector<int>ans(nums.size());\n        for(int i=0;i<nums.size();i++){\n            ans[i]=prefVector[i]*suffVector[i]\n        }\n        return ans;\n    }\n};\n\n```\n\nFind and fix the bug(s) in the code above. Provide the corrected code. Fix ONLY the bug — do NOT rewrite, rename variables, change data structures, or optimize. Keep the original code structure.\n\nCANDIDATE:\nclass Solution {\npublic:\n    vector<int> productExceptSelf(vector<int>& nums) {\n        vector<int>p\n\nReviewDecision JSON only:",
+        "role": "user"
+      }
+    ],
+    "model": "auto",
+    "seed": 42,
+    "stream": false,
+    "temperature": 0.0
+  },
+  "url": "http://127.0.0.1:19560/v1/chat/completions"
+}

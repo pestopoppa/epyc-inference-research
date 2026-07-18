@@ -5639,7 +5639,7 @@ roles:
 
   glm_52_ud_iq2m:
     tier: B
-    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, current-source runner-shaped quality recovered only under the observed next-power-of-two DSA top-k schedule, chat/free+JSON-schema protocol matrix passed at ~2.9K/~12.0K prompt tokens, synthetic GC-1/2/3 reviewer repairs passed, and the first near-miss corpus shadow run is parse-clean but quality-blocked by false rejects.
+    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, current-source runner-shaped quality recovered only under the observed next-power-of-two DSA top-k schedule, chat/free+JSON-schema protocol matrix passed at ~2.9K/~12.0K prompt tokens, synthetic GC-1/2/3 reviewer repairs passed, and the near-miss corpus shadow plus explicit same-row replay are parse-clean but quality-blocked by false rejects.
     model:
       name: GLM-5.2-UD-IQ2_M
       huggingface_id: unsloth/GLM-5.2-GGUF
@@ -5677,7 +5677,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence failed under unsafe low top_k. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. Source/runtime evidence narrows malformed output to the DSA final-attention selection cap, and the observed safe caps are next power-of-two bands 2048, 4096, and 16384 for the tested prompt shapes. A 2026-07-18 chat-only protocol matrix passed exact READY and JSON-schema {decision:allow} at ~2.9K/4096 and ~12.0K/16384 prompt bands. GC-1/2/3 repair smokes now pass small synthetic checks, but a 2026-07-18 nearmiss-v1 code shadow slice is only parse-clean, not quality-clean: n=12, FA 16.7%, FR 66.7%, accept 25.0%. Next fix reviewer policy/prompting/calibration and rerun claim-grade corpus gates after P-REV-1; raw /completion and /v1/completions remain unvalidated and should be probed only narrowly."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence failed under unsafe low top_k. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. Source/runtime evidence narrows malformed output to the DSA final-attention selection cap, and the observed safe caps are next power-of-two bands 2048, 4096, and 16384 for the tested prompt shapes. A 2026-07-18 chat-only protocol matrix passed exact READY and JSON-schema {decision:allow} at ~2.9K/4096 and ~12.0K/16384 prompt bands. GC-1/2/3 repair smokes now pass small synthetic checks, but a 2026-07-18 nearmiss-v1 code shadow slice and explicit same-row multi_oracle replay are only parse-clean, not quality-clean: n=12, FA 16.7%, FR 66.7%, accept 25.0%. Next fix reviewer policy/prompting/calibration before any further corpus replay or P-REV-1 claim-grade gate; raw /completion and /v1/completions remain unvalidated and should be probed only narrowly."
     candidate_roles:
     - architect
     - ingest
@@ -5690,9 +5690,9 @@ roles:
       forbid:
       - production_stack_registration
       - production_role_claim_without_dsa_quality_gate
-      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated and the observed next-power-of-two top_k schedule recovers runner-shaped prompts through 12K. Chat free-text and JSON-schema channels pass at ~2.9K/~12.0K, repaired synthetic GC-1/2/3 smokes pass, but the first real near-miss corpus shadow run is FR-heavy. Production-quality serving still needs reviewer-policy repair and claim-grade gates under that schedule before role claims."
+      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated and the observed next-power-of-two top_k schedule recovers runner-shaped prompts through 12K. Chat free-text and JSON-schema channels pass at ~2.9K/~12.0K, repaired synthetic GC-1/2/3 smokes pass, but the real near-miss corpus shadow run is FR-heavy and the same-row replay reproduced it. Production-quality serving still needs reviewer-policy repair and claim-grade gates under that schedule before role claims."
     performance:
-      benchmark_status: current_source_reviewer_shadow_corpus_fr_heavy_quality_blocked
+      benchmark_status: current_source_reviewer_shadow_corpus_replay_fr_heavy_quality_blocked
       short_smoke_observation: >
         2026-07-16 experimental v7 b10077-da1bf5e2f CPU-only llama-server
         loaded the six-shard UD-IQ2_M artifact. With reasoning auto, the model
@@ -5892,7 +5892,15 @@ roles:
         ECE=0.392, AUC=0.414, Brier=0.402. Aggregate task timings from row
         timings were 10924 prompt tokens at 26.37 t/s and 319 decode tokens at
         2.56 t/s. This is pre-P-REV-1 observation-grade evidence and blocks
-        reviewer-role confidence; it does not close claim-grade gates.
+        reviewer-role confidence; it does not close claim-grade gates. A follow-up
+        explicit --gold-confidence multi_oracle replay at
+        data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/
+        selected the same 12 rows because multi_oracle is already the runner
+        default, and reproduced the same report: parse=0.0%, FA=16.7%,
+        FR=66.7%, accept=25.0%, ECE=0.392, AUC=0.414, Brier=0.402. Replay
+        aggregate timings were 10924 prompt tokens at 26.73 t/s and 319 decode
+        tokens at 2.59 t/s. Treat the replay as a clean negative control; any
+        next corpus run must change reviewer policy/prompting/calibration first.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
@@ -5976,6 +5984,10 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/decisions.jsonl
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/reviewer_calibration_report.md
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/raw_prompt_and_server_log_artifacts.tar.gz
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/decisions.jsonl
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/reviewer_calibration_report.md
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/raw_prompt_artifacts.tar.gz
     memory:
       residency: cold
       pinned: false

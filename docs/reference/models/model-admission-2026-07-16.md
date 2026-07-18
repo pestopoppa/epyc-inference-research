@@ -216,6 +216,10 @@ Evidence:
 - `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/decisions.jsonl`
 - `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/reviewer_calibration_report.md`
 - `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-20260718Tcheckpoint/raw_prompt_and_server_log_artifacts.tar.gz`
+- `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/summary.json`
+- `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/decisions.jsonl`
+- `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/reviewer_calibration_report.md`
+- `data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n12-calibrated-20260718T034916Z/raw_prompt_artifacts.tar.gz`
 
 The direct corpus runner (`scripts/benchmark/glm52_reviewer_corpus_direct_runner.py`) keeps GLM-5.2 out of the production orchestration registry while emitting ledger-shaped decisions for `scripts/analysis/reviewer_calibration_report.py`. This run used CPU-only current-source experimental v7, chat/completions, JSON schema, `--reasoning off --reasoning-budget 0`, and the recovered `p12000_tk16384` band. It selected a deterministic balanced `nearmiss-v1` code slice (`n=12`, `6 accept / 6 reject`, `multi_oracle` rows).
 
@@ -228,7 +232,9 @@ The direct corpus runner (`scripts/benchmark/glm52_reviewer_corpus_direct_runner
 | ECE / AUC / Brier | `0.392 / 0.414 / 0.402` |
 | Aggregate prompt / decode | `26.37 t/s` / `2.56 t/s` |
 
-Disposition: this is pre-P-REV-1 observation-grade evidence and cannot gate deployment, but it is a strong warning that the repaired synthetic smokes did not transfer to real near-miss review. GLM is parse-clean under schema, but it over-rejects heavily; fix reviewer policy/prompting or calibration before any claim-grade rerun or acceleration spend. The raw prompt text files and raw server log are preserved in the compressed archive above; expanded `artifacts/*.prompt.txt` and `logs/` copies are local scratch and ignored to avoid whitespace-only artifact churn.
+Follow-up replay: the explicit `--gold-confidence multi_oracle` run in `glm52-nearmiss-code-n12-calibrated-20260718T034916Z` selected the same 12 row ids because `multi_oracle` was already the runner default. It reproduced the same report: parse failures `0.0%`, FA `16.7%`, FR `66.7%`, accept `25.0%`, ECE/AUC/Brier `0.392/0.414/0.402`; aggregate prompt/decode `26.73/2.59 t/s`. This run used `--no-trace-logs`, so raw prompts are preserved in `raw_prompt_artifacts.tar.gz` and there is no server-log archive.
+
+Disposition: this is pre-P-REV-1 observation-grade evidence and cannot gate deployment, but it is a strong warning that the repaired synthetic smokes did not transfer to real near-miss review. GLM is parse-clean under schema, but it over-rejects heavily; fix reviewer policy/prompting or calibration before any claim-grade rerun or acceleration spend. Unchanged same-row `multi_oracle` reruns are now retired as non-progress. The raw prompt text files and raw server log from the first shadow run are preserved in the compressed archive above; expanded `artifacts/*.prompt.txt` and `logs/` copies are local scratch and ignored to avoid whitespace-only artifact churn.
 
 ## GLM-5.2 Expert-Routing Skew
 
@@ -552,7 +558,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 
 ## Next Queue
 
-1. Apply the GLM-5.2 DSA top-k schedule in task-quality/reviewer probes before any role claim. True >64K prompt execution is recorded as stale-binary runnability, current-source 32K needle/coherence failed under unsafe low top-k, the schedule sweep shows exact short output requires next power-of-two caps for the tested prompt bands (`2048`, `4096`, `16384`), and the 2026-07-18 chat/free+JSON-schema matrix passed at ~2.9K/~12.0K under that schedule. The first `nearmiss-v1` shadow corpus run is parse-clean but FR-heavy (`66.7%` false rejects), so do not spend more GLM acceleration work until real reviewer quality improves under this schedule.
+1. Apply the GLM-5.2 DSA top-k schedule in task-quality/reviewer probes before any role claim. True >64K prompt execution is recorded as stale-binary runnability, current-source 32K needle/coherence failed under unsafe low top-k, the schedule sweep shows exact short output requires next power-of-two caps for the tested prompt bands (`2048`, `4096`, `16384`), and the 2026-07-18 chat/free+JSON-schema matrix passed at ~2.9K/~12.0K under that schedule. The `nearmiss-v1` shadow corpus run and explicit same-row `multi_oracle` replay are parse-clean but FR-heavy (`66.7%` false rejects), so do not spend more GLM acceleration work until reviewer policy/prompting changes and real reviewer quality improves under this schedule.
 2. Run Hy3 task-level quality / architecture-fit probes if the 295B/21B-active candidate remains interesting. MTP-on/off functional closure is done, and `draft-mtp` regressed vs no-spec in both CPU and MI210-hybrid samples.
 3. Investigate the Ternary Bonsai Q2_0 artifact/runtime offset mismatch before retrying. Q2_g64 is CPU+MI210 runtime-smoke passed and has preliminary throughput observations, including a positive MI210 `ngram-mod` structured-copy speed signal, but the strict quality gate passed only 6/8 and blocks any role claim; dspark variants failed separately.
 4. Qwable IQ4_XS standalone routing and broader representative quality are closed for the research registry: plain reasoning-off IQ4_XS is the preferred reasoning-heavy route, `ngram-mod` is neutral on the expanded slice, and scaffold remains only the beneficiary-must-answer fallback. Remaining work is production hosting/composite-route wiring, not model admission.
