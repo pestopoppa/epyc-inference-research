@@ -7864,7 +7864,16 @@ roles:
       - production_stack_registration_without_mtp_quality_gate
       reason: "Exact MTP artifact is separate from the non-MTP Qwen3.6-27B rows and needs MTP acceptance plus quality evidence."
     performance:
-      benchmark_status: ngram_smoke_observation_quality_gate_open
+      benchmark_status: current_v7_mi210_context_and_ngram_observation_quality_gate_open
+      current_v7_mi210_context_observation: >
+        2026-07-18 current experimental-v7 `cf051d3e1` MI210 llama-bench
+        run on the exact MTP Q8 artifact with `-dev ROCm0 -ngl 99 -fa on`
+        measured base benchmark throughput: prompt-only `pp512 839.72 t/s`,
+        decode-only `tg128 30.85 t/s`, and paired context rows
+        `pp2048+tg512 134.70 t/s`, `pp8192+tg512 311.90 t/s`,
+        `pp32768+tg512 477.89 t/s`. `llama-bench` exposed no MTP/ngram
+        selector, so this is not native-MTP acceptance evidence or a default
+        acceleration claim.
       ngram_gpu_smoke_observation: >
         2026-07-18 bounded MI210 server/chat smoke on experimental-v7
         `cf051d3e18c7` used the exact MTP Q8 artifact after DR-0 scheduling
@@ -7876,6 +7885,8 @@ roles:
         matched baseline on `3/4`. Observation-only; not a role or default
         acceleration claim.
       evidence:
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-mtp-q8-v7-context-20260718T222725Z/metrics_summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-mtp-q8-v7-context-20260718T222725Z/summary.md
       - /mnt/raid0/llm/epyc-inference-research/data/ngram_gpu_smoke_20260718T221549Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/ngram_gpu_smoke_20260718T221549Z/dr0_blocker.txt
     memory:

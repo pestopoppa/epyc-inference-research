@@ -1,0 +1,2 @@
+research_commit_at_run: 4c5a85b4064e86399b5b159bdbff48eafc0c7c64
+working_tree_note: broader repo was dirty; status snapshot omitted from commit for noise control

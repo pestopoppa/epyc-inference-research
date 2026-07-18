@@ -1,0 +1,4 @@
+ggml_cuda_init: found 1 ROCm devices (Total VRAM: 65520 MiB):
+  Device 0: AMD Instinct MI210, gfx90a:sramecc+:xnack- (0x90a), VMM: no, Wave Size: 64, VRAM: 65520 MiB
+Available devices:
+  ROCm0: AMD Instinct MI210 (65520 MiB, 65416 MiB free)

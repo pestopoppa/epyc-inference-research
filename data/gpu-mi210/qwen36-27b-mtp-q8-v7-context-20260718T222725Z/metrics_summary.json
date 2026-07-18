@@ -1,0 +1,106 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-mtp-q8-v7-context-20260718T222725Z",
+  "command": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-mtp-q8-v7-context-20260718T222725Z/llama_bench_stdout.json",
+  "rows": [
+    {
+      "n_prompt": 512,
+      "n_gen": 0,
+      "avg_ts": 839.720441,
+      "stddev_ts": 32.776731,
+      "samples_ts": [
+        816.544,
+        862.897
+      ],
+      "avg_ns": 610191566,
+      "stddev_ns": 23817551,
+      "test_time": "2026-07-18T22:27:54Z",
+      "build_commit": "cf051d3e1",
+      "build_number": 10095,
+      "gpu_info": "AMD Instinct MI210",
+      "backends": "ROCm",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 128,
+      "avg_ts": 30.849266,
+      "stddev_ts": 0.010980,
+      "samples_ts": [
+        30.8415,
+        30.857
+      ],
+      "avg_ns": 4149207616,
+      "stddev_ns": 1479649,
+      "test_time": "2026-07-18T22:27:56Z",
+      "build_commit": "cf051d3e1",
+      "build_number": 10095,
+      "gpu_info": "AMD Instinct MI210",
+      "backends": "ROCm",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 2048,
+      "n_gen": 512,
+      "avg_ts": 134.703575,
+      "stddev_ts": 0.027041,
+      "samples_ts": [
+        134.723,
+        134.684
+      ],
+      "avg_ns": 19004692663,
+      "stddev_ns": 3820118,
+      "test_time": "2026-07-18T22:28:05Z",
+      "build_commit": "cf051d3e1",
+      "build_number": 10095,
+      "gpu_info": "AMD Instinct MI210",
+      "backends": "ROCm",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 512,
+      "avg_ts": 311.898449,
+      "stddev_ts": 0.036870,
+      "samples_ts": [
+        311.925,
+        311.872
+      ],
+      "avg_ns": 27906519207,
+      "stddev_ns": 3307284,
+      "test_time": "2026-07-18T22:28:45Z",
+      "build_commit": "cf051d3e1",
+      "build_number": 10095,
+      "gpu_info": "AMD Instinct MI210",
+      "backends": "ROCm",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 32768,
+      "n_gen": 512,
+      "avg_ts": 477.888607,
+      "stddev_ts": 1.393851,
+      "samples_ts": [
+        478.874,
+        476.903
+      ],
+      "avg_ns": 69639955960,
+      "stddev_ns": 203117831,
+      "test_time": "2026-07-18T22:29:51Z",
+      "build_commit": "cf051d3e1",
+      "build_number": 10095,
+      "gpu_info": "AMD Instinct MI210",
+      "backends": "ROCm",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    }
+  ]
+}
