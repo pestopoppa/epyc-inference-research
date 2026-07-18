@@ -15,17 +15,20 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
         scenario = k35.scenario_by_name("worker_general_cpu_composed_spec")
         argv = k35.build_server_argv(
             scenario,
-            binary=Path("/tmp/llama-server"),
+            binary=Path("/tmp/k35-build/bin/llama-server"),
             port=19123,
             nominal_context=2048,
             max_tokens=256,
         )
         joined = " ".join(argv)
+        self.assertIn("LD_LIBRARY_PATH=/tmp/k35-build/bin", argv)
         self.assertIn("--spec-type ngram-mod,draft-mtp", joined)
         self.assertIn("--spec-draft-n-max 2", joined)
         self.assertIn("--spec-draft-threads 16", joined)
         self.assertIn("--spec-draft-device none", joined)
         self.assertIn("--no-mmap", argv)
+        self.assertIn("--no-op-offload", argv)
+        self.assertIn("--no-kv-offload", argv)
         self.assertIn("-ctk q8_0 -ctv q8_0", joined)
 
     def test_frontdoor_command_uses_gpu_no_spec(self):
@@ -136,7 +139,7 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
                 ]
             )
             plan = k35.build_plan(args)
-            self.assertEqual([cell["nominal_context"] for cell in plan["cells"]], [2048])
+            self.assertEqual([cell["nominal_context"] for cell in plan["cells"]], [2048, 32768])
 
     def test_plan_skips_architect_contexts_above_per_slot_cap(self):
         with tempfile.TemporaryDirectory() as tmp:

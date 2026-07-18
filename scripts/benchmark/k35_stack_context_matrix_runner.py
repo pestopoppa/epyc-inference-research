@@ -70,6 +70,17 @@ AUTOPILOT_MARKERS = (
 )
 
 
+def runtime_library_dir(binary: Path) -> Path:
+    return binary.expanduser().resolve().parent
+
+
+def runtime_env_prefix(binary: Path) -> list[str]:
+    return [
+        "env",
+        f"LD_LIBRARY_PATH={runtime_library_dir(binary)}",
+    ]
+
+
 @dataclasses.dataclass(frozen=True)
 class Scenario:
     name: str
@@ -181,7 +192,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         ),
         model=Path("/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf"),
         draft_model=Path("/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf"),
-        max_context=16384,
+        max_context=32768,
         threads=96,
         ubatch=512,
         device="none",
@@ -195,6 +206,7 @@ SCENARIOS: tuple[Scenario, ...] = (
         spec_draft_device="none",
         spec_draft_ngl=0,
         no_mmap=True,
+        extra_args=("--no-op-offload", "--no-kv-offload"),
         prior_evidence=(
             "/mnt/raid0/llm/tmp/v7-worker-general-shortctx-recheck-20260717T112435Z/: "
             "short-context full-instance composed spec decoded at 76.02 and 116.96 t/s"
@@ -340,8 +352,7 @@ def build_server_argv(
 ) -> list[str]:
     ctx = server_context(scenario, nominal_context, max_tokens)
     argv = [
-        "env",
-        f"LD_LIBRARY_PATH={EXPERIMENTAL_BIN_DIR}",
+        *runtime_env_prefix(binary),
         "GGML_IQK=1",
         "ROCR_VISIBLE_DEVICES=0",
         "HIP_VISIBLE_DEVICES=0",
@@ -537,10 +548,12 @@ def collect_process_blockers() -> list[dict[str, Any]]:
 
 
 def collect_guard_state(binary: Path) -> dict[str, Any]:
+    lib_dir = runtime_library_dir(binary)
     return {
         "captured_at": utc_now(),
         "binary": str(binary),
-        "server_version": run_capture([str(binary), "--version"], timeout=30),
+        "runtime_library_dir": str(lib_dir),
+        "server_version": run_capture([*runtime_env_prefix(binary), str(binary), "--version"], timeout=30),
         "git": {
             "experimental_head": run_capture(
                 ["git", "-C", str(EXPERIMENTAL_ROOT), "rev-parse", "--short", "HEAD"], timeout=10
@@ -551,8 +564,7 @@ def collect_guard_state(binary: Path) -> dict[str, Any]:
         },
         "devices": run_capture(
             [
-                "env",
-                f"LD_LIBRARY_PATH={EXPERIMENTAL_BIN_DIR}",
+                *runtime_env_prefix(binary),
                 "ROCR_VISIBLE_DEVICES=0",
                 "HIP_VISIBLE_DEVICES=0",
                 str(binary),
