@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": true\n  },\n  \"evidence\": {\n    \"basis\": \"azuread_map_groups calls requests.get without try/except and reuses response variable for Graph API.\",\n    \"risk\": \"Fatal Graph API failures are uncaught and duplicated request handling is not justified.\"\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784370219,
+  "id": "chatcmpl-KBglmEPny8obKWVAV8K8L3ii5V1wDEjf",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 35622.831,
+    "predicted_n": 86,
+    "predicted_per_second": 2.4141820732888974,
+    "predicted_per_token_ms": 414.21896511627904,
+    "prompt_ms": 64217.857,
+    "prompt_n": 1610,
+    "prompt_per_second": 25.07090823662957,
+    "prompt_per_token_ms": 39.88686770186336
+  },
+  "usage": {
+    "completion_tokens": 86,
+    "prompt_tokens": 1919,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 2005
+  }
+}

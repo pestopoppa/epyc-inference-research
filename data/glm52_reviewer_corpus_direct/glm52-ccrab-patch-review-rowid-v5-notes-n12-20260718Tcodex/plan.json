@@ -1,0 +1,296 @@
+{
+  "band": {
+    "context_length": 16384,
+    "indexer_top_k": 16384,
+    "min_prompt_tokens": 12000,
+    "name": "p12000_tk16384",
+    "prompt_context_guard_tokens": 512
+  },
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "corpus": {
+    "available_counts": {
+      "('code', 'accept', 'observation', 'python', None)": 410,
+      "('code', 'reject', 'multi_oracle', 'python', None)": 485
+    },
+    "available_summary": {
+      "by_label_representation_counts": {
+        "('accept', 'c-crab|python|no_scoring_method')": 410,
+        "('reject', 'c-crab|python|no_scoring_method')": 485
+      },
+      "candidate_chars": {
+        "max": 20030,
+        "min": 501,
+        "p50": 9011
+      },
+      "candidate_payload_scope_counts": {
+        "full_candidate": 895
+      },
+      "label_counts": {
+        "accept": 410,
+        "reject": 485
+      },
+      "representation_counts": {
+        "c-crab|python|no_scoring_method": 895
+      }
+    },
+    "domain_filter": "code",
+    "explicit_row_ids": [
+      "nearmiss-v1:c-crab:c7b60daa9aa5eadd",
+      "nearmiss-v1:c-crab:660688d73003ed0a",
+      "nearmiss-v1:c-crab:0e49d06ddc8f2635",
+      "nearmiss-v1:c-crab:1c8613da318282a0",
+      "nearmiss-v1:c-crab:8f3c0663c47de1ed",
+      "nearmiss-v1:c-crab:5df8ae04380b00e8",
+      "nearmiss-v1:c-crab:6b710a8f003b6d7f",
+      "nearmiss-v1:c-crab:28cdbe123c730a18",
+      "nearmiss-v1:c-crab:34224c9c98534550",
+      "nearmiss-v1:c-crab:8dc1180c48a1b3b6",
+      "nearmiss-v1:c-crab:1a06ca93c57f49ac",
+      "nearmiss-v1:c-crab:e44abdf36f469146"
+    ],
+    "gold_confidence": [
+      "multi_oracle",
+      "observation"
+    ],
+    "missing_explicit_row_ids": [],
+    "n_judgeable_available": 895,
+    "n_requested": 12,
+    "n_selected": 12,
+    "path": "/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl",
+    "provenance_scoring_method_filter": [
+      "all"
+    ],
+    "selected_label_counts": {
+      "accept": 6,
+      "reject": 6
+    },
+    "selected_row_ids": [
+      "nearmiss-v1:c-crab:c7b60daa9aa5eadd",
+      "nearmiss-v1:c-crab:660688d73003ed0a",
+      "nearmiss-v1:c-crab:0e49d06ddc8f2635",
+      "nearmiss-v1:c-crab:1c8613da318282a0",
+      "nearmiss-v1:c-crab:8f3c0663c47de1ed",
+      "nearmiss-v1:c-crab:5df8ae04380b00e8",
+      "nearmiss-v1:c-crab:6b710a8f003b6d7f",
+      "nearmiss-v1:c-crab:28cdbe123c730a18",
+      "nearmiss-v1:c-crab:34224c9c98534550",
+      "nearmiss-v1:c-crab:8dc1180c48a1b3b6",
+      "nearmiss-v1:c-crab:1a06ca93c57f49ac",
+      "nearmiss-v1:c-crab:e44abdf36f469146"
+    ],
+    "selected_summary": {
+      "by_label_representation_counts": {
+        "('accept', 'c-crab|python|no_scoring_method')": 6,
+        "('reject', 'c-crab|python|no_scoring_method')": 6
+      },
+      "candidate_chars": {
+        "max": 20029,
+        "min": 3651,
+        "p50": 6838
+      },
+      "candidate_payload_scope_counts": {
+        "full_candidate": 12
+      },
+      "label_counts": {
+        "accept": 6,
+        "reject": 6
+      },
+      "representation_counts": {
+        "c-crab|python|no_scoring_method": 12
+      }
+    },
+    "selection_mode": "explicit_row_ids",
+    "source_benchmark_filter": [
+      "c-crab"
+    ],
+    "source_suite_filter": [
+      "python"
+    ]
+  },
+  "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n12-20260718Tcodex/decisions.jsonl",
+  "execution": null,
+  "execution_allowed": true,
+  "generated_at": "2026-07-18T10:16:26.928311+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "measurement_note": "pre-P-REV-1 observation; non-decision-gating",
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "observation_only": true,
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n12-20260718Tcodex",
+  "preexisting_processes": [
+    {
+      "command": "/usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh",
+      "pid": 1849379
+    }
+  ],
+  "refusal_reasons": [],
+  "request": {
+    "endpoint": "chat",
+    "era": "pre_p_rev1_observation",
+    "max_field_chars": 24000,
+    "max_tokens": 320,
+    "rubric_version": "glm52_direct_nearmiss_review_v5+binary_schema+task_test_alignment+oracle_notes",
+    "seed": 42,
+    "temperature": 0.0,
+    "timeout_s": 1800
+  },
+  "review_hints": {
+    "oracle_notes_by_row_id": {
+      "nearmiss-v1:c-crab:0e49d06ddc8f2635": "For this SQLFluff L009 patch review, the added test must reproduce the reported dbt/raw-space source-slice failure. Do not treat a pass-only templated-newline fixture as sufficient evidence. Raw-slice helper/API changes alone are insufficient unless tied to the failing rule path.",
+      "nearmiss-v1:c-crab:1c8613da318282a0": "For this NetBox Azure SSO group-mapping patch review, check whether fatal Graph API/request failures are caught and re-raised with useful context, and whether duplicated request/URL handling is justified. Do not treat a happy-path group assignment as sufficient.",
+      "nearmiss-v1:c-crab:5df8ae04380b00e8": "For this OpenHands pre-commit update patch review, check for unrelated behavioral defaults. In particular, changing the structured logging level-key default is not justified by dependency-hook updates and may break logging tests.",
+      "nearmiss-v1:c-crab:660688d73003ed0a": "For this SymPy perfect/Mersenne-number patch review, inspect the odd-factor validation carefully. The review concern is that the implementation should reason over factor/exponent pairs, not only odd base values, when counting odd exponents.",
+      "nearmiss-v1:c-crab:8f3c0663c47de1ed": "For this topology applications API patch review, inspect exception specificity. Broad generic exception handling or generic 400 responses are not sufficient if the API should distinguish expected lookup/validation failures from unexpected server errors.",
+      "nearmiss-v1:c-crab:c7b60daa9aa5eadd": "For this scikit-learn LogisticRegression dtype patch review, check whether the class-weight dtype change safely preserves float class weights for integer labels. Do not treat broad float32 propagation as sufficient if the reviewed hunk leaves a dtype-design concern unresolved."
+    },
+    "oracle_notes_files": [
+      "/mnt/raid0/llm/epyc-inference-research/docs/data/glm52_ccrab_oracle_notes_n12_confirm_20260718.json"
+    ],
+    "oracle_notes_row_ids": [
+      "nearmiss-v1:c-crab:0e49d06ddc8f2635",
+      "nearmiss-v1:c-crab:1c8613da318282a0",
+      "nearmiss-v1:c-crab:5df8ae04380b00e8",
+      "nearmiss-v1:c-crab:660688d73003ed0a",
+      "nearmiss-v1:c-crab:8f3c0663c47de1ed",
+      "nearmiss-v1:c-crab:c7b60daa9aa5eadd"
+    ],
+    "selected_oracle_note_row_ids": [
+      "nearmiss-v1:c-crab:0e49d06ddc8f2635",
+      "nearmiss-v1:c-crab:1c8613da318282a0",
+      "nearmiss-v1:c-crab:5df8ae04380b00e8",
+      "nearmiss-v1:c-crab:660688d73003ed0a",
+      "nearmiss-v1:c-crab:8f3c0663c47de1ed",
+      "nearmiss-v1:c-crab:c7b60daa9aa5eadd"
+    ],
+    "unused_oracle_note_row_ids": []
+  },
+  "schema": "glm52_reviewer_corpus_direct.v1",
+  "server": {
+    "context_length": 16384,
+    "extra_args": [
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\",\"evidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}},\"evidence\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"basis\",\"risk\"],\"properties\":{\"basis\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180},\"risk\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180}}}}}"
+    ],
+    "indexer_top_k": 16384,
+    "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:16384",
+    "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n12-20260718Tcodex/logs/glm52_corpus__p12000_tk16384.server.log",
+    "metrics": false,
+    "port": 19560,
+    "server_command": [
+      "env",
+      "-i",
+      "PATH=/usr/bin:/bin",
+      "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+      "OMP_NUM_THREADS=1",
+      "numactl",
+      "--interleave=all",
+      "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+      "-m",
+      "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "--override-kv",
+      "glm-dsa.attention.indexer.top_k=int:16384",
+      "--device",
+      "none",
+      "-ngl",
+      "0",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "19560",
+      "-c",
+      "16384",
+      "-t",
+      "96",
+      "-ub",
+      "512",
+      "--log-verbosity",
+      "4",
+      "--log-file",
+      "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n12-20260718Tcodex/logs/glm52_corpus__p12000_tk16384.server.log",
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\",\"evidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}},\"evidence\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"basis\",\"risk\"],\"properties\":{\"basis\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180},\"risk\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180}}}}}"
+    ],
+    "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:16384 --device none -ngl 0 --host 127.0.0.1 --port 19560 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-ccrab-patch-review-rowid-v5-notes-n12-20260718Tcodex/logs/glm52_corpus__p12000_tk16384.server.log --reasoning-format deepseek --reasoning off --reasoning-budget 0 --json-schema '{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\",\"evidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}},\"evidence\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"basis\",\"risk\"],\"properties\":{\"basis\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180},\"risk\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180}}}}}'",
+    "threads": 96,
+    "trace_logs": true,
+    "ubatch": 512
+  }
+}

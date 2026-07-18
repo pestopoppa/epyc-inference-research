@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"reject\",\"confidence\":0.7,\"blocking\":{\"tripwire\":true},\"evidence\":{\"basis\":\"No tests included; _slice_track/_is_track_inside logic is complex and unverified.\",\"risk\":\"Missing tests for overlapping segment slicing; logic may be incorrect.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784371863,
+  "id": "chatcmpl-6gDxfJbYTmUMDXhymWblUPnjA68KY7lu",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 23371.271,
+    "predicted_n": 57,
+    "predicted_per_second": 2.4388917487628294,
+    "predicted_per_token_ms": 410.022298245614,
+    "prompt_ms": 60079.175,
+    "prompt_n": 1554,
+    "prompt_per_second": 25.86586783190681,
+    "prompt_per_token_ms": 38.660987773487776
+  },
+  "usage": {
+    "completion_tokens": 57,
+    "prompt_tokens": 1863,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 1920
+  }
+}

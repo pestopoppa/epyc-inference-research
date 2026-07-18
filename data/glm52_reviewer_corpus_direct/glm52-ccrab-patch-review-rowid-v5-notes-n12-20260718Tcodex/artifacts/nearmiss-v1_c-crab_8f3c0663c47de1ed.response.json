@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": true\n  },\n  \"evidence\": {\n    \"basis\": \"API routes use broad `except Exception` with generic 400/500 responses for all application operations.\",\n    \"risk\": \"Generic exception handling fails to distinguish lookup/validation failures from server errors.\"\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784370490,
+  "id": "chatcmpl-zxO5rq6VRCfW5ErjoVrfp3IKdymxKNg8",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 38489.858,
+    "predicted_n": 84,
+    "predicted_per_second": 2.182393086511257,
+    "predicted_per_token_ms": 458.2125952380952,
+    "prompt_ms": 232329.991,
+    "prompt_n": 5133,
+    "prompt_per_second": 22.09357465175471,
+    "prompt_per_token_ms": 45.26202824858757
+  },
+  "usage": {
+    "completion_tokens": 84,
+    "prompt_tokens": 5133,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 5217
+  }
+}

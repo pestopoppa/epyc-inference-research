@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"`_is_dataloader_shuffled` now returns `False` for list samplers and only `True` for `RandomSampler`, matching the task requirement.\",\n    \"risk\": \"Checked that tests cover the new behavior and no undefined identifiers or missing side effects were found.\"\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784371779,
+  "id": "chatcmpl-I8bwY3mSCqzhICSa8MeIUMkjw0DTBfaU",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 47441.139,
+    "predicted_n": 100,
+    "predicted_per_second": 2.1078751924569095,
+    "predicted_per_token_ms": 474.41139000000004,
+    "prompt_ms": 303215.694,
+    "prompt_n": 6208,
+    "prompt_per_second": 20.4738742843568,
+    "prompt_per_token_ms": 48.84273421391753
+  },
+  "usage": {
+    "completion_tokens": 100,
+    "prompt_tokens": 6208,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 6308
+  }
+}

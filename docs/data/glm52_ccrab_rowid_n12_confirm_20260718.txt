@@ -1,0 +1,16 @@
+# Pinned C-CRAB patch-review confirmation slice for GLM reviewer v5+oracle notes.
+# Reject controls are multi-oracle hard negatives from the prior n=24 false-accept set.
+nearmiss-v1:c-crab:c7b60daa9aa5eadd
+nearmiss-v1:c-crab:660688d73003ed0a
+nearmiss-v1:c-crab:0e49d06ddc8f2635
+nearmiss-v1:c-crab:1c8613da318282a0
+nearmiss-v1:c-crab:8f3c0663c47de1ed
+nearmiss-v1:c-crab:5df8ae04380b00e8
+
+# Accept controls are observation-grade merged PRs that the prior n=24 run approved.
+nearmiss-v1:c-crab:6b710a8f003b6d7f
+nearmiss-v1:c-crab:28cdbe123c730a18
+nearmiss-v1:c-crab:34224c9c98534550
+nearmiss-v1:c-crab:8dc1180c48a1b3b6
+nearmiss-v1:c-crab:1a06ca93c57f49ac
+nearmiss-v1:c-crab:e44abdf36f469146

@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"`_coerce_to_type` now converts bool input to int64, and tests assert qcut/cut on bool input matches int input.\",\"risk\":\"Checked that bool coercion is tied to the failing qcut path and tests cover both reported bin counts.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784371324,
+  "id": "chatcmpl-m5qpVRfJS9STbQLk0sjtLdoq0DbQP8D5",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 32470.085,
+    "predicted_n": 76,
+    "predicted_per_second": 2.3406159854524557,
+    "predicted_per_token_ms": 427.23796052631576,
+    "prompt_ms": 103536.698,
+    "prompt_n": 2564,
+    "prompt_per_second": 24.764166228287483,
+    "prompt_per_token_ms": 40.38092745709829
+  },
+  "usage": {
+    "completion_tokens": 76,
+    "prompt_tokens": 2873,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 2949
+  }
+}

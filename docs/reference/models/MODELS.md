@@ -6,6 +6,10 @@ Comprehensive model reference for the orchestration system.
 `/mnt/raid0/llm/epyc-orchestrator/orchestration/derived/stack_priors.yaml`
 compiled at `2026-07-05T04:32:46Z`.
 
+**Last research-registry drift audit:** 2026-07-18 against
+`orchestration/model_registry.yaml`; this corrected stale worker TPS, vision
+escalation, and ingest acceleration notes below.
+
 This document is a research-facing snapshot. The current live stack is governed
 by orchestrator generated stack priors; historical benchmark rows in this repo
 are evidence, not launch truth.
@@ -30,9 +34,9 @@ live-stack snapshot rather than the full artifact catalogue.
 
 | Role | Model | Quant | Endpoint / Ports | Prior TPS | Acceleration |
 |------|-------|-------|------------------|-----------|--------------|
-| `worker_general` | gemma-4-26B-A4B-it-ORIG-Q4_K_M | Q4_K_M | `8072` primary; `8072/8082/8182/8282/8382` launch ports | 60.7 | MTP |
-| `worker_math` | shared with `worker_general` | Q4_K_M | `8072/8082` | 60.7 | MTP |
-| `toolrunner` | shared with `worker_general` | Q4_K_M | `8072/8082` | 60.7 | MTP |
+| `worker_general` | gemma-4-26B-A4B-it-ORIG-Q4_K_M | Q4_K_M | `8072` primary; `8072/8082/8182/8282/8382` launch ports | 38.46 | MTP |
+| `worker_math` | shared with `worker_general` | Q4_K_M | `8072/8082` | 38.46 | MTP |
+| `toolrunner` | shared with `worker_general` | Q4_K_M | `8072/8082` | 38.46 | MTP |
 | `worker_summarize` | shared with `frontdoor` | Q8_0 | `8070` | 24.3 | none |
 
 ### Vision
@@ -40,14 +44,14 @@ live-stack snapshot rather than the full artifact catalogue.
 | Role | Model | Quant | Endpoint / Ports | Prior TPS | Acceleration |
 |------|-------|-------|------------------|-----------|--------------|
 | `worker_vision` | Qwen2.5-VL-7B-Instruct | Q4_K_M | `8086` | 20.0 | baseline VL |
-| `vision_escalation` | Qwen3-VL-30B-A3B-Instruct | Q4_K_M | `8087` primary; `8087/8187/8287/8387/8487` launch ports | 27.6 | MoE expert reduction |
+| `vision_escalation` | Qwen2.5-VL-7B-Instruct | Q4_K_M | `8087` primary; `8087/8187/8287/8387/8487` launch ports | 32.4 | baseline VL |
 
 ### Architect And Ingest
 
 | Role | Model | Quant | Endpoint / Ports | Prior TPS | Acceleration |
 |------|-------|-------|------------------|-----------|--------------|
 | `architect_general` | Qwen3.5-122B-A10B | Q4_K_M | `8083` | 12.19 | embedded NEXTN/MTP |
-| `ingest_long_context` | Qwen3-Next-80B-A3B-Instruct | Q4_K_M | `8085` primary; `8085/8185/8285/8385/8485` launch ports | 20.8 | MoE expert reduction |
+| `ingest_long_context` | Qwen3-Next-80B-A3B-Instruct | Q4_K_M | `8085` primary; `8085/8185/8285/8385/8485` launch ports | 20.8 | none |
 
 ### Auxiliary Services
 
@@ -81,8 +85,7 @@ each role owned a separate model.
 |------------------|-------|-------------------|
 | Qwen3.6-35B-A3B-MTP-Q8_0 | `frontdoor`, `coder_escalation`, `worker_summarize` | 37 GB |
 | gemma-4-26B-A4B-it-ORIG-Q4_K_M | `worker_general`, `worker_math`, `toolrunner` | 16 GB |
-| Qwen2.5-VL-7B-Instruct | `worker_vision` | 4.4 GB |
-| Qwen3-VL-30B-A3B-Instruct | `vision_escalation` | 18 GB |
+| Qwen2.5-VL-7B-Instruct | `worker_vision`, `vision_escalation` | 4.4 GB |
 | Qwen3.5-122B-A10B | `architect_general` | 69 GB |
 | Qwen3-Next-80B-A3B-Instruct | `ingest_long_context` | 45 GB |
 
@@ -116,8 +119,8 @@ recorded in orchestrator stack-prior `serving.launch.runtime.flags.override_kv`.
 | Model Family | Override Key | Typical Expert Setting |
 |--------------|--------------|------------------------|
 | Qwen3.5 MoE | `qwen35moe.expert_used_count` | 8 for current architect |
-| Qwen3-Next | `qwen3next.expert_used_count` | 4 for quality-oriented ingest |
-| Qwen3-VL MoE | `qwen3vlmoe.expert_used_count` | 4 for vision escalation |
+| Qwen3-Next | `qwen3next.expert_used_count` | Historical only; current ingest acceleration is `none` |
+| Qwen3-VL MoE | `qwen3vlmoe.expert_used_count` | Historical only; current vision escalation maps to Qwen2.5-VL |
 | Qwen3-Coder MoE | `qwen3moe.expert_used_count` | Historical/candidate only unless promoted |
 
 ## Critical Constraints

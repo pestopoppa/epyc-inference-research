@@ -1,0 +1,27 @@
+{"row_total": 12, "status": "server_starting", "ts": "2026-07-18T10:16:27.087752+00:00"}
+{"row_total": 12, "status": "server_healthy", "ts": "2026-07-18T10:16:37.247428+00:00"}
+{"domain": "code", "gold_label": "reject", "row_id": "nearmiss-v1:c-crab:c7b60daa9aa5eadd", "row_index": 1, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:16:37.247541+00:00"}
+{"decision": "reject", "gold_label": "reject", "latency_ms": 128032.264, "prompt_token_count": 2288, "row_id": "nearmiss-v1:c-crab:c7b60daa9aa5eadd", "row_index": 1, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:18:45.285307+00:00"}
+{"domain": "code", "gold_label": "reject", "row_id": "nearmiss-v1:c-crab:660688d73003ed0a", "row_index": 2, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:18:45.285363+00:00"}
+{"decision": "reject", "gold_label": "reject", "latency_ms": 99889.539, "prompt_token_count": 2062, "row_id": "nearmiss-v1:c-crab:660688d73003ed0a", "row_index": 2, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:20:25.179830+00:00"}
+{"domain": "code", "gold_label": "reject", "row_id": "nearmiss-v1:c-crab:0e49d06ddc8f2635", "row_index": 3, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:20:25.179886+00:00"}
+{"decision": "reject", "gold_label": "reject", "latency_ms": 94084.623, "prompt_token_count": 1905, "row_id": "nearmiss-v1:c-crab:0e49d06ddc8f2635", "row_index": 3, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:21:59.269735+00:00"}
+{"domain": "code", "gold_label": "reject", "row_id": "nearmiss-v1:c-crab:1c8613da318282a0", "row_index": 4, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:21:59.269790+00:00"}
+{"decision": "reject", "gold_label": "reject", "latency_ms": 99878.885, "prompt_token_count": 1913, "row_id": "nearmiss-v1:c-crab:1c8613da318282a0", "row_index": 4, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:23:39.153931+00:00"}
+{"domain": "code", "gold_label": "reject", "row_id": "nearmiss-v1:c-crab:8f3c0663c47de1ed", "row_index": 5, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:23:39.153988+00:00"}
+{"decision": "reject", "gold_label": "reject", "latency_ms": 270863.23, "prompt_token_count": 5127, "row_id": "nearmiss-v1:c-crab:8f3c0663c47de1ed", "row_index": 5, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:28:10.027031+00:00"}
+{"domain": "code", "gold_label": "reject", "row_id": "nearmiss-v1:c-crab:5df8ae04380b00e8", "row_index": 6, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:28:10.027124+00:00"}
+{"decision": "reject", "gold_label": "reject", "latency_ms": 328447.704, "prompt_token_count": 6065, "row_id": "nearmiss-v1:c-crab:5df8ae04380b00e8", "row_index": 6, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:33:38.485049+00:00"}
+{"domain": "code", "gold_label": "accept", "row_id": "nearmiss-v1:c-crab:6b710a8f003b6d7f", "row_index": 7, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:33:38.485115+00:00"}
+{"decision": "approve", "gold_label": "accept", "latency_ms": 369575.481, "prompt_token_count": 6635, "row_id": "nearmiss-v1:c-crab:6b710a8f003b6d7f", "row_index": 7, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:39:48.072146+00:00"}
+{"domain": "code", "gold_label": "accept", "row_id": "nearmiss-v1:c-crab:28cdbe123c730a18", "row_index": 8, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:39:48.072211+00:00"}
+{"decision": "approve", "gold_label": "accept", "latency_ms": 136118.37, "prompt_token_count": 2867, "row_id": "nearmiss-v1:c-crab:28cdbe123c730a18", "row_index": 8, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:42:04.196017+00:00"}
+{"domain": "code", "gold_label": "accept", "row_id": "nearmiss-v1:c-crab:34224c9c98534550", "row_index": 9, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:42:04.196110+00:00"}
+{"decision": "approve", "gold_label": "accept", "latency_ms": 104605.942, "prompt_token_count": 2229, "row_id": "nearmiss-v1:c-crab:34224c9c98534550", "row_index": 9, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:43:48.807287+00:00"}
+{"domain": "code", "gold_label": "accept", "row_id": "nearmiss-v1:c-crab:8dc1180c48a1b3b6", "row_index": 10, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:43:48.807346+00:00"}
+{"decision": "approve", "gold_label": "accept", "latency_ms": 350711.136, "prompt_token_count": 6202, "row_id": "nearmiss-v1:c-crab:8dc1180c48a1b3b6", "row_index": 10, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:49:39.529448+00:00"}
+{"domain": "code", "gold_label": "accept", "row_id": "nearmiss-v1:c-crab:1a06ca93c57f49ac", "row_index": 11, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:49:39.529507+00:00"}
+{"decision": "reject", "gold_label": "accept", "latency_ms": 83558.83, "prompt_token_count": 1857, "row_id": "nearmiss-v1:c-crab:1a06ca93c57f49ac", "row_index": 11, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:51:03.093274+00:00"}
+{"domain": "code", "gold_label": "accept", "row_id": "nearmiss-v1:c-crab:e44abdf36f469146", "row_index": 12, "row_total": 12, "status": "row_start", "ts": "2026-07-18T10:51:03.093326+00:00"}
+{"decision": "approve", "gold_label": "accept", "latency_ms": 178934.933, "prompt_token_count": 3461, "row_id": "nearmiss-v1:c-crab:e44abdf36f469146", "row_index": 12, "row_total": 12, "status": "row_done", "ts": "2026-07-18T10:54:02.035105+00:00"}
+{"row_total": 12, "status": "server_stopped", "ts": "2026-07-18T10:54:06.981188+00:00"}

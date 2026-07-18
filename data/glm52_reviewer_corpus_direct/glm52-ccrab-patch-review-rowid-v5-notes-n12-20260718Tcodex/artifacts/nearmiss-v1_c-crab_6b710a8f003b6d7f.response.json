@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.8,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"Removed `establish_db_conn()` from `__public__.py` and moved migration to `establish_db_conn`, making DB connection lazy.\",\n    \"risk\": \"Checked that lazy connection is triggered via `ensure_connection()` in save paths and tests cover cleanup behavior.\"\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784371188,
+  "id": "chatcmpl-SLGkxFbjpnf4OOwkmUg0JaHuMDA5YnPG",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 46756.532,
+    "predicted_n": 98,
+    "predicted_per_second": 2.0959638323903063,
+    "predicted_per_token_ms": 477.1074693877551,
+    "prompt_ms": 322718.2,
+    "prompt_n": 6641,
+    "prompt_per_second": 20.578324990657485,
+    "prompt_per_token_ms": 48.594820057220296
+  },
+  "usage": {
+    "completion_tokens": 98,
+    "prompt_tokens": 6641,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 6739
+  }
+}
