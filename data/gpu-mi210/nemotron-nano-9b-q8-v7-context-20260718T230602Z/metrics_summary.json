@@ -1,0 +1,91 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/nemotron-nano-9b-q8-v7-context-20260718T230602Z",
+  "exit_code": 0,
+  "rows": [
+    {
+      "n_prompt": 512,
+      "n_gen": 0,
+      "avg_ts": 2052.901773,
+      "stddev_ts": 42.035275,
+      "samples_ts": [
+        2023.18,
+        2082.63
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "nemotron_h 9B Q8_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 128,
+      "avg_ts": 83.302708,
+      "stddev_ts": 0.118706,
+      "samples_ts": [
+        83.2188,
+        83.3866
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "nemotron_h 9B Q8_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 2048,
+      "n_gen": 512,
+      "avg_ts": 358.140989,
+      "stddev_ts": 0.214575,
+      "samples_ts": [
+        358.293,
+        357.989
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "nemotron_h 9B Q8_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 512,
+      "avg_ts": 837.590811,
+      "stddev_ts": 0.178065,
+      "samples_ts": [
+        837.717,
+        837.465
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "nemotron_h 9B Q8_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 32768,
+      "n_gen": 512,
+      "avg_ts": 1279.524608,
+      "stddev_ts": 1.689037,
+      "samples_ts": [
+        1280.72,
+        1278.33
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "nemotron_h 9B Q8_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    }
+  ]
+}

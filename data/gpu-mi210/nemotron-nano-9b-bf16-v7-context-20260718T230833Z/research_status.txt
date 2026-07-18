@@ -1,0 +1,2 @@
+research_commit_at_run: 3e0bbd8fc9ad9e86502f511b8ab6b3d5b691fc4d
+working_tree_note: broader repo may be dirty; full status omitted for noise control

@@ -3077,6 +3077,22 @@ roles:
       protocol_correction_observation: "2026-07-17 protocol probe showed the earlier exact-output concern was harness/protocol-specific: llama-cli must use -f for prompt files, not -p @file; --reasoning-format none leaves thought text in the content channel. A server/API probe with --reasoning-format deepseek --reasoning off returned message.content exactly 'ok' while separating message.reasoning_content, prompt 201.34 t/s and generation 83.11 t/s on MI210. Treat old CLI exactness rows as load/throughput controls only."
       task_quality_channel_observation: "2026-07-18 protocol/channel follow-up keeps Q8_0 research-only but no longer first-pass quality-blocked under the bounded lane. With the strict system prompt, 512-token deepseek and deepseek-legacy arms reached only 2/5 in message.content and 4/5 with content_or_reasoning fallback; reasoning-format none failed 0/5. Removing the system prompt improved deepseek to 4/5 in message.content with clean host cleanup and uncontaminated observational throughput (82.73 t/s mean decode). A current-v7 clean-host rerun showed the token budget boundary directly: conservative task caps failed 0/5 at 83.56 t/s; `--ignore-task-token-caps --max-tokens 512` improved to 4/5 at 81.43 t/s; the 1024-token no-system deepseek lane then passed 5/5 at mean decode 81.42 t/s. Any role claim must preserve that serving contract: no system prompt, deepseek reasoning extraction, and 1024-token task budget."
       current_v7_llama_bench_observation: "2026-07-18 current experimental-v7 `d1e5a20eb` MI210 llama-bench: `pp2048 2066.77 t/s`, `pp8192 1978.87 t/s`, `tg1024 84.00 t/s`; 32K rider `pp32768 1696.72 t/s`, `tg512 84.50 t/s`. Speed-only context evidence, not role admission."
+      current_v7_mi210_context_observation: >
+        2026-07-18 current experimental-v7 `cf051d3e1` MI210 llama-bench
+        rerun on the exact Q8_0 artifact with `-dev ROCm0 -ngl 99 -fa on`
+        measured prompt-only `pp512 2052.90 t/s`, decode-only `tg128
+        83.30 t/s`, and combined context rows `pp2048+tg512 358.14 t/s`,
+        `pp8192+tg512 837.59 t/s`, `pp32768+tg512 1279.52 t/s`.
+        Speed-only; use the no-system deepseek 1024-token server quality lane
+        for role/admission decisions.
+      current_v7_mi210_q8kv_context_observation: >
+        2026-07-18 current experimental-v7 `cf051d3e1` MI210 llama-bench
+        rerun with `--cache-type-k q8_0 --cache-type-v q8_0` measured
+        prompt-only `pp512 2042.48 t/s`, decode-only `tg128 82.98 t/s`,
+        and combined context rows `pp2048+tg512 355.61 t/s`, `pp8192+tg512
+        826.76 t/s`, `pp32768+tg512 1261.53 t/s`. This is slightly slower
+        than f16 KV on the same Q8_0 model in this speed-only probe, so q8 KV
+        remains a memory/serving-policy lever rather than a speed lever.
       current_v7_cpu_llama_bench_observation: >
         2026-07-18 current experimental-v7 CPU-only llama-bench with
         `-dev none -ngl 0 -fa off -t 16`: `pp2048 135.85 t/s`,
@@ -3109,6 +3125,10 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-current-v7-20260718T155941Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron/cpu-v7-nemotron-nano-9b-q8_0-20260718T155831Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron/cpu-v7-nemotron-nano-9b-q8_0-20260718T2215Z/llama_bench.json
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/nemotron-nano-9b-q8-v7-context-20260718T230602Z/metrics_summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/nemotron-nano-9b-q8-v7-context-20260718T230602Z/summary.md
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/nemotron-nano-9b-q8-kvq8-v7-context-20260718T231115Z/metrics_summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/nemotron-nano-9b-q8-kvq8-v7-context-20260718T231115Z/summary.md
     benchmark_date: 2026-04-23
     notes: |
       Reasoning-mode toggle (default AUTO/ON per user preference):
@@ -3190,10 +3210,20 @@ roles:
       observed_date: 2026-07-18
       task_quality_observation: "2026-07-18 current-v7 MI210 BF16 reference arm (`--model-path` runner override, no-system deepseek, 512-token caps) passed 4/5 at uncontaminated mean decode 59.44 t/s. Unlike Q8, strict JSON passed, but the five-lowercase-words probe failed on hyphenated `real-world`; BF16 is slower and still not role-ready."
       current_v7_llama_bench_observation: "2026-07-18 current experimental-v7 `d1e5a20eb` MI210 llama-bench: `pp2048 2297.22 t/s`, `pp8192 2194.74 t/s`, `tg1024 59.03 t/s`; 32K rider `pp32768 1851.77 t/s`, `tg512 57.31 t/s`. Speed-only reference evidence. A generated cleanup summary was contaminated by a concurrent CPU-only run with a KFD handle; the later cleanup recheck shows no KFD PIDs and 0% VRAM."
+      current_v7_mi210_context_observation: >
+        2026-07-18 current experimental-v7 `cf051d3e1` MI210 llama-bench
+        rerun on the exact BF16 artifact with `-dev ROCm0 -ngl 99 -fa on`
+        measured prompt-only `pp512 2250.67 t/s`, decode-only `tg128
+        59.64 t/s`, and combined context rows `pp2048+tg512 269.22 t/s`,
+        `pp8192+tg512 679.66 t/s`, `pp32768+tg512 1223.90 t/s`.
+        Speed-only reference evidence; BF16 remains slower than Q8_0 and not
+        role-ready on task-quality evidence.
       evidence:
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/bf16-nosystem-clean-mi210-512tok-current-v7-20260718T154109Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron/nemotron_nano_bf16_mi210_llama_bench_20260718T155128Z/final_cleanup_recheck_20260718Tpost_cpu_qwable.txt
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/nemotron-nano-9b-bf16-v7-context-20260718T230833Z/metrics_summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/nemotron-nano-9b-bf16-v7-context-20260718T230833Z/summary.md
     benchmark_date: 2026-07-18
     notes: >
       Full-precision BF16 reference. Same launch notes as nemotron_nano_9b_q8.
@@ -6689,6 +6719,15 @@ roles:
       kv_quant_observation: "2026-07-16 MI210 default KV vs q4_0/q4_0 KV sweep showed no decode-speed improvement: 10.97 vs 10.93 t/s at 1285 prompt tokens, and 10.54 vs 10.54 t/s at 25225 prompt tokens."
       strict_output_gate: "2026-07-17 quiet-host gate with completion-mode, reasoning-off v7 CLI passed 6/8 CPU+MI210 probes: exact ok, strict minified JSON, and simple math passed on both devices; short six-word instruction failed on both, so Bonsai is loadable/partially coherent but not role-ready."
       current_v7_llama_bench_observation: "2026-07-18 current experimental-v7 `d1e5a20eb` MI210 llama-bench context probe: `pp2048 798.59 t/s`, `pp8192 759.19 t/s`, `tg1024 11.24 t/s`. This confirms the local Q1 path remains decode-slow and is speed-only evidence; the 6/8 strict-output gate still blocks role readiness."
+      current_v7_kv_compare_observation: >
+        2026-07-18 current experimental-v7 `cf051d3e1` paired MI210
+        llama-bench runs compared default f16 KV vs q4_0/q4_0 KV on the exact
+        Q1_0 artifact. Decode-only was effectively unchanged: default `tg128
+        11.153 t/s`, q4 KV `tg128 11.113 t/s`. Combined context rows were also
+        near-identical: default `pp2048+tg512 52.72`, `pp8192+tg512 152.20`,
+        `pp32768+tg512 334.84 t/s`; q4 KV `52.62`, `151.11`, `330.06 t/s`.
+        This does not support KV quantization as an explanation for reported
+        external Bonsai speedups. Speed-only; quality gate remains open.
       cpu_prompt_repair_observation: "2026-07-18 bounded CPU-only prompt characterization at /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_repair_20260718T191220Z/ measured `pp512 84.63 t/s`, `tg128 9.58 t/s`; the direct six-word prompt failed with three words, while a repaired prompt passed with exactly six lowercase words. Observation-grade n=1 per prompt; informs prompt repair only, not role readiness."
       cpu_prompt_control_n6_observation: "2026-07-18 bounded CPU-only six-prompt control at /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_control_n6_20260718T200059Z/ scored direct prompts 0/6, repaired prompts 1/6, overall 1/12. CLI generation was roughly 10.4-12.3 t/s. This weakens the prompt-repair path; do not spend near-term role-readiness cycles on Bonsai Q1_0 without a new quality hypothesis."
       related_dspark_observation: "Bonsai-27B-dspark-Q4_1 failed on CPU and MI210 with `unknown model architecture: 'dspark'`; unsupported until dspark architecture support is added."
@@ -6706,6 +6745,8 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_repair_20260718T191220Z/report.md
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_control_n6_20260718T200059Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/bonsai27-q1-defaultkv-v7-context-20260718T225648Z/metrics_summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/bonsai27-q1-kv-q4-v7-context-20260718T224733Z/metrics_summary.json
     memory:
       residency: cold
       pinned: false
@@ -7206,6 +7247,12 @@ roles:
         isolated decode. Q8_0 remains slightly faster than IQ4_XS on decode but
         much larger; keep as quality/reference arm unless broader tasks show a
         quality advantage.
+      current_v7_cpu_context_observation: >
+        2026-07-18 current experimental-v7 `cf051d3e1` CPU-only llama-bench
+        rerun with `-dev none -ngl 0 -fa off -t 16` measured prompt-only
+        `pp2048 145.23 t/s`, `pp8192 121.33 t/s`, `pp32768 99.11 t/s`, and
+        decode-only `tg512 10.84 t/s`. Speed-only single-rep evidence; MI210
+        remains the primary Qwable execution lane when available.
       evidence:
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/summary.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/responses/standalone_q8_gpu.raw.json
@@ -7216,6 +7263,8 @@ roles:
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_q8_mi210/summary.txt
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwable_q8_mi210_llama_bench_20260718T220220Z_rebuilt_cf051d3e1/bench.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_run2_20260718T224956Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_run2_20260718T224956Z/summary.md
     memory:
       residency: cold
       pinned: false

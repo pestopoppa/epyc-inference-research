@@ -1,0 +1,1 @@
+HIP_VISIBLE_DEVICES=0 ROCR_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin:/opt/rocm/lib /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-bf16.gguf -dev ROCm0 -ngl 99 -fa on -pg 2048,512 -pg 8192,512 -pg 32768,512 -r 2 -o json --progress

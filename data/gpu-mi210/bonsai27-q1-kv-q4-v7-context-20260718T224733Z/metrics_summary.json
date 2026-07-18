@@ -1,0 +1,93 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/bonsai27-q1-kv-q4-v7-context-20260718T224733Z",
+  "exit_code": 0,
+  "cache_type_k": "q4_0",
+  "cache_type_v": "q4_0",
+  "rows": [
+    {
+      "n_prompt": 512,
+      "n_gen": 0,
+      "avg_ts": 772.014825,
+      "stddev_ts": 30.799268,
+      "samples_ts": [
+        750.236,
+        793.793
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B Q1_0",
+      "type_k": "q4_0",
+      "type_v": "q4_0",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 128,
+      "avg_ts": 11.113175,
+      "stddev_ts": 0.044117,
+      "samples_ts": [
+        11.082,
+        11.1444
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B Q1_0",
+      "type_k": "q4_0",
+      "type_v": "q4_0",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 2048,
+      "n_gen": 512,
+      "avg_ts": 52.615406,
+      "stddev_ts": 0.023134,
+      "samples_ts": [
+        52.6318,
+        52.599
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B Q1_0",
+      "type_k": "q4_0",
+      "type_v": "q4_0",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 512,
+      "avg_ts": 151.107401,
+      "stddev_ts": 0.093234,
+      "samples_ts": [
+        151.173,
+        151.041
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B Q1_0",
+      "type_k": "q4_0",
+      "type_v": "q4_0",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 32768,
+      "n_gen": 512,
+      "avg_ts": 330.059677,
+      "stddev_ts": 0.295461,
+      "samples_ts": [
+        330.269,
+        329.851
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B Q1_0",
+      "type_k": "q4_0",
+      "type_v": "q4_0",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    }
+  ]
+}

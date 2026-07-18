@@ -1,0 +1,2 @@
+/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench 17984 bytes mtime=2026-07-18 22:02:00.309135337 +0000
+/mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf 3803452480 bytes mtime=2026-07-16 10:55:05.378488245 +0000

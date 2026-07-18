@@ -1,0 +1,3 @@
+ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
+Available devices:
+  (none)

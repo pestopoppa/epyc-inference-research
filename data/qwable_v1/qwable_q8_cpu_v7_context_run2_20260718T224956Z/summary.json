@@ -1,0 +1,88 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_run2_20260718T224956Z",
+  "exit_code": 0,
+  "duration_seconds": 883,
+  "binary_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench",
+  "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+  "command": "env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin GGML_IQK=1 HIP_VISIBLE_DEVICES=-1 ROCR_VISIBLE_DEVICES=-1 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf -dev none -ngl 0 -fa off -t 16 -p 2048,8192,32768 -n 512 -r 1 -o json --progress",
+  "llama_cpp_experimental_head": "cf051d3e18c7d8d898581f42a468602c7f6bade0",
+  "llama_bench_build_commit": "cf051d3e1",
+  "llama_bench_build_number": 10095,
+  "caveats": [
+    "speed-only llama-bench observation, not a quality/admission gate",
+    "single repetition, so stddev is zero by construction",
+    "build/bin default probe failed with unresolved symbol; used current experimental build-hip binary with pinned LD_LIBRARY_PATH",
+    "HIP/ROCR devices hidden and llama-bench argv used -dev none -ngl 0 -fa off; JSON reports devices=none and n_gpu_layers=0",
+    "post/final checks include unrelated GPU llama-bench processes from other sessions"
+  ],
+  "rows": [
+    {
+      "n_prompt": 2048,
+      "n_gen": 0,
+      "avg_ts": 145.233612,
+      "stddev_ts": 0.000000,
+      "test_time": "2026-07-18T22:49:58Z",
+      "samples_ts": [
+        145.234
+      ],
+      "backends": "ROCm",
+      "devices": "none",
+      "n_gpu_layers": 0,
+      "flash_attn": 0,
+      "n_threads": 16,
+      "type_k": "f16",
+      "type_v": "f16"
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "avg_ts": 121.325412,
+      "stddev_ts": 0.000000,
+      "test_time": "2026-07-18T22:50:26Z",
+      "samples_ts": [
+        121.325
+      ],
+      "backends": "ROCm",
+      "devices": "none",
+      "n_gpu_layers": 0,
+      "flash_attn": 0,
+      "n_threads": 16,
+      "type_k": "f16",
+      "type_v": "f16"
+    },
+    {
+      "n_prompt": 32768,
+      "n_gen": 0,
+      "avg_ts": 99.107122,
+      "stddev_ts": 0.000000,
+      "test_time": "2026-07-18T22:52:42Z",
+      "samples_ts": [
+        99.1071
+      ],
+      "backends": "ROCm",
+      "devices": "none",
+      "n_gpu_layers": 0,
+      "flash_attn": 0,
+      "n_threads": 16,
+      "type_k": "f16",
+      "type_v": "f16"
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 512,
+      "avg_ts": 10.838663,
+      "stddev_ts": 0.000000,
+      "test_time": "2026-07-18T23:03:52Z",
+      "samples_ts": [
+        10.8387
+      ],
+      "backends": "ROCm",
+      "devices": "none",
+      "n_gpu_layers": 0,
+      "flash_attn": 0,
+      "n_threads": 16,
+      "type_k": "f16",
+      "type_v": "f16"
+    }
+  ]
+}

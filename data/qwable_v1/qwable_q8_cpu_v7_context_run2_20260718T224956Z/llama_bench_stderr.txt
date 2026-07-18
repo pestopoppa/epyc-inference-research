@@ -1,0 +1,13 @@
+ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
+llama-bench: benchmark 1/4: starting
+llama-bench: benchmark 1/4: warmup prompt run
+llama-bench: benchmark 1/4: prompt run 1/1
+llama-bench: benchmark 2/4: starting
+llama-bench: benchmark 2/4: warmup prompt run
+llama-bench: benchmark 2/4: prompt run 1/1
+llama-bench: benchmark 3/4: starting
+llama-bench: benchmark 3/4: warmup prompt run
+llama-bench: benchmark 3/4: prompt run 1/1
+llama-bench: benchmark 4/4: starting
+llama-bench: benchmark 4/4: warmup generation run
+llama-bench: benchmark 4/4: generation run 1/1

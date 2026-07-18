@@ -1,0 +1,1 @@
+/mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/llama-bench completed prior run2 at qwable_q8_cpu_v7_context_run2_20260718T223330Z but self-reported build_commit 9882c2c69; this rerun uses build-hip current-v7 cf051d3e1 with -dev none -ngl 0.

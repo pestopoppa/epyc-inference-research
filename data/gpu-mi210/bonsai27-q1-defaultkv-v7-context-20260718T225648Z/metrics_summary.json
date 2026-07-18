@@ -1,0 +1,93 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/bonsai27-q1-defaultkv-v7-context-20260718T225648Z",
+  "exit_code": 0,
+  "cache_type_k": "default",
+  "cache_type_v": "default",
+  "rows": [
+    {
+      "n_prompt": 512,
+      "n_gen": 0,
+      "avg_ts": 780.906553,
+      "stddev_ts": 23.108986,
+      "samples_ts": [
+        764.566,
+        797.247
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B Q1_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 128,
+      "avg_ts": 11.153425,
+      "stddev_ts": 0.002766,
+      "samples_ts": [
+        11.1515,
+        11.1554
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B Q1_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 2048,
+      "n_gen": 512,
+      "avg_ts": 52.71504,
+      "stddev_ts": 0.067504,
+      "samples_ts": [
+        52.6673,
+        52.7628
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B Q1_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 512,
+      "avg_ts": 152.198285,
+      "stddev_ts": 0.00911,
+      "samples_ts": [
+        152.192,
+        152.205
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B Q1_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 32768,
+      "n_gen": 512,
+      "avg_ts": 334.844484,
+      "stddev_ts": 0.392475,
+      "samples_ts": [
+        334.567,
+        335.122
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B Q1_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    }
+  ]
+}
