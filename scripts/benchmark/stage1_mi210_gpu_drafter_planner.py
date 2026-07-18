@@ -105,6 +105,20 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _current_pid_chain() -> set[int]:
+    pids: set[int] = set()
+    pid = os.getpid()
+    while pid > 0 and pid not in pids:
+        pids.add(pid)
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+            ppid = int(stat.rsplit(") ", maxsplit=1)[1].split()[1])
+        except (IndexError, OSError, ValueError):
+            break
+        pid = ppid
+    return pids
+
+
 def _probe_pattern(
     pattern: str,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
@@ -112,7 +126,21 @@ def _probe_pattern(
     result = runner(["pgrep", "-af", pattern], capture_output=True, text=True)
     if result.returncode != 0:
         return []
-    return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    ignored_pids = _current_pid_chain()
+    matches: list[str] = []
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        parts = stripped.split(maxsplit=1)
+        if len(parts) != 2 or not parts[0].isdigit():
+            continue
+        pid = int(parts[0])
+        argv0 = Path(parts[1].split(maxsplit=1)[0]).name
+        if pid in ignored_pids or argv0 == "pgrep":
+            continue
+        matches.append(stripped)
+    return matches
 
 
 def _probe_process_basename(

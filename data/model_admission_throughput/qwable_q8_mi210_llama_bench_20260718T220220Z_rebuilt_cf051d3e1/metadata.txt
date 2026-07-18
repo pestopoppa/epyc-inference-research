@@ -1,0 +1,9 @@
+artifact=/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwable_q8_mi210_llama_bench_20260718T220220Z_rebuilt_cf051d3e1
+sha=cf051d3e18c7d8d898581f42a468602c7f6bade0
+model=/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf
+binary=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench
+started=2026-07-18T22:02:20+00:00
+ggml_cuda_init: found 1 ROCm devices (Total VRAM: 65520 MiB):
+  Device 0: AMD Instinct MI210, gfx90a:sramecc+:xnack- (0x90a), VMM: no, Wave Size: 64, VRAM: 65520 MiB
+Available devices:
+  ROCm0: AMD Instinct MI210 (65520 MiB, 65416 MiB free)

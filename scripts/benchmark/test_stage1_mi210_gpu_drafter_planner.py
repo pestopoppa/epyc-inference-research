@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from unittest import mock
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -52,6 +53,24 @@ class Stage1Mi210GpuDrafterPlannerTests(unittest.TestCase):
         self.assertEqual(len(guards.quiet_host_blockers), 2)
         self.assertTrue(any("AutoPilot pattern" in blocker for blocker in guards.quiet_host_blockers))
         self.assertTrue(any("process basename 'llama-server'" in blocker for blocker in guards.quiet_host_blockers))
+
+    def test_probe_pattern_ignores_current_process_chain(self):
+        self_pid = planner.os.getpid()
+        with mock.patch.object(planner, "_current_pid_chain", return_value={self_pid, 2222}):
+            fake_runner = _fake_runner_factory(
+                {
+                    planner.AUTOPILOT_PATTERN: [
+                        f"{self_pid} /bin/bash -c pgrep -af {planner.AUTOPILOT_PATTERN!r}",
+                        f"2222 timeout wrapper {planner.AUTOPILOT_PATTERN}",
+                        "3333 python scripts/autopilot/autopilot.py start",
+                        f"4444 pgrep -af {planner.AUTOPILOT_PATTERN}",
+                    ],
+                }
+            )
+
+            matches = planner._probe_pattern(planner.AUTOPILOT_PATTERN, runner=fake_runner)
+
+        self.assertEqual(matches, ["3333 python scripts/autopilot/autopilot.py start"])
 
     def test_write_artifacts_emits_manifest_commands_and_gate_summary(self):
         with tempfile.TemporaryDirectory() as tmpdir:

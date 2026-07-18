@@ -7175,7 +7175,19 @@ roles:
         on CPU at mean prompt 70.72 t/s and mean decode 13.66 t/s. This small
         slice did not show a Q8-only quality advantage over IQ4_XS.
       long_decode_observation: "2026-07-16 longer server runs during active GLM download: CPU generated 706 tokens at 10.00 t/s; MI210 generated 1087 tokens at 100.15 t/s."
-      current_v7_llama_bench_observation: "2026-07-18 current experimental-v7 `d1e5a20eb` MI210 llama-bench context probe: `pp2048 2085.55 t/s`, `pp8192 1982.17 t/s`, `tg1024 102.89 t/s`; 32K rider `pp32768 1647.90 t/s`, `tg512 104.11 t/s`. This confirms Q8_0 is slightly faster than IQ4_XS on decode but much larger; keep as quality/reference arm unless broader tasks show a quality advantage."
+      current_v7_llama_bench_observation: >
+        2026-07-18 current experimental-v7 `d1e5a20eb` MI210 llama-bench
+        context probe: `pp2048 2085.55 t/s`, `pp8192 1982.17 t/s`,
+        `tg1024 102.89 t/s`; 32K rider `pp32768 1647.90 t/s`,
+        `tg512 104.11 t/s`. A rebuilt clean-provenance rerun on
+        experimental-v7 `cf051d3e1` supersedes the first stale-build artifact:
+        prompt-only p512 `2101.21 t/s`, decode-only tg128 `99.17 t/s`,
+        and llama-bench combined prompt+generation avg_ts rows pg2048/1024
+        `266.82 t/s`, pg8192/1024 `602.12 t/s`, pg32768/512
+        `1252.67 t/s`. Combined pg rows are throughput observations, not
+        isolated decode. Q8_0 remains slightly faster than IQ4_XS on decode but
+        much larger; keep as quality/reference arm unless broader tasks show a
+        quality advantage.
       evidence:
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/summary.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/responses/standalone_q8_gpu.raw.json
@@ -7185,6 +7197,7 @@ roles:
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_q8_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_q8_mi210/summary.txt
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_mi210_llama_bench_20260718T145119Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwable_q8_mi210_llama_bench_20260718T220220Z_rebuilt_cf051d3e1/bench.json
     memory:
       residency: cold
       pinned: false

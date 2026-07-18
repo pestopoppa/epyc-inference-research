@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from unittest import mock
 import sys
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -106,6 +107,24 @@ class Mi210StrategyGateRunnerTests(unittest.TestCase):
         self.assertTrue(guards.glm_download_active)
         self.assertTrue(any("quiet host guard" in blocker for blocker in guards.quiet_host_blockers))
         self.assertTrue(any("GLM HF writer" in blocker for blocker in guards.glm_download_blockers))
+
+    def test_probe_pattern_ignores_current_process_chain(self):
+        self_pid = runner.os.getpid()
+        with mock.patch.object(runner, "_current_pid_chain", return_value={self_pid, 2222}):
+            fake_runner = _fake_runner_factory(
+                {
+                    runner.AUTOPILOT_PATTERN: [
+                        f"{self_pid} /bin/bash -c pgrep -af {runner.AUTOPILOT_PATTERN!r}",
+                        f"2222 timeout wrapper {runner.AUTOPILOT_PATTERN}",
+                        "3333 python scripts/autopilot/autopilot.py start",
+                        f"4444 pgrep -af {runner.AUTOPILOT_PATTERN}",
+                    ],
+                }
+            )
+
+            matches = runner._probe_pattern(runner.AUTOPILOT_PATTERN, runner=fake_runner)
+
+        self.assertEqual(matches, ["3333 python scripts/autopilot/autopilot.py start"])
 
     def test_execute_refuses_glm_writer_without_override(self):
         with tempfile.TemporaryDirectory() as tmpdir:
