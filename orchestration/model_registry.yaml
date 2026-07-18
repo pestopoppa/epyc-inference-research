@@ -6370,7 +6370,7 @@ roles:
         commit: 98a1ad8cf
         binaries:
         - llama-cli
-        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The 2026-07-18 task-quality / architecture-fit first slice passed 5/6 on both CPU no-spec and MI210-hybrid no-spec, failing only exact six-word instruction. A later CPU-only strict slice reproduced 5/6, failed exact word count, and exposed a code-only/no-fence strictness smell; a bounded CPU prompt-repair probe passed 2/2 repaired six-word variants, then a CPU repaired strict-suite probe passed 7/7 including an explicit code-only/no-fence prompt. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
+        notes: "Experimental v7 now loads the AngelSlim GGUF after Hy3-specific router-bias tensor fix: `LLM_TENSOR_FFN_EXP_PROBS_B` must use the `bias` suffix to match `blk.N.exp_probs_b.bias`. Follow-up CPU and MI210-hybrid A/Bs on 2026-07-16 showed no-spec and `draft-mtp` both produce coherent output; `draft-mtp` was slower than no-spec on the longer CPU and hybrid samples. The 2026-07-18 task-quality / architecture-fit first slice passed 5/6 on both CPU no-spec and MI210-hybrid no-spec, failing only exact six-word instruction. A later CPU-only strict slice reproduced 5/6, failed exact word count, and exposed a code-only/no-fence strictness smell; a bounded CPU prompt-repair probe passed 2/2 repaired six-word variants, then a CPU repaired strict-suite probe passed 7/7 including an explicit code-only/no-fence prompt. The production-shaped MI210-hybrid repaired strict-suite gate also passed 7/7 at mean prompt 22.33 t/s and mean decode 11.43 t/s. The older patched throwaway build at /mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716/build/bin remains a reference/fallback only."
       runtime_observations:
         evidence_dir: /mnt/raid0/llm/tmp/hy3-mtp-closure-20260716T234610Z
         current_source_cpuonly_load_probe: "2026-07-18 rebuilt experimental-v7 `d1e5a20eb` CPU-only n=0 load probe with `-dev none -ngl 0 --no-op-offload -nkvo` reached about 175 GiB RSS and timed out after 300s without reproducing the old tensor-count mismatch; no decode/quality claim. Artifact: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3-iq1m-mtp-load-n0-cpuonly-20260718T162550Z/summary.json"
@@ -6401,8 +6401,13 @@ roles:
         cpu_repaired_strict_suite_total: 7
         cpu_repaired_strict_suite_mean_prompt_tps: 26.806
         cpu_repaired_strict_suite_mean_generation_tps: 5.167
+        mi210_hybrid_repaired_strict_suite_evidence_dir: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3_mi210_hybrid_repaired_strict_suite_20260718T200124Z
+        mi210_hybrid_repaired_strict_suite_passed: 7
+        mi210_hybrid_repaired_strict_suite_total: 7
+        mi210_hybrid_repaired_strict_suite_mean_prompt_tps: 22.33
+        mi210_hybrid_repaired_strict_suite_mean_generation_tps: 11.43
         task_quality_failed_task: lowercase_six_words
-        classification: "draft-mtp functional but slower than no-spec; full MI210 residency is not feasible for the 91.8GB artifact. CPU and MI210-hybrid no-spec passed the first task-quality slice 5/6, a later CPU-only strict slice reproduced 5/6, and a CPU repaired strict-suite probe passed 7/7. The remaining role-readiness question is whether the repaired prompts hold in the production-shaped MI210-hybrid lane and a broader role-quality gate."
+        classification: "draft-mtp functional but slower than no-spec; full MI210 residency is not feasible for the 91.8GB artifact. CPU and MI210-hybrid no-spec passed the first task-quality slice 5/6, a later CPU-only strict slice reproduced 5/6, and repaired strict-suite probes passed 7/7 on both CPU-only and production-shaped MI210-hybrid lanes. Hy3 remains research-only until broader role-policy/admission and context-throughput evidence land."
       hf_metadata:
         path: /mnt/raid0/llm/models/hy3-angelslim/.cache/huggingface/download/Hy3-IQ1_M-mtp.gguf.metadata
         revision: 218c93f0fb5227553b67e556b01dfe70fb70cf30
@@ -6664,6 +6669,7 @@ roles:
       strict_output_gate: "2026-07-17 quiet-host gate with completion-mode, reasoning-off v7 CLI passed 6/8 CPU+MI210 probes: exact ok, strict minified JSON, and simple math passed on both devices; short six-word instruction failed on both, so Bonsai is loadable/partially coherent but not role-ready."
       current_v7_llama_bench_observation: "2026-07-18 current experimental-v7 `d1e5a20eb` MI210 llama-bench context probe: `pp2048 798.59 t/s`, `pp8192 759.19 t/s`, `tg1024 11.24 t/s`. This confirms the local Q1 path remains decode-slow and is speed-only evidence; the 6/8 strict-output gate still blocks role readiness."
       cpu_prompt_repair_observation: "2026-07-18 bounded CPU-only prompt characterization at /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_repair_20260718T191220Z/ measured `pp512 84.63 t/s`, `tg128 9.58 t/s`; the direct six-word prompt failed with three words, while a repaired prompt passed with exactly six lowercase words. Observation-grade n=1 per prompt; informs prompt repair only, not role readiness."
+      cpu_prompt_control_n6_observation: "2026-07-18 bounded CPU-only six-prompt control at /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_control_n6_20260718T200059Z/ scored direct prompts 0/6, repaired prompts 1/6, overall 1/12. CLI generation was roughly 10.4-12.3 t/s. This weakens the prompt-repair path; do not spend near-term role-readiness cycles on Bonsai Q1_0 without a new quality hypothesis."
       related_dspark_observation: "Bonsai-27B-dspark-Q4_1 failed on CPU and MI210 with `unknown model architecture: 'dspark'`; unsupported until dspark architecture support is added."
       evidence:
       - /mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_q1_cpu/bonsai_q1_cpu.stdout
@@ -6678,6 +6684,7 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_q1_quality_gate/bonsai_q1_quality_clean_20260717T0755Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_mi210_llama_bench_20260718T150243Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_repair_20260718T191220Z/report.md
+      - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai27_q1_cpu_prompt_control_n6_20260718T200059Z/summary.json
     memory:
       residency: cold
       pinned: false
@@ -7028,11 +7035,16 @@ roles:
         /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start24_20260718T193035Z
         scored pass@1 15/24, oracle pass@5 15/24, verifier-selected 15/24,
         and selection accuracy 15/15, with no selector misses among solvable
-        rows. Combined rows 0-47 are positive observation-grade evidence:
-        pass@1 23/48, oracle pass@5 28/48, verifier-selected 26/48,
-        selection accuracy 26/28, gap recovered 0.6, and stable stop/marker
-        telemetry across all verifier calls. This supports a repeated or
-        decision-grade gate, not a deployment decision yet.
+        rows. The rows 48-95 continuation at
+        /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start48_20260718T194032Z
+        completed 48 rows in 18m01.82s: pass@1 22/48, oracle pass@5 25/48,
+        verifier-selected 23/48, selection accuracy 23/25, gap recovered 1/3,
+        stop=48, marker=48. It exposed two solvable selector misses
+        (`cruxeval_output_0057` and `cruxeval_output_0081`). Combined rows
+        0-95 are still positive but observation-grade: pass@1 45/96, oracle
+        pass@5 53/96, verifier-selected 49/96, selection accuracy 49/53
+        (92.45%), and gap recovered 0.5. This supports miss analysis and a
+        repeated/decision-grade gate, not a deployment decision yet.
       long_decode_observation: >
         2026-07-16 longer server runs during active GLM download: CPU generated
         616 tokens at 13.71 t/s; MI210 generated 1322 tokens at 98.32 t/s.
@@ -7071,6 +7083,7 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_20260718T191709Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start12_20260718T192418Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start24_20260718T193035Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/verifier_selector_scaled_no_solve_first_start48_20260718T194032Z/summary.json
       - /mnt/raid0/llm/tmp/model-long-cpu-20260716T221606/qwable_iq4xs_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/qwable_iq4xs_mi210/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c2048/summary.txt
