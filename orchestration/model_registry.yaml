@@ -7969,12 +7969,24 @@ roles:
       - production_stack_registration_without_memory_plan
       reason: "f16-upcast artifact is too large for casual GPU residency and needs explicit CPU/GPU/hybrid memory planning before benchmarks."
     performance:
-      benchmark_status: not_run_exact_artifact
+      benchmark_status: current_v7_mi210_context_observation_quality_gate_open
+      current_v7_mi210_context_observation: >
+        2026-07-18 current experimental-v7 `cf051d3e1` MI210 llama-bench
+        run on the exact MTP f16-upcast artifact with `-dev ROCm0 -ngl 99
+        -fa on` measured base benchmark throughput: prompt-only `pp512
+        930.09 t/s`, decode-only `tg128 19.34 t/s`, and paired context
+        rows `pp2048+tg512 87.67 t/s`, `pp8192+tg512 226.28 t/s`,
+        `pp32768+tg512 412.26 t/s`. `llama-bench` exposed no MTP/ngram
+        selector, so this is not native-MTP acceptance evidence or a default
+        acceleration claim.
+      evidence:
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-mtp-f16-upcast-v7-context-20260718T224253Z/metrics_summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-mtp-f16-upcast-v7-context-20260718T224253Z/summary.md
     memory:
       residency: cold
       pinned: false
       cpu_only_candidate: true
-      gpu_only_candidate: false
+      gpu_only_candidate: true
       hybrid_candidate: true
 
   qwen35_27b_mtp_q4km_local:

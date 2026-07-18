@@ -1,0 +1,76 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-mtp-f16-upcast-v7-context-20260718T224253Z",
+  "exit_code": 0,
+  "rows": [
+    {
+      "n_prompt": 512,
+      "n_gen": 0,
+      "avg_ts": 930.090936,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        930.091
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B F16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 128,
+      "avg_ts": 19.339837,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        19.3398
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B F16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 2048,
+      "n_gen": 512,
+      "avg_ts": 87.66574,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        87.6657
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B F16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 512,
+      "avg_ts": 226.275162,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        226.275
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B F16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    },
+    {
+      "n_prompt": 32768,
+      "n_gen": 512,
+      "avg_ts": 412.264802,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        412.265
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "qwen35 27B F16",
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "n_gpu_layers": 99
+    }
+  ]
+}
