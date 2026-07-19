@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"reject\",\"confidence\":0.95,\"blocking\":{\"tripwire\":true},\"evidence\":{\"basis\":\"`check_keyboard_type` checks `keyboard[0][0]` without verifying `keyboard[0]` is a Sequence, risking IndexError/TypeError.\",\"risk\":\"IndexError/TypeError on valid 1D input or empty sublists; not robust for the rule path.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784471637,
+  "id": "chatcmpl-xW6aEGB6hdm5isqE2XyksZHPdhE6sS8X",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 30922.251,
+    "predicted_n": 80,
+    "predicted_per_second": 2.5871337762571036,
+    "predicted_per_token_ms": 386.5281375,
+    "prompt_ms": 36903.483,
+    "prompt_n": 816,
+    "prompt_per_second": 22.111734006245428,
+    "prompt_per_token_ms": 45.224856617647056
+  },
+  "usage": {
+    "completion_tokens": 80,
+    "prompt_tokens": 1125,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 1205
+  }
+}

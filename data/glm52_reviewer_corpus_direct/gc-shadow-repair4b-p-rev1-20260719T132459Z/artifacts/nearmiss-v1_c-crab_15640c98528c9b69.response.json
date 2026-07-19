@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"approve\",\"confidence\":0.9,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Replaces importlib.machinery path with DelayedImportErrorModule(fullname, ...) for missing modules.\",\"risk\":\"Checked that no undefined identifiers or missing side effects block the fix.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784472428,
+  "id": "chatcmpl-G8mgLNjWaxNDqVB6tgKcG4cvG84lsX5G",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 23420.311,
+    "predicted_n": 61,
+    "predicted_per_second": 2.604576856387603,
+    "predicted_per_token_ms": 383.93952459016396,
+    "prompt_ms": 49861.757,
+    "prompt_n": 1070,
+    "prompt_per_second": 21.45933204880847,
+    "prompt_per_token_ms": 46.59977289719626
+  },
+  "usage": {
+    "completion_tokens": 61,
+    "prompt_tokens": 1379,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 1440
+  }
+}

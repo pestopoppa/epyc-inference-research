@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"Removes Dockerfile rewriting and uses docker build labels, enabling multistage support; adds multistage test.\",\n    \"risk\": \"Checked that identifiers and test assertions match the multistage build behavior; no blockers found.\"\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784469670,
+  "id": "chatcmpl-y0Ox58p6GWUbiENAgfNYe9wCvJja01x8",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 38538.738,
+    "predicted_n": 92,
+    "predicted_per_second": 2.3872084238980533,
+    "predicted_per_token_ms": 418.8993260869565,
+    "prompt_ms": 138342.238,
+    "prompt_n": 2770,
+    "prompt_per_second": 20.02280749571219,
+    "prompt_per_token_ms": 49.94304620938629
+  },
+  "usage": {
+    "completion_tokens": 92,
+    "prompt_tokens": 3079,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 3171
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"Adds `callee_ir_validator` raising UnsupportedError for `ir.Yield`, and `raise_on_unsupported_feature` checks for generator expressions.\",\n    \"risk\": \"Checked that tests assert the new UnsupportedError messages for yield/generator expressions.\"\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784469825,
+  "id": "chatcmpl-2MukID24baaOiB2vIdMFQU31AoXcJSJc",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 38979.849,
+    "predicted_n": 94,
+    "predicted_per_second": 2.4115024150042244,
+    "predicted_per_token_ms": 414.67924468085107,
+    "prompt_ms": 115424.541,
+    "prompt_n": 2416,
+    "prompt_per_second": 20.931423933494354,
+    "prompt_per_token_ms": 47.775058360927154
+  },
+  "usage": {
+    "completion_tokens": 94,
+    "prompt_tokens": 2725,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 2819
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"approve\",\"confidence\":0.9,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Stick-breaking beta path for alpha.max()<0.1 avoids 0/0 NaNs; tests assert exact small-alpha and mean for moderate alpha.\",\"risk\":\"Checked that identifiers and fields are defined and tests cover the fixed behavior; no blocker found.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784468076,
+  "id": "chatcmpl-DZ6K3XAKHTwJKSIDrW3EMSFBelO76fit",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 30783.907,
+    "predicted_n": 75,
+    "predicted_per_second": 2.4363379216289864,
+    "predicted_per_token_ms": 410.4520933333333,
+    "prompt_ms": 113051.933,
+    "prompt_n": 2314,
+    "prompt_per_second": 20.468469123831785,
+    "prompt_per_token_ms": 48.85563223854797
+  },
+  "usage": {
+    "completion_tokens": 75,
+    "prompt_tokens": 2623,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 2698
+  }
+}

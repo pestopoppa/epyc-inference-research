@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"approve\",\"confidence\":0.88,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"_argcheck now allows nc=0 and _pdf/_cdf/_logpdf dispatch to chi2 when nc=0; tests assert this.\",\"risk\":\"Checked that dispatch and tests target nc=0 behavior; no undefined identifiers or missing side effects found.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784469909,
+  "id": "chatcmpl-0O6oNf4sZ9QfnmniY1Q3fLM0B22bN5Q5",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 29839.613,
+    "predicted_n": 76,
+    "predicted_per_second": 2.546949921904148,
+    "predicted_per_token_ms": 392.6264868421053,
+    "prompt_ms": 54460.109,
+    "prompt_n": 1193,
+    "prompt_per_second": 21.905942200739997,
+    "prompt_per_token_ms": 45.64971416596814
+  },
+  "usage": {
+    "completion_tokens": 76,
+    "prompt_tokens": 1502,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 1578
+  }
+}

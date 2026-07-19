@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"test_issue_21882 asserts solve returns the correct all-zero solutions for the reported system.\",\n    \"risk\": \"Checked that the _ok_syms key change plausibly fixes the split without introducing undefined identifiers.\"\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784471569,
+  "id": "chatcmpl-MTHtiPXNciTcv83RbEtMOu5Nvi9cVPeF",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 38524.736,
+    "predicted_n": 89,
+    "predicted_per_second": 2.310204020606397,
+    "predicted_per_token_ms": 432.86220224719096,
+    "prompt_ms": 193107.083,
+    "prompt_n": 3843,
+    "prompt_per_second": 19.900875412218827,
+    "prompt_per_token_ms": 50.249045797554
+  },
+  "usage": {
+    "completion_tokens": 89,
+    "prompt_tokens": 3843,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 3932
+  }
+}

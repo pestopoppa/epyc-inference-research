@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"`_setup_subplots` and `_maybe_right_yaxis` set `'symlog'` when `logx/logy/loglog == 'sym'`; tests assert symlog scales.\",\"risk\":\"Checked that symlog path and validation are implemented and covered; no blockers found.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784468317,
+  "id": "chatcmpl-sEPkQwUOubJx3IrIOy9p0AxyUYIxy8yz",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 33361.861,
+    "predicted_n": 81,
+    "predicted_per_second": 2.427922111419384,
+    "predicted_per_token_ms": 411.8748271604938,
+    "prompt_ms": 108068.342,
+    "prompt_n": 2213,
+    "prompt_per_second": 20.47778247583367,
+    "prompt_per_token_ms": 48.83341256213286
+  },
+  "usage": {
+    "completion_tokens": 81,
+    "prompt_tokens": 2522,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 2603
+  }
+}

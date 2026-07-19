@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"dis.py maps CALL_INTRINSIC_1/2 args to _intrinsic_1_descs/_intrinsic_2_descs; tests assert INTRINSIC_* names.\",\n    \"risk\": \"Checked that tests cover CALL_INTRINSIC_* argrepr behavior; no missing persistence or undefined identifiers found.\"\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784473875,
+  "id": "chatcmpl-q2UPYaPdxOlU0vY4BwISPab4eKo7q6WK",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 46256.821,
+    "predicted_n": 109,
+    "predicted_per_second": 2.3564092309759026,
+    "predicted_per_token_ms": 424.37450458715597,
+    "prompt_ms": 163213.683,
+    "prompt_n": 3344,
+    "prompt_per_second": 20.48847828524279,
+    "prompt_per_token_ms": 48.80791955741626
+  },
+  "usage": {
+    "completion_tokens": 109,
+    "prompt_tokens": 3344,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 3453
+  }
+}

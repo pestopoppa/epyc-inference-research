@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"approve\",\"confidence\":0.85,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"getsearchdirs uses sys.path; testConfigFollowImportsSysPath uses pypath dir added to PYTHONPATH.\",\"risk\":\"Checked that tests cover sys.path behavior and no undefined identifiers or missing side effects found.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784469306,
+  "id": "chatcmpl-9ORuJo5Ap8Lvs4oABuLreb8xxikGNNyS",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 29270.223,
+    "predicted_n": 67,
+    "predicted_per_second": 2.289015700358689,
+    "predicted_per_token_ms": 436.869,
+    "prompt_ms": 221305.603,
+    "prompt_n": 4230,
+    "prompt_per_second": 19.11384051130418,
+    "prompt_per_token_ms": 52.31810945626478
+  },
+  "usage": {
+    "completion_tokens": 67,
+    "prompt_tokens": 4230,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 4297
+  }
+}

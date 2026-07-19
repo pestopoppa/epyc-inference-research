@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"reject\",\"confidence\":0.95,\"blocking\":{\"tripwire\":true},\"evidence\":{\"basis\":\"Test catches exception and asserts a string, which always passes without exercising the fix.\",\"risk\":\"Test does not cover requested behavior; assert on string is a no-op.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784471079,
+  "id": "chatcmpl-MW71HSUy8DVAppGe9dCr9vR1IX9ZpOLO",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 23132.32,
+    "predicted_n": 58,
+    "predicted_per_second": 2.50731444143951,
+    "predicted_per_token_ms": 398.83310344827584,
+    "prompt_ms": 78069.157,
+    "prompt_n": 1642,
+    "prompt_per_second": 21.03263392481617,
+    "prompt_per_token_ms": 47.54516260657735
+  },
+  "usage": {
+    "completion_tokens": 58,
+    "prompt_tokens": 1951,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 2009
+  }
+}

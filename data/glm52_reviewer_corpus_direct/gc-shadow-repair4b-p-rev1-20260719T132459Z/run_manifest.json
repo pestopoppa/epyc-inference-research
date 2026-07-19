@@ -1,0 +1,11 @@
+{
+  "calibration_command": "python3 /mnt/raid0/llm/epyc-orchestrator/scripts/analysis/reviewer_calibration_report.py --decisions /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/decisions.jsonl --corpus /mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl --k 2 --print",
+  "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/decisions.jsonl",
+  "generated_at": "2026-07-19T15:12:23.455130+00:00",
+  "measurement_note": "P-REV-1 candidate run; protocol attestation MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719",
+  "measurement_protocol": "p_rev1",
+  "n_scored": 48,
+  "observation_only": false,
+  "protocol_attestation": "MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719",
+  "schema": "glm52_reviewer_corpus_direct_run_manifest.v1"
+}

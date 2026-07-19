@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": true\n  },\n  \"evidence\": {\n    \"basis\": \"GitPackage._fetch_metadata only warns when self.version[0] == 'master', missing the no-revision case.\",\n    \"risk\": \"Missing warning for packages with no specified version/revision, a core task requirement.\"\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784470278,
+  "id": "chatcmpl-FM8pKjM3UvGM5d8FFHrWNHmlV0oh0Hnz",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 38899.255,
+    "predicted_n": 91,
+    "predicted_per_second": 2.33937642250475,
+    "predicted_per_token_ms": 427.4643406593406,
+    "prompt_ms": 173047.786,
+    "prompt_n": 3252,
+    "prompt_per_second": 18.79249700426679,
+    "prompt_per_token_ms": 53.21272632226322
+  },
+  "usage": {
+    "completion_tokens": 91,
+    "prompt_tokens": 3561,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 3652
+  }
+}

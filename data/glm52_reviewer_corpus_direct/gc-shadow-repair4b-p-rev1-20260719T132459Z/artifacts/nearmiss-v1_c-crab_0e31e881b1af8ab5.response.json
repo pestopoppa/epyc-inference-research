@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": true\n  },\n  \"evidence\": {\n    \"basis\": \"DateTimeVar.__lt__ references DATETIME_TYPES before it is defined at module end.\",\n    \"risk\": \"NameError: DATETIME_TYPES is undefined when comparison methods execute.\"\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784468526,
+  "id": "chatcmpl-jjszzH1NJhwKSWt2yFPeZbUqajcDbqyx",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 34494.992,
+    "predicted_n": 81,
+    "predicted_per_second": 2.3481669455090755,
+    "predicted_per_token_ms": 425.86409876543206,
+    "prompt_ms": 175407.284,
+    "prompt_n": 3315,
+    "prompt_per_second": 18.89887309354838,
+    "prompt_per_token_ms": 52.91320784313726
+  },
+  "usage": {
+    "completion_tokens": 81,
+    "prompt_tokens": 3624,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 3705
+  }
+}

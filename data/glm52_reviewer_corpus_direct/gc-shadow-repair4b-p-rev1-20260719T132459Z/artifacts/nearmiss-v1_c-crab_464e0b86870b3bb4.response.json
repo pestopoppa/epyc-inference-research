@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"reject\",\"confidence\":0.9,\"blocking\":{\"tripwire\":true},\"evidence\":{\"basis\":\"action.yml uses composite action with invalid multi-line input expansion for entrypoint.sh.\",\"risk\":\"YAML scalar folding breaks the entrypoint command; inputs are not passed correctly.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784471337,
+  "id": "chatcmpl-uNGy0Nb1zwajaMEfM3S0NHSaj2JzI0cx",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 22352.351,
+    "predicted_n": 59,
+    "predicted_per_second": 2.639543375101796,
+    "predicted_per_token_ms": 378.853406779661,
+    "prompt_ms": 26598.201,
+    "prompt_n": 580,
+    "prompt_per_second": 21.80598605146265,
+    "prompt_per_token_ms": 45.85896724137931
+  },
+  "usage": {
+    "completion_tokens": 59,
+    "prompt_tokens": 889,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 948
+  }
+}

@@ -1,0 +1,193 @@
+{
+  "group_fields": [
+    "reviewer_model_quant",
+    "grading_model",
+    "rubric_version",
+    "corpus_id",
+    "domain"
+  ],
+  "groups": [
+    {
+      "group": {
+        "corpus_id": "nearmiss-v1",
+        "domain": "code",
+        "grading_model": null,
+        "reviewer_model_quant": "glm_52_ud_iq2m",
+        "rubric_version": "glm52_direct_nearmiss_review_v5+binary_schema+task_test_alignment+oracle_notes"
+      },
+      "metrics": {
+        "acceptance_rate": {
+          "n": 48,
+          "rate": 0.5833333333333334,
+          "successes": 28,
+          "wilson95": [
+            0.44281082215364653,
+            0.7115054026542298
+          ]
+        },
+        "auc": 0.5087890625,
+        "brier": 0.2775166666666667,
+        "calibration_n": 48,
+        "consistency_rate": {
+          "caveat": "CR can reach ~81% at near-random accuracy (intake-837); read with AUC/Brier.",
+          "n_all_agree": 0,
+          "n_candidates_multi_run": 0,
+          "rate": null,
+          "wilson95": null
+        },
+        "ece": 0.23875000000000002,
+        "escalation_precision": {
+          "n": 0,
+          "rate": null
+        },
+        "fa_fr_ratio": 1.6666666666666667,
+        "fa_rate": {
+          "n": 24,
+          "rate": 0.4166666666666667,
+          "successes": 10,
+          "wilson95": [
+            0.24467347246538232,
+            0.6116566235061137
+          ]
+        },
+        "fr_rate": {
+          "n": 24,
+          "rate": 0.25,
+          "successes": 6,
+          "wilson95": [
+            0.11999203479342334,
+            0.44899825312106445
+          ]
+        },
+        "n_actually_bad": 24,
+        "n_actually_good": 24,
+        "n_golded_terminal": 48,
+        "n_terminal": 48,
+        "n_total": 48,
+        "parse_failure_rate": {
+          "n": 48,
+          "rate": 0.0,
+          "successes": 0,
+          "wilson95": [
+            0.0,
+            0.0741026511527422
+          ]
+        },
+        "pass_hat_2": {
+          "k": 2,
+          "n_candidates_ge_k": 0,
+          "n_pass": 0,
+          "rate": null,
+          "wilson95": null
+        },
+        "request_evidence_yield": {
+          "n": 0,
+          "rate": null
+        }
+      }
+    }
+  ],
+  "instrument": {
+    "source": {
+      "corpus": "/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl",
+      "kind": "decisions_jsonl",
+      "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/decisions.jsonl",
+      "run_manifest": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/run_manifest.json"
+    }
+  },
+  "measurement": {
+    "directions": {
+      "acceptance_rate": "context",
+      "auc": "higher-better",
+      "brier": "lower-better",
+      "consistency_rate": "higher-better",
+      "ece": "lower-better",
+      "escalation_precision": "higher-better",
+      "fa_rate": "lower-better",
+      "fr_rate": "lower-better",
+      "parse_failure_rate": "lower-better",
+      "request_evidence_yield": "higher-better"
+    },
+    "grade": "decision",
+    "note": "P-REV-1: metrics are decision-grade for the material inputs and attestation recorded in the supplied run manifest. Attestation: MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719.",
+    "protocol": "P-REV-1",
+    "run_manifest": {
+      "measurement_protocol": "p_rev1",
+      "observation_only": false,
+      "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/run_manifest.json",
+      "protocol_attestation": "MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719"
+    }
+  },
+  "n_groups": 1,
+  "n_rows": 48,
+  "overall": {
+    "acceptance_rate": {
+      "n": 48,
+      "rate": 0.5833333333333334,
+      "successes": 28,
+      "wilson95": [
+        0.44281082215364653,
+        0.7115054026542298
+      ]
+    },
+    "auc": 0.5087890625,
+    "brier": 0.2775166666666667,
+    "calibration_n": 48,
+    "consistency_rate": {
+      "caveat": "CR can reach ~81% at near-random accuracy (intake-837); read with AUC/Brier.",
+      "n_all_agree": 0,
+      "n_candidates_multi_run": 0,
+      "rate": null,
+      "wilson95": null
+    },
+    "ece": 0.23875000000000002,
+    "escalation_precision": {
+      "n": 0,
+      "rate": null
+    },
+    "fa_fr_ratio": 1.6666666666666667,
+    "fa_rate": {
+      "n": 24,
+      "rate": 0.4166666666666667,
+      "successes": 10,
+      "wilson95": [
+        0.24467347246538232,
+        0.6116566235061137
+      ]
+    },
+    "fr_rate": {
+      "n": 24,
+      "rate": 0.25,
+      "successes": 6,
+      "wilson95": [
+        0.11999203479342334,
+        0.44899825312106445
+      ]
+    },
+    "n_actually_bad": 24,
+    "n_actually_good": 24,
+    "n_golded_terminal": 48,
+    "n_terminal": 48,
+    "n_total": 48,
+    "parse_failure_rate": {
+      "n": 48,
+      "rate": 0.0,
+      "successes": 0,
+      "wilson95": [
+        0.0,
+        0.0741026511527422
+      ]
+    },
+    "pass_hat_2": {
+      "k": 2,
+      "n_candidates_ge_k": 0,
+      "n_pass": 0,
+      "rate": null,
+      "wilson95": null
+    },
+    "request_evidence_yield": {
+      "n": 0,
+      "rate": null
+    }
+  }
+}

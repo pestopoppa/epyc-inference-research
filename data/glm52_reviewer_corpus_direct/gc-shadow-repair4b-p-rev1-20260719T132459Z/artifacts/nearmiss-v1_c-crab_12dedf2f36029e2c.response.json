@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"approve\",\"confidence\":0.85,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"`_alpha_grid` now applies sample weights via `_preprocess_data` and `yw`, and tests assert alpha_max yields zero coefs.\",\"risk\":\"Checked that tests directly cover alpha_max with sample weights and fail without the fix.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784469056,
+  "id": "chatcmpl-RV3BIqQfsnpqB885lSYXZfBLNoXWoySF",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 31448.515,
+    "predicted_n": 72,
+    "predicted_per_second": 2.2894562748034364,
+    "predicted_per_token_ms": 436.78493055555555,
+    "prompt_ms": 223119.923,
+    "prompt_n": 4283,
+    "prompt_per_second": 19.195954993225772,
+    "prompt_per_token_ms": 52.094308428671496
+  },
+  "usage": {
+    "completion_tokens": 72,
+    "prompt_tokens": 4283,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 4355
+  }
+}

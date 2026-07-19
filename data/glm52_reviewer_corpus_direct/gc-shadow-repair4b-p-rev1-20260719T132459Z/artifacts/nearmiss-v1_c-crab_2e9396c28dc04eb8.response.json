@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"`_should_skip_enqueue` checks existing trials and `enqueue_trial` skips adding when true; tests assert no duplicate trial is added.\",\"risk\":\"Checked that helper logic is tied to the rule path and tests cover skip behavior; no undefined identifiers or missing side effects found.\"}}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784470439,
+  "id": "chatcmpl-F03QcBlmegHkMOzkUvzSNAs2J1cp3wxX",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 32818.954,
+    "predicted_n": 79,
+    "predicted_per_second": 2.4071455781314666,
+    "predicted_per_token_ms": 415.4297974683544,
+    "prompt_ms": 128506.287,
+    "prompt_n": 2498,
+    "prompt_per_second": 19.438737654913336,
+    "prompt_per_token_ms": 51.44366973578863
+  },
+  "usage": {
+    "completion_tokens": 79,
+    "prompt_tokens": 2807,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 2886
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"Replaces stale third_party_modules set with current package popularity list.\",\n    \"risk\": \"No tests included, but task is data-only update; no code rule path affected.\"\n  }\n}",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784471793,
+  "id": "chatcmpl-mkoBKGcxPiLXoU3ehA8KmL8VFKTpChfc",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10097-6a8dd5ea6",
+  "timings": {
+    "cache_n": 309,
+    "predicted_ms": 33690.82,
+    "predicted_n": 81,
+    "predicted_per_second": 2.404215747791238,
+    "predicted_per_token_ms": 415.936049382716,
+    "prompt_ms": 122305.78,
+    "prompt_n": 2551,
+    "prompt_per_second": 20.857558816925906,
+    "prompt_per_token_ms": 47.94424931399451
+  },
+  "usage": {
+    "completion_tokens": 81,
+    "prompt_tokens": 2860,
+    "prompt_tokens_details": {
+      "cached_tokens": 309
+    },
+    "total_tokens": 2941
+  }
+}
