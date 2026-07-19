@@ -116,6 +116,7 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
             self.assertIn("role_smoke_ports.tsv", commands)
             self.assertIn("/v1/chat/completions", commands)
             self.assertIn("role_smoke_aggregate.json", commands)
+            self.assertIn('"chat_template_kwargs":{"enable_thinking":false}', commands)
             self.assertIn('if not aggregate["all_pass"]:', commands)
             self.assertIn("orchestrator_stack.py stop", commands)
             self.assertLess(

@@ -417,7 +417,7 @@ vision_escalation 8087
 EOF
 
 cat > "$OP2_RUN_ROOT/live-v6/role_smoke_request.json" <<'EOF'
-{{"model":"local","messages":[{{"role":"user","content":"Return exactly: OP2_READY"}}],"temperature":0,"seed":42,"max_tokens":32}}
+{{"model":"local","messages":[{{"role":"user","content":"Return exactly: OP2_READY"}}],"temperature":0,"seed":42,"max_tokens":32,"chat_template_kwargs":{{"enable_thinking":false}}}}
 EOF
 
 cat > "$OP2_RUN_ROOT/live-v6/role_smoke_check.py" <<'PY'
