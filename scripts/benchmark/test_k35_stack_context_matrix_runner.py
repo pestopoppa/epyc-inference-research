@@ -251,6 +251,35 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             operator_text = operator_run.read_text()
             self.assertIn("--execute", operator_text)
             self.assertIn("--output-dir", operator_text)
+            self.assertIn("K35_RUN_ID:=k35_stack_context_matrix_$(date -u +%Y%m%dT%H%M%SZ)", operator_text)
+            self.assertIn("/mnt/raid0/llm/epyc-inference-research/data/k35_stack_context_matrix", operator_text)
+            self.assertNotIn(f"--output-dir {tmp}", operator_text)
+            self.assertEqual(
+                plan["pgpu1_protocol_fields"]["operator_execution_output_dir"],
+                "${K35_EXECUTION_BASE}/${K35_RUN_ID}",
+            )
+
+    def test_operator_run_static_execution_output_dir_is_explicit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prep_dir = Path(tmp) / "prep"
+            execution_dir = Path(tmp) / "execute"
+            rc = k35.main(
+                [
+                    "--only",
+                    "frontdoor_gpu_resident_no_spec",
+                    "--context",
+                    "2048",
+                    "--output-dir",
+                    str(prep_dir),
+                    "--execution-output-dir",
+                    str(execution_dir),
+                ]
+            )
+
+            self.assertEqual(rc, 0)
+            operator_text = (prep_dir / "operator_run.sh").read_text()
+            self.assertIn(f'K35_EXEC_OUTPUT_DIR:-{execution_dir.resolve()}', operator_text)
+            self.assertIn('--output-dir "$K35_EXEC_OUTPUT_DIR"', operator_text)
 
     def test_summarize_results_by_scenario_reports_medians_and_speedups(self):
         summary = k35.summarize_results_by_scenario(

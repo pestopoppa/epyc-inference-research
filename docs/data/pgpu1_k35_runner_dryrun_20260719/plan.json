@@ -285,7 +285,7 @@
   "contexts": [
     8192
   ],
-  "created_at": "2026-07-19T10:35:21.719019+00:00",
+  "created_at": "2026-07-19T11:23:53.071345+00:00",
   "execute": false,
   "max_tokens": 1024,
   "operator_invocation": [
@@ -301,7 +301,7 @@
     "--min-completion-tokens",
     "128",
     "--output-dir",
-    "docs/data/pgpu1_k35_runner_dryrun_20260719",
+    "${K35_EXEC_OUTPUT_DIR}",
     "--binary",
     "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
     "--port-base",
@@ -319,6 +319,7 @@
   ],
   "pgpu1_protocol_fields": {
     "cpu_interference_policy": "CPU stack quiesced; AutoPilot and unrelated llama workloads stopped before operator-window execution",
+    "operator_execution_output_dir": "${K35_EXECUTION_BASE}/${K35_RUN_ID}",
     "operator_invocation": "operator_run.sh records the exact --execute runner invocation for the prepared plan",
     "post_cleanup_vram_sample": "collected as memory_samples phase=after_cleanup after server termination",
     "pre_launch_gpu_sample": "collected as memory_samples phase=before_launch before server start",

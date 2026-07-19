@@ -55,6 +55,8 @@ DEFAULT_OUTPUT_DIR = (
     / "k35_stack_context_matrix"
     / f"k35_stack_context_matrix_{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
 )
+DEFAULT_EXECUTION_OUTPUT_BASE = RESEARCH_ROOT / "data" / "k35_stack_context_matrix"
+EXEC_OUTPUT_MARKER = "__K35_EXEC_OUTPUT_DIR__"
 DEFAULT_CONTEXTS = (2048, 8192, 32768)
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_REQUEST_TIMEOUT_S = 900
@@ -775,10 +777,16 @@ def render_commands(plan: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def build_runner_invocation(args: argparse.Namespace, *, execute: bool) -> list[str]:
+def build_runner_invocation(
+    args: argparse.Namespace,
+    *,
+    execute: bool,
+    output_dir: Path | str | None = None,
+) -> list[str]:
     argv = [sys.executable, str(Path(__file__).resolve())]
     if execute:
         argv.append("--execute")
+    selected_output_dir = output_dir if output_dir is not None else args.output_dir
     for scenario in args.only or []:
         argv.extend(["--only", scenario])
     for context in args.context or []:
@@ -790,7 +798,7 @@ def build_runner_invocation(args: argparse.Namespace, *, execute: bool) -> list[
             "--min-completion-tokens",
             str(args.min_completion_tokens),
             "--output-dir",
-            str(args.output_dir),
+            str(selected_output_dir),
             "--binary",
             str(args.binary),
             "--port-base",
@@ -812,8 +820,22 @@ def build_runner_invocation(args: argparse.Namespace, *, execute: bool) -> list[
     return argv
 
 
+def operator_output_preamble(args: argparse.Namespace) -> str:
+    if args.execution_output_dir:
+        execution_dir = Path(args.execution_output_dir).expanduser().resolve()
+        return f'export K35_EXEC_OUTPUT_DIR="${{K35_EXEC_OUTPUT_DIR:-{execution_dir}}}"'
+    return "\n".join(
+        [
+            ': "${K35_RUN_ID:=k35_stack_context_matrix_$(date -u +%Y%m%dT%H%M%SZ)}"',
+            f'export K35_EXECUTION_BASE="${{K35_EXECUTION_BASE:-{DEFAULT_EXECUTION_OUTPUT_BASE}}}"',
+            'export K35_EXEC_OUTPUT_DIR="${K35_EXEC_OUTPUT_DIR:-${K35_EXECUTION_BASE}/${K35_RUN_ID}}"',
+        ]
+    )
+
+
 def render_operator_run_script(args: argparse.Namespace) -> str:
-    invocation = shlex.join(build_runner_invocation(args, execute=True))
+    invocation = shlex.join(build_runner_invocation(args, execute=True, output_dir=EXEC_OUTPUT_MARKER))
+    invocation = invocation.replace(EXEC_OUTPUT_MARKER, '"$K35_EXEC_OUTPUT_DIR"')
     return "\n".join(
         [
             "#!/bin/bash",
@@ -821,6 +843,7 @@ def render_operator_run_script(args: argparse.Namespace) -> str:
             "",
             "# Re-run this K35/P-GPU-1 plan inside an approved operator bench window.",
             "# The dry-run preparer only writes this script; it does not execute inference.",
+            operator_output_preamble(args),
             f"cd {shlex.quote(str(RESEARCH_ROOT))}",
             invocation,
             "",
@@ -875,9 +898,11 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "pre_launch_gpu_sample": "collected as memory_samples phase=before_launch before server start",
             "request_artifacts": "each executed cell writes prompt.txt, prompt_sha256.txt, request.json, response.json, and result.json",
             "operator_invocation": "operator_run.sh records the exact --execute runner invocation for the prepared plan",
+            "operator_execution_output_dir": args.execution_output_dir
+            or "${K35_EXECUTION_BASE}/${K35_RUN_ID}",
             "rocm_hardware_state": "collect_rocm_snapshot captures pid/memory/utilization plus clocks, power, and temperature",
         },
-        "operator_invocation": build_runner_invocation(args, execute=True),
+        "operator_invocation": build_runner_invocation(args, execute=True, output_dir="${K35_EXEC_OUTPUT_DIR}"),
         "cells": cells,
     }
 
@@ -1065,6 +1090,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-tokens", type=int, default=DEFAULT_MAX_TOKENS)
     parser.add_argument("--min-completion-tokens", type=int, default=DEFAULT_MIN_COMPLETION_TOKENS)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument(
+        "--execution-output-dir",
+        default="",
+        help=(
+            "Optional static artifact directory used by generated operator_run.sh. "
+            "If omitted, operator_run.sh creates a fresh timestamped directory under "
+            f"{DEFAULT_EXECUTION_OUTPUT_BASE}."
+        ),
+    )
     parser.add_argument("--binary", type=Path, default=DEFAULT_BINARY)
     parser.add_argument("--port-base", type=int, default=DEFAULT_BASE_PORT)
     parser.add_argument("--request-timeout", type=int, default=DEFAULT_REQUEST_TIMEOUT_S)
