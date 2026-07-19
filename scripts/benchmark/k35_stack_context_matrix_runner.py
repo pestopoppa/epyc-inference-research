@@ -61,6 +61,14 @@ DEFAULT_STARTUP_TIMEOUT_S = 300
 DEFAULT_MIN_COMPLETION_TOKENS = 128
 DEFAULT_BASE_PORT = 19100
 DEFAULT_REPS = 1
+DEFAULT_WARMUP_DISCARD_POLICY = (
+    "no warm-up requests; no discarded reps; fresh server per rep; graph recapture, if any, "
+    "is included in the measured row"
+)
+DEFAULT_CPU_INTERFERENCE_POLICY = (
+    "CPU stack quiet required; runner aborts on AutoPilot or llama workload process blockers "
+    "unless --allow-dirty-host is explicit"
+)
 
 BLOCKER_BASENAMES = {"llama-server", "llama-cli", "llama-bench", "llama-mtmd-cli"}
 AUTOPILOT_MARKERS = (
@@ -521,13 +529,37 @@ def collect_process_memory(pid: int) -> dict[str, Any]:
 def collect_rocm_snapshot() -> dict[str, Any]:
     if shutil.which("rocm-smi") is None:
         return {"ok": False, "skipped": "rocm-smi not found"}
-    return run_capture(["rocm-smi", "--showpidgpus", "--showmemuse", "--showuse"], timeout=20)
+    utilization_memory_pid = run_capture(
+        ["rocm-smi", "--showpidgpus", "--showmemuse", "--showuse"],
+        timeout=20,
+    )
+    snapshots = {
+        "utilization_memory_pid": utilization_memory_pid,
+        "clocks": run_capture(["rocm-smi", "--showclocks"], timeout=20),
+        "power": run_capture(["rocm-smi", "--showpower"], timeout=20),
+        "temperature": run_capture(["rocm-smi", "--showtemp"], timeout=20),
+    }
+    return {
+        **utilization_memory_pid,
+        "schema": "epyc.rocm_snapshot.v2",
+        "captured_at": utc_now(),
+        "snapshots": snapshots,
+    }
 
 
 def collect_resident_memory_sample(pid: int, phase: str) -> dict[str, Any]:
     return {
         "phase": phase,
         "process": collect_process_memory(pid),
+        "rocm": collect_rocm_snapshot(),
+    }
+
+
+def collect_post_cleanup_sample(pid: int, phase: str = "after_cleanup") -> dict[str, Any]:
+    return {
+        "phase": phase,
+        "pid": pid,
+        "ps": run_capture(["ps", "-p", str(pid), "-o", "pid=,comm=,args="], timeout=10),
         "rocm": collect_rocm_snapshot(),
     }
 
@@ -746,6 +778,12 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "contexts": contexts,
         "reps": args.reps,
         "max_tokens": args.max_tokens,
+        "pgpu1_protocol_fields": {
+            "warmup_discard_policy": args.warmup_discard_policy,
+            "cpu_interference_policy": args.cpu_interference_policy,
+            "post_cleanup_vram_sample": "collected as memory_samples phase=after_cleanup after server termination",
+            "rocm_hardware_state": "collect_rocm_snapshot captures pid/memory/utilization plus clocks, power, and temperature",
+        },
         "cells": cells,
     }
 
@@ -810,6 +848,7 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
         if proc.poll() is None:
             memory_samples.append(collect_resident_memory_sample(proc.pid, "before_cleanup"))
         cleanup = terminate(proc)
+        memory_samples.append(collect_post_cleanup_sample(proc.pid))
     result["started_at_monotonic"] = started
     result["memory_samples"] = memory_samples
     result["cleanup"] = cleanup
@@ -881,6 +920,7 @@ def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Pat
             "reason": "process blockers present",
             "blockers": blockers,
             "results": [],
+            "pgpu1_protocol_fields": plan.get("pgpu1_protocol_fields"),
         }
         write_json(output_dir / "summary.json", summary)
         return summary
@@ -893,6 +933,7 @@ def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Pat
         "results": results,
         "scenario_summaries": summarize_results_by_scenario(results),
         "cleanup_process_blockers": cleanup_guard,
+        "pgpu1_protocol_fields": plan.get("pgpu1_protocol_fields"),
     }
     write_json(output_dir / "summary.json", summary)
     return summary
@@ -922,6 +963,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--startup-timeout", type=int, default=DEFAULT_STARTUP_TIMEOUT_S)
     parser.add_argument("--allow-dirty-host", action="store_true")
     parser.add_argument("--reps", type=int, default=DEFAULT_REPS, help="Sequential fresh-server repetitions per scenario/context")
+    parser.add_argument(
+        "--warmup-discard-policy",
+        default=DEFAULT_WARMUP_DISCARD_POLICY,
+        help="Explicit P-GPU-1 warm-up/discard policy string to record in plan and summary",
+    )
+    parser.add_argument(
+        "--cpu-interference-policy",
+        default=DEFAULT_CPU_INTERFERENCE_POLICY,
+        help="Explicit P-GPU-1 CPU-stack interference policy string to record in plan and summary",
+    )
     args = parser.parse_args(argv)
     if args.reps <= 0:
         parser.error("--reps must be positive")

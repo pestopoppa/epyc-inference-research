@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -192,6 +193,29 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             self.assertEqual([cell["nominal_context"] for cell in plan["cells"]], [8192, 8192, 8192])
             self.assertEqual(len({cell["port"] for cell in plan["cells"]}), 3)
 
+    def test_plan_records_pgpu1_policy_fields(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = k35.parse_args(
+                [
+                    "--only",
+                    "frontdoor_gpu_resident_no_spec",
+                    "--context",
+                    "8192",
+                    "--warmup-discard-policy",
+                    "no warm-up; no discard",
+                    "--cpu-interference-policy",
+                    "CPU stack quiesced",
+                    "--output-dir",
+                    tmp,
+                ]
+            )
+            plan = k35.build_plan(args)
+            fields = plan["pgpu1_protocol_fields"]
+            self.assertEqual(fields["warmup_discard_policy"], "no warm-up; no discard")
+            self.assertEqual(fields["cpu_interference_policy"], "CPU stack quiesced")
+            self.assertIn("after_cleanup", fields["post_cleanup_vram_sample"])
+            self.assertIn("clocks", fields["rocm_hardware_state"])
+
     def test_main_dry_run_writes_plan_and_commands(self):
         with tempfile.TemporaryDirectory() as tmp:
             rc = k35.main(
@@ -287,6 +311,44 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
         self.assertTrue(sample["status"]["ok"])
         self.assertIn("VmRSS", sample["status"]["fields"])
         self.assertIn("ps", sample)
+
+    def test_collect_rocm_snapshot_preserves_legacy_fields_and_adds_pgpu1_snapshots(self):
+        def fake_run_capture(argv, *, timeout=30):
+            return {
+                "argv": argv,
+                "ok": True,
+                "returncode": 0,
+                "stdout": " ".join(argv),
+                "stderr": "",
+            }
+
+        with mock.patch.object(k35.shutil, "which", return_value="/usr/bin/rocm-smi"), mock.patch.object(
+            k35,
+            "run_capture",
+            side_effect=fake_run_capture,
+        ):
+            sample = k35.collect_rocm_snapshot()
+
+        self.assertTrue(sample["ok"])
+        self.assertEqual(sample["argv"], ["rocm-smi", "--showpidgpus", "--showmemuse", "--showuse"])
+        self.assertEqual(sample["schema"], "epyc.rocm_snapshot.v2")
+        self.assertIn("snapshots", sample)
+        self.assertIn("clocks", sample["snapshots"])
+        self.assertIn("power", sample["snapshots"])
+        self.assertIn("temperature", sample["snapshots"])
+        self.assertEqual(sample["snapshots"]["clocks"]["argv"], ["rocm-smi", "--showclocks"])
+
+    def test_collect_post_cleanup_sample_records_after_cleanup_rocm(self):
+        with mock.patch.object(k35, "run_capture", return_value={"ok": True, "stdout": "", "stderr": ""}), mock.patch.object(
+            k35,
+            "collect_rocm_snapshot",
+            return_value={"ok": True, "stdout": "0% VRAM"},
+        ):
+            sample = k35.collect_post_cleanup_sample(12345)
+
+        self.assertEqual(sample["phase"], "after_cleanup")
+        self.assertEqual(sample["pid"], 12345)
+        self.assertEqual(sample["rocm"]["stdout"], "0% VRAM")
 
 
 if __name__ == "__main__":
