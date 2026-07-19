@@ -1,0 +1,51 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/axa2-qwen35-122b-iq2m-prefill-sizing-20260719T060039Z",
+  "exit_code": 15,
+  "status": "partial_timeout_sigterm",
+  "parse_error": "llama_bench_stdout.json is a partial JSON array because the run was stopped before 32K/decode rows completed.",
+  "rows": [
+    {
+      "n_prompt": 2048,
+      "n_gen": 0,
+      "avg_ts": 342.056712,
+      "type_k": "q4_0",
+      "type_v": "f16",
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T06:00:53Z"
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "avg_ts": 135.559948,
+      "type_k": "q4_0",
+      "type_v": "f16",
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T06:01:05Z"
+    },
+    {
+      "n_prompt": 16384,
+      "n_gen": 0,
+      "avg_ts": 76.519188,
+      "type_k": "q4_0",
+      "type_v": "f16",
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T06:03:06Z"
+    }
+  ],
+  "missing_rows": [
+    {
+      "n_prompt": 32768,
+      "n_gen": 0
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 512
+    }
+  ],
+  "cleanup": {
+    "post_processes_empty": true,
+    "post_kfd_scan_empty": true,
+    "post_rocm_smi_no_kfd": true,
+    "manual_post_verification": "manual_post_check_utc=2026-07-19T06:21:53Z\nllama_processes_now:\nkfd_processes_now:\nrocm_smi_showpids:\n\n\n============================ ROCm System Management Interface ============================\n===================================== KFD Processes ======================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+  }
+}

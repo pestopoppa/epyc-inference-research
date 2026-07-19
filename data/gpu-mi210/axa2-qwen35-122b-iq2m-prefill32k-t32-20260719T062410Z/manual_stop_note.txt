@@ -1,0 +1,1 @@
+Manual stop by main session after >14 minutes with no completed 32K row, empty stdout, no stderr beyond ROCm init, and no current GPU activity while holding MI210 VRAM. PIDs 405203/405202/405186 were terminated and verified dead; ROCm post-check reported no KFD PIDs.

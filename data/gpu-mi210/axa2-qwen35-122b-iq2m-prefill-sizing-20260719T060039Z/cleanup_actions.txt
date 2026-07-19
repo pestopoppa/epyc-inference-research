@@ -1,0 +1,3 @@
+cleanup_TERM: no matching launched processes
+cleanup_KILL: no matching launched processes
+cleanup_verify: launched process absent

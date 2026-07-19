@@ -1,0 +1,7 @@
+exit_code=15
+post_processes_empty=true
+post_kfd_scan_empty=true
+post_rocm_smi_no_kfd=true
+cleanup_TERM: no matching launched processes
+cleanup_KILL: no matching launched processes
+cleanup_verify: launched process absent

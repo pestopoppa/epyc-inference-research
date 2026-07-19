@@ -1,0 +1,11 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/axa2-qwen35-122b-iq2m-prefill32k-t32-20260719T062410Z",
+  "exit_code": 143,
+  "rows": [],
+  "status": "manual_stop_no_completed_row",
+  "observation": "32K-only prefill run held MI210 memory but emitted no llama-bench row before manual stop after more than 14 minutes.",
+  "cleanup": {
+    "post_processes_empty": true,
+    "post_rocm_smi_no_kfd": true
+  }
+}

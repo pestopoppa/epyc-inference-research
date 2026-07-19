@@ -1002,6 +1002,7 @@ with reasoning disabled and q4_0/f16 KV:
 | 3-prompt mixed architect/reviewer slice | `41.85 t/s`, `3/3` | not repeated | `50.77 t/s`, `3/3` (`235/356` accepted) | PASS |
 | 8-prompt broadened sanity slice | not repeated | not repeated | mean `80.77 t/s`, `1166/1440` accepted | FAIL overall (`5/8`) |
 | CPU-only IQ2 prefill sizing | `pp2048 122.31 t/s`; `pp8192 114.40 t/s`; `tg16 6.24 t/s` | not applicable | not applicable | PASS runtime; no KFD PIDs |
+| AXA-2 MI210 prefill sizing | `pp2048 342.06 t/s`; `pp8192 135.56 t/s`; `pp16384 76.52 t/s`; `pp32768` no row after two bounded attempts | not applicable | not applicable | PARTIAL runtime; cleanup clean |
 
 Artifacts:
 
@@ -1010,6 +1011,8 @@ Artifacts:
 - `data/model_admission_throughput/qwen35_122b_iq2m_mixed_ngram_mtp_ab_local_20260719T013943Z/summary.json`
 - `data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/summary.json`
 - `data/cpu_prefill_compute/20260719T014801Z_qwen35_122b_iq2_cpu_prefill/summary.json`
+- `data/gpu-mi210/axa2-qwen35-122b-iq2m-prefill-sizing-20260719T060039Z/summary.json`
+- `data/gpu-mi210/axa2-qwen35-122b-iq2m-prefill32k-t32-20260719T062410Z/summary.json`
 
 Disposition: composed `ngram-mod,draft-mtp` is a strong routing candidate for
 repetitive/structured generation and a modest positive candidate on mixed
@@ -1019,7 +1022,10 @@ passed, while code sketch, exact word count, and repeated-word control failed
 their simple sanity checks. It is therefore a task-class lever only, not a
 blanket default. The CPU-only IQ2 row is useful for CPU prefill-compute and
 hybrid-placement economics, but decode is too slow for a primary CPU-only
-serving lane.
+serving lane. The AXA-2 MI210 prefill rows are observation-grade teleport cost
+inputs only: 2K/8K/16K completed cleanly with q4_0/f16 KV, while 32K did not
+emit a `llama-bench` row before bounded manual stops and needs a separate
+profile/rerun before any 32K cutover policy is claimed.
 
 ## Deferred Low-Contention Manifest Work
 

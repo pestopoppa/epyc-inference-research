@@ -1,0 +1,4 @@
+n_prompt	n_gen	avg_ts	type_k	type_v	devices	test_time
+2048	0	342.056712	q4_0	f16	ROCm0	2026-07-19T06:00:53Z
+8192	0	135.559948	q4_0	f16	ROCm0	2026-07-19T06:01:05Z
+16384	0	76.519188	q4_0	f16	ROCm0	2026-07-19T06:03:06Z
