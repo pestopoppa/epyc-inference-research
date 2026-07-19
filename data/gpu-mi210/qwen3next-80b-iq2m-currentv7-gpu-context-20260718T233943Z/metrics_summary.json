@@ -1,0 +1,79 @@
+{
+  "rows": [
+    {
+      "build_commit": "cf051d3e1",
+      "build_number": 10095,
+      "model_filename": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "backend": "ROCm",
+      "n_prompt": 512,
+      "n_gen": 0,
+      "test": null,
+      "t_s": 1220.739899,
+      "t_s_err": 0.0,
+      "n_threads": 8,
+      "cpu_mask": "0x0",
+      "gpu_layers": 99,
+      "fa": 1
+    },
+    {
+      "build_commit": "cf051d3e1",
+      "build_number": 10095,
+      "model_filename": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "backend": "ROCm",
+      "n_prompt": 0,
+      "n_gen": 512,
+      "test": null,
+      "t_s": 56.510418,
+      "t_s_err": 0.0,
+      "n_threads": 8,
+      "cpu_mask": "0x0",
+      "gpu_layers": 99,
+      "fa": 1
+    },
+    {
+      "build_commit": "cf051d3e1",
+      "build_number": 10095,
+      "model_filename": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "backend": "ROCm",
+      "n_prompt": 2048,
+      "n_gen": 512,
+      "test": null,
+      "t_s": 237.429349,
+      "t_s_err": 0.0,
+      "n_threads": 8,
+      "cpu_mask": "0x0",
+      "gpu_layers": 99,
+      "fa": 1
+    },
+    {
+      "build_commit": "cf051d3e1",
+      "build_number": 10095,
+      "model_filename": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "backend": "ROCm",
+      "n_prompt": 8192,
+      "n_gen": 512,
+      "test": null,
+      "t_s": 539.109358,
+      "t_s_err": 0.0,
+      "n_threads": 8,
+      "cpu_mask": "0x0",
+      "gpu_layers": 99,
+      "fa": 1
+    },
+    {
+      "build_commit": "cf051d3e1",
+      "build_number": 10095,
+      "model_filename": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+      "backend": "ROCm",
+      "n_prompt": 32768,
+      "n_gen": 512,
+      "test": null,
+      "t_s": 796.453464,
+      "t_s_err": 0.0,
+      "n_threads": 8,
+      "cpu_mask": "0x0",
+      "gpu_layers": 99,
+      "fa": 1
+    }
+  ]
+}

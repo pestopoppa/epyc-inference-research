@@ -1,0 +1,12 @@
+artifact_files.txt
+command.txt
+exit_code.txt
+llama_bench_stderr.txt
+llama_bench_stdout.json
+meta.txt
+metrics_summary.json
+post_pgrep.txt
+post_rocm_smi.txt
+pre_pgrep.txt
+pre_rocm_smi.txt
+summary.md

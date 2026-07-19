@@ -1,0 +1,1 @@
+command=python3 scripts/benchmark/qwable_reasoning_economics_runner.py --execute --only strict_iq4_schema_gpu --output-dir data/qwable_reasoning_economics/qwable_schema_sourcehead_repeat_20260719T000517Z --context 8192 --max-tokens 128 --port-base 19140

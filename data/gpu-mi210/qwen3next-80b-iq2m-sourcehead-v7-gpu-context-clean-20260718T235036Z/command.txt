@@ -1,0 +1,1 @@
+HIP_VISIBLE_DEVICES=0 ROCR_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin timeout --kill-after=30s 1200s /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf -dev ROCm0 -ngl 99 -fa on -t 8 -n 512 -pg 2048\,512 -pg 8192\,512 -pg 32768\,512 -r 1 -o json --progress

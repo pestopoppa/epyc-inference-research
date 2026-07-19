@@ -1,0 +1,12 @@
+Nemotron-Nano Q8 MI210 quality gate
+mode: execute
+output_dir: data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z
+server_bin: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server
+model_path: /mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf
+preexisting_server_pids: []
+concurrent_glm_probe_pids: []
+selected_port: 19122
+q8_kv_supported: True
+quality_gate_passed: True (5/5)
+cleanup_passed: True
+Summary written to data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/summary.json

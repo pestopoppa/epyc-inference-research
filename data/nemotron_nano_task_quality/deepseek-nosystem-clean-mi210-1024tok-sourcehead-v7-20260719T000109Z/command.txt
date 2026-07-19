@@ -1,0 +1,1 @@
+command=python3 scripts/benchmark/nemotron_nano_task_quality_runner.py --execute --no-system-prompt --protocol deepseek --ignore-task-token-caps --max-tokens 1024 --output-dir data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z

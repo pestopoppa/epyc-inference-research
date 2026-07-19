@@ -1,0 +1,932 @@
+{
+  "best_protocol_source": [
+    5,
+    "deepseek",
+    "content_or_reasoning"
+  ],
+  "classification": "quality-only protocol matrix; throughput is observational unless the host is otherwise quiet",
+  "cleanup": {
+    "allowed_pids": [],
+    "extra_pids": [],
+    "missing_allowed_pids": [],
+    "observed_pids": [],
+    "passed": true
+  },
+  "created_at": "2026-07-19T00:01:33.669800+00:00",
+  "mode": "execute",
+  "model_path": "/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf",
+  "passed": 5,
+  "prompt_policy": {
+    "no_system_prompt": true,
+    "system_prompt": null
+  },
+  "protocol_summaries": [
+    {
+      "passed_by_source": {
+        "content": 5,
+        "content_or_reasoning": 5,
+        "reasoning_content": 0
+      },
+      "protocol": "deepseek",
+      "quality_gate_passed_by_source": {
+        "content": true,
+        "content_or_reasoning": true,
+        "reasoning_content": false
+      },
+      "results": [
+        {
+          "content": "\n\nok\n",
+          "finish_reason": "stop",
+          "prompt": "Return exactly: ok",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "Okay, the user wants me to return exactly \"ok\". Let me make sure I understand the request correctly. They specified \"Return exactly: ok\", so I shouldn't add any",
+          "response_path": "data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/responses/deepseek/exact_ok.raw.json",
+          "score": {
+            "expected": "ok",
+            "observed": "ok",
+            "passed": true
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "ok",
+              "observed": "ok",
+              "passed": true
+            },
+            "content_or_reasoning": {
+              "expected": "ok",
+              "observed": "ok",
+              "passed": true
+            },
+            "reasoning_content": {
+              "expected": "ok",
+              "observed": "Okay, the user wants me to return exactly \"ok\". Let me make sure I understand the request correctly. They specified \"Return exactly: ok\", so I shouldn't add anything else. Just the word \"ok\" in lowercase. I need to check if there are any hidden requirements or if it's a test. Since the instruction is straightforward, I'll comply by simply outputting \"ok\" without any additional text or formatting. That should meet their requirement precisely.",
+              "passed": false
+            }
+          },
+          "task_id": "exact_ok",
+          "timings": {
+            "cache_n": 0,
+            "predicted_ms": 1268.503,
+            "predicted_n": 99,
+            "predicted_per_second": 78.04475038687335,
+            "predicted_per_token_ms": 12.813161616161615,
+            "prompt_ms": 102.571,
+            "prompt_n": 18,
+            "prompt_per_second": 175.48819841865634,
+            "prompt_per_token_ms": 5.698388888888889
+          },
+          "usage": {
+            "completion_tokens": 99,
+            "prompt_tokens": 18,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 117
+          }
+        },
+        {
+          "content": "\n\n{\"status\":\"ok\",\"model\":\"nemotron\"}\n",
+          "finish_reason": "stop",
+          "prompt": "Return exactly this minified JSON and nothing else: {\"status\":\"ok\",\"model\":\"nemotron\"}",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "Okay, the user wants me to return exactly the minified JSON {\"status\":\"ok\",\"model\":\"nemotron\"} and nothing else. Let me make sure I understand the request corre",
+          "response_path": "data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/responses/deepseek/strict_json.raw.json",
+          "score": {
+            "expected": {
+              "model": "nemotron",
+              "status": "ok"
+            },
+            "json_mode": "strict",
+            "observed": {
+              "model": "nemotron",
+              "status": "ok"
+            },
+            "passed": true
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "strict",
+              "observed": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "passed": true
+            },
+            "content_or_reasoning": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "strict",
+              "observed": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "passed": true
+            },
+            "reasoning_content": {
+              "expected": {
+                "model": "nemotron",
+                "status": "ok"
+              },
+              "json_mode": "non_json",
+              "observed": null,
+              "passed": false
+            }
+          },
+          "task_id": "strict_json",
+          "timings": {
+            "cache_n": 4,
+            "predicted_ms": 8271.663,
+            "predicted_n": 630,
+            "predicted_per_second": 76.16364448116418,
+            "predicted_per_token_ms": 13.12962380952381,
+            "prompt_ms": 143.894,
+            "prompt_n": 29,
+            "prompt_per_second": 201.53724269253755,
+            "prompt_per_token_ms": 4.961862068965518
+          },
+          "usage": {
+            "completion_tokens": 630,
+            "prompt_tokens": 33,
+            "prompt_tokens_details": {
+              "cached_tokens": 4
+            },
+            "total_tokens": 663
+          }
+        },
+        {
+          "content": "\n\n95\n",
+          "finish_reason": "stop",
+          "prompt": "Answer with only the integer result: 37 + 58",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "Okay, let's see. The user wants the sum of 37 and 58. Hmm, I need to add these two numbers. Let me start by adding the units place. 7 plus 8 is 15. So I write d",
+          "response_path": "data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/responses/deepseek/simple_math.raw.json",
+          "score": {
+            "expected": "95",
+            "observed": "95",
+            "passed": true
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "95",
+              "observed": "95",
+              "passed": true
+            },
+            "content_or_reasoning": {
+              "expected": "95",
+              "observed": "95",
+              "passed": true
+            },
+            "reasoning_content": {
+              "expected": "95",
+              "observed": "Okay, let's see. The user wants the sum of 37 and 58. Hmm, I need to add these two numbers. Let me start by adding the units place. 7 plus 8 is 15. So I write down 5 and carry over 1. Then the tens place: 3 plus 5 is 8, plus the carried 1 makes 9. So putting it together, 37 + 58 equals 95. Let me double-check. 30 + 50 is 80, and 7 + 8 is 15. 80 + 15 is definitely 95. Yep, that's right.",
+              "passed": false
+            }
+          },
+          "task_id": "simple_math",
+          "timings": {
+            "cache_n": 4,
+            "predicted_ms": 1989.138,
+            "predicted_n": 156,
+            "predicted_per_second": 78.42593123252384,
+            "predicted_per_token_ms": 12.750884615384615,
+            "prompt_ms": 118.646,
+            "prompt_n": 24,
+            "prompt_per_second": 202.28241997201758,
+            "prompt_per_token_ms": 4.943583333333334
+          },
+          "usage": {
+            "completion_tokens": 156,
+            "prompt_tokens": 28,
+            "prompt_tokens_details": {
+              "cached_tokens": 4
+            },
+            "total_tokens": 184
+          }
+        },
+        {
+          "content": "\n\nvalidate generalization unseen bias accuracy\n",
+          "finish_reason": "stop",
+          "prompt": "In exactly five lowercase words, describe why held-out tests matter. Return only the five words.",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "Okay, the user wants exactly five lowercase words explaining why held-out tests matter. Let me start by recalling what held-out tests are. They're a validation ",
+          "response_path": "data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/responses/deepseek/five_lowercase_words.raw.json",
+          "score": {
+            "expected_word_count": 5,
+            "observed_words": [
+              "validate",
+              "generalization",
+              "unseen",
+              "bias",
+              "accuracy"
+            ],
+            "passed": true
+          },
+          "scores_by_source": {
+            "content": {
+              "expected_word_count": 5,
+              "observed_words": [
+                "validate",
+                "generalization",
+                "unseen",
+                "bias",
+                "accuracy"
+              ],
+              "passed": true
+            },
+            "content_or_reasoning": {
+              "expected_word_count": 5,
+              "observed_words": [
+                "validate",
+                "generalization",
+                "unseen",
+                "bias",
+                "accuracy"
+              ],
+              "passed": true
+            },
+            "reasoning_content": {
+              "expected_word_count": 5,
+              "observed_words": [
+                "Okay,",
+                "the",
+                "user",
+                "wants",
+                "exactly",
+                "five",
+                "lowercase",
+                "words",
+                "explaining",
+                "why",
+                "held-out",
+                "tests",
+                "matter.",
+                "Let",
+                "me",
+                "start",
+                "by",
+                "recalling",
+                "what",
+                "held-out",
+                "tests",
+                "are.",
+                "They're",
+                "a",
+                "validation",
+                "method",
+                "where",
+                "data",
+                "is",
+                "split",
+                "into",
+                "training",
+                "and",
+                "test",
+                "sets.",
+                "The",
+                "key",
+                "point",
+                "is",
+                "that",
+                "the",
+                "test",
+                "set",
+                "isn't",
+                "used",
+                "during",
+                "training,",
+                "so",
+                "it's",
+                "a",
+                "true",
+                "measure",
+                "of",
+                "performance.",
+                "First",
+                "word:",
+                "Maybe",
+                "\"validate\"",
+                "since",
+                "it's",
+                "about",
+                "checking",
+                "model",
+                "performance.",
+                "Second:",
+                "\"generalization\"",
+                "because",
+                "held-out",
+                "tests",
+                "check",
+                "if",
+                "the",
+                "model",
+                "works",
+                "on",
+                "unseen",
+                "data.",
+                "Third:",
+                "\"unseen\"",
+                "data",
+                "is",
+                "crucial",
+                "here.",
+                "Fourth:",
+                "\"bias\"",
+                "reduction,",
+                "as",
+                "using",
+                "the",
+                "same",
+                "data",
+                "for",
+                "training",
+                "and",
+                "testing",
+                "can",
+                "lead",
+                "to",
+                "overfitting.",
+                "Fifth:",
+                "\"accuracy\"",
+                "assessment,",
+                "ensuring",
+                "the",
+                "model's",
+                "predictions",
+                "are",
+                "reliable.",
+                "Let",
+                "me",
+                "check",
+                "if",
+                "these",
+                "words",
+                "are",
+                "all",
+                "lowercase",
+                "and",
+                "fit.",
+                "Validate,",
+                "generalization,",
+                "unseen,",
+                "bias,",
+                "accuracy.",
+                "That's",
+                "five.",
+                "Seems",
+                "to",
+                "cover",
+                "the",
+                "main",
+                "reasons:",
+                "validation,",
+                "generalization",
+                "to",
+                "new",
+                "data,",
+                "avoiding",
+                "bias,",
+                "and",
+                "measuring",
+                "accuracy."
+              ],
+              "passed": false
+            }
+          },
+          "task_id": "five_lowercase_words",
+          "timings": {
+            "cache_n": 4,
+            "predicted_ms": 2636.436,
+            "predicted_n": 207,
+            "predicted_per_second": 78.51508627556291,
+            "predicted_per_token_ms": 12.73640579710145,
+            "prompt_ms": 114.536,
+            "prompt_n": 28,
+            "prompt_per_second": 244.46462247677584,
+            "prompt_per_token_ms": 4.090571428571429
+          },
+          "usage": {
+            "completion_tokens": 207,
+            "prompt_tokens": 32,
+            "prompt_tokens_details": {
+              "cached_tokens": 4
+            },
+            "total_tokens": 239
+          }
+        },
+        {
+          "content": "\n\nNN-4242-DELTA\n",
+          "finish_reason": "stop",
+          "prompt": "Read the full passage, then answer with only the project code.\n\nStatus notes: alpha reports remain internal. Audit reviewers asked for a longer context check to confirm the chat endpoint still returns the answer in message.content without mixing in reasoning-only fields. The archive repeats the same operational warning for scanning depth. Line 1: ignore incidental numbers like 104, 205, or 999.\nLine 2: only one project code is authoritative.\nLine 3: the project code appears once and should be copied exactly.\nLine 4: filler text discusses ports, GPUs, and cache settings.\nLine 5: project summaries remain provisional pending the quality gate.\nLine 6: the canonical project code is NN-4242-DELTA.\nLine 7: later lines mention unrelated strings such as AA-1000 or test-draft.\nLine 8: answer with the code only.\n\nQuestion: what is the project code?",
+          "reasoning_content_observed": true,
+          "reasoning_content_preview": "Okay, let's tackle this question. The user wants the project code from the passage. Let me read through the status notes again carefully.\n\nLine 1 says to ignore",
+          "response_path": "data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/responses/deepseek/long_context_needle.raw.json",
+          "score": {
+            "expected": "NN-4242-DELTA",
+            "observed": "NN-4242-DELTA",
+            "passed": true
+          },
+          "scores_by_source": {
+            "content": {
+              "expected": "NN-4242-DELTA",
+              "observed": "NN-4242-DELTA",
+              "passed": true
+            },
+            "content_or_reasoning": {
+              "expected": "NN-4242-DELTA",
+              "observed": "NN-4242-DELTA",
+              "passed": true
+            },
+            "reasoning_content": {
+              "expected": "NN-4242-DELTA",
+              "observed": "Okay, let's tackle this question. The user wants the project code from the passage. Let me read through the status notes again carefully.\n\nLine 1 says to ignore numbers like 104, 205, or 999. So those are not the code. Line 2 mentions only one project code is authoritative. Line 3 states the code appears once and should be copied exactly. Line 4 talks about ports, GPUs, cache\u2014probably irrelevant. Line 5 says summaries are provisional. Line 6 is key: \"the canonical project code is NN-4242-DELTA.\" That seems like the answer. Line 7 mentions other strings like AA-1000 or test-draft, which are unrelated. Line 8 instructs to answer with the code only.\n\nSo the correct code is NN-4242-DELTA. I need to make sure there's no other code mentioned. The other lines have numbers or other strings, but line 6 explicitly states the canonical code. Yep, that's the one.",
+              "passed": false
+            }
+          },
+          "task_id": "long_context_needle",
+          "timings": {
+            "cache_n": 0,
+            "predicted_ms": 3072.463,
+            "predicted_n": 240,
+            "predicted_per_second": 78.11322707547657,
+            "predicted_per_token_ms": 12.801929166666667,
+            "prompt_ms": 220.588,
+            "prompt_n": 211,
+            "prompt_per_second": 956.5343536366439,
+            "prompt_per_token_ms": 1.0454407582938388
+          },
+          "usage": {
+            "completion_tokens": 240,
+            "prompt_tokens": 211,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 451
+          }
+        }
+      ],
+      "server": {
+        "log_path": "data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/logs/nemotron_nano_q8_mi210.deepseek.server.log",
+        "port": 19122,
+        "reasoning": "off",
+        "reasoning_format": "deepseek"
+      }
+    }
+  ],
+  "q8_kv_supported": true,
+  "quality_gate_passed": true,
+  "results": [
+    {
+      "content": "\n\nok\n",
+      "finish_reason": "stop",
+      "prompt": "Return exactly: ok",
+      "reasoning_content_observed": true,
+      "reasoning_content_preview": "Okay, the user wants me to return exactly \"ok\". Let me make sure I understand the request correctly. They specified \"Return exactly: ok\", so I shouldn't add any",
+      "response_path": "data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/responses/deepseek/exact_ok.raw.json",
+      "score": {
+        "expected": "ok",
+        "observed": "ok",
+        "passed": true
+      },
+      "scores_by_source": {
+        "content": {
+          "expected": "ok",
+          "observed": "ok",
+          "passed": true
+        },
+        "content_or_reasoning": {
+          "expected": "ok",
+          "observed": "ok",
+          "passed": true
+        },
+        "reasoning_content": {
+          "expected": "ok",
+          "observed": "Okay, the user wants me to return exactly \"ok\". Let me make sure I understand the request correctly. They specified \"Return exactly: ok\", so I shouldn't add anything else. Just the word \"ok\" in lowercase. I need to check if there are any hidden requirements or if it's a test. Since the instruction is straightforward, I'll comply by simply outputting \"ok\" without any additional text or formatting. That should meet their requirement precisely.",
+          "passed": false
+        }
+      },
+      "task_id": "exact_ok",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 1268.503,
+        "predicted_n": 99,
+        "predicted_per_second": 78.04475038687335,
+        "predicted_per_token_ms": 12.813161616161615,
+        "prompt_ms": 102.571,
+        "prompt_n": 18,
+        "prompt_per_second": 175.48819841865634,
+        "prompt_per_token_ms": 5.698388888888889
+      },
+      "usage": {
+        "completion_tokens": 99,
+        "prompt_tokens": 18,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 117
+      }
+    },
+    {
+      "content": "\n\n{\"status\":\"ok\",\"model\":\"nemotron\"}\n",
+      "finish_reason": "stop",
+      "prompt": "Return exactly this minified JSON and nothing else: {\"status\":\"ok\",\"model\":\"nemotron\"}",
+      "reasoning_content_observed": true,
+      "reasoning_content_preview": "Okay, the user wants me to return exactly the minified JSON {\"status\":\"ok\",\"model\":\"nemotron\"} and nothing else. Let me make sure I understand the request corre",
+      "response_path": "data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/responses/deepseek/strict_json.raw.json",
+      "score": {
+        "expected": {
+          "model": "nemotron",
+          "status": "ok"
+        },
+        "json_mode": "strict",
+        "observed": {
+          "model": "nemotron",
+          "status": "ok"
+        },
+        "passed": true
+      },
+      "scores_by_source": {
+        "content": {
+          "expected": {
+            "model": "nemotron",
+            "status": "ok"
+          },
+          "json_mode": "strict",
+          "observed": {
+            "model": "nemotron",
+            "status": "ok"
+          },
+          "passed": true
+        },
+        "content_or_reasoning": {
+          "expected": {
+            "model": "nemotron",
+            "status": "ok"
+          },
+          "json_mode": "strict",
+          "observed": {
+            "model": "nemotron",
+            "status": "ok"
+          },
+          "passed": true
+        },
+        "reasoning_content": {
+          "expected": {
+            "model": "nemotron",
+            "status": "ok"
+          },
+          "json_mode": "non_json",
+          "observed": null,
+          "passed": false
+        }
+      },
+      "task_id": "strict_json",
+      "timings": {
+        "cache_n": 4,
+        "predicted_ms": 8271.663,
+        "predicted_n": 630,
+        "predicted_per_second": 76.16364448116418,
+        "predicted_per_token_ms": 13.12962380952381,
+        "prompt_ms": 143.894,
+        "prompt_n": 29,
+        "prompt_per_second": 201.53724269253755,
+        "prompt_per_token_ms": 4.961862068965518
+      },
+      "usage": {
+        "completion_tokens": 630,
+        "prompt_tokens": 33,
+        "prompt_tokens_details": {
+          "cached_tokens": 4
+        },
+        "total_tokens": 663
+      }
+    },
+    {
+      "content": "\n\n95\n",
+      "finish_reason": "stop",
+      "prompt": "Answer with only the integer result: 37 + 58",
+      "reasoning_content_observed": true,
+      "reasoning_content_preview": "Okay, let's see. The user wants the sum of 37 and 58. Hmm, I need to add these two numbers. Let me start by adding the units place. 7 plus 8 is 15. So I write d",
+      "response_path": "data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/responses/deepseek/simple_math.raw.json",
+      "score": {
+        "expected": "95",
+        "observed": "95",
+        "passed": true
+      },
+      "scores_by_source": {
+        "content": {
+          "expected": "95",
+          "observed": "95",
+          "passed": true
+        },
+        "content_or_reasoning": {
+          "expected": "95",
+          "observed": "95",
+          "passed": true
+        },
+        "reasoning_content": {
+          "expected": "95",
+          "observed": "Okay, let's see. The user wants the sum of 37 and 58. Hmm, I need to add these two numbers. Let me start by adding the units place. 7 plus 8 is 15. So I write down 5 and carry over 1. Then the tens place: 3 plus 5 is 8, plus the carried 1 makes 9. So putting it together, 37 + 58 equals 95. Let me double-check. 30 + 50 is 80, and 7 + 8 is 15. 80 + 15 is definitely 95. Yep, that's right.",
+          "passed": false
+        }
+      },
+      "task_id": "simple_math",
+      "timings": {
+        "cache_n": 4,
+        "predicted_ms": 1989.138,
+        "predicted_n": 156,
+        "predicted_per_second": 78.42593123252384,
+        "predicted_per_token_ms": 12.750884615384615,
+        "prompt_ms": 118.646,
+        "prompt_n": 24,
+        "prompt_per_second": 202.28241997201758,
+        "prompt_per_token_ms": 4.943583333333334
+      },
+      "usage": {
+        "completion_tokens": 156,
+        "prompt_tokens": 28,
+        "prompt_tokens_details": {
+          "cached_tokens": 4
+        },
+        "total_tokens": 184
+      }
+    },
+    {
+      "content": "\n\nvalidate generalization unseen bias accuracy\n",
+      "finish_reason": "stop",
+      "prompt": "In exactly five lowercase words, describe why held-out tests matter. Return only the five words.",
+      "reasoning_content_observed": true,
+      "reasoning_content_preview": "Okay, the user wants exactly five lowercase words explaining why held-out tests matter. Let me start by recalling what held-out tests are. They're a validation ",
+      "response_path": "data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/responses/deepseek/five_lowercase_words.raw.json",
+      "score": {
+        "expected_word_count": 5,
+        "observed_words": [
+          "validate",
+          "generalization",
+          "unseen",
+          "bias",
+          "accuracy"
+        ],
+        "passed": true
+      },
+      "scores_by_source": {
+        "content": {
+          "expected_word_count": 5,
+          "observed_words": [
+            "validate",
+            "generalization",
+            "unseen",
+            "bias",
+            "accuracy"
+          ],
+          "passed": true
+        },
+        "content_or_reasoning": {
+          "expected_word_count": 5,
+          "observed_words": [
+            "validate",
+            "generalization",
+            "unseen",
+            "bias",
+            "accuracy"
+          ],
+          "passed": true
+        },
+        "reasoning_content": {
+          "expected_word_count": 5,
+          "observed_words": [
+            "Okay,",
+            "the",
+            "user",
+            "wants",
+            "exactly",
+            "five",
+            "lowercase",
+            "words",
+            "explaining",
+            "why",
+            "held-out",
+            "tests",
+            "matter.",
+            "Let",
+            "me",
+            "start",
+            "by",
+            "recalling",
+            "what",
+            "held-out",
+            "tests",
+            "are.",
+            "They're",
+            "a",
+            "validation",
+            "method",
+            "where",
+            "data",
+            "is",
+            "split",
+            "into",
+            "training",
+            "and",
+            "test",
+            "sets.",
+            "The",
+            "key",
+            "point",
+            "is",
+            "that",
+            "the",
+            "test",
+            "set",
+            "isn't",
+            "used",
+            "during",
+            "training,",
+            "so",
+            "it's",
+            "a",
+            "true",
+            "measure",
+            "of",
+            "performance.",
+            "First",
+            "word:",
+            "Maybe",
+            "\"validate\"",
+            "since",
+            "it's",
+            "about",
+            "checking",
+            "model",
+            "performance.",
+            "Second:",
+            "\"generalization\"",
+            "because",
+            "held-out",
+            "tests",
+            "check",
+            "if",
+            "the",
+            "model",
+            "works",
+            "on",
+            "unseen",
+            "data.",
+            "Third:",
+            "\"unseen\"",
+            "data",
+            "is",
+            "crucial",
+            "here.",
+            "Fourth:",
+            "\"bias\"",
+            "reduction,",
+            "as",
+            "using",
+            "the",
+            "same",
+            "data",
+            "for",
+            "training",
+            "and",
+            "testing",
+            "can",
+            "lead",
+            "to",
+            "overfitting.",
+            "Fifth:",
+            "\"accuracy\"",
+            "assessment,",
+            "ensuring",
+            "the",
+            "model's",
+            "predictions",
+            "are",
+            "reliable.",
+            "Let",
+            "me",
+            "check",
+            "if",
+            "these",
+            "words",
+            "are",
+            "all",
+            "lowercase",
+            "and",
+            "fit.",
+            "Validate,",
+            "generalization,",
+            "unseen,",
+            "bias,",
+            "accuracy.",
+            "That's",
+            "five.",
+            "Seems",
+            "to",
+            "cover",
+            "the",
+            "main",
+            "reasons:",
+            "validation,",
+            "generalization",
+            "to",
+            "new",
+            "data,",
+            "avoiding",
+            "bias,",
+            "and",
+            "measuring",
+            "accuracy."
+          ],
+          "passed": false
+        }
+      },
+      "task_id": "five_lowercase_words",
+      "timings": {
+        "cache_n": 4,
+        "predicted_ms": 2636.436,
+        "predicted_n": 207,
+        "predicted_per_second": 78.51508627556291,
+        "predicted_per_token_ms": 12.73640579710145,
+        "prompt_ms": 114.536,
+        "prompt_n": 28,
+        "prompt_per_second": 244.46462247677584,
+        "prompt_per_token_ms": 4.090571428571429
+      },
+      "usage": {
+        "completion_tokens": 207,
+        "prompt_tokens": 32,
+        "prompt_tokens_details": {
+          "cached_tokens": 4
+        },
+        "total_tokens": 239
+      }
+    },
+    {
+      "content": "\n\nNN-4242-DELTA\n",
+      "finish_reason": "stop",
+      "prompt": "Read the full passage, then answer with only the project code.\n\nStatus notes: alpha reports remain internal. Audit reviewers asked for a longer context check to confirm the chat endpoint still returns the answer in message.content without mixing in reasoning-only fields. The archive repeats the same operational warning for scanning depth. Line 1: ignore incidental numbers like 104, 205, or 999.\nLine 2: only one project code is authoritative.\nLine 3: the project code appears once and should be copied exactly.\nLine 4: filler text discusses ports, GPUs, and cache settings.\nLine 5: project summaries remain provisional pending the quality gate.\nLine 6: the canonical project code is NN-4242-DELTA.\nLine 7: later lines mention unrelated strings such as AA-1000 or test-draft.\nLine 8: answer with the code only.\n\nQuestion: what is the project code?",
+      "reasoning_content_observed": true,
+      "reasoning_content_preview": "Okay, let's tackle this question. The user wants the project code from the passage. Let me read through the status notes again carefully.\n\nLine 1 says to ignore",
+      "response_path": "data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/responses/deepseek/long_context_needle.raw.json",
+      "score": {
+        "expected": "NN-4242-DELTA",
+        "observed": "NN-4242-DELTA",
+        "passed": true
+      },
+      "scores_by_source": {
+        "content": {
+          "expected": "NN-4242-DELTA",
+          "observed": "NN-4242-DELTA",
+          "passed": true
+        },
+        "content_or_reasoning": {
+          "expected": "NN-4242-DELTA",
+          "observed": "NN-4242-DELTA",
+          "passed": true
+        },
+        "reasoning_content": {
+          "expected": "NN-4242-DELTA",
+          "observed": "Okay, let's tackle this question. The user wants the project code from the passage. Let me read through the status notes again carefully.\n\nLine 1 says to ignore numbers like 104, 205, or 999. So those are not the code. Line 2 mentions only one project code is authoritative. Line 3 states the code appears once and should be copied exactly. Line 4 talks about ports, GPUs, cache\u2014probably irrelevant. Line 5 says summaries are provisional. Line 6 is key: \"the canonical project code is NN-4242-DELTA.\" That seems like the answer. Line 7 mentions other strings like AA-1000 or test-draft, which are unrelated. Line 8 instructs to answer with the code only.\n\nSo the correct code is NN-4242-DELTA. I need to make sure there's no other code mentioned. The other lines have numbers or other strings, but line 6 explicitly states the canonical code. Yep, that's the one.",
+          "passed": false
+        }
+      },
+      "task_id": "long_context_needle",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 3072.463,
+        "predicted_n": 240,
+        "predicted_per_second": 78.11322707547657,
+        "predicted_per_token_ms": 12.801929166666667,
+        "prompt_ms": 220.588,
+        "prompt_n": 211,
+        "prompt_per_second": 956.5343536366439,
+        "prompt_per_token_ms": 1.0454407582938388
+      },
+      "usage": {
+        "completion_tokens": 240,
+        "prompt_tokens": 211,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 451
+      }
+    }
+  ],
+  "schema": "nemotron_nano_task_quality_summary.v1",
+  "server_pid": null,
+  "server_port": 19122,
+  "throughput_observation": {
+    "contaminated": false,
+    "decision_use": "observation_only_quality_gate",
+    "mean_decode_tps": 77.85252789032018,
+    "mean_prompt_tps": 356.06136743932626
+  },
+  "total": 5
+}

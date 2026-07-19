@@ -1,0 +1,5 @@
+created_utc=2026-07-18T23:39:43Z
+artifact=data/gpu-mi210/qwen3next-80b-iq2m-currentv7-gpu-context-20260718T233943Z
+binary=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench
+model=/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf
+experimental_commit=ed4091266

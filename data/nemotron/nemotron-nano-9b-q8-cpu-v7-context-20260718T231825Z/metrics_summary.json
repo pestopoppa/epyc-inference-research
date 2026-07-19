@@ -1,0 +1,91 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/nemotron/nemotron-nano-9b-q8-cpu-v7-context-20260718T231825Z",
+  "exit_code": 0,
+  "rows": [
+    {
+      "n_prompt": 512,
+      "n_gen": 0,
+      "avg_ts": 134.623237,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        134.623
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "nemotron_h 9B Q8_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 0,
+      "devices": "none",
+      "n_gpu_layers": 0,
+      "n_threads": 16
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 512,
+      "avg_ts": 5.426978,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        5.42698
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "nemotron_h 9B Q8_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 0,
+      "devices": "none",
+      "n_gpu_layers": 0,
+      "n_threads": 16
+    },
+    {
+      "n_prompt": 2048,
+      "n_gen": 512,
+      "avg_ts": 23.20654,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        23.2065
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "nemotron_h 9B Q8_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 0,
+      "devices": "none",
+      "n_gpu_layers": 0,
+      "n_threads": 16
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 512,
+      "avg_ts": 53.237039,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        53.237
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "nemotron_h 9B Q8_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 0,
+      "devices": "none",
+      "n_gpu_layers": 0,
+      "n_threads": 16
+    },
+    {
+      "n_prompt": 32768,
+      "n_gen": 512,
+      "avg_ts": 75.619312,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        75.6193
+      ],
+      "build_commit": "cf051d3e1",
+      "model_type": "nemotron_h 9B Q8_0",
+      "type_k": "f16",
+      "type_v": "f16",
+      "flash_attn": 0,
+      "devices": "none",
+      "n_gpu_layers": 0,
+      "n_threads": 16
+    }
+  ]
+}

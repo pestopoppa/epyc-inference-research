@@ -1,0 +1,8 @@
+artifact=data/gpu-mi210/qwen3next-80b-iq2m-sourcehead-v7-gpu-context-clean-20260718T235036Z
+utc=2026-07-18T23:50:36Z
+llama_commit=ed4091266
+binary=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench
+binary_mtime=2026-07-18 22:02:00.309135337 +0000
+model=/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf
+model_size=26056028768 model_mtime=2026-07-05 12:14:29.906015003 +0000
+note=clean rerun after contaminated overlap was killed
