@@ -1,0 +1,82 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen3_4b_thinking_2507_q8_mi210_context_6a8dd5ea68_20260719T045143Z",
+  "source_head": "6a8dd5ea68",
+  "exit_code": "0",
+  "rows": [
+    {
+      "build_commit": "6a8dd5ea6",
+      "build_number": 10097,
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "n_prompt": 512,
+      "n_gen": 0,
+      "avg_ts": 4012.63081,
+      "stddev_ts": 498.492197,
+      "type_k": "q8_0",
+      "type_v": "q8_0",
+      "flash_attn": 1,
+      "n_gpu_layers": 99,
+      "model_type": "qwen3 4B Q8_0"
+    },
+    {
+      "build_commit": "6a8dd5ea6",
+      "build_number": 10097,
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "n_prompt": 2048,
+      "n_gen": 0,
+      "avg_ts": 3524.806398,
+      "stddev_ts": 102.204367,
+      "type_k": "q8_0",
+      "type_v": "q8_0",
+      "flash_attn": 1,
+      "n_gpu_layers": 99,
+      "model_type": "qwen3 4B Q8_0"
+    },
+    {
+      "build_commit": "6a8dd5ea6",
+      "build_number": 10097,
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "avg_ts": 2352.544139,
+      "stddev_ts": 17.042473,
+      "type_k": "q8_0",
+      "type_v": "q8_0",
+      "flash_attn": 1,
+      "n_gpu_layers": 99,
+      "model_type": "qwen3 4B Q8_0"
+    },
+    {
+      "build_commit": "6a8dd5ea6",
+      "build_number": 10097,
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "n_prompt": 32768,
+      "n_gen": 0,
+      "avg_ts": 991.419363,
+      "stddev_ts": 3.588567,
+      "type_k": "q8_0",
+      "type_v": "q8_0",
+      "flash_attn": 1,
+      "n_gpu_layers": 99,
+      "model_type": "qwen3 4B Q8_0"
+    },
+    {
+      "build_commit": "6a8dd5ea6",
+      "build_number": 10097,
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "n_prompt": 0,
+      "n_gen": 512,
+      "avg_ts": 119.044736,
+      "stddev_ts": 1.030456,
+      "type_k": "q8_0",
+      "type_v": "q8_0",
+      "flash_attn": 1,
+      "n_gpu_layers": 99,
+      "model_type": "qwen3 4B Q8_0"
+    }
+  ]
+}
