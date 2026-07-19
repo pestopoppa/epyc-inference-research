@@ -107,6 +107,7 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
             self.assertNotIn(f'OP2_RUN_ROOT:-{bundle.resolve()}', commands)
             self.assertIn("bench_canonical.sh", commands)
             self.assertIn("python3 scripts/server/preflight_gate.py", commands)
+            self.assertIn("--roles frontdoor worker_general architect_general ingest_long_context worker_vision vision_escalation", commands)
             self.assertIn("python3 scripts/server/orchestrator_stack.py status", commands)
             self.assertNotIn("python scripts/server/", commands)
             self.assertIn("role_smoke_ports.tsv", commands)

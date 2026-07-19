@@ -325,6 +325,7 @@ mkdir -p "$OP2_RUN_ROOT"/{{approvals,preflight,attestations,live-v6,canonical-v6
 cd /mnt/raid0/llm/epyc-orchestrator
 python3 scripts/server/preflight_gate.py \\
   --require-servers \\
+  --roles frontdoor worker_general architect_general ingest_long_context worker_vision vision_escalation \\
   --output-dir "$OP2_RUN_ROOT/attestations" \\
   --json | tee "$OP2_RUN_ROOT/preflight/live_stack_preflight.json"
 
