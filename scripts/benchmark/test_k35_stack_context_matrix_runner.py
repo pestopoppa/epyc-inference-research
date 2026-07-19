@@ -400,6 +400,52 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
         self.assertEqual(sample["pid"], 12345)
         self.assertEqual(sample["rocm"]["stdout"], "0% VRAM")
 
+    def test_mark_cleanup_failure_overrides_successful_inference_status(self):
+        result = {"status": "ok", "scenario": "frontdoor_cpu_no_spec"}
+        cleanup = {
+            "pid": 12345,
+            "returncode": None,
+            "dead": False,
+            "completed": False,
+            "ps_after": {"ok": True, "stdout": "12345 llama-server"},
+        }
+
+        k35.mark_cleanup_failure(result, cleanup)
+
+        self.assertEqual(result["status"], "cleanup_failed")
+        self.assertEqual(result["inference_status"], "ok")
+        self.assertIn("cleanup", result["cleanup_error"])
+
+    def test_execute_plan_fails_summary_when_cleanup_not_proved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = k35.parse_args(["--execute", "--output-dir", tmp, "--allow-dirty-host"])
+            plan = {"cells": [{"scenario": "frontdoor_cpu_no_spec"}], "pgpu1_protocol_fields": {"policy": "test"}}
+            leaked_result = {
+                "scenario": "frontdoor_cpu_no_spec",
+                "nominal_context": 2048,
+                "rep": 1,
+                "status": "cleanup_failed",
+                "inference_status": "ok",
+                "cleanup": {
+                    "pid": 12345,
+                    "returncode": None,
+                    "dead": False,
+                    "completed": False,
+                    "ps_after": {"ok": True, "stdout": "12345 llama-server"},
+                },
+            }
+
+            with mock.patch.object(k35, "collect_guard_state", return_value={"process_blockers": []}), mock.patch.object(
+                k35,
+                "run_cell",
+                return_value=leaked_result,
+            ), mock.patch.object(k35, "collect_process_blockers", return_value=[]):
+                summary = k35.execute_plan(plan, args, Path(tmp))
+
+        self.assertEqual(summary["status"], "failed")
+        self.assertEqual(summary["results"][0]["status"], "cleanup_failed")
+        self.assertEqual(summary["cleanup_failures"][0]["inference_status"], "ok")
+
 
 if __name__ == "__main__":
     unittest.main()

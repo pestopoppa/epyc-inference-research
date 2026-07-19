@@ -22,9 +22,9 @@ from typing import Any, Callable
 
 SCHEMA = "epyc.op2_quiet_window_prep.v1"
 PGPU1_CERTIFICATION_NOTE = (
-    "Current P-GPU-1 amendment prep is production-named-kernel only: experimental, "
-    "candidate, or fork GPU rows remain observation-grade unless the signed amendment "
-    "explicitly permits pre-promotion evidence or retro-certification."
+    "P-GPU-1 is ratified for production-named MI210 GPU claims only: experimental, "
+    "candidate, or fork GPU rows remain observation-grade until promoted to a "
+    "production-named kernel or strict retro-certification applies."
 )
 
 DEFAULT_ROOT = Path("/mnt/raid0/llm/epyc-root")
@@ -346,6 +346,51 @@ python scripts/server/orchestrator_stack.py status \\
 ps -eo pid,lstart,comm,args \\
   | rg 'llama-server|uvicorn|autopilot|perf|rocprof' \\
   > "$OP2_RUN_ROOT/live-v6/process_snapshot.txt" || true
+
+python3 - "$OP2_RUN_ROOT/live-v6/process_snapshot.txt" "$OP2_RUN_ROOT/live-v6/process_blockers.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+snapshot_path = Path(sys.argv[1])
+out_path = Path(sys.argv[2])
+allowed = {{"llama-server", "uvicorn"}}
+blocked_basenames = {{"llama-bench", "llama-cli", "perf", "rocprof", "rocprofv2"}}
+blockers = []
+for raw in snapshot_path.read_text(encoding="utf-8").splitlines():
+    parts = raw.split(maxsplit=4)
+    if len(parts) < 5:
+        continue
+    pid, _weekday, _month, _day, rest = parts
+    fields = rest.split(maxsplit=4)
+    if len(fields) < 5:
+        continue
+    _time, _year, comm, args = fields[0], fields[1], fields[2], fields[3] if len(fields) == 4 else fields[4]
+    lower_args = raw.lower()
+    reason = None
+    if comm in blocked_basenames:
+        reason = f"blocked process {{comm}}"
+    elif "autopilot" in lower_args:
+        reason = "blocked AutoPilot process"
+    elif comm == "perf" and (" stat " in f" {{lower_args}} " or " record " in f" {{lower_args}} "):
+        reason = "blocked perf profiler"
+    elif "rocprof" in lower_args:
+        reason = "blocked ROCm profiler"
+    if reason is not None:
+        blockers.append({{"pid": pid, "comm": comm, "reason": reason, "line": raw}})
+
+payload = {{
+    "schema": "epyc.op2.quiet_window_process_blockers.v1",
+    "allowed_processes": sorted(allowed),
+    "blocker_n": len(blockers),
+    "blockers": blockers,
+}}
+out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+if blockers:
+    print(json.dumps(payload, sort_keys=True))
+    raise SystemExit(74)
+print(json.dumps(payload, sort_keys=True))
+PY
 
 for pid in $(pgrep -f '/mnt/raid0/llm/llama.cpp/build/bin/llama-server' || true); do
   mkdir -p "$OP2_RUN_ROOT/live-v6/pid-${{pid}}"

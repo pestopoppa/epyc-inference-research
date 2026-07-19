@@ -727,7 +727,20 @@ def terminate(proc: subprocess.Popen[str], *, timeout_s: int = 20) -> dict[str, 
     ps = run_capture(["ps", "-p", str(proc.pid), "-o", "pid=,comm=,args="], timeout=10)
     result["ps_after"] = ps
     result["dead"] = str(proc.pid) not in ps.get("stdout", "")
+    result["completed"] = proc.returncode is not None and bool(ps.get("ok")) and bool(result["dead"])
     return result
+
+
+def cleanup_proved_complete(cleanup: dict[str, Any] | None) -> bool:
+    return bool(cleanup and cleanup.get("completed") is True and cleanup.get("dead") is True)
+
+
+def mark_cleanup_failure(result: dict[str, Any], cleanup: dict[str, Any] | None) -> None:
+    if cleanup_proved_complete(cleanup):
+        return
+    result["inference_status"] = result.get("status")
+    result["status"] = "cleanup_failed"
+    result["cleanup_error"] = "server cleanup did not prove process dead/completed"
 
 
 def content_from_response(response: dict[str, Any]) -> str:
@@ -990,6 +1003,7 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
     result["started_at_monotonic"] = started
     result["memory_samples"] = memory_samples
     result["cleanup"] = cleanup
+    mark_cleanup_failure(result, cleanup)
     result["server_log"] = str(server_log)
     result["prompt_path"] = str(prompt_path)
     result["prompt_sha256_path"] = str(prompt_hash_path)
@@ -1067,13 +1081,28 @@ def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Pat
         return summary
     results = [run_cell(cell, args, output_dir) for cell in plan["cells"]]
     cleanup_guard = collect_process_blockers()
+    cleanup_failures = [
+        {
+            "scenario": result.get("scenario"),
+            "nominal_context": result.get("nominal_context"),
+            "rep": result.get("rep"),
+            "status": result.get("status"),
+            "inference_status": result.get("inference_status"),
+            "cleanup": result.get("cleanup"),
+        }
+        for result in results
+        if not cleanup_proved_complete(result.get("cleanup"))
+    ]
     summary = {
         "schema": "epyc.k35_stack_context_matrix.summary.v1",
         "created_at": utc_now(),
-        "status": "ok" if all(result.get("status") == "ok" for result in results) else "partial",
+        "status": "failed"
+        if cleanup_failures
+        else ("ok" if all(result.get("status") == "ok" for result in results) else "partial"),
         "results": results,
         "scenario_summaries": summarize_results_by_scenario(results),
         "cleanup_process_blockers": cleanup_guard,
+        "cleanup_failures": cleanup_failures,
         "pgpu1_protocol_fields": plan.get("pgpu1_protocol_fields"),
     }
     write_json(output_dir / "summary.json", summary)
