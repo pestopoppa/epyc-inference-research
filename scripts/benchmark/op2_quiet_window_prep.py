@@ -340,8 +340,7 @@ python3 scripts/benchmark/perf_counter_preflight.py \\
   --output-md "$OP2_RUN_ROOT/preflight/perf_counter_preflight.md"
 
 python3 scripts/benchmark/cpu_bench_clean_preflight.py \\
-  --output-json "$OP2_RUN_ROOT/preflight/cpu_clean_record_only.json" \\
-  --strict
+  --output-json "$OP2_RUN_ROOT/preflight/cpu_clean_record_only.json"
 
 cd /mnt/raid0/llm/epyc-orchestrator
 python3 scripts/server/orchestrator_stack.py status \\
@@ -500,7 +499,14 @@ aggregate = dict(
 )
 aggregate_path.write_text(json.dumps(aggregate, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
 print(json.dumps(aggregate, sort_keys=True))
+if not aggregate["all_pass"]:
+    raise SystemExit(73)
 PY
+
+cd /mnt/raid0/llm/epyc-orchestrator
+python3 scripts/server/orchestrator_stack.py stop \\
+  frontdoor worker_general architect_general ingest_long_context worker_vision vision_escalation \\
+  | tee "$OP2_RUN_ROOT/canonical-v6/stack_stop_before_canonical.txt"
 
 cd /mnt/raid0/llm/epyc-inference-research
 python3 scripts/benchmark/cpu_bench_clean_preflight.py \\

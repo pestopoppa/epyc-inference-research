@@ -116,6 +116,21 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
             self.assertIn("role_smoke_ports.tsv", commands)
             self.assertIn("/v1/chat/completions", commands)
             self.assertIn("role_smoke_aggregate.json", commands)
+            self.assertIn('if not aggregate["all_pass"]:', commands)
+            self.assertIn("orchestrator_stack.py stop", commands)
+            self.assertLess(
+                commands.index("role_smoke_aggregate.json"),
+                commands.index("orchestrator_stack.py stop"),
+            )
+            self.assertLess(
+                commands.index("orchestrator_stack.py stop"),
+                commands.index("--run-sentinel"),
+            )
+            record_only = commands[
+                commands.index("cpu_clean_record_only.json"):
+                commands.index("python3 scripts/server/orchestrator_stack.py status")
+            ]
+            self.assertNotIn("--strict", record_only)
             self.assertIn("P-GPU-1 caveat", commands)
             self.assertIn("process_blockers.json", commands)
             self.assertIn("raise SystemExit(74)", commands)
