@@ -1,0 +1,105 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z",
+  "exit_code": 0,
+  "llama_cpp_experimental_head": "ed4091266d286045510e498ceb059c209a65aff9",
+  "research_head": "d8277a5ef79fb5a9d59ac12c1665b9a1ea536278",
+  "binary_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench",
+  "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+  "command": "env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin GGML_IQK=1 HIP_VISIBLE_DEVICES=-1 ROCR_VISIBLE_DEVICES=-1 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf -dev none -ngl 0 -fa off -t 16 -p 2048,8192,32768 -n 512 -r 1 -o json --progress",
+  "timeout_seconds": 1800,
+  "kill_after_seconds": 30,
+  "cpu_threads": 16,
+  "cpu_only_controls": [
+    "HIP_VISIBLE_DEVICES=-1",
+    "ROCR_VISIBLE_DEVICES=-1",
+    "-dev none",
+    "-ngl 0",
+    "-fa off"
+  ],
+  "rows": [
+    {
+      "n_prompt": 2048,
+      "n_gen": 0,
+      "avg_ts": 142.729602,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        142.73
+      ],
+      "n_threads": 16,
+      "n_gpu_layers": 0,
+      "devices": "none",
+      "flash_attn": 0,
+      "type_k": "f16",
+      "type_v": "f16",
+      "build_commit": "ed4091266",
+      "build_number": 10096,
+      "backends": "ROCm",
+      "test_time": "2026-07-19T01:04:12Z"
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "avg_ts": 118.585662,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        118.586
+      ],
+      "n_threads": 16,
+      "n_gpu_layers": 0,
+      "devices": "none",
+      "flash_attn": 0,
+      "type_k": "f16",
+      "type_v": "f16",
+      "build_commit": "ed4091266",
+      "build_number": 10096,
+      "backends": "ROCm",
+      "test_time": "2026-07-19T01:04:41Z"
+    },
+    {
+      "n_prompt": 32768,
+      "n_gen": 0,
+      "avg_ts": 94.735757,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        94.7358
+      ],
+      "n_threads": 16,
+      "n_gpu_layers": 0,
+      "devices": "none",
+      "flash_attn": 0,
+      "type_k": "f16",
+      "type_v": "f16",
+      "build_commit": "ed4091266",
+      "build_number": 10096,
+      "backends": "ROCm",
+      "test_time": "2026-07-19T01:06:59Z"
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 512,
+      "avg_ts": 10.742701,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        10.7427
+      ],
+      "n_threads": 16,
+      "n_gpu_layers": 0,
+      "devices": "none",
+      "flash_attn": 0,
+      "type_k": "f16",
+      "type_v": "f16",
+      "build_commit": "ed4091266",
+      "build_number": 10096,
+      "backends": "ROCm",
+      "test_time": "2026-07-19T01:18:35Z"
+    }
+  ],
+  "cleanup": {
+    "post_process_check_path": "/mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/post_process_check.txt",
+    "post_rocm_smi_showpids_path": "/mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/post_rocm_smi_showpids.txt"
+  },
+  "caveats": [
+    "speed-only llama-bench observation, not a quality/admission gate",
+    "single repetition"
+  ]
+}

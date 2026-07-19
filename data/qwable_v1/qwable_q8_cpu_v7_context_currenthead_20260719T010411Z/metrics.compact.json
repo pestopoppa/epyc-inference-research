@@ -1,0 +1,78 @@
+[
+  {
+    "n_prompt": 2048,
+    "n_gen": 0,
+    "avg_ts": 142.729602,
+    "stddev_ts": 0.0,
+    "samples_ts": [
+      142.73
+    ],
+    "n_threads": 16,
+    "n_gpu_layers": 0,
+    "devices": "none",
+    "flash_attn": 0,
+    "type_k": "f16",
+    "type_v": "f16",
+    "build_commit": "ed4091266",
+    "build_number": 10096,
+    "backends": "ROCm",
+    "test_time": "2026-07-19T01:04:12Z"
+  },
+  {
+    "n_prompt": 8192,
+    "n_gen": 0,
+    "avg_ts": 118.585662,
+    "stddev_ts": 0.0,
+    "samples_ts": [
+      118.586
+    ],
+    "n_threads": 16,
+    "n_gpu_layers": 0,
+    "devices": "none",
+    "flash_attn": 0,
+    "type_k": "f16",
+    "type_v": "f16",
+    "build_commit": "ed4091266",
+    "build_number": 10096,
+    "backends": "ROCm",
+    "test_time": "2026-07-19T01:04:41Z"
+  },
+  {
+    "n_prompt": 32768,
+    "n_gen": 0,
+    "avg_ts": 94.735757,
+    "stddev_ts": 0.0,
+    "samples_ts": [
+      94.7358
+    ],
+    "n_threads": 16,
+    "n_gpu_layers": 0,
+    "devices": "none",
+    "flash_attn": 0,
+    "type_k": "f16",
+    "type_v": "f16",
+    "build_commit": "ed4091266",
+    "build_number": 10096,
+    "backends": "ROCm",
+    "test_time": "2026-07-19T01:06:59Z"
+  },
+  {
+    "n_prompt": 0,
+    "n_gen": 512,
+    "avg_ts": 10.742701,
+    "stddev_ts": 0.0,
+    "samples_ts": [
+      10.7427
+    ],
+    "n_threads": 16,
+    "n_gpu_layers": 0,
+    "devices": "none",
+    "flash_attn": 0,
+    "type_k": "f16",
+    "type_v": "f16",
+    "build_commit": "ed4091266",
+    "build_number": 10096,
+    "backends": "ROCm",
+    "test_time": "2026-07-19T01:18:35Z"
+  }
+]
