@@ -51,6 +51,9 @@ DEFAULT_MAX_FIELD_CHARS = 24000
 MEASUREMENT_PROTOCOL_OBSERVATION = "pre_p_rev1_observation"
 MEASUREMENT_PROTOCOL_P_REV1 = "p_rev1"
 MEASUREMENT_PROTOCOLS = (MEASUREMENT_PROTOCOL_OBSERVATION, MEASUREMENT_PROTOCOL_P_REV1)
+ACCEPT_CONTROL_SIGNOFF_SCHEMA = "glm52_ccrab_accept_control_signoff.v1"
+ACCEPT_CONTROL_FILTER_SCHEMA = "glm52_ccrab_accept_control_filter.v1"
+P_REV1_MIN_HARD_ACCEPT_CONTROLS = 24
 ANSWER_FRAGMENT_SCORING_METHODS = frozenset({"substring", "exact_match"})
 GOLD_LABELS = ("accept", "reject")
 DEFAULT_GOLD_CONFIDENCE = ("multi_oracle",)
@@ -186,23 +189,67 @@ def read_accept_control_signoff_report(path: Path) -> dict[str, Any]:
     return data
 
 
+def accept_control_report_row_ids(report: dict[str, Any]) -> list[str]:
+    if report.get("schema") == ACCEPT_CONTROL_SIGNOFF_SCHEMA:
+        value = report.get("accepted_row_ids")
+    else:
+        value = report.get("selected_row_ids")
+    if not isinstance(value, list):
+        return []
+    return [row_id for row_id in value if isinstance(row_id, str) and row_id]
+
+
 def accept_control_signoff_refusals(report: dict[str, Any]) -> list[str]:
     refusals: list[str] = []
-    if report.get("schema") != "glm52_ccrab_accept_control_signoff.v1":
-        refusals.append("accept-control signoff report has unknown schema")
-    if report.get("decision_grade") is not True:
-        refusals.append("accept-control signoff report is not decision_grade=true")
-    if report.get("rejected_or_ambiguous_n") != 0:
-        refusals.append("accept-control signoff report has rejected_or_ambiguous rows")
-    if report.get("unreviewed_n") != 0:
-        refusals.append("accept-control signoff report has unreviewed rows")
-    accepted = report.get("accepted_row_ids")
-    if not isinstance(accepted, list) or not accepted:
-        refusals.append("accept-control signoff report has no accepted_row_ids")
-    elif any(not isinstance(row_id, str) or not row_id for row_id in accepted):
-        refusals.append("accept-control signoff report accepted_row_ids must be non-empty strings")
-    if report.get("accepted_row_ids_match_expected") is False:
-        refusals.append("accept-control signoff report accepted_row_ids do not match expected row-id file")
+    schema = report.get("schema")
+    if schema == ACCEPT_CONTROL_SIGNOFF_SCHEMA:
+        if report.get("decision_grade") is not True:
+            refusals.append("accept-control signoff report is not decision_grade=true")
+        if report.get("rejected_or_ambiguous_n") != 0:
+            refusals.append("accept-control signoff report has rejected_or_ambiguous rows")
+        if report.get("unreviewed_n") != 0:
+            refusals.append("accept-control signoff report has unreviewed rows")
+        accepted = report.get("accepted_row_ids")
+        if not isinstance(accepted, list) or not accepted:
+            refusals.append("accept-control signoff report has no accepted_row_ids")
+        elif any(not isinstance(row_id, str) or not row_id for row_id in accepted):
+            refusals.append("accept-control signoff report accepted_row_ids must be non-empty strings")
+        if report.get("accepted_row_ids_match_expected") is False:
+            refusals.append("accept-control signoff report accepted_row_ids do not match expected row-id file")
+        return refusals
+
+    if schema == ACCEPT_CONTROL_FILTER_SCHEMA:
+        if report.get("decision_grade") is not True:
+            refusals.append("accept-control filter report is not decision_grade=true")
+        selected = report.get("selected_row_ids")
+        if not isinstance(selected, list) or not selected:
+            refusals.append("accept-control filter report has no selected_row_ids")
+        elif any(not isinstance(row_id, str) or not row_id for row_id in selected):
+            refusals.append("accept-control filter report selected_row_ids must be non-empty strings")
+        if report.get("observation_only_n") != 0:
+            refusals.append("accept-control filter report includes observation-only rows")
+        hard_n = report.get("hard_accept_control_n")
+        if not isinstance(hard_n, int) or hard_n < P_REV1_MIN_HARD_ACCEPT_CONTROLS:
+            refusals.append(
+                f"accept-control filter report has fewer than {P_REV1_MIN_HARD_ACCEPT_CONTROLS} hard accepts"
+            )
+        elif isinstance(selected, list) and hard_n < len(selected):
+            refusals.append("accept-control filter report hard_accept_control_n is smaller than selected_row_ids")
+        selected_rows = report.get("selected_rows")
+        if isinstance(selected_rows, list):
+            non_hard = [
+                str(row.get("row_id") or "<missing>")
+                for row in selected_rows
+                if isinstance(row, dict) and row.get("hard_accept_control") is not True
+            ]
+            if non_hard:
+                refusals.append(
+                    "accept-control filter report selected_rows include non-hard controls: "
+                    + ", ".join(non_hard[:3])
+                )
+        return refusals
+
+    refusals.append("accept-control report has unknown schema")
     return refusals
 
 
@@ -748,6 +795,16 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         selected,
         allow_answer_fragment_review=args.allow_answer_fragment_review,
     )
+    accept_control_report_row_id_list = accept_control_report_row_ids(accept_control_report or {})
+    selected_id_set = {row.row_id for row in selected}
+    missing_accept_control_report_row_ids = [
+        row_id for row_id in accept_control_report_row_id_list if row_id not in selected_id_set
+    ]
+    if args.measurement_protocol == MEASUREMENT_PROTOCOL_P_REV1 and missing_accept_control_report_row_ids:
+        protocol_refusals.append(
+            "accept-control report row ids are not selected in this run: "
+            + ", ".join(missing_accept_control_report_row_ids[:3])
+        )
     server = build_server_spec(
         args,
         band=band,
@@ -808,9 +865,9 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "accept_control_signoff_report": str(args.accept_control_signoff_report.expanduser().resolve())
             if args.accept_control_signoff_report
             else None,
-            "accept_control_accepted_row_ids": accept_control_report.get("accepted_row_ids", [])
-            if accept_control_report
-            else [],
+            "accept_control_report_schema": accept_control_report.get("schema") if accept_control_report else None,
+            "accept_control_accepted_row_ids": accept_control_report_row_id_list,
+            "missing_accept_control_report_row_ids": missing_accept_control_report_row_ids,
         },
         "band": band.__dict__,
         "binary": str(binary),
@@ -1122,7 +1179,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--accept-control-signoff-report",
         type=Path,
         default=None,
-        help="Decision-grade GLM C-CRAB accept-control signoff report required for P-REV-1 mode.",
+        help=(
+            "Decision-grade GLM C-CRAB accept-control report required for P-REV-1 mode. "
+            "Accepts legacy manual signoff reports and deterministic filter reports."
+        ),
     )
     parser.add_argument("--trace-logs", dest="trace_logs", action="store_true")
     parser.add_argument("--no-trace-logs", dest="trace_logs", action="store_false")

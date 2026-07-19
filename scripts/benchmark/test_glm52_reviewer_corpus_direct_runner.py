@@ -572,6 +572,134 @@ def test_build_plan_accepts_p_rev1_with_decision_grade_signoff(tmp_path, monkeyp
     assert plan["review_hints"]["accept_control_accepted_row_ids"] == ["accept-a"]
 
 
+def test_build_plan_accepts_p_rev1_with_decision_grade_filter_report(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    accept_ids = [f"accept-{idx:02d}" for idx in range(24)]
+    reject_ids = [f"reject-{idx:02d}" for idx in range(24)]
+    rows = [
+        {**_row(row_id, label="accept"), "provenance": {}}
+        for row_id in accept_ids
+    ] + [
+        {**_row(row_id, label="reject"), "provenance": {}}
+        for row_id in reject_ids
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    filter_report = tmp_path / "filter.json"
+    filter_report.write_text(
+        json.dumps(
+            {
+                "schema": "glm52_ccrab_accept_control_filter.v1",
+                "decision_grade": True,
+                "hard_accept_control_n": 24,
+                "observation_only_n": 0,
+                "selected_n": 24,
+                "selected_row_ids": accept_ids,
+                "selected_rows": [
+                    {"row_id": row_id, "hard_accept_control": True}
+                    for row_id in accept_ids
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--measurement-protocol",
+            "p_rev1",
+            "--protocol-attestation",
+            "attest-test",
+            "--accept-control-signoff-report",
+            str(filter_report),
+            *sum((["--row-id", row_id] for row_id in accept_ids + reject_ids), []),
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(
+        runner.base,
+        "collect_inventory",
+        lambda model_dir: {
+            "status": "ready",
+            "primary_shard": "/tmp/glm.gguf",
+            "refusal_reasons": [],
+        },
+    )
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+
+    plan = runner.build_plan(args)
+
+    assert plan["execution_allowed"] is True
+    assert plan["observation_only"] is False
+    assert plan["review_hints"]["accept_control_report_schema"] == "glm52_ccrab_accept_control_filter.v1"
+    assert plan["review_hints"]["accept_control_accepted_row_ids"] == accept_ids
+
+
+def test_build_plan_refuses_p_rev1_when_report_row_ids_are_not_selected(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    rows = [
+        {**_row("accept-a", label="accept"), "provenance": {}},
+        {**_row("reject-a", label="reject"), "provenance": {}},
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    signoff_report = tmp_path / "signoff.json"
+    signoff_report.write_text(
+        json.dumps(
+            {
+                "schema": "glm52_ccrab_accept_control_signoff.v1",
+                "decision_grade": True,
+                "rejected_or_ambiguous_n": 0,
+                "unreviewed_n": 0,
+                "accepted_row_ids_match_expected": True,
+                "accepted_row_ids": ["accept-not-selected"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--row-id",
+            "accept-a",
+            "--row-id",
+            "reject-a",
+            "--measurement-protocol",
+            "p_rev1",
+            "--protocol-attestation",
+            "attest-test",
+            "--accept-control-signoff-report",
+            str(signoff_report),
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(
+        runner.base,
+        "collect_inventory",
+        lambda model_dir: {
+            "status": "ready",
+            "primary_shard": "/tmp/glm.gguf",
+            "refusal_reasons": [],
+        },
+    )
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+
+    plan = runner.build_plan(args)
+
+    assert plan["execution_allowed"] is False
+    assert plan["observation_only"] is True
+    assert plan["review_hints"]["missing_accept_control_report_row_ids"] == ["accept-not-selected"]
+    assert any("accept-control report row ids are not selected" in reason for reason in plan["refusal_reasons"])
+
+
 def test_build_plan_refuses_missing_explicit_row_id(tmp_path, monkeypatch):
     corpus = tmp_path / "rows.jsonl"
     rows = [
