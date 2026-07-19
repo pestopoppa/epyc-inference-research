@@ -1,0 +1,10 @@
+{
+  "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/decisions.jsonl",
+  "generated_at": "2026-07-19T17:56:33.972073+00:00",
+  "measurement_protocol": "p_rev1",
+  "n_scored": 24,
+  "observation_only": false,
+  "protocol_attestation": "MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719",
+  "rows_jsonl": "/mnt/raid0/llm/epyc-inference-research/docs/data/glm52_external_swebench_verified_n24_rows_20260719.jsonl",
+  "schema": "glm52_external_ground_truth_direct_run_manifest.v1"
+}

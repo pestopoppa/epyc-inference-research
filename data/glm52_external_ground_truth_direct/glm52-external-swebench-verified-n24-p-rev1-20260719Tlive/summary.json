@@ -1,0 +1,2536 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/decisions.jsonl",
+  "execution": {
+    "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/decisions.jsonl",
+    "elapsed_s": 1965.612,
+    "post_processes": [],
+    "progress_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/progress.jsonl",
+    "run_manifest": {
+      "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/decisions.jsonl",
+      "generated_at": "2026-07-19T17:56:33.972073+00:00",
+      "measurement_protocol": "p_rev1",
+      "n_scored": 24,
+      "observation_only": false,
+      "protocol_attestation": "MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719",
+      "rows_jsonl": "/mnt/raid0/llm/epyc-inference-research/docs/data/glm52_external_swebench_verified_n24_rows_20260719.jsonl",
+      "schema": "glm52_external_ground_truth_direct_run_manifest.v1"
+    },
+    "score": {
+      "accept_control_n": 24,
+      "accuracy": 0.9166666666666666,
+      "approve_rate": 0.9166666666666666,
+      "confidence_warning_counts": {},
+      "correct": 22,
+      "decision_counts": {
+        "approve": 22,
+        "reject": 2
+      },
+      "fa_rate": null,
+      "false_accepts": 0,
+      "false_rejects": 2,
+      "fr_rate": 0.08333333333333333,
+      "gold_label_counts": {
+        "accept": 24
+      },
+      "hard_negative_n": 0,
+      "n": 24,
+      "parse_failure_rate": 0.0,
+      "parse_failures": 0,
+      "reject_rate": 0.08333333333333333,
+      "tripwire_counts": {
+        "False": 22,
+        "True": 2
+      }
+    },
+    "server_log": {
+      "bytes": 129982,
+      "decode_tokens": 76,
+      "decode_tps": 2.79,
+      "line_count": 1342,
+      "matched_line_count": 871,
+      "matched_lines_tail": [
+        "30.59.009.535 I srv        update:    - prompt 0x5fad5d813040:    1566 tokens, checkpoints:  0,   166.158 MiB",
+        "30.59.009.535 I srv        update:    - prompt 0x5fad5e0adf30:    1317 tokens, checkpoints:  0,   139.738 MiB",
+        "30.59.009.536 I srv        update:    - prompt 0x5fad5e0cf980:    1173 tokens, checkpoints:  0,   124.459 MiB",
+        "30.59.009.536 I srv        update:    - prompt 0x5fad5d8e3e90:    1559 tokens, checkpoints:  0,   165.415 MiB",
+        "30.59.009.536 I srv        update:    - prompt 0x5fad5e073140:    1260 tokens, checkpoints:  0,   133.690 MiB",
+        "30.59.009.537 I srv        update:    - prompt 0x5fad5e064260:    1337 tokens, checkpoints:  0,   141.860 MiB",
+        "30.59.009.537 I srv        update:    - prompt 0x5fad5d968860:    2623 tokens, checkpoints:  0,   278.307 MiB",
+        "30.59.009.537 I srv        update:    - prompt 0x5fad5d942700:    2351 tokens, checkpoints:  0,   249.448 MiB",
+        "30.59.009.538 I srv        update:    - prompt 0x5fad5e03d8a0:    1293 tokens, checkpoints:  0,   137.192 MiB",
+        "30.59.009.538 I srv        update:    - prompt 0x5fad5e091fe0:    2438 tokens, checkpoints:  0,   258.678 MiB",
+        "30.59.009.538 I srv        update:    - prompt 0x5fad5d801d20:    3504 tokens, checkpoints:  0,   371.783 MiB",
+        "30.59.009.538 I srv        update:    - prompt 0x5fad5e037a20:    1121 tokens, checkpoints:  0,   118.942 MiB",
+        "30.59.009.538 I srv        update:    - prompt 0x5fad5d5ea650:     965 tokens, checkpoints:  0,   102.390 MiB",
+        "30.59.009.539 I srv        update:    - prompt 0x5fad5d6c8820:     835 tokens, checkpoints:  0,    88.597 MiB",
+        "30.59.009.539 I srv        update:    - prompt 0x5fad5e076060:    1147 tokens, checkpoints:  0,   121.701 MiB",
+        "30.59.009.540 I srv        update:    - prompt 0x5fad5e0b72c0:    1321 tokens, checkpoints:  0,   140.163 MiB",
+        "30.59.009.726 I cmn  common_reaso: activated, budget=0 tokens",
+        "30.59.009.759 I slot launch_slot_: id  2 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+        "30.59.009.766 I slot launch_slot_: id  2 | task -1 | sampler params: ",
+        "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+        "30.59.009.771 I slot launch_slot_: id  2 | task 1605 | processing task, is_child = 0",
+        "30.59.009.771 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+        "30.59.009.773 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+        "30.59.009.796 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+        "30.59.009.798 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+        "30.59.009.811 I slot process_sing: id  3 | task -1 | saving idle slot to prompt cache",
+        "30.59.009.812 I slot prompt_clear: id  3 | task -1 | clearing prompt with 0 tokens",
+        "30.59.009.836 I slot   operator(): id  2 | task 1605 | new prompt, n_ctx_slot = 16384, n_keep = 0, task.n_tokens = 867",
+        "30.59.009.841 I slot   operator(): id  2 | task 1605 | cached n_tokens = 310, memory_seq_rm [310, end)",
+        "30.59.010.116 I slot init_sampler: id  2 | task 1605 | init sampler, took 0.09 ms, tokens: text = 867, total = 867",
+        "31.47.516.592 I slot print_timing: id  2 | task 1605 | prompt eval time =   28390.67 ms /   557 tokens (   50.97 ms per token,    19.62 tokens per second)",
+        "31.47.516.600 I slot print_timing: id  2 | task 1605 |        eval time =   20116.07 ms /    56 tokens (  359.22 ms per token,     2.78 tokens per second)",
+        "31.47.516.600 I slot print_timing: id  2 | task 1605 |       total time =   48506.74 ms /   613 tokens",
+        "31.47.516.602 I slot print_timing: id  2 | task 1605 |    graphs reused =       1587",
+        "31.47.516.677 I slot      release: id  2 | task 1605 | stop processing: n_tokens = 922, truncated = 0",
+        "31.47.516.691 I srv  update_slots: all slots are idle",
+        "31.47.531.878 I slot get_availabl: id  2 | task -1 | selected slot by LCP similarity, sim_best = 0.372 (> 0.100 thold), f_keep = 0.335",
+        "31.47.549.007 I srv        update:  - cache state: 22 prompts, 3552.654 MiB (limits: 8192.000 MiB, 16384 tokens, 77207 est)",
+        "31.47.549.012 I srv        update:    - prompt 0x5fad5d7ef920:    1351 tokens, checkpoints:  0,   143.346 MiB",
+        "31.47.549.013 I srv        update:    - prompt 0x5fad5b7c3600:    2115 tokens, checkpoints:  0,   224.408 MiB",
+        "31.47.549.013 I srv        update:    - prompt 0x5fad5793ee90:    1258 tokens, checkpoints:  0,   133.478 MiB",
+        "31.47.549.013 I srv        update:    - prompt 0x5fad5d6b4000:    1073 tokens, checkpoints:  0,   113.849 MiB",
+        "31.47.549.015 I srv        update:    - prompt 0x5fad5d928f30:     954 tokens, checkpoints:  0,   101.223 MiB",
+        "31.47.549.016 I srv        update:    - prompt 0x5fad5d813040:    1566 tokens, checkpoints:  0,   166.158 MiB",
+        "31.47.549.016 I srv        update:    - prompt 0x5fad5e0adf30:    1317 tokens, checkpoints:  0,   139.738 MiB",
+        "31.47.549.016 I srv        update:    - prompt 0x5fad5e0cf980:    1173 tokens, checkpoints:  0,   124.459 MiB",
+        "31.47.549.016 I srv        update:    - prompt 0x5fad5d8e3e90:    1559 tokens, checkpoints:  0,   165.415 MiB",
+        "31.47.549.016 I srv        update:    - prompt 0x5fad5e073140:    1260 tokens, checkpoints:  0,   133.690 MiB",
+        "31.47.549.017 I srv        update:    - prompt 0x5fad5e064260:    1337 tokens, checkpoints:  0,   141.860 MiB",
+        "31.47.549.018 I srv        update:    - prompt 0x5fad5d968860:    2623 tokens, checkpoints:  0,   278.307 MiB",
+        "31.47.549.018 I srv        update:    - prompt 0x5fad5d942700:    2351 tokens, checkpoints:  0,   249.448 MiB",
+        "31.47.549.019 I srv        update:    - prompt 0x5fad5e03d8a0:    1293 tokens, checkpoints:  0,   137.192 MiB",
+        "31.47.549.019 I srv        update:    - prompt 0x5fad5e091fe0:    2438 tokens, checkpoints:  0,   258.678 MiB",
+        "31.47.549.019 I srv        update:    - prompt 0x5fad5d801d20:    3504 tokens, checkpoints:  0,   371.783 MiB",
+        "31.47.549.019 I srv        update:    - prompt 0x5fad5e037a20:    1121 tokens, checkpoints:  0,   118.942 MiB",
+        "31.47.549.020 I srv        update:    - prompt 0x5fad5d5ea650:     965 tokens, checkpoints:  0,   102.390 MiB",
+        "31.47.549.020 I srv        update:    - prompt 0x5fad5d6c8820:     835 tokens, checkpoints:  0,    88.597 MiB",
+        "31.47.549.021 I srv        update:    - prompt 0x5fad5e076060:    1147 tokens, checkpoints:  0,   121.701 MiB",
+        "31.47.549.022 I srv        update:    - prompt 0x5fad5e0b72c0:    1321 tokens, checkpoints:  0,   140.163 MiB",
+        "31.47.549.022 I srv        update:    - prompt 0x5fad5e07ff00:     922 tokens, checkpoints:  0,    97.828 MiB",
+        "31.47.549.201 I cmn  common_reaso: activated, budget=0 tokens",
+        "31.47.549.232 I slot launch_slot_: id  2 | task -1 | sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist ",
+        "31.47.549.240 I slot launch_slot_: id  2 | task -1 | sampler params: ",
+        "\ttop_k = 40, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000",
+        "31.47.549.245 I slot launch_slot_: id  2 | task 1662 | processing task, is_child = 0",
+        "31.47.549.247 I slot process_sing: id  0 | task -1 | saving idle slot to prompt cache",
+        "31.47.549.248 I slot prompt_clear: id  0 | task -1 | clearing prompt with 0 tokens",
+        "31.47.549.269 I slot process_sing: id  1 | task -1 | saving idle slot to prompt cache",
+        "31.47.549.271 I slot prompt_clear: id  1 | task -1 | clearing prompt with 0 tokens",
+        "31.47.549.284 I slot process_sing: id  3 | task -1 | saving idle slot to prompt cache",
+        "31.47.549.285 I slot prompt_clear: id  3 | task -1 | clearing prompt with 0 tokens",
+        "31.47.549.308 I slot   operator(): id  2 | task 1662 | new prompt, n_ctx_slot = 16384, n_keep = 0, task.n_tokens = 830",
+        "31.47.549.312 I slot   operator(): id  2 | task 1662 | cached n_tokens = 309, memory_seq_rm [309, end)",
+        "31.47.549.541 I slot init_sampler: id  2 | task 1662 | init sampler, took 0.08 ms, tokens: text = 830, total = 830",
+        "32.40.528.808 I slot print_timing: id  2 | task 1662 | prompt eval time =   25784.47 ms /   521 tokens (   49.49 ms per token,    20.21 tokens per second)",
+        "32.40.528.815 I slot print_timing: id  2 | task 1662 |        eval time =   27195.02 ms /    76 tokens (  357.83 ms per token,     2.79 tokens per second)",
+        "32.40.528.816 I slot print_timing: id  2 | task 1662 |       total time =   52979.49 ms /   597 tokens",
+        "32.40.528.817 I slot print_timing: id  2 | task 1662 |    graphs reused =       1661",
+        "32.40.528.891 I slot      release: id  2 | task 1662 | stop processing: n_tokens = 905, truncated = 0",
+        "32.40.528.903 I srv  update_slots: all slots are idle"
+      ],
+      "max_decoded_checkpoint": null,
+      "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/logs/glm52_external__p12000_tk16384.server.log",
+      "prompt_eval_tokens": 521,
+      "prompt_eval_tps": 20.21,
+      "status": "ok"
+    },
+    "status": "ok",
+    "task_results": [
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_aaac35f5684e0cd7d324.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_aaac35f5684e0cd7d324.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_aaac35f5684e0cd7d324.response.json"
+        },
+        "confidence": 0.95,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Adds re.IGNORECASE to _line_type_re and uppercases 'NO' comparison, enabling lowercase QDP commands.",
+          "risk": "Checked for misspelled identifiers and missing side effects; none found."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 83343.426,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 955,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 8,
+            "prompt_chars": 4680,
+            "prompt_token_count": 1282,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 1339,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1282,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:aaac35f5684e0cd7d324",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Adds re.IGNORECASE to _line_type_re and uppercases 'NO' comparison, enabling lowercase QDP commands.\",\"risk\":\"Checked for misspelled identifiers and missing side effects; none found.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 24471.86,
+          "predicted_n": 64,
+          "predicted_per_second": 2.6152486978921914,
+          "predicted_per_token_ms": 382.3728125,
+          "prompt_ms": 58859.708,
+          "prompt_n": 1288,
+          "prompt_per_second": 21.882541449237227,
+          "prompt_per_token_ms": 45.69853105590062
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 955,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 8,
+          "prompt_chars": 4680,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 1339,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 64,
+          "prompt_tokens": 1288,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1352
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_e4bf08601465811f09a0.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_e4bf08601465811f09a0.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_e4bf08601465811f09a0.response.json"
+        },
+        "confidence": 0.9,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Removes the __file__ check and adds migration_names-based migrated/unmigrated classification.",
+          "risk": "No blocker found; behavior matches task and tests cover namespace package loading."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 67555.539,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 1519,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 24,
+            "prompt_chars": 5211,
+            "prompt_token_count": 1095,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 829,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1095,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:e4bf08601465811f09a0",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"Removes the __file__ check and adds migration_names-based migrated/unmigrated classification.\",\n    \"risk\": \"No blocker found; behavior matches task and tests cover namespace package loading.\"\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 31349.641,
+          "predicted_n": 83,
+          "predicted_per_second": 2.647558228816719,
+          "predicted_per_token_ms": 377.70651807228916,
+          "prompt_ms": 36175.591,
+          "prompt_n": 792,
+          "prompt_per_second": 21.89321523454862,
+          "prompt_per_token_ms": 45.676251262626266
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 1519,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 24,
+          "prompt_chars": 5211,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 829,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 83,
+          "prompt_tokens": 1101,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1184
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_e975812011ab21814f67.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_e975812011ab21814f67.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_e975812011ab21814f67.response.json"
+        },
+        "confidence": 0.95,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "split_exclude copies _filtered_relations to inner query; trim_start avoids trimming filtered-relation joins.",
+          "risk": "No blocker found; tests cover exclude on annotated FilteredRelation."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 108486.066,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 1668,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 30,
+            "prompt_chars": 8536,
+            "prompt_token_count": 2051,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 3810,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2051,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:e975812011ab21814f67",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"split_exclude copies _filtered_relations to inner query; trim_start avoids trimming filtered-relation joins.\",\"risk\":\"No blocker found; tests cover exclude on annotated FilteredRelation.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 23285.207,
+          "predicted_n": 59,
+          "predicted_per_second": 2.533797530767066,
+          "predicted_per_token_ms": 394.6645254237288,
+          "prompt_ms": 85172.317,
+          "prompt_n": 1748,
+          "prompt_per_second": 20.52310024629247,
+          "prompt_per_token_ms": 48.725581807780316
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 1668,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 30,
+          "prompt_chars": 8536,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 3810,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 59,
+          "prompt_tokens": 2057,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 2116
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_dd8cb81b28d9d1a50b61.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_dd8cb81b28d9d1a50b61.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_dd8cb81b28d9d1a50b61.response.json"
+        },
+        "confidence": 1.0,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "EnumSerializer.serialize now emits module.EnumName['NAME'] using self.value.name.",
+          "risk": "No blocker: output matches requested Status['GOOD'] form and tests cover enum serialization."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 71191.983,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 739,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 2,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 44,
+            "prompt_chars": 5452,
+            "prompt_token_count": 1169,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 1601,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1169,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:dd8cb81b28d9d1a50b61",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"EnumSerializer.serialize now emits module.EnumName['NAME'] using self.value.name.\",\n    \"risk\": \"No blocker: output matches requested Status['GOOD'] form and tests cover enum serialization.\"\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 31920.119,
+          "predicted_n": 84,
+          "predicted_per_second": 2.631569136694008,
+          "predicted_per_token_ms": 380.00141666666667,
+          "prompt_ms": 39227.853,
+          "prompt_n": 866,
+          "prompt_per_second": 22.076150841087326,
+          "prompt_per_token_ms": 45.29775173210162
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 739,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 2,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 44,
+          "prompt_chars": 5452,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 1601,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 84,
+          "prompt_tokens": 1175,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1259
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_9cad4fccd76d792011bd.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_9cad4fccd76d792011bd.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_9cad4fccd76d792011bd.response.json"
+        },
+        "confidence": 1.0,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Changed hunk caps explicit batch_size via min(batch_size, max_batch_size).",
+          "risk": "No blocker; fix matches requested behavior and supports named test."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 53786.12,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 901,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 21,
+            "prompt_chars": 4473,
+            "prompt_token_count": 1012,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 609,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1012,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:9cad4fccd76d792011bd",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":1.0,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Changed hunk caps explicit batch_size via min(batch_size, max_batch_size).\",\"risk\":\"No blocker; fix matches requested behavior and supports named test.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 20895.318,
+          "predicted_n": 56,
+          "predicted_per_second": 2.680026214484987,
+          "predicted_per_token_ms": 373.1306785714286,
+          "prompt_ms": 32861.555,
+          "prompt_n": 709,
+          "prompt_per_second": 21.575363673447587,
+          "prompt_per_token_ms": 46.34916078984485
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 901,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 21,
+          "prompt_chars": 4473,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 609,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 56,
+          "prompt_tokens": 1018,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1074
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_21d534d11a3921e7aed6.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_21d534d11a3921e7aed6.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_21d534d11a3921e7aed6.response.json"
+        },
+        "confidence": 0.95,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "get_context now builds a new attrs dict instead of mutating the passed-in dict.",
+          "risk": "Checked that no undefined identifiers or wrong fields are introduced; behavior matches the task."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 49668.046,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 525,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 11,
+            "prompt_chars": 4192,
+            "prompt_token_count": 890,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 773,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 890,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:21d534d11a3921e7aed6",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"get_context now builds a new attrs dict instead of mutating the passed-in dict.\",\"risk\":\"Checked that no undefined identifiers or wrong fields are introduced; behavior matches the task.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 21961.767,
+          "predicted_n": 59,
+          "predicted_per_second": 2.686486929762983,
+          "predicted_per_token_ms": 372.2333389830508,
+          "prompt_ms": 27678.543,
+          "prompt_n": 587,
+          "prompt_per_second": 21.207763717909575,
+          "prompt_per_token_ms": 47.15254344122658
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 525,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 11,
+          "prompt_chars": 4192,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 773,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 59,
+          "prompt_tokens": 896,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 955
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_3ab2791b333e454dcfe6.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_3ab2791b333e454dcfe6.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_3ab2791b333e454dcfe6.response.json"
+        },
+        "confidence": 0.9,
+        "confidence_warning": null,
+        "correct": false,
+        "decision": "reject",
+        "evidence": {
+          "basis": "Patch changes output_field to use target/field, unrelated to int(SimpleLazyObject) failure.",
+          "risk": "Does not fix int() conversion for SimpleLazyObject; no test added for lazy filter."
+        },
+        "false_accept": false,
+        "false_reject": true,
+        "gold_label": "accept",
+        "latency_ms": 81116.011,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 580,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 135,
+            "prompt_chars": 6230,
+            "prompt_token_count": 1496,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 2854,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1496,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:3ab2791b333e454dcfe6",
+        "scoring_text": "{\"decision\":\"reject\",\"confidence\":0.9,\"blocking\":{\"tripwire\":true},\"evidence\":{\"basis\":\"Patch changes output_field to use target/field, unrelated to int(SimpleLazyObject) failure.\",\"risk\":\"Does not fix int() conversion for SimpleLazyObject; no test added for lazy filter.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 25046.13,
+          "predicted_n": 65,
+          "predicted_per_second": 2.5952113160795696,
+          "predicted_per_token_ms": 385.32507692307695,
+          "prompt_ms": 56039.233,
+          "prompt_n": 1193,
+          "prompt_per_second": 21.2886568236935,
+          "prompt_per_token_ms": 46.973372170997486
+        },
+        "tripwire": true,
+        "truncation": {
+          "candidate_chars_original": 580,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 135,
+          "prompt_chars": 6230,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 2854,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 65,
+          "prompt_tokens": 1502,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1567
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_135cab909bed3632729c.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_135cab909bed3632729c.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_135cab909bed3632729c.response.json"
+        },
+        "confidence": 0.85,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Replaces SimpleLazyObject with lazy(access_value, type(value))() so URL kwargs resolve to their real type for filtering.",
+          "risk": "Checked that lazy() is imported and preserves deprecation warning while resolving to the correct type."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 69547.412,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 1114,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 52,
+            "prompt_chars": 5524,
+            "prompt_token_count": 1242,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 1384,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1242,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:135cab909bed3632729c",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.85,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Replaces SimpleLazyObject with lazy(access_value, type(value))() so URL kwargs resolve to their real type for filtering.\",\"risk\":\"Checked that lazy() is imported and preserves deprecation warning while resolving to the correct type.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 26459.563,
+          "predicted_n": 70,
+          "predicted_per_second": 2.645546338010193,
+          "predicted_per_token_ms": 377.99375714285713,
+          "prompt_ms": 43046.799,
+          "prompt_n": 939,
+          "prompt_per_second": 21.81346863909672,
+          "prompt_per_token_ms": 45.84323642172524
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 1114,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 52,
+          "prompt_chars": 5524,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 1384,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 70,
+          "prompt_tokens": 1248,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1318
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_1ba5df6cf0c13fe8918e.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_1ba5df6cf0c13fe8918e.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_1ba5df6cf0c13fe8918e.response.json"
+        },
+        "confidence": 0.95,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "`deconstruct()` now returns `_storage_callable` when set, preserving the callable reference instead of the evaluated storage.",
+          "risk": "Checked that the fix targets the deconstruct path and preserves callable storage without breaking existing storage initialization."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 62137.418,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 980,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 130,
+            "prompt_chars": 5376,
+            "prompt_token_count": 1099,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 1260,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1099,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:1ba5df6cf0c13fe8918e",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"`deconstruct()` now returns `_storage_callable` when set, preserving the callable reference instead of the evaluated storage.\",\"risk\":\"Checked that the fix targets the deconstruct path and preserves callable storage without breaking existing storage initialization.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 25918.504,
+          "predicted_n": 69,
+          "predicted_per_second": 2.6621906881662616,
+          "predicted_per_token_ms": 375.6304927536232,
+          "prompt_ms": 36182.725,
+          "prompt_n": 796,
+          "prompt_per_second": 21.99944863190929,
+          "prompt_per_token_ms": 45.45568467336683
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 980,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 130,
+          "prompt_chars": 5376,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 1260,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 69,
+          "prompt_tokens": 1105,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1174
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_8b01d0ce2fd481542629.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_8b01d0ce2fd481542629.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_8b01d0ce2fd481542629.response.json"
+        },
+        "confidence": 0.95,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "CharField.__init__ now guards MaxLengthValidator append on self.max_length is not None.",
+          "risk": "Checked that validator append is tied to max_length rule path; no undefined identifiers."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 88460.893,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 653,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 2,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 158,
+            "prompt_chars": 6181,
+            "prompt_token_count": 1468,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 2748,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1468,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:8b01d0ce2fd481542629",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"CharField.__init__ now guards MaxLengthValidator append on self.max_length is not None.\",\n    \"risk\": \"Checked that validator append is tied to max_length rule path; no undefined identifiers.\"\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 33451.713,
+          "predicted_n": 86,
+          "predicted_per_second": 2.570869838564022,
+          "predicted_per_token_ms": 388.97340697674423,
+          "prompt_ms": 54975.767,
+          "prompt_n": 1165,
+          "prompt_per_second": 21.19115500471326,
+          "prompt_per_token_ms": 47.18949957081545
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 653,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 2,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 158,
+          "prompt_chars": 6181,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 2748,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 86,
+          "prompt_tokens": 1474,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1560
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_7796098912154409596a.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_7796098912154409596a.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_7796098912154409596a.response.json"
+        },
+        "confidence": 1.0,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Changed help_text format to f\"../../{self.instance.pk}/password/\" in UserChangeForm.__init__.",
+          "risk": "No blocker; fix targets the reported to_field link path and tests exercise it."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 73615.145,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 697,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 86,
+            "prompt_chars": 5271,
+            "prompt_token_count": 1164,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 1413,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1164,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:7796098912154409596a",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 1.0,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"Changed help_text format to f\\\"../../{self.instance.pk}/password/\\\" in UserChangeForm.__init__.\",\n    \"risk\": \"No blocker; fix targets the reported to_field link path and tests exercise it.\"\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 34780.089,
+          "predicted_n": 91,
+          "predicted_per_second": 2.616439538150693,
+          "predicted_per_token_ms": 382.19878021978025,
+          "prompt_ms": 38794.497,
+          "prompt_n": 861,
+          "prompt_per_second": 22.19386940369403,
+          "prompt_per_token_ms": 45.05748780487805
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 697,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 86,
+          "prompt_chars": 5271,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 1413,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 91,
+          "prompt_tokens": 1170,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1261
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_b095de3514463921d358.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_b095de3514463921d358.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_b095de3514463921d358.response.json"
+        },
+        "confidence": 0.95,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Catches OverflowError in value_from_datadict and returns invalid \"0-0-0\", preventing crash.",
+          "risk": "No blocker; fix targets exact OverflowError path and returns invalid date for validation."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 68923.871,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 529,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 2,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 24,
+            "prompt_chars": 5561,
+            "prompt_token_count": 1266,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 1758,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1266,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:b095de3514463921d358",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Catches OverflowError in value_from_datadict and returns invalid \\\"0-0-0\\\", preventing crash.\",\"risk\":\"No blocker; fix targets exact OverflowError path and returns invalid date for validation.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 25169.446,
+          "predicted_n": 66,
+          "predicted_per_second": 2.622226965186282,
+          "predicted_per_token_ms": 381.3552424242424,
+          "prompt_ms": 43719.227,
+          "prompt_n": 963,
+          "prompt_per_second": 22.026921930710255,
+          "prompt_per_token_ms": 45.39898961578401
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 529,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 2,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 24,
+          "prompt_chars": 5561,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 1758,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 66,
+          "prompt_tokens": 1272,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1338
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_086e0babe6296b770052.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_086e0babe6296b770052.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_086e0babe6296b770052.response.json"
+        },
+        "confidence": 0.95,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Adds timedelta64 handling via `astype(float)` in `_ensure_numeric`.",
+          "risk": "Checked for misspelled identifiers and wrong field names; none found."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 143821.724,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 779,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 264,
+            "prompt_chars": 7970,
+            "prompt_token_count": 2538,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 4310,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2538,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:086e0babe6296b770052",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.95,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"Adds timedelta64 handling via `astype(float)` in `_ensure_numeric`.\",\n    \"risk\": \"Checked for misspelled identifiers and wrong field names; none found.\"\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 32490.911,
+          "predicted_n": 80,
+          "predicted_per_second": 2.4622270517437936,
+          "predicted_per_token_ms": 406.1363875,
+          "prompt_ms": 111292.492,
+          "prompt_n": 2235,
+          "prompt_per_second": 20.08221722629771,
+          "prompt_per_token_ms": 49.79529843400447
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 779,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 264,
+          "prompt_chars": 7970,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 4310,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 80,
+          "prompt_tokens": 2544,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 2624
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_1ff5b0646b7d0585cb5e.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_1ff5b0646b7d0585cb5e.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_1ff5b0646b7d0585cb5e.response.json"
+        },
+        "confidence": 0.9,
+        "confidence_warning": null,
+        "correct": false,
+        "decision": "reject",
+        "evidence": {
+          "basis": "Patch adds _check_regexp_csv but includes no tests for the new behavior.",
+          "risk": "Missing test coverage for the requested regex comma handling behavior."
+        },
+        "false_accept": false,
+        "false_reject": true,
+        "gold_label": "accept",
+        "latency_ms": 126628.816,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 2614,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 18,
+            "prompt_chars": 8935,
+            "prompt_token_count": 2268,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 3455,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2268,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:1ff5b0646b7d0585cb5e",
+        "scoring_text": "{\n  \"decision\": \"reject\",\n  \"confidence\": 0.9,\n  \"blocking\": {\n    \"tripwire\": true\n  },\n  \"evidence\": {\n    \"basis\": \"Patch adds _check_regexp_csv but includes no tests for the new behavior.\",\n    \"risk\": \"Missing test coverage for the requested regex comma handling behavior.\"\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 31552.696,
+          "predicted_n": 78,
+          "predicted_per_second": 2.472055002843497,
+          "predicted_per_token_ms": 404.5217435897436,
+          "prompt_ms": 95016.343,
+          "prompt_n": 1965,
+          "prompt_per_second": 20.68065280096078,
+          "prompt_per_token_ms": 48.354373027989816
+        },
+        "tripwire": true,
+        "truncation": {
+          "candidate_chars_original": 2614,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 18,
+          "prompt_chars": 8935,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 3455,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 78,
+          "prompt_tokens": 2274,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 2352
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_d203b2f1a5a87af13f7d.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_d203b2f1a5a87af13f7d.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_d203b2f1a5a87af13f7d.response.json"
+        },
+        "confidence": 0.9,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Changes `obj.__globals__` to `inspect.unwrap(obj).__globals__` to handle decorated `__init__`.",
+          "risk": "No blocker found; unwrap resolves decorated methods and existing tests cover skip-member behavior."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 67390.987,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 861,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 16,
+            "prompt_chars": 5011,
+            "prompt_token_count": 1220,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 1139,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1220,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:d203b2f1a5a87af13f7d",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.9,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Changes `obj.__globals__` to `inspect.unwrap(obj).__globals__` to handle decorated `__init__`.\",\"risk\":\"No blocker found; unwrap resolves decorated methods and existing tests cover skip-member behavior.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 25993.231,
+          "predicted_n": 68,
+          "predicted_per_second": 2.6160656980273056,
+          "predicted_per_token_ms": 382.2533970588235,
+          "prompt_ms": 41343.122,
+          "prompt_n": 917,
+          "prompt_per_second": 22.180231091401367,
+          "prompt_per_token_ms": 45.08519302071974
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 861,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 16,
+          "prompt_chars": 5011,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 1139,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 68,
+          "prompt_tokens": 1226,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1294
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_7a9145c53c881bc60ba2.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_7a9145c53c881bc60ba2.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_7a9145c53c881bc60ba2.response.json"
+        },
+        "confidence": 0.85,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "PropertyDocumenter.can_document_member and import_object handle classmethod-wrapped properties; PyProperty adds :classmethod:.",
+          "risk": "Checked that changes target classmethod+property handling and tests cover this behavior; no blockers found."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 136173.472,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 4777,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 3,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 59,
+            "prompt_chars": 9975,
+            "prompt_token_count": 2340,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 2294,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2340,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:7a9145c53c881bc60ba2",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"PropertyDocumenter.can_document_member and import_object handle classmethod-wrapped properties; PyProperty adds :classmethod:.\",\n    \"risk\": \"Checked that changes target classmethod+property handling and tests cover this behavior; no blockers found.\"\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 37518.634,
+          "predicted_n": 93,
+          "predicted_per_second": 2.4787682835147997,
+          "predicted_per_token_ms": 403.42617204301075,
+          "prompt_ms": 98617.509,
+          "prompt_n": 2037,
+          "prompt_per_second": 20.65556127563514,
+          "prompt_per_token_ms": 48.41311192930781
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 4777,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 3,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 59,
+          "prompt_chars": 9975,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 2294,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 93,
+          "prompt_tokens": 2346,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 2439
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_5effe256ffa7220a85fe.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_5effe256ffa7220a85fe.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_5effe256ffa7220a85fe.response.json"
+        },
+        "confidence": 0.95,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Changed `_af_new` to classmethod using `cls` and routed instance creation through `cls`/`self` throughout.",
+          "risk": "No blocker found; subclassing now returns subclass instances via `cls`."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 196197.535,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 9648,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 8,
+            "prompt_chars": 12841,
+            "prompt_token_count": 3431,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 1214,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 3431,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:5effe256ffa7220a85fe",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Changed `_af_new` to classmethod using `cls` and routed instance creation through `cls`/`self` throughout.\",\"risk\":\"No blocker found; subclassing now returns subclass instances via `cls`.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 28307.599,
+          "predicted_n": 68,
+          "predicted_per_second": 2.402181831104786,
+          "predicted_per_token_ms": 416.2882205882353,
+          "prompt_ms": 167829.557,
+          "prompt_n": 3128,
+          "prompt_per_second": 18.637956602602483,
+          "prompt_per_token_ms": 53.65395044757033
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 9648,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 8,
+          "prompt_chars": 12841,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 1214,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 68,
+          "prompt_tokens": 3437,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 3505
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_a6fc52f8b61b30f052b7.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_a6fc52f8b61b30f052b7.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_a6fc52f8b61b30f052b7.response.json"
+        },
+        "confidence": 0.85,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Adds else: raise NotImplementedError for reprec/imprec when re/im aren't numbers, preventing UnboundLocalError.",
+          "risk": "Checked that the fix targets the exact evalf path and raises instead of referencing unassigned variables."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 63115.834,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 736,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 44,
+            "prompt_chars": 4149,
+            "prompt_token_count": 1047,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 1183,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1047,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:a6fc52f8b61b30f052b7",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.85,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Adds else: raise NotImplementedError for reprec/imprec when re/im aren't numbers, preventing UnboundLocalError.\",\"risk\":\"Checked that the fix targets the exact evalf path and raises instead of referencing unassigned variables.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 25245.222,
+          "predicted_n": 69,
+          "predicted_per_second": 2.7331904627338983,
+          "predicted_per_token_ms": 365.8727826086957,
+          "prompt_ms": 37795.796,
+          "prompt_n": 744,
+          "prompt_per_second": 19.684728957686193,
+          "prompt_per_token_ms": 50.80080107526882
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 736,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 44,
+          "prompt_chars": 4149,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 1183,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 69,
+          "prompt_tokens": 1053,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1122
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_c93041c5b6e3811dde1a.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_c93041c5b6e3811dde1a.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_c93041c5b6e3811dde1a.response.json"
+        },
+        "confidence": 0.7,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Replaced broken sum-of-products with exp(Sum(log(p))) for non-rationalizable terms.",
+          "risk": "Checked that no misspelled identifiers or wrong field names block the fix."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 52638.363,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 680,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 17,
+            "prompt_chars": 3403,
+            "prompt_token_count": 898,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 499,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 898,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:c93041c5b6e3811dde1a",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.7,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Replaced broken sum-of-products with exp(Sum(log(p))) for non-rationalizable terms.\",\"risk\":\"Checked that no misspelled identifiers or wrong field names block the fix.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 22397.223,
+          "predicted_n": 62,
+          "predicted_per_second": 2.7682003255492877,
+          "predicted_per_token_ms": 361.24553225806454,
+          "prompt_ms": 30208.782,
+          "prompt_n": 595,
+          "prompt_per_second": 19.69625918714631,
+          "prompt_per_token_ms": 50.77106218487395
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 680,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 17,
+          "prompt_chars": 3403,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 499,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 62,
+          "prompt_tokens": 904,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 966
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_39e7c1e9a17469854015.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_39e7c1e9a17469854015.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_39e7c1e9a17469854015.response.json"
+        },
+        "confidence": 0.88,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "_complement now sifts elements by ternary contains and keeps non-true elements via Union/Complement.",
+          "risk": "Checked for undefined identifiers and missing side effects; none found."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 44830.03,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 871,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 70,
+            "prompt_chars": 3264,
+            "prompt_token_count": 768,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 201,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 768,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:39e7c1e9a17469854015",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.88,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"_complement now sifts elements by ternary contains and keeps non-true elements via Union/Complement.\",\"risk\":\"Checked for undefined identifiers and missing side effects; none found.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 22097.654,
+          "predicted_n": 62,
+          "predicted_per_second": 2.805727703040332,
+          "predicted_per_token_ms": 356.41377419354836,
+          "prompt_ms": 22702.447,
+          "prompt_n": 465,
+          "prompt_per_second": 20.482373552066875,
+          "prompt_per_token_ms": 48.822466666666664
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 871,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 70,
+          "prompt_chars": 3264,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 201,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 62,
+          "prompt_tokens": 774,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 836
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_5eabd55911d8aa19f493.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_5eabd55911d8aa19f493.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_5eabd55911d8aa19f493.response.json"
+        },
+        "confidence": 0.85,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "KeyError fallback sets mul_symbol_latex to arbitrary user string, enabling custom mul_symbol.",
+          "risk": "No blocker found; fallback preserves backward compatibility for table keys."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 67280.678,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 1343,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 102,
+            "prompt_chars": 4420,
+            "prompt_token_count": 1061,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 861,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1061,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:5eabd55911d8aa19f493",
+        "scoring_text": "{\n  \"decision\": \"approve\",\n  \"confidence\": 0.85,\n  \"blocking\": {\n    \"tripwire\": false\n  },\n  \"evidence\": {\n    \"basis\": \"KeyError fallback sets mul_symbol_latex to arbitrary user string, enabling custom mul_symbol.\",\n    \"risk\": \"No blocker found; fallback preserves backward compatibility for table keys.\"\n  }\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 29622.319,
+          "predicted_n": 81,
+          "predicted_per_second": 2.7344246748541194,
+          "predicted_per_token_ms": 365.70764197530866,
+          "prompt_ms": 37631.067,
+          "prompt_n": 758,
+          "prompt_per_second": 20.142931371039783,
+          "prompt_per_token_ms": 49.64520712401056
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 1343,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 102,
+          "prompt_chars": 4420,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 861,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 81,
+          "prompt_tokens": 1067,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1148
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_e3d60cf958a3bd8d5466.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_e3d60cf958a3bd8d5466.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_e3d60cf958a3bd8d5466.response.json"
+        },
+        "confidence": 0.95,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Added `if not rv.exp.is_real: return rv` guard before `rv.exp < 0` comparison in `_f`.",
+          "risk": "Checked that guard prevents complex exponent comparison without altering real-exponent paths."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 72778.483,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 410,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 2,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 67,
+            "prompt_chars": 4378,
+            "prompt_token_count": 1248,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 1916,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1248,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:e3d60cf958a3bd8d5466",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Added `if not rv.exp.is_real: return rv` guard before `rv.exp < 0` comparison in `_f`.\",\"risk\":\"Checked that guard prevents complex exponent comparison without altering real-exponent paths.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 25466.176,
+          "predicted_n": 68,
+          "predicted_per_second": 2.6702085150122263,
+          "predicted_per_token_ms": 374.5025882352941,
+          "prompt_ms": 47278.839,
+          "prompt_n": 945,
+          "prompt_per_second": 19.987800461851442,
+          "prompt_per_token_ms": 50.03051746031746
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 410,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 2,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 67,
+          "prompt_chars": 4378,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 1916,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 68,
+          "prompt_tokens": 1254,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 1322
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_0350babf917e900e18d6.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_0350babf917e900e18d6.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_0350babf917e900e18d6.response.json"
+        },
+        "confidence": 0.95,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Adds _print_dict and _print_set to print srepr-compatible dict/set representations.",
+          "risk": "No blockers; tests likely validate dict/set srepr behavior."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 48542.488,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 741,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 40,
+            "prompt_chars": 3386,
+            "prompt_token_count": 861,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 480,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 861,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:0350babf917e900e18d6",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Adds _print_dict and _print_set to print srepr-compatible dict/set representations.\",\"risk\":\"No blockers; tests likely validate dict/set srepr behavior.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 310,
+          "predicted_ms": 20116.068,
+          "predicted_n": 56,
+          "predicted_per_second": 2.783844238347176,
+          "predicted_per_token_ms": 359.21549999999996,
+          "prompt_ms": 28390.672,
+          "prompt_n": 557,
+          "prompt_per_second": 19.619119970108493,
+          "prompt_per_token_ms": 50.97068581687612
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 741,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 40,
+          "prompt_chars": 3386,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 480,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 56,
+          "prompt_tokens": 867,
+          "prompt_tokens_details": {
+            "cached_tokens": 310
+          },
+          "total_tokens": 923
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_16cd07cd421c1e8ce001.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_16cd07cd421c1e8ce001.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/artifacts/glm52-swebench-verified_16cd07cd421c1e8ce001.response.json"
+        },
+        "confidence": 0.95,
+        "confidence_warning": null,
+        "correct": true,
+        "decision": "approve",
+        "evidence": {
+          "basis": "Adds `__slots__ = ()` to `Printable` mixin, preventing `__dict__` in slotted subclasses like `Symbol`.",
+          "risk": "Checked that the change targets the missing slots path and no undefined identifiers or side effects are introduced."
+        },
+        "false_accept": false,
+        "false_reject": false,
+        "gold_label": "accept",
+        "latency_ms": 53008.554,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_chars_original": 611,
+            "candidate_truncated": false,
+            "fail_to_pass_total": 1,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "pass_to_pass_total": 21,
+            "prompt_chars": 3499,
+            "prompt_token_count": 824,
+            "review_mode": "patch_review_oracle",
+            "task_chars_original": 758,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 824,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-swebench-verified:16cd07cd421c1e8ce001",
+        "scoring_text": "{\"decision\":\"approve\",\"confidence\":0.95,\"blocking\":{\"tripwire\":false},\"evidence\":{\"basis\":\"Adds `__slots__ = ()` to `Printable` mixin, preventing `__dict__` in slotted subclasses like `Symbol`.\",\"risk\":\"Checked that the change targets the missing slots path and no undefined identifiers or side effects are introduced.\"}}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 309,
+          "predicted_ms": 27195.019,
+          "predicted_n": 76,
+          "predicted_per_second": 2.7946294135701835,
+          "predicted_per_token_ms": 357.82919736842103,
+          "prompt_ms": 25784.466,
+          "prompt_n": 521,
+          "prompt_per_second": 20.205964319757484,
+          "prompt_per_token_ms": 49.49033781190019
+        },
+        "tripwire": false,
+        "truncation": {
+          "candidate_chars_original": 611,
+          "candidate_truncated": false,
+          "fail_to_pass_total": 1,
+          "max_field_chars": 24000,
+          "pass_to_pass_total": 21,
+          "prompt_chars": 3499,
+          "review_mode": "patch_review_oracle",
+          "task_chars_original": 758,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 76,
+          "prompt_tokens": 830,
+          "prompt_tokens_details": {
+            "cached_tokens": 309
+          },
+          "total_tokens": 906
+        }
+      }
+    ]
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-19T17:23:48.359239+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "measurement_protocol": "p_rev1",
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "observation_only": false,
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive",
+  "preexisting_processes": [],
+  "prompt_rows": [
+    {
+      "prompt_token_count": 571,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:aaac35f5684e0cd7d324",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 955,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 8,
+        "prompt_chars": 4680,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1339,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 595,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:e4bf08601465811f09a0",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 1519,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 24,
+        "prompt_chars": 5211,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 829,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 776,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:e975812011ab21814f67",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 1668,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 30,
+        "prompt_chars": 8536,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 3810,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 639,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:dd8cb81b28d9d1a50b61",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 739,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 2,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 44,
+        "prompt_chars": 5452,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1601,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 473,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:9cad4fccd76d792011bd",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 901,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 21,
+        "prompt_chars": 4473,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 609,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 467,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:21d534d11a3921e7aed6",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 525,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 11,
+        "prompt_chars": 4192,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 773,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 603,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:3ab2791b333e454dcfe6",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 580,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 135,
+        "prompt_chars": 6230,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 2854,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 582,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:135cab909bed3632729c",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 1114,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 52,
+        "prompt_chars": 5524,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1384,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 590,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:1ba5df6cf0c13fe8918e",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 980,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 130,
+        "prompt_chars": 5376,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1260,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 782,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:8b01d0ce2fd481542629",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 653,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 2,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 158,
+        "prompt_chars": 6181,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 2748,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 554,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:7796098912154409596a",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 697,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 86,
+        "prompt_chars": 5271,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1413,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 594,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:b095de3514463921d358",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 529,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 2,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 24,
+        "prompt_chars": 5561,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1758,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 830,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:086e0babe6296b770052",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 779,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 264,
+        "prompt_chars": 7970,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 4310,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 933,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:1ff5b0646b7d0585cb5e",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 2614,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 18,
+        "prompt_chars": 8935,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 3455,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 526,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:d203b2f1a5a87af13f7d",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 861,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 16,
+        "prompt_chars": 5011,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1139,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1023,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:7a9145c53c881bc60ba2",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 4777,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 3,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 59,
+        "prompt_chars": 9975,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 2294,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1546,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:5effe256ffa7220a85fe",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 9648,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 8,
+        "prompt_chars": 12841,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1214,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 537,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:a6fc52f8b61b30f052b7",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 736,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 44,
+        "prompt_chars": 4149,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1183,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 458,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:c93041c5b6e3811dde1a",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 680,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 17,
+        "prompt_chars": 3403,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 499,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 429,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:39e7c1e9a17469854015",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 871,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 70,
+        "prompt_chars": 3264,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 201,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 564,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:5eabd55911d8aa19f493",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 1343,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 102,
+        "prompt_chars": 4420,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 861,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 575,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:e3d60cf958a3bd8d5466",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 410,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 2,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 67,
+        "prompt_chars": 4378,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1916,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 475,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:0350babf917e900e18d6",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 741,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 40,
+        "prompt_chars": 3386,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 480,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 483,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:16cd07cd421c1e8ce001",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 611,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 21,
+        "prompt_chars": 3499,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 758,
+        "task_truncated": false
+      }
+    }
+  ],
+  "protocol_attestation": "MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719",
+  "refusal_reasons": [],
+  "request": {
+    "band": "p12000_tk16384",
+    "context_length": 16384,
+    "endpoint": "chat",
+    "era": "p_rev1_attested",
+    "indexer_top_k": 16384,
+    "max_field_chars": 24000,
+    "max_tokens": 128,
+    "prompt_guard_tokens": 512,
+    "response_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "blocking": {
+          "additionalProperties": false,
+          "properties": {
+            "tripwire": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "tripwire"
+          ],
+          "type": "object"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "decision": {
+          "enum": [
+            "approve",
+            "reject"
+          ],
+          "type": "string"
+        },
+        "evidence": {
+          "additionalProperties": false,
+          "properties": {
+            "basis": {
+              "maxLength": 180,
+              "minLength": 3,
+              "type": "string"
+            },
+            "risk": {
+              "maxLength": 180,
+              "minLength": 3,
+              "type": "string"
+            }
+          },
+          "required": [
+            "basis",
+            "risk"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "decision",
+        "confidence",
+        "blocking",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "rubric_version": "glm52_external_swebench_review_v1+binary_schema+test_oracle",
+    "seed": 52,
+    "temperature": 0.0,
+    "timeout_s": 1800
+  },
+  "rows": {
+    "gold_label_counts": {
+      "accept": 24
+    },
+    "n": 24,
+    "row_ids": [
+      "glm52-swebench-verified:aaac35f5684e0cd7d324",
+      "glm52-swebench-verified:e4bf08601465811f09a0",
+      "glm52-swebench-verified:e975812011ab21814f67",
+      "glm52-swebench-verified:dd8cb81b28d9d1a50b61",
+      "glm52-swebench-verified:9cad4fccd76d792011bd",
+      "glm52-swebench-verified:21d534d11a3921e7aed6",
+      "glm52-swebench-verified:3ab2791b333e454dcfe6",
+      "glm52-swebench-verified:135cab909bed3632729c",
+      "glm52-swebench-verified:1ba5df6cf0c13fe8918e",
+      "glm52-swebench-verified:8b01d0ce2fd481542629",
+      "glm52-swebench-verified:7796098912154409596a",
+      "glm52-swebench-verified:b095de3514463921d358",
+      "glm52-swebench-verified:086e0babe6296b770052",
+      "glm52-swebench-verified:1ff5b0646b7d0585cb5e",
+      "glm52-swebench-verified:d203b2f1a5a87af13f7d",
+      "glm52-swebench-verified:7a9145c53c881bc60ba2",
+      "glm52-swebench-verified:5effe256ffa7220a85fe",
+      "glm52-swebench-verified:a6fc52f8b61b30f052b7",
+      "glm52-swebench-verified:c93041c5b6e3811dde1a",
+      "glm52-swebench-verified:39e7c1e9a17469854015",
+      "glm52-swebench-verified:5eabd55911d8aa19f493",
+      "glm52-swebench-verified:e3d60cf958a3bd8d5466",
+      "glm52-swebench-verified:0350babf917e900e18d6",
+      "glm52-swebench-verified:16cd07cd421c1e8ce001"
+    ],
+    "source_counts": {
+      "swe-bench-verified|astropy/astropy": 1,
+      "swe-bench-verified|django/django": 11,
+      "swe-bench-verified|pydata/xarray": 1,
+      "swe-bench-verified|pylint-dev/pylint": 1,
+      "swe-bench-verified|sphinx-doc/sphinx": 2,
+      "swe-bench-verified|sympy/sympy": 8
+    },
+    "task_kind_counts": {
+      "patch_review_oracle": 24
+    }
+  },
+  "rows_jsonl": "/mnt/raid0/llm/epyc-inference-research/docs/data/glm52_external_swebench_verified_n24_rows_20260719.jsonl",
+  "schema": "glm52_external_ground_truth_direct_runner.v1",
+  "server": {
+    "context_length": 16384,
+    "extra_args": [
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\",\"evidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}},\"evidence\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"basis\",\"risk\"],\"properties\":{\"basis\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180},\"risk\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180}}}}}"
+    ],
+    "indexer_top_k": 16384,
+    "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:16384",
+    "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/logs/glm52_external__p12000_tk16384.server.log",
+    "metrics": false,
+    "port": 19570,
+    "server_command": [
+      "env",
+      "-i",
+      "PATH=/usr/bin:/bin",
+      "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+      "OMP_NUM_THREADS=1",
+      "numactl",
+      "--interleave=all",
+      "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+      "-m",
+      "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "--override-kv",
+      "glm-dsa.attention.indexer.top_k=int:16384",
+      "--device",
+      "none",
+      "-ngl",
+      "0",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "19570",
+      "-c",
+      "16384",
+      "-t",
+      "96",
+      "-ub",
+      "512",
+      "--log-verbosity",
+      "4",
+      "--log-file",
+      "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/logs/glm52_external__p12000_tk16384.server.log",
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\",\"evidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}},\"evidence\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"basis\",\"risk\"],\"properties\":{\"basis\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180},\"risk\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180}}}}}"
+    ],
+    "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:16384 --device none -ngl 0 --host 127.0.0.1 --port 19570 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/logs/glm52_external__p12000_tk16384.server.log --reasoning-format deepseek --reasoning off --reasoning-budget 0 --json-schema '{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\",\"evidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}},\"evidence\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"basis\",\"risk\"],\"properties\":{\"basis\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180},\"risk\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180}}}}}'",
+    "threads": 96,
+    "trace_logs": true,
+    "ubatch": 512
+  }
+}
