@@ -100,6 +100,53 @@ def test_review_csv_generation_includes_recommendations(tmp_path):
     assert json.loads(summary_out.read_text(encoding="utf-8"))["review_row_n"] == 1
 
 
+def test_review_markdown_generation_includes_bounded_excerpts(tmp_path):
+    packet_path = tmp_path / "packet.json"
+    rec_path = tmp_path / "recommendations.json"
+    md_out = tmp_path / "review.md"
+    summary_out = tmp_path / "summary.json"
+    packet_path.write_text(json.dumps(_packet(_row("a"))) + "\n", encoding="utf-8")
+    rec_path.write_text(
+        json.dumps(
+            {
+                "recommendations": [
+                    {
+                        "row_id": "a",
+                        "recommendation": "hard_accept_candidate",
+                        "reason": "Patch includes direct fix and regression test.",
+                        "format_concerns": ["check fixture literal"],
+                    }
+                ]
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    rc = review_mod.main(
+        [
+            str(packet_path),
+            "--machine-recommendations",
+            str(rec_path),
+            "--review-md-out",
+            str(md_out),
+            "--excerpt-chars",
+            "20",
+            "--summary-out",
+            str(summary_out),
+        ]
+    )
+
+    assert rc == 0
+    text = md_out.read_text(encoding="utf-8")
+    assert "GLM-5.2 C-CRAB Accept-Control Review Packet" in text
+    assert "`a`" in text
+    assert "check fixture literal" in text
+    assert "...[truncated]" in text
+    summary = json.loads(summary_out.read_text(encoding="utf-8"))
+    assert summary["review_md_written"] == str(md_out)
+
+
 def test_apply_review_csv_writes_signed_packet(tmp_path):
     packet_path = tmp_path / "packet.json"
     csv_path = tmp_path / "review.csv"

@@ -31,6 +31,7 @@ CSV_FIELDS = [
     "notes",
 ]
 
+DEFAULT_EXCERPT_CHARS = 1800
 UNREVIEWED_DECISIONS = {"", "unreviewed"}
 
 
@@ -141,6 +142,98 @@ def write_review_csv(rows: list[dict[str, str]], path: Path) -> None:
         writer.writerows(rows)
 
 
+def _excerpt(value: Any, *, max_chars: int) -> str:
+    text = str(value or "").strip()
+    if max_chars <= 0:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars].rstrip() + "\n...[truncated]"
+
+
+def _markdown_code(text: str) -> str:
+    if not text:
+        return "_empty_"
+    fence = "```"
+    while fence in text:
+        fence += "`"
+    return f"{fence}\n{text}\n{fence}"
+
+
+def write_review_markdown(
+    packet: dict[str, Any],
+    *,
+    machine_recommendations: dict[str, dict[str, Any]],
+    path: Path,
+    excerpt_chars: int = DEFAULT_EXCERPT_CHARS,
+) -> None:
+    """Write a bounded human/oracle review packet.
+
+    The packet intentionally does not contain signoff decisions. It mirrors the
+    CSV row order and includes excerpts to make manual review less error-prone.
+    """
+
+    packet_rows = _packet_rows(packet)
+    lines = [
+        "# GLM-5.2 C-CRAB Accept-Control Review Packet",
+        "",
+        "This packet is a review aid only. It does not modify `signoff` fields,",
+        "does not claim operator approval, and does not make the accept controls decision-grade.",
+        "",
+        f"- Rows: `{len(packet_rows)}`",
+        f"- Source schema: `{packet.get('schema', '')}`",
+        f"- Excerpt chars per task/candidate: `{excerpt_chars}`",
+        "",
+        "| # | row_id | repo | PR | machine recommendation | concerns |",
+        "|---:|---|---|---:|---|---|",
+    ]
+    for idx, row in enumerate(packet_rows, start=1):
+        row_id = str(row["row_id"])
+        recommendation = machine_recommendations.get(row_id, {})
+        concerns = _format_concerns(recommendation.get("format_concerns")) or ""
+        lines.append(
+            "| "
+            f"{idx} | `{row_id}` | {row.get('repo') or ''} | {row.get('pull_number') or ''} | "
+            f"{recommendation.get('recommendation') or ''} | {concerns or 'none'} |"
+        )
+
+    for idx, row in enumerate(packet_rows, start=1):
+        row_id = str(row["row_id"])
+        recommendation = machine_recommendations.get(row_id, {})
+        concerns = _format_concerns(recommendation.get("format_concerns")) or "none"
+        lines.extend(
+            [
+                "",
+                f"## {idx}. `{row_id}`",
+                "",
+                f"- Instance: `{row.get('instance_id') or ''}`",
+                f"- Repo / PR: `{row.get('repo') or ''}` / `{row.get('pull_number') or ''}`",
+                f"- Candidate chars: `{row.get('candidate_chars') or 0}`",
+                f"- Candidate redacted long digit runs: `{bool(row.get('candidate_redacted_long_digit_runs'))}`",
+                f"- Machine recommendation: `{recommendation.get('recommendation') or ''}`",
+                f"- Machine reason: {recommendation.get('reason') or ''}",
+                f"- Format concerns: {concerns}",
+                "",
+                "**Task Excerpt**",
+                "",
+                _markdown_code(_excerpt(row.get("task"), max_chars=excerpt_chars)),
+                "",
+                "**Candidate Excerpt**",
+                "",
+                _markdown_code(_excerpt(row.get("candidate"), max_chars=excerpt_chars)),
+                "",
+                "**Reviewer Decision To Fill In CSV**",
+                "",
+                "- decision: `hard_accept` or `reject_or_ambiguous`",
+                "- reviewer: required",
+                "- reviewed_at: required UTC timestamp",
+                "- notes: required rationale",
+            ]
+        )
+
+    _write_text(path, "\n".join(lines) + "\n")
+
+
 def _load_review_csv(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -223,6 +316,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("audit_packet", type=Path)
     parser.add_argument("--machine-recommendations", type=Path)
     parser.add_argument("--review-csv-out", type=Path)
+    parser.add_argument("--review-md-out", type=Path)
+    parser.add_argument("--excerpt-chars", type=int, default=DEFAULT_EXCERPT_CHARS)
     parser.add_argument("--apply-review-csv", type=Path)
     parser.add_argument("--signed-packet-out", type=Path)
     parser.add_argument("--default-reviewer")
@@ -246,12 +341,21 @@ def main(argv: list[str] | None = None) -> int:
                 "machine recommendations are advisory and are never converted to signoff decisions."
             ),
         }
-        if args.review_csv_out:
+        if args.review_csv_out or args.review_md_out:
             recommendation_map = _load_recommendations(args.machine_recommendations)
-            review_rows = build_review_rows(packet, machine_recommendations=recommendation_map)
-            write_review_csv(review_rows, args.review_csv_out)
-            summary["review_csv_written"] = str(args.review_csv_out)
-            summary["review_row_n"] = len(review_rows)
+            if args.review_csv_out:
+                review_rows = build_review_rows(packet, machine_recommendations=recommendation_map)
+                write_review_csv(review_rows, args.review_csv_out)
+                summary["review_csv_written"] = str(args.review_csv_out)
+                summary["review_row_n"] = len(review_rows)
+            if args.review_md_out:
+                write_review_markdown(
+                    packet,
+                    machine_recommendations=recommendation_map,
+                    path=args.review_md_out,
+                    excerpt_chars=args.excerpt_chars,
+                )
+                summary["review_md_written"] = str(args.review_md_out)
         if args.apply_review_csv or args.signed_packet_out:
             if not args.apply_review_csv or not args.signed_packet_out:
                 raise ReviewSheetError("--apply-review-csv and --signed-packet-out must be provided together")
