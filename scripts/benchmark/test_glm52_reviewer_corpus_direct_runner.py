@@ -280,6 +280,40 @@ def test_collect_model_inventory_accepts_explicit_single_gguf(tmp_path):
     assert inventory["primary_shard"] == str(model.resolve())
 
 
+def test_indexer_top_k_auto_ignores_default_glm_model_dir_for_explicit_non_glm_path(tmp_path):
+    model = tmp_path / "qwen.gguf"
+    model.write_bytes(b"gguf")
+    args = runner.parse_args(
+        [
+            "--model-dir",
+            "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+            "--model-path",
+            str(model),
+            "--reviewer-id",
+            "qwen35_122b_iq2_reviewer",
+        ]
+    )
+
+    assert runner.should_apply_indexer_top_k_override(args) is False
+
+
+def test_indexer_top_k_auto_still_applies_to_explicit_glm_path(tmp_path):
+    model = tmp_path / "GLM-5.2-UD-IQ2_M.gguf"
+    model.write_bytes(b"gguf")
+    args = runner.parse_args(
+        [
+            "--model-dir",
+            str(tmp_path / "other"),
+            "--model-path",
+            str(model),
+            "--reviewer-id",
+            "glm_52_ud_iq2m",
+        ]
+    )
+
+    assert runner.should_apply_indexer_top_k_override(args) is True
+
+
 def test_build_plan_allows_generic_gpu_reviewer_model_path(tmp_path, monkeypatch):
     corpus = tmp_path / "rows.jsonl"
     model = tmp_path / "qwen.gguf"

@@ -849,7 +849,8 @@ def should_apply_indexer_top_k_override(args: argparse.Namespace) -> bool:
         return True
     if args.indexer_top_k_override == "off":
         return False
-    probe = " ".join([args.reviewer_id, str(args.model_dir), str(args.model_path or "")]).lower()
+    model_identity = args.model_path if args.model_path is not None else args.model_dir
+    probe = " ".join([args.reviewer_id, str(model_identity)]).lower()
     return "glm" in probe
 
 

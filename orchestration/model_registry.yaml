@@ -2391,6 +2391,28 @@ roles:
         showed no KFD PIDs. Interpretation: useful for CPU prefill-compute and
         hybrid-placement economics; decode is too slow for a primary CPU-only
         serving lane.
+      measured:
+      - protocol: p_rev1
+        instrument_era: p_rev1_attested
+        attestation: MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719
+        date: 2026-07-19
+        role: patch_reviewer
+        corpus: c-crab
+        slice: GC-shadow-repair4b.2c
+        n: 48
+        accept_controls: 24
+        hard_negatives: 24
+        reviewer_arm: qwen35_122b_iq2_reviewer
+        false_accept_rate: 0.125
+        false_reject_rate: 0.583
+        auc: 0.513
+        ece: 0.302
+        brier: 0.319
+        parse_failure_rate: 0.0
+        median_latency_seconds: 5.5
+        role_ready: false
+        verdict: lower_false_accept_but_false_reject_too_high
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-next-a3-qwen35-122b-iq2-ccrab-p-rev1-20260719T204845Z
       evidence:
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/metrics_summary.json
@@ -2404,6 +2426,7 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mixed_ngram_mtp_ab_local_20260719T013943Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/20260719T014801Z_qwen35_122b_iq2_cpu_prefill/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-next-a3-qwen35-122b-iq2-ccrab-p-rev1-20260719T204845Z/reviewer_calibration_report.md
     memory:
       residency: cold
       pinned: false
