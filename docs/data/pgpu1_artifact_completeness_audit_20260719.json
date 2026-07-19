@@ -1,0 +1,1262 @@
+{
+  "artifacts": [
+    {
+      "artifact": "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet",
+      "field_results": {
+        "binary_model_identity": {
+          "label": "binary, git, model, and backend identity",
+          "matched_patterns": [
+            "llama-server",
+            "llama\\.cpp-experimental",
+            "\\.gguf\\b",
+            "rev-parse",
+            "ld_library_path",
+            "rocm0"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cleanup_proof": {
+          "label": "process cleanup proof",
+          "matched_patterns": [
+            "\"dead\"\\s*:\\s*true",
+            "cleanup_process_blockers",
+            "\\bcleanup proof\\b"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cpu_interference_policy": {
+          "label": "explicit CPU-stack interference policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "process_blockers",
+            "cleanup_process_blockers"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "post_cleanup_vram_sample": {
+          "label": "post-cleanup VRAM/KFD sample",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "before_cleanup",
+            "\"dead\"\\s*:\\s*true"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rep_count": {
+          "label": "rep count sufficient for >=5% claim",
+          "matched_patterns": [
+            "\"rep\"\\s*:\\s*5\\b",
+            "\"n\"\\s*:\\s*5\\b",
+            "\\bn=5\\b"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "result_grammar": {
+          "label": "median/MAD throughput, prompt/decode split, and draft counters",
+          "matched_patterns": [
+            "\\bmedian\\b",
+            "\\bmad\\b",
+            "prompt_tps",
+            "decode_tps",
+            "draft_n_accepted"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "rocm_clocks_before_after": {
+          "label": "ROCm clocks before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_power_before_after": {
+          "label": "ROCm power before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_temp_before_after": {
+          "label": "ROCm temperature before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "summary_json": {
+          "label": "summary.json or explicit summary file",
+          "matched_patterns": [
+            "__file__:summary\\.json"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "vram_pid_util_samples": {
+          "label": "VRAM, utilization, and GPU PID samples",
+          "matched_patterns": [
+            "--showpidgpus\\b",
+            "--showmemuse\\b",
+            "--showuse\\b",
+            "\\bgpu memory allocated\\b",
+            "\\bvram",
+            "\\bgpu use"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "warmup_discard_policy": {
+          "label": "explicit warm-up/discard policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "\\bfresh-server\\b",
+            "\\brep(?:s|licate)?\\b"
+          ],
+          "required": true,
+          "state": "missing"
+        }
+      },
+      "files_scanned": [
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/commands.sh",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/frontdoor_pgpu1_candidate_report.md",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/guard_state.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/plan.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep1/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep1/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep1/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep1/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep2/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep2/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep2/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep2/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep3/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep3/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep3/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep3/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep4/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep4/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep4/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep4/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep5/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep5/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep5/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_cpu_no_spec_ctx8192_rep5/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep1/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep1/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep1/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep1/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep2/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep2/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep2/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep2/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep3/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep3/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep3/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep3/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep4/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep4/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep4/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep4/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep5/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep5/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep5/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_native_mtp_ctx8192_rep5/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep1/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep1/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep1/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep1/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep2/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep2/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep2/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep2/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep3/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep3/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep3/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep3/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep4/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep4/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep4/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep4/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep5/response.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep5/result.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep5/server.stderr",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/runs/frontdoor_gpu_resident_no_spec_ctx8192_rep5/server_argv.json",
+        "data/k35_stack_context_matrix/frontdoor_pgpu1_candidate_20260718Tquiet/summary.json"
+      ],
+      "files_scanned_n": 65,
+      "files_skipped_large": [],
+      "missing_required_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "warmup_discard_policy",
+        "cpu_interference_policy",
+        "post_cleanup_vram_sample"
+      ],
+      "near_miss_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "warmup_discard_policy",
+        "cpu_interference_policy",
+        "post_cleanup_vram_sample"
+      ],
+      "present_required_fields": [
+        "summary_json",
+        "vram_pid_util_samples",
+        "binary_model_identity",
+        "rep_count",
+        "result_grammar",
+        "cleanup_proof"
+      ],
+      "recommendation": "rerun_required",
+      "status": "incomplete",
+      "summary_status": "ok"
+    },
+    {
+      "artifact": "data/k35_stack_context_matrix/frontdoor_context_edges_20260718Tcodex/summary.json",
+      "field_results": {
+        "binary_model_identity": {
+          "label": "binary, git, model, and backend identity",
+          "matched_patterns": [
+            "llama-server",
+            "llama\\.cpp-experimental",
+            "\\.gguf\\b",
+            "rocm0"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cleanup_proof": {
+          "label": "process cleanup proof",
+          "matched_patterns": [
+            "\"dead\"\\s*:\\s*true",
+            "cleanup_process_blockers"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cpu_interference_policy": {
+          "label": "explicit CPU-stack interference policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "process_blockers",
+            "cleanup_process_blockers"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "post_cleanup_vram_sample": {
+          "label": "post-cleanup VRAM/KFD sample",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "before_cleanup",
+            "\"dead\"\\s*:\\s*true"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rep_count": {
+          "label": "rep count sufficient for >=5% claim",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "result_grammar": {
+          "label": "median/MAD throughput, prompt/decode split, and draft counters",
+          "matched_patterns": [
+            "\\bmedian\\b",
+            "\\bmad\\b",
+            "prompt_tps",
+            "decode_tps",
+            "draft_n_accepted"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "rocm_clocks_before_after": {
+          "label": "ROCm clocks before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_power_before_after": {
+          "label": "ROCm power before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_temp_before_after": {
+          "label": "ROCm temperature before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "summary_json": {
+          "label": "summary.json or explicit summary file",
+          "matched_patterns": [
+            "__file__:summary\\.json"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "vram_pid_util_samples": {
+          "label": "VRAM, utilization, and GPU PID samples",
+          "matched_patterns": [
+            "--showpidgpus\\b",
+            "--showmemuse\\b",
+            "--showuse\\b",
+            "\\bgpu memory allocated\\b",
+            "\\bvram",
+            "\\bgpu use"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "warmup_discard_policy": {
+          "label": "explicit warm-up/discard policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "\\brep(?:s|licate)?\\b"
+          ],
+          "required": true,
+          "state": "missing"
+        }
+      },
+      "files_scanned": [
+        "data/k35_stack_context_matrix/frontdoor_context_edges_20260718Tcodex/summary.json"
+      ],
+      "files_scanned_n": 1,
+      "files_skipped_large": [],
+      "missing_required_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "warmup_discard_policy",
+        "rep_count",
+        "cpu_interference_policy",
+        "post_cleanup_vram_sample"
+      ],
+      "near_miss_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "warmup_discard_policy",
+        "cpu_interference_policy",
+        "post_cleanup_vram_sample"
+      ],
+      "present_required_fields": [
+        "summary_json",
+        "vram_pid_util_samples",
+        "binary_model_identity",
+        "result_grammar",
+        "cleanup_proof"
+      ],
+      "recommendation": "rerun_required",
+      "status": "incomplete",
+      "summary_status": "ok"
+    },
+    {
+      "artifact": "/mnt/raid0/llm/tmp/k35-memory-backfill-20260717T1400Z/summary.json",
+      "field_results": {
+        "binary_model_identity": {
+          "label": "binary, git, model, and backend identity",
+          "matched_patterns": [
+            "llama-server",
+            "llama\\.cpp-experimental",
+            "\\.gguf\\b",
+            "rocm0"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cleanup_proof": {
+          "label": "process cleanup proof",
+          "matched_patterns": [
+            "\"dead\"\\s*:\\s*true",
+            "cleanup_process_blockers"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cpu_interference_policy": {
+          "label": "explicit CPU-stack interference policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "process_blockers",
+            "cleanup_process_blockers"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "post_cleanup_vram_sample": {
+          "label": "post-cleanup VRAM/KFD sample",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "before_cleanup",
+            "\"dead\"\\s*:\\s*true"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rep_count": {
+          "label": "rep count sufficient for >=5% claim",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "result_grammar": {
+          "label": "median/MAD throughput, prompt/decode split, and draft counters",
+          "matched_patterns": [
+            "prompt_tps",
+            "decode_tps",
+            "draft_n_accepted"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "rocm_clocks_before_after": {
+          "label": "ROCm clocks before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_power_before_after": {
+          "label": "ROCm power before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_temp_before_after": {
+          "label": "ROCm temperature before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "summary_json": {
+          "label": "summary.json or explicit summary file",
+          "matched_patterns": [
+            "__file__:summary\\.json"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "vram_pid_util_samples": {
+          "label": "VRAM, utilization, and GPU PID samples",
+          "matched_patterns": [
+            "--showpidgpus\\b",
+            "--showmemuse\\b",
+            "--showuse\\b",
+            "\\bgpu memory allocated\\b",
+            "\\bvram",
+            "\\bgpu use"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "warmup_discard_policy": {
+          "label": "explicit warm-up/discard policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        }
+      },
+      "files_scanned": [
+        "/mnt/raid0/llm/tmp/k35-memory-backfill-20260717T1400Z/summary.json"
+      ],
+      "files_scanned_n": 1,
+      "files_skipped_large": [],
+      "missing_required_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "warmup_discard_policy",
+        "rep_count",
+        "cpu_interference_policy",
+        "post_cleanup_vram_sample"
+      ],
+      "near_miss_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "cpu_interference_policy",
+        "post_cleanup_vram_sample"
+      ],
+      "present_required_fields": [
+        "summary_json",
+        "vram_pid_util_samples",
+        "binary_model_identity",
+        "result_grammar",
+        "cleanup_proof"
+      ],
+      "recommendation": "rerun_required",
+      "status": "incomplete",
+      "summary_status": "ok"
+    },
+    {
+      "artifact": "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/summary.json",
+      "field_results": {
+        "binary_model_identity": {
+          "label": "binary, git, model, and backend identity",
+          "matched_patterns": [
+            "llama-server",
+            "llama\\.cpp-experimental",
+            "\\.gguf\\b",
+            "rocm0"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cleanup_proof": {
+          "label": "process cleanup proof",
+          "matched_patterns": [
+            "\"dead\"\\s*:\\s*true",
+            "cleanup_process_blockers"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cpu_interference_policy": {
+          "label": "explicit CPU-stack interference policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "process_blockers",
+            "cleanup_process_blockers"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "post_cleanup_vram_sample": {
+          "label": "post-cleanup VRAM/KFD sample",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "\"dead\"\\s*:\\s*true"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rep_count": {
+          "label": "rep count sufficient for >=5% claim",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "result_grammar": {
+          "label": "median/MAD throughput, prompt/decode split, and draft counters",
+          "matched_patterns": [
+            "prompt_tps",
+            "decode_tps",
+            "draft_n_accepted"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "rocm_clocks_before_after": {
+          "label": "ROCm clocks before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_power_before_after": {
+          "label": "ROCm power before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_temp_before_after": {
+          "label": "ROCm temperature before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "summary_json": {
+          "label": "summary.json or explicit summary file",
+          "matched_patterns": [
+            "__file__:summary\\.json"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "vram_pid_util_samples": {
+          "label": "VRAM, utilization, and GPU PID samples",
+          "matched_patterns": [
+            "--showpidgpus\\b",
+            "--showmemuse\\b",
+            "--showuse\\b",
+            "\\bgpu memory allocated\\b",
+            "\\bvram",
+            "\\bgpu use"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "warmup_discard_policy": {
+          "label": "explicit warm-up/discard policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "\\brep(?:s|licate)?\\b"
+          ],
+          "required": true,
+          "state": "missing"
+        }
+      },
+      "files_scanned": [
+        "/mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/summary.json"
+      ],
+      "files_scanned_n": 1,
+      "files_skipped_large": [],
+      "missing_required_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "warmup_discard_policy",
+        "rep_count",
+        "cpu_interference_policy",
+        "post_cleanup_vram_sample"
+      ],
+      "near_miss_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "warmup_discard_policy",
+        "cpu_interference_policy",
+        "post_cleanup_vram_sample"
+      ],
+      "present_required_fields": [
+        "summary_json",
+        "vram_pid_util_samples",
+        "binary_model_identity",
+        "result_grammar",
+        "cleanup_proof"
+      ],
+      "recommendation": "rerun_required",
+      "status": "incomplete",
+      "summary_status": "ok"
+    },
+    {
+      "artifact": "/mnt/raid0/llm/tmp/k35-frontdoor-operational-1024-20260717T201842Z/summary.json",
+      "field_results": {
+        "binary_model_identity": {
+          "label": "binary, git, model, and backend identity",
+          "matched_patterns": [
+            "llama-server",
+            "llama\\.cpp-experimental",
+            "\\.gguf\\b",
+            "rocm0"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cleanup_proof": {
+          "label": "process cleanup proof",
+          "matched_patterns": [
+            "\"dead\"\\s*:\\s*true",
+            "cleanup_process_blockers"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cpu_interference_policy": {
+          "label": "explicit CPU-stack interference policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "process_blockers",
+            "cleanup_process_blockers"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "post_cleanup_vram_sample": {
+          "label": "post-cleanup VRAM/KFD sample",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "before_cleanup",
+            "\"dead\"\\s*:\\s*true"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rep_count": {
+          "label": "rep count sufficient for >=5% claim",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "result_grammar": {
+          "label": "median/MAD throughput, prompt/decode split, and draft counters",
+          "matched_patterns": [
+            "prompt_tps",
+            "decode_tps",
+            "draft_n_accepted"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "rocm_clocks_before_after": {
+          "label": "ROCm clocks before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_power_before_after": {
+          "label": "ROCm power before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_temp_before_after": {
+          "label": "ROCm temperature before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "rocm-smi",
+            "rocm system management interface"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "summary_json": {
+          "label": "summary.json or explicit summary file",
+          "matched_patterns": [
+            "__file__:summary\\.json"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "vram_pid_util_samples": {
+          "label": "VRAM, utilization, and GPU PID samples",
+          "matched_patterns": [
+            "--showpidgpus\\b",
+            "--showmemuse\\b",
+            "--showuse\\b",
+            "\\bgpu memory allocated\\b",
+            "\\bvram",
+            "\\bgpu use"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "warmup_discard_policy": {
+          "label": "explicit warm-up/discard policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        }
+      },
+      "files_scanned": [
+        "/mnt/raid0/llm/tmp/k35-frontdoor-operational-1024-20260717T201842Z/summary.json"
+      ],
+      "files_scanned_n": 1,
+      "files_skipped_large": [],
+      "missing_required_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "warmup_discard_policy",
+        "rep_count",
+        "cpu_interference_policy",
+        "post_cleanup_vram_sample"
+      ],
+      "near_miss_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "cpu_interference_policy",
+        "post_cleanup_vram_sample"
+      ],
+      "present_required_fields": [
+        "summary_json",
+        "vram_pid_util_samples",
+        "binary_model_identity",
+        "result_grammar",
+        "cleanup_proof"
+      ],
+      "recommendation": "rerun_required",
+      "status": "incomplete",
+      "summary_status": "ok"
+    },
+    {
+      "artifact": "data/gpu-mi210/axa2_32k_prefill_qwen35_122b_v1_q4kv_b1024_ub256_20260719T071051Z/summary.json",
+      "field_results": {
+        "binary_model_identity": {
+          "label": "binary, git, model, and backend identity",
+          "matched_patterns": [
+            "\\.gguf\\b",
+            "rocm0"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cleanup_proof": {
+          "label": "process cleanup proof",
+          "matched_patterns": [
+            "independent_cleanup",
+            "no_exact_llama_processes"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cpu_interference_policy": {
+          "label": "explicit CPU-stack interference policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "post_cleanup_vram_sample": {
+          "label": "post-cleanup VRAM/KFD sample",
+          "matched_patterns": [
+            "post_rocm_smi_no_kfd"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "rep_count": {
+          "label": "rep count sufficient for >=5% claim",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "result_grammar": {
+          "label": "median/MAD throughput, prompt/decode split, and draft counters",
+          "matched_patterns": [
+            "avg_ts",
+            "stddev_ts",
+            "samples_ts"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "rocm_clocks_before_after": {
+          "label": "ROCm clocks before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_power_before_after": {
+          "label": "ROCm power before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_temp_before_after": {
+          "label": "ROCm temperature before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "summary_json": {
+          "label": "summary.json or explicit summary file",
+          "matched_patterns": [
+            "__file__:summary\\.json"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "vram_pid_util_samples": {
+          "label": "VRAM, utilization, and GPU PID samples",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "warmup_discard_policy": {
+          "label": "explicit warm-up/discard policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        }
+      },
+      "files_scanned": [
+        "data/gpu-mi210/axa2_32k_prefill_qwen35_122b_v1_q4kv_b1024_ub256_20260719T071051Z/summary.json"
+      ],
+      "files_scanned_n": 1,
+      "files_skipped_large": [],
+      "missing_required_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "vram_pid_util_samples",
+        "warmup_discard_policy",
+        "rep_count",
+        "cpu_interference_policy"
+      ],
+      "near_miss_fields": [],
+      "present_required_fields": [
+        "summary_json",
+        "binary_model_identity",
+        "result_grammar",
+        "cleanup_proof",
+        "post_cleanup_vram_sample"
+      ],
+      "recommendation": "rerun_required",
+      "status": "incomplete",
+      "summary_status": "summary_present"
+    },
+    {
+      "artifact": "data/gpu-mi210/axa2_fa_all_quants_mixed_kv_validation_20260719T073906Z/summary.json",
+      "field_results": {
+        "binary_model_identity": {
+          "label": "binary, git, model, and backend identity",
+          "matched_patterns": [
+            "\\.gguf\\b",
+            "rocm0"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cleanup_proof": {
+          "label": "process cleanup proof",
+          "matched_patterns": [
+            "independent_cleanup",
+            "no_exact_llama_processes"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cpu_interference_policy": {
+          "label": "explicit CPU-stack interference policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "post_cleanup_vram_sample": {
+          "label": "post-cleanup VRAM/KFD sample",
+          "matched_patterns": [
+            "post_rocm_smi_no_kfd"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "rep_count": {
+          "label": "rep count sufficient for >=5% claim",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "result_grammar": {
+          "label": "median/MAD throughput, prompt/decode split, and draft counters",
+          "matched_patterns": [
+            "avg_ts",
+            "stddev_ts",
+            "samples_ts"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "rocm_clocks_before_after": {
+          "label": "ROCm clocks before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_power_before_after": {
+          "label": "ROCm power before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_temp_before_after": {
+          "label": "ROCm temperature before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "summary_json": {
+          "label": "summary.json or explicit summary file",
+          "matched_patterns": [
+            "__file__:summary\\.json"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "vram_pid_util_samples": {
+          "label": "VRAM, utilization, and GPU PID samples",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "warmup_discard_policy": {
+          "label": "explicit warm-up/discard policy",
+          "matched_patterns": [
+            "\\bwarm[-_ ]?up\\b"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        }
+      },
+      "files_scanned": [
+        "data/gpu-mi210/axa2_fa_all_quants_mixed_kv_validation_20260719T073906Z/summary.json"
+      ],
+      "files_scanned_n": 1,
+      "files_skipped_large": [],
+      "missing_required_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "vram_pid_util_samples",
+        "rep_count",
+        "cpu_interference_policy"
+      ],
+      "near_miss_fields": [],
+      "present_required_fields": [
+        "summary_json",
+        "binary_model_identity",
+        "warmup_discard_policy",
+        "result_grammar",
+        "cleanup_proof",
+        "post_cleanup_vram_sample"
+      ],
+      "recommendation": "rerun_required",
+      "status": "incomplete",
+      "summary_status": "summary_present"
+    },
+    {
+      "artifact": "data/gpu-mi210/axa2_current_build_no_warmup_homogeneous_controls_20260719T074757Z/summary.json",
+      "field_results": {
+        "binary_model_identity": {
+          "label": "binary, git, model, and backend identity",
+          "matched_patterns": [
+            "\\.gguf\\b",
+            "rocm0"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cleanup_proof": {
+          "label": "process cleanup proof",
+          "matched_patterns": [
+            "independent_cleanup",
+            "no_exact_llama_processes"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "cpu_interference_policy": {
+          "label": "explicit CPU-stack interference policy",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "post_cleanup_vram_sample": {
+          "label": "post-cleanup VRAM/KFD sample",
+          "matched_patterns": [
+            "post_rocm_smi_no_kfd"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "rep_count": {
+          "label": "rep count sufficient for >=5% claim",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "result_grammar": {
+          "label": "median/MAD throughput, prompt/decode split, and draft counters",
+          "matched_patterns": [
+            "avg_ts",
+            "stddev_ts",
+            "samples_ts"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "rocm_clocks_before_after": {
+          "label": "ROCm clocks before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_power_before_after": {
+          "label": "ROCm power before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "rocm_temp_before_after": {
+          "label": "ROCm temperature before+after",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "summary_json": {
+          "label": "summary.json or explicit summary file",
+          "matched_patterns": [
+            "__file__:summary\\.json"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        },
+        "vram_pid_util_samples": {
+          "label": "VRAM, utilization, and GPU PID samples",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
+        },
+        "warmup_discard_policy": {
+          "label": "explicit warm-up/discard policy",
+          "matched_patterns": [
+            "\\bwarm[-_ ]?up\\b"
+          ],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "present"
+        }
+      },
+      "files_scanned": [
+        "data/gpu-mi210/axa2_current_build_no_warmup_homogeneous_controls_20260719T074757Z/summary.json"
+      ],
+      "files_scanned_n": 1,
+      "files_skipped_large": [],
+      "missing_required_fields": [
+        "rocm_clocks_before_after",
+        "rocm_power_before_after",
+        "rocm_temp_before_after",
+        "vram_pid_util_samples",
+        "rep_count",
+        "cpu_interference_policy"
+      ],
+      "near_miss_fields": [],
+      "present_required_fields": [
+        "summary_json",
+        "binary_model_identity",
+        "warmup_discard_policy",
+        "result_grammar",
+        "cleanup_proof",
+        "post_cleanup_vram_sample"
+      ],
+      "recommendation": "rerun_required",
+      "status": "incomplete",
+      "summary_status": "summary_present"
+    }
+  ],
+  "created_at": "2026-07-19T09:33:07.707266+00:00",
+  "policy": "draft P-GPU-1 mandatory-field audit",
+  "recommendation": "rerun_required_for_incomplete_artifacts",
+  "schema": "epyc.pgpu1_artifact_completeness_audit.v1",
+  "scope": "artifact-only; no inference, server, benchmark, build, or ROCm command executed",
+  "status": "incomplete"
+}
