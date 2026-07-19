@@ -1,0 +1,417 @@
+{
+  "cleanup": {
+    "dead": true,
+    "ps_after": {
+      "argv": [
+        "ps",
+        "-p",
+        "74153",
+        "-o",
+        "pid=,comm=,args="
+      ],
+      "returncode": 1,
+      "stderr": "",
+      "stdout": ""
+    },
+    "returncode": 0,
+    "rocm_showpids_after_lane": {
+      "argv": [
+        "rocm-smi",
+        "--showpids"
+      ],
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\n\n============================ ROCm System Management Interface ============================\n===================================== KFD Processes ======================================\nNo KFD PIDs currently running\n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+    },
+    "sigterm": "exited"
+  },
+  "command": "env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin GGML_IQK=1 ROCR_VISIBLE_DEVICES=0 HIP_VISIBLE_DEVICES=0 OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19421 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off",
+  "health": "{\"status\":\"ok\"}",
+  "lane": "vision_escalation_candidate_minicpm_o45_mi210",
+  "long_decode": {
+    "completion_tokens": 506,
+    "content_preview": "This image presents a line chart titled \"Duration of compulsory education, 2005 to 2014,\" which illustrates the number of years that children are legally obliged to attend school across four different countries over a decade. The chart is sourced from the World Bank and published by \"Our World in Data,\" as indicated by logos in the top right and bottom left corners, respectively, with a \"CC BY\" license noted at the bottom right.\n\nThe vertical axis (y-axis) represents the duration of compulsory e",
+    "decode_tps": 109.17746646137276,
+    "elapsed_s": 4.979603299172595,
+    "fixture_id": "chart_tanzania",
+    "min_completion_tokens_required": 128,
+    "pass_long_enough": true,
+    "prompt": "Describe this image in detail for an accessibility audit. Include the visible chart or document structure, all salient labels and values you can read, comparisons between entries, and any uncertainty. Write at least 220 words and do not stop after a short answer.",
+    "prompt_tokens": 263,
+    "prompt_tps": 984.248285050279,
+    "word_count": 382
+  },
+  "memory_samples": [
+    {
+      "phase": "after_health",
+      "pid": 74153,
+      "ps": {
+        "argv": [
+          "ps",
+          "-p",
+          "74153",
+          "-o",
+          "pid=,comm=,rss=,vsz=,args="
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "  74153 llama-server    1002952 18449312 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19421 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+      },
+      "rocm": {
+        "argv": [
+          "rocm-smi",
+          "--showpidgpus",
+          "--showmemuse",
+          "--showuse"
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 489033277\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 11\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2498894031\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 74153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+      },
+      "smaps_rollup": {
+        "AnonHugePages_kib": 49152,
+        "Anonymous_kib": 477340,
+        "FilePmdMapped_kib": 0,
+        "KSM_kib": 0,
+        "LazyFree_kib": 0,
+        "Locked_kib": 0,
+        "Private_Clean_kib": 762596,
+        "Private_Dirty_kib": 235480,
+        "Private_Hugetlb_kib": 0,
+        "Pss_Anon_kib": 477340,
+        "Pss_Dirty_kib": 235480,
+        "Pss_File_kib": 521336,
+        "Pss_Shmem_kib": 0,
+        "Pss_kib": 998676,
+        "Referenced_kib": 692212,
+        "Rss_kib": 1002952,
+        "Shared_Clean_kib": 4876,
+        "Shared_Dirty_kib": 0,
+        "Shared_Hugetlb_kib": 0,
+        "ShmemPmdMapped_kib": 0,
+        "SwapPss_kib": 0,
+        "Swap_kib": 0
+      }
+    },
+    {
+      "phase": "after_quality_ocr_digit_7500",
+      "pid": 74153,
+      "ps": {
+        "argv": [
+          "ps",
+          "-p",
+          "74153",
+          "-o",
+          "pid=,comm=,rss=,vsz=,args="
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "  74153 llama-server    1050820 18704920 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19421 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+      },
+      "rocm": {
+        "argv": [
+          "rocm-smi",
+          "--showpidgpus",
+          "--showmemuse",
+          "--showuse"
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 489047727\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 11\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2498896879\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 74153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+      },
+      "smaps_rollup": {
+        "AnonHugePages_kib": 51200,
+        "Anonymous_kib": 520524,
+        "FilePmdMapped_kib": 0,
+        "KSM_kib": 0,
+        "LazyFree_kib": 0,
+        "Locked_kib": 0,
+        "Private_Clean_kib": 767280,
+        "Private_Dirty_kib": 278664,
+        "Private_Hugetlb_kib": 0,
+        "Pss_Anon_kib": 520524,
+        "Pss_Dirty_kib": 278664,
+        "Pss_File_kib": 526020,
+        "Pss_Shmem_kib": 0,
+        "Pss_kib": 1046544,
+        "Referenced_kib": 740080,
+        "Rss_kib": 1050820,
+        "Shared_Clean_kib": 4876,
+        "Shared_Dirty_kib": 0,
+        "Shared_Hugetlb_kib": 0,
+        "ShmemPmdMapped_kib": 0,
+        "SwapPss_kib": 0,
+        "Swap_kib": 0
+      }
+    },
+    {
+      "phase": "after_quality_receipt_total_payable",
+      "pid": 74153,
+      "ps": {
+        "argv": [
+          "ps",
+          "-p",
+          "74153",
+          "-o",
+          "pid=,comm=,rss=,vsz=,args="
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "  74153 llama-server    1107720 18776508 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19421 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+      },
+      "rocm": {
+        "argv": [
+          "rocm-smi",
+          "--showpidgpus",
+          "--showmemuse",
+          "--showuse"
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 489087782\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 11\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2498904234\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 74153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+      },
+      "smaps_rollup": {
+        "AnonHugePages_kib": 71680,
+        "Anonymous_kib": 576656,
+        "FilePmdMapped_kib": 0,
+        "KSM_kib": 0,
+        "LazyFree_kib": 0,
+        "Locked_kib": 0,
+        "Private_Clean_kib": 768048,
+        "Private_Dirty_kib": 334796,
+        "Private_Hugetlb_kib": 0,
+        "Pss_Anon_kib": 576656,
+        "Pss_Dirty_kib": 334796,
+        "Pss_File_kib": 526788,
+        "Pss_Shmem_kib": 0,
+        "Pss_kib": 1103444,
+        "Referenced_kib": 796980,
+        "Rss_kib": 1107720,
+        "Shared_Clean_kib": 4876,
+        "Shared_Dirty_kib": 0,
+        "Shared_Hugetlb_kib": 0,
+        "ShmemPmdMapped_kib": 0,
+        "SwapPss_kib": 0,
+        "Swap_kib": 0
+      }
+    },
+    {
+      "phase": "after_quality_chart_tanzania",
+      "pid": 74153,
+      "ps": {
+        "argv": [
+          "ps",
+          "-p",
+          "74153",
+          "-o",
+          "pid=,comm=,rss=,vsz=,args="
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "  74153 llama-server    1151480 18892260 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19421 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+      },
+      "rocm": {
+        "argv": [
+          "rocm-smi",
+          "--showpidgpus",
+          "--showmemuse",
+          "--showuse"
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 489116395\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 11\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2498909693\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 74153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+      },
+      "smaps_rollup": {
+        "AnonHugePages_kib": 114688,
+        "Anonymous_kib": 620416,
+        "FilePmdMapped_kib": 0,
+        "KSM_kib": 0,
+        "LazyFree_kib": 0,
+        "Locked_kib": 0,
+        "Private_Clean_kib": 768048,
+        "Private_Dirty_kib": 378556,
+        "Private_Hugetlb_kib": 0,
+        "Pss_Anon_kib": 620416,
+        "Pss_Dirty_kib": 378556,
+        "Pss_File_kib": 526788,
+        "Pss_Shmem_kib": 0,
+        "Pss_kib": 1147204,
+        "Referenced_kib": 840740,
+        "Rss_kib": 1151480,
+        "Shared_Clean_kib": 4876,
+        "Shared_Dirty_kib": 0,
+        "Shared_Hugetlb_kib": 0,
+        "ShmemPmdMapped_kib": 0,
+        "SwapPss_kib": 0,
+        "Swap_kib": 0
+      }
+    },
+    {
+      "phase": "after_quality_receipt_doc_number",
+      "pid": 74153,
+      "ps": {
+        "argv": [
+          "ps",
+          "-p",
+          "74153",
+          "-o",
+          "pid=,comm=,rss=,vsz=,args="
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "  74153 llama-server    1261048 19014584 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19421 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+      },
+      "rocm": {
+        "argv": [
+          "rocm-smi",
+          "--showpidgpus",
+          "--showmemuse",
+          "--showuse"
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 489196831\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 11\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2498925009\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 74153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+      },
+      "smaps_rollup": {
+        "AnonHugePages_kib": 163840,
+        "Anonymous_kib": 729984,
+        "FilePmdMapped_kib": 0,
+        "KSM_kib": 0,
+        "LazyFree_kib": 0,
+        "Locked_kib": 0,
+        "Private_Clean_kib": 768048,
+        "Private_Dirty_kib": 488124,
+        "Private_Hugetlb_kib": 0,
+        "Pss_Anon_kib": 729984,
+        "Pss_Dirty_kib": 488124,
+        "Pss_File_kib": 526788,
+        "Pss_Shmem_kib": 0,
+        "Pss_kib": 1256772,
+        "Referenced_kib": 950308,
+        "Rss_kib": 1261048,
+        "Shared_Clean_kib": 4876,
+        "Shared_Dirty_kib": 0,
+        "Shared_Hugetlb_kib": 0,
+        "ShmemPmdMapped_kib": 0,
+        "SwapPss_kib": 0,
+        "Swap_kib": 0
+      }
+    },
+    {
+      "phase": "after_long_decode",
+      "pid": 74153,
+      "ps": {
+        "argv": [
+          "ps",
+          "-p",
+          "74153",
+          "-o",
+          "pid=,comm=,rss=,vsz=,args="
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "  74153 llama-server    1338808 19192764 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf --host 127.0.0.1 --port 19421 -np 1 -c 8192 -t 24 --flash-attn on --device ROCm0 --reasoning off\n"
+      },
+      "rocm": {
+        "argv": [
+          "rocm-smi",
+          "--showpidgpus",
+          "--showmemuse",
+          "--showuse"
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "\n\n============================ ROCm System Management Interface ============================\n=================================== % time GPU is busy ===================================\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GFX Activity: 489677187\n==========================================================================================\n=================================== Current Memory Use ===================================\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 11\nGPU[0]\t\t: GPU Memory Read/Write Activity (%): 0\nGPU[0]\t\t: Memory Activity: 2499077149\nGPU[0]\t\t: Avg. Memory Bandwidth: 0\n==========================================================================================\n================================== GPUs Indexed by PID ===================================\nPID 74153 is using 1 DRM device(s):\n0 \n==========================================================================================\n================================== End of ROCm SMI Log ===================================\n"
+      },
+      "smaps_rollup": {
+        "AnonHugePages_kib": 247808,
+        "Anonymous_kib": 807744,
+        "FilePmdMapped_kib": 0,
+        "KSM_kib": 0,
+        "LazyFree_kib": 0,
+        "Locked_kib": 0,
+        "Private_Clean_kib": 768048,
+        "Private_Dirty_kib": 565884,
+        "Private_Hugetlb_kib": 0,
+        "Pss_Anon_kib": 807744,
+        "Pss_Dirty_kib": 565884,
+        "Pss_File_kib": 526741,
+        "Pss_Shmem_kib": 0,
+        "Pss_kib": 1334485,
+        "Referenced_kib": 1028068,
+        "Rss_kib": 1338808,
+        "Shared_Clean_kib": 4876,
+        "Shared_Dirty_kib": 0,
+        "Shared_Hugetlb_kib": 0,
+        "ShmemPmdMapped_kib": 0,
+        "SwapPss_kib": 0,
+        "Swap_kib": 0
+      }
+    }
+  ],
+  "memory_summary": {
+    "max_rss_gib": 1.2767868041992188,
+    "max_vram_pct": 11
+  },
+  "pid": 74153,
+  "quality": [
+    {
+      "completion_tokens": 5,
+      "content_preview": "7500",
+      "decode_tps": 120.64472541260494,
+      "elapsed_s": 0.17093595792539418,
+      "expected": [
+        "7500"
+      ],
+      "fixture_id": "ocr_digit_7500",
+      "missing": [],
+      "pass": true,
+      "prompt_tokens": 91,
+      "prompt_tps": 746.1218064346857
+    },
+    {
+      "completion_tokens": 6,
+      "content_preview": "43.36",
+      "decode_tps": 120.12492992712421,
+      "elapsed_s": 0.514324088813737,
+      "expected": [
+        "43.36"
+      ],
+      "fixture_id": "receipt_total_payable",
+      "missing": [],
+      "pass": true,
+      "prompt_tokens": 294,
+      "prompt_tps": 816.8481884863302
+    },
+    {
+      "completion_tokens": 4,
+      "content_preview": "Tanzania",
+      "decode_tps": 126.3862997251098,
+      "elapsed_s": 0.35797588201239705,
+      "expected": [
+        "tanzania"
+      ],
+      "fixture_id": "chart_tanzania",
+      "missing": [],
+      "pass": true,
+      "prompt_tokens": 230,
+      "prompt_tps": 885.6986622099337
+    },
+    {
+      "completion_tokens": 10,
+      "content_preview": "CS00012465",
+      "decode_tps": 115.02053116481292,
+      "elapsed_s": 1.039020183030516,
+      "expected": [
+        "cs00012465"
+      ],
+      "fixture_id": "receipt_doc_number",
+      "missing": [],
+      "pass": true,
+      "prompt_tokens": 626,
+      "prompt_tps": 861.1214662725134
+    }
+  ],
+  "role": "vision_escalation_candidate",
+  "status": "ok"
+}

@@ -3874,6 +3874,13 @@ roles:
       speedup: 1.3x
       vl_score: 11/12 (92%)  # rescored 2026-03-04 (was 29/36=81%)
       benchmark_date: 2026-03-04
+      k35_longdecode_observation: >
+        2026-07-19 current experimental-v7 `ed4091266` MI210 worker-vs-escalation
+        comparison kept Qwen2.5-VL as the faster safe lane: fixed fixtures
+        passed `4/4`, quality decode averaged `133.29 t/s`, and the chart
+        long-decode sample generated `437` completion tokens at `118.50 t/s`
+        with max `11%` VRAM. Artifact:
+        `/mnt/raid0/llm/epyc-inference-research/data/k35_vision_matrix/k35_worker_vs_escalation_mi210_longdecode_20260719T004016Z/summary.json`.
     memory:
       residency: hot
       pinned: false
@@ -3917,6 +3924,13 @@ roles:
       vl_score: {pct: 100.0, raw: "4/4 K35 fixed fixtures"}
       benchmark_date: 2026-07-17
       evidence: /mnt/raid0/llm/tmp/k35-vision-matrix-20260717T1500Z/summary.json
+      k35_longdecode_observation: >
+        2026-07-19 current experimental-v7 `ed4091266` comparison against the
+        MiniCPM-o candidate found the temporary Qwen2.5-VL alias still faster
+        on MI210 (`4/4`, quality decode mean `133.29 t/s`, long decode `118.50
+        t/s`). MiniCPM-o also passed the same four fixtures but decoded the
+        long sample at `109.18 t/s`; keep this alias until the controlled
+        MiniCPM-o live flip and rollback check are executed.
     memory:
       residency: hot
       pinned: false
@@ -7530,6 +7544,7 @@ roles:
       long_mi210_observation: "2026-07-16 longer MI210 server run generated 1472 tokens at 107.20 t/s after an 84-token prompt."
       k35_vision_observation: "2026-07-17 K35 fixed OCR/chart candidate gate: default reasoning mode routed correct answers into reasoning_content and failed message.content scoring (`0/4`) on CPU and MI210. With --reasoning off, CPU passed `4/4` at 11.98-14.13 t/s decode, and MI210 passed `4/4` at 110.81-122.18 t/s decode with 11% VRAM and ~0.96-1.20 GiB host RSS. This is the first quality-clean fast MiniCPM-o vision candidate."
       k35_coresidency_observation: "2026-07-17 targeted service-policy smoke passed at /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-coresidency-20260717T191849Z/: MiniCPM-o reasoning-off MI210 server co-resided with the fastest validated MI210 frontdoor Qwen3.6 lane at 66% VRAM, both handled concurrent requests, MiniCPM-o answered the chart fixture as Tanzania, frontdoor decoded 512 text tokens at 99.97 t/s, and post-cleanup verification showed no llama-server/AutoPilot process plus 0% VRAM/no KFD PIDs. Follow-up service-tax probe at /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/ showed frontdoor alone 101.68/101.84 t/s, frontdoor with MiniCPM resident but idle 101.89/101.86 t/s, and active concurrent MiniCPM vision frontdoor 80.16/80.34 t/s while MiniCPM decoded 90.49/90.23 t/s. Broader service matrix at /mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/summary.json then tested all four K35 fixtures at 2K/8K: frontdoor alone averaged 96.33 t/s, frontdoor with MiniCPM resident but idle averaged 96.48 t/s, active overlap averaged 94.77 t/s frontdoor and 85.22 t/s MiniCPM, and all 8/8 active fixture/context pairs passed. K35.13 recorded the 2026-07-18 activation policy: MiniCPM-o should become the next MI210 vision_escalation lane with --reasoning off, resident-loaded/on-demand scheduling, a one-active-vision-request capacity cap while frontdoor is resident, and Qwen2.5-VL rollback verification during the controlled live-stack flip."
+      k35_vs_worker_longdecode_observation: "2026-07-19 bounded MI210 comparison against the current Qwen2.5-VL safety alias: MiniCPM-o reasoning-off passed the same four OCR/chart fixtures (`4/4`) with quality decode mean `120.54 t/s` and generated a 506-token chart-description sample at `109.18 t/s`; Qwen2.5-VL also passed `4/4` and was faster on this run (`133.29 t/s` quality mean, `118.50 t/s` long decode). This keeps MiniCPM-o candidate evidence positive but does not by itself flip the live `vision_escalation` alias."
       evidence:
       - /mnt/raid0/llm/tmp/cpu-inference-churn-20260716b/minicpm_q4_cpu_text_v7/minicpm_q4_cpu_text_v7.stdout
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716-local-minicpm_q4_mi210_text_v7/minicpm_q4_mi210_text_v7.stdout
@@ -7542,6 +7557,7 @@ roles:
       - /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/summary.json
       - /mnt/raid0/llm/tmp/k35-minicpm-frontdoor-service-tax-20260717T192427Z/post_cleanup_verification.txt
       - /mnt/raid0/llm/tmp/k35-minicpm-service-matrix-20260717T2045Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/k35_vision_matrix/k35_worker_vs_escalation_mi210_longdecode_20260719T004016Z/summary.json
     memory:
       residency: cold
       pinned: false
