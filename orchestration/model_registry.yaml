@@ -6323,8 +6323,8 @@ roles:
     - long_context
     - reasoning
     acceleration:
-      type: native_mtp_pending
-      notes: "DSA cache/runtime wiring is verified on current-source experimental-v7 3dee86a5a, and stale-binary true >64K CPU prompt runnability is recorded. Current-source ngram-mod produced zero drafts/accepted tokens on the 16K long-output probe, so native GLM-MTP/NEXTN or real sparse final attention remains the plausible acceleration path."
+      type: native_mtp_repair_observation
+      notes: "DSA cache/runtime wiring is verified on current-source experimental-v7 3dee86a5a, and stale-binary true >64K CPU prompt runnability is recorded. Current-source ngram-mod produced zero drafts/accepted tokens on the 16K long-output probe. A repaired single-NextN draft-mtp path produced alpha=0.933 and 5.33 t/s decode versus 2.49 t/s no-spec on the matched long-output retry; this is acceleration evidence only and does not reverse the P-REV-1 reviewer-admission failure."
     constraints:
       forbid:
       - production_stack_registration
