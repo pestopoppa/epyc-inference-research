@@ -6465,7 +6465,8 @@ roles:
         data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/
         and data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/.
         This is positive judge-native pairwise preference evidence, not patch-review
-        admission; SWE-bench-Verified direct oracle remains open.
+        admission. SWE-bench-Verified accept controls later passed 22/24 with
+        FR 8.3%, but that slice has no hard negatives.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
