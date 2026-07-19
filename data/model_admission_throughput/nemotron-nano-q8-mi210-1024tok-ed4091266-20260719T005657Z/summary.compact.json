@@ -1,0 +1,97 @@
+{
+  "artifact": "data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z",
+  "created_at": "2026-07-19T00:57:17.504536+00:00",
+  "model_path": "/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf",
+  "experimental_v7_head": "data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/llama_cpp_experimental_head.txt",
+  "classification": "quality-only protocol matrix; throughput is observational unless the host is otherwise quiet",
+  "quality": {
+    "passed": 5,
+    "best_protocol_source": [
+      5,
+      "deepseek",
+      "content_or_reasoning"
+    ],
+    "prompt_policy": {
+      "no_system_prompt": true,
+      "system_prompt": null
+    },
+    "cleanup": {
+      "allowed_pids": [],
+      "extra_pids": [],
+      "missing_allowed_pids": [],
+      "observed_pids": [],
+      "passed": true
+    }
+  },
+  "throughput": {
+    "command_file": "data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/llama_bench_command.txt",
+    "exit_code_file": "data/model_admission_throughput/nemotron-nano-q8-mi210-1024tok-ed4091266-20260719T005657Z/llama_bench_exit_code.txt",
+    "rows": [
+      {
+        "build_commit": "cf051d3e1",
+        "model_type": "nemotron_h 9B Q8_0",
+        "n_prompt": 512,
+        "n_gen": 0,
+        "avg_ts": 2032.517009,
+        "type_k": "f16",
+        "type_v": "f16",
+        "n_gpu_layers": 99,
+        "flash_attn": 1,
+        "devices": "ROCm0",
+        "test_time": "2026-07-19T00:57:40Z"
+      },
+      {
+        "build_commit": "cf051d3e1",
+        "model_type": "nemotron_h 9B Q8_0",
+        "n_prompt": 0,
+        "n_gen": 128,
+        "avg_ts": 83.886147,
+        "type_k": "f16",
+        "type_v": "f16",
+        "n_gpu_layers": 99,
+        "flash_attn": 1,
+        "devices": "ROCm0",
+        "test_time": "2026-07-19T00:57:41Z"
+      },
+      {
+        "build_commit": "cf051d3e1",
+        "model_type": "nemotron_h 9B Q8_0",
+        "n_prompt": 2048,
+        "n_gen": 1024,
+        "avg_ts": 231.627589,
+        "type_k": "f16",
+        "type_v": "f16",
+        "n_gpu_layers": 99,
+        "flash_attn": 1,
+        "devices": "ROCm0",
+        "test_time": "2026-07-19T00:57:42Z"
+      },
+      {
+        "build_commit": "cf051d3e1",
+        "model_type": "nemotron_h 9B Q8_0",
+        "n_prompt": 8192,
+        "n_gen": 1024,
+        "avg_ts": 556.519084,
+        "type_k": "f16",
+        "type_v": "f16",
+        "n_gpu_layers": 99,
+        "flash_attn": 1,
+        "devices": "ROCm0",
+        "test_time": "2026-07-19T00:57:57Z"
+      },
+      {
+        "build_commit": "cf051d3e1",
+        "model_type": "nemotron_h 9B Q8_0",
+        "n_prompt": 32768,
+        "n_gen": 1024,
+        "avg_ts": 1047.245793,
+        "type_k": "f16",
+        "type_v": "f16",
+        "n_gpu_layers": 99,
+        "flash_attn": 1,
+        "devices": "ROCm0",
+        "test_time": "2026-07-19T00:58:17Z"
+      }
+    ]
+  }
+}
