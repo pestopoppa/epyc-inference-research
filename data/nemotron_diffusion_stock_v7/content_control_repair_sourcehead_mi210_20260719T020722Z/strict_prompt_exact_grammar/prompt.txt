@@ -1,0 +1,1 @@
+Return exactly this JSON object and nothing else: {"answer":"mi210-diffusion-ready","ok":true}

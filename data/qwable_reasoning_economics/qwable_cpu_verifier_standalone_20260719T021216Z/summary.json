@@ -1,0 +1,138 @@
+{
+  "commands_path": "/mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_cpu_verifier_standalone_20260719T021216Z/commands.sh",
+  "created_at": "2026-07-19T02:13:02.192031+00:00",
+  "first_smoke": {
+    "arm": "cpu_iq4_baseline",
+    "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 19220 --device none -ngl 0 -t 96 -c 8192 -fa on -rea off",
+    "device": "none",
+    "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+    "ngl": 0,
+    "port": 19220,
+    "response_path": "/mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_cpu_verifier_standalone_20260719T021216Z/responses/cpu_iq4_baseline.raw.json",
+    "response_sha256": "71c321e1dd4ee6f6f49537b8ce0c86c8333a66869a61739170caff6bb653dac3",
+    "response_summary": {
+      "content": "{\n  \"arm\": \"cpu_iq4_baseline\",\n  \"quant\": \"IQ4_XS\",\n  \"role\": \"baseline\"\n}",
+      "content_json": {
+        "arm": "cpu_iq4_baseline",
+        "quant": "IQ4_XS",
+        "role": "baseline"
+      },
+      "content_json_mode": "strict",
+      "finish_reason": "stop",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2507.035,
+        "predicted_n": 35,
+        "predicted_per_second": 13.960714549258388,
+        "predicted_per_token_ms": 71.62957142857142,
+        "prompt_ms": 488.497,
+        "prompt_n": 44,
+        "prompt_per_second": 90.07220105752953,
+        "prompt_per_token_ms": 11.102204545454546
+      },
+      "usage": {
+        "completion_tokens": 35,
+        "prompt_tokens": 44,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 79
+      }
+    },
+    "role": "cpu_baseline",
+    "server_pid": 143701,
+    "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:19220/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":64,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"cpu_iq4_baseline\\\", \\\"IQ4_XS\\\", and \\\"baseline\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+    "status": "ok"
+  },
+  "mode": "execute",
+  "plan_path": "/mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_cpu_verifier_standalone_20260719T021216Z/plan.json",
+  "schema": "qwable_reasoning_economics_execute.v1",
+  "smokes": [
+    {
+      "arm": "cpu_iq4_baseline",
+      "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 19220 --device none -ngl 0 -t 96 -c 8192 -fa on -rea off",
+      "device": "none",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "ngl": 0,
+      "port": 19220,
+      "response_path": "/mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_cpu_verifier_standalone_20260719T021216Z/responses/cpu_iq4_baseline.raw.json",
+      "response_sha256": "71c321e1dd4ee6f6f49537b8ce0c86c8333a66869a61739170caff6bb653dac3",
+      "response_summary": {
+        "content": "{\n  \"arm\": \"cpu_iq4_baseline\",\n  \"quant\": \"IQ4_XS\",\n  \"role\": \"baseline\"\n}",
+        "content_json": {
+          "arm": "cpu_iq4_baseline",
+          "quant": "IQ4_XS",
+          "role": "baseline"
+        },
+        "content_json_mode": "strict",
+        "finish_reason": "stop",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 2507.035,
+          "predicted_n": 35,
+          "predicted_per_second": 13.960714549258388,
+          "predicted_per_token_ms": 71.62957142857142,
+          "prompt_ms": 488.497,
+          "prompt_n": 44,
+          "prompt_per_second": 90.07220105752953,
+          "prompt_per_token_ms": 11.102204545454546
+        },
+        "usage": {
+          "completion_tokens": 35,
+          "prompt_tokens": 44,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 79
+        }
+      },
+      "role": "cpu_baseline",
+      "server_pid": 143701,
+      "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:19220/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":64,\"messages\":[{\"content\":\"Return a compact JSON object with keys arm, quant, and role using values \\\"cpu_iq4_baseline\\\", \\\"IQ4_XS\\\", and \\\"baseline\\\".\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+      "status": "ok"
+    },
+    {
+      "arm": "verifier_selector_stub",
+      "command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf --host 127.0.0.1 --port 19240 --device none -ngl 0 -t 96 -c 8192 -fa on -rea off",
+      "device": "none",
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "ngl": 0,
+      "port": 19240,
+      "response_path": "/mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_cpu_verifier_standalone_20260719T021216Z/responses/verifier_selector_stub.raw.json",
+      "response_sha256": "119a1384ada68486db043248febfdf1276ba13bafe24ee2a4328ec0a1ce0fbe9",
+      "response_summary": {
+        "content": "```json\n{\n  \"arm\": \"x86_64\",\n  \"verifier\": \"default\",\n  \"selector\": \"any\"\n}\n```",
+        "content_json": {
+          "arm": "x86_64",
+          "selector": "any",
+          "verifier": "default"
+        },
+        "content_json_mode": "fenced",
+        "finish_reason": "stop",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 2770.98,
+          "predicted_n": 39,
+          "predicted_per_second": 14.074442976852955,
+          "predicted_per_token_ms": 71.05076923076923,
+          "prompt_ms": 391.329,
+          "prompt_n": 30,
+          "prompt_per_second": 76.6618369709375,
+          "prompt_per_token_ms": 13.0443
+        },
+        "usage": {
+          "completion_tokens": 39,
+          "prompt_tokens": 30,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 69
+        }
+      },
+      "role": "verifier_selector_stub",
+      "server_pid": 144081,
+      "smoke_command": "env -i HOME=/tmp LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 PATH=/usr/bin:/bin curl -fsS http://127.0.0.1:19240/v1/chat/completions -H 'Content-Type: application/json' --data '{\"max_tokens\":64,\"messages\":[{\"content\":\"Draft a verifier-selector stub and return compact JSON with keys arm, verifier, and selector.\",\"role\":\"user\"}],\"model\":\"auto\",\"seed\":42,\"stream\":false,\"temperature\":0.0,\"top_k\":1,\"top_p\":1.0}'",
+      "status": "ok"
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z",
+  "experimental_commit": "ed4091266d286045510e498ceb059c209a65aff9",
+  "model": "/mnt/raid0/llm/models/Nemotron-Labs-Diffusion-14B-Q8_0-GGUF/nemotron-diffusion-14b-Q8_0.gguf",
+  "matrix": [
+    {
+      "name": "strict_prompt_unconstrained",
+      "exit_code": 0,
+      "duration_seconds": 6.006,
+      "expected": "{\"answer\":\"mi210-diffusion-ready\",\"ok\":true}",
+      "visible_output_excerpt": "0.05.790.395 I \nOkay user wants me to return minified JSON: {\"answer\": \"mi210-diffusion-ready\", \"ok\": true}\nBut they specifically said to return minified JSON for MI210-ready. The answer is \"mi210-diffusion-ready\" is the the MI101-ready MI. MI2-1-------ready-ready",
+      "pass_exact": false,
+      "contains_expected": false,
+      "metrics": {
+        "total_time_ms": 3389.82,
+        "time_per_step_ms": 105.93,
+        "sampling_time_per_step_ms": 3.87,
+        "approx_tokens_per_second_from_total_time": 37.76,
+        "diffusion_steps": 32,
+        "max_tokens": 128
+      },
+      "extra_args": []
+    },
+    {
+      "name": "strict_prompt_exact_grammar",
+      "exit_code": 0,
+      "duration_seconds": 6.006,
+      "expected": "{\"answer\":\"mi210-diffusion-ready\",\"ok\":true}",
+      "visible_output_excerpt": "0.05.776.788 I \nOkay user wants for a JSON-like JSON object. The instruction: {\"answer\":\"mi210-diffusion-ready\", \"ok\":true} and nothing else.\n\n Need to output exactly that. JSON must be properly formatted. The answer is a string. the system answer is \" mi210-diffusion--ready \" But the answer string \"mi210-diffusion-ready\". Let the",
+      "pass_exact": false,
+      "contains_expected": false,
+      "metrics": {
+        "total_time_ms": 3404.56,
+        "time_per_step_ms": 106.39,
+        "sampling_time_per_step_ms": 3.99,
+        "approx_tokens_per_second_from_total_time": 37.6,
+        "diffusion_steps": 32,
+        "max_tokens": 128
+      },
+      "extra_args": [
+        "--grammar",
+        "root ::= \"{\\\"answer\\\":\\\"mi210-diffusion-ready\\\",\\\"ok\\\":true}\""
+      ]
+    },
+    {
+      "name": "json_schema_const",
+      "exit_code": 0,
+      "duration_seconds": 6.007,
+      "expected": "{\"answer\":\"mi210-diffusion-ready\",\"ok\":true}",
+      "visible_output_excerpt": "0.05.766.388 I \nThe user says: \"Return a JSON object with answer mi210-diffusion-ready and ok true. No prose.\"\n\nThis is straightforward. They want a JSON object with fields \"answer\" and \"mi210-diffusion-ready\" and \"ok\" set to a true value. Wait, is \"Return a JSON object with answer mimi210-diffusion-ready and ok true true. No want",
+      "pass_exact": false,
+      "contains_expected": false,
+      "metrics": {
+        "total_time_ms": 3410.29,
+        "time_per_step_ms": 106.57,
+        "sampling_time_per_step_ms": 4.02,
+        "approx_tokens_per_second_from_total_time": 37.53,
+        "diffusion_steps": 32,
+        "max_tokens": 128
+      },
+      "extra_args": [
+        "-j",
+        "{\"type\":\"object\",\"properties\":{\"answer\":{\"const\":\"mi210-diffusion-ready\"},\"ok\":{\"const\":true}},\"required\":[\"answer\",\"ok\"],\"additionalProperties\":false}"
+      ]
+    },
+    {
+      "name": "copy_one_line",
+      "exit_code": 0,
+      "duration_seconds": 6.007,
+      "expected": "mi210-diffusion-ready",
+      "visible_output_excerpt": "0.05.752.248 I \n</think>\nThe user says: \"Copy this line exactly and output no other text: mi210-diffusion-ready\"\n\n So I just output the line \"mi210-diffusion-ready\" and nothing else.\n\n Therefore, the user is \"mi210-diffusion-ready",
+      "pass_exact": false,
+      "contains_expected": true,
+      "metrics": {
+        "total_time_ms": 3399.54,
+        "time_per_step_ms": 106.24,
+        "sampling_time_per_step_ms": 4.05,
+        "approx_tokens_per_second_from_total_time": 37.65,
+        "diffusion_steps": 32,
+        "max_tokens": 128
+      },
+      "extra_args": []
+    }
+  ],
+  "passes": 0,
+  "total": 4,
+  "cleanup": {
+    "final_rocm_smi_no_kfd_pids": true,
+    "final_rocm_smi_vram_zero": true,
+    "final_process_check": "138656 /usr/bin/bash -c python3 - <<'PY' import json, os, re, shlex, subprocess, time from datetime import datetime, timezone from pathlib import Path  base = Path('/mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7') ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') art = base / f'content_control_repair_sourcehead_mi210_{ts}' art.mkdir(parents=True, exist_ok=False) model = '/mnt/raid0/llm/models/Nemotron-Labs-Diffusion-14B-Q8_0-GGUF/nemotron-diffusion-14b-Q8_0.gguf' bin_path = '/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-diffusion-cli' ld = '/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin:/opt/AMD/aocc-compiler-5.0.0/lib:/opt/rocm/lib' branch = subprocess.check_output(['git','-C','/mnt/raid0/llm/llama.cpp-experimental','rev-parse','--abbrev-ref','HEAD'], text=True).strip() commit = subprocess.check_output(['git','-C','/mnt/raid0/llm/llama.cpp-experimental','rev-parse','HEAD'], text=True).strip() desc = subprocess.check_output(['git','-C'"
+  },
+  "classification": "loader_and_sampler_probe"
+}

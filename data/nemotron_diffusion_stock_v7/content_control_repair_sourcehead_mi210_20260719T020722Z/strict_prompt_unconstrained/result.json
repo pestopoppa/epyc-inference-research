@@ -1,0 +1,18 @@
+{
+  "name": "strict_prompt_unconstrained",
+  "exit_code": 0,
+  "duration_seconds": 6.006,
+  "expected": "{\"answer\":\"mi210-diffusion-ready\",\"ok\":true}",
+  "visible_output_excerpt": "0.05.790.395 I \nOkay user wants me to return minified JSON: {\"answer\": \"mi210-diffusion-ready\", \"ok\": true}\nBut they specifically said to return minified JSON for MI210-ready. The answer is \"mi210-diffusion-ready\" is the the MI101-ready MI. MI2-1-------ready-ready",
+  "pass_exact": false,
+  "contains_expected": false,
+  "metrics": {
+    "total_time_ms": 3389.82,
+    "time_per_step_ms": 105.93,
+    "sampling_time_per_step_ms": 3.87,
+    "approx_tokens_per_second_from_total_time": 37.76,
+    "diffusion_steps": 32,
+    "max_tokens": 128
+  },
+  "extra_args": []
+}

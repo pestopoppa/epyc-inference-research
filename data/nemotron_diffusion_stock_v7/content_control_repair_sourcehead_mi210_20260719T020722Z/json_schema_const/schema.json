@@ -1,0 +1,1 @@
+{"type":"object","properties":{"answer":{"const":"mi210-diffusion-ready"},"ok":{"const":true}},"required":["answer","ok"],"additionalProperties":false}

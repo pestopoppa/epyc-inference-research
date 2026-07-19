@@ -1,0 +1,6 @@
+artifact=/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z
+2026-07-19T02:20:10Z
+90e87bc
+ m ggml
+hip_sd_server=build-hip/bin/sd-server size=95305176 mtime=2026-07-19 02:15:24.808842504 +0000
+cpu_sd_server=build/bin/sd-server size=26865504 mtime=2026-05-07 13:57:14.687114293 +0000

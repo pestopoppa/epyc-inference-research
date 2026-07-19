@@ -1,0 +1,21 @@
+{
+  "name": "strict_prompt_exact_grammar",
+  "exit_code": 0,
+  "duration_seconds": 6.006,
+  "expected": "{\"answer\":\"mi210-diffusion-ready\",\"ok\":true}",
+  "visible_output_excerpt": "0.05.776.788 I \nOkay user wants for a JSON-like JSON object. The instruction: {\"answer\":\"mi210-diffusion-ready\", \"ok\":true} and nothing else.\n\n Need to output exactly that. JSON must be properly formatted. The answer is a string. the system answer is \" mi210-diffusion--ready \" But the answer string \"mi210-diffusion-ready\". Let the",
+  "pass_exact": false,
+  "contains_expected": false,
+  "metrics": {
+    "total_time_ms": 3404.56,
+    "time_per_step_ms": 106.39,
+    "sampling_time_per_step_ms": 3.99,
+    "approx_tokens_per_second_from_total_time": 37.6,
+    "diffusion_steps": 32,
+    "max_tokens": 128
+  },
+  "extra_args": [
+    "--grammar",
+    "root ::= \"{\\\"answer\\\":\\\"mi210-diffusion-ready\\\",\\\"ok\\\":true}\""
+  ]
+}

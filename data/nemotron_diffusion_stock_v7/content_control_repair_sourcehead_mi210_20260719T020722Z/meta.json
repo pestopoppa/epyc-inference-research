@@ -1,0 +1,10 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z",
+  "start_utc": "2026-07-19T02:07:22.821302+00:00",
+  "experimental_branch": "experimental-v7-refresh-20260716",
+  "experimental_commit": "ed4091266d286045510e498ceb059c209a65aff9",
+  "experimental_describe": "gguf-v0.19.0-1050-ged4091266",
+  "model": "/mnt/raid0/llm/models/Nemotron-Labs-Diffusion-14B-Q8_0-GGUF/nemotron-diffusion-14b-Q8_0.gguf",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-diffusion-cli",
+  "ld_library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin:/opt/AMD/aocc-compiler-5.0.0/lib:/opt/rocm/lib"
+}

@@ -416,8 +416,9 @@ Evidence:
 - MI210 stock-v7 `llama-bench -ngl 99 -dev ROCm0 -p 512 -n 512` exits `0`: `data/nemotron_diffusion_stock_v7/mi210_dream_fix_local_20260718T165819Z/`, with `pp512 1700.42 t/s` and `tg512 69.05 t/s`
 - MI210 stock-v7 `llama-diffusion-cli -ngl 99 -dev ROCm0 --diffusion-steps 16 --diffusion-eps 0.001` exits `0`: `data/nemotron_diffusion_stock_v7/mi210_cli_dream_fix_local_20260718T170018Z/`, total diffusion time `1807.44 ms`, `112.97 ms/step`; the exact-output prompt was not task-clean because the model emitted reasoning text
 - CPU-only stock-v7 clean `llama-bench -dev none -ngl 0 --no-op-offload 1 --no-kv-offload 1 -p 512 -n 256 -r 3` exits `0`: `data/nemotron_diffusion_stock_v7/cpu_dream_fix_clean_local_20260718T171131Z/summary.json`, with `pp512 157.57 t/s` and `tg256 2.69 t/s`
+- 2026-07-19 source-head current-v7 rebuild repaired the stale `llama-diffusion-cli`/shared-library mismatch at `ed4091266` (`--version` and `-h` both exit `0` when `LD_LIBRARY_PATH` is pinned to `build-hip/bin`). The MI210 content-control matrix at `data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z/summary.json` ran four bounded variants: unconstrained strict JSON, exact GBNF, JSON-schema const, and exact line copy. All exited `0` with clean GPU cleanup, but exact-output pass remained `0/4`. The GBNF/schema variants were accepted by the CLI yet did not constrain output because `examples/diffusion/diffusion.cpp` builds a local top-k/top-p/temp/dist sampler chain and does not initialize the common sampler carrying grammar/schema state.
 
-This closes stock-v7 loader/CLI runnability and gives first MI210 plus clean CPU synthetic throughput rows. It does not close task quality. The CLI output was not task-clean.
+This closes stock-v7 loader/CLI runnability and gives first MI210 plus clean CPU synthetic throughput rows. It does not close task quality. The CLI output is not task-clean, and current stock diffusion CLI grammar/schema flags are inert for content control. Any admission path needs either a maintained server/parser path with separated reasoning/content or a diffusion-aware constrained decode design.
 
 After the operator authorized a fork-specific loader if needed, `spiritbuun/buun-llama-cpp` branch tarball `rocm-fused-turbo-port` was procured into scratch at `/mnt/raid0/llm/tmp/buun-llama-cpp-src`. The CPU fork build produced `/mnt/raid0/llm/tmp/buun-llama-cpp-src/build-cpu/bin/llama-diffusion-cli`. The HIP fork build produced `/mnt/raid0/llm/tmp/buun-llama-cpp-src/build-hip/bin/llama-diffusion-cli` and `llama-server`.
 
@@ -451,6 +452,23 @@ These are admission observations gathered 2026-07-16 while GLM-5.2 was still dow
 Follow-ups: Q2_g64 is runtime-smoke passed and has preliminary control/optimized throughput observations, but it failed the first strict quality gate and is not role-ready. The Qwable speed/load observations do not invalidate earlier successful v7/GPU Qwable work; the failed CPU direct-CLI runs were harness failures.
 
 2026-07-18 Ternary Bonsai Q2_0 decision: treat the offset failure as a producer/export contract bug first, not a v7 loader bug. The raw layout verifier at `data/bonsai_current_v7/ternary_bonsai_q2_layout_contract_20260718Tcodex.json` found all `498/498` Q2_0 tensors physically short under current-v7's standard 18-byte/64-weight `GGML_TYPE_Q2_0` contract, while sibling Q2_g64 had `0/498` mismatches. The first mismatch is `output.weight`, short by exactly one byte per 64-value block. Next step is a canonical producer/export replacement, or a distinct metadata/type contract for the 17-byte layout. Do not rerun ordinary CPU/MI210 smokes until the raw layout verifier passes on a corrected artifact; blind padding transcode and a compatibility loader are both unsafe without documented layout semantics.
+
+## ERNIE-Image-Turbo HIP Candidate
+
+2026-07-19 MI210 HIP build/smoke used `/mnt/raid0/llm/stable-diffusion.cpp/build-hip/bin/sd-server` from stable-diffusion.cpp `90e87bc`, built in the separate `build-hip` tree with `SD_HIPBLAS=ON`, `GGML_HIP=ON`, `AMDGPU_TARGETS=gfx90a`, and `CMAKE_EXE_LINKER_FLAGS=-no-pie`. The production CPU `build/bin/sd-server` binary was not rebuilt or modified.
+
+Build note: the gfx90a HIP build required a nested `ggml` compile guard in `ggml/src/ggml-cuda/vendors/hip.h`, changing the ROCm 6.2 FP8 alias block from `HIP_VERSION >= 60200000` to `HIP_VERSION >= 60200000 && defined(CDNA3)`. On this ROCm 6.2 + MI210 stack, gfx90a/CDNA2 exposes FNUZ FP8 names but not `__hip_fp8_e4m3`; the guard keeps the CDNA3 FP8 path out of the MI210 build.
+
+Evidence:
+
+- First detached server smoke: `data/gpu-mi210/ernie-image-turbo-hip-smoke-detached-20260719T022010Z/`.
+- 512x512, 2 steps, `cfg_scale=1.0`: HTTP `200`, one PNG, `3.905s`, visually nonblank with legible `ERNIE IMAGE TURBO` title.
+- 1024x1024, 8 steps, `cfg_scale=1.0`: HTTP `200`, `25.380s`, but the PNG was visually blank white.
+- No-conv-direct 1024 repeat: `data/gpu-mi210/ernie-image-turbo-hip-smoke-no-convdirect-20260719T022241Z/`, HTTP `200`, `14.870s`, still blank white.
+- Resolution sweep without direct-conv flags: `data/gpu-mi210/ernie-image-turbo-hip-resolution-sweep-20260719T022342Z/summary.json`; 512x512/8 steps `3.997s` nonblank, 768x768/8 steps `7.825s` nonblank, 1024x1024/8 steps `14.857s` with a tiny `33011` byte PNG and visually blank output.
+- All isolated HIP servers were terminated after the probes; final `rocm-smi --showpids` reported no KFD PIDs and `0%` VRAM.
+
+Interpretation: ERNIE-Image-Turbo is runnable on MI210 through a separate HIP sd.cpp build and is immediately useful up to at least 768x768. It is not a production replacement for the current CPU image backend yet because the existing 1024x1024 audit shape returns blank white images under the HIP build. The research registry should keep the production `sd_server` path on the CPU binary until a 1024-quality fix or a resolution-policy change is validated.
 
 ## Bonsai Q1_0 Quiet-Host Prompting Gate
 

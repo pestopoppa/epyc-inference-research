@@ -1,0 +1,15 @@
+{
+  "info": "",
+  "parameters": {
+    "batch_size": 1,
+    "cfg_scale": 1.0,
+    "height": 512,
+    "negative_prompt": "blurry, low quality, blank white image",
+    "prompt": "a lovely cat, colorful, detailed, studio lighting",
+    "seed": 20261231,
+    "steps": 8,
+    "width": 512
+  },
+  "num_images": 1,
+  "status": 200
+}

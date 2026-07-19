@@ -1,0 +1,10 @@
+{
+  "prompt": "a clean technical poster reading ERNIE IMAGE TURBO, crisp bilingual typography, simple blue and white design, centered composition",
+  "negative_prompt": "blurry, low quality, unreadable text, distorted letters",
+  "width": 512,
+  "height": 512,
+  "steps": 2,
+  "cfg_scale": 1.0,
+  "seed": 20260719,
+  "batch_size": 1
+}

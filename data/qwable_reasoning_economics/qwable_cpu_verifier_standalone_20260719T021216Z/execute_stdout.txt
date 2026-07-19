@@ -1,0 +1,15 @@
+Qwable reasoning-economics runner
+mode: execute
+output_dir: /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_cpu_verifier_standalone_20260719T021216Z
+server_bin: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server
+ld_library_path: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin
+iq4_xs_model: /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf
+q8_0_model: /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf
+glm_active: False
+first_smoke_arm: standalone_iq4_gpu
+selected_smoke_arms: cpu_iq4_baseline, verifier_selector_stub
+resource_note_iq4: can co-reside more plausibly
+resource_note_q8: sequential or smaller-beneficiary only
+Executing selected smoke arm(s).
+Summary written to /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_cpu_verifier_standalone_20260719T021216Z/summary.json
+Selected-smoke execution complete.

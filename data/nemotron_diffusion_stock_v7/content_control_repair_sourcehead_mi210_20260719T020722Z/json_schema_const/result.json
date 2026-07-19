@@ -1,0 +1,21 @@
+{
+  "name": "json_schema_const",
+  "exit_code": 0,
+  "duration_seconds": 6.007,
+  "expected": "{\"answer\":\"mi210-diffusion-ready\",\"ok\":true}",
+  "visible_output_excerpt": "0.05.766.388 I \nThe user says: \"Return a JSON object with answer mi210-diffusion-ready and ok true. No prose.\"\n\nThis is straightforward. They want a JSON object with fields \"answer\" and \"mi210-diffusion-ready\" and \"ok\" set to a true value. Wait, is \"Return a JSON object with answer mimi210-diffusion-ready and ok true true. No want",
+  "pass_exact": false,
+  "contains_expected": false,
+  "metrics": {
+    "total_time_ms": 3410.29,
+    "time_per_step_ms": 106.57,
+    "sampling_time_per_step_ms": 4.02,
+    "approx_tokens_per_second_from_total_time": 37.53,
+    "diffusion_steps": 32,
+    "max_tokens": 128
+  },
+  "extra_args": [
+    "-j",
+    "{\"type\":\"object\",\"properties\":{\"answer\":{\"const\":\"mi210-diffusion-ready\"},\"ok\":{\"const\":true}},\"required\":[\"answer\",\"ok\"],\"additionalProperties\":false}"
+  ]
+}

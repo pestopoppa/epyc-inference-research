@@ -1,0 +1,18 @@
+{
+  "name": "copy_one_line",
+  "exit_code": 0,
+  "duration_seconds": 6.007,
+  "expected": "mi210-diffusion-ready",
+  "visible_output_excerpt": "0.05.752.248 I \n</think>\nThe user says: \"Copy this line exactly and output no other text: mi210-diffusion-ready\"\n\n So I just output the line \"mi210-diffusion-ready\" and nothing else.\n\n Therefore, the user is \"mi210-diffusion-ready",
+  "pass_exact": false,
+  "contains_expected": true,
+  "metrics": {
+    "total_time_ms": 3399.54,
+    "time_per_step_ms": 106.24,
+    "sampling_time_per_step_ms": 4.05,
+    "approx_tokens_per_second_from_total_time": 37.65,
+    "diffusion_steps": 32,
+    "max_tokens": 128
+  },
+  "extra_args": []
+}

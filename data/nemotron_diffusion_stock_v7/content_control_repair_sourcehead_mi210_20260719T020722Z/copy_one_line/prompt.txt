@@ -1,0 +1,2 @@
+Copy this line exactly and output no other text:
+mi210-diffusion-ready

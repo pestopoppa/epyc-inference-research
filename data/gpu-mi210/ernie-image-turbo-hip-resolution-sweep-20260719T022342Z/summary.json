@@ -1,0 +1,23 @@
+[
+  {
+    "size": 512,
+    "status": 200,
+    "elapsed_seconds": 3.997,
+    "num_images": 1,
+    "png_bytes": 647860
+  },
+  {
+    "size": 768,
+    "status": 200,
+    "elapsed_seconds": 7.825,
+    "num_images": 1,
+    "png_bytes": 1319659
+  },
+  {
+    "size": 1024,
+    "status": 200,
+    "elapsed_seconds": 14.857,
+    "num_images": 1,
+    "png_bytes": 33011
+  }
+]

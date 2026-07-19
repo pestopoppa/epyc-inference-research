@@ -1,0 +1,4 @@
+# dry-run
+timeout --kill-after=15s 60s python3 scripts/benchmark/qwable_reasoning_economics_runner.py --only cpu_iq4_baseline --only verifier_selector_stub --output-dir /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_cpu_verifier_standalone_20260719T021216Z --threads 96 --context 8192 --max-tokens 64 --request-timeout 120 --startup-timeout 240 --port-base 19180
+# execute
+timeout --kill-after=60s 900s python3 scripts/benchmark/qwable_reasoning_economics_runner.py --execute --only cpu_iq4_baseline --only verifier_selector_stub --output-dir /mnt/raid0/llm/epyc-inference-research/data/qwable_reasoning_economics/qwable_cpu_verifier_standalone_20260719T021216Z --threads 96 --context 8192 --max-tokens 64 --request-timeout 120 --startup-timeout 240 --port-base 19180

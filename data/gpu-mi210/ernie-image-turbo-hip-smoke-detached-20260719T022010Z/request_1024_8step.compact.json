@@ -1,0 +1,15 @@
+{
+  "info": "",
+  "parameters": {
+    "batch_size": 1,
+    "cfg_scale": 1.0,
+    "height": 1024,
+    "negative_prompt": "blurry, low quality, watermark, illegible text, distorted letters",
+    "prompt": "a sharp 1024 pixel editorial illustration for a local inference research dashboard, readable title ERNIE IMAGE TURBO, clean UI chart motifs, balanced colors, no watermark",
+    "seed": 2026071902,
+    "steps": 8,
+    "width": 1024
+  },
+  "num_images": 1,
+  "status": 200
+}
