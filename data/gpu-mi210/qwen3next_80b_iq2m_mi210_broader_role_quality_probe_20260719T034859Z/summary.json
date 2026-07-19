@@ -1,0 +1,981 @@
+{
+  "artifact_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen3next_80b_iq2m_mi210_broader_role_quality_probe_20260719T034859Z",
+  "status": "ok",
+  "model": "/mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf",
+  "server_binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "passed": 35,
+  "total": 42,
+  "mean_completion_tps_wall": 16.78746357643357,
+  "wall_s": 27.271186351776123,
+  "failures": [
+    {
+      "id": "arithmetic_discount",
+      "expected": "PASS",
+      "score_reason": "expected_exact_PASS",
+      "content": "FAIL"
+    },
+    {
+      "id": "strict_if_no_markdown",
+      "expected": "eight_words_no_markdown",
+      "score_reason": "eight_words_no_markdown",
+      "content": "Outdated data leads to inaccurate search results and poor user experience."
+    },
+    {
+      "id": "tool_shape_no_extra",
+      "expected": "json_search_docs",
+      "score_reason": "json_search_docs",
+      "content": "{\"tool\": \"search_docs\", \"query\": \"MI210 probe cleanup\", \"top_k\": 3}"
+    },
+    {
+      "id": "review_no_bug_first_precondition",
+      "expected": "NO_MAJOR_BUG",
+      "score_reason": "expected_exact_NO_MAJOR_BUG",
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "review_no_bug_average_contract",
+      "expected": "NO_MAJOR_BUG",
+      "score_reason": "expected_exact_NO_MAJOR_BUG",
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "review_no_bug_cache_ttl",
+      "expected": "NO_MAJOR_BUG",
+      "score_reason": "expected_exact_NO_MAJOR_BUG",
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "freeform_real_bug_clamp_rationale",
+      "expected": "json_verdict_MAJOR_BUG",
+      "score_reason": "json_verdict_parse:Unterminated string starting at: line 3 column 16 (char 43)",
+      "content": "{\n  \"verdict\": \"MAJOR_BUG\",\n  \"rationale\": \"The function `clamp(x, lo, hi)` is implemented as `return min(lo, max(hi, x))`, which is incorrect. The contract `lo <= hi` implies that `lo` is the lower bound and `hi` is the upper bound. However, the current implementation compares `lo` with the result of `max(hi, x)`, which reverses the intended logic. The correct implementation should be `min(hi, max(lo, x))` to ensure `x` is clamped between `lo` and `hi`. As written, the function may return values outside the intended range and violate the contract. For example, if `x=5`, `lo=1`, `hi=3`, the function returns `min(1, max(3, 5)) = min(1, 5) = 1`, which is wrong \u2014 it should return `3` (the upper bound). This is a fundamental logic error that breaks the intended behavior of clamping"
+    }
+  ],
+  "rows": [
+    {
+      "id": "exact_ok",
+      "category": "exact",
+      "expected": "ok",
+      "grammar": "root ::= \"ok\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_ok",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.3213934898376465,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 34,
+        "total_tokens": 36,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 6.222901406653601,
+      "content": "ok"
+    },
+    {
+      "id": "category_route_tool_calc",
+      "category": "category",
+      "expected": "TOOL",
+      "grammar": "root ::= \"TOOL\" | \"CHAT\" | \"RETRIEVE\" | \"CODE\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_TOOL",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.27633070945739746,
+      "usage": {
+        "completion_tokens": 3,
+        "prompt_tokens": 67,
+        "total_tokens": 70,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 10.856556645082247,
+      "content": "TOOL"
+    },
+    {
+      "id": "category_route_code_patch",
+      "category": "category",
+      "expected": "CODE",
+      "grammar": "root ::= \"TOOL\" | \"CHAT\" | \"RETRIEVE\" | \"CODE\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_CODE",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.24578571319580078,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 64,
+        "total_tokens": 66,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 8.137169463575516,
+      "content": "CODE"
+    },
+    {
+      "id": "category_route_retrieve_doc",
+      "category": "category",
+      "expected": "RETRIEVE",
+      "grammar": "root ::= \"TOOL\" | \"CHAT\" | \"RETRIEVE\" | \"CODE\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_RETRIEVE",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.3056468963623047,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 65,
+        "total_tokens": 70,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 16.358746185576017,
+      "content": "RETRIEVE"
+    },
+    {
+      "id": "category_route_chat_poem",
+      "category": "category",
+      "expected": "CHAT",
+      "grammar": "root ::= \"TOOL\" | \"CHAT\" | \"RETRIEVE\" | \"CODE\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_CHAT",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.24119329452514648,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 62,
+        "total_tokens": 64,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 8.292104487969016,
+      "content": "CHAT"
+    },
+    {
+      "id": "mcq_planet",
+      "category": "mcq",
+      "expected": "B",
+      "grammar": "root ::= \"A\" | \"B\" | \"C\" | \"D\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_B",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.41284894943237305,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 62,
+        "total_tokens": 64,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 4.844386797519539,
+      "content": "B"
+    },
+    {
+      "id": "mcq_http_404",
+      "category": "mcq",
+      "expected": "C",
+      "grammar": "root ::= \"A\" | \"B\" | \"C\" | \"D\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_C",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.4093799591064453,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 62,
+        "total_tokens": 64,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 4.885437001765805,
+      "content": "C"
+    },
+    {
+      "id": "arithmetic_17_19",
+      "category": "arithmetic",
+      "expected": "PASS",
+      "grammar": "root ::= \"PASS\" | \"FAIL\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_PASS",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.38544535636901855,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 50,
+        "total_tokens": 52,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 5.18880294431472,
+      "content": "PASS"
+    },
+    {
+      "id": "arithmetic_46_27",
+      "category": "arithmetic",
+      "expected": "FAIL",
+      "grammar": "root ::= \"PASS\" | \"FAIL\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_FAIL",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.21444416046142578,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 49,
+        "total_tokens": 51,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 9.326437221216663,
+      "content": "FAIL"
+    },
+    {
+      "id": "arithmetic_discount",
+      "category": "arithmetic",
+      "expected": "PASS",
+      "grammar": "root ::= \"PASS\" | \"FAIL\"",
+      "max_tokens": 16,
+      "passed": false,
+      "score_reason": "expected_exact_PASS",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.2483820915222168,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 66,
+        "total_tokens": 68,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 8.05211031013928,
+      "content": "FAIL"
+    },
+    {
+      "id": "arithmetic_fraction",
+      "category": "arithmetic",
+      "expected": "YES",
+      "grammar": "root ::= \"YES\" | \"NO\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_YES",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.38562774658203125,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 53,
+        "total_tokens": 55,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 5.186348798100703,
+      "content": "YES"
+    },
+    {
+      "id": "arithmetic_mod",
+      "category": "arithmetic",
+      "expected": "YES",
+      "grammar": "root ::= \"YES\" | \"NO\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_YES",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.21199703216552734,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 47,
+        "total_tokens": 49,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 9.43409433410558,
+      "content": "YES"
+    },
+    {
+      "id": "arithmetic_square_wrong",
+      "category": "arithmetic",
+      "expected": "NO",
+      "grammar": "root ::= \"YES\" | \"NO\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_NO",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.21412968635559082,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 48,
+        "total_tokens": 50,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 9.340134168406403,
+      "content": "NO"
+    },
+    {
+      "id": "needle_ticket_mid",
+      "category": "needle",
+      "expected": "K7-MI210",
+      "grammar": null,
+      "max_tokens": 32,
+      "passed": true,
+      "score_reason": "expected_exact_K7-MI210",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.35832881927490234,
+      "usage": {
+        "completion_tokens": 8,
+        "prompt_tokens": 63,
+        "total_tokens": 71,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 22.32586264255393,
+      "content": "K7-MI210"
+    },
+    {
+      "id": "needle_secret_phrase",
+      "category": "needle",
+      "expected": "cobalt-river-91",
+      "grammar": null,
+      "max_tokens": 32,
+      "passed": true,
+      "score_reason": "expected_exact_cobalt-river-91",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.5121848583221436,
+      "usage": {
+        "completion_tokens": 8,
+        "prompt_tokens": 55,
+        "total_tokens": 63,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 15.619360607822427,
+      "content": "cobalt-river-91"
+    },
+    {
+      "id": "needle_last_value",
+      "category": "needle",
+      "expected": "purple",
+      "grammar": null,
+      "max_tokens": 32,
+      "passed": true,
+      "score_reason": "expected_exact_purple",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.3848083019256592,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 55,
+        "total_tokens": 57,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 5.197393065564314,
+      "content": "purple"
+    },
+    {
+      "id": "strict_if_lowercase",
+      "category": "strict",
+      "expected": "lowercase6",
+      "grammar": null,
+      "max_tokens": 64,
+      "passed": true,
+      "score_reason": "lowercase6",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.47347474098205566,
+      "usage": {
+        "completion_tokens": 7,
+        "prompt_tokens": 42,
+        "total_tokens": 49,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 14.784315601463721,
+      "content": "hello world this is a test"
+    },
+    {
+      "id": "strict_if_two_sentences",
+      "category": "strict",
+      "expected": "two_sentences",
+      "grammar": null,
+      "max_tokens": 96,
+      "passed": true,
+      "score_reason": "two_sentences_no_bullets",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.7002365589141846,
+      "usage": {
+        "completion_tokens": 29,
+        "prompt_tokens": 41,
+        "total_tokens": 70,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 41.414575732761776,
+      "content": "Caching stores frequently accessed data temporarily to speed up future requests. It reduces latency and improves application performance by avoiding repeated computations or database queries."
+    },
+    {
+      "id": "strict_if_no_markdown",
+      "category": "strict",
+      "expected": "eight_words_no_markdown",
+      "grammar": null,
+      "max_tokens": 64,
+      "passed": false,
+      "score_reason": "eight_words_no_markdown",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.6110141277313232,
+      "usage": {
+        "completion_tokens": 14,
+        "prompt_tokens": 49,
+        "total_tokens": 63,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 22.912727160633047,
+      "content": "Outdated data leads to inaccurate search results and poor user experience."
+    },
+    {
+      "id": "tool_shape_add",
+      "category": "tool",
+      "expected": "json_tool_add",
+      "grammar": null,
+      "max_tokens": 96,
+      "passed": true,
+      "score_reason": "json_tool_add",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.6748628616333008,
+      "usage": {
+        "completion_tokens": 16,
+        "prompt_tokens": 66,
+        "total_tokens": 82,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 23.708520515230095,
+      "content": "{\"tool\":\"add\",\"arguments\":{\"numbers\":[8,13]}}"
+    },
+    {
+      "id": "tool_shape_weather",
+      "category": "tool",
+      "expected": "json_tool_weather",
+      "grammar": null,
+      "max_tokens": 128,
+      "passed": true,
+      "score_reason": "json_tool_weather",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.894127368927002,
+      "usage": {
+        "completion_tokens": 27,
+        "prompt_tokens": 82,
+        "total_tokens": 109,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 30.197040084346558,
+      "content": "{\"tool\":\"weather\",\"arguments\":{\"location\":\"Seattle, WA\",\"date\":\"2026-07-20\"}}"
+    },
+    {
+      "id": "tool_shape_no_extra",
+      "category": "tool",
+      "expected": "json_search_docs",
+      "grammar": null,
+      "max_tokens": 128,
+      "passed": false,
+      "score_reason": "json_search_docs",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.8347294330596924,
+      "usage": {
+        "completion_tokens": 26,
+        "prompt_tokens": 57,
+        "total_tokens": 83,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 31.147817448699826,
+      "content": "{\"tool\": \"search_docs\", \"query\": \"MI210 probe cleanup\", \"top_k\": 3}"
+    },
+    {
+      "id": "json_status_exact",
+      "category": "json",
+      "expected": "json_status",
+      "grammar": null,
+      "max_tokens": 64,
+      "passed": true,
+      "score_reason": "json_status",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.5221033096313477,
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 44,
+        "total_tokens": 54,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 19.15329747107121,
+      "content": "{\"status\":\"ok\",\"score\":1}"
+    },
+    {
+      "id": "semantic_contradiction",
+      "category": "semantic",
+      "expected": "NO",
+      "grammar": "root ::= \"YES\" | \"NO\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_NO",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.3771045207977295,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 58,
+        "total_tokens": 60,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 5.303569407678238,
+      "content": "NO"
+    },
+    {
+      "id": "semantic_cause_effect",
+      "category": "semantic",
+      "expected": "NO",
+      "grammar": "root ::= \"YES\" | \"NO\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_NO",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.3986928462982178,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 63,
+        "total_tokens": 65,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 5.016392991671645,
+      "content": "NO"
+    },
+    {
+      "id": "semantic_safety",
+      "category": "semantic",
+      "expected": "NO",
+      "grammar": "root ::= \"YES\" | \"NO\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_NO",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.3690674304962158,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 57,
+        "total_tokens": 59,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 5.419063929079233,
+      "content": "NO"
+    },
+    {
+      "id": "review_no_bug_clamp_strict",
+      "category": "review",
+      "expected": "NO_MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 32,
+      "passed": true,
+      "score_reason": "expected_exact_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.48351168632507324,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 77,
+        "total_tokens": 82,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 10.341011688884835,
+      "content": "NO_MAJOR_BUG"
+    },
+    {
+      "id": "review_real_bug_clamp_reversed",
+      "category": "review",
+      "expected": "MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 32,
+      "passed": true,
+      "score_reason": "expected_exact_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.31616806983947754,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 77,
+        "total_tokens": 82,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 15.814373673276249,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "review_no_bug_first_precondition",
+      "category": "review",
+      "expected": "NO_MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 32,
+      "passed": false,
+      "score_reason": "expected_exact_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.46163034439086914,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 69,
+        "total_tokens": 74,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 10.83117706787149,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "review_real_bug_first_second",
+      "category": "review",
+      "expected": "MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 32,
+      "passed": true,
+      "score_reason": "expected_exact_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.47840356826782227,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 75,
+        "total_tokens": 80,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 10.451427062100999,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "review_no_bug_average_contract",
+      "category": "review",
+      "expected": "NO_MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 32,
+      "passed": false,
+      "score_reason": "expected_exact_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.46434879302978516,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 73,
+        "total_tokens": 78,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 10.767767839722328,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "review_real_bug_average_last",
+      "category": "review",
+      "expected": "MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 32,
+      "passed": true,
+      "score_reason": "expected_exact_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.48723411560058594,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 98,
+        "total_tokens": 103,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 10.262007195117654,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "review_no_bug_cache_ttl",
+      "category": "review",
+      "expected": "NO_MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 32,
+      "passed": false,
+      "score_reason": "expected_exact_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.47920656204223633,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 76,
+        "total_tokens": 81,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 10.433913881920736,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "review_real_bug_cache_ttl",
+      "category": "review",
+      "expected": "MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 32,
+      "passed": true,
+      "score_reason": "expected_exact_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.3112602233886719,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 76,
+        "total_tokens": 81,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 16.06372939518353,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "freeform_no_bug_clamp_rationale",
+      "category": "freeform",
+      "expected": "json_verdict_NO_MAJOR_BUG",
+      "grammar": null,
+      "max_tokens": 192,
+      "passed": true,
+      "score_reason": "json_verdict_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 2.947274923324585,
+      "usage": {
+        "completion_tokens": 142,
+        "prompt_tokens": 78,
+        "total_tokens": 220,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 48.18009981906308,
+      "content": "{\n  \"verdict\": \"NO_MAJOR_BUG\",\n  \"rationale\": \"The function `clamp(x, lo, hi)` correctly implements the contract `lo <= hi` by returning a value between `lo` and `hi` inclusive. The expression `max(lo, min(hi, x))` ensures that if `lo <= hi`, the result is clamped within that range. Even if `lo > hi`, the function still returns a valid value (though it violates the contract), but since the contract assumes `lo <= hi`, and the function behaves correctly under that assumption, there is no major bug in the implementation. The function is correctly designed for its intended contract.\"\n}"
+    },
+    {
+      "id": "freeform_real_bug_clamp_rationale",
+      "category": "freeform",
+      "expected": "json_verdict_MAJOR_BUG",
+      "grammar": null,
+      "max_tokens": 224,
+      "passed": false,
+      "score_reason": "json_verdict_parse:Unterminated string starting at: line 3 column 16 (char 43)",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 4.423102617263794,
+      "usage": {
+        "completion_tokens": 224,
+        "prompt_tokens": 78,
+        "total_tokens": 302,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 50.6431840685103,
+      "content": "{\n  \"verdict\": \"MAJOR_BUG\",\n  \"rationale\": \"The function `clamp(x, lo, hi)` is implemented as `return min(lo, max(hi, x))`, which is incorrect. The contract `lo <= hi` implies that `lo` is the lower bound and `hi` is the upper bound. However, the current implementation compares `lo` with the result of `max(hi, x)`, which reverses the intended logic. The correct implementation should be `min(hi, max(lo, x))` to ensure `x` is clamped between `lo` and `hi`. As written, the function may return values outside the intended range and violate the contract. For example, if `x=5`, `lo=1`, `hi=3`, the function returns `min(1, max(3, 5)) = min(1, 5) = 1`, which is wrong \u2014 it should return `3` (the upper bound). This is a fundamental logic error that breaks the intended behavior of clamping"
+    },
+    {
+      "id": "freeform_semantic_rationale",
+      "category": "freeform",
+      "expected": "json_answer_NO",
+      "grammar": null,
+      "max_tokens": 160,
+      "passed": true,
+      "score_reason": "json_answer_NO",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 1.3316442966461182,
+      "usage": {
+        "completion_tokens": 53,
+        "prompt_tokens": 67,
+        "total_tokens": 120,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 39.8004182749747,
+      "content": "{\n  \"answer\": \"NO\",\n  \"rationale\": \"If a benchmark states that lower latency is better, then a higher latency number indicates worse performance, not an improvement. Therefore, a higher latency number should not be treated as an improvement.\"\n}"
+    },
+    {
+      "id": "freeform_tool_choice_rationale",
+      "category": "freeform",
+      "expected": "json_route_RETRIEVE",
+      "grammar": null,
+      "max_tokens": 160,
+      "passed": true,
+      "score_reason": "json_route_RETRIEVE",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 1.4595093727111816,
+      "usage": {
+        "completion_tokens": 61,
+        "prompt_tokens": 67,
+        "total_tokens": 128,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 41.794866919344635,
+      "content": "{\n  \"route\": \"RETRIEVE\",\n  \"rationale\": \"The user is asking for the latest ROCm release notes, which are publicly available documentation. This requires retrieving the most up-to-date information from a reliable source, such as the official AMD ROCm documentation website.\"\n}"
+    },
+    {
+      "id": "concise_rationale_arithmetic",
+      "category": "concise",
+      "expected": "mentions_12",
+      "grammar": null,
+      "max_tokens": 96,
+      "passed": true,
+      "score_reason": "mentions_12",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.8484890460968018,
+      "usage": {
+        "completion_tokens": 28,
+        "prompt_tokens": 50,
+        "total_tokens": 78,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 32.99983674368562,
+      "content": "15% of 80 is 12 because 0.15 multiplied by 80 equals 12."
+    },
+    {
+      "id": "concise_rationale_code",
+      "category": "concise",
+      "expected": "mentions_last",
+      "grammar": null,
+      "max_tokens": 96,
+      "passed": true,
+      "score_reason": "mentions_last",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 1.0394089221954346,
+      "usage": {
+        "completion_tokens": 39,
+        "prompt_tokens": 54,
+        "total_tokens": 93,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 37.52132502155589,
+      "content": "The bug is that `range(len(xs)-1)` excludes the last element of `xs`, so it doesn't sum all items\u2014only the first `len(xs)-1` elements."
+    },
+    {
+      "id": "security_sql_injection",
+      "category": "security",
+      "expected": "YES",
+      "grammar": "root ::= \"YES\" | \"NO\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_YES",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.3658730983734131,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 50,
+        "total_tokens": 52,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 5.466376207738519,
+      "content": "YES"
+    },
+    {
+      "id": "concurrency_lock",
+      "category": "concurrency",
+      "expected": "YES",
+      "grammar": "root ::= \"YES\" | \"NO\"",
+      "max_tokens": 16,
+      "passed": true,
+      "score_reason": "expected_exact_YES",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.37196922302246094,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 50,
+        "total_tokens": 52,
+        "prompt_tokens_details": {
+          "cached_tokens": 22
+        }
+      },
+      "completion_tps_wall": 5.376788928258272,
+      "content": "YES"
+    }
+  ],
+  "cleanup_status": "server_pid_gone; no_kfd_pids_post_cleanup"
+}

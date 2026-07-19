@@ -1,0 +1,11 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Review under the stated precondition. Precondition: xs is non-empty. Code: def first(xs): return xs[0]. Is there a major bug under this contract? Output exactly NO_MAJOR_BUG or MAJOR_BUG."
+    }
+  ],
+  "temperature": 0,
+  "max_tokens": 256,
+  "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\""
+}

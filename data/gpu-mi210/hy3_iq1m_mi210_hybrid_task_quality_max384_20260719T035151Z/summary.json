@@ -1,0 +1,271 @@
+{
+  "classification": "deterministic task-quality and CPU-vs-hybrid architecture-fit slice; does not register Hy3 into production roles by itself",
+  "cleanup": {
+    "allowed_pids": [],
+    "extra_pids": [],
+    "observed_pids": [],
+    "passed": true
+  },
+  "created_at": "2026-07-19T03:52:40.376738+00:00",
+  "gpu_only_disposition": "not runnable on one MI210 for this 91.8GB artifact; meaningful GPU lane is --cpu-moe hybrid",
+  "mode": "execute",
+  "quality_gate_passed": false,
+  "results": [
+    {
+      "arm": "hybrid_nospec",
+      "device": "ROCm0",
+      "hybrid": true,
+      "mean_decode_tps": 11.16771856504706,
+      "mean_prompt_tps": 22.287144532005467,
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "ngl": 99,
+      "pass_rate": 0.8333333333333334,
+      "passed": 5,
+      "port": 19340,
+      "resource_class": "MI210 + CPU experts",
+      "role": "mi210_hybrid_cpu_experts_nospec",
+      "tasks": [
+        {
+          "content": "{\"status\":\"ok\",\"model\":\"hy3\"}",
+          "prompt": "Return exactly this minified JSON and nothing else: {\"status\":\"ok\",\"model\":\"hy3\"}",
+          "response_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/hy3_iq1m_mi210_hybrid_task_quality_max384_20260719T035151Z/responses/hybrid_nospec/strict_json.raw.json",
+          "score": {
+            "expected": {
+              "model": "hy3",
+              "status": "ok"
+            },
+            "json_mode": "strict",
+            "normalized": "{\"status\":\"ok\",\"model\":\"hy3\"}",
+            "observed": {
+              "model": "hy3",
+              "status": "ok"
+            },
+            "passed": true,
+            "scorer": "json_exact"
+          },
+          "task_id": "strict_json",
+          "timings": {
+            "cache_n": 0,
+            "predicted_ms": 1107.706,
+            "predicted_n": 11,
+            "predicted_per_second": 9.93043280437228,
+            "predicted_per_token_ms": 100.70054545454545,
+            "prompt_ms": 5670.279,
+            "prompt_n": 51,
+            "prompt_per_second": 8.994266419694691,
+            "prompt_per_token_ms": 111.1819411764706
+          },
+          "usage": {
+            "completion_tokens": 11,
+            "prompt_tokens": 51,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 62
+          }
+        },
+        {
+          "content": "95",
+          "prompt": "Answer with only the integer result: 37 + 58",
+          "response_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/hy3_iq1m_mi210_hybrid_task_quality_max384_20260719T035151Z/responses/hybrid_nospec/simple_math.raw.json",
+          "score": {
+            "expected": "95",
+            "normalized": "95",
+            "observed": "95",
+            "passed": true,
+            "scorer": "exact"
+          },
+          "task_id": "simple_math",
+          "timings": {
+            "cache_n": 28,
+            "predicted_ms": 113.778,
+            "predicted_n": 2,
+            "predicted_per_second": 17.578090667791663,
+            "predicted_per_token_ms": 56.889,
+            "prompt_ms": 631.235,
+            "prompt_n": 15,
+            "prompt_per_second": 23.762940901565976,
+            "prompt_per_token_ms": 42.08233333333333
+          },
+          "usage": {
+            "completion_tokens": 2,
+            "prompt_tokens": 43,
+            "prompt_tokens_details": {
+              "cached_tokens": 28
+            },
+            "total_tokens": 45
+          }
+        },
+        {
+          "content": "reduces computation by skipping unnecessary node connections.",
+          "prompt": "In exactly six lowercase words, describe why sparse routing helps. Return only the six words.",
+          "response_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/hy3_iq1m_mi210_hybrid_task_quality_max384_20260719T035151Z/responses/hybrid_nospec/lowercase_six_words.raw.json",
+          "score": {
+            "expected_word_count": 6,
+            "normalized": "reduces computation by skipping unnecessary node connections.",
+            "observed_words": [
+              "reduces",
+              "computation",
+              "by",
+              "skipping",
+              "unnecessary",
+              "node",
+              "connections."
+            ],
+            "passed": false,
+            "scorer": "five_lowercase_words"
+          },
+          "task_id": "lowercase_six_words",
+          "timings": {
+            "cache_n": 28,
+            "predicted_ms": 982.914,
+            "predicted_n": 10,
+            "predicted_per_second": 10.173830060412204,
+            "predicted_per_token_ms": 98.2914,
+            "prompt_ms": 824.132,
+            "prompt_n": 21,
+            "prompt_per_second": 25.481354928579403,
+            "prompt_per_token_ms": 39.24438095238095
+          },
+          "usage": {
+            "completion_tokens": 10,
+            "prompt_tokens": 49,
+            "prompt_tokens_details": {
+              "cached_tokens": 28
+            },
+            "total_tokens": 59
+          }
+        },
+        {
+          "content": "Dense inference activates all parameters per token, maximizing compute and memory bandwidth use but with no routing overhead. Sparse expert routing activates only selected experts, reducing compute and memory bandwidth per token, but adds routing overhead from the gating step. Dense inference avoids load balancing issues since all experts are always used; sparse routing risks imbalance where some experts are overloaded and others underused, hurting utilization. Overall, dense inference is simpler and uniformly utilized, while sparse routing saves compute/bandwidth at the cost of routing logic and potential load imbalance.",
+          "prompt": "Compare dense inference with sparse expert routing in under 140 words. Mention compute, memory bandwidth, load balancing, and routing overhead.",
+          "response_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/hy3_iq1m_mi210_hybrid_task_quality_max384_20260719T035151Z/responses/hybrid_nospec/routing_tradeoffs.raw.json",
+          "score": {
+            "case_sensitive": false,
+            "expected_groups": [
+              [
+                "compute",
+                "computation"
+              ],
+              [
+                "memory bandwidth",
+                "bandwidth"
+              ],
+              [
+                "load balancing",
+                "load-balanced",
+                "imbalance"
+              ],
+              [
+                "routing overhead",
+                "router overhead",
+                "routing cost"
+              ]
+            ],
+            "matched_terms": [
+              "compute",
+              "memory bandwidth",
+              "load balancing",
+              "routing overhead"
+            ],
+            "missing_groups": [],
+            "normalized": "Dense inference activates all parameters per token, maximizing compute and memory bandwidth use but with no routing overhead. Sparse expert routing activates only selected experts, reducing compute and memory bandwidth per token, but adds routing overhead from the gating step. Dense inference avoids load balancing issues since all experts are always used; sparse routing risks imbalance where some experts are overloaded and others underused, hurting utilization. Overall, dense inference is simpler and uniformly utilized, while sparse routing saves compute/bandwidth at the cost of routing logic and potential load imbalance.",
+            "passed": true,
+            "scorer": "contains_all_groups"
+          },
+          "task_id": "routing_tradeoffs",
+          "timings": {
+            "cache_n": 28,
+            "predicted_ms": 11255.481,
+            "predicted_n": 107,
+            "predicted_per_second": 9.50647955427227,
+            "predicted_per_token_ms": 105.19141121495326,
+            "prompt_ms": 1010.342,
+            "prompt_n": 30,
+            "prompt_per_second": 29.692915864133138,
+            "prompt_per_token_ms": 33.678066666666666
+          },
+          "usage": {
+            "completion_tokens": 107,
+            "prompt_tokens": 58,
+            "prompt_tokens_details": {
+              "cached_tokens": 28
+            },
+            "total_tokens": 165
+          }
+        },
+        {
+          "content": "HY3-DELTA-9421",
+          "prompt": "Read the passage and answer with only the deployment code.\n\nOperators compared CPU-only and hybrid inference lanes. Several unrelated identifiers appear: HX-1000, ROUTE-77, and TEST-404. The deployment code to preserve is HY3-DELTA-9421. Later notes mention caches, ports, and throughput, but no other deployment code.\n\nQuestion: what is the deployment code?",
+          "response_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/hy3_iq1m_mi210_hybrid_task_quality_max384_20260719T035151Z/responses/hybrid_nospec/needle_code.raw.json",
+          "score": {
+            "expected": "HY3-DELTA-9421",
+            "normalized": "HY3-DELTA-9421",
+            "observed": "HY3-DELTA-9421",
+            "passed": true,
+            "scorer": "exact"
+          },
+          "task_id": "needle_code",
+          "timings": {
+            "cache_n": 28,
+            "predicted_ms": 872.987,
+            "predicted_n": 9,
+            "predicted_per_second": 10.309431870119486,
+            "predicted_per_token_ms": 96.99855555555555,
+            "prompt_ms": 5174.062,
+            "prompt_n": 86,
+            "prompt_per_second": 16.62137021164416,
+            "prompt_per_token_ms": 60.16351162790698
+          },
+          "usage": {
+            "completion_tokens": 9,
+            "prompt_tokens": 114,
+            "prompt_tokens_details": {
+              "cached_tokens": 28
+            },
+            "total_tokens": 123
+          }
+        },
+        {
+          "content": "```python\ndef binary_search(arr, target):\n    if not arr:\n        return -1\n    low, high = 0, len(arr) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1\n```",
+          "prompt": "Write a Python binary_search(arr, target) function. Return code only. It must handle an empty array and return -1 when absent.",
+          "response_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/hy3_iq1m_mi210_hybrid_task_quality_max384_20260719T035151Z/responses/hybrid_nospec/binary_search_code.raw.json",
+          "score": {
+            "case_sensitive": true,
+            "expected_terms": [
+              "def binary_search",
+              "while",
+              "return -1"
+            ],
+            "missing_terms": [],
+            "normalized": "```python\ndef binary_search(arr, target):\n    if not arr:\n        return -1\n    low, high = 0, len(arr) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1\n```",
+            "passed": true,
+            "scorer": "contains_all"
+          },
+          "task_id": "binary_search_code",
+          "timings": {
+            "cache_n": 28,
+            "predicted_ms": 11043.278,
+            "predicted_n": 105,
+            "predicted_per_second": 9.508046433314455,
+            "predicted_per_token_ms": 105.1740761904762,
+            "prompt_ms": 1062.735,
+            "prompt_n": 31,
+            "prompt_per_second": 29.17001886641543,
+            "prompt_per_token_ms": 34.28177419354839
+          },
+          "usage": {
+            "completion_tokens": 105,
+            "prompt_tokens": 59,
+            "prompt_tokens_details": {
+              "cached_tokens": 28
+            },
+            "total_tokens": 164
+          }
+        }
+      ],
+      "total": 6
+    }
+  ],
+  "schema": "hy3_task_quality_execute.v1"
+}

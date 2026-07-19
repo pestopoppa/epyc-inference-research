@@ -1,0 +1,11 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Review this Python. It should average all elements of a non-empty list. Code:\ndef avg(xs):\n    s = 0\n    for i in range(len(xs)-1):\n        s += xs[i]\n    return s / len(xs)\nIs there a major behavior bug? Output exactly NO_MAJOR_BUG or MAJOR_BUG."
+    }
+  ],
+  "temperature": 0,
+  "max_tokens": 256,
+  "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\""
+}

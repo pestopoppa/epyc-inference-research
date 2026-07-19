@@ -1,0 +1,27 @@
+K11 Gemma4 determinism runner
+mode: execute
+output_dir: /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/gemma4_ud_iq4xs_mtp_freeform_termination_20260719T035436Z
+server_bin: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server
+ld_library_path: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin
+target_model: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf
+draft_model: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf
+runs: 3
+prompt: Return exactly 200 words. Every word must be benchmark. Do not use punctuation, numbering, line breaks, or any other text.
+seed: 42
+temperature: 0.0
+max_tokens: 768
+stop: []
+spec_type: draft-mtp
+spec_draft_n_max: 2
+slots: 4
+request_sampler_mode: current
+draft_backend_sampling: default
+schema_task: none
+expected_word: benchmark
+expected_word_count: 200
+run_01: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=211543
+run_02: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=211765
+run_03: ok hash=f66370861ce2 draft=133/134 accept=99.3% pid=212010
+Summary written to /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/gemma4_ud_iq4xs_mtp_freeform_termination_20260719T035436Z/summary.json
+Unique output hashes: 1
+Determinism check passed.

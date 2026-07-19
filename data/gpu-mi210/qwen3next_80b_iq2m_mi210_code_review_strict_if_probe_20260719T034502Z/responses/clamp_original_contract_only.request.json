@@ -1,0 +1,11 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Review: def clamp(x, lo, hi): return max(lo, min(hi, x)). Return exactly NO_MAJOR_BUG or MAJOR_BUG."
+    }
+  ],
+  "temperature": 0,
+  "max_tokens": 256,
+  "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\""
+}

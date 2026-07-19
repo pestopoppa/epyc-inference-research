@@ -1,0 +1,372 @@
+{
+  "artifact_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen3_4b_instruct_2507_prompt_policy_probe_20260719T040156Z",
+  "status": "ok",
+  "passed": 15,
+  "total": 18,
+  "mean_completion_tps_wall": 77.32955560099586,
+  "failures": [
+    {
+      "id": "discount_15_of_200_original_policy",
+      "expected": "PASS",
+      "content": "FAIL",
+      "score_reason": "exact_PASS"
+    },
+    {
+      "id": "discount_15_of_200_explicit_policy",
+      "expected": "PASS",
+      "content": "FAIL",
+      "score_reason": "exact_PASS"
+    },
+    {
+      "id": "needle_zx41_embedded_policy",
+      "expected": "ZX-41",
+      "content": "\"ZX-41\"",
+      "score_reason": "exact_ZX-41"
+    }
+  ],
+  "rows": [
+    {
+      "id": "discount_15_of_200_original_policy",
+      "expected": "PASS",
+      "passed": false,
+      "score_reason": "exact_PASS",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.06542515754699707,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 92,
+        "total_tokens": 94,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 30.56928060988364,
+      "content": "FAIL"
+    },
+    {
+      "id": "discount_15_of_200_explicit_policy",
+      "expected": "PASS",
+      "passed": false,
+      "score_reason": "exact_PASS",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.04472684860229492,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 96,
+        "total_tokens": 98,
+        "prompt_tokens_details": {
+          "cached_tokens": 59
+        }
+      },
+      "completion_tps_wall": 44.71587117133445,
+      "content": "FAIL"
+    },
+    {
+      "id": "discount_wrong_control",
+      "expected": "FAIL",
+      "passed": true,
+      "score_reason": "exact_FAIL",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.042677879333496094,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 92,
+        "total_tokens": 94,
+        "prompt_tokens_details": {
+          "cached_tokens": 59
+        }
+      },
+      "completion_tps_wall": 46.86268463274563,
+      "content": "FAIL"
+    },
+    {
+      "id": "discount_20_of_80_control",
+      "expected": "PASS",
+      "passed": true,
+      "score_reason": "exact_PASS",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.030370712280273438,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 91,
+        "total_tokens": 93,
+        "prompt_tokens_details": {
+          "cached_tokens": 63
+        }
+      },
+      "completion_tps_wall": 65.85291716385103,
+      "content": "PASS"
+    },
+    {
+      "id": "needle_zx41_original_policy",
+      "expected": "ZX-41",
+      "passed": true,
+      "score_reason": "exact_ZX-41",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.054840087890625,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 84,
+        "total_tokens": 89,
+        "prompt_tokens_details": {
+          "cached_tokens": 59
+        }
+      },
+      "completion_tps_wall": 91.17417918753478,
+      "content": "ZX-41"
+    },
+    {
+      "id": "needle_zx41_embedded_policy",
+      "expected": "ZX-41",
+      "passed": false,
+      "score_reason": "exact_ZX-41",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.06719422340393066,
+      "usage": {
+        "completion_tokens": 7,
+        "prompt_tokens": 87,
+        "total_tokens": 94,
+        "prompt_tokens_details": {
+          "cached_tokens": 59
+        }
+      },
+      "completion_tps_wall": 104.1756217334379,
+      "content": "\"ZX-41\""
+    },
+    {
+      "id": "needle_r7b2_control",
+      "expected": "R7B2",
+      "passed": true,
+      "score_reason": "exact_R7B2",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.05252194404602051,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 78,
+        "total_tokens": 83,
+        "prompt_tokens_details": {
+          "cached_tokens": 59
+        }
+      },
+      "completion_tps_wall": 95.19830407684312,
+      "content": "R7B2"
+    },
+    {
+      "id": "exact_ok",
+      "expected": "ok",
+      "passed": true,
+      "score_reason": "exact_ok",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.02655959129333496,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 68,
+        "total_tokens": 70,
+        "prompt_tokens_details": {
+          "cached_tokens": 59
+        }
+      },
+      "completion_tps_wall": 75.30236357597465,
+      "content": "ok"
+    },
+    {
+      "id": "mod_21_7",
+      "expected": "YES",
+      "passed": true,
+      "score_reason": "exact_YES",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.029149293899536133,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 79,
+        "total_tokens": 81,
+        "prompt_tokens_details": {
+          "cached_tokens": 59
+        }
+      },
+      "completion_tps_wall": 68.61229664406474,
+      "content": "YES"
+    },
+    {
+      "id": "mod_22_7",
+      "expected": "NO",
+      "passed": true,
+      "score_reason": "exact_NO",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.029006004333496094,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 79,
+        "total_tokens": 81,
+        "prompt_tokens_details": {
+          "cached_tokens": 62
+        }
+      },
+      "completion_tps_wall": 68.9512411638994,
+      "content": "NO"
+    },
+    {
+      "id": "math_fraction",
+      "expected": "YES",
+      "passed": true,
+      "score_reason": "exact_YES",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.029560089111328125,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 87,
+        "total_tokens": 89,
+        "prompt_tokens_details": {
+          "cached_tokens": 61
+        }
+      },
+      "completion_tps_wall": 67.65879468318492,
+      "content": "YES"
+    },
+    {
+      "id": "boolean_tool",
+      "expected": "YES",
+      "passed": true,
+      "score_reason": "exact_YES",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.02939915657043457,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 83,
+        "total_tokens": 85,
+        "prompt_tokens_details": {
+          "cached_tokens": 59
+        }
+      },
+      "completion_tps_wall": 68.02916251044125,
+      "content": "YES"
+    },
+    {
+      "id": "boolean_poem",
+      "expected": "NO",
+      "passed": true,
+      "score_reason": "exact_NO",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.026859045028686523,
+      "usage": {
+        "completion_tokens": 2,
+        "prompt_tokens": 83,
+        "total_tokens": 85,
+        "prompt_tokens_details": {
+          "cached_tokens": 67
+        }
+      },
+      "completion_tps_wall": 74.46281123785008,
+      "content": "NO"
+    },
+    {
+      "id": "review_no_issue",
+      "expected": "NO_MAJOR_BUG",
+      "passed": true,
+      "score_reason": "exact_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.05706906318664551,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 101,
+        "total_tokens": 106,
+        "prompt_tokens_details": {
+          "cached_tokens": 59
+        }
+      },
+      "completion_tps_wall": 87.61314310780607,
+      "content": "NO_MAJOR_BUG"
+    },
+    {
+      "id": "review_bug_index",
+      "expected": "MAJOR_BUG",
+      "passed": true,
+      "score_reason": "exact_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.06142711639404297,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 99,
+        "total_tokens": 104,
+        "prompt_tokens_details": {
+          "cached_tokens": 65
+        }
+      },
+      "completion_tps_wall": 81.39727686264769,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "review_no_bug_clamp",
+      "expected": "NO_MAJOR_BUG",
+      "passed": true,
+      "score_reason": "exact_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.057093143463134766,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 108,
+        "total_tokens": 113,
+        "prompt_tokens_details": {
+          "cached_tokens": 65
+        }
+      },
+      "completion_tps_wall": 87.57619035687739,
+      "content": "NO_MAJOR_BUG"
+    },
+    {
+      "id": "tool_call_shape",
+      "expected": "json_tool",
+      "passed": true,
+      "score_reason": "json_tool",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.12558436393737793,
+      "usage": {
+        "completion_tokens": 15,
+        "prompt_tokens": 98,
+        "total_tokens": 113,
+        "prompt_tokens_details": {
+          "cached_tokens": 59
+        }
+      },
+      "completion_tps_wall": 119.44162099255988,
+      "content": "{\"tool\":\"add\",\"arguments\":{\"numbers\":[2,3]}}"
+    },
+    {
+      "id": "json_status",
+      "expected": "json_status",
+      "passed": true,
+      "score_reason": "json_status",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.08745980262756348,
+      "usage": {
+        "completion_tokens": 10,
+        "prompt_tokens": 78,
+        "total_tokens": 88,
+        "prompt_tokens_details": {
+          "cached_tokens": 61
+        }
+      },
+      "completion_tps_wall": 114.33824110698873,
+      "content": "{\"status\":\"ok\",\"score\":1}"
+    }
+  ],
+  "cleanup_status": "pending_trap_cleanup"
+}

@@ -1,0 +1,11 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "You are a strict code reviewer. Label MAJOR_BUG only if the code violates its stated behavior for normal inputs. Review this Python function whose intended behavior is to clamp x into the inclusive range [lo, hi], assuming lo <= hi: def clamp(x, lo, hi): return max(lo, min(hi, x)). Output exactly one token: NO_MAJOR_BUG or MAJOR_BUG."
+    }
+  ],
+  "temperature": 0,
+  "max_tokens": 256,
+  "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\""
+}

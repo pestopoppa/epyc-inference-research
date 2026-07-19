@@ -1,0 +1,11 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "You are a strict code reviewer. Intended behavior: clamp x into inclusive range [lo, hi], assuming lo <= hi. Code: def clamp(x, lo, hi): return max(lo, x). Does this have a major behavior bug? Output exactly one token: NO_MAJOR_BUG or MAJOR_BUG."
+    }
+  ],
+  "temperature": 0,
+  "max_tokens": 256,
+  "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\""
+}

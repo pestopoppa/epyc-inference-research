@@ -1,0 +1,126 @@
+{
+  "arms": [
+    {
+      "command": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf --host 127.0.0.1 --port 19340 --device ROCm0 -ngl 99 -t 96 -c 4096 -fa on --reasoning off --reasoning-budget 0 --cpu-moe --fit on",
+      "device": "ROCm0",
+      "hybrid": true,
+      "name": "hybrid_nospec",
+      "ngl": 99,
+      "port": 19340,
+      "resource_class": "MI210 + CPU experts",
+      "role": "mi210_hybrid_cpu_experts_nospec"
+    },
+    {
+      "command": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf --host 127.0.0.1 --port 19350 --device none -ngl 0 -t 96 -c 4096 -fa on --reasoning off --reasoning-budget 0 --device-draft none",
+      "device": "none",
+      "hybrid": false,
+      "name": "cpu_nospec",
+      "ngl": 0,
+      "port": 19350,
+      "resource_class": "CPU-only",
+      "role": "cpu_nospec"
+    }
+  ],
+  "classification": "deterministic task-quality and CPU-vs-hybrid architecture-fit slice; does not register Hy3 into production roles by itself",
+  "created_at": "2026-07-19T03:51:52.156437+00:00",
+  "experimental_root": "/mnt/raid0/llm/llama.cpp-experimental",
+  "glm_guard": {
+    "active": false,
+    "allow_override_flag": "--allow-glm-download",
+    "blocked_in_execute": true,
+    "pattern": "hf download unsloth/GLM-5.2-GGUF"
+  },
+  "gpu_only_disposition": "not runnable on one MI210 for this 91.8GB artifact; meaningful GPU lane is --cpu-moe hybrid",
+  "mode": "execute",
+  "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+  "preexisting_llama_server_pids": [],
+  "request": {
+    "context": 4096,
+    "max_tokens": 384,
+    "request_timeout_s": 420,
+    "seed": 7,
+    "startup_timeout_s": 900,
+    "temperature": 0.0
+  },
+  "schema": "hy3_task_quality_plan.v1",
+  "selected_arms": [
+    "hybrid_nospec"
+  ],
+  "server_bin": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "tasks": [
+    {
+      "expected": {
+        "model": "hy3",
+        "status": "ok"
+      },
+      "max_tokens": 64,
+      "prompt": "Return exactly this minified JSON and nothing else: {\"status\":\"ok\",\"model\":\"hy3\"}",
+      "scorer": "json_exact",
+      "task_id": "strict_json"
+    },
+    {
+      "expected": "95",
+      "max_tokens": 32,
+      "prompt": "Answer with only the integer result: 37 + 58",
+      "scorer": "exact",
+      "task_id": "simple_math"
+    },
+    {
+      "expected": 6,
+      "max_tokens": 64,
+      "prompt": "In exactly six lowercase words, describe why sparse routing helps. Return only the six words.",
+      "scorer": "five_lowercase_words",
+      "task_id": "lowercase_six_words"
+    },
+    {
+      "expected": {
+        "case_sensitive": false,
+        "groups": [
+          [
+            "compute",
+            "computation"
+          ],
+          [
+            "memory bandwidth",
+            "bandwidth"
+          ],
+          [
+            "load balancing",
+            "load-balanced",
+            "imbalance"
+          ],
+          [
+            "routing overhead",
+            "router overhead",
+            "routing cost"
+          ]
+        ]
+      },
+      "max_tokens": 256,
+      "prompt": "Compare dense inference with sparse expert routing in under 140 words. Mention compute, memory bandwidth, load balancing, and routing overhead.",
+      "scorer": "contains_all_groups",
+      "task_id": "routing_tradeoffs"
+    },
+    {
+      "expected": "HY3-DELTA-9421",
+      "max_tokens": 48,
+      "prompt": "Read the passage and answer with only the deployment code.\n\nOperators compared CPU-only and hybrid inference lanes. Several unrelated identifiers appear: HX-1000, ROUTE-77, and TEST-404. The deployment code to preserve is HY3-DELTA-9421. Later notes mention caches, ports, and throughput, but no other deployment code.\n\nQuestion: what is the deployment code?",
+      "scorer": "exact",
+      "task_id": "needle_code"
+    },
+    {
+      "expected": {
+        "case_sensitive": true,
+        "terms": [
+          "def binary_search",
+          "while",
+          "return -1"
+        ]
+      },
+      "max_tokens": 384,
+      "prompt": "Write a Python binary_search(arr, target) function. Return code only. It must handle an empty array and return -1 when absent.",
+      "scorer": "contains_all",
+      "task_id": "binary_search_code"
+    }
+  ]
+}

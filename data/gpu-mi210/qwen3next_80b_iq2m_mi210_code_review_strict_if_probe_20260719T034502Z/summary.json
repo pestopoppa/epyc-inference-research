@@ -1,0 +1,221 @@
+{
+  "artifact_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen3next_80b_iq2m_mi210_code_review_strict_if_probe_20260719T034502Z",
+  "status": "ok",
+  "passed": 10,
+  "total": 10,
+  "mean_completion_tps_wall": 22.561181212450467,
+  "failures": [],
+  "rows": [
+    {
+      "id": "clamp_original_contract_only",
+      "expected": "NO_MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 256,
+      "passed": true,
+      "score_reason": "expected_exact_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.33257436752319336,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 40,
+        "total_tokens": 45,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 15.034231402849487,
+      "content": "NO_MAJOR_BUG"
+    },
+    {
+      "id": "clamp_original_strict_if",
+      "expected": "NO_MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 256,
+      "passed": true,
+      "score_reason": "expected_exact_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.33317995071411133,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 90,
+        "total_tokens": 95,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 15.006905395367875,
+      "content": "NO_MAJOR_BUG"
+    },
+    {
+      "id": "clamp_real_bug_bounds_reversed",
+      "expected": "MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 256,
+      "passed": true,
+      "score_reason": "expected_exact_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.3242964744567871,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 77,
+        "total_tokens": 82,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 15.417990616072071,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "clamp_real_bug_ignores_hi",
+      "expected": "MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 256,
+      "passed": true,
+      "score_reason": "expected_exact_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.3222050666809082,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 73,
+        "total_tokens": 78,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 15.518067581946774,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "no_bug_avg_nonempty",
+      "expected": "NO_MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 256,
+      "passed": true,
+      "score_reason": "expected_exact_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.3241147994995117,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 64,
+        "total_tokens": 69,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 15.426632809488641,
+      "content": "NO_MAJOR_BUG"
+    },
+    {
+      "id": "real_bug_avg_drops_last",
+      "expected": "MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 256,
+      "passed": true,
+      "score_reason": "expected_exact_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.31916046142578125,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 77,
+        "total_tokens": 82,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 15.666100925106972,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "no_bug_first_with_precondition",
+      "expected": "NO_MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 256,
+      "passed": true,
+      "score_reason": "expected_exact_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.31287169456481934,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 54,
+        "total_tokens": 59,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 15.980991847008143,
+      "content": "NO_MAJOR_BUG"
+    },
+    {
+      "id": "real_bug_first_second_index",
+      "expected": "MAJOR_BUG",
+      "grammar": "root ::= \"NO_MAJOR_BUG\" | \"MAJOR_BUG\"",
+      "max_tokens": 256,
+      "passed": true,
+      "score_reason": "expected_exact_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 0.30831003189086914,
+      "usage": {
+        "completion_tokens": 5,
+        "prompt_tokens": 54,
+        "total_tokens": 59,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 16.217441804715012,
+      "content": "MAJOR_BUG"
+    },
+    {
+      "id": "freeform_no_bug_clamp_rationale",
+      "expected": "json_verdict_NO_MAJOR_BUG",
+      "grammar": null,
+      "max_tokens": 512,
+      "passed": true,
+      "score_reason": "json_verdict_NO_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 1.73866605758667,
+      "usage": {
+        "completion_tokens": 85,
+        "prompt_tokens": 76,
+        "total_tokens": 161,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 48.88805393600598,
+      "content": "{\n  \"verdict\": \"NO_MAJOR_BUG\",\n  \"rationale\": \"The function correctly clamps x to the inclusive range [lo, hi] by first taking min(hi, x) to ensure x does not exceed hi, then taking max(lo, ...) to ensure x is at least lo. The logic is sound and matches the intended behavior assuming lo <= hi. No major bugs present.\"\n}"
+    },
+    {
+      "id": "freeform_real_bug_clamp_rationale",
+      "expected": "json_verdict_MAJOR_BUG",
+      "grammar": null,
+      "max_tokens": 512,
+      "passed": true,
+      "score_reason": "json_verdict_MAJOR_BUG",
+      "status": 200,
+      "error": null,
+      "elapsed_s": 3.2599124908447266,
+      "usage": {
+        "completion_tokens": 171,
+        "prompt_tokens": 76,
+        "total_tokens": 247,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "completion_tps_wall": 52.455395805943716,
+      "content": "{\n  \"verdict\": \"MAJOR_BUG\",\n  \"rationale\": \"The function incorrectly uses min(lo, max(hi, x)). This will clamp x to [lo, hi] only if lo <= hi, but the logic is reversed: max(hi, x) returns the larger of hi and x, then min(lo, ...) returns the smaller of lo and that result \u2014 which means if x is greater than hi, max(hi, x) becomes x, and min(lo, x) will return lo if lo < x \u2014 effectively clamping to lo even if lo is less than hi. The correct logic should be min(hi, max(lo, x)) to ensure x is bounded below by lo and above by hi. This function will produce incorrect results for any x outside [lo, hi].\"\n}"
+    }
+  ],
+  "cleanup_status": "server_pid_gone; no_kfd_pids_post_cleanup"
+}

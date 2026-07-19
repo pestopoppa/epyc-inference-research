@@ -1,0 +1,9 @@
+Hy3 task-quality runner
+mode: execute
+output_dir: /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/hy3_iq1m_mi210_hybrid_task_quality_max384_20260719T035151Z
+selected_arms: hybrid_nospec
+server_bin: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server
+glm_active: False
+hybrid_nospec: 5/6 mean_decode_tps=11.16771856504706
+cleanup_passed: True
+Summary written to /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/hy3_iq1m_mi210_hybrid_task_quality_max384_20260719T035151Z/summary.json

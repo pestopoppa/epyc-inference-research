@@ -1,0 +1,1 @@
+/usr/bin/bash: line 8: ss: command not found

@@ -1,0 +1,10 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Code review this Python function. Intended behavior: clamp x to inclusive [lo, hi], assuming lo <= hi. Code:\ndef clamp(x, lo, hi):\n    return min(lo, max(hi, x))\nReturn JSON only with keys verdict and rationale. verdict must be exactly NO_MAJOR_BUG or MAJOR_BUG."
+    }
+  ],
+  "temperature": 0,
+  "max_tokens": 512
+}
