@@ -16,7 +16,13 @@ sys.modules["glm52_ccrab_accept_control_filter"] = filter_mod
 _SPEC.loader.exec_module(filter_mod)
 
 
-def _row(row_id: str, *, candidate: str, confidence: str = "observation") -> dict:
+def _row(
+    row_id: str,
+    *,
+    candidate: str,
+    confidence: str = "observation",
+    executable_oracle: dict | None = None,
+) -> dict:
     return {
         "row_id": row_id,
         "source_benchmark": "c-crab",
@@ -24,7 +30,7 @@ def _row(row_id: str, *, candidate: str, confidence: str = "observation") -> dic
         "gold_label": "accept",
         "gold_source": "merged_pr_accepted",
         "gold_confidence": confidence,
-        "executable_oracle": None,
+        "executable_oracle": executable_oracle,
         "defect_origin": "natural",
         "ambiguous_tail": False,
         "provenance": {"clean_control": True, "instance_id": "owner__repo-1@abc"},
@@ -42,9 +48,15 @@ GOOD_PATCH = """diff --git a/pkg/tests/test_bug.py b/pkg/tests/test_bug.py
 
 
 def test_select_rows_requires_clean_c_crab_accept_with_test_evidence():
+    oracle = {
+        "oracle_type": "testgen_fail_then_pass",
+        "verdict": "pass",
+        "source": "c-crab/stage4_agent_resolved",
+        "resolution": "agent_resolved",
+    }
     rows = [
         _row("b", candidate=GOOD_PATCH),
-        _row("a", candidate=GOOD_PATCH, confidence="multi_oracle"),
+        _row("a", candidate=GOOD_PATCH, confidence="multi_oracle", executable_oracle=oracle),
         {**_row("no-test", candidate="diff --git a/pkg/mod.py b/pkg/mod.py\n+value = 1\n")},
         {**_row("reject", candidate=GOOD_PATCH), "gold_label": "reject"},
         {**_row("dirty", candidate=GOOD_PATCH), "provenance": {"clean_control": False}},
@@ -55,6 +67,25 @@ def test_select_rows_requires_clean_c_crab_accept_with_test_evidence():
     assert [row.row_id for row in selected] == ["a", "b"]
     assert selected[0].hard_accept_control is True
     assert selected[1].hard_accept_control is False
+
+
+def test_select_rows_prefers_hard_accept_controls_before_observations():
+    oracle = {
+        "oracle_type": "testgen_fail_then_pass",
+        "verdict": "pass",
+        "source": "c-crab/stage3_testgen_verified",
+        "resolution": "testgen_verified",
+    }
+    rows = [
+        _row("a-observation", candidate=GOOD_PATCH),
+        _row("b-hard", candidate=GOOD_PATCH, confidence="multi_oracle", executable_oracle=oracle),
+        _row("c-hard", candidate=GOOD_PATCH, confidence="multi_oracle", executable_oracle=oracle),
+    ]
+
+    selected = filter_mod.select_rows(rows, n=2, max_chars=15000)
+
+    assert [row.row_id for row in selected] == ["b-hard", "c-hard"]
+    assert all(row.hard_accept_control for row in selected)
 
 
 def test_cli_writes_json_and_row_ids(tmp_path):

@@ -117,7 +117,7 @@ def matching_rows(rows: Iterable[dict[str, Any]], *, max_chars: int) -> list[Acc
                 instance_id=instance_id(row),
             )
         )
-    matches.sort(key=lambda row: row.row_id)
+    matches.sort(key=lambda row: (not row.hard_accept_control, row.row_id))
     return matches
 
 
