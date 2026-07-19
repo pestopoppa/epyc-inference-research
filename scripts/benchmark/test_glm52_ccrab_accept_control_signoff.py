@@ -98,6 +98,30 @@ def test_rejected_or_ambiguous_rows_are_dropped_from_accepts():
     assert report["decision_grade"] is True
 
 
+def test_expected_row_ids_must_match_for_decision_grade():
+    packet = _packet(_row("a"), _row("b"))
+
+    matched = signoff_mod.build_report(
+        packet,
+        min_hard_accepts=2,
+        allow_unreviewed=False,
+        expected_row_ids=["a", "b"],
+    )
+    mismatched = signoff_mod.build_report(
+        packet,
+        min_hard_accepts=2,
+        allow_unreviewed=False,
+        expected_row_ids=["a", "c"],
+    )
+
+    assert matched["accepted_row_ids_match_expected"] is True
+    assert matched["decision_grade"] is True
+    assert mismatched["accepted_row_ids_match_expected"] is False
+    assert mismatched["missing_expected_accepted_row_ids"] == ["c"]
+    assert mismatched["unexpected_accepted_row_ids"] == ["b"]
+    assert mismatched["decision_grade"] is False
+
+
 def test_invalid_reviewed_decision_fails_validation():
     packet = _packet(_row("a", signoff=_signoff(decision="maybe_accept")))
 
@@ -118,11 +142,15 @@ def test_cli_writes_report_row_ids_and_oracle_notes(tmp_path):
     json_out = tmp_path / "report.json"
     row_ids_out = tmp_path / "row_ids.txt"
     oracle_notes_out = tmp_path / "oracle_notes.json"
+    expected_row_ids = tmp_path / "expected.txt"
+    expected_row_ids.write_text("# expected accepts\na\n", encoding="utf-8")
 
     rc = signoff_mod.main([
         str(packet_path),
         "--min-hard-accepts",
         "1",
+        "--expected-row-ids",
+        str(expected_row_ids),
         "--json-out",
         str(json_out),
         "--row-ids-out",
@@ -135,6 +163,7 @@ def test_cli_writes_report_row_ids_and_oracle_notes(tmp_path):
     report = json.loads(json_out.read_text(encoding="utf-8"))
     oracle_notes = json.loads(oracle_notes_out.read_text(encoding="utf-8"))
     assert report["decision_grade"] is True
+    assert report["accepted_row_ids_match_expected"] is True
     assert report["accepted_row_ids"] == ["a"]
     assert row_ids_out.read_text(encoding="utf-8") == "a\n"
     assert oracle_notes == {

@@ -39,6 +39,28 @@ def write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def read_row_ids_file(path: Path) -> list[str]:
+    row_ids: list[str] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        row_id = stripped.split("#", 1)[0].strip()
+        if row_id:
+            row_ids.append(row_id)
+    return row_ids
+
+
+def duplicate_values(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for value in values:
+        if value in seen:
+            duplicates.add(value)
+        seen.add(value)
+    return sorted(duplicates)
+
+
 def _require_string(value: Any, *, field: str, row_id: str | None = None) -> str:
     if not isinstance(value, str) or not value:
         prefix = f"row {row_id}: " if row_id else ""
@@ -97,9 +119,17 @@ def validate_row(row: Any) -> tuple[str, dict[str, Any]]:
     return row_id, signoff
 
 
-def build_report(packet: dict[str, Any], *, min_hard_accepts: int, allow_unreviewed: bool) -> dict[str, Any]:
+def build_report(
+    packet: dict[str, Any],
+    *,
+    min_hard_accepts: int,
+    allow_unreviewed: bool,
+    expected_row_ids: list[str] | None = None,
+) -> dict[str, Any]:
     if min_hard_accepts < 0:
         raise ValidationError("min_hard_accepts must be >= 0")
+    if expected_row_ids is not None and duplicate_values(expected_row_ids):
+        raise ValidationError("expected row ids file contains duplicate row ids")
 
     rows = validate_packet(packet)
     accepted_row_ids: list[str] = []
@@ -109,6 +139,8 @@ def build_report(packet: dict[str, Any], *, min_hard_accepts: int, allow_unrevie
 
     for row in rows:
         row_id, signoff = validate_row(row)
+        if row_id in accepted_row_ids or row_id in rejected_row_ids or row_id in unreviewed_row_ids:
+            raise ValidationError(f"duplicate row_id in packet: {row_id}")
         status = signoff["status"]
         decision = signoff["decision"]
         if status == UNREVIEWED_STATUS:
@@ -127,7 +159,22 @@ def build_report(packet: dict[str, Any], *, min_hard_accepts: int, allow_unrevie
 
     hard_accept_n = len(accepted_row_ids)
     unreviewed_n = len(unreviewed_row_ids)
-    decision_grade = hard_accept_n >= min_hard_accepts and (allow_unreviewed or unreviewed_n == 0)
+    if expected_row_ids is None:
+        accepted_row_ids_match_expected = None
+        missing_expected_accepted_row_ids: list[str] = []
+        unexpected_accepted_row_ids: list[str] = []
+    else:
+        accepted_row_ids_match_expected = accepted_row_ids == expected_row_ids
+        expected_set = set(expected_row_ids)
+        accepted_set = set(accepted_row_ids)
+        missing_expected_accepted_row_ids = [row_id for row_id in expected_row_ids if row_id not in accepted_set]
+        unexpected_accepted_row_ids = [row_id for row_id in accepted_row_ids if row_id not in expected_set]
+    expected_gate = accepted_row_ids_match_expected is not False
+    decision_grade = (
+        hard_accept_n >= min_hard_accepts
+        and (allow_unreviewed or unreviewed_n == 0)
+        and expected_gate
+    )
     return {
         "schema": REPORT_SCHEMA,
         "audit_packet_schema": AUDIT_PACKET_SCHEMA,
@@ -138,6 +185,10 @@ def build_report(packet: dict[str, Any], *, min_hard_accepts: int, allow_unrevie
         "rejected_or_ambiguous_n": len(rejected_row_ids),
         "unreviewed_n": unreviewed_n,
         "decision_grade": decision_grade,
+        "expected_row_ids_n": len(expected_row_ids) if expected_row_ids is not None else None,
+        "accepted_row_ids_match_expected": accepted_row_ids_match_expected,
+        "missing_expected_accepted_row_ids": missing_expected_accepted_row_ids,
+        "unexpected_accepted_row_ids": unexpected_accepted_row_ids,
         "accepted_row_ids": accepted_row_ids,
         "rejected_row_ids": rejected_row_ids,
         "unreviewed_row_ids": unreviewed_row_ids,
@@ -150,6 +201,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("audit_packet", type=Path)
     parser.add_argument("--min-hard-accepts", type=int, default=24)
     parser.add_argument("--allow-unreviewed", action="store_true")
+    parser.add_argument(
+        "--expected-row-ids",
+        type=Path,
+        help="Optional row-id file that accepted hard controls must match exactly for decision_grade=true.",
+    )
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--row-ids-out", type=Path)
     parser.add_argument("--oracle-notes-out", type=Path)
@@ -160,10 +216,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         packet = read_json(args.audit_packet)
+        expected_row_ids = read_row_ids_file(args.expected_row_ids) if args.expected_row_ids else None
         report = build_report(
             packet,
             min_hard_accepts=args.min_hard_accepts,
             allow_unreviewed=args.allow_unreviewed,
+            expected_row_ids=expected_row_ids,
         )
     except ValidationError as exc:
         print(str(exc), file=sys.stderr)
