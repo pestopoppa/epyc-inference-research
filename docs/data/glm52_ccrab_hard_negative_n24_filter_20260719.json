@@ -1,0 +1,194 @@
+{
+  "corpus": "/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl",
+  "decision_grade": false,
+  "decision_grade_reason": "This artifact validates only the reject-side companion controls; the combined GC-shadow-repair4b.2b gate remains blocked until accept controls have signed hard-accept status.",
+  "filter": {
+    "candidate_payload_scope": "full_candidate",
+    "domain": "code",
+    "gold_confidence": "multi_oracle",
+    "gold_label": "reject",
+    "source_benchmark": "c-crab",
+    "source_suite": "python"
+  },
+  "invalid_json_lines": 0,
+  "matching_pool_n": 318,
+  "max_candidate_chars": 15000,
+  "purpose": "Deterministic reject-side companion controls for GC-shadow-repair4b.2b. This is no-inference prep and does not close the hard accept-control signoff gate.",
+  "reject_side_decision_grade": true,
+  "requested_n": 24,
+  "schema": "glm52_ccrab_hard_negative_filter.v1",
+  "seed": 42,
+  "selected_n": 24,
+  "selected_row_ids": [
+    "nearmiss-v1:c-crab:3b9731be33a917ac",
+    "nearmiss-v1:c-crab:688c6c72adbf5dbb",
+    "nearmiss-v1:c-crab:4f41428972bf8d1c",
+    "nearmiss-v1:c-crab:464e0b86870b3bb4",
+    "nearmiss-v1:c-crab:ffbb86d418484744",
+    "nearmiss-v1:c-crab:2b42feb6f862f419",
+    "nearmiss-v1:c-crab:4dffb979a7dbe93a",
+    "nearmiss-v1:c-crab:3b5fea1f6bbf15c9",
+    "nearmiss-v1:c-crab:6cec38ff57a31ab2",
+    "nearmiss-v1:c-crab:318082712c259a61",
+    "nearmiss-v1:c-crab:7c65bc29012e3519",
+    "nearmiss-v1:c-crab:615c2809e29a09cb",
+    "nearmiss-v1:c-crab:15640c98528c9b69",
+    "nearmiss-v1:c-crab:3333a13b02e7c9cd",
+    "nearmiss-v1:c-crab:6adc4394b44ef7fb",
+    "nearmiss-v1:c-crab:8b2bcb5a21222c99",
+    "nearmiss-v1:c-crab:d7b88900c121adf7",
+    "nearmiss-v1:c-crab:0e49d06ddc8f2635",
+    "nearmiss-v1:c-crab:3a9386520926c69a",
+    "nearmiss-v1:c-crab:4f7f5d3cefab8e82",
+    "nearmiss-v1:c-crab:580d7a6264a6c05e",
+    "nearmiss-v1:c-crab:0342d6ad25d55619",
+    "nearmiss-v1:c-crab:92c85c457f389108",
+    "nearmiss-v1:c-crab:e5e8deb707c24d37"
+  ],
+  "selected_rows": [
+    {
+      "candidate_chars": 764,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "pandas-dev__pandas-16744@b8a6007",
+      "row_id": "nearmiss-v1:c-crab:3b9731be33a917ac"
+    },
+    {
+      "candidate_chars": 6633,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "netbox-community__netbox-14754@44cf93a",
+      "row_id": "nearmiss-v1:c-crab:688c6c72adbf5dbb"
+    },
+    {
+      "candidate_chars": 1142,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "ansible__ansible-59946@fbe8544",
+      "row_id": "nearmiss-v1:c-crab:4f41428972bf8d1c"
+    },
+    {
+      "candidate_chars": 1509,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "psf__black-1940@55a46b8",
+      "row_id": "nearmiss-v1:c-crab:464e0b86870b3bb4"
+    },
+    {
+      "candidate_chars": 7715,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "sympy__sympy-21883@418efae",
+      "row_id": "nearmiss-v1:c-crab:ffbb86d418484744"
+    },
+    {
+      "candidate_chars": 2516,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "python-telegram-bot__python-telegram-bot-3514@d5c0a5c",
+      "row_id": "nearmiss-v1:c-crab:2b42feb6f862f419"
+    },
+    {
+      "candidate_chars": 6930,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "python__mypy-6781@3a824fb",
+      "row_id": "nearmiss-v1:c-crab:4dffb979a7dbe93a"
+    },
+    {
+      "candidate_chars": 882,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "ccxt__ccxt-14830@1d1701f",
+      "row_id": "nearmiss-v1:c-crab:3b5fea1f6bbf15c9"
+    },
+    {
+      "candidate_chars": 1755,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "python__mypy-17309@b3c328e",
+      "row_id": "nearmiss-v1:c-crab:6cec38ff57a31ab2"
+    },
+    {
+      "candidate_chars": 14934,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "psf__black-2919@22a0d08",
+      "row_id": "nearmiss-v1:c-crab:318082712c259a61"
+    },
+    {
+      "candidate_chars": 5833,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "apache__airflow-26766@cf0c9a6",
+      "row_id": "nearmiss-v1:c-crab:7c65bc29012e3519"
+    },
+    {
+      "candidate_chars": 1032,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "pandas-dev__pandas-34363@f3c7e18",
+      "row_id": "nearmiss-v1:c-crab:615c2809e29a09cb"
+    },
+    {
+      "candidate_chars": 2383,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "networkx__networkx-5371@b446ef1",
+      "row_id": "nearmiss-v1:c-crab:15640c98528c9b69"
+    },
+    {
+      "candidate_chars": 13802,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "pytorch__vision-2596@8859151",
+      "row_id": "nearmiss-v1:c-crab:3333a13b02e7c9cd"
+    },
+    {
+      "candidate_chars": 6554,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "saleor__saleor-5254@efbebcc",
+      "row_id": "nearmiss-v1:c-crab:6adc4394b44ef7fb"
+    },
+    {
+      "candidate_chars": 3504,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "python-telegram-bot__python-telegram-bot-2335@e64ddb0",
+      "row_id": "nearmiss-v1:c-crab:8b2bcb5a21222c99"
+    },
+    {
+      "candidate_chars": 3902,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "sqlfluff__sqlfluff-1803@a822a1f",
+      "row_id": "nearmiss-v1:c-crab:d7b88900c121adf7"
+    },
+    {
+      "candidate_chars": 4686,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "sqlfluff__sqlfluff-2285@2a45c67",
+      "row_id": "nearmiss-v1:c-crab:0e49d06ddc8f2635"
+    },
+    {
+      "candidate_chars": 905,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "pandas-dev__pandas-42635@59d4145",
+      "row_id": "nearmiss-v1:c-crab:3a9386520926c69a"
+    },
+    {
+      "candidate_chars": 6548,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "gradio-app__gradio-3275@067f582",
+      "row_id": "nearmiss-v1:c-crab:4f7f5d3cefab8e82"
+    },
+    {
+      "candidate_chars": 9161,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "frappe__frappe-15891@ec9ae72",
+      "row_id": "nearmiss-v1:c-crab:580d7a6264a6c05e"
+    },
+    {
+      "candidate_chars": 3568,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "apache__airflow-32366@52228da",
+      "row_id": "nearmiss-v1:c-crab:0342d6ad25d55619"
+    },
+    {
+      "candidate_chars": 9719,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "python__cpython-104029@f78e70e",
+      "row_id": "nearmiss-v1:c-crab:92c85c457f389108"
+    },
+    {
+      "candidate_chars": 1837,
+      "gold_source": "human_review_comment+testgen_oracle",
+      "instance_id": "pandas-dev__pandas-42186@62d46c4",
+      "row_id": "nearmiss-v1:c-crab:e5e8deb707c24d37"
+    }
+  ]
+}
