@@ -1,0 +1,541 @@
+{
+  "trace_starts": [
+    [
+      1,
+      1,
+      48
+    ],
+    [
+      16,
+      16,
+      48
+    ],
+    [
+      1,
+      1,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      1,
+      1,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      512,
+      512,
+      48
+    ],
+    [
+      1,
+      1,
+      48
+    ],
+    [
+      16,
+      16,
+      48
+    ],
+    [
+      1,
+      1,
+      48
+    ],
+    [
+      1,
+      1,
+      48
+    ],
+    [
+      1,
+      1,
+      48
+    ],
+    [
+      1,
+      1,
+      48
+    ],
+    [
+      1,
+      1,
+      48
+    ]
+  ],
+  "trace_start_count": 45,
+  "final_graph_nodes_values": [
+    4471
+  ],
+  "final_count": 45,
+  "layer_line_count": 2160,
+  "phase_delta_counts": {
+    "linear_attn": {
+      "92": 45,
+      "99": 1575
+    },
+    "full_attn": {
+      "75": 540
+    }
+  },
+  "first_48_layers": [
+    {
+      "layer": 0,
+      "phase": "linear_attn",
+      "graph_nodes": 93,
+      "delta": 92
+    },
+    {
+      "layer": 1,
+      "phase": "linear_attn",
+      "graph_nodes": 192,
+      "delta": 99
+    },
+    {
+      "layer": 2,
+      "phase": "linear_attn",
+      "graph_nodes": 291,
+      "delta": 99
+    },
+    {
+      "layer": 3,
+      "phase": "full_attn",
+      "graph_nodes": 366,
+      "delta": 75
+    },
+    {
+      "layer": 4,
+      "phase": "linear_attn",
+      "graph_nodes": 465,
+      "delta": 99
+    },
+    {
+      "layer": 5,
+      "phase": "linear_attn",
+      "graph_nodes": 564,
+      "delta": 99
+    },
+    {
+      "layer": 6,
+      "phase": "linear_attn",
+      "graph_nodes": 663,
+      "delta": 99
+    },
+    {
+      "layer": 7,
+      "phase": "full_attn",
+      "graph_nodes": 738,
+      "delta": 75
+    },
+    {
+      "layer": 8,
+      "phase": "linear_attn",
+      "graph_nodes": 837,
+      "delta": 99
+    },
+    {
+      "layer": 9,
+      "phase": "linear_attn",
+      "graph_nodes": 936,
+      "delta": 99
+    },
+    {
+      "layer": 10,
+      "phase": "linear_attn",
+      "graph_nodes": 1035,
+      "delta": 99
+    },
+    {
+      "layer": 11,
+      "phase": "full_attn",
+      "graph_nodes": 1110,
+      "delta": 75
+    },
+    {
+      "layer": 12,
+      "phase": "linear_attn",
+      "graph_nodes": 1209,
+      "delta": 99
+    },
+    {
+      "layer": 13,
+      "phase": "linear_attn",
+      "graph_nodes": 1308,
+      "delta": 99
+    },
+    {
+      "layer": 14,
+      "phase": "linear_attn",
+      "graph_nodes": 1407,
+      "delta": 99
+    },
+    {
+      "layer": 15,
+      "phase": "full_attn",
+      "graph_nodes": 1482,
+      "delta": 75
+    },
+    {
+      "layer": 16,
+      "phase": "linear_attn",
+      "graph_nodes": 1581,
+      "delta": 99
+    },
+    {
+      "layer": 17,
+      "phase": "linear_attn",
+      "graph_nodes": 1680,
+      "delta": 99
+    },
+    {
+      "layer": 18,
+      "phase": "linear_attn",
+      "graph_nodes": 1779,
+      "delta": 99
+    },
+    {
+      "layer": 19,
+      "phase": "full_attn",
+      "graph_nodes": 1854,
+      "delta": 75
+    },
+    {
+      "layer": 20,
+      "phase": "linear_attn",
+      "graph_nodes": 1953,
+      "delta": 99
+    },
+    {
+      "layer": 21,
+      "phase": "linear_attn",
+      "graph_nodes": 2052,
+      "delta": 99
+    },
+    {
+      "layer": 22,
+      "phase": "linear_attn",
+      "graph_nodes": 2151,
+      "delta": 99
+    },
+    {
+      "layer": 23,
+      "phase": "full_attn",
+      "graph_nodes": 2226,
+      "delta": 75
+    },
+    {
+      "layer": 24,
+      "phase": "linear_attn",
+      "graph_nodes": 2325,
+      "delta": 99
+    },
+    {
+      "layer": 25,
+      "phase": "linear_attn",
+      "graph_nodes": 2424,
+      "delta": 99
+    },
+    {
+      "layer": 26,
+      "phase": "linear_attn",
+      "graph_nodes": 2523,
+      "delta": 99
+    },
+    {
+      "layer": 27,
+      "phase": "full_attn",
+      "graph_nodes": 2598,
+      "delta": 75
+    },
+    {
+      "layer": 28,
+      "phase": "linear_attn",
+      "graph_nodes": 2697,
+      "delta": 99
+    },
+    {
+      "layer": 29,
+      "phase": "linear_attn",
+      "graph_nodes": 2796,
+      "delta": 99
+    },
+    {
+      "layer": 30,
+      "phase": "linear_attn",
+      "graph_nodes": 2895,
+      "delta": 99
+    },
+    {
+      "layer": 31,
+      "phase": "full_attn",
+      "graph_nodes": 2970,
+      "delta": 75
+    },
+    {
+      "layer": 32,
+      "phase": "linear_attn",
+      "graph_nodes": 3069,
+      "delta": 99
+    },
+    {
+      "layer": 33,
+      "phase": "linear_attn",
+      "graph_nodes": 3168,
+      "delta": 99
+    },
+    {
+      "layer": 34,
+      "phase": "linear_attn",
+      "graph_nodes": 3267,
+      "delta": 99
+    },
+    {
+      "layer": 35,
+      "phase": "full_attn",
+      "graph_nodes": 3342,
+      "delta": 75
+    },
+    {
+      "layer": 36,
+      "phase": "linear_attn",
+      "graph_nodes": 3441,
+      "delta": 99
+    },
+    {
+      "layer": 37,
+      "phase": "linear_attn",
+      "graph_nodes": 3540,
+      "delta": 99
+    },
+    {
+      "layer": 38,
+      "phase": "linear_attn",
+      "graph_nodes": 3639,
+      "delta": 99
+    },
+    {
+      "layer": 39,
+      "phase": "full_attn",
+      "graph_nodes": 3714,
+      "delta": 75
+    },
+    {
+      "layer": 40,
+      "phase": "linear_attn",
+      "graph_nodes": 3813,
+      "delta": 99
+    },
+    {
+      "layer": 41,
+      "phase": "linear_attn",
+      "graph_nodes": 3912,
+      "delta": 99
+    },
+    {
+      "layer": 42,
+      "phase": "linear_attn",
+      "graph_nodes": 4011,
+      "delta": 99
+    },
+    {
+      "layer": 43,
+      "phase": "full_attn",
+      "graph_nodes": 4086,
+      "delta": 75
+    },
+    {
+      "layer": 44,
+      "phase": "linear_attn",
+      "graph_nodes": 4185,
+      "delta": 99
+    },
+    {
+      "layer": 45,
+      "phase": "linear_attn",
+      "graph_nodes": 4284,
+      "delta": 99
+    },
+    {
+      "layer": 46,
+      "phase": "linear_attn",
+      "graph_nodes": 4383,
+      "delta": 99
+    },
+    {
+      "layer": 47,
+      "phase": "full_attn",
+      "graph_nodes": 4458,
+      "delta": 75
+    }
+  ],
+  "bench": {
+    "build_commit": "12a292f0c",
+    "build_number": 10099,
+    "pp8192_avg_ts": 112.08235,
+    "tg1_avg_ts": 4.311924,
+    "max_rss_kb": 77043932
+  }
+}

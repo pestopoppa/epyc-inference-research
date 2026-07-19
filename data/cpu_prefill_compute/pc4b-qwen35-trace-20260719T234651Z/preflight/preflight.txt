@@ -1,0 +1,37 @@
+run_id=pc4b-qwen35-trace-20260719T234651Z
+run_root=/mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/pc4b-qwen35-trace-20260719T234651Z
+timestamp_utc=2026-07-19T23:46:51Z
+## experimental-v7-refresh-20260716...fork/experimental-v7-refresh-20260716
+ M src/models/qwen35.cpp
+ M src/models/qwen35moe.cpp
+12a292f0c21d34b6d1db437291afbcbfb33bc491
+/mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/llama-bench 2026-07-19 23:42:03.153863633 +0000 17984
+/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf 2026-06-25 20:32:28.905744737 +0000 10943808
+	linux-vdso.so.1 (0x0000786656521000)
+	libllama-bench-impl.so => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libllama-bench-impl.so (0x00007866564b4000)
+	libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x0000786656221000)
+	libgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007866561f4000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x0000786655fb1000)
+	libllama-common.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libllama-common.so.0 (0x0000786655a00000)
+	libllama.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libllama.so.0 (0x0000786655600000)
+	libggml.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libggml.so.0 (0x0000786655fa1000)
+	libggml-base.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libggml-base.so.0 (0x0000786655ecd000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007866554f3000)
+	/lib64/ld-linux-x86-64.so.2 (0x0000786656523000)
+	libggml-cpu.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libggml-cpu.so.0 (0x0000786655200000)
+	libgomp.so.1 => /usr/lib/llvm-20/lib/libgomp.so.1 (0x00007866550cd000)
+perf_event_paranoid=1
+numa_balancing=0
+governor=performance
+               total        used        free      shared  buff/cache   available
+Mem:           1.1Ti        53Gi        92Gi       258Mi       994Gi       1.1Ti
+Swap:          8.0Gi       2.8Gi       5.2Gi
+1097654 /usr/bin/bash -lc set -euo pipefail RUN_ID="pc4b-qwen35-trace-$(date -u +%Y%m%dT%H%M%SZ)" RUN_ROOT="/mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/${RUN_ID}" mkdir -p "$RUN_ROOT"/{commands,preflight,trace,cleanup,reports} BIN_DIR="/mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin" BENCH="$BIN_DIR/llama-bench" MODEL="/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf" {   printf 'run_id=%s\n' "$RUN_ID"   printf 'run_root=%s\n' "$RUN_ROOT"   printf 'timestamp_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"   git -C /mnt/raid0/llm/llama.cpp-experimental status --short --branch   git -C /mnt/raid0/llm/llama.cpp-experimental rev-parse HEAD   stat -c '%n %y %s' "$BENCH" "$MODEL"   env LD_LIBRARY_PATH="$BIN_DIR:/usr/lib/llvm-20/lib" ldd "$BENCH"   printf 'perf_event_paranoid='; cat /proc/sys/kernel/perf_event_paranoid   printf 'numa_balancing='; cat /proc/sys/kernel/numa_balancing   printf 'governor='; cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || true   free -h   pgrep -af 'llama-server|llama-bench|llama-cli|autopilot\.py|rocprof|perf record|perf stat' || true   rocm-smi --showpids || true } > "$RUN_ROOT/preflight/preflight.txt" 2>&1 CMD=(/usr/bin/time -v timeout --signal=TERM --kill-after=30s 1800s env \   LD_LIBRARY_PATH="$BIN_DIR:/usr/lib/llvm-20/lib" \   LLAMA_QWEN35_PREFILL_TRACE=1 \   HIP_VISIBLE_DEVICES=-1 ROCR_VISIBLE_DEVICES=-1 \   OMP_PROC_BIND=spread OMP_PLACES=cores OMP_WAIT_POLICY=active OMP_DYNAMIC=false GGML_IQK=1 \   taskset -c 0-95 numactl --interleave=all "$BENCH" \   -t 96 -fa 1 -mmp 0 -m "$MODEL" -p 8192 -n 1 -r 1 -dev none -ngl 0 -nopo 1 -nkvo 1 -o json) {   printf 'command:'   printf ' %q' "${CMD[@]}"   printf '\n' } > "$RUN_ROOT/commands/architect_p8192_n1_trace.command.txt" set +e "${CMD[@]}" > "$RUN_ROOT/trace/architect_p8192_n1.results.json" 2> "$RUN_ROOT/trace/architect_p8192_n1.trace_stderr_time.txt" STATUS=$? set -e printf 'exit_status=%s\nfinished_utc=%s\n' "$STATUS" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RUN_ROOT/trace/architect_p8192_n1.exit.txt" {   printf 'cleanup_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"   for name in llama-bench llama-server llama-cli perf rocprof; do     printf '%s_pids=' "$name"     pgrep -x "$name" | tr '\n' ' ' || true     printf '\n'   done   printf 'autopilot_matches=\n'   pgrep -af '[a]utopilot\.py' || true   rocm-smi --showpids || true   du -sh "$RUN_ROOT" } > "$RUN_ROOT/cleanup/process_cleanup.txt" 2>&1 printf '%s\n' "$RUN_ROOT" exit "$STATUS"
+1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh
+
+
+============================ ROCm System Management Interface ============================
+===================================== KFD Processes ======================================
+No KFD PIDs currently running
+==========================================================================================
+================================== End of ROCm SMI Log ===================================

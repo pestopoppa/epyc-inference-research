@@ -1,0 +1,15 @@
+cleanup_utc=2026-07-19T23:54:56Z
+llama-bench_pids=
+llama-server_pids=
+llama-cli_pids=
+perf_pids=
+rocprof_pids=
+autopilot_matches=
+
+
+============================ ROCm System Management Interface ============================
+===================================== KFD Processes ======================================
+No KFD PIDs currently running
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+268K	/mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/pc4b-qwen35-trace-verbose-20260719T235218Z
