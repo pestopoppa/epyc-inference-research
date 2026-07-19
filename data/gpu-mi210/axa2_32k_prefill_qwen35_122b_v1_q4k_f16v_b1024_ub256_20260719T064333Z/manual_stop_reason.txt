@@ -1,0 +1,1 @@
+manual_stop_reason=gpu_zero_4_polls_no_stdout
