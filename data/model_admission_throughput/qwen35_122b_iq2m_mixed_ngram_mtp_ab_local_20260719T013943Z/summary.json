@@ -1,0 +1,110 @@
+{
+  "arms": {
+    "ngram_mod_draft_mtp": {
+      "draft_n": 356,
+      "draft_n_accepted": 235,
+      "mean_decode_tps": 50.77,
+      "pid": 120494,
+      "port": 19651,
+      "quality_passes": 3,
+      "quality_total": 3,
+      "requests": [
+        {
+          "completion_tokens": 17,
+          "draft_n": 12,
+          "draft_n_accepted": 12,
+          "elapsed_s": 0.71,
+          "finish_reason": "stop",
+          "key": "json_decision",
+          "predicted_per_second": 55.83,
+          "prompt_per_second": 105.23,
+          "prompt_tokens": 42,
+          "quality_sanity": true
+        },
+        {
+          "completion_tokens": 97,
+          "draft_n": 88,
+          "draft_n_accepted": 52,
+          "elapsed_s": 2.44,
+          "finish_reason": "stop",
+          "key": "numbered_plan",
+          "predicted_per_second": 46.86,
+          "prompt_per_second": 116.31,
+          "prompt_tokens": 37,
+          "quality_sanity": true
+        },
+        {
+          "completion_tokens": 300,
+          "draft_n": 256,
+          "draft_n_accepted": 171,
+          "elapsed_s": 6.42,
+          "finish_reason": "stop",
+          "key": "review",
+          "predicted_per_second": 49.62,
+          "prompt_per_second": 119.33,
+          "prompt_tokens": 38,
+          "quality_sanity": true
+        }
+      ],
+      "returncode": 0,
+      "status": "ok",
+      "total_completion_tokens": 414
+    },
+    "spec_none": {
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "mean_decode_tps": 41.85,
+      "pid": 120149,
+      "port": 19650,
+      "quality_passes": 3,
+      "quality_total": 3,
+      "requests": [
+        {
+          "completion_tokens": 17,
+          "draft_n": 0,
+          "draft_n_accepted": 0,
+          "elapsed_s": 0.77,
+          "finish_reason": "stop",
+          "key": "json_decision",
+          "predicted_per_second": 43.1,
+          "prompt_per_second": 115.89,
+          "prompt_tokens": 42,
+          "quality_sanity": true
+        },
+        {
+          "completion_tokens": 91,
+          "draft_n": 0,
+          "draft_n_accepted": 0,
+          "elapsed_s": 2.53,
+          "finish_reason": "stop",
+          "key": "numbered_plan",
+          "predicted_per_second": 42.11,
+          "prompt_per_second": 118.46,
+          "prompt_tokens": 37,
+          "quality_sanity": true
+        },
+        {
+          "completion_tokens": 314,
+          "draft_n": 0,
+          "draft_n_accepted": 0,
+          "elapsed_s": 8.15,
+          "finish_reason": "stop",
+          "key": "review",
+          "predicted_per_second": 40.34,
+          "prompt_per_second": 121.51,
+          "prompt_tokens": 38,
+          "quality_sanity": true
+        }
+      ],
+      "returncode": 0,
+      "status": "ok",
+      "total_completion_tokens": 422
+    }
+  },
+  "completed_at": "2026-07-19T01:40:23.756589+00:00",
+  "created_at": "2026-07-19T01:39:43.075730+00:00",
+  "model": "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+  "ngram_mtp_vs_none_ratio": 1.21,
+  "schema": "epyc.qwen35_122b_iq2m_mixed_ngram_mtp_ab.v1",
+  "source_head": "ed4091266d286045510e498ceb059c209a65aff9"
+}

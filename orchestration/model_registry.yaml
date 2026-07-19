@@ -796,6 +796,15 @@ server_mode:
     throughput: 0.17  # pages/sec on EPYC 9655 (8×12 config)
     baseline_throughput: 0.009  # PyTorch CPU baseline
     speedup: 19x  # vs PyTorch CPU
+    mi210_v7_observation: >
+      2026-07-19 bounded experimental-v7 `ed4091266` MI210 parser-comparison
+      smoke loaded `LightOnOCR-2-1B-bbox-Q4_K_M` + F16 mmproj through
+      `llama-server`, decoded a 512-token document extraction at `224.45 t/s`,
+      and reached median `226.62 t/s` across three probes with about `4%` VRAM
+      after requests. The server prompt shape was not table-clean or QA-clean:
+      the table-page probe missed expected table markers and OCRBench digit QA
+      emitted a bbox string instead of `7500`. Artifact:
+      `/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/summary.json`.
     launch_script: scripts/document/start_lightonocr_llama.sh
     launch_quirks:
       - "llama-mtmd-cli requires BOTH --image AND -p flags for non-interactive mode"
@@ -2316,7 +2325,7 @@ roles:
         requires the documented architect quality/eval gates and, for
         production, P-GPU-1 measurement ratification.
     performance:
-      benchmark_status: bounded_mi210_smoke_context_and_architect_slice_pass_role_gate_open
+      benchmark_status: bounded_mi210_smoke_context_architect_slice_and_task_class_spec_pass_role_gate_open
       load_smoke_observation: >
         2026-07-19 experimental-v7 source-head MI210 server smoke loaded in
         7.125s, returned exact `{"status":"ok","model":"qwen35_122b_iq2m"}`,
@@ -2355,6 +2364,33 @@ roles:
         Draft counters reported `24/30` accepted tokens (`80%`). Keep this
         candidate no-spec by default unless a longer/repetitive workload proves
         a separate MTP win.
+      task_class_spec_observation: >
+        2026-07-19 follow-up MI210 probes on experimental-v7 `ed4091266`
+        showed the separate task-class win that the short architect slice could
+        not expose. On a 768-token repeated-word output, no-spec decoded at
+        `37.87 t/s`, native `draft-mtp` at `60.65 t/s` (`1.60x`, `511/511`
+        drafts accepted), and composed `ngram-mod,draft-mtp` at `287.09 t/s`
+        (`7.58x` vs no-spec, `746/746` accepted), all with simple output sanity
+        passing. A three-prompt mixed architect/reviewer check then passed `3/3`
+        on both no-spec and composed `ngram-mod,draft-mtp`; composed mode
+        averaged `50.77 t/s` vs no-spec `41.85 t/s` (`1.21x`, `235/356`
+        accepted). Interpretation: this candidate should not run MTP globally
+        from the short-slice evidence alone, but `ngram-mod,draft-mtp` is a
+        strong routing candidate for repetitive/structured generation and a
+        modest same-quality candidate for mixed bounded architect tasks.
+        A broadened 8-prompt sanity slice then passed only `5/8` checks at mean
+        `80.77 t/s` (`1166/1440` accepted), with failures on code sketch, exact
+        word-count, and repeated-word-control checks; keep this route gated by
+        task class and acceptance tests rather than enabling it globally.
+      cpu_prefill_observation: >
+        2026-07-19 CPU-only current-source prefill probe using
+        `build-k24-cpu/bin/llama-bench`, `--device none`, `-ngl 0`, `96`
+        threads, f16 KV, and `GGML_IQK=1` measured `pp2048 122.31 t/s`,
+        `pp8192 114.40 t/s`, and `tg16 6.24 t/s`; backend reported `CPU`,
+        device `none`, GPU info empty, and pre/post `rocm-smi --showpids`
+        showed no KFD PIDs. Interpretation: useful for CPU prefill-compute and
+        hybrid-placement economics; decode is too slow for a primary CPU-only
+        serving lane.
       evidence:
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/metrics_summary.json
@@ -2363,6 +2399,11 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/summary.md
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/metrics_summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/summary.md
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_long_mtp_ab_local_20260719T013555Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_long_ngram_mtp_local_20260719T013814Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mixed_ngram_mtp_ab_local_20260719T013943Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/20260719T014801Z_qwen35_122b_iq2_cpu_prefill/summary.json
     memory:
       residency: cold
       pinned: false

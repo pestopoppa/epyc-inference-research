@@ -1,0 +1,91 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z",
+  "draft_n": 1440,
+  "draft_n_accepted": 1166,
+  "mean_decode_tps": 80.77,
+  "pass_count": 5,
+  "prompt_count": 8,
+  "results": [
+    {
+      "completion_tokens": 26,
+      "decode_tps": 59.02,
+      "draft_n": 18,
+      "draft_n_accepted": 18,
+      "finish_reason": "stop",
+      "key": "strict_json",
+      "pass": true,
+      "sanity": "exact JSON"
+    },
+    {
+      "completion_tokens": 108,
+      "decode_tps": 41.77,
+      "draft_n": 110,
+      "draft_n_accepted": 54,
+      "finish_reason": "stop",
+      "key": "numbered_plan",
+      "pass": true,
+      "sanity": "first five lines numbered"
+    },
+    {
+      "completion_tokens": 256,
+      "decode_tps": 46.31,
+      "draft_n": 232,
+      "draft_n_accepted": 139,
+      "finish_reason": "length",
+      "key": "short_review",
+      "pass": true,
+      "sanity": "6 bullets"
+    },
+    {
+      "completion_tokens": 71,
+      "decode_tps": 55.57,
+      "draft_n": 54,
+      "draft_n_accepted": 44,
+      "finish_reason": "stop",
+      "key": "code_sketch",
+      "pass": false,
+      "sanity": "contains expected parser fields"
+    },
+    {
+      "completion_tokens": 140,
+      "decode_tps": 51.12,
+      "draft_n": 116,
+      "draft_n_accepted": 81,
+      "finish_reason": "stop",
+      "key": "compare_options",
+      "pass": true,
+      "sanity": "contains required comparison rows"
+    },
+    {
+      "completion_tokens": 137,
+      "decode_tps": 41.5,
+      "draft_n": 140,
+      "draft_n_accepted": 67,
+      "finish_reason": "stop",
+      "key": "risk_list",
+      "pass": true,
+      "sanity": "7 risk markers"
+    },
+    {
+      "completion_tokens": 30,
+      "decode_tps": 52.33,
+      "draft_n": 24,
+      "draft_n_accepted": 17,
+      "finish_reason": "stop",
+      "key": "exact_word_count",
+      "pass": false,
+      "sanity": "28 words"
+    },
+    {
+      "completion_tokens": 768,
+      "decode_tps": 298.52,
+      "draft_n": 746,
+      "draft_n_accepted": 746,
+      "finish_reason": "length",
+      "key": "repeated_word_control",
+      "pass": false,
+      "sanity": "768 verify tokens"
+    }
+  ],
+  "status": "quality_fail"
+}

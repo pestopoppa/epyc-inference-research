@@ -1,0 +1,12 @@
+# pre process check
+ps -eo pid,ppid,lstart,comm,args | egrep -i 'kfd|rocm|rocblas|hip|amdgpu|llama-bench' | egrep -v 'egrep|grep' || true
+rocm-smi --showpids
+
+# benchmark
+cd /mnt/raid0/llm/llama.cpp-experimental && OMP_NUM_THREADS=96 GGML_IQK=1 timeout --preserve-status 2700 /usr/bin/time -v ./build-k24-cpu/bin/llama-bench \
+  -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf \
+  -p 2048,8192 -n 16 -r 1 --no-warmup -t 96 -b 2048 -ub 512 -ngl 0 --device none -o jsonl --progress
+
+# post process check
+ps -eo pid,ppid,lstart,comm,args | egrep -i 'kfd|rocm|rocblas|hip|amdgpu|llama-bench' | egrep -v 'egrep|grep' || true
+rocm-smi --showpids

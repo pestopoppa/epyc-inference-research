@@ -1,0 +1,39 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/20260719T014801Z_qwen35_122b_iq2_cpu_prefill",
+  "date_utc": "2026-07-19T01:49:02Z",
+  "kernel_tree": "/mnt/raid0/llm/llama.cpp-experimental",
+  "binary": "./build-k24-cpu/bin/llama-bench",
+  "build_commit_reported": "9882c2c69",
+  "model": "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+  "model_type": "qwen35moe 122B.A10B IQ2_M - 2.7 bpw",
+  "model_size_bytes": 40366862336,
+  "model_params": "124.6B params",
+  "backend": "CPU",
+  "devices": "none",
+  "n_gpu_layers": 0,
+  "threads": 96,
+  "batch": 2048,
+  "ubatch": 512,
+  "kv": {
+    "k": "f16",
+    "v": "f16"
+  },
+  "results": {
+    "pp2048_tok_s": 122.31,
+    "pp8192_tok_s": 114.4,
+    "tg16_tok_s": 6.24
+  },
+  "wall_time": "1:33.18",
+  "max_rss_kb": 40062336,
+  "exit_status": 0,
+  "gpu_kfd": {
+    "pre": "No KFD PIDs currently running",
+    "post": "No KFD PIDs currently running",
+    "created": false
+  },
+  "cleanup": {
+    "llama_bench": "no process",
+    "timeout": "no process"
+  },
+  "interpretation": "Observation-only CPU prefill datapoint for Qwen3.5-122B UD-IQ2_M. Prefill is around 114-122 tok/s at 2K-8K prompt; decode is around 6.24 tok/s, so this is not a primary serving lane but helps size CPU prefill-compute and hybrid-placement economics."
+}

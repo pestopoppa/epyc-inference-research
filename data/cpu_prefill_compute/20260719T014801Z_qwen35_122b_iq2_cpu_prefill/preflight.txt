@@ -1,0 +1,5 @@
+binary ldd accelerator/openmp grep:
+	libgomp.so.1 => /lib/x86_64-linux-gnu/libgomp.so.1 (0x000076b63d5a7000)
+
+model:
+-rw-r--r-- 1 node node 38G Jul  5 00:43 /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf

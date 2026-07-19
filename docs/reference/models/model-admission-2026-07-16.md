@@ -911,6 +911,50 @@ Existing-artifact comparison evidence lives at `data/odl_existing_comparison/pad
 
 Disposition: PaddleOCR-VL is runtime-clean and very fast as a document/OCR extraction specialist. It should not be evaluated as a general `vision_escalation` QA replacement from narrow-answer prompts. The producer is usable and the post-processing hook fixes a real scorer-compatibility gap, but the quality result is still not table-clean and ODL currently wins the table/reading-order comparison. Next document work is a matched LightOnOCR or stronger table-parser comparison on the same structural/table/reading-order metrics.
 
+2026-07-19 LightOnOCR-2 bounded MI210 comparison smoke: `LightOnOCR-2-1B-bbox-Q4_K_M`
+plus F16 mmproj loaded on experimental-v7 `ed4091266` and decoded at median
+`226.62 t/s` across three probes (`224.45 t/s` on the 512-token science-page
+document extraction), with about `4%` VRAM after requests and clean teardown.
+The prompt shape was not table-clean or QA-clean: the table-page probe missed
+expected table markers and the OCRBench digit QA emitted a bbox string instead
+of `7500`. Artifact:
+`data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z/summary.json`.
+
+## Qwen3.5-122B IQ2 Task-Class Speculation Probes
+
+The 2026-07-19 Qwen3.5-122B UD-IQ2_M MI210 admission row now has a clear
+task-class split. Earlier bounded architect prompts showed native `draft-mtp`
+was runtime-functional but slower than no-spec (`35.94` vs `58.96 t/s`), so it
+should not be enabled globally from that slice.
+
+Follow-up source-head experimental-v7 probes used the same MI210-resident GGUF
+with reasoning disabled and q4_0/f16 KV:
+
+| Probe | No-spec | Native MTP | Composed ngram->MTP | Quality sanity |
+|---|---:|---:|---:|---|
+| 768-token repeated-word output | `37.87 t/s` | `60.65 t/s` (`511/511` accepted) | `287.09 t/s` (`746/746` accepted) | PASS |
+| 3-prompt mixed architect/reviewer slice | `41.85 t/s`, `3/3` | not repeated | `50.77 t/s`, `3/3` (`235/356` accepted) | PASS |
+| 8-prompt broadened sanity slice | not repeated | not repeated | mean `80.77 t/s`, `1166/1440` accepted | FAIL overall (`5/8`) |
+| CPU-only IQ2 prefill sizing | `pp2048 122.31 t/s`; `pp8192 114.40 t/s`; `tg16 6.24 t/s` | not applicable | not applicable | PASS runtime; no KFD PIDs |
+
+Artifacts:
+
+- `data/model_admission_throughput/qwen35_122b_iq2m_long_mtp_ab_local_20260719T013555Z/summary.json`
+- `data/model_admission_throughput/qwen35_122b_iq2m_long_ngram_mtp_local_20260719T013814Z/summary.json`
+- `data/model_admission_throughput/qwen35_122b_iq2m_mixed_ngram_mtp_ab_local_20260719T013943Z/summary.json`
+- `data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/summary.json`
+- `data/cpu_prefill_compute/20260719T014801Z_qwen35_122b_iq2_cpu_prefill/summary.json`
+
+Disposition: composed `ngram-mod,draft-mtp` is a strong routing candidate for
+repetitive/structured generation and a modest positive candidate on mixed
+bounded architect prompts. The broadened slice did not pass overall: strict
+JSON, numbered plans, short review, option comparison, and risk-list prompts
+passed, while code sketch, exact word count, and repeated-word control failed
+their simple sanity checks. It is therefore a task-class lever only, not a
+blanket default. The CPU-only IQ2 row is useful for CPU prefill-compute and
+hybrid-placement economics, but decode is too slow for a primary CPU-only
+serving lane.
+
 ## Deferred Low-Contention Manifest Work
 
 Do not hash the large GGUFs during active GLM download or benchmark windows. If a human-readable manifest is needed, first emit byte inventories and reuse HF sidecars:
@@ -936,7 +980,7 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
 3. Decide the Ternary Bonsai Q2_0 loader/export path before retrying. The raw verifier confirmed 498/498 Q2_0 tensors are physically short under current-v7 standard Q2_0, while Q2_g64 is standard-layout but quality-blocked. Q2_g64 has preliminary throughput observations, including a positive MI210 `ngram-mod` structured-copy speed signal, but its strict quality gate passed only 6/8 and blocks any role claim; dspark variants failed separately.
 4. Qwable IQ4_XS standalone routing and broader representative quality are closed for the research registry: plain reasoning-off IQ4_XS is the preferred reasoning-heavy route, `ngram-mod` is neutral on the expanded slice, and scaffold remains only the beneficiary-must-answer fallback. Remaining work is production hosting/composite-route wiring, not model admission.
 5. Keep Nemotron-Nano research-only pending role-policy/admission decision, but Q8_0 now has a clean bounded lane: no-system `deepseek` with `--ignore-task-token-caps --max-tokens 1024` passed `5/5` at mean decode `81.42 t/s`. The earlier 512-token lane failed strict JSON by budget/channel behavior, and the BF16 reference arm reached a different `4/5`, fixed strict JSON, failed five-word formatting, and decoded slower at `59.44 t/s`; BF16 remains diagnostic rather than a replacement. Nemotron-Cascade-2 is historical/catalogue only; do not schedule inference absent an explicit Mamba2-hybrid revival study. The legacy Cascade scaling runners are dry-run-first safety wrappers now, so `--help`/default invocations cannot start servers; live use requires `--execute --allow-historical-cascade`.
-6. Move beyond first-pass admission observations for Bonsai and Nemotron where role candidacy remains plausible. Qwen3.5-9B MTP now has quiet-host matched no-spec/MTP task-class evidence plus a broader `default+expanded` slice: no-spec is better for tiny completions, native MTP is faster on long repetitive structured output, and broader MTP keeps the same `13/18` pass profile while improving decode to `114.09 t/s`. This supports a structured-output niche, not a general frontdoor/worker role claim. MiniCPM-o now has a K35 quality-clean vision candidate result plus targeted frontdoor co-residency/service-tax evidence; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure; SuperGemma4 is quality-clean but slower/heavier than MiniCPM-o. PaddleOCR-VL now has a guarded `odl_bench` producer and three scored document-parser rows; the pipe-table post-processor moves table TEDS off zero but is still not table-quality-clean, so PaddleOCR remains a document-specialist lane pending stronger table extraction / parser comparison, not a general vision QA role.
+6. Move beyond first-pass admission observations for Bonsai and Nemotron where role candidacy remains plausible. Qwen3.5-9B MTP now has quiet-host matched no-spec/MTP task-class evidence plus a broader `default+expanded` slice: no-spec is better for tiny completions, native MTP is faster on long repetitive structured output, and broader MTP keeps the same `13/18` pass profile while improving decode to `114.09 t/s`. Qwen3.5-122B UD-IQ2_M shows the same task-class pattern on MI210: native MTP is slower on short architect prompts, but composed `ngram-mod,draft-mtp` reaches `287.09 t/s` on repetitive output and `1.21x` on a small mixed architect slice with sanity passing. These support structured/repetitive routing niches, not a general frontdoor/worker default. MiniCPM-o now has a K35 quality-clean vision candidate result plus targeted frontdoor co-residency/service-tax evidence; Qwen3-VL-8B has a K35 candidate A/B result and is rejected as the active escalation replacement unless a later tuned lane fixes the chart failure; SuperGemma4 is quality-clean but slower/heavier than MiniCPM-o. PaddleOCR-VL now has a guarded `odl_bench` producer and three scored document-parser rows; the pipe-table post-processor moves table TEDS off zero but is still not table-quality-clean, so PaddleOCR remains a document-specialist lane pending stronger table extraction / parser comparison, not a general vision QA role.
 7. Keep generic GLM hot-expert offload/REAP deprioritized after the production-representative skew profile; reopen only with a narrower role-specific corpus or different placement mechanism.
 
 Opt-in command file: `docs/data/model_admission_smoke_commands_20260716.sh`.

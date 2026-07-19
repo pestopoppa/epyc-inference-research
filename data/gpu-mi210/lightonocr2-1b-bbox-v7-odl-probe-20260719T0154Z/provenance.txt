@@ -1,0 +1,7 @@
+artifact=/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/lightonocr2-1b-bbox-v7-odl-probe-20260719T0154Z
+started_at=2026-07-19T01:54:12Z
+hostname=Beelzebub
+cwd=/workspace
+kernel=Linux Beelzebub 6.14.0-37-generic #37~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Nov 20 10:25:38 UTC 2 x86_64 GNU/Linux
+llama_server_version=version: 10096 (ed4091266) built with GNU 15.2.0 for Linux x86_64
+experimental_git=experimental-v7-refresh-20260716 ed4091266d286045510e498ceb059c209a65aff9

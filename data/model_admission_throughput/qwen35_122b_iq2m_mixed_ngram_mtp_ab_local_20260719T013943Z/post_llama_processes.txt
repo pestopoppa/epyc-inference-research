@@ -1,0 +1,1 @@
+ 116953 llama-bench     /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/llama-bench -m /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf -dev none -ngl 0 -fa off -t 16 -nopo 1 -nkvo 1 -ctk f16 -ctv f16 -r 3 -o json -p 512 -n 0 -p 2048 -n 0 -p 8192 -n 0 -p 32768 -n 0 -p 0 -n 128 -p 0 -n 512 -pg 2048,512 -pg 8192,512 -pg 32768,512

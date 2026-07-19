@@ -1,0 +1,87 @@
+{
+  "cleanup_verification": {
+    "kfd_clear": true,
+    "llama_clear": true,
+    "llama_process_lines": [],
+    "server_ps_after_cleanup": ""
+  },
+  "decode_tps_max": 234.66,
+  "decode_tps_median": 226.62,
+  "decode_tps_min": 224.45,
+  "final_cleanup_verification": {
+    "filtered_llama_process_lines": [],
+    "gpu_vram_zero": true,
+    "kfd_clear": true,
+    "llama_clear": true
+  },
+  "lane": "K35.18 document-parser follow-up / LightOnOCR parser comparison smoke",
+  "memory_observation": {
+    "after_requests_rocm_excerpt": "GPU[0]\t\t: GPU Memory Allocated (VRAM%): 4\n===================================== KFD Processes ======================================\nKFD process information:\nPID   \tPROCESS NAME\tGPU(s)\tVRAM USED \tSDMA USED\tCU OCCUPANCY\t",
+    "server_ps_after_requests": "PID    PPID                  STARTED STAT   RSS    VSZ %CPU %MEM COMMAND         COMMAND\n 126684  126664 Sun Jul 19 01:54:12 2026 Sl   1521924 14538112 82.9  0.1 llama-server /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/LightOnOCR-2-1B-bbox-Q4_K_M.gguf --mmproj /mnt/raid0/llm/models/LightOnOCR-2-1B-bbox-mmproj-F16.gguf --host 127.0.0.1 --port 19380 -np 1 -c 4096 -t 24 --flash-attn on --device ROCm0 -ngl 99 --reasoning off"
+  },
+  "model": "LightOnOCR-2-1B-bbox-Q4_K_M + mmproj F16",
+  "results": [
+    {
+      "completion_tokens": 85,
+      "content_chars": 370,
+      "content_preview": "- **Human Factors**\n\n  - the process molds to the needs of the people and team, not the other way around\n\n  - key traits must exist among the people on an agile team and the team itself:\n    - Competence.\n    - Common focus.\n    - Collabora",
+      "decode_tps": 226.62,
+      "elapsed_s": 1.4,
+      "fixture": "odl_table_page",
+      "image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/yanbaopptmerge_SE05.pdf_7.jpg",
+      "max_tokens": 512,
+      "prompt_tokens": 2343,
+      "prompt_tps": 2926.93,
+      "quality": {
+        "expected_terms": [
+          "|",
+          "table"
+        ],
+        "missing_terms": [
+          "|",
+          "table"
+        ],
+        "pass": false
+      }
+    },
+    {
+      "completion_tokens": 512,
+      "content_chars": 1704,
+      "content_preview": "For consistency, the time derivative of the constraints of (10) must vanish and hence they must have vanishing Poisson bracket with $H$ . Using the fundamental Poisson brackets\n\n$$\n\\left[U(x), \\Pi^U(y)\\right] = \\delta(x - y),\n$$\n\netc., we f",
+      "decode_tps": 224.45,
+      "elapsed_s": 3.27,
+      "fixture": "odl_science_page",
+      "image": "/mnt/raid0/llm/opendataloader-bench/demo_data/omnidocbench_demo/images/docstructbench_llm-raw-scihub-o.O-j.physletb.2004.06.101.pdf_3.jpg",
+      "max_tokens": 512,
+      "prompt_tokens": 2285,
+      "prompt_tps": 3170.94,
+      "quality": {
+        "expected_terms": [],
+        "missing_terms": [],
+        "pass": null
+      }
+    },
+    {
+      "completion_tokens": 22,
+      "content_chars": 34,
+      "content_preview": "![image](image_1.png)20,27,977,947",
+      "decode_tps": 234.66,
+      "elapsed_s": 0.58,
+      "fixture": "ocrbench_digit",
+      "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0237.png",
+      "max_tokens": 64,
+      "prompt_tokens": 1292,
+      "prompt_tps": 4007.84,
+      "quality": {
+        "expected_terms": [
+          "7500"
+        ],
+        "missing_terms": [
+          "7500"
+        ],
+        "pass": false
+      }
+    }
+  ],
+  "schema": "epyc.gpu_mi210.lightonocr2_odl_probe.v1"
+}
