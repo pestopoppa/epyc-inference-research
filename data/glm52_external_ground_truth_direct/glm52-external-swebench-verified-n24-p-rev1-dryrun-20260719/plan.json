@@ -1,0 +1,668 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-dryrun-20260719/decisions.jsonl",
+  "execution": null,
+  "execution_allowed": true,
+  "generated_at": "2026-07-19T17:19:18.541947+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "measurement_protocol": "p_rev1",
+  "mode": "dry-run",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "observation_only": false,
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-dryrun-20260719",
+  "preexisting_processes": [],
+  "prompt_rows": [
+    {
+      "prompt_token_count": 571,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:aaac35f5684e0cd7d324",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 955,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 8,
+        "prompt_chars": 4680,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1339,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 595,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:e4bf08601465811f09a0",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 1519,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 24,
+        "prompt_chars": 5211,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 829,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 776,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:e975812011ab21814f67",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 1668,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 30,
+        "prompt_chars": 8536,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 3810,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 639,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:dd8cb81b28d9d1a50b61",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 739,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 2,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 44,
+        "prompt_chars": 5452,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1601,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 473,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:9cad4fccd76d792011bd",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 901,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 21,
+        "prompt_chars": 4473,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 609,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 467,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:21d534d11a3921e7aed6",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 525,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 11,
+        "prompt_chars": 4192,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 773,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 603,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:3ab2791b333e454dcfe6",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 580,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 135,
+        "prompt_chars": 6230,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 2854,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 582,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:135cab909bed3632729c",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 1114,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 52,
+        "prompt_chars": 5524,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1384,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 590,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:1ba5df6cf0c13fe8918e",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 980,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 130,
+        "prompt_chars": 5376,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1260,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 782,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:8b01d0ce2fd481542629",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 653,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 2,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 158,
+        "prompt_chars": 6181,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 2748,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 554,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:7796098912154409596a",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 697,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 86,
+        "prompt_chars": 5271,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1413,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 594,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:b095de3514463921d358",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 529,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 2,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 24,
+        "prompt_chars": 5561,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1758,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 830,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:086e0babe6296b770052",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 779,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 264,
+        "prompt_chars": 7970,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 4310,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 933,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:1ff5b0646b7d0585cb5e",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 2614,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 18,
+        "prompt_chars": 8935,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 3455,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 526,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:d203b2f1a5a87af13f7d",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 861,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 16,
+        "prompt_chars": 5011,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1139,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1023,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:7a9145c53c881bc60ba2",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 4777,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 3,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 59,
+        "prompt_chars": 9975,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 2294,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1546,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:5effe256ffa7220a85fe",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 9648,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 8,
+        "prompt_chars": 12841,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1214,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 537,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:a6fc52f8b61b30f052b7",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 736,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 44,
+        "prompt_chars": 4149,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1183,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 458,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:c93041c5b6e3811dde1a",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 680,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 17,
+        "prompt_chars": 3403,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 499,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 429,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:39e7c1e9a17469854015",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 871,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 70,
+        "prompt_chars": 3264,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 201,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 564,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:5eabd55911d8aa19f493",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 1343,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 102,
+        "prompt_chars": 4420,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 861,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 575,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:e3d60cf958a3bd8d5466",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 410,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 2,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 67,
+        "prompt_chars": 4378,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 1916,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 475,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:0350babf917e900e18d6",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 741,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 40,
+        "prompt_chars": 3386,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 480,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 483,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-swebench-verified:16cd07cd421c1e8ce001",
+      "task_kind": "patch_review_oracle",
+      "truncation": {
+        "candidate_chars_original": 611,
+        "candidate_truncated": false,
+        "fail_to_pass_total": 1,
+        "max_field_chars": 24000,
+        "pass_to_pass_total": 21,
+        "prompt_chars": 3499,
+        "review_mode": "patch_review_oracle",
+        "task_chars_original": 758,
+        "task_truncated": false
+      }
+    }
+  ],
+  "protocol_attestation": "MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719",
+  "refusal_reasons": [],
+  "request": {
+    "band": "p12000_tk16384",
+    "context_length": 16384,
+    "endpoint": "chat",
+    "era": "p_rev1_attested",
+    "indexer_top_k": 16384,
+    "max_field_chars": 24000,
+    "max_tokens": 128,
+    "prompt_guard_tokens": 512,
+    "response_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "blocking": {
+          "additionalProperties": false,
+          "properties": {
+            "tripwire": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "tripwire"
+          ],
+          "type": "object"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "decision": {
+          "enum": [
+            "approve",
+            "reject"
+          ],
+          "type": "string"
+        },
+        "evidence": {
+          "additionalProperties": false,
+          "properties": {
+            "basis": {
+              "maxLength": 180,
+              "minLength": 3,
+              "type": "string"
+            },
+            "risk": {
+              "maxLength": 180,
+              "minLength": 3,
+              "type": "string"
+            }
+          },
+          "required": [
+            "basis",
+            "risk"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "decision",
+        "confidence",
+        "blocking",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "rubric_version": "glm52_external_swebench_review_v1+binary_schema+test_oracle",
+    "seed": 52,
+    "temperature": 0.0,
+    "timeout_s": 1800
+  },
+  "rows": {
+    "gold_label_counts": {
+      "accept": 24
+    },
+    "n": 24,
+    "row_ids": [
+      "glm52-swebench-verified:aaac35f5684e0cd7d324",
+      "glm52-swebench-verified:e4bf08601465811f09a0",
+      "glm52-swebench-verified:e975812011ab21814f67",
+      "glm52-swebench-verified:dd8cb81b28d9d1a50b61",
+      "glm52-swebench-verified:9cad4fccd76d792011bd",
+      "glm52-swebench-verified:21d534d11a3921e7aed6",
+      "glm52-swebench-verified:3ab2791b333e454dcfe6",
+      "glm52-swebench-verified:135cab909bed3632729c",
+      "glm52-swebench-verified:1ba5df6cf0c13fe8918e",
+      "glm52-swebench-verified:8b01d0ce2fd481542629",
+      "glm52-swebench-verified:7796098912154409596a",
+      "glm52-swebench-verified:b095de3514463921d358",
+      "glm52-swebench-verified:086e0babe6296b770052",
+      "glm52-swebench-verified:1ff5b0646b7d0585cb5e",
+      "glm52-swebench-verified:d203b2f1a5a87af13f7d",
+      "glm52-swebench-verified:7a9145c53c881bc60ba2",
+      "glm52-swebench-verified:5effe256ffa7220a85fe",
+      "glm52-swebench-verified:a6fc52f8b61b30f052b7",
+      "glm52-swebench-verified:c93041c5b6e3811dde1a",
+      "glm52-swebench-verified:39e7c1e9a17469854015",
+      "glm52-swebench-verified:5eabd55911d8aa19f493",
+      "glm52-swebench-verified:e3d60cf958a3bd8d5466",
+      "glm52-swebench-verified:0350babf917e900e18d6",
+      "glm52-swebench-verified:16cd07cd421c1e8ce001"
+    ],
+    "source_counts": {
+      "swe-bench-verified|astropy/astropy": 1,
+      "swe-bench-verified|django/django": 11,
+      "swe-bench-verified|pydata/xarray": 1,
+      "swe-bench-verified|pylint-dev/pylint": 1,
+      "swe-bench-verified|sphinx-doc/sphinx": 2,
+      "swe-bench-verified|sympy/sympy": 8
+    },
+    "task_kind_counts": {
+      "patch_review_oracle": 24
+    }
+  },
+  "schema": "glm52_external_ground_truth_direct_runner.v1",
+  "server": {
+    "context_length": 16384,
+    "extra_args": [
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\",\"evidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}},\"evidence\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"basis\",\"risk\"],\"properties\":{\"basis\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180},\"risk\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180}}}}}"
+    ],
+    "indexer_top_k": 16384,
+    "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:16384",
+    "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-dryrun-20260719/logs/glm52_external__p12000_tk16384.server.log",
+    "metrics": false,
+    "port": 19570,
+    "server_command": [
+      "env",
+      "-i",
+      "PATH=/usr/bin:/bin",
+      "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+      "OMP_NUM_THREADS=1",
+      "numactl",
+      "--interleave=all",
+      "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+      "-m",
+      "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "--override-kv",
+      "glm-dsa.attention.indexer.top_k=int:16384",
+      "--device",
+      "none",
+      "-ngl",
+      "0",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "19570",
+      "-c",
+      "16384",
+      "-t",
+      "96",
+      "-ub",
+      "512",
+      "--log-verbosity",
+      "4",
+      "--log-file",
+      "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-dryrun-20260719/logs/glm52_external__p12000_tk16384.server.log",
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\",\"evidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}},\"evidence\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"basis\",\"risk\"],\"properties\":{\"basis\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180},\"risk\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180}}}}}"
+    ],
+    "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:16384 --device none -ngl 0 --host 127.0.0.1 --port 19570 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-dryrun-20260719/logs/glm52_external__p12000_tk16384.server.log --reasoning-format deepseek --reasoning off --reasoning-budget 0 --json-schema '{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\",\"blocking\",\"evidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1},\"blocking\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"tripwire\"],\"properties\":{\"tripwire\":{\"type\":\"boolean\"}}},\"evidence\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"basis\",\"risk\"],\"properties\":{\"basis\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180},\"risk\":{\"type\":\"string\",\"minLength\":3,\"maxLength\":180}}}}}'",
+    "threads": 96,
+    "trace_logs": true,
+    "ubatch": 512
+  }
+}

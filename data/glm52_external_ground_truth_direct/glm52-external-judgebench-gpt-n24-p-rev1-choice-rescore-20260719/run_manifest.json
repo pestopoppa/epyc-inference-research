@@ -1,6 +1,6 @@
 {
   "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/decisions.jsonl",
-  "generated_at": "2026-07-19T16:57:24.346340+00:00",
+  "generated_at": "2026-07-19T17:18:39.732891+00:00",
   "measurement_protocol": "p_rev1",
   "n_scored": 24,
   "observation_only": false,

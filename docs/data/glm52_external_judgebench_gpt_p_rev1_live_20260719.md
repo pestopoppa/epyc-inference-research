@@ -20,17 +20,19 @@ The live run completed `24` JudgeBench-GPT pairwise rows (`12` gold A, `12` gold
 | Original strict schema score | `15/24` | `62.5%` | `7/24` | Seven responses used 0-100 confidence values despite valid A/B decisions. |
 | Exact-choice P-REV-1 rescore | `22/24` | `91.7%` | `0/24` | Scorer now normalizes 0-100 confidence as a warning, not a failed exact-choice decision. |
 
-The exact-choice rescore records `confidence_warning_counts={"confidence_scale_0_100": 7}` and balanced final decisions (`12` A / `12` B). This is positive judge-native evidence for GLM's pairwise preference capability, but it does not clear patch-review admission because the same model already failed decision-grade C-CRAB P-REV-1 (`FA 41.7%`, `FR 25.0%`, `AUC 0.509`) and SWE-bench-Verified remains open.
+The exact-choice rescore records `confidence_warning_counts={"confidence_scale_0_100": 7}` and balanced final decisions (`12` A / `12` B). This is positive judge-native evidence for GLM's pairwise preference capability, but it does not clear patch-review admission because the same model already failed decision-grade C-CRAB P-REV-1 (`FA 41.7%`, `FR 25.0%`, `AUC 0.509`) and SWE-bench-Verified live execution remains open.
 
 ## Code Hygiene
 
 The direct runner now defaults `--measurement-protocol p_rev1` runs to `era=p_rev1_attested`, preserves `observation_only=false` in score-only manifests, and carries confidence warnings through live and saved-response summaries. The pairwise prompt now explicitly asks for decimal confidence (`0.0` to `1.0`) to reduce future format warnings.
 
+Follow-up no-inference cleanup fixed the score-only artifact so `summary.json` records `server.not_started=true` and `server.log_file=null` instead of a stale nonexistent server log path. Expanded raw live `artifacts/` and `logs/` remain local/untracked because the repository PII hook flags long digit runs in saved prompts/server logs; the committed decision-grade evidence is the summary, manifest, decisions, and plan.
+
 Focused validation:
 
 ```bash
-uv run --with pytest pytest -q scripts/benchmark/test_glm52_external_ground_truth_adapter.py scripts/benchmark/test_glm52_external_ground_truth_direct_runner.py
-python3 -m py_compile scripts/benchmark/glm52_external_ground_truth_adapter.py scripts/benchmark/glm52_external_ground_truth_direct_runner.py
+uv run --with pytest pytest -q scripts/benchmark/test_glm52_external_ground_truth_adapter.py scripts/benchmark/test_glm52_external_ground_truth_direct_runner.py scripts/benchmark/test_glm52_swebench_verified_adapter.py
+python3 -m py_compile scripts/benchmark/glm52_external_ground_truth_adapter.py scripts/benchmark/glm52_external_ground_truth_direct_runner.py scripts/benchmark/glm52_swebench_verified_adapter.py
 ```
 
-Result: `13 passed`; compile checks passed.
+Result: `24 passed`; compile checks passed.

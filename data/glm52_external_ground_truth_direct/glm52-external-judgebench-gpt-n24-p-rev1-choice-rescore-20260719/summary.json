@@ -3,7 +3,7 @@
   "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/decisions.jsonl",
   "execution": null,
   "execution_allowed": true,
-  "generated_at": "2026-07-19T16:57:24.345692+00:00",
+  "generated_at": "2026-07-19T17:18:39.732201+00:00",
   "inventory": {
     "blocker_files": [],
     "hf_tree_manifest": {
@@ -82,6 +82,7 @@
       "prompt_token_count": 914,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:bd513cdb44e841152cfa",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 1919,
         "candidate_a_truncated": false,
@@ -97,6 +98,7 @@
       "prompt_token_count": 1190,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:aecbd576ea922b28a136",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 3571,
         "candidate_a_truncated": false,
@@ -112,6 +114,7 @@
       "prompt_token_count": 974,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:7d43ddfcf6f63b564d91",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 2093,
         "candidate_a_truncated": false,
@@ -127,6 +130,7 @@
       "prompt_token_count": 617,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:1441c7e58522b952b521",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 1842,
         "candidate_a_truncated": false,
@@ -142,6 +146,7 @@
       "prompt_token_count": 656,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:d1eb1ad7f8e454f9baf5",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 1816,
         "candidate_a_truncated": false,
@@ -157,6 +162,7 @@
       "prompt_token_count": 984,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:876a4ed1c9768fa610b3",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 2677,
         "candidate_a_truncated": false,
@@ -172,6 +178,7 @@
       "prompt_token_count": 559,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:b9223375a294a17e0f4b",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 1242,
         "candidate_a_truncated": false,
@@ -187,6 +194,7 @@
       "prompt_token_count": 666,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:2a9d2e2cce43fdd6ccd3",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 1066,
         "candidate_a_truncated": false,
@@ -202,6 +210,7 @@
       "prompt_token_count": 982,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:b723ed046ad8790c4b2c",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 2035,
         "candidate_a_truncated": false,
@@ -217,6 +226,7 @@
       "prompt_token_count": 522,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:dc2a002d6c51b660d07c",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 1169,
         "candidate_a_truncated": false,
@@ -232,6 +242,7 @@
       "prompt_token_count": 785,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:629c4ba99f878fcf1a91",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 2070,
         "candidate_a_truncated": false,
@@ -247,6 +258,7 @@
       "prompt_token_count": 856,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:f78382ebf36110d8cc94",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 1893,
         "candidate_a_truncated": false,
@@ -262,6 +274,7 @@
       "prompt_token_count": 737,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:c538c6002537208c2271",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 2499,
         "candidate_a_truncated": false,
@@ -277,6 +290,7 @@
       "prompt_token_count": 1285,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:3d1249af7885c7626e91",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 2620,
         "candidate_a_truncated": false,
@@ -292,6 +306,7 @@
       "prompt_token_count": 1247,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:fe2151ed2845e49bc928",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 2544,
         "candidate_a_truncated": false,
@@ -307,6 +322,7 @@
       "prompt_token_count": 1217,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:c9cfddae4c9db7a03fb8",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 2907,
         "candidate_a_truncated": false,
@@ -322,6 +338,7 @@
       "prompt_token_count": 1295,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:ea53f9ae2e947190c296",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 2844,
         "candidate_a_truncated": false,
@@ -337,6 +354,7 @@
       "prompt_token_count": 1467,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:f63b94976242b46b4026",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 3468,
         "candidate_a_truncated": false,
@@ -352,6 +370,7 @@
       "prompt_token_count": 1245,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:f672d9179e030458f403",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 2479,
         "candidate_a_truncated": false,
@@ -367,6 +386,7 @@
       "prompt_token_count": 1194,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:0980c4cac73909c8be88",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 3238,
         "candidate_a_truncated": false,
@@ -382,6 +402,7 @@
       "prompt_token_count": 805,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:e41c4d4805daa532f9f6",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 2215,
         "candidate_a_truncated": false,
@@ -397,6 +418,7 @@
       "prompt_token_count": 404,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:5987ea782b2d0a44bc3e",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 675,
         "candidate_a_truncated": false,
@@ -412,6 +434,7 @@
       "prompt_token_count": 368,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:70e434e831bc643dd6cc",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 389,
         "candidate_a_truncated": false,
@@ -427,6 +450,7 @@
       "prompt_token_count": 640,
       "prompt_token_max": 15744,
       "row_id": "glm52-ext:judgebench:gpt:555577402a93fd77cca5",
+      "task_kind": "pairwise",
       "truncation": {
         "candidate_a_chars_original": 1349,
         "candidate_a_truncated": false,
@@ -451,11 +475,26 @@
     "max_tokens": 128,
     "prompt_guard_tokens": 512,
     "response_schema": {
-      "confidence": "number|null",
-      "decision": [
-        "A",
-        "B"
-      ]
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "decision": {
+          "enum": [
+            "A",
+            "B"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "decision",
+        "confidence"
+      ],
+      "type": "object"
     },
     "rubric_version": "glm52_external_pairwise_exact_match_v1",
     "seed": 52,
@@ -496,12 +535,15 @@
     ],
     "source_counts": {
       "judgebench|gpt": 24
+    },
+    "task_kind_counts": {
+      "pairwise": 24
     }
   },
   "rows_jsonl": "/mnt/raid0/llm/epyc-inference-research/docs/data/glm52_external_judgebench_gpt_n24_rows_20260719.jsonl",
   "run_manifest": {
     "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/decisions.jsonl",
-    "generated_at": "2026-07-19T16:57:24.346340+00:00",
+    "generated_at": "2026-07-19T17:18:39.732891+00:00",
     "measurement_protocol": "p_rev1",
     "n_scored": 24,
     "observation_only": false,
@@ -521,6 +563,10 @@
       "A": 12,
       "B": 12
     },
+    "gold_label_counts": {
+      "A": 12,
+      "B": 12
+    },
     "missing_response_row_ids": [],
     "n": 24,
     "n_expected": 24,
@@ -529,64 +575,10 @@
   },
   "server": {
     "context_length": 16384,
-    "extra_args": [
-      "--reasoning-format",
-      "deepseek",
-      "--reasoning",
-      "off",
-      "--reasoning-budget",
-      "0",
-      "--json-schema",
-      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"A\",\"B\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1}}}"
-    ],
     "indexer_top_k": 16384,
-    "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:16384",
-    "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/logs/glm52_external__p12000_tk16384.server.log",
-    "metrics": false,
+    "log_file": null,
+    "not_started": true,
     "port": 19570,
-    "server_command": [
-      "env",
-      "-i",
-      "PATH=/usr/bin:/bin",
-      "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
-      "OMP_NUM_THREADS=1",
-      "numactl",
-      "--interleave=all",
-      "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
-      "-m",
-      "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
-      "--override-kv",
-      "glm-dsa.attention.indexer.top_k=int:16384",
-      "--device",
-      "none",
-      "-ngl",
-      "0",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      "19570",
-      "-c",
-      "16384",
-      "-t",
-      "96",
-      "-ub",
-      "512",
-      "--log-verbosity",
-      "4",
-      "--log-file",
-      "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/logs/glm52_external__p12000_tk16384.server.log",
-      "--reasoning-format",
-      "deepseek",
-      "--reasoning",
-      "off",
-      "--reasoning-budget",
-      "0",
-      "--json-schema",
-      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"A\",\"B\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1}}}"
-    ],
-    "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:16384 --device none -ngl 0 --host 127.0.0.1 --port 19570 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/logs/glm52_external__p12000_tk16384.server.log --reasoning-format deepseek --reasoning off --reasoning-budget 0 --json-schema '{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"A\",\"B\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1}}}'",
-    "threads": 96,
-    "trace_logs": true,
-    "ubatch": 512
+    "reason": "score_responses_jsonl"
   }
 }
