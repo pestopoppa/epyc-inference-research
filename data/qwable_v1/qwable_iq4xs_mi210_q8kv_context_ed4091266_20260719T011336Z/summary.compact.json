@@ -1,0 +1,87 @@
+{
+  "artifact": "data/qwable_v1/qwable_iq4xs_mi210_q8kv_context_ed4091266_20260719T011336Z",
+  "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+  "experimental_head": "ed4091266d286045510e498ceb059c209a65aff9",
+  "research_head": "f991176e633155f5eef8576037e53cfa361465f9",
+  "command": "HIP_VISIBLE_DEVICES=0 ROCR_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin:/opt/rocm/lib /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf -dev ROCm0 -ngl 99 -fa on -ctk q8_0 -ctv q8_0 -pg 2048,1024 -pg 8192,1024 -pg 32768,1024 -r 1 -o json --progress",
+  "exit_code": 0,
+  "rows": [
+    {
+      "build_commit": "ed4091266",
+      "model_type": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "n_prompt": 512,
+      "n_gen": 0,
+      "avg_ts": 2230.164055,
+      "type_k": "q8_0",
+      "type_v": "q8_0",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T01:13:39Z"
+    },
+    {
+      "build_commit": "ed4091266",
+      "model_type": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "n_prompt": 0,
+      "n_gen": 128,
+      "avg_ts": 95.948316,
+      "type_k": "q8_0",
+      "type_v": "q8_0",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T01:13:39Z"
+    },
+    {
+      "build_commit": "ed4091266",
+      "model_type": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "n_prompt": 2048,
+      "n_gen": 1024,
+      "avg_ts": 260.670873,
+      "type_k": "q8_0",
+      "type_v": "q8_0",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T01:13:41Z"
+    },
+    {
+      "build_commit": "ed4091266",
+      "model_type": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "n_prompt": 8192,
+      "n_gen": 1024,
+      "avg_ts": 605.632745,
+      "type_k": "q8_0",
+      "type_v": "q8_0",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T01:13:54Z"
+    },
+    {
+      "build_commit": "ed4091266",
+      "model_type": "qwen35moe 35B.A3B IQ4_XS - 4.25 bpw",
+      "n_prompt": 32768,
+      "n_gen": 1024,
+      "avg_ts": 1038.708668,
+      "type_k": "q8_0",
+      "type_v": "q8_0",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T01:14:13Z"
+    }
+  ],
+  "cleanup": {
+    "post_rocm_smi_file": "data/qwable_v1/qwable_iq4xs_mi210_q8kv_context_ed4091266_20260719T011336Z/post_rocm_smi.txt",
+    "concurrent_cpu_only_qwable_q8_process_observed": true,
+    "final_rocm_smi_file": "data/qwable_v1/qwable_iq4xs_mi210_q8kv_context_ed4091266_20260719T011336Z/final_rocm_smi.txt",
+    "gpu_vram_released_after_final_check": true
+  },
+  "caveats": [
+    "speed-only llama-bench observation",
+    "single repetition",
+    "ran concurrently with CPU-only Qwable Q8 context bench"
+  ],
+  "interpretation": "Against the immediately preceding Qwable IQ4_XS f16-KV MI210 row, q8_0 KV was not a speed win: tg128 was 0.993x and long combined rows were 0.970x, 0.950x, and 0.938x of f16-KV throughput."
+}
