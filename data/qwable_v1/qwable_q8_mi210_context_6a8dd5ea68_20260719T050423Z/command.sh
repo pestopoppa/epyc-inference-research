@@ -1,0 +1,1 @@
+env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin GGML_HIP_GRAPHS=1 ROCR_VISIBLE_DEVICES=0 HIP_VISIBLE_DEVICES=0 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf -dev ROCm0 -ngl 99 -fa on -t 8 -b 512 -ub 512 -ctk q8_0 -ctv q8_0 -p 2048\,8192\,32768 -n 512 -o json
