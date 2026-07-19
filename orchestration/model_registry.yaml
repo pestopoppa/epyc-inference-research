@@ -7291,16 +7291,6 @@ roles:
         `pp2048 116.13 t/s`, `pp8192 110.76 t/s`, and `tg512 13.99 t/s`.
         IQ4_XS remains the preferred default unless a broader quality slice
         shows a Q8-only gain.
-      current_v7_context_matrix_observation: >
-        2026-07-19 current experimental-v7 `ed4091266` MI210 llama-bench
-        context row measured IQ4_XS f16-KV prompt-only `pp512 2287.39 t/s`,
-        decode-only `tg128 96.62 t/s`, and combined rows `pp2048+tg1024
-        268.77 t/s`, `pp8192+tg1024 637.77 t/s`, `pp32768+tg1024
-        1106.94 t/s`. Matched q8_0-KV repeat was not a speed win: `tg128
-        95.95 t/s`, combined rows `260.67`, `605.63`, `1038.71 t/s`
-        (0.970x, 0.950x, 0.938x on long combined rows). Speed-only,
-        single-rep evidence; keep f16 KV for speed and reserve q8 KV for
-        memory-policy experiments.
       evidence:
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/summary.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/responses/standalone_iq4_gpu.raw.json
@@ -7332,8 +7322,6 @@ roles:
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c32768/summary.txt
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/summary.json
-      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_mi210_context_ed4091266_20260719T010502Z/summary.compact.json
-      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_mi210_q8kv_context_ed4091266_20260719T011336Z/summary.compact.json
     memory:
       residency: cold
       pinned: false
@@ -7415,17 +7403,6 @@ roles:
         `pp2048 145.23 t/s`, `pp8192 121.33 t/s`, `pp32768 99.11 t/s`, and
         decode-only `tg512 10.84 t/s`. Speed-only single-rep evidence; MI210
         remains the primary Qwable execution lane when available.
-      current_v7_context_matrix_observation: >
-        2026-07-19 current experimental-v7 `ed4091266` Qwable Q8_0 context
-        matrix measured CPU-only `pp2048 142.73 t/s`, `pp8192 118.59 t/s`,
-        `pp32768 94.74 t/s`, and `tg512 10.74 t/s` with `-dev none -ngl 0
-        -fa off -t 16`. MI210 f16-KV measured `pp512 2094.89 t/s`,
-        `tg128 101.27 t/s`, and combined `pp2048+tg1024 274.82 t/s`,
-        `pp8192+tg1024 633.36 t/s`, `pp32768+tg1024 1068.60 t/s`.
-        Matched q8_0-KV was not a speed win: `tg128 100.09 t/s`, combined
-        rows `268.67`, `604.57`, `1010.96 t/s` (0.978x, 0.955x, 0.946x on
-        long combined rows). Use q8 KV only as a memory/serving-policy lever,
-        not a speed default.
       evidence:
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/summary.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/responses/standalone_q8_gpu.raw.json
@@ -7438,9 +7415,6 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwable_q8_mi210_llama_bench_20260718T220220Z_rebuilt_cf051d3e1/bench.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_run2_20260718T224956Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_run2_20260718T224956Z/summary.md
-      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T010411Z/summary.compact.json
-      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_mi210_context_ed4091266_20260719T010751Z/summary.compact.json
-      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_mi210_q8kv_context_ed4091266_20260719T011048Z/summary.compact.json
     memory:
       residency: cold
       pinned: false
