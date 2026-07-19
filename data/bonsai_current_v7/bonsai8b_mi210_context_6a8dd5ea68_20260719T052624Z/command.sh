@@ -1,0 +1,1 @@
+env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin GGML_HIP_GRAPHS=1 ROCR_VISIBLE_DEVICES=0 HIP_VISIBLE_DEVICES=0 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Bonsai-8B.gguf -dev ROCm0 -ngl 99 -fa on -t 8 -b 512 -ub 512 -ctk q8_0 -ctv q8_0 -p 512\,4096\,16384 -n 1024 -o json
