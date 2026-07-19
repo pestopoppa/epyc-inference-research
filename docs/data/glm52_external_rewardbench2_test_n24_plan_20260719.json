@@ -1,0 +1,87 @@
+{
+  "dataset": {
+    "available": {
+      "gold_label_counts": {
+        "A": 5289
+      },
+      "max_prompt_tokens_policy": 12000,
+      "n": 5289,
+      "source_counts": {
+        "reward-bench-2|Factuality": 1425,
+        "reward-bench-2|Focus": 1485,
+        "reward-bench-2|Math": 549,
+        "reward-bench-2|Precise IF": 480,
+        "reward-bench-2|Safety": 1350
+      },
+      "task_kind_counts": {
+        "pairwise": 5289
+      }
+    },
+    "file_sha256": "c8ec60efbd75d2f9dcba4121e6101f7a6015abc38a34e034ae2c7ae886265958",
+    "kind": "reward-bench-2",
+    "path": "/mnt/raid0/llm/datasets/reward-bench-2/data/test-00000-of-00001.parquet",
+    "score_key": null,
+    "selected": {
+      "gold_label_counts": {
+        "A": 24
+      },
+      "max_prompt_tokens_policy": 12000,
+      "n": 24,
+      "source_counts": {
+        "reward-bench-2|Factuality": 8,
+        "reward-bench-2|Focus": 10,
+        "reward-bench-2|Math": 2,
+        "reward-bench-2|Precise IF": 2,
+        "reward-bench-2|Safety": 2
+      },
+      "task_kind_counts": {
+        "pairwise": 24
+      }
+    },
+    "selected_row_ids": [
+      "glm52-ext:reward-bench-2:test:5f48fb4e57cf12cfbb4c",
+      "glm52-ext:reward-bench-2:test:38ada14f9e05228c05eb",
+      "glm52-ext:reward-bench-2:test:c443e7a4e3f39b3118ec",
+      "glm52-ext:reward-bench-2:test:751f60a2bb0c7dcb285f",
+      "glm52-ext:reward-bench-2:test:6ebc945b9bdefdfa48de",
+      "glm52-ext:reward-bench-2:test:1b88e7b5e36b8bed3ed5",
+      "glm52-ext:reward-bench-2:test:a6ffcd048406a096723a",
+      "glm52-ext:reward-bench-2:test:6bb743768b8d9cd37b9c",
+      "glm52-ext:reward-bench-2:test:5139ce313e0095b9c316",
+      "glm52-ext:reward-bench-2:test:d9e38f251008fe5eb294",
+      "glm52-ext:reward-bench-2:test:3c1676f5236d9aa8b775",
+      "glm52-ext:reward-bench-2:test:b4280691e62e13f0c67b",
+      "glm52-ext:reward-bench-2:test:1fa47c67b8e5d9a97291",
+      "glm52-ext:reward-bench-2:test:9a0c1960d2e8aaeb8bbb",
+      "glm52-ext:reward-bench-2:test:11702a065620aa84c767",
+      "glm52-ext:reward-bench-2:test:123bb3de3866048b2b99",
+      "glm52-ext:reward-bench-2:test:65f3759a99e44744d09d",
+      "glm52-ext:reward-bench-2:test:4b5123840ac732744d3d",
+      "glm52-ext:reward-bench-2:test:fd4d9c3ad5d5df9b52f3",
+      "glm52-ext:reward-bench-2:test:e897ed54d4fa7c98fa33",
+      "glm52-ext:reward-bench-2:test:2385f96c7bd38ec866c9",
+      "glm52-ext:reward-bench-2:test:8970c6ff5c1172a1eec6",
+      "glm52-ext:reward-bench-2:test:e99502b1724b7bac7c43",
+      "glm52-ext:reward-bench-2:test:72053ca2773d24513e95"
+    ],
+    "suite": "test"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-19T15:30:51.833403+00:00",
+  "mode": "dry-run",
+  "refusal_reasons": [],
+  "request_policy": {
+    "context_length": 12000,
+    "max_field_chars": 24000,
+    "max_tokens": 128,
+    "prompt_guard_tokens": 256,
+    "response_schema": {
+      "confidence": "number|null",
+      "decision": [
+        "A",
+        "B"
+      ]
+    }
+  },
+  "schema": "glm52_external_ground_truth_adapter.v1"
+}

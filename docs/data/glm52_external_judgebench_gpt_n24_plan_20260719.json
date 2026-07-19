@@ -1,0 +1,81 @@
+{
+  "dataset": {
+    "available": {
+      "gold_label_counts": {
+        "A": 193,
+        "B": 157
+      },
+      "max_prompt_tokens_policy": 12000,
+      "n": 350,
+      "source_counts": {
+        "judgebench|gpt": 350
+      },
+      "task_kind_counts": {
+        "pairwise": 350
+      }
+    },
+    "file_sha256": "d5106306b38dead1b2e964ecf5534a3e7b2fc4b8d3b8da327599edfcebd76042",
+    "kind": "judgebench",
+    "path": "/mnt/raid0/llm/datasets/judgebench/data/gpt-00000-of-00001.jsonl",
+    "score_key": null,
+    "selected": {
+      "gold_label_counts": {
+        "A": 12,
+        "B": 12
+      },
+      "max_prompt_tokens_policy": 12000,
+      "n": 24,
+      "source_counts": {
+        "judgebench|gpt": 24
+      },
+      "task_kind_counts": {
+        "pairwise": 24
+      }
+    },
+    "selected_row_ids": [
+      "glm52-ext:judgebench:gpt:b9223375a294a17e0f4b",
+      "glm52-ext:judgebench:gpt:555577402a93fd77cca5",
+      "glm52-ext:judgebench:gpt:629c4ba99f878fcf1a91",
+      "glm52-ext:judgebench:gpt:aecbd576ea922b28a136",
+      "glm52-ext:judgebench:gpt:2a9d2e2cce43fdd6ccd3",
+      "glm52-ext:judgebench:gpt:dc2a002d6c51b660d07c",
+      "glm52-ext:judgebench:gpt:ea53f9ae2e947190c296",
+      "glm52-ext:judgebench:gpt:f63b94976242b46b4026",
+      "glm52-ext:judgebench:gpt:7d43ddfcf6f63b564d91",
+      "glm52-ext:judgebench:gpt:d1eb1ad7f8e454f9baf5",
+      "glm52-ext:judgebench:gpt:f672d9179e030458f403",
+      "glm52-ext:judgebench:gpt:bd513cdb44e841152cfa",
+      "glm52-ext:judgebench:gpt:f78382ebf36110d8cc94",
+      "glm52-ext:judgebench:gpt:fe2151ed2845e49bc928",
+      "glm52-ext:judgebench:gpt:70e434e831bc643dd6cc",
+      "glm52-ext:judgebench:gpt:876a4ed1c9768fa610b3",
+      "glm52-ext:judgebench:gpt:c9cfddae4c9db7a03fb8",
+      "glm52-ext:judgebench:gpt:b723ed046ad8790c4b2c",
+      "glm52-ext:judgebench:gpt:c538c6002537208c2271",
+      "glm52-ext:judgebench:gpt:3d1249af7885c7626e91",
+      "glm52-ext:judgebench:gpt:5987ea782b2d0a44bc3e",
+      "glm52-ext:judgebench:gpt:1441c7e58522b952b521",
+      "glm52-ext:judgebench:gpt:0980c4cac73909c8be88",
+      "glm52-ext:judgebench:gpt:e41c4d4805daa532f9f6"
+    ],
+    "suite": "gpt"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-19T15:28:47.827277+00:00",
+  "mode": "dry-run",
+  "refusal_reasons": [],
+  "request_policy": {
+    "context_length": 12000,
+    "max_field_chars": 24000,
+    "max_tokens": 128,
+    "prompt_guard_tokens": 256,
+    "response_schema": {
+      "confidence": "number|null",
+      "decision": [
+        "A",
+        "B"
+      ]
+    }
+  },
+  "schema": "glm52_external_ground_truth_adapter.v1"
+}

@@ -1,0 +1,81 @@
+{
+  "dataset": {
+    "available": {
+      "gold_label_counts": {
+        "A": 42,
+        "B": 58
+      },
+      "max_prompt_tokens_policy": 12000,
+      "n": 100,
+      "source_counts": {
+        "llmbar|natural": 100
+      },
+      "task_kind_counts": {
+        "pairwise": 100
+      }
+    },
+    "file_sha256": "f7127b7aa78104cb8e03a2b1b3ac0077e95b125714dd441a8ee63666145a3375",
+    "kind": "llmbar",
+    "path": "/mnt/raid0/llm/datasets/llmbar/Dataset/LLMBar/Natural/dataset.json",
+    "score_key": null,
+    "selected": {
+      "gold_label_counts": {
+        "A": 12,
+        "B": 12
+      },
+      "max_prompt_tokens_policy": 12000,
+      "n": 24,
+      "source_counts": {
+        "llmbar|natural": 24
+      },
+      "task_kind_counts": {
+        "pairwise": 24
+      }
+    },
+    "selected_row_ids": [
+      "glm52-ext:llmbar:natural:fb0a32991fa15709b78e",
+      "glm52-ext:llmbar:natural:2dc28ff43613882b9457",
+      "glm52-ext:llmbar:natural:d2e4c9cd288e5a5c7c21",
+      "glm52-ext:llmbar:natural:f1453acf4b17535b17d5",
+      "glm52-ext:llmbar:natural:315ae631ca0102de7ea0",
+      "glm52-ext:llmbar:natural:efc37bbc20af26b77a53",
+      "glm52-ext:llmbar:natural:a8476516dce4862625d8",
+      "glm52-ext:llmbar:natural:d273a39398e21d0c8331",
+      "glm52-ext:llmbar:natural:41d3cf810e2f58423b66",
+      "glm52-ext:llmbar:natural:dd53828c22f56605e0ef",
+      "glm52-ext:llmbar:natural:6e31829ddc121036b7d8",
+      "glm52-ext:llmbar:natural:f567923354cee9a48757",
+      "glm52-ext:llmbar:natural:304753e995f6cdaf43e2",
+      "glm52-ext:llmbar:natural:812ecbd902a5a54f81d8",
+      "glm52-ext:llmbar:natural:b1edebd228a06b849896",
+      "glm52-ext:llmbar:natural:75959fc9685fb70dc1df",
+      "glm52-ext:llmbar:natural:e00314fefd1a396c7a7c",
+      "glm52-ext:llmbar:natural:ff0391f77753e41427f4",
+      "glm52-ext:llmbar:natural:386b24f8ca3747f3b203",
+      "glm52-ext:llmbar:natural:cd308548134abe2028dc",
+      "glm52-ext:llmbar:natural:7815e6cf2cbe497d0498",
+      "glm52-ext:llmbar:natural:c8eb521b1a298fdc1a5f",
+      "glm52-ext:llmbar:natural:ff591f0e934a27380282",
+      "glm52-ext:llmbar:natural:4b921b80594bb49fa70f"
+    ],
+    "suite": "natural"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-19T15:28:47.951091+00:00",
+  "mode": "dry-run",
+  "refusal_reasons": [],
+  "request_policy": {
+    "context_length": 12000,
+    "max_field_chars": 24000,
+    "max_tokens": 128,
+    "prompt_guard_tokens": 256,
+    "response_schema": {
+      "confidence": "number|null",
+      "decision": [
+        "A",
+        "B"
+      ]
+    }
+  },
+  "schema": "glm52_external_ground_truth_adapter.v1"
+}

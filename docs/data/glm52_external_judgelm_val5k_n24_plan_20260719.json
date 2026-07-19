@@ -1,0 +1,81 @@
+{
+  "dataset": {
+    "available": {
+      "gold_label_counts": {
+        "A": 2041,
+        "B": 2082
+      },
+      "max_prompt_tokens_policy": 12000,
+      "n": 4123,
+      "source_counts": {
+        "judgelm|val_5k": 4123
+      },
+      "task_kind_counts": {
+        "pairwise": 4123
+      }
+    },
+    "file_sha256": "2084ad833420b4f810add6d589fab436465b6b2c6f436d81fa3bc9627541052d",
+    "kind": "judgelm",
+    "path": "/mnt/raid0/llm/datasets/judgelm-100k/judgelm_val_5k.jsonl",
+    "score_key": "rougeLsum",
+    "selected": {
+      "gold_label_counts": {
+        "A": 12,
+        "B": 12
+      },
+      "max_prompt_tokens_policy": 12000,
+      "n": 24,
+      "source_counts": {
+        "judgelm|val_5k": 24
+      },
+      "task_kind_counts": {
+        "pairwise": 24
+      }
+    },
+    "selected_row_ids": [
+      "glm52-ext:judgelm:val_5k:8b8e4718cc14c0ee3c8c",
+      "glm52-ext:judgelm:val_5k:30d4ad176b556085e538",
+      "glm52-ext:judgelm:val_5k:b686e088837daadc999b",
+      "glm52-ext:judgelm:val_5k:305843da836d75c5f871",
+      "glm52-ext:judgelm:val_5k:2fd12cce9e05c7cf3c4d",
+      "glm52-ext:judgelm:val_5k:c51c8e9025cd8baeba1c",
+      "glm52-ext:judgelm:val_5k:8b693c97f3ee7a62de62",
+      "glm52-ext:judgelm:val_5k:dcdbfe4146afa4b06834",
+      "glm52-ext:judgelm:val_5k:5bb89ca47d9a128ab4cb",
+      "glm52-ext:judgelm:val_5k:418c02e1f51b7b75f9ee",
+      "glm52-ext:judgelm:val_5k:18666d823bd83f60572e",
+      "glm52-ext:judgelm:val_5k:30e26b53f1765abdfb83",
+      "glm52-ext:judgelm:val_5k:5530e1674fd448231e66",
+      "glm52-ext:judgelm:val_5k:7d8e108f544e9e3bac8f",
+      "glm52-ext:judgelm:val_5k:c9765ed40a3be418d37a",
+      "glm52-ext:judgelm:val_5k:a928878ff34228ae0e25",
+      "glm52-ext:judgelm:val_5k:c13ead93d20bc0c980a5",
+      "glm52-ext:judgelm:val_5k:e329113b4abeda24d5c6",
+      "glm52-ext:judgelm:val_5k:141ca586ca5468718c6a",
+      "glm52-ext:judgelm:val_5k:b0f8b9cbe370b744a46a",
+      "glm52-ext:judgelm:val_5k:c2c5db5a787eee24efe0",
+      "glm52-ext:judgelm:val_5k:e740dcf7c57e87ab3279",
+      "glm52-ext:judgelm:val_5k:2dd25674474634944e3d",
+      "glm52-ext:judgelm:val_5k:465d883542880e533116"
+    ],
+    "suite": "val_5k"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-19T15:28:48.134982+00:00",
+  "mode": "dry-run",
+  "refusal_reasons": [],
+  "request_policy": {
+    "context_length": 12000,
+    "max_field_chars": 24000,
+    "max_tokens": 128,
+    "prompt_guard_tokens": 256,
+    "response_schema": {
+      "confidence": "number|null",
+      "decision": [
+        "A",
+        "B"
+      ]
+    }
+  },
+  "schema": "glm52_external_ground_truth_adapter.v1"
+}

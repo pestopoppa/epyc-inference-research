@@ -1,0 +1,115 @@
+{
+  "dataset": {
+    "available": {
+      "gold_label_counts": {
+        "A": 2985
+      },
+      "max_prompt_tokens_policy": 12000,
+      "n": 2985,
+      "source_counts": {
+        "reward-bench|alpacaeval-easy": 100,
+        "reward-bench|alpacaeval-hard": 95,
+        "reward-bench|alpacaeval-length": 95,
+        "reward-bench|donotanswer": 136,
+        "reward-bench|hep-cpp": 164,
+        "reward-bench|hep-go": 164,
+        "reward-bench|hep-java": 164,
+        "reward-bench|hep-js": 164,
+        "reward-bench|hep-python": 164,
+        "reward-bench|hep-rust": 164,
+        "reward-bench|llmbar-adver-GPTInst": 92,
+        "reward-bench|llmbar-adver-GPTOut": 47,
+        "reward-bench|llmbar-adver-manual": 46,
+        "reward-bench|llmbar-adver-neighbor": 134,
+        "reward-bench|llmbar-natural": 100,
+        "reward-bench|math-prm": 447,
+        "reward-bench|mt-bench-easy": 28,
+        "reward-bench|mt-bench-hard": 37,
+        "reward-bench|mt-bench-med": 40,
+        "reward-bench|refusals-dangerous": 100,
+        "reward-bench|refusals-offensive": 100,
+        "reward-bench|xstest-should-refuse": 154,
+        "reward-bench|xstest-should-respond": 250
+      },
+      "task_kind_counts": {
+        "pairwise": 2985
+      }
+    },
+    "file_sha256": "65473c20ed0627e02503557ae102c25c6b0e66b5ed69ee327e224bb95e70ca29",
+    "kind": "reward-bench",
+    "path": "/mnt/raid0/llm/datasets/reward-bench/data/filtered-00000-of-00001.parquet",
+    "score_key": null,
+    "selected": {
+      "gold_label_counts": {
+        "A": 24
+      },
+      "max_prompt_tokens_policy": 12000,
+      "n": 24,
+      "source_counts": {
+        "reward-bench|alpacaeval-easy": 2,
+        "reward-bench|donotanswer": 1,
+        "reward-bench|hep-cpp": 3,
+        "reward-bench|hep-go": 3,
+        "reward-bench|hep-js": 1,
+        "reward-bench|hep-python": 2,
+        "reward-bench|hep-rust": 1,
+        "reward-bench|llmbar-adver-GPTInst": 2,
+        "reward-bench|llmbar-adver-manual": 1,
+        "reward-bench|llmbar-adver-neighbor": 1,
+        "reward-bench|llmbar-natural": 1,
+        "reward-bench|math-prm": 2,
+        "reward-bench|refusals-dangerous": 1,
+        "reward-bench|refusals-offensive": 1,
+        "reward-bench|xstest-should-respond": 2
+      },
+      "task_kind_counts": {
+        "pairwise": 24
+      }
+    },
+    "selected_row_ids": [
+      "glm52-ext:reward-bench:filtered:e8225d98431d46cd1e61",
+      "glm52-ext:reward-bench:filtered:d48060039fda0a24f61b",
+      "glm52-ext:reward-bench:filtered:5404ae8fae6ca5e11875",
+      "glm52-ext:reward-bench:filtered:073bb4aa6d05f514e1cb",
+      "glm52-ext:reward-bench:filtered:f783139f539453558366",
+      "glm52-ext:reward-bench:filtered:144661e0a7d220e45038",
+      "glm52-ext:reward-bench:filtered:9b9285b22752c0f4af1c",
+      "glm52-ext:reward-bench:filtered:0ecf43d18fe0bf690b06",
+      "glm52-ext:reward-bench:filtered:b4a2b06c5e8e2a82f840",
+      "glm52-ext:reward-bench:filtered:944fb99385f8aa4f7471",
+      "glm52-ext:reward-bench:filtered:93da0a8b0bc162b83d5e",
+      "glm52-ext:reward-bench:filtered:976238bcfe9aabafc287",
+      "glm52-ext:reward-bench:filtered:01a676b40c590125dd3f",
+      "glm52-ext:reward-bench:filtered:a7c815e00404561d09e9",
+      "glm52-ext:reward-bench:filtered:b72ea1fac4c3515bd29d",
+      "glm52-ext:reward-bench:filtered:366e7c9da9cdd3bd8c4a",
+      "glm52-ext:reward-bench:filtered:84bf025f9499cba433fb",
+      "glm52-ext:reward-bench:filtered:4ff7fb3567cae5a9a1b7",
+      "glm52-ext:reward-bench:filtered:8a76c1a4f3bedde38ec5",
+      "glm52-ext:reward-bench:filtered:c2d0537092fd0ebd879c",
+      "glm52-ext:reward-bench:filtered:1325ff1454544870022d",
+      "glm52-ext:reward-bench:filtered:7019712088f6b064bcf9",
+      "glm52-ext:reward-bench:filtered:4cd793e1f2aaf380f00c",
+      "glm52-ext:reward-bench:filtered:ee3c6d12fc2571be313c"
+    ],
+    "suite": "filtered"
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-19T15:29:51.444662+00:00",
+  "mode": "dry-run",
+  "refusal_reasons": [],
+  "request_policy": {
+    "context_length": 12000,
+    "max_field_chars": 24000,
+    "max_tokens": 128,
+    "prompt_guard_tokens": 256,
+    "response_schema": {
+      "confidence": "number|null",
+      "decision": [
+        "A",
+        "B"
+      ]
+    }
+  },
+  "schema": "glm52_external_ground_truth_adapter.v1"
+}
