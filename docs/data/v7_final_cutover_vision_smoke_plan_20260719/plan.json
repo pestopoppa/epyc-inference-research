@@ -1,0 +1,242 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "cells": [
+    {
+      "candidate": false,
+      "context": 8192,
+      "description": "Production worker vision lane: Qwen2.5-VL-7B + F16 projector, CPU-only.",
+      "fixtures": [
+        {
+          "expected_terms": [
+            "7500"
+          ],
+          "fixture_id": "ocr_digit_7500",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0237.png",
+          "prompt": "What number is shown in the image? Answer with digits only."
+        },
+        {
+          "expected_terms": [
+            "43.36"
+          ],
+          "fixture_id": "receipt_total_payable",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0713.png",
+          "prompt": "What is the total payable amount on the receipt? Answer with the amount only."
+        },
+        {
+          "expected_terms": [
+            "tanzania"
+          ],
+          "fixture_id": "chart_tanzania",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0619.png",
+          "prompt": "Which country has 7 years of compulsory education in the chart? Answer with the country name only."
+        },
+        {
+          "expected_terms": [
+            "cs00012465"
+          ],
+          "fixture_id": "receipt_doc_number",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0734.png",
+          "prompt": "What is the Doc No. on the receipt? Answer with the document number only."
+        }
+      ],
+      "mmproj": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-model-f16.gguf",
+      "model": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+      "parallel": 2,
+      "port": 19400,
+      "prior_evidence": "/mnt/raid0/llm/tmp/k35-vision-release-smoke-20260717T125719Z/summary.json",
+      "role": "worker_vision",
+      "scenario": "worker_vision_cpu_qwen25vl",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_IQK=1",
+        "ROCR_VISIBLE_DEVICES=-1",
+        "HIP_VISIBLE_DEVICES=-1",
+        "CUDA_VISIBLE_DEVICES=",
+        "OMP_NUM_THREADS=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+        "--mmproj",
+        "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-model-f16.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19400",
+        "-np",
+        "2",
+        "-c",
+        "8192",
+        "-t",
+        "24",
+        "--flash-attn",
+        "on",
+        "--device",
+        "none"
+      ],
+      "threads": 24
+    },
+    {
+      "candidate": false,
+      "context": 8192,
+      "description": "Current temporary safe vision escalation alias: Qwen2.5-VL-7B + F16 projector, CPU-only, matching the orchestrator registry until a true higher-quality escalation lane is activated.",
+      "fixtures": [
+        {
+          "expected_terms": [
+            "7500"
+          ],
+          "fixture_id": "ocr_digit_7500",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0237.png",
+          "prompt": "What number is shown in the image? Answer with digits only."
+        },
+        {
+          "expected_terms": [
+            "43.36"
+          ],
+          "fixture_id": "receipt_total_payable",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0713.png",
+          "prompt": "What is the total payable amount on the receipt? Answer with the amount only."
+        },
+        {
+          "expected_terms": [
+            "tanzania"
+          ],
+          "fixture_id": "chart_tanzania",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0619.png",
+          "prompt": "Which country has 7 years of compulsory education in the chart? Answer with the country name only."
+        },
+        {
+          "expected_terms": [
+            "cs00012465"
+          ],
+          "fixture_id": "receipt_doc_number",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0734.png",
+          "prompt": "What is the Doc No. on the receipt? Answer with the document number only."
+        }
+      ],
+      "mmproj": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-model-f16.gguf",
+      "model": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+      "parallel": 2,
+      "port": 19401,
+      "prior_evidence": "/mnt/raid0/llm/epyc-orchestrator/orchestration/model_registry.yaml: vision_escalation is currently a Qwen2.5-VL temporary safe alias.",
+      "role": "vision_escalation",
+      "scenario": "vision_escalation_cpu_qwen25vl_alias",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_IQK=1",
+        "ROCR_VISIBLE_DEVICES=-1",
+        "HIP_VISIBLE_DEVICES=-1",
+        "CUDA_VISIBLE_DEVICES=",
+        "OMP_NUM_THREADS=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+        "--mmproj",
+        "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-model-f16.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19401",
+        "-np",
+        "2",
+        "-c",
+        "8192",
+        "-t",
+        "24",
+        "--flash-attn",
+        "on",
+        "--device",
+        "none"
+      ],
+      "threads": 24
+    },
+    {
+      "candidate": true,
+      "context": 8192,
+      "description": "Local MiniCPM-o-4_5 Q4_K_M + vision F16 projector candidate offloaded to MI210. Tests whether the multimodal bundle can become a fast vision-escalation candidate rather than a text-only observation.",
+      "fixtures": [
+        {
+          "expected_terms": [
+            "7500"
+          ],
+          "fixture_id": "ocr_digit_7500",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0237.png",
+          "prompt": "What number is shown in the image? Answer with digits only."
+        },
+        {
+          "expected_terms": [
+            "43.36"
+          ],
+          "fixture_id": "receipt_total_payable",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0713.png",
+          "prompt": "What is the total payable amount on the receipt? Answer with the amount only."
+        },
+        {
+          "expected_terms": [
+            "tanzania"
+          ],
+          "fixture_id": "chart_tanzania",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0619.png",
+          "prompt": "Which country has 7 years of compulsory education in the chart? Answer with the country name only."
+        },
+        {
+          "expected_terms": [
+            "cs00012465"
+          ],
+          "fixture_id": "receipt_doc_number",
+          "image": "/mnt/raid0/llm/epyc-orchestrator/benchmarks/images/vl/ocrbench/ocr_0734.png",
+          "prompt": "What is the Doc No. on the receipt? Answer with the document number only."
+        }
+      ],
+      "mmproj": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf",
+      "model": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf",
+      "parallel": 1,
+      "port": 19402,
+      "prior_evidence": "/mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/minicpm_q4_mi210/summary.txt: MI210 text-only long run generated 1472 tokens at 107.20 t/s.",
+      "role": "vision_escalation_candidate",
+      "scenario": "vision_candidate_mi210_minicpm_o45_q4",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_IQK=1",
+        "ROCR_VISIBLE_DEVICES=0",
+        "HIP_VISIBLE_DEVICES=0",
+        "CUDA_VISIBLE_DEVICES=0",
+        "OMP_NUM_THREADS=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf",
+        "--mmproj",
+        "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/vision/MiniCPM-o-4_5-vision-F16.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19402",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "24",
+        "--flash-attn",
+        "on",
+        "--device",
+        "ROCm0",
+        "--reasoning",
+        "off"
+      ],
+      "threads": 24
+    }
+  ],
+  "created_at": "2026-07-19T18:47:08.805066+00:00",
+  "execute": false,
+  "max_tokens": 128,
+  "schema": "epyc.k35_vision_matrix.plan.v1"
+}

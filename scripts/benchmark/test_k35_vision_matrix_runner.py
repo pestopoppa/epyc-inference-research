@@ -2,6 +2,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -23,7 +24,28 @@ class K35VisionMatrixRunnerTests(unittest.TestCase):
         self.assertIn("-c 8192", joined)
         self.assertIn("-t 24", joined)
         self.assertIn("--device none", joined)
+        self.assertIn("ROCR_VISIBLE_DEVICES=-1", argv)
+        self.assertIn("HIP_VISIBLE_DEVICES=-1", argv)
         self.assertNotIn("--override-kv", argv)
+
+    def test_vision_escalation_alias_uses_qwen25vl_safety_shape(self):
+        scenario = k35v.scenario_by_name("vision_escalation_cpu_qwen25vl_alias")
+        argv = k35v.build_server_argv(
+            scenario,
+            binary=Path("/tmp/llama-server"),
+            port=19252,
+        )
+        joined = " ".join(argv)
+        self.assertEqual(scenario.role, "vision_escalation")
+        self.assertIn("Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf", joined)
+        self.assertIn("mmproj-model-f16.gguf", joined)
+        self.assertIn("-np 2", joined)
+        self.assertIn("-c 8192", joined)
+        self.assertIn("-t 24", joined)
+        self.assertIn("--device none", joined)
+        self.assertIn("ROCR_VISIBLE_DEVICES=-1", argv)
+        self.assertIn("HIP_VISIBLE_DEVICES=-1", argv)
+        self.assertFalse(scenario.candidate)
 
     def test_vision_escalation_command_preserves_moe4_override(self):
         scenario = k35v.scenario_by_name("vision_escalation_cpu_qwen3vl30b_moe4")
@@ -37,6 +59,7 @@ class K35VisionMatrixRunnerTests(unittest.TestCase):
         self.assertIn("-c 16384", joined)
         self.assertIn("-t 96", joined)
         self.assertIn("--override-kv qwen3vlmoe.expert_used_count=int:4", joined)
+        self.assertTrue(scenario.candidate)
 
     def test_vision_escalation_image1024_candidate_adds_warned_bounds(self):
         scenario = k35v.scenario_by_name("vision_escalation_cpu_qwen3vl30b_moe4_image1024")
@@ -119,6 +142,8 @@ class K35VisionMatrixRunnerTests(unittest.TestCase):
         joined = " ".join(argv)
         self.assertIn("vision/MiniCPM-o-4_5-vision-F16.gguf", joined)
         self.assertIn("--device ROCm0", joined)
+        self.assertIn("ROCR_VISIBLE_DEVICES=0", argv)
+        self.assertIn("HIP_VISIBLE_DEVICES=0", argv)
         self.assertIn("--reasoning off", joined)
 
     def test_supergemma4_cpu_candidate_uses_registered_artifacts(self):
@@ -189,8 +214,36 @@ class K35VisionMatrixRunnerTests(unittest.TestCase):
             names = [cell["scenario"] for cell in plan["cells"]]
             self.assertEqual(
                 names,
-                ["worker_vision_cpu_qwen25vl", "vision_escalation_cpu_qwen3vl30b_moe4"],
+                ["worker_vision_cpu_qwen25vl", "vision_escalation_cpu_qwen25vl_alias"],
             )
+
+    def test_execute_plan_fails_summary_when_cleanup_not_proved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            args = k35v.parse_args(["--execute", "--output-dir", tmp, "--allow-dirty-host"])
+            plan = {"cells": [{"scenario": "worker_vision_cpu_qwen25vl"}]}
+            leaked_result = {
+                "scenario": "worker_vision_cpu_qwen25vl",
+                "role": "worker_vision",
+                "status": "cleanup_failed",
+                "inference_status": "ok",
+                "cleanup": {
+                    "pid": 12345,
+                    "returncode": None,
+                    "dead": False,
+                    "completed": False,
+                    "ps_after": {"ok": True, "stdout": "12345 llama-server"},
+                },
+            }
+
+            with mock.patch.object(k35v.k35, "collect_guard_state", return_value={"process_blockers": []}), mock.patch.object(
+                k35v,
+                "run_cell",
+                return_value=leaked_result,
+            ), mock.patch.object(k35v.k35, "collect_process_blockers", return_value=[]):
+                summary = k35v.execute_plan(plan, args, Path(tmp))
+
+        self.assertEqual(summary["status"], "failed")
+        self.assertEqual(summary["cleanup_failures"][0]["inference_status"], "ok")
 
 
 if __name__ == "__main__":

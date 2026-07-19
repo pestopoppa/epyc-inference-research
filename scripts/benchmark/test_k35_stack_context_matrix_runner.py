@@ -416,6 +416,17 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
         self.assertEqual(result["inference_status"], "ok")
         self.assertIn("cleanup", result["cleanup_error"])
 
+    def test_cleanup_proved_complete_accepts_ps_absence_returncode(self):
+        cleanup = {
+            "pid": 12345,
+            "returncode": -15,
+            "dead": True,
+            "completed": True,
+            "ps_after": {"ok": False, "returncode": 1, "stdout": ""},
+        }
+
+        self.assertTrue(k35.cleanup_proved_complete(cleanup))
+
     def test_execute_plan_fails_summary_when_cleanup_not_proved(self):
         with tempfile.TemporaryDirectory() as tmp:
             args = k35.parse_args(["--execute", "--output-dir", tmp, "--allow-dirty-host"])

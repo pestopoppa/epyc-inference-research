@@ -87,11 +87,37 @@ SCENARIOS: tuple[VisionScenario, ...] = (
         prior_evidence="/mnt/raid0/llm/tmp/k35-vision-release-smoke-20260717T125719Z/summary.json",
     ),
     VisionScenario(
+        name="vision_escalation_cpu_qwen25vl_alias",
+        role="vision_escalation",
+        description=(
+            "Current temporary safe vision escalation alias: Qwen2.5-VL-7B + F16 "
+            "projector, CPU-only, matching the orchestrator registry until a true "
+            "higher-quality escalation lane is activated."
+        ),
+        model=Path(
+            "/mnt/raid0/llm/lmstudio/models/lmstudio-community/"
+            "Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf"
+        ),
+        mmproj=Path(
+            "/mnt/raid0/llm/lmstudio/models/lmstudio-community/"
+            "Qwen2.5-VL-7B-Instruct-GGUF/mmproj-model-f16.gguf"
+        ),
+        context=8192,
+        threads=24,
+        parallel=2,
+        prior_evidence=(
+            "/mnt/raid0/llm/epyc-orchestrator/orchestration/model_registry.yaml: "
+            "vision_escalation is currently a Qwen2.5-VL temporary safe alias."
+        ),
+    ),
+    VisionScenario(
         name="vision_escalation_cpu_qwen3vl30b_moe4",
         role="vision_escalation",
         description=(
-            "Production vision escalation lane: Qwen3-VL-30B-A3B + F16 projector, "
-            "CPU-only, current qwen3vlmoe expert-count override."
+            "Historical vision escalation lane: Qwen3-VL-30B-A3B + F16 projector, "
+            "CPU-only, qwen3vlmoe expert-count override. This is explicit-only "
+            "because K35.8 found a chart fixture failure and production now uses "
+            "the Qwen2.5-VL safety alias."
         ),
         model=Path(
             "/mnt/raid0/llm/lmstudio/models/lmstudio-community/"
@@ -106,6 +132,7 @@ SCENARIOS: tuple[VisionScenario, ...] = (
         parallel=1,
         override_kv=("qwen3vlmoe.expert_used_count=int:4",),
         prior_evidence="/mnt/raid0/llm/tmp/k35-vision-release-smoke-20260717T125719Z/summary.json",
+        candidate=True,
     ),
     VisionScenario(
         name="vision_escalation_cpu_qwen3vl30b_moe4_image1024",
@@ -402,12 +429,14 @@ def image_data_url(path: Path) -> str:
 
 
 def build_server_argv(scenario: VisionScenario, *, binary: Path, port: int) -> list[str]:
+    visible_device = "0" if scenario.device != "none" else "-1"
     argv = [
         "env",
         f"LD_LIBRARY_PATH={EXPERIMENTAL_BIN_DIR}",
         "GGML_IQK=1",
-        "ROCR_VISIBLE_DEVICES=0",
-        "HIP_VISIBLE_DEVICES=0",
+        f"ROCR_VISIBLE_DEVICES={visible_device}",
+        f"HIP_VISIBLE_DEVICES={visible_device}",
+        "CUDA_VISIBLE_DEVICES=0" if scenario.device != "none" else "CUDA_VISIBLE_DEVICES=",
         "OMP_NUM_THREADS=1",
         "numactl",
         "--interleave=all",
@@ -516,6 +545,7 @@ def terminate(proc: subprocess.Popen[str], *, timeout_s: int = 20) -> dict[str, 
     ps = k35.run_capture(["ps", "-p", str(proc.pid), "-o", "pid=,comm=,args="], timeout=10)
     result["ps_after"] = ps
     result["dead"] = str(proc.pid) not in ps.get("stdout", "")
+    result["completed"] = proc.returncode is not None and ps.get("returncode") in (0, 1) and bool(result["dead"])
     return result
 
 
@@ -638,6 +668,10 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
         cleanup = terminate(proc)
     result["memory_samples"] = memory_samples
     result["cleanup"] = cleanup
+    if not k35.cleanup_proved_complete(cleanup):
+        result["inference_status"] = result.get("status")
+        result["status"] = "cleanup_failed"
+        result["cleanup_error"] = "server cleanup did not prove process dead/completed"
     result["server_log"] = str(server_log)
     write_json(cell_dir / "result.json", result)
     return result
@@ -660,11 +694,19 @@ def execute_plan(plan: dict[str, Any], args: argparse.Namespace, output_dir: Pat
         return summary
     results = [run_cell(cell, args, output_dir) for cell in plan["cells"]]
     cleanup_guard = k35.collect_process_blockers()
+    cleanup_failures = [result for result in results if result.get("status") == "cleanup_failed"]
+    if cleanup_failures or cleanup_guard:
+        status = "failed"
+    elif all(result.get("status") == "ok" for result in results):
+        status = "ok"
+    else:
+        status = "partial"
     summary = {
         "schema": "epyc.k35_vision_matrix.summary.v1",
         "created_at": utc_now(),
-        "status": "ok" if all(result.get("status") == "ok" for result in results) else "partial",
+        "status": status,
         "results": results,
+        "cleanup_failures": cleanup_failures,
         "cleanup_process_blockers": cleanup_guard,
     }
     write_json(output_dir / "summary.json", summary)
@@ -678,7 +720,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--only",
         action="append",
         choices=[scenario.name for scenario in SCENARIOS],
-        help="Scenario to include. May be repeated. Defaults to both production vision roles.",
+        help="Scenario to include. May be repeated. Defaults to current non-candidate production vision roles.",
     )
     parser.add_argument(
         "--fixture",

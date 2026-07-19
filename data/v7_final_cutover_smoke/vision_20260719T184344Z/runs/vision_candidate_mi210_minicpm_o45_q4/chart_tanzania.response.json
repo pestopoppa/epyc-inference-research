@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "content": "Tanzania",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784486694,
+  "id": "chatcmpl-jOfRTkig4aH651F4toJYG0dZOXaFHVx6",
+  "model": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10098-6ad45fa3f",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 31.519,
+    "predicted_n": 4,
+    "predicted_per_second": 126.90757955518895,
+    "predicted_per_token_ms": 7.87975,
+    "prompt_ms": 260.028,
+    "prompt_n": 230,
+    "prompt_per_second": 884.5201286015351,
+    "prompt_per_token_ms": 1.1305565217391305
+  },
+  "usage": {
+    "completion_tokens": 4,
+    "prompt_tokens": 230,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 234
+  }
+}

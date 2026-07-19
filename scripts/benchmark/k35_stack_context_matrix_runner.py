@@ -73,9 +73,9 @@ DEFAULT_CPU_INTERFERENCE_POLICY = (
     "unless --allow-dirty-host is explicit"
 )
 PGPU1_CERTIFICATION_NOTE = (
-    "Current P-GPU-1 amendment prep is production-named-kernel only: experimental, "
-    "candidate, or fork GPU rows remain observation-grade unless the signed amendment "
-    "explicitly permits pre-promotion evidence or retro-certification."
+    "Ratified P-GPU-1 is production-named-kernel only: experimental, candidate, "
+    "or fork GPU rows remain observation-grade unless MEASUREMENT explicitly permits "
+    "pre-promotion evidence or retro-certification."
 )
 
 BLOCKER_BASENAMES = {"llama-server", "llama-cli", "llama-bench", "llama-mtmd-cli"}
@@ -727,7 +727,7 @@ def terminate(proc: subprocess.Popen[str], *, timeout_s: int = 20) -> dict[str, 
     ps = run_capture(["ps", "-p", str(proc.pid), "-o", "pid=,comm=,args="], timeout=10)
     result["ps_after"] = ps
     result["dead"] = str(proc.pid) not in ps.get("stdout", "")
-    result["completed"] = proc.returncode is not None and bool(ps.get("ok")) and bool(result["dead"])
+    result["completed"] = proc.returncode is not None and ps.get("returncode") in (0, 1) and bool(result["dead"])
     return result
 
 
