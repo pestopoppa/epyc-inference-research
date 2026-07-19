@@ -8,8 +8,10 @@ experimental v7 binary, score a deterministic judgeable slice of near-miss
 corpus rows, and emit ledger-shaped ``decisions.jsonl`` rows consumable by
 ``epyc-orchestrator/scripts/analysis/reviewer_calibration_report.py``.
 
-Default mode is dry-run. Live inference requires ``--execute``. All emitted
-numbers are pre-P-REV-1 observations and are non-decision-gating.
+Default mode is dry-run. Live inference requires ``--execute``. Default
+outputs are pre-P-REV-1 observations and are non-decision-gating. P-REV-1
+output mode is fail-closed behind an explicit protocol attestation plus a
+decision-grade GLM C-CRAB accept-control signoff report.
 """
 
 from __future__ import annotations
@@ -46,6 +48,9 @@ DEFAULT_N = 12
 DEFAULT_RUBRIC_VERSION = "glm52_direct_nearmiss_review_v5+binary_schema+task_test_alignment+oracle_notes"
 DEFAULT_ERA = "pre_p_rev1_observation"
 DEFAULT_MAX_FIELD_CHARS = 24000
+MEASUREMENT_PROTOCOL_OBSERVATION = "pre_p_rev1_observation"
+MEASUREMENT_PROTOCOL_P_REV1 = "p_rev1"
+MEASUREMENT_PROTOCOLS = (MEASUREMENT_PROTOCOL_OBSERVATION, MEASUREMENT_PROTOCOL_P_REV1)
 ANSWER_FRAGMENT_SCORING_METHODS = frozenset({"substring", "exact_match"})
 GOLD_LABELS = ("accept", "reject")
 DEFAULT_GOLD_CONFIDENCE = ("multi_oracle",)
@@ -149,7 +154,13 @@ def read_oracle_notes_file(path: Path) -> dict[str, str]:
     notes: dict[str, str] = {}
     for key, value in data.items():
         row_id = str(key).strip()
-        note = str(value).strip() if isinstance(value, str) else ""
+        if isinstance(value, str):
+            note = value.strip()
+        elif isinstance(value, dict):
+            note_value = value.get("notes")
+            note = note_value.strip() if isinstance(note_value, str) else ""
+        else:
+            note = ""
         if not row_id:
             raise ValueError(f"oracle notes file contains an empty row id: {path}")
         if not note:
@@ -166,6 +177,33 @@ def load_oracle_notes(paths: Iterable[Path]) -> dict[str, str]:
                 raise ValueError(f"conflicting oracle notes for row id {row_id!r}")
             notes[row_id] = note
     return notes
+
+
+def read_accept_control_signoff_report(path: Path) -> dict[str, Any]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"accept-control signoff report must be a JSON object: {path}")
+    return data
+
+
+def accept_control_signoff_refusals(report: dict[str, Any]) -> list[str]:
+    refusals: list[str] = []
+    if report.get("schema") != "glm52_ccrab_accept_control_signoff.v1":
+        refusals.append("accept-control signoff report has unknown schema")
+    if report.get("decision_grade") is not True:
+        refusals.append("accept-control signoff report is not decision_grade=true")
+    if report.get("rejected_or_ambiguous_n") != 0:
+        refusals.append("accept-control signoff report has rejected_or_ambiguous rows")
+    if report.get("unreviewed_n") != 0:
+        refusals.append("accept-control signoff report has unreviewed rows")
+    accepted = report.get("accepted_row_ids")
+    if not isinstance(accepted, list) or not accepted:
+        refusals.append("accept-control signoff report has no accepted_row_ids")
+    elif any(not isinstance(row_id, str) or not row_id for row_id in accepted):
+        refusals.append("accept-control signoff report accepted_row_ids must be non-empty strings")
+    if report.get("accepted_row_ids_match_expected") is False:
+        refusals.append("accept-control signoff report accepted_row_ids do not match expected row-id file")
+    return refusals
 
 
 def requested_row_ids(args: argparse.Namespace) -> list[str]:
@@ -662,6 +700,16 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     source_benchmarks = optional_filter(args.source_benchmark)
     scoring_methods = optional_filter(args.provenance_scoring_method)
     oracle_notes = load_oracle_notes(args.oracle_notes_file or [])
+    accept_control_report: dict[str, Any] | None = None
+    protocol_refusals: list[str] = []
+    if args.measurement_protocol == MEASUREMENT_PROTOCOL_P_REV1:
+        if not args.protocol_attestation:
+            protocol_refusals.append("P-REV-1 mode requires --protocol-attestation")
+        if not args.accept_control_signoff_report:
+            protocol_refusals.append("P-REV-1 mode requires --accept-control-signoff-report")
+        else:
+            accept_control_report = read_accept_control_signoff_report(args.accept_control_signoff_report)
+            protocol_refusals.extend(accept_control_signoff_refusals(accept_control_report))
     rows = list(
         iter_judgeable_rows(
             args.corpus,
@@ -707,12 +755,21 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         library_path=library_path,
         model_path=primary_shard,
     )
+    observation_only = args.measurement_protocol != MEASUREMENT_PROTOCOL_P_REV1 or bool(protocol_refusals)
+    if args.measurement_protocol != MEASUREMENT_PROTOCOL_P_REV1:
+        measurement_note = "pre-P-REV-1 observation; non-decision-gating"
+    elif protocol_refusals:
+        measurement_note = "P-REV-1 requested but refused; non-decision-gating dry-run"
+    else:
+        measurement_note = f"P-REV-1 candidate run; protocol attestation {args.protocol_attestation}"
     return {
         "schema": SCHEMA,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "mode": "execute" if args.execute else "dry-run",
-        "observation_only": True,
-        "measurement_note": "pre-P-REV-1 observation; non-decision-gating",
+        "observation_only": observation_only,
+        "measurement_protocol": args.measurement_protocol,
+        "measurement_note": measurement_note,
+        "protocol_attestation": args.protocol_attestation,
         "corpus": {
             "path": str(args.corpus),
             "domain_filter": args.domain or "all",
@@ -748,6 +805,12 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "selected_oracle_note_row_ids": sorted(row.row_id for row in selected if row.row_id in oracle_notes),
             "unused_oracle_note_row_ids": sorted(row_id for row_id in oracle_notes if row_id not in rows_by_id),
             "oracle_notes_by_row_id": oracle_notes,
+            "accept_control_signoff_report": str(args.accept_control_signoff_report.expanduser().resolve())
+            if args.accept_control_signoff_report
+            else None,
+            "accept_control_accepted_row_ids": accept_control_report.get("accepted_row_ids", [])
+            if accept_control_report
+            else [],
         },
         "band": band.__dict__,
         "binary": str(binary),
@@ -763,6 +826,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             and set(selected_counts) == set(GOLD_LABELS)
             and (args.allow_mixed_representation or not mixed_representation)
             and not fragment_refusals
+            and not protocol_refusals
         ),
         "refusal_reasons": list(inventory["refusal_reasons"])
         + ([] if selected else ["no selected judgeable rows"])
@@ -777,7 +841,8 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             if args.allow_mixed_representation or not mixed_representation
             else ["selected rows mix source_suite/scoring representations; rerun with explicit filters or --allow-mixed-representation"]
         )
-        + fragment_refusals,
+        + fragment_refusals
+        + protocol_refusals,
         "inventory": inventory,
         "preexisting_processes": runtime_processes("llama-server|llama-cli|autopilot|glm52"),
         "server": server,
@@ -947,7 +1012,10 @@ def run_execution(plan: dict[str, Any], rows_by_id: dict[str, CorpusRow]) -> dic
     run_manifest = {
         "schema": "glm52_reviewer_corpus_direct_run_manifest.v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "observation_only": True,
+        "observation_only": bool(plan.get("observation_only", True)),
+        "measurement_protocol": plan.get("measurement_protocol", MEASUREMENT_PROTOCOL_OBSERVATION),
+        "measurement_note": plan.get("measurement_note"),
+        "protocol_attestation": plan.get("protocol_attestation"),
         "decisions_path": str(decisions_path),
         "n_scored": len(ledger_rows),
         "calibration_command": (
@@ -1036,6 +1104,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-field-chars", type=int, default=DEFAULT_MAX_FIELD_CHARS)
     parser.add_argument("--rubric-version", default=DEFAULT_RUBRIC_VERSION)
     parser.add_argument("--era", default=DEFAULT_ERA)
+    parser.add_argument(
+        "--measurement-protocol",
+        choices=MEASUREMENT_PROTOCOLS,
+        default=MEASUREMENT_PROTOCOL_OBSERVATION,
+        help=(
+            "Measurement protocol stamp. p_rev1 is fail-closed and requires "
+            "--protocol-attestation plus a decision-grade --accept-control-signoff-report."
+        ),
+    )
+    parser.add_argument(
+        "--protocol-attestation",
+        default=None,
+        help="Operator-supplied attestation id for P-REV-1 mode; not inferred by this helper.",
+    )
+    parser.add_argument(
+        "--accept-control-signoff-report",
+        type=Path,
+        default=None,
+        help="Decision-grade GLM C-CRAB accept-control signoff report required for P-REV-1 mode.",
+    )
     parser.add_argument("--trace-logs", dest="trace_logs", action="store_true")
     parser.add_argument("--no-trace-logs", dest="trace_logs", action="store_false")
     parser.set_defaults(trace_logs=True)

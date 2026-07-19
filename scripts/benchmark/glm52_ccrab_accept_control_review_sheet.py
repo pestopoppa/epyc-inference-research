@@ -8,7 +8,6 @@ import csv
 import json
 import sys
 from copy import deepcopy
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -279,7 +278,6 @@ def apply_review_csv(
             f"; missing={missing}; unexpected={unexpected}"
         )
 
-    now = default_reviewed_at or datetime.now(UTC).replace(microsecond=0).isoformat()
     for packet_row, review_row in zip(packet_rows, review_rows, strict=True):
         row_id = str(packet_row["row_id"])
         decision = _normalized_decision(review_row.get("decision", ""), row_id=row_id)
@@ -293,7 +291,7 @@ def apply_review_csv(
             }
             continue
         reviewer = (review_row.get("reviewer") or default_reviewer or "").strip()
-        reviewed_at = (review_row.get("reviewed_at") or now).strip()
+        reviewed_at = (review_row.get("reviewed_at") or default_reviewed_at or "").strip()
         notes = (review_row.get("notes") or "").strip()
         if not reviewer:
             raise ReviewSheetError(f"row {row_id}: reviewer is required for reviewed decisions")

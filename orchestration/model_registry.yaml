@@ -3974,8 +3974,11 @@ roles:
         MiniCPM-o candidate found the temporary Qwen2.5-VL alias still faster
         on MI210 (`4/4`, quality decode mean `133.29 t/s`, long decode `118.50
         t/s`). MiniCPM-o also passed the same four fixtures but decoded the
-        long sample at `109.18 t/s`; keep this alias until the controlled
-        MiniCPM-o live flip and rollback check are executed.
+        long sample at `109.18 t/s`. The controlled MiniCPM-o live launch/smoke
+        and Qwen2.5-VL rollback check were executed after the candidate gate,
+        but persistent API/AutoPilot traffic was not restarted or observed; keep
+        this Qwen2.5-VL alias as the safety lane until that persistent-live
+        cutover is explicitly performed.
     memory:
       residency: hot
       pinned: false
@@ -7611,7 +7614,7 @@ roles:
       hybrid_candidate: false
     benchmark_plan:
       cpu_only: "Text-only load smoke first; modality smokes only after runtime support is mapped."
-      gpu_only: "Controlled live-stack flip for vision_escalation with one-active-request capacity cap, then verify Qwen2.5-VL rollback path and optional multi-request stress."
+      gpu_only: "Controlled MiniCPM-o launch/smoke plus Qwen2.5-VL rollback path executed; persistent API/AutoPilot traffic remains unconfirmed, so production alias stays on the Qwen2.5-VL safety lane until an explicit cutover window."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   qwen25_coder_14b_local_q4km:

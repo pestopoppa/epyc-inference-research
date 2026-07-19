@@ -231,3 +231,47 @@ def test_apply_review_csv_requires_notes_for_reviewed_decisions(tmp_path):
         assert "notes are required" in str(exc)
     else:
         raise AssertionError("expected empty notes to fail")
+
+
+def test_apply_review_csv_requires_reviewed_at_for_reviewed_decisions(tmp_path):
+    packet = _packet(_row("a"))
+    csv_rows = [
+        {
+            **{field: "" for field in review_mod.CSV_FIELDS},
+            "row_id": "a",
+            "decision": "hard_accept",
+            "reviewer": "operator",
+            "reviewed_at": "",
+            "notes": "Complete patch with regression test.",
+        }
+    ]
+
+    try:
+        review_mod.apply_review_csv(packet, csv_rows, default_reviewer=None, default_reviewed_at=None)
+    except review_mod.ReviewSheetError as exc:
+        assert "reviewed_at is required" in str(exc)
+    else:
+        raise AssertionError("expected empty reviewed_at to fail")
+
+
+def test_apply_review_csv_allows_explicit_default_reviewed_at(tmp_path):
+    packet = _packet(_row("a"))
+    csv_rows = [
+        {
+            **{field: "" for field in review_mod.CSV_FIELDS},
+            "row_id": "a",
+            "decision": "hard_accept",
+            "reviewer": "operator",
+            "reviewed_at": "",
+            "notes": "Complete patch with regression test.",
+        }
+    ]
+
+    signed = review_mod.apply_review_csv(
+        packet,
+        csv_rows,
+        default_reviewer=None,
+        default_reviewed_at="2026-07-19T00:00:00Z",
+    )
+
+    assert signed["rows"][0]["signoff"]["reviewed_at"] == "2026-07-19T00:00:00Z"

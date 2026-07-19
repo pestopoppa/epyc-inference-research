@@ -314,6 +314,38 @@ def test_read_oracle_notes_file_requires_row_id_mapping(tmp_path):
     assert runner.read_oracle_notes_file(notes_file) == {"row-a": "Check the exact failing path."}
 
 
+def test_read_oracle_notes_file_accepts_signoff_helper_records(tmp_path):
+    notes_file = tmp_path / "notes.json"
+    notes_file.write_text(
+        json.dumps(
+            {
+                "row-a": {
+                    "notes": "Operator checked the regression path.",
+                    "reviewer": "operator",
+                    "reviewed_at": "2026-07-19T00:00:00Z",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert runner.read_oracle_notes_file(notes_file) == {
+        "row-a": "Operator checked the regression path."
+    }
+
+
+def test_read_oracle_notes_file_requires_non_empty_structured_note(tmp_path):
+    notes_file = tmp_path / "notes.json"
+    notes_file.write_text(json.dumps({"row-a": {"notes": ""}}), encoding="utf-8")
+
+    try:
+        runner.read_oracle_notes_file(notes_file)
+    except ValueError as exc:
+        assert "must be a non-empty string" in str(exc)
+    else:
+        raise AssertionError("expected empty structured note to fail")
+
+
 def test_load_oracle_notes_refuses_conflicting_duplicates(tmp_path):
     first = tmp_path / "first.json"
     second = tmp_path / "second.json"
@@ -433,6 +465,111 @@ def test_build_plan_records_selected_oracle_notes(tmp_path, monkeypatch):
     assert plan["review_hints"]["oracle_notes_by_row_id"] == {
         "reject-a": "Check the exact patched failing path."
     }
+
+
+def test_build_plan_refuses_p_rev1_without_attestation_or_signoff(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    rows = [
+        {**_row("accept-a", label="accept"), "provenance": {}},
+        {**_row("reject-a", label="reject"), "provenance": {}},
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--row-id",
+            "accept-a",
+            "--row-id",
+            "reject-a",
+            "--measurement-protocol",
+            "p_rev1",
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(
+        runner.base,
+        "collect_inventory",
+        lambda model_dir: {
+            "status": "ready",
+            "primary_shard": "/tmp/glm.gguf",
+            "refusal_reasons": [],
+        },
+    )
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+
+    plan = runner.build_plan(args)
+
+    assert plan["observation_only"] is True
+    assert plan["measurement_protocol"] == "p_rev1"
+    assert plan["execution_allowed"] is False
+    assert any("requires --protocol-attestation" in reason for reason in plan["refusal_reasons"])
+    assert any("requires --accept-control-signoff-report" in reason for reason in plan["refusal_reasons"])
+
+
+def test_build_plan_accepts_p_rev1_with_decision_grade_signoff(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    rows = [
+        {**_row("accept-a", label="accept"), "provenance": {}},
+        {**_row("reject-a", label="reject"), "provenance": {}},
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    signoff_report = tmp_path / "signoff.json"
+    signoff_report.write_text(
+        json.dumps(
+            {
+                "schema": "glm52_ccrab_accept_control_signoff.v1",
+                "decision_grade": True,
+                "rejected_or_ambiguous_n": 0,
+                "unreviewed_n": 0,
+                "accepted_row_ids_match_expected": True,
+                "accepted_row_ids": ["accept-a"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--row-id",
+            "accept-a",
+            "--row-id",
+            "reject-a",
+            "--measurement-protocol",
+            "p_rev1",
+            "--protocol-attestation",
+            "attest-test",
+            "--accept-control-signoff-report",
+            str(signoff_report),
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(
+        runner.base,
+        "collect_inventory",
+        lambda model_dir: {
+            "status": "ready",
+            "primary_shard": "/tmp/glm.gguf",
+            "refusal_reasons": [],
+        },
+    )
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+
+    plan = runner.build_plan(args)
+
+    assert plan["execution_allowed"] is True
+    assert plan["observation_only"] is False
+    assert plan["protocol_attestation"] == "attest-test"
+    assert plan["review_hints"]["accept_control_accepted_row_ids"] == ["accept-a"]
 
 
 def test_build_plan_refuses_missing_explicit_row_id(tmp_path, monkeypatch):

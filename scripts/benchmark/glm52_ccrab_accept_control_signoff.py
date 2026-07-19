@@ -76,6 +76,12 @@ def _optional_note(value: Any, *, row_id: str) -> str | None:
     return value
 
 
+def _require_note(value: Any, *, row_id: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValidationError(f"row {row_id}: signoff.notes must be a non-empty string")
+    return value.strip()
+
+
 def validate_packet(packet: dict[str, Any]) -> list[dict[str, Any]]:
     if packet.get("schema") != AUDIT_PACKET_SCHEMA:
         raise ValidationError(f"schema must be {AUDIT_PACKET_SCHEMA}")
@@ -115,7 +121,7 @@ def validate_row(row: Any) -> tuple[str, dict[str, Any]]:
         raise ValidationError(f"row {row_id}: unknown signoff.decision {decision!r}")
     _require_string(signoff.get("reviewer"), field="signoff.reviewer", row_id=row_id)
     _require_string(signoff.get("reviewed_at"), field="signoff.reviewed_at", row_id=row_id)
-    _optional_note(signoff.get("notes"), row_id=row_id)
+    _require_note(signoff.get("notes"), row_id=row_id)
     return row_id, signoff
 
 

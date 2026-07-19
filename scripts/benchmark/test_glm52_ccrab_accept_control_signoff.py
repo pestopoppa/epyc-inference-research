@@ -133,6 +133,18 @@ def test_invalid_reviewed_decision_fails_validation():
         raise AssertionError("expected invalid decision to fail")
 
 
+def test_reviewed_rows_require_non_empty_notes():
+    for notes in ("", None):
+        packet = _packet(_row("a", signoff=_signoff(notes=notes)))
+
+        try:
+            signoff_mod.build_report(packet, min_hard_accepts=1, allow_unreviewed=False)
+        except signoff_mod.ValidationError as exc:
+            assert "signoff.notes must be a non-empty string" in str(exc)
+        else:
+            raise AssertionError("expected missing notes to fail")
+
+
 def test_cli_writes_report_row_ids_and_oracle_notes(tmp_path):
     packet_path = tmp_path / "audit.json"
     packet_path.write_text(

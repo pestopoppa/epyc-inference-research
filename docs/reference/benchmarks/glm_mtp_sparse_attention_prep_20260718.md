@@ -5,17 +5,22 @@ This note is a prep artifact, not a claim that either acceleration path is imple
 
 ## Upstream / Current-Tree Verdict
 
-No current official upstream path was found that already supports GLM/GLM-DSA native
-MTP or real indexed sparse DSA final attention. Upstream/current tree has generic MTP
-metadata and APIs, and Qwen-specific MTP graph implementations, but GLM tail tensors are
-still preserved/loaded as unused tensors and GLM graph construction does not dispatch a
-decoder-MTP graph.
+No current official upstream path was found that already supports complete GLM/GLM-DSA
+native MTP or real indexed sparse DSA final attention. The local experimental-v7 tree now
+has a buildable GLM-5.2 `glm-dsa` single-NextN scaffold; do not describe it as a
+multi-head/general GLM-MTP implementation, and do not make throughput/quality claims until
+the GLM reviewer gate `GC-shadow-repair4b -> P-REV-1` closes. Current anchors live in
+`docs/reference/kernel/glm-mtp-sparse-attention-implementation-map-20260718.md` and the
+2026-07-19 root contract-generalization audit.
 
 ## Native GLM-MTP
 
-Current state: GLM GGUF metadata/tensors preserve `NEXTN`, but native MTP is scaffold-only.
+Current state: GLM GGUF metadata/tensors preserve `NEXTN`, and the GLM-5.2 `glm-dsa`
+path has a single-NextN scaffold. It remains scaffold/runtime-gated: no accepted-token,
+throughput, or reviewer-quality claim exists yet.
 
-Observed source shape in `/mnt/raid0/llm/llama.cpp-experimental`:
+Original 2026-07-18 source snapshot in `/mnt/raid0/llm/llama.cpp-experimental` before the
+single-NextN scaffold follow-up; keep this as historical diff context, not current status:
 
 - `src/models/glm-dsa.cpp:35-37`: reads `LLM_KV_NEXTN_PREDICT_LAYERS` into
   `hparams.n_layer_nextn`, so metadata is present.
