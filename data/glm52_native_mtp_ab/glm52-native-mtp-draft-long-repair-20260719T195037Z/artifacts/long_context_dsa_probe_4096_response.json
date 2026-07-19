@@ -1,0 +1,40 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "message": {
+        "content": "",
+        "reasoning_content": "I need to output \"READY\" first, then output the word \"tokenstream\" repeated exactly 620 times, separated by single spaces. No markdown, no explanation, no stopping early.\n\nLet me count carefully. I need to output \"tokenstream\" 620 times separated by single spaces.\n\nLet me generate this sequence:\n\nREADY\n\ntokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream token"
+      }
+    }
+  ],
+  "streaming": {
+    "chunk_count": 515,
+    "completed_at": "2026-07-19T19:54:32.542697+00:00",
+    "enabled": true,
+    "first_chunk_at": "2026-07-19T19:52:56.509717+00:00",
+    "parse_errors_tail": [],
+    "started_at": "2026-07-19T19:50:47.765806+00:00"
+  },
+  "timings": {
+    "cache_n": 0,
+    "draft_n": 403,
+    "draft_n_accepted": 376,
+    "predicted_ms": 96033.304,
+    "predicted_n": 512,
+    "predicted_per_second": 5.331483752761438,
+    "predicted_per_token_ms": 187.565046875,
+    "prompt_ms": 128729.651,
+    "prompt_n": 2931,
+    "prompt_per_second": 22.76864713942245,
+    "prompt_per_token_ms": 43.920044694643465
+  },
+  "usage": {
+    "completion_tokens": 512,
+    "prompt_tokens": 2931,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 3443
+  }
+}

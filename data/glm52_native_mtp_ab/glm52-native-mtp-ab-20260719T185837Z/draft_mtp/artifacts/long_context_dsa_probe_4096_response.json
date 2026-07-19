@@ -1,0 +1,21 @@
+{
+  "choices": [
+    {
+      "finish_reason": null,
+      "message": {
+        "content": "",
+        "reasoning_content": null
+      }
+    }
+  ],
+  "streaming": {
+    "chunk_count": 0,
+    "completed_at": "2026-07-19T19:05:03.790627+00:00",
+    "enabled": true,
+    "first_chunk_at": null,
+    "parse_errors_tail": [],
+    "started_at": "2026-07-19T19:04:38.632388+00:00"
+  },
+  "timings": {},
+  "usage": {}
+}

@@ -59,6 +59,7 @@ DEFAULT_TEMPERATURE = 0.0
 DEFAULT_INDEXER_TOP_K = 2048
 DEFAULT_REQUEST_TIMEOUT = 3600
 DEFAULT_PROGRESS_POLL_INTERVAL = 30
+DEFAULT_STREAM_SSE_PING_INTERVAL = 5
 REQUEST_ENDPOINTS = ("chat", "v1_completions", "completion")
 REQUEST_ENDPOINT_PATHS = {
     "chat": "/v1/chat/completions",
@@ -744,7 +745,13 @@ def call_completion(
     return json.loads(raw)
 
 
-def _chat_stream_payload(prompt: str, max_tokens: int, temperature: float, seed: int) -> dict[str, Any]:
+def _chat_stream_payload(
+    prompt: str,
+    max_tokens: int,
+    temperature: float,
+    seed: int,
+    sse_ping_interval: int = DEFAULT_STREAM_SSE_PING_INTERVAL,
+) -> dict[str, Any]:
     return {
         "model": "auto",
         "messages": [{"role": "user", "content": prompt}],
@@ -753,6 +760,7 @@ def _chat_stream_payload(prompt: str, max_tokens: int, temperature: float, seed:
         "seed": seed,
         "stream": True,
         "stream_options": {"include_usage": True},
+        "sse_ping_interval": sse_ping_interval,
     }
 
 

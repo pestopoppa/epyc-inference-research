@@ -1,0 +1,38 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "message": {
+        "content": "READY\ntokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream",
+        "reasoning_content": "I need to output \"READY\" first, then output the word \"tokenstream\" repeated exactly 620 times, separated by single spaces. No markdown, no explanation, no stopping early.\n\nLet me count carefully. I need to output \"tokenstream\" 620 times separated by single spaces.\n\nLet me generate this sequence:\n\ntokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream ... (620 times)\n\nI'll count in groups of 10 to make sure I get exactly 620.\n\nActually, let me just generate the full sequence carefully. I'll count by groups of 10:\n\n1-10: tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream\n11-20: tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream tokenstream\n... and so on until 620.\n\nLet me write this out properly. 620 / 10 = 62 groups of 10.\n\nI'll generate the complete sequence now."
+      }
+    }
+  ],
+  "streaming": {
+    "chunk_count": 514,
+    "completed_at": "2026-07-19T19:04:23.126495+00:00",
+    "enabled": true,
+    "first_chunk_at": "2026-07-19T19:00:57.443603+00:00",
+    "parse_errors_tail": [],
+    "started_at": "2026-07-19T18:58:47.524376+00:00"
+  },
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 205683.01,
+    "predicted_n": 512,
+    "predicted_per_second": 2.489267343958064,
+    "predicted_per_token_ms": 401.72462890625,
+    "prompt_ms": 129905.231,
+    "prompt_n": 2931,
+    "prompt_per_second": 22.56260180931436,
+    "prompt_per_token_ms": 44.3211296485841
+  },
+  "usage": {
+    "completion_tokens": 512,
+    "prompt_tokens": 2931,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 3443
+  }
+}

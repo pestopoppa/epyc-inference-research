@@ -823,6 +823,13 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
         self.assertEqual(result["streaming"], {"enabled": True, "chunk_count": 1})
         self.assertEqual(result["stream_progress_samples_tail"], [{"status": "stream_chunk", "chunk_count": 1}])
 
+    def test_chat_stream_payload_sets_short_sse_ping(self) -> None:
+        payload = runner._chat_stream_payload("hello", 16, 0.0, 42)
+
+        self.assertEqual(payload["stream"], True)
+        self.assertEqual(payload["stream_options"], {"include_usage": True})
+        self.assertEqual(payload["sse_ping_interval"], runner.DEFAULT_STREAM_SSE_PING_INTERVAL)
+
     def test_run_stage_streaming_zero_chunk_close_is_failed_request(self) -> None:
         stage = {
             "name": "long_context_dsa_probe",
