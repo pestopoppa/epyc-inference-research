@@ -1,0 +1,67 @@
+[
+  {
+    "build_commit": "ed4091266",
+    "model_type": "qwen35moe 35B.A3B Q8_0",
+    "n_prompt": 512,
+    "n_gen": 0,
+    "avg_ts": 2094.888721,
+    "type_k": "f16",
+    "type_v": "f16",
+    "n_gpu_layers": 99,
+    "flash_attn": 1,
+    "devices": "ROCm0",
+    "test_time": "2026-07-19T01:07:56Z"
+  },
+  {
+    "build_commit": "ed4091266",
+    "model_type": "qwen35moe 35B.A3B Q8_0",
+    "n_prompt": 0,
+    "n_gen": 128,
+    "avg_ts": 101.267257,
+    "type_k": "f16",
+    "type_v": "f16",
+    "n_gpu_layers": 99,
+    "flash_attn": 1,
+    "devices": "ROCm0",
+    "test_time": "2026-07-19T01:07:57Z"
+  },
+  {
+    "build_commit": "ed4091266",
+    "model_type": "qwen35moe 35B.A3B Q8_0",
+    "n_prompt": 2048,
+    "n_gen": 1024,
+    "avg_ts": 274.815749,
+    "type_k": "f16",
+    "type_v": "f16",
+    "n_gpu_layers": 99,
+    "flash_attn": 1,
+    "devices": "ROCm0",
+    "test_time": "2026-07-19T01:07:58Z"
+  },
+  {
+    "build_commit": "ed4091266",
+    "model_type": "qwen35moe 35B.A3B Q8_0",
+    "n_prompt": 8192,
+    "n_gen": 1024,
+    "avg_ts": 633.358842,
+    "type_k": "f16",
+    "type_v": "f16",
+    "n_gpu_layers": 99,
+    "flash_attn": 1,
+    "devices": "ROCm0",
+    "test_time": "2026-07-19T01:08:10Z"
+  },
+  {
+    "build_commit": "ed4091266",
+    "model_type": "qwen35moe 35B.A3B Q8_0",
+    "n_prompt": 32768,
+    "n_gen": 1024,
+    "avg_ts": 1068.596658,
+    "type_k": "f16",
+    "type_v": "f16",
+    "n_gpu_layers": 99,
+    "flash_attn": 1,
+    "devices": "ROCm0",
+    "test_time": "2026-07-19T01:08:29Z"
+  }
+]

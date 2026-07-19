@@ -1,0 +1,9 @@
+artifact=/mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_mi210_context_ed4091266_20260719T010751Z
+start_utc=2026-07-19T01:07:51+00:00
+binary=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench
+model=/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf
+experimental-v7-refresh-20260716
+ed4091266d286045510e498ceb059c209a65aff9
+485ef41953bd9f3ac2de46bf1fa84f14e76894ec
+end_utc=2026-07-19T01:09:21+00:00
+exit_code=0

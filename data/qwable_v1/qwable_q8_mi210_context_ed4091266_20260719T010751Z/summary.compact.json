@@ -1,0 +1,86 @@
+{
+  "artifact": "data/qwable_v1/qwable_q8_mi210_context_ed4091266_20260719T010751Z",
+  "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+  "experimental_head": "ed4091266d286045510e498ceb059c209a65aff9",
+  "research_head": "485ef41953bd9f3ac2de46bf1fa84f14e76894ec",
+  "command": "HIP_VISIBLE_DEVICES=0 ROCR_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin:/opt/rocm/lib /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf -dev ROCm0 -ngl 99 -fa on -pg 2048,1024 -pg 8192,1024 -pg 32768,1024 -r 1 -o json --progress",
+  "exit_code": 0,
+  "rows": [
+    {
+      "build_commit": "ed4091266",
+      "model_type": "qwen35moe 35B.A3B Q8_0",
+      "n_prompt": 512,
+      "n_gen": 0,
+      "avg_ts": 2094.888721,
+      "type_k": "f16",
+      "type_v": "f16",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T01:07:56Z"
+    },
+    {
+      "build_commit": "ed4091266",
+      "model_type": "qwen35moe 35B.A3B Q8_0",
+      "n_prompt": 0,
+      "n_gen": 128,
+      "avg_ts": 101.267257,
+      "type_k": "f16",
+      "type_v": "f16",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T01:07:57Z"
+    },
+    {
+      "build_commit": "ed4091266",
+      "model_type": "qwen35moe 35B.A3B Q8_0",
+      "n_prompt": 2048,
+      "n_gen": 1024,
+      "avg_ts": 274.815749,
+      "type_k": "f16",
+      "type_v": "f16",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T01:07:58Z"
+    },
+    {
+      "build_commit": "ed4091266",
+      "model_type": "qwen35moe 35B.A3B Q8_0",
+      "n_prompt": 8192,
+      "n_gen": 1024,
+      "avg_ts": 633.358842,
+      "type_k": "f16",
+      "type_v": "f16",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T01:08:10Z"
+    },
+    {
+      "build_commit": "ed4091266",
+      "model_type": "qwen35moe 35B.A3B Q8_0",
+      "n_prompt": 32768,
+      "n_gen": 1024,
+      "avg_ts": 1068.596658,
+      "type_k": "f16",
+      "type_v": "f16",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "devices": "ROCm0",
+      "test_time": "2026-07-19T01:08:29Z"
+    }
+  ],
+  "cleanup": {
+    "post_rocm_smi_file": "data/qwable_v1/qwable_q8_mi210_context_ed4091266_20260719T010751Z/post_rocm_smi.txt",
+    "final_rocm_smi_file": "data/qwable_v1/qwable_q8_mi210_context_ed4091266_20260719T010751Z/final_rocm_smi.txt",
+    "concurrent_cpu_only_qwable_q8_process_observed": true,
+    "gpu_vram_released_after_final_check": true
+  },
+  "caveats": [
+    "speed-only llama-bench observation",
+    "single repetition",
+    "ran concurrently with CPU-only Qwable Q8 context bench"
+  ]
+}
