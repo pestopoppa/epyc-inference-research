@@ -323,7 +323,7 @@ export FRONTDOOR_Q8="${{FRONTDOOR_Q8:-{frontdoor_model}}}"
 mkdir -p "$OP2_RUN_ROOT"/{{approvals,preflight,attestations,live-v6,canonical-v6,b1-barrier-fusion,b4-dsa-d3,routing}}
 
 cd /mnt/raid0/llm/epyc-orchestrator
-python scripts/server/preflight_gate.py \\
+python3 scripts/server/preflight_gate.py \\
   --require-servers \\
   --output-dir "$OP2_RUN_ROOT/attestations" \\
   --json | tee "$OP2_RUN_ROOT/preflight/live_stack_preflight.json"
@@ -340,7 +340,7 @@ python3 scripts/benchmark/cpu_bench_clean_preflight.py \\
   --strict
 
 cd /mnt/raid0/llm/epyc-orchestrator
-python scripts/server/orchestrator_stack.py status \\
+python3 scripts/server/orchestrator_stack.py status \\
   | tee "$OP2_RUN_ROOT/live-v6/orchestrator_stack_status.txt"
 
 ps -eo pid,lstart,comm,args \\
