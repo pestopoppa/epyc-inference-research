@@ -1,0 +1,49 @@
+{
+  "artifact_path": "/mnt/raid0/llm/epyc-inference-research/data/minicpm_o45_gpu_text_matrix/minicpm_o45_q4_mi210_context_decode_currentv7_20260719T0535Z",
+  "status": "ok",
+  "exit_code": 0,
+  "model": "/mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench",
+  "rows": [
+    {
+      "n_prompt": 512,
+      "n_gen": 0,
+      "avg_ts": 2195.421274,
+      "stddev_ts": 0.0,
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "model_type": "qwen3 8B Q4_K - Medium",
+      "build_commit": "6a8dd5ea6"
+    },
+    {
+      "n_prompt": 2048,
+      "n_gen": 0,
+      "avg_ts": 2277.364322,
+      "stddev_ts": 0.0,
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "model_type": "qwen3 8B Q4_K - Medium",
+      "build_commit": "6a8dd5ea6"
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "avg_ts": 1693.854716,
+      "stddev_ts": 0.0,
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "model_type": "qwen3 8B Q4_K - Medium",
+      "build_commit": "6a8dd5ea6"
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 1024,
+      "avg_ts": 100.774126,
+      "stddev_ts": 0.0,
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "model_type": "qwen3 8B Q4_K - Medium",
+      "build_commit": "6a8dd5ea6"
+    }
+  ]
+}

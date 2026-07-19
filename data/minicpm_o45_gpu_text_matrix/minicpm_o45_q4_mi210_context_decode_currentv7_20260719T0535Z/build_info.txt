@@ -1,0 +1,3 @@
+experimental_repo=6a8dd5ea680860f790f98136cc370e400c3dabe3 2026-07-19 04:23:29 +0000 Apply upstream v7 pre-promotion fixes
+binary_stat=2026-07-19 04:45:47.679234461 +0000 17984 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench
+model_stat=2026-02-10 15:50:25.973508813 +0000 5026714400 /mnt/raid0/llm/models/MiniCPM-o-4_5-gguf/MiniCPM-o-4_5-Q4_K_M.gguf
