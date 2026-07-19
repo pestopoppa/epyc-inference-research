@@ -100,7 +100,9 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
             self.assertTrue((bundle / "manifest.json").exists())
             self.assertTrue((bundle / "stage_plan.json").exists())
             commands = (bundle / "operator_next_commands.sh").read_text()
-            self.assertIn(f'OP2_RUN_ROOT:-{bundle.resolve()}', commands)
+            self.assertIn("OP2_RUN_ID:=op2-canonical-bench-window-$(date -u +%Y%m%dT%H%M%SZ)", commands)
+            self.assertIn("/mnt/raid0/llm/epyc-inference-research/data/op2_canonical_bench_window", commands)
+            self.assertNotIn(f'OP2_RUN_ROOT:-{bundle.resolve()}', commands)
             self.assertIn("bench_canonical.sh", commands)
             self.assertIn("orchestrator_stack.py status", commands)
             self.assertIn("role_smoke_ports.tsv", commands)
@@ -110,6 +112,42 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
 
             loaded = json.loads((bundle / "manifest.json").read_text())
             self.assertEqual(loaded["schema"], op2.SCHEMA)
+            self.assertEqual(loaded["operator_execution"]["mode"], "dynamic_timestamped")
+
+    def test_static_execution_output_dir_is_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            measurement = tmp_path / "MEASUREMENT.md"
+            measurement.write_text("### P-GPU-1 — GPU canonical (DEFERRED — hardware not acquired)\n")
+            execution_dir = tmp_path / "execution"
+            args = op2.parse_args(
+                [
+                    "--run-id",
+                    "op2-test",
+                    "--output-dir",
+                    str(tmp_path / "bundle"),
+                    "--execution-output-dir",
+                    str(execution_dir),
+                    "--measurement-path",
+                    str(measurement),
+                    "--root-repo",
+                    str(tmp_path),
+                    "--research-repo",
+                    str(tmp_path),
+                    "--orchestrator-repo",
+                    str(tmp_path),
+                    "--production-llama-repo",
+                    str(tmp_path),
+                    "--experimental-llama-repo",
+                    str(tmp_path),
+                ]
+            )
+
+            manifest = op2.write_bundle(args, runner=FakeRunner())
+
+            commands = (tmp_path / "bundle" / "operator_next_commands.sh").read_text()
+            self.assertIn(f'OP2_RUN_ROOT:-{execution_dir.resolve()}', commands)
+            self.assertEqual(manifest["operator_execution"]["mode"], "static")
 
 
 if __name__ == "__main__":

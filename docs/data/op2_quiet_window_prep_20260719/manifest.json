@@ -5,9 +5,9 @@
     "summary": "/mnt/raid0/llm/epyc-inference-research/docs/data/op2_quiet_window_prep_20260719/summary.md"
   },
   "autopilot_restart_authorized": false,
-  "generated_at": "2026-07-19T10:28:10.288261+00:00",
+  "generated_at": "2026-07-19T11:18:05.085146+00:00",
   "host_state": {
-    "captured_at": "2026-07-19T10:28:10.288370+00:00",
+    "captured_at": "2026-07-19T11:18:05.085249+00:00",
     "commands": {
       "free_h": {
         "argv": [
@@ -39,7 +39,7 @@
         "ok": true,
         "returncode": 0,
         "stderr": "",
-        "stdout": " 10:28:10 up 16 days, 16:26,  0 users,  load average: 0.74, 0.88, 0.99\n"
+        "stdout": " 11:18:05 up 16 days, 17:16,  0 users,  load average: 0.84, 0.70, 0.74\n"
       }
     },
     "kernel_knobs": {
@@ -64,8 +64,13 @@
     "path": "/workspace/MEASUREMENT.md"
   },
   "operator_approval_ref": "MISSING_OPERATOR_APPROVAL",
+  "operator_execution": {
+    "default_run_root": "${OP2_EXECUTION_BASE}/${OP2_RUN_ID}",
+    "mode": "dynamic_timestamped",
+    "output_base": "/mnt/raid0/llm/epyc-inference-research/data/op2_canonical_bench_window"
+  },
   "process_state": {
-    "captured_at": "2026-07-19T10:28:10.330423+00:00",
+    "captured_at": "2026-07-19T11:18:05.124436+00:00",
     "matching_processes": [],
     "ps_ok": true,
     "ps_stderr": ""
@@ -159,7 +164,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": "a784eb489683014863ebb27cb2b34d3ee53ebc59\n"
+          "stdout": "ea3f9d4cbc5498361b2d526cdca7958ded2bb0d0\n"
         },
         "tracked_status": {
           "argv": [
@@ -190,7 +195,7 @@
         }
       },
       "exists": true,
-      "head": "a784eb489683014863ebb27cb2b34d3ee53ebc59",
+      "head": "ea3f9d4cbc5498361b2d526cdca7958ded2bb0d0",
       "path": "/mnt/raid0/llm/epyc-orchestrator",
       "tracked_dirty_lines": 10,
       "upstream": "origin/spec-dec-mtp-refresh-2026-06-22"
@@ -281,7 +286,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": "e4c64ca0100ab90889a2138fce410e412b2429b0\n"
+          "stdout": "73aac2d49519c131c482e9759947ece2a018b460\n"
         },
         "tracked_status": {
           "argv": [
@@ -294,7 +299,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": " M orchestration/model_registry.yaml\n M scripts/benchmark/op2_quiet_window_prep.py\n M scripts/benchmark/test_op2_quiet_window_prep.py\n"
+          "stdout": " M scripts/benchmark/op2_quiet_window_prep.py\n M scripts/benchmark/test_op2_quiet_window_prep.py\n"
         },
         "upstream": {
           "argv": [
@@ -312,9 +317,9 @@
         }
       },
       "exists": true,
-      "head": "e4c64ca0100ab90889a2138fce410e412b2429b0",
+      "head": "73aac2d49519c131c482e9759947ece2a018b460",
       "path": "/mnt/raid0/llm/epyc-inference-research",
-      "tracked_dirty_lines": 3,
+      "tracked_dirty_lines": 2,
       "upstream": "origin/main"
     },
     "root": {
@@ -342,7 +347,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": "1e39f0bb5673184d9975453f6ddc2332bfd44f8b\n"
+          "stdout": "8b6ba5c54dc96a723870a19dbed0db82ada42dd0\n"
         },
         "tracked_status": {
           "argv": [
@@ -355,7 +360,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": " M CLAUDE.md\n M docs/reference/glm52-accept-control-signoff-runbook-2026-07-19.md\n M handoffs/active/glm52-reviewer-capability-gates.md\n M handoffs/active/gpu-acceleration-path.md\n M handoffs/active/inference-acceleration-index.md\n M handoffs/active/master-handoff-index.md\n M handoffs/active/moe-spec-cpu-spec-dec-integration.md\n M handoffs/active/qwen-mtp-llamacpp-port.md\n M handoffs/active/scaffold-autopilot-cost-lever-deployment.md\n M handoffs/active/speculative-decoding-mtp-refresh.md\n M handoffs/active/tree-draft-forward-port-plan.md\n D llama.log\n M logs/.current_session\n M logs/agent_audit.log\n D main.log\n M progress/2026-07/2026-07-19.md\n"
+          "stdout": " M CLAUDE.md\n M handoffs/active/gpu-acceleration-path.md\n M handoffs/active/moe-spec-cpu-spec-dec-integration.md\n M handoffs/active/qwen-mtp-llamacpp-port.md\n M handoffs/active/scaffold-autopilot-cost-lever-deployment.md\n M handoffs/active/speculative-decoding-mtp-refresh.md\n D llama.log\n M logs/.current_session\n M logs/agent_audit.log\n D main.log\n"
         },
         "upstream": {
           "argv": [
@@ -373,9 +378,9 @@
         }
       },
       "exists": true,
-      "head": "1e39f0bb5673184d9975453f6ddc2332bfd44f8b",
+      "head": "8b6ba5c54dc96a723870a19dbed0db82ada42dd0",
       "path": "/mnt/raid0/llm/epyc-root",
-      "tracked_dirty_lines": 16,
+      "tracked_dirty_lines": 10,
       "upstream": "origin/spec-dec-mtp-refresh-2026-06-22"
     }
   },
