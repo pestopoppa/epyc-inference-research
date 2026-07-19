@@ -1,0 +1,13 @@
+{
+  "model": "local",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Return exactly 1024 lowercase words. Use the word benchmark repeated every time. Do not add punctuation, numbering, or commentary."
+    }
+  ],
+  "max_tokens": 1024,
+  "temperature": 0.0,
+  "seed": 42,
+  "stream": false
+}

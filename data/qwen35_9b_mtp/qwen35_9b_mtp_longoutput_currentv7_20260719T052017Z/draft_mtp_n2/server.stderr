@@ -1,0 +1,22 @@
+0.00.059.041 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.059.863 W srv  llama_server: -----------------
+0.00.059.866 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.059.867 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.059.867 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.059.867 W srv  llama_server: -----------------
+0.00.061.262 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.5-9B-MTP-GGUF/Qwen3.5-9B-Q4_K_M.gguf'
+0.03.394.591 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 4096, kv_unified = 'false'
+0.03.394.926 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.03.428.018 I srv  llama_server: model loaded
+0.03.428.027 I srv  llama_server: listening on http://127.0.0.1:18141
+0.03.994.644 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.03.994.922 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.07.178.150 I slot print_timing: id  0 | task 0 | n_decoded =    357, tg = 118.17 t/s, tg_3s = 118.16 t/s
+0.10.191.563 I slot print_timing: id  0 | task 0 | n_decoded =    711, tg = 117.82 t/s, tg_3s = 117.48 t/s
+0.12.896.115 I slot print_timing: id  0 | task 0 | prompt eval time =     161.97 ms /    40 tokens (    4.05 ms per token,   246.96 tokens per second)
+0.12.896.132 I slot print_timing: id  0 | task 0 |        eval time =    8739.17 ms /  1024 tokens (    8.53 ms per token,   117.17 tokens per second)
+0.12.896.134 I slot print_timing: id  0 | task 0 |       total time =    8901.14 ms /  1064 tokens
+0.12.896.157 I slot print_timing: id  0 | task 0 |    graphs reused =        337
+0.12.896.169 I slot print_timing: id  0 | task 0 | draft acceptance = 0.99853 (  681 accepted /   682 generated), mean len =  3.00
+0.12.896.388 I slot      release: id  0 | task 0 | stop processing: n_tokens = 1063, truncated = 0
+0.12.900.231 I srv    operator(): operator(): cleaning up before exit...

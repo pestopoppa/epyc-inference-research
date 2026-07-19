@@ -1,0 +1,28 @@
+{
+  "schema": "qwen35_9b_ngram_mtp_longoutput_currentv7.v1",
+  "created_at": "2026-07-19T05:22:51Z",
+  "model": "/mnt/raid0/llm/models/Qwen3.5-9B-MTP-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "result": {
+    "arm": "ngram_mod_draft_mtp_n2",
+    "ready": true,
+    "server_pid": 293089,
+    "source_head": "6a8dd5ea68",
+    "ok": true,
+    "elapsed_s": 2.195202112197876,
+    "completion_tokens": 1024,
+    "decode_tps_wall": 466.4718543727861,
+    "word_count": 1024,
+    "finish_reason": "length",
+    "content_prefix": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+    "usage": {
+      "completion_tokens": 1024,
+      "prompt_tokens": 40,
+      "total_tokens": 1064,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "server_returncode": 0,
+    "draft_log_mentions": 1
+  }
+}

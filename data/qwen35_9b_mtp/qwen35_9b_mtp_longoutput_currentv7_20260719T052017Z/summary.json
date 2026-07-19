@@ -1,0 +1,64 @@
+{
+  "schema": "qwen35_9b_mtp_longoutput_currentv7.v1",
+  "created_at": "2026-07-19T05:20:18Z",
+  "model": "/mnt/raid0/llm/models/Qwen3.5-9B-MTP-GGUF/Qwen3.5-9B-Q4_K_M.gguf",
+  "source_head": "6a8dd5ea68",
+  "arms": [
+    {
+      "arm": "no_spec",
+      "spec_flags": [
+        "--spec-type",
+        "none"
+      ],
+      "ready": true,
+      "server_pid": 291895,
+      "ok": true,
+      "elapsed_s": 13.77503228187561,
+      "completion_tokens": 1024,
+      "decode_tps_wall": 74.33739384751351,
+      "word_count": 1024,
+      "content_prefix": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+      "finish_reason": "length",
+      "usage": {
+        "completion_tokens": 1024,
+        "prompt_tokens": 40,
+        "total_tokens": 1064,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "server_returncode": 0,
+      "draft_log_mentions": 0,
+      "server_version_line": ""
+    },
+    {
+      "arm": "draft_mtp_n2",
+      "spec_flags": [
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-n-max",
+        "2"
+      ],
+      "ready": true,
+      "server_pid": 292203,
+      "ok": true,
+      "elapsed_s": 8.918741703033447,
+      "completion_tokens": 1024,
+      "decode_tps_wall": 114.81440253524963,
+      "word_count": 1024,
+      "content_prefix": "benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark benchmark ",
+      "finish_reason": "length",
+      "usage": {
+        "completion_tokens": 1024,
+        "prompt_tokens": 40,
+        "total_tokens": 1064,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "server_returncode": 0,
+      "draft_log_mentions": 1,
+      "server_version_line": ""
+    }
+  ]
+}
