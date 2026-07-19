@@ -1,0 +1,51 @@
+{"row_total": 24, "status": "server_starting", "ts": "2026-07-19T15:45:17.923885+00:00"}
+{"row_total": 24, "status": "server_healthy", "ts": "2026-07-19T15:45:27.486273+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:bd513cdb44e841152cfa", "row_index": 1, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:45:27.486459+00:00"}
+{"correct": true, "decision": "A", "latency_ms": 56948.192, "prompt_token_count": 1129, "row_id": "glm52-ext:judgebench:gpt:bd513cdb44e841152cfa", "row_index": 1, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:46:24.438440+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:aecbd576ea922b28a136", "row_index": 2, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:46:24.438488+00:00"}
+{"correct": false, "decision": "parse_error", "latency_ms": 79876.293, "prompt_token_count": 1694, "row_id": "glm52-ext:judgebench:gpt:aecbd576ea922b28a136", "row_index": 2, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:47:44.319503+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:7d43ddfcf6f63b564d91", "row_index": 3, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:47:44.319560+00:00"}
+{"correct": false, "decision": "parse_error", "latency_ms": 62154.305, "prompt_token_count": 1368, "row_id": "glm52-ext:judgebench:gpt:7d43ddfcf6f63b564d91", "row_index": 3, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:48:46.478362+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:1441c7e58522b952b521", "row_index": 4, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:48:46.478419+00:00"}
+{"correct": true, "decision": "B", "latency_ms": 43890.675, "prompt_token_count": 909, "row_id": "glm52-ext:judgebench:gpt:1441c7e58522b952b521", "row_index": 4, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:49:30.372816+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:d1eb1ad7f8e454f9baf5", "row_index": 5, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:49:30.372874+00:00"}
+{"correct": true, "decision": "A", "latency_ms": 38261.119, "prompt_token_count": 824, "row_id": "glm52-ext:judgebench:gpt:d1eb1ad7f8e454f9baf5", "row_index": 5, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:50:08.638276+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:876a4ed1c9768fa610b3", "row_index": 6, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:50:08.638336+00:00"}
+{"correct": false, "decision": "parse_error", "latency_ms": 53914.207, "prompt_token_count": 1178, "row_id": "glm52-ext:judgebench:gpt:876a4ed1c9768fa610b3", "row_index": 6, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:51:02.556635+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:b9223375a294a17e0f4b", "row_index": 7, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:51:02.556695+00:00"}
+{"correct": false, "decision": "A", "latency_ms": 61065.657, "prompt_token_count": 1339, "row_id": "glm52-ext:judgebench:gpt:b9223375a294a17e0f4b", "row_index": 7, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:52:03.625607+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:2a9d2e2cce43fdd6ccd3", "row_index": 8, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:52:03.625665+00:00"}
+{"correct": false, "decision": "parse_error", "latency_ms": 45179.467, "prompt_token_count": 1006, "row_id": "glm52-ext:judgebench:gpt:2a9d2e2cce43fdd6ccd3", "row_index": 8, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:52:48.808701+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:b723ed046ad8790c4b2c", "row_index": 9, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:52:48.808758+00:00"}
+{"correct": false, "decision": "parse_error", "latency_ms": 70441.729, "prompt_token_count": 1560, "row_id": "glm52-ext:judgebench:gpt:b723ed046ad8790c4b2c", "row_index": 9, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:53:59.255316+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:dc2a002d6c51b660d07c", "row_index": 10, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:53:59.255376+00:00"}
+{"correct": true, "decision": "A", "latency_ms": 50130.456, "prompt_token_count": 1074, "row_id": "glm52-ext:judgebench:gpt:dc2a002d6c51b660d07c", "row_index": 10, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:54:49.388252+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:629c4ba99f878fcf1a91", "row_index": 11, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:54:49.388313+00:00"}
+{"correct": true, "decision": "A", "latency_ms": 88615.029, "prompt_token_count": 1895, "row_id": "glm52-ext:judgebench:gpt:629c4ba99f878fcf1a91", "row_index": 11, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:56:18.007688+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:f78382ebf36110d8cc94", "row_index": 12, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:56:18.007747+00:00"}
+{"correct": true, "decision": "A", "latency_ms": 72746.363, "prompt_token_count": 1533, "row_id": "glm52-ext:judgebench:gpt:f78382ebf36110d8cc94", "row_index": 12, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:57:30.759245+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:c538c6002537208c2271", "row_index": 13, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:57:30.759305+00:00"}
+{"correct": true, "decision": "A", "latency_ms": 107134.175, "prompt_token_count": 2177, "row_id": "glm52-ext:judgebench:gpt:c538c6002537208c2271", "row_index": 13, "row_total": 24, "status": "row_done", "ts": "2026-07-19T15:59:17.896768+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:3d1249af7885c7626e91", "row_index": 14, "row_total": 24, "status": "row_start", "ts": "2026-07-19T15:59:17.896826+00:00"}
+{"correct": false, "decision": "B", "latency_ms": 83588.818, "prompt_token_count": 1792, "row_id": "glm52-ext:judgebench:gpt:3d1249af7885c7626e91", "row_index": 14, "row_total": 24, "status": "row_done", "ts": "2026-07-19T16:00:41.490106+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:fe2151ed2845e49bc928", "row_index": 15, "row_total": 24, "status": "row_start", "ts": "2026-07-19T16:00:41.490170+00:00"}
+{"correct": true, "decision": "A", "latency_ms": 79343.332, "prompt_token_count": 1661, "row_id": "glm52-ext:judgebench:gpt:fe2151ed2845e49bc928", "row_index": 15, "row_total": 24, "status": "row_done", "ts": "2026-07-19T16:02:00.837953+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:c9cfddae4c9db7a03fb8", "row_index": 16, "row_total": 24, "status": "row_start", "ts": "2026-07-19T16:02:00.838013+00:00"}
+{"correct": false, "decision": "parse_error", "latency_ms": 80549.131, "prompt_token_count": 1729, "row_id": "glm52-ext:judgebench:gpt:c9cfddae4c9db7a03fb8", "row_index": 16, "row_total": 24, "status": "row_done", "ts": "2026-07-19T16:03:21.391725+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:ea53f9ae2e947190c296", "row_index": 17, "row_total": 24, "status": "row_start", "ts": "2026-07-19T16:03:21.391777+00:00"}
+{"correct": true, "decision": "A", "latency_ms": 87456.794, "prompt_token_count": 1849, "row_id": "glm52-ext:judgebench:gpt:ea53f9ae2e947190c296", "row_index": 17, "row_total": 24, "status": "row_done", "ts": "2026-07-19T16:04:48.853413+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:f63b94976242b46b4026", "row_index": 18, "row_total": 24, "status": "row_start", "ts": "2026-07-19T16:04:48.853473+00:00"}
+{"correct": true, "decision": "B", "latency_ms": 98790.132, "prompt_token_count": 2075, "row_id": "glm52-ext:judgebench:gpt:f63b94976242b46b4026", "row_index": 18, "row_total": 24, "status": "row_done", "ts": "2026-07-19T16:06:27.648367+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:f672d9179e030458f403", "row_index": 19, "row_total": 24, "status": "row_start", "ts": "2026-07-19T16:06:27.648426+00:00"}
+{"correct": true, "decision": "B", "latency_ms": 80200.42, "prompt_token_count": 1714, "row_id": "glm52-ext:judgebench:gpt:f672d9179e030458f403", "row_index": 19, "row_total": 24, "status": "row_done", "ts": "2026-07-19T16:07:47.853179+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:0980c4cac73909c8be88", "row_index": 20, "row_total": 24, "status": "row_start", "ts": "2026-07-19T16:07:47.853237+00:00"}
+{"correct": false, "decision": "parse_error", "latency_ms": 78818.968, "prompt_token_count": 1669, "row_id": "glm52-ext:judgebench:gpt:0980c4cac73909c8be88", "row_index": 20, "row_total": 24, "status": "row_done", "ts": "2026-07-19T16:09:06.676352+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:e41c4d4805daa532f9f6", "row_index": 21, "row_total": 24, "status": "row_start", "ts": "2026-07-19T16:09:06.676412+00:00"}
+{"correct": true, "decision": "B", "latency_ms": 53646.28, "prompt_token_count": 1113, "row_id": "glm52-ext:judgebench:gpt:e41c4d4805daa532f9f6", "row_index": 21, "row_total": 24, "status": "row_done", "ts": "2026-07-19T16:10:00.326402+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:5987ea782b2d0a44bc3e", "row_index": 22, "row_total": 24, "status": "row_start", "ts": "2026-07-19T16:10:00.326462+00:00"}
+{"correct": true, "decision": "B", "latency_ms": 37964.555, "prompt_token_count": 799, "row_id": "glm52-ext:judgebench:gpt:5987ea782b2d0a44bc3e", "row_index": 22, "row_total": 24, "status": "row_done", "ts": "2026-07-19T16:10:38.293846+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:70e434e831bc643dd6cc", "row_index": 23, "row_total": 24, "status": "row_start", "ts": "2026-07-19T16:10:38.293907+00:00"}
+{"correct": true, "decision": "B", "latency_ms": 30190.559, "prompt_token_count": 594, "row_id": "glm52-ext:judgebench:gpt:70e434e831bc643dd6cc", "row_index": 23, "row_total": 24, "status": "row_done", "ts": "2026-07-19T16:11:08.487123+00:00"}
+{"row_id": "glm52-ext:judgebench:gpt:555577402a93fd77cca5", "row_index": 24, "row_total": 24, "status": "row_start", "ts": "2026-07-19T16:11:08.487186+00:00"}
+{"correct": true, "decision": "B", "latency_ms": 48551.931, "prompt_token_count": 1044, "row_id": "glm52-ext:judgebench:gpt:555577402a93fd77cca5", "row_index": 24, "row_total": 24, "status": "row_done", "ts": "2026-07-19T16:11:57.042488+00:00"}
+{"row_total": 24, "status": "server_stopped", "ts": "2026-07-19T16:12:02.290675+00:00"}

@@ -1,0 +1,11 @@
+{
+  "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/decisions.jsonl",
+  "generated_at": "2026-07-19T16:57:24.346340+00:00",
+  "measurement_protocol": "p_rev1",
+  "n_scored": 24,
+  "observation_only": false,
+  "protocol_attestation": "MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719",
+  "responses_jsonl": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/choice_rescore_response_rows_20260719.jsonl",
+  "rows_jsonl": "/mnt/raid0/llm/epyc-inference-research/docs/data/glm52_external_judgebench_gpt_n24_rows_20260719.jsonl",
+  "schema": "glm52_external_ground_truth_direct_run_manifest.v1"
+}

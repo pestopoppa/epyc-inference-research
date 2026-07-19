@@ -151,6 +151,16 @@ def test_judgelm_derives_higher_score_and_skips_equal(tmp_path):
 def test_pairwise_scoring_handles_correct_wrong_and_parse_failure():
     assert adapter.score_pairwise_text('{"decision":"A","confidence":0.8}', "A")["correct"] is True
     assert adapter.score_pairwise_text('{"decision":"B","confidence":0.8}', "A")["correct"] is False
+    percent = adapter.score_pairwise_text('{"decision":"A","confidence":85}', "A")
+    assert percent["correct"] is True
+    assert percent["parse_failure"] is None
+    assert percent["confidence"] == 0.85
+    assert percent["confidence_warning"]["reason"] == "confidence_scale_0_100"
+    non_numeric = adapter.score_pairwise_text('{"decision":"B","confidence":"high"}', "B")
+    assert non_numeric["correct"] is True
+    assert non_numeric["parse_failure"] is None
+    assert non_numeric["confidence"] is None
+    assert non_numeric["confidence_warning"]["reason"] == "confidence_format"
     failed = adapter.score_pairwise_text('{"decision":"C"}', "A")
     assert failed["decision"] == "parse_error"
     assert failed["parse_failure"]["reason"] == "schema_invalid"

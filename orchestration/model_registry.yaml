@@ -6178,7 +6178,7 @@ roles:
 
   glm_52_ud_iq2m:
     tier: B
-    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, current-source runner-shaped quality recovered only under the observed next-power-of-two DSA top-k schedule, chat/free+JSON-schema protocol matrix passed at ~2.9K/~12.0K prompt tokens, synthetic GC-1/2/3 reviewer repairs passed, and the near-miss corpus shadow/replay/binary-schema repair are parse-clean but quality-blocked.
+    description: GLM-5.2 UD-IQ2_M - 754B-total GLM-MoE-DSA primary GLM candidate; artifact complete, short CPU load/coherence smoke passed, stale-binary true >64K CPU DSA/indexer runnability recorded, low indexer_top_k corruption isolated, current-source runner-shaped quality recovered only under the observed next-power-of-two DSA top-k schedule, chat/free+JSON-schema protocol matrix passed at ~2.9K/~12.0K prompt tokens, synthetic GC-1/2/3 reviewer repairs passed, C-CRAB P-REV-1 patch-review admission failed, and external JudgeBench-GPT pairwise exact-choice evidence is positive but not sufficient for patch-review role admission.
     model:
       name: GLM-5.2-UD-IQ2_M
       huggingface_id: unsloth/GLM-5.2-GGUF
@@ -6216,7 +6216,7 @@ roles:
       - path: /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf
         bytes: 41914650304
         lfs_sha256: eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d
-      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence failed under unsafe low top_k. The old runner default indexer_top_k=32 was unsafe: metadata-default 2048 recovers the 1.4K runner-shaped chat prompt, so low top_k is now an explicit stress knob. Source/runtime evidence narrows malformed output to the DSA final-attention selection cap, and the observed safe caps are next power-of-two bands 2048, 4096, and 16384 for the tested prompt shapes. A 2026-07-18 chat-only protocol matrix passed exact READY and JSON-schema {decision:allow} at ~2.9K/4096 and ~12.0K/16384 prompt bands. GC-1/2/3 repair smokes now pass small synthetic checks, but real nearmiss-v1 code corpus slices are only parse-clean, not quality-clean: n=12 replay FA 16.7% / FR 66.7%; n=24 binary-schema/prompt repair FA 50.0% / FR 75.0%. Next fix reviewer policy/prompting/thresholding or calibration before any further corpus replay or P-REV-1 claim-grade gate; raw /completion and /v1/completions remain unvalidated and should be probed only narrowly."
+      next_step: "Current-source GLM DSA cache/runtime wiring is closed on experimental-v7 3dee86a5a. Current-source 16K throughput controls show ngram-mod produces zero drafts on the GLM long-output prompt. Current-source 32K needle/coherence failed under unsafe low top_k. The old runner default indexer_top_k=32 was unsafe; use the observed next-power-of-two DSA top-k schedule (2048/4096/16384 for the tested prompt bands) and the validated chat JSON/schema route. C-CRAB P-REV-1 patch-review admission failed on 2026-07-19 (FA 41.7%, FR 25.0%, AUC 0.509), and RM-2 fast reviewer alternatives did not produce a clean replacement. External JudgeBench-GPT pairwise exact-choice evidence is positive (22/24, 91.7%) but does not answer patch-review acceptance. Next progress is SWE-bench-Verified direct oracle execution and/or a new reviewer repair hypothesis; do not rerun the same C-CRAB policy unchanged. Raw /completion and /v1/completions remain unvalidated and should be probed only narrowly."
     candidate_roles:
     - architect
     - ingest
@@ -6229,9 +6229,9 @@ roles:
       forbid:
       - production_stack_registration
       - production_role_claim_without_dsa_quality_gate
-      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated and the observed next-power-of-two top_k schedule recovers runner-shaped prompts through 12K. Chat free-text and JSON-schema channels pass at ~2.9K/~12.0K, repaired synthetic GC-1/2/3 smokes pass, but real near-miss corpus slices remain quality-failed even after binary action-space repair. Production-quality serving still needs reviewer-policy/prompt/threshold/calibration repair and claim-grade gates under that schedule before role claims."
+      reason: "Artifact is complete, current-source DSA cache/runtime wiring is closed, and stale-binary true >64K CPU DSA/indexer runnability is recorded. The low-top-k runner corruption is isolated and the observed next-power-of-two top_k schedule recovers runner-shaped prompts through 12K. Chat free-text and JSON-schema channels pass at ~2.9K/~12.0K and repaired synthetic GC-1/2/3 smokes pass, but decision-grade C-CRAB P-REV-1 patch-review admission failed. External JudgeBench-GPT pairwise exact-choice is positive but only partial. Production-quality serving still needs SWE-bench-Verified/external patch-review evidence or a new reviewer repair hypothesis before role claims."
     performance:
-      benchmark_status: current_source_reviewer_binary_schema_repair_quality_failed
+      benchmark_status: patch_review_quality_blocked_external_judgebench_positive_partial
       short_smoke_observation: >
         2026-07-16 experimental v7 b10077-da1bf5e2f CPU-only llama-server
         loaded the six-shard UD-IQ2_M artifact. With reasoning auto, the model
@@ -6446,6 +6446,26 @@ roles:
         FA=50.0%, FR=75.0%, accept=37.5%, ECE=0.592, AUC=0.663, Brier=0.567,
         with aggregate prompt/decode 22.39/2.10 t/s. Any next corpus run must
         change reviewer policy, prompting, thresholding, or calibration first.
+      reviewer_corpus_p_rev1_failure: >
+        2026-07-19 decision-grade C-CRAB P-REV-1 patch-review confirmation used
+        deterministic hard accept controls plus matched hard negatives, n=48
+        (24 accept / 24 reject), observation_only=false, measurement_protocol=p_rev1,
+        attestation MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719. Evidence:
+        data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/.
+        Result: FA 41.7% (10/24), FR 25.0% (6/24), accept 58.3%, parse 0.0%,
+        ECE/AUC/Brier 0.239/0.509/0.278. Verdict: not patch-reviewer role-ready
+        under this policy; do not rerun unchanged.
+      external_judgebench_gpt_p_rev1_observation: >
+        2026-07-19 external JudgeBench-GPT pairwise live gate used n=24,
+        observation_only=false, measurement_protocol=p_rev1, attestation
+        MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719, and era p_rev1_attested.
+        Original strict schema score was 15/24 because seven valid A/B decisions
+        used 0-100 confidence values. Exact-choice rescore is 22/24 (91.7%) with
+        parse 0/24 and confidence_scale_0_100 warnings on 7/24 rows. Evidence:
+        data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/
+        and data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/.
+        This is positive judge-native pairwise preference evidence, not patch-review
+        admission; SWE-bench-Verified direct oracle remains open.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
@@ -6537,6 +6557,16 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/decisions.jsonl
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/reviewer_calibration_report.md
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/glm52-nearmiss-code-n24-binaryschema-20260718Tcontinuation/raw_prompt_artifacts.tar.gz
+      reviewer_corpus_p_rev1:
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/decisions.jsonl
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/reviewer_calibration_report.md
+      external_ground_truth:
+      - /mnt/raid0/llm/epyc-inference-research/docs/data/glm52_external_judgebench_gpt_p_rev1_live_20260719.md
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/decisions.jsonl
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/decisions.jsonl
     memory:
       residency: cold
       pinned: false

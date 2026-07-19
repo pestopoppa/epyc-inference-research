@@ -355,7 +355,8 @@ def build_pairwise_prompt(row: PairwiseRow | dict[str, Any], *, max_field_chars:
     cand_b, b_truncated = truncate_middle(str(data.get("candidate_b") or ""), max_field_chars)
     prompt = (
         "You are judging two candidate responses for the same task. Choose the better answer.\n"
-        "Return exactly one JSON object with keys decision and confidence. decision must be A or B.\n\n"
+        "Return exactly one JSON object with keys decision and confidence. decision must be A or B. "
+        "confidence must be a decimal from 0.0 to 1.0, not a percent.\n\n"
         f"TASK:\n{task}\n\n"
         f"CANDIDATE A:\n{cand_a}\n\n"
         f"CANDIDATE B:\n{cand_b}\n\n"
@@ -434,6 +435,31 @@ def extract_json_object(text: str) -> str | None:
     return None
 
 
+def normalize_pairwise_confidence(value: Any) -> tuple[float | None, dict[str, Any] | None]:
+    if value is None:
+        return None, None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None, {
+            "reason": "confidence_format",
+            "detail": "confidence was ignored because it is not numeric",
+            "raw_confidence": value,
+        }
+    confidence = float(value)
+    if 0 <= confidence <= 1:
+        return confidence, None
+    if 1 < confidence <= 100:
+        return confidence / 100.0, {
+            "reason": "confidence_scale_0_100",
+            "detail": "confidence was normalized from 0-100 to 0-1",
+            "raw_confidence": value,
+        }
+    return None, {
+        "reason": "confidence_format",
+        "detail": "confidence was ignored because it is outside [0, 1] and [0, 100]",
+        "raw_confidence": value,
+    }
+
+
 def parse_pairwise_decision_text(text: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
     candidate = extract_json_object(text)
     if candidate is None:
@@ -450,12 +476,8 @@ def parse_pairwise_decision_text(text: str) -> tuple[dict[str, Any] | None, dict
     decision = str(obj.get("decision") or "").strip().upper()
     if decision not in PAIRWISE_DECISIONS:
         return None, {"reason": "schema_invalid", "detail": "decision must be A or B"}
-    confidence = obj.get("confidence")
-    if confidence is not None and (
-        not isinstance(confidence, (int, float)) or isinstance(confidence, bool) or not (0 <= confidence <= 1)
-    ):
-        return None, {"reason": "schema_invalid", "detail": "confidence must be null or a number in [0, 1]"}
-    return {"decision": decision, "confidence": confidence}, None
+    confidence, confidence_warning = normalize_pairwise_confidence(obj.get("confidence"))
+    return {"decision": decision, "confidence": confidence, "confidence_warning": confidence_warning}, None
 
 
 def score_pairwise_text(text: str, gold_label: str) -> dict[str, Any]:
@@ -463,7 +485,13 @@ def score_pairwise_text(text: str, gold_label: str) -> dict[str, Any]:
     if failure is not None or parsed is None:
         return {"decision": "parse_error", "correct": False, "parse_failure": failure}
     decision = parsed["decision"]
-    return {"decision": decision, "correct": decision == gold_label, "parse_failure": None, "confidence": parsed.get("confidence")}
+    return {
+        "decision": decision,
+        "correct": decision == gold_label,
+        "parse_failure": None,
+        "confidence": parsed.get("confidence"),
+        "confidence_warning": parsed.get("confidence_warning"),
+    }
 
 
 def stable_row_hash(seed_key: str, row_id: str) -> str:

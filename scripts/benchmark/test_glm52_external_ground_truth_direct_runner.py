@@ -67,7 +67,7 @@ def test_score_saved_responses_writes_decisions_summary_and_manifest(tmp_path):
         responses_path,
         [
             {"row_id": "r1", "response_text": '{"decision":"A","confidence":0.8}'},
-            {"row_id": "r2", "response_text": '{"decision":"A","confidence":0.6}'},
+            {"row_id": "r2", "response_text": '{"decision":"A","confidence":85}'},
         ],
     )
 
@@ -79,6 +79,10 @@ def test_score_saved_responses_writes_decisions_summary_and_manifest(tmp_path):
             str(tmp_path / "out"),
             "--score-responses-jsonl",
             str(responses_path),
+            "--measurement-protocol",
+            "p_rev1",
+            "--protocol-attestation",
+            "TEST-ATTESTATION",
         ]
     )
 
@@ -87,5 +91,17 @@ def test_score_saved_responses_writes_decisions_summary_and_manifest(tmp_path):
     assert decisions == [("r1", True), ("r2", False)]
     summary = json.loads((tmp_path / "out" / "summary.json").read_text())
     assert summary["score"]["accuracy"] == 0.5
+    assert summary["score"]["confidence_warning_counts"] == {"confidence_scale_0_100": 1}
     assert summary["run_manifest"]["n_scored"] == 2
+    assert summary["run_manifest"]["observation_only"] is False
+    assert summary["run_manifest"]["protocol_attestation"] == "TEST-ATTESTATION"
     assert (tmp_path / "out" / "run_manifest.json").exists()
+
+
+def test_parse_args_defaults_p_rev1_to_attested_era(tmp_path):
+    rows_path = tmp_path / "rows.jsonl"
+    _write_jsonl(rows_path, [_row("r1", "A")])
+
+    args = runner.parse_args(["--rows-jsonl", str(rows_path), "--measurement-protocol", "p_rev1"])
+
+    assert args.era == runner.P_REV1_ERA

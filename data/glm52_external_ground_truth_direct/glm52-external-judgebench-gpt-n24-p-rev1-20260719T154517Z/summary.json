@@ -1,0 +1,2121 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/decisions.jsonl",
+  "execution": {
+    "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/decisions.jsonl",
+    "elapsed_s": 1604.367,
+    "post_processes": [],
+    "progress_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/progress.jsonl",
+    "run_manifest": {
+      "decisions_path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/decisions.jsonl",
+      "generated_at": "2026-07-19T16:12:02.291231+00:00",
+      "measurement_protocol": "p_rev1",
+      "n_scored": 24,
+      "observation_only": false,
+      "protocol_attestation": "MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719",
+      "rows_jsonl": "/mnt/raid0/llm/epyc-inference-research/docs/data/glm52_external_judgebench_gpt_n24_rows_20260719.jsonl",
+      "schema": "glm52_external_ground_truth_direct_run_manifest.v1"
+    },
+    "score": {
+      "accuracy": 0.625,
+      "correct": 15,
+      "decision_counts": {
+        "A": 9,
+        "B": 8,
+        "parse_error": 7
+      },
+      "gold_label_counts": {
+        "A": 12,
+        "B": 12
+      },
+      "n": 24,
+      "parse_failure_rate": 0.2916666666666667,
+      "parse_failures": 7
+    },
+    "server_log": {
+      "bytes": 158631,
+      "decode_tokens": 13,
+      "decode_tps": 2.93,
+      "line_count": 1610,
+      "matched_line_count": 1140,
+      "max_decoded_checkpoint": null,
+      "path": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/logs/glm52_external__p12000_tk16384.server.log",
+      "prompt_eval_tokens": 1050,
+      "prompt_eval_tps": 23.82,
+      "status": "ok"
+    },
+    "status": "ok",
+    "task_results": [
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_bd513cdb44e841152cfa.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_bd513cdb44e841152cfa.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_bd513cdb44e841152cfa.response.json"
+        },
+        "confidence": 0.9,
+        "correct": true,
+        "decision": "A",
+        "gold_label": "A",
+        "latency_ms": 56948.192,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 1919,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 2166,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 5403,
+            "prompt_token_count": 1129,
+            "task_chars_original": 1076,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1129,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:bd513cdb44e841152cfa",
+        "scoring_text": "{\n  \"decision\": \"A\",\n  \"confidence\": 0.9\n}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 6711.248,
+          "predicted_n": 19,
+          "predicted_per_second": 2.831068081525225,
+          "predicted_per_token_ms": 353.2235789473684,
+          "prompt_ms": 50224.13,
+          "prompt_n": 1135,
+          "prompt_per_second": 22.59869907154191,
+          "prompt_per_token_ms": 44.250334801762115
+        },
+        "truncation": {
+          "candidate_a_chars_original": 1919,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 2166,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 5403,
+          "task_chars_original": 1076,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 19,
+          "prompt_tokens": 1135,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1154
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_aecbd576ea922b28a136.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_aecbd576ea922b28a136.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_aecbd576ea922b28a136.response.json"
+        },
+        "confidence": null,
+        "correct": false,
+        "decision": "parse_error",
+        "gold_label": "B",
+        "latency_ms": 79876.293,
+        "parse_failure": {
+          "detail": "confidence must be null or a number in [0, 1]",
+          "reason": "schema_invalid"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 3571,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 1940,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 7284,
+            "prompt_token_count": 1694,
+            "task_chars_original": 1531,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1694,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:aecbd576ea922b28a136",
+        "scoring_text": "{\"decision\": \"B\", \"confidence\": 9}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 4644.133,
+          "predicted_n": 13,
+          "predicted_per_second": 2.799230771384024,
+          "predicted_per_token_ms": 357.241,
+          "prompt_ms": 75203.654,
+          "prompt_n": 1700,
+          "prompt_per_second": 22.605284578326476,
+          "prompt_per_token_ms": 44.23744352941176
+        },
+        "truncation": {
+          "candidate_a_chars_original": 3571,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 1940,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 7284,
+          "task_chars_original": 1531,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 13,
+          "prompt_tokens": 1700,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1713
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_7d43ddfcf6f63b564d91.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_7d43ddfcf6f63b564d91.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_7d43ddfcf6f63b564d91.response.json"
+        },
+        "confidence": null,
+        "correct": false,
+        "decision": "parse_error",
+        "gold_label": "A",
+        "latency_ms": 62154.305,
+        "parse_failure": {
+          "detail": "confidence must be null or a number in [0, 1]",
+          "reason": "schema_invalid"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 2093,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 2728,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 5901,
+            "prompt_token_count": 1368,
+            "task_chars_original": 838,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1368,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:7d43ddfcf6f63b564d91",
+        "scoring_text": "{\"decision\":\"A\",\"confidence\":85}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 3403.494,
+          "predicted_n": 10,
+          "predicted_per_second": 2.938157082104449,
+          "predicted_per_token_ms": 340.3494,
+          "prompt_ms": 58713.212,
+          "prompt_n": 1374,
+          "prompt_per_second": 23.401887806785297,
+          "prompt_per_token_ms": 42.73159534206696
+        },
+        "truncation": {
+          "candidate_a_chars_original": 2093,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 2728,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 5901,
+          "task_chars_original": 838,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 10,
+          "prompt_tokens": 1374,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1384
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_1441c7e58522b952b521.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_1441c7e58522b952b521.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_1441c7e58522b952b521.response.json"
+        },
+        "confidence": 0.85,
+        "correct": true,
+        "decision": "B",
+        "gold_label": "B",
+        "latency_ms": 43890.675,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 1842,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 1199,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 3781,
+            "prompt_token_count": 909,
+            "task_chars_original": 498,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 909,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:1441c7e58522b952b521",
+        "scoring_text": "{\"decision\": \"B\", \"confidence\": 0.85}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 5177.513,
+          "predicted_n": 15,
+          "predicted_per_second": 2.8971438603823882,
+          "predicted_per_token_ms": 345.1675333333333,
+          "prompt_ms": 38675.728,
+          "prompt_n": 915,
+          "prompt_per_second": 23.658248915185254,
+          "prompt_per_token_ms": 42.26855519125684
+        },
+        "truncation": {
+          "candidate_a_chars_original": 1842,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 1199,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 3781,
+          "task_chars_original": 498,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 15,
+          "prompt_tokens": 915,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 930
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_d1eb1ad7f8e454f9baf5.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_d1eb1ad7f8e454f9baf5.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_d1eb1ad7f8e454f9baf5.response.json"
+        },
+        "confidence": 0.7,
+        "correct": true,
+        "decision": "A",
+        "gold_label": "A",
+        "latency_ms": 38261.119,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 1816,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 1501,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 3977,
+            "prompt_token_count": 824,
+            "task_chars_original": 418,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 824,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:d1eb1ad7f8e454f9baf5",
+        "scoring_text": "{\"decision\":\"A\",\"confidence\":0.7}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 4031.552,
+          "predicted_n": 12,
+          "predicted_per_second": 2.9765212007683393,
+          "predicted_per_token_ms": 335.9626666666667,
+          "prompt_ms": 34201.486,
+          "prompt_n": 830,
+          "prompt_per_second": 24.267951398369068,
+          "prompt_per_token_ms": 41.20660963855421
+        },
+        "truncation": {
+          "candidate_a_chars_original": 1816,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 1501,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 3977,
+          "task_chars_original": 418,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 12,
+          "prompt_tokens": 830,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 842
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_876a4ed1c9768fa610b3.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_876a4ed1c9768fa610b3.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_876a4ed1c9768fa610b3.response.json"
+        },
+        "confidence": null,
+        "correct": false,
+        "decision": "parse_error",
+        "gold_label": "B",
+        "latency_ms": 53914.207,
+        "parse_failure": {
+          "detail": "confidence must be null or a number in [0, 1]",
+          "reason": "schema_invalid"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 2677,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 2417,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 5937,
+            "prompt_token_count": 1178,
+            "task_chars_original": 601,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1178,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:876a4ed1c9768fa610b3",
+        "scoring_text": "{\"decision\":\"B\",\"confidence\":95}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 3360.732,
+          "predicted_n": 10,
+          "predicted_per_second": 2.9755422330611307,
+          "predicted_per_token_ms": 336.0732,
+          "prompt_ms": 50525.13,
+          "prompt_n": 1184,
+          "prompt_per_second": 23.433883297281966,
+          "prompt_per_token_ms": 42.673251689189186
+        },
+        "truncation": {
+          "candidate_a_chars_original": 2677,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 2417,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 5937,
+          "task_chars_original": 601,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 10,
+          "prompt_tokens": 1184,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1194
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_b9223375a294a17e0f4b.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_b9223375a294a17e0f4b.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_b9223375a294a17e0f4b.response.json"
+        },
+        "confidence": 0.95,
+        "correct": false,
+        "decision": "A",
+        "gold_label": "B",
+        "latency_ms": 61065.657,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 1242,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 1424,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 3451,
+            "prompt_token_count": 1339,
+            "task_chars_original": 543,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1339,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:b9223375a294a17e0f4b",
+        "scoring_text": "{\"decision\":\"A\",\"confidence\":0.95}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 4150.617,
+          "predicted_n": 12,
+          "predicted_per_second": 2.8911364262228965,
+          "predicted_per_token_ms": 345.88475,
+          "prompt_ms": 56881.225,
+          "prompt_n": 1345,
+          "prompt_per_second": 23.645763606532736,
+          "prompt_per_token_ms": 42.29087360594795
+        },
+        "truncation": {
+          "candidate_a_chars_original": 1242,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 1424,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 3451,
+          "task_chars_original": 543,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 12,
+          "prompt_tokens": 1345,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1357
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_2a9d2e2cce43fdd6ccd3.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_2a9d2e2cce43fdd6ccd3.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_2a9d2e2cce43fdd6ccd3.response.json"
+        },
+        "confidence": null,
+        "correct": false,
+        "decision": "parse_error",
+        "gold_label": "A",
+        "latency_ms": 45179.467,
+        "parse_failure": {
+          "detail": "confidence must be null or a number in [0, 1]",
+          "reason": "schema_invalid"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 1066,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 1818,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 3647,
+            "prompt_token_count": 1006,
+            "task_chars_original": 521,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1006,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:2a9d2e2cce43fdd6ccd3",
+        "scoring_text": "{\"decision\":\"A\",\"confidence\":3}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 3363.511,
+          "predicted_n": 10,
+          "predicted_per_second": 2.973083780609013,
+          "predicted_per_token_ms": 336.3511,
+          "prompt_ms": 41779.231,
+          "prompt_n": 1012,
+          "prompt_per_second": 24.22256168381845,
+          "prompt_per_token_ms": 41.283825098814226
+        },
+        "truncation": {
+          "candidate_a_chars_original": 1066,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 1818,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 3647,
+          "task_chars_original": 521,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 10,
+          "prompt_tokens": 1012,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1022
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_b723ed046ad8790c4b2c.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_b723ed046ad8790c4b2c.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_b723ed046ad8790c4b2c.response.json"
+        },
+        "confidence": null,
+        "correct": false,
+        "decision": "parse_error",
+        "gold_label": "A",
+        "latency_ms": 70441.729,
+        "parse_failure": {
+          "detail": "confidence must be null or a number in [0, 1]",
+          "reason": "schema_invalid"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 2035,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 2150,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 5591,
+            "prompt_token_count": 1560,
+            "task_chars_original": 1164,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1560,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:b723ed046ad8790c4b2c",
+        "scoring_text": "{\"decision\":\"A\",\"confidence\":6}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 3424.958,
+          "predicted_n": 10,
+          "predicted_per_second": 2.919743833355037,
+          "predicted_per_token_ms": 342.49580000000003,
+          "prompt_ms": 66985.936,
+          "prompt_n": 1566,
+          "prompt_per_second": 23.378041623543186,
+          "prompt_per_token_ms": 42.77518263090677
+        },
+        "truncation": {
+          "candidate_a_chars_original": 2035,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 2150,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 5591,
+          "task_chars_original": 1164,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 10,
+          "prompt_tokens": 1566,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1576
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_dc2a002d6c51b660d07c.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_dc2a002d6c51b660d07c.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_dc2a002d6c51b660d07c.response.json"
+        },
+        "confidence": 1,
+        "correct": true,
+        "decision": "A",
+        "gold_label": "A",
+        "latency_ms": 50130.456,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 1169,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 1043,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 2567,
+            "prompt_token_count": 1074,
+            "task_chars_original": 113,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1074,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:dc2a002d6c51b660d07c",
+        "scoring_text": "{\"decision\": \"A\", \"confidence\": 1}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 4419.809,
+          "predicted_n": 13,
+          "predicted_per_second": 2.9413035721679375,
+          "predicted_per_token_ms": 339.9853076923077,
+          "prompt_ms": 45670.42,
+          "prompt_n": 1080,
+          "prompt_per_second": 23.647691437915398,
+          "prompt_per_token_ms": 42.28742592592592
+        },
+        "truncation": {
+          "candidate_a_chars_original": 1169,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 1043,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 2567,
+          "task_chars_original": 113,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 13,
+          "prompt_tokens": 1080,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1093
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_629c4ba99f878fcf1a91.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_629c4ba99f878fcf1a91.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_629c4ba99f878fcf1a91.response.json"
+        },
+        "confidence": 1,
+        "correct": true,
+        "decision": "A",
+        "gold_label": "A",
+        "latency_ms": 88615.029,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 2070,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 1921,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 4887,
+            "prompt_token_count": 1895,
+            "task_chars_original": 654,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1895,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:629c4ba99f878fcf1a91",
+        "scoring_text": "{\"decision\": \"A\", \"confidence\": 1}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 4627.881,
+          "predicted_n": 13,
+          "predicted_per_second": 2.8090609935735165,
+          "predicted_per_token_ms": 355.9908461538462,
+          "prompt_ms": 83954.107,
+          "prompt_n": 1901,
+          "prompt_per_second": 22.64332345289552,
+          "prompt_per_token_ms": 44.16312835349816
+        },
+        "truncation": {
+          "candidate_a_chars_original": 2070,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 1921,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 4887,
+          "task_chars_original": 654,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 13,
+          "prompt_tokens": 1901,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1914
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_f78382ebf36110d8cc94.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_f78382ebf36110d8cc94.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_f78382ebf36110d8cc94.response.json"
+        },
+        "confidence": 0.9,
+        "correct": true,
+        "decision": "A",
+        "gold_label": "A",
+        "latency_ms": 72746.363,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 1893,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 2023,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 4667,
+            "prompt_token_count": 1533,
+            "task_chars_original": 509,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1533,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:f78382ebf36110d8cc94",
+        "scoring_text": "{\"decision\": \"A\", \"confidence\": 0.9}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 5417.491,
+          "predicted_n": 15,
+          "predicted_per_second": 2.7688093990373037,
+          "predicted_per_token_ms": 361.16606666666667,
+          "prompt_ms": 67282.092,
+          "prompt_n": 1539,
+          "prompt_per_second": 22.8738428644579,
+          "prompt_per_token_ms": 43.71805847953217
+        },
+        "truncation": {
+          "candidate_a_chars_original": 1893,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 2023,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 4667,
+          "task_chars_original": 509,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 15,
+          "prompt_tokens": 1539,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1554
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_c538c6002537208c2271.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_c538c6002537208c2271.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_c538c6002537208c2271.response.json"
+        },
+        "confidence": 0.7,
+        "correct": true,
+        "decision": "A",
+        "gold_label": "A",
+        "latency_ms": 107134.175,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 2499,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 2520,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 5413,
+            "prompt_token_count": 2177,
+            "task_chars_original": 152,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2177,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:c538c6002537208c2271",
+        "scoring_text": "{\"decision\": \"A\", \"confidence\": 0.7}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 5561.728,
+          "predicted_n": 15,
+          "predicted_per_second": 2.6970035212077974,
+          "predicted_per_token_ms": 370.78186666666664,
+          "prompt_ms": 101531.893,
+          "prompt_n": 2183,
+          "prompt_per_second": 21.500633303468497,
+          "prompt_per_token_ms": 46.510257901969766
+        },
+        "truncation": {
+          "candidate_a_chars_original": 2499,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 2520,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 5413,
+          "task_chars_original": 152,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 15,
+          "prompt_tokens": 2183,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2198
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_3d1249af7885c7626e91.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_3d1249af7885c7626e91.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_3d1249af7885c7626e91.response.json"
+        },
+        "confidence": 0.7,
+        "correct": false,
+        "decision": "B",
+        "gold_label": "A",
+        "latency_ms": 83588.818,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 2620,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 2614,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 7407,
+            "prompt_token_count": 1792,
+            "task_chars_original": 1931,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1792,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:3d1249af7885c7626e91",
+        "scoring_text": "{\"decision\": \"B\", \"confidence\": 0.7}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 5389.623,
+          "predicted_n": 15,
+          "predicted_per_second": 2.783126018276232,
+          "predicted_per_token_ms": 359.3082,
+          "prompt_ms": 78146.598,
+          "prompt_n": 1798,
+          "prompt_per_second": 23.008039326292874,
+          "prompt_per_token_ms": 43.46306896551724
+        },
+        "truncation": {
+          "candidate_a_chars_original": 2620,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 2614,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 7407,
+          "task_chars_original": 1931,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 15,
+          "prompt_tokens": 1798,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1813
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_fe2151ed2845e49bc928.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_fe2151ed2845e49bc928.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_fe2151ed2845e49bc928.response.json"
+        },
+        "confidence": 0.7,
+        "correct": true,
+        "decision": "A",
+        "gold_label": "A",
+        "latency_ms": 79343.332,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 2544,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 2802,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 7286,
+            "prompt_token_count": 1661,
+            "task_chars_original": 1698,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1661,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:fe2151ed2845e49bc928",
+        "scoring_text": "{\"decision\": \"A\", \"confidence\": 0.7}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 5387.659,
+          "predicted_n": 15,
+          "predicted_per_second": 2.7841405701437303,
+          "predicted_per_token_ms": 359.17726666666664,
+          "prompt_ms": 73910.584,
+          "prompt_n": 1667,
+          "prompt_per_second": 22.55427991206239,
+          "prompt_per_token_ms": 44.33748290341932
+        },
+        "truncation": {
+          "candidate_a_chars_original": 2544,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 2802,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 7286,
+          "task_chars_original": 1698,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 15,
+          "prompt_tokens": 1667,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1682
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_c9cfddae4c9db7a03fb8.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_c9cfddae4c9db7a03fb8.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_c9cfddae4c9db7a03fb8.response.json"
+        },
+        "confidence": null,
+        "correct": false,
+        "decision": "parse_error",
+        "gold_label": "B",
+        "latency_ms": 80549.131,
+        "parse_failure": {
+          "detail": "confidence must be null or a number in [0, 1]",
+          "reason": "schema_invalid"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 2907,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 2753,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 7354,
+            "prompt_token_count": 1729,
+            "task_chars_original": 1452,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1729,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:c9cfddae4c9db7a03fb8",
+        "scoring_text": "{\"decision\": \"B\", \"confidence\": 7}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 4641.859,
+          "predicted_n": 13,
+          "predicted_per_second": 2.8006020863623817,
+          "predicted_per_token_ms": 357.06607692307693,
+          "prompt_ms": 75865.511,
+          "prompt_n": 1735,
+          "prompt_per_second": 22.86941690803348,
+          "prompt_per_token_ms": 43.72651930835735
+        },
+        "truncation": {
+          "candidate_a_chars_original": 2907,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 2753,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 7354,
+          "task_chars_original": 1452,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 13,
+          "prompt_tokens": 1735,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1748
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_ea53f9ae2e947190c296.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_ea53f9ae2e947190c296.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_ea53f9ae2e947190c296.response.json"
+        },
+        "confidence": 0.7,
+        "correct": true,
+        "decision": "A",
+        "gold_label": "A",
+        "latency_ms": 87456.794,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 2844,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 3482,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 7810,
+            "prompt_token_count": 1849,
+            "task_chars_original": 1242,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1849,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:ea53f9ae2e947190c296",
+        "scoring_text": "{\"decision\": \"A\", \"confidence\": 0.7}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 5440.489,
+          "predicted_n": 15,
+          "predicted_per_second": 2.7571051058094227,
+          "predicted_per_token_ms": 362.69926666666663,
+          "prompt_ms": 81971.935,
+          "prompt_n": 1855,
+          "prompt_per_second": 22.629696371081153,
+          "prompt_per_token_ms": 44.189722371967655
+        },
+        "truncation": {
+          "candidate_a_chars_original": 2844,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 3482,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 7810,
+          "task_chars_original": 1242,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 15,
+          "prompt_tokens": 1855,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1870
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_f63b94976242b46b4026.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_f63b94976242b46b4026.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_f63b94976242b46b4026.response.json"
+        },
+        "confidence": 0.7,
+        "correct": true,
+        "decision": "B",
+        "gold_label": "B",
+        "latency_ms": 98790.132,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 3468,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 2737,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 8115,
+            "prompt_token_count": 2075,
+            "task_chars_original": 1668,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 2075,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:f63b94976242b46b4026",
+        "scoring_text": "{\"decision\": \"B\", \"confidence\": 0.7}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 5502.521,
+          "predicted_n": 15,
+          "predicted_per_second": 2.7260232173580072,
+          "predicted_per_token_ms": 366.8347333333333,
+          "prompt_ms": 93241.014,
+          "prompt_n": 2081,
+          "prompt_per_second": 22.318504601419285,
+          "prompt_per_token_ms": 44.805869293608836
+        },
+        "truncation": {
+          "candidate_a_chars_original": 3468,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 2737,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 8115,
+          "task_chars_original": 1668,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 15,
+          "prompt_tokens": 2081,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 2096
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_f672d9179e030458f403.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_f672d9179e030458f403.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_f672d9179e030458f403.response.json"
+        },
+        "confidence": 0.8,
+        "correct": true,
+        "decision": "B",
+        "gold_label": "B",
+        "latency_ms": 80200.42,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 2479,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 2496,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 7151,
+            "prompt_token_count": 1714,
+            "task_chars_original": 1934,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1714,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:f672d9179e030458f403",
+        "scoring_text": "{\"decision\":\"B\",\"confidence\":0.8}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 4261.707,
+          "predicted_n": 12,
+          "predicted_per_second": 2.8157731162653836,
+          "predicted_per_token_ms": 355.14225000000005,
+          "prompt_ms": 75888.841,
+          "prompt_n": 1720,
+          "prompt_per_second": 22.66472879721539,
+          "prompt_per_token_ms": 44.12141918604651
+        },
+        "truncation": {
+          "candidate_a_chars_original": 2479,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 2496,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 7151,
+          "task_chars_original": 1934,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 12,
+          "prompt_tokens": 1720,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1732
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_0980c4cac73909c8be88.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_0980c4cac73909c8be88.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_0980c4cac73909c8be88.response.json"
+        },
+        "confidence": null,
+        "correct": false,
+        "decision": "parse_error",
+        "gold_label": "B",
+        "latency_ms": 78818.968,
+        "parse_failure": {
+          "detail": "confidence must be null or a number in [0, 1]",
+          "reason": "schema_invalid"
+        },
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 3238,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 1779,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 6792,
+            "prompt_token_count": 1669,
+            "task_chars_original": 1533,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1669,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:0980c4cac73909c8be88",
+        "scoring_text": "{\"decision\": \"B\", \"confidence\": 9}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 4597.178,
+          "predicted_n": 13,
+          "predicted_per_second": 2.8278217636993825,
+          "predicted_per_token_ms": 353.6290769230769,
+          "prompt_ms": 74178.296,
+          "prompt_n": 1675,
+          "prompt_per_second": 22.580729004613424,
+          "prompt_per_token_ms": 44.28554985074627
+        },
+        "truncation": {
+          "candidate_a_chars_original": 3238,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 1779,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 6792,
+          "task_chars_original": 1533,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 13,
+          "prompt_tokens": 1675,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1688
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_e41c4d4805daa532f9f6.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_e41c4d4805daa532f9f6.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_e41c4d4805daa532f9f6.response.json"
+        },
+        "confidence": 0.8,
+        "correct": true,
+        "decision": "B",
+        "gold_label": "B",
+        "latency_ms": 53646.28,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 2215,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 1514,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 4505,
+            "prompt_token_count": 1113,
+            "task_chars_original": 534,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1113,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:e41c4d4805daa532f9f6",
+        "scoring_text": "{\"decision\": \"B\", \"confidence\": 0.8}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 5200.284,
+          "predicted_n": 15,
+          "predicted_per_second": 2.8844578488405634,
+          "predicted_per_token_ms": 346.68559999999997,
+          "prompt_ms": 48403.463,
+          "prompt_n": 1119,
+          "prompt_per_second": 23.118180614473804,
+          "prompt_per_token_ms": 43.25599910634495
+        },
+        "truncation": {
+          "candidate_a_chars_original": 2215,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 1514,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 4505,
+          "task_chars_original": 534,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 15,
+          "prompt_tokens": 1119,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1134
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_5987ea782b2d0a44bc3e.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_5987ea782b2d0a44bc3e.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_5987ea782b2d0a44bc3e.response.json"
+        },
+        "confidence": 1,
+        "correct": true,
+        "decision": "B",
+        "gold_label": "B",
+        "latency_ms": 37964.555,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 675,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 1259,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 2983,
+            "prompt_token_count": 799,
+            "task_chars_original": 807,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 799,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:5987ea782b2d0a44bc3e",
+        "scoring_text": "{\"decision\": \"B\", \"confidence\": 1}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 4351.671,
+          "predicted_n": 13,
+          "predicted_per_second": 2.9873581895322507,
+          "predicted_per_token_ms": 334.7439230769231,
+          "prompt_ms": 33581.152,
+          "prompt_n": 805,
+          "prompt_per_second": 23.97178036060228,
+          "prompt_per_token_ms": 41.71571677018634
+        },
+        "truncation": {
+          "candidate_a_chars_original": 675,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 1259,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 2983,
+          "task_chars_original": 807,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 13,
+          "prompt_tokens": 805,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 818
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_70e434e831bc643dd6cc.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_70e434e831bc643dd6cc.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_70e434e831bc643dd6cc.response.json"
+        },
+        "confidence": 1,
+        "correct": true,
+        "decision": "B",
+        "gold_label": "B",
+        "latency_ms": 30190.559,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 389,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 383,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 2424,
+            "prompt_token_count": 594,
+            "task_chars_original": 1410,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 594,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:70e434e831bc643dd6cc",
+        "scoring_text": "{\"decision\": \"B\", \"confidence\": 1}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 4337.159,
+          "predicted_n": 13,
+          "predicted_per_second": 2.99735379772796,
+          "predicted_per_token_ms": 333.62761538461535,
+          "prompt_ms": 25826.108,
+          "prompt_n": 600,
+          "prompt_per_second": 23.232304302297504,
+          "prompt_per_token_ms": 43.04351333333334
+        },
+        "truncation": {
+          "candidate_a_chars_original": 389,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 383,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 2424,
+          "task_chars_original": 1410,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 13,
+          "prompt_tokens": 600,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 613
+        }
+      },
+      {
+        "artifacts": {
+          "prompt": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_555577402a93fd77cca5.prompt.txt",
+          "request": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_555577402a93fd77cca5.request.json",
+          "response": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/artifacts/glm52-ext_judgebench_gpt_555577402a93fd77cca5.response.json"
+        },
+        "confidence": 1,
+        "correct": true,
+        "decision": "B",
+        "gold_label": "B",
+        "latency_ms": 48551.931,
+        "parse_failure": null,
+        "prompt_fit_attempts": [
+          {
+            "candidate_a_chars_original": 1349,
+            "candidate_a_truncated": false,
+            "candidate_b_chars_original": 1158,
+            "candidate_b_truncated": false,
+            "field_chars": 24000,
+            "max_field_chars": 24000,
+            "prompt_chars": 4122,
+            "prompt_token_count": 1044,
+            "task_chars_original": 1373,
+            "task_truncated": false
+          }
+        ],
+        "prompt_token_count": 1044,
+        "prompt_token_max": 15744,
+        "request_error": null,
+        "row_id": "glm52-ext:judgebench:gpt:555577402a93fd77cca5",
+        "scoring_text": "{\"decision\": \"B\", \"confidence\": 1}",
+        "status": "ok",
+        "timings": {
+          "cache_n": 0,
+          "predicted_ms": 4443.18,
+          "predicted_n": 13,
+          "predicted_per_second": 2.9258323993176054,
+          "predicted_per_token_ms": 341.7830769230769,
+          "prompt_ms": 44085.469,
+          "prompt_n": 1050,
+          "prompt_per_second": 23.817371660489766,
+          "prompt_per_token_ms": 41.98616095238095
+        },
+        "truncation": {
+          "candidate_a_chars_original": 1349,
+          "candidate_a_truncated": false,
+          "candidate_b_chars_original": 1158,
+          "candidate_b_truncated": false,
+          "max_field_chars": 24000,
+          "prompt_chars": 4122,
+          "task_chars_original": 1373,
+          "task_truncated": false
+        },
+        "usage": {
+          "completion_tokens": 13,
+          "prompt_tokens": 1050,
+          "prompt_tokens_details": {
+            "cached_tokens": 0
+          },
+          "total_tokens": 1063
+        }
+      }
+    ]
+  },
+  "execution_allowed": true,
+  "generated_at": "2026-07-19T15:45:17.923518+00:00",
+  "inventory": {
+    "blocker_files": [],
+    "hf_tree_manifest": {
+      "matched_shards": 6,
+      "mismatches": [],
+      "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json",
+      "status": "complete"
+    },
+    "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+    "non_cache_shard_count": 6,
+    "non_cache_shards": [
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+        "size": 9423744
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+        "size": 49223976800
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+        "size": 49143176640
+      },
+      {
+        "path": "UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+        "size": 41914650304
+      }
+    ],
+    "primary_shard": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+    "refusal_reasons": [],
+    "required_non_cache_shards": 6,
+    "stale_cache_marker_files": [
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/MXDnX6jasA4bS7RNxjDs33gUqGE=.10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e.d9f0c4e1.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/_S0CJvi02TKjl6SduhlT8xU50Ss=.40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d.8fa26805.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/tis-1RBFRe2FmP4GPVO0QXg__g0=.eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d.f8fbc9ef.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yTEbJ8S6mw7vDbhN2qBkHHJgD4g=.1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b.418eadc0.incomplete",
+        "size": 0
+      },
+      {
+        "path": ".cache/huggingface/download/UD-IQ2_M/yrL2NmK-0aOPSp785Zv2VJFzACA=.251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1.a802498d.incomplete",
+        "size": 36074
+      }
+    ],
+    "status": "ready",
+    "total_shard_bytes_display": "238,577,580,768",
+    "total_shard_gib": 222.19
+  },
+  "library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "measurement_protocol": "p_rev1",
+  "mode": "execute",
+  "model_dir": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M",
+  "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "observation_only": false,
+  "output_dir": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z",
+  "preexisting_processes": [],
+  "prompt_rows": [
+    {
+      "prompt_token_count": 902,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:bd513cdb44e841152cfa",
+      "truncation": {
+        "candidate_a_chars_original": 1919,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 2166,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 5403,
+        "task_chars_original": 1076,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1178,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:aecbd576ea922b28a136",
+      "truncation": {
+        "candidate_a_chars_original": 3571,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 1940,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 7284,
+        "task_chars_original": 1531,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 962,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:7d43ddfcf6f63b564d91",
+      "truncation": {
+        "candidate_a_chars_original": 2093,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 2728,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 5901,
+        "task_chars_original": 838,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 605,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:1441c7e58522b952b521",
+      "truncation": {
+        "candidate_a_chars_original": 1842,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 1199,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 3781,
+        "task_chars_original": 498,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 644,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:d1eb1ad7f8e454f9baf5",
+      "truncation": {
+        "candidate_a_chars_original": 1816,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 1501,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 3977,
+        "task_chars_original": 418,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 972,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:876a4ed1c9768fa610b3",
+      "truncation": {
+        "candidate_a_chars_original": 2677,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 2417,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 5937,
+        "task_chars_original": 601,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 547,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:b9223375a294a17e0f4b",
+      "truncation": {
+        "candidate_a_chars_original": 1242,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 1424,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 3451,
+        "task_chars_original": 543,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 654,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:2a9d2e2cce43fdd6ccd3",
+      "truncation": {
+        "candidate_a_chars_original": 1066,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 1818,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 3647,
+        "task_chars_original": 521,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 970,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:b723ed046ad8790c4b2c",
+      "truncation": {
+        "candidate_a_chars_original": 2035,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 2150,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 5591,
+        "task_chars_original": 1164,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 510,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:dc2a002d6c51b660d07c",
+      "truncation": {
+        "candidate_a_chars_original": 1169,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 1043,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 2567,
+        "task_chars_original": 113,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 773,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:629c4ba99f878fcf1a91",
+      "truncation": {
+        "candidate_a_chars_original": 2070,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 1921,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 4887,
+        "task_chars_original": 654,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 844,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:f78382ebf36110d8cc94",
+      "truncation": {
+        "candidate_a_chars_original": 1893,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 2023,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 4667,
+        "task_chars_original": 509,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 725,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:c538c6002537208c2271",
+      "truncation": {
+        "candidate_a_chars_original": 2499,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 2520,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 5413,
+        "task_chars_original": 152,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1273,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:3d1249af7885c7626e91",
+      "truncation": {
+        "candidate_a_chars_original": 2620,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 2614,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 7407,
+        "task_chars_original": 1931,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1235,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:fe2151ed2845e49bc928",
+      "truncation": {
+        "candidate_a_chars_original": 2544,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 2802,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 7286,
+        "task_chars_original": 1698,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1205,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:c9cfddae4c9db7a03fb8",
+      "truncation": {
+        "candidate_a_chars_original": 2907,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 2753,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 7354,
+        "task_chars_original": 1452,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1283,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:ea53f9ae2e947190c296",
+      "truncation": {
+        "candidate_a_chars_original": 2844,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 3482,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 7810,
+        "task_chars_original": 1242,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1455,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:f63b94976242b46b4026",
+      "truncation": {
+        "candidate_a_chars_original": 3468,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 2737,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 8115,
+        "task_chars_original": 1668,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1233,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:f672d9179e030458f403",
+      "truncation": {
+        "candidate_a_chars_original": 2479,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 2496,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 7151,
+        "task_chars_original": 1934,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 1182,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:0980c4cac73909c8be88",
+      "truncation": {
+        "candidate_a_chars_original": 3238,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 1779,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 6792,
+        "task_chars_original": 1533,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 793,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:e41c4d4805daa532f9f6",
+      "truncation": {
+        "candidate_a_chars_original": 2215,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 1514,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 4505,
+        "task_chars_original": 534,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 392,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:5987ea782b2d0a44bc3e",
+      "truncation": {
+        "candidate_a_chars_original": 675,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 1259,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 2983,
+        "task_chars_original": 807,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 356,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:70e434e831bc643dd6cc",
+      "truncation": {
+        "candidate_a_chars_original": 389,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 383,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 2424,
+        "task_chars_original": 1410,
+        "task_truncated": false
+      }
+    },
+    {
+      "prompt_token_count": 628,
+      "prompt_token_max": 15744,
+      "row_id": "glm52-ext:judgebench:gpt:555577402a93fd77cca5",
+      "truncation": {
+        "candidate_a_chars_original": 1349,
+        "candidate_a_truncated": false,
+        "candidate_b_chars_original": 1158,
+        "candidate_b_truncated": false,
+        "max_field_chars": 24000,
+        "prompt_chars": 4122,
+        "task_chars_original": 1373,
+        "task_truncated": false
+      }
+    }
+  ],
+  "protocol_attestation": "MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719",
+  "refusal_reasons": [],
+  "request": {
+    "band": "p12000_tk16384",
+    "context_length": 16384,
+    "endpoint": "chat",
+    "era": "p_rev1_attested",
+    "indexer_top_k": 16384,
+    "max_field_chars": 24000,
+    "max_tokens": 128,
+    "prompt_guard_tokens": 512,
+    "response_schema": {
+      "confidence": "number|null",
+      "decision": [
+        "A",
+        "B"
+      ]
+    },
+    "rubric_version": "glm52_external_pairwise_exact_match_v1",
+    "seed": 52,
+    "temperature": 0.0,
+    "timeout_s": 1800
+  },
+  "rows": {
+    "gold_label_counts": {
+      "A": 12,
+      "B": 12
+    },
+    "n": 24,
+    "row_ids": [
+      "glm52-ext:judgebench:gpt:bd513cdb44e841152cfa",
+      "glm52-ext:judgebench:gpt:aecbd576ea922b28a136",
+      "glm52-ext:judgebench:gpt:7d43ddfcf6f63b564d91",
+      "glm52-ext:judgebench:gpt:1441c7e58522b952b521",
+      "glm52-ext:judgebench:gpt:d1eb1ad7f8e454f9baf5",
+      "glm52-ext:judgebench:gpt:876a4ed1c9768fa610b3",
+      "glm52-ext:judgebench:gpt:b9223375a294a17e0f4b",
+      "glm52-ext:judgebench:gpt:2a9d2e2cce43fdd6ccd3",
+      "glm52-ext:judgebench:gpt:b723ed046ad8790c4b2c",
+      "glm52-ext:judgebench:gpt:dc2a002d6c51b660d07c",
+      "glm52-ext:judgebench:gpt:629c4ba99f878fcf1a91",
+      "glm52-ext:judgebench:gpt:f78382ebf36110d8cc94",
+      "glm52-ext:judgebench:gpt:c538c6002537208c2271",
+      "glm52-ext:judgebench:gpt:3d1249af7885c7626e91",
+      "glm52-ext:judgebench:gpt:fe2151ed2845e49bc928",
+      "glm52-ext:judgebench:gpt:c9cfddae4c9db7a03fb8",
+      "glm52-ext:judgebench:gpt:ea53f9ae2e947190c296",
+      "glm52-ext:judgebench:gpt:f63b94976242b46b4026",
+      "glm52-ext:judgebench:gpt:f672d9179e030458f403",
+      "glm52-ext:judgebench:gpt:0980c4cac73909c8be88",
+      "glm52-ext:judgebench:gpt:e41c4d4805daa532f9f6",
+      "glm52-ext:judgebench:gpt:5987ea782b2d0a44bc3e",
+      "glm52-ext:judgebench:gpt:70e434e831bc643dd6cc",
+      "glm52-ext:judgebench:gpt:555577402a93fd77cca5"
+    ],
+    "source_counts": {
+      "judgebench|gpt": 24
+    }
+  },
+  "rows_jsonl": "/mnt/raid0/llm/epyc-inference-research/docs/data/glm52_external_judgebench_gpt_n24_rows_20260719.jsonl",
+  "schema": "glm52_external_ground_truth_direct_runner.v1",
+  "server": {
+    "context_length": 16384,
+    "extra_args": [
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"A\",\"B\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1}}}"
+    ],
+    "indexer_top_k": 16384,
+    "indexer_top_k_override": "glm-dsa.attention.indexer.top_k=int:16384",
+    "log_file": "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/logs/glm52_external__p12000_tk16384.server.log",
+    "metrics": true,
+    "port": 19570,
+    "server_command": [
+      "env",
+      "-i",
+      "PATH=/usr/bin:/bin",
+      "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+      "OMP_NUM_THREADS=1",
+      "numactl",
+      "--interleave=all",
+      "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+      "-m",
+      "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "--override-kv",
+      "glm-dsa.attention.indexer.top_k=int:16384",
+      "--device",
+      "none",
+      "-ngl",
+      "0",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "19570",
+      "-c",
+      "16384",
+      "-t",
+      "96",
+      "-ub",
+      "512",
+      "--log-verbosity",
+      "4",
+      "--log-file",
+      "/mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/logs/glm52_external__p12000_tk16384.server.log",
+      "--metrics",
+      "--reasoning-format",
+      "deepseek",
+      "--reasoning",
+      "off",
+      "--reasoning-budget",
+      "0",
+      "--json-schema",
+      "{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"A\",\"B\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1}}}"
+    ],
+    "server_command_shell": "env -i PATH=/usr/bin:/bin LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf --override-kv glm-dsa.attention.indexer.top_k=int:16384 --device none -ngl 0 --host 127.0.0.1 --port 19570 -c 16384 -t 96 -ub 512 --log-verbosity 4 --log-file /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/logs/glm52_external__p12000_tk16384.server.log --metrics --reasoning-format deepseek --reasoning off --reasoning-budget 0 --json-schema '{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"decision\",\"confidence\"],\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"A\",\"B\"]},\"confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1}}}'",
+    "threads": 96,
+    "trace_logs": true,
+    "ubatch": 512
+  }
+}

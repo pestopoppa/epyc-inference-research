@@ -30,6 +30,7 @@ SCHEMA = "glm52_external_ground_truth_direct_runner.v1"
 RUN_MANIFEST_SCHEMA = "glm52_external_ground_truth_direct_run_manifest.v1"
 DEFAULT_RUBRIC_VERSION = "glm52_external_pairwise_exact_match_v1"
 DEFAULT_ERA = "external_ground_truth_no_inference"
+P_REV1_ERA = "p_rev1_attested"
 MEASUREMENT_PROTOCOL_OBSERVATION = "external_ground_truth_observation"
 MEASUREMENT_PROTOCOL_P_REV1 = "p_rev1"
 MEASUREMENT_PROTOCOLS = (MEASUREMENT_PROTOCOL_OBSERVATION, MEASUREMENT_PROTOCOL_P_REV1)
@@ -259,6 +260,7 @@ def score_saved_responses(rows: list[dict[str, Any]], response_rows: Iterable[di
                 "source_suite": gold_row.get("source_suite"),
                 "correct": scored["correct"],
                 "parse_failure": scored["parse_failure"],
+                "confidence_warning": scored.get("confidence_warning"),
                 "era": plan["request"]["era"],
             }
         )
@@ -276,6 +278,9 @@ def score_saved_responses(rows: list[dict[str, Any]], response_rows: Iterable[di
             "parse_failures": parse_failures,
             "parse_failure_rate": (parse_failures / len(decisions)) if decisions else None,
             "decision_counts": dict(Counter(row["decision"] for row in decisions)),
+            "confidence_warning_counts": dict(
+                Counter(str(row["confidence_warning"]["reason"]) for row in decisions if row.get("confidence_warning"))
+            ),
         },
     }
 
@@ -378,6 +383,7 @@ def call_row(row: dict[str, Any], *, plan: dict[str, Any], output_dir: Path) -> 
         "confidence": scored.get("confidence"),
         "correct": scored["correct"],
         "parse_failure": scored["parse_failure"],
+        "confidence_warning": scored.get("confidence_warning"),
         "prompt_token_count": prompt_info["prompt_token_count"],
         "prompt_token_max": prompt_info["prompt_token_max"],
         "prompt_fit_attempts": prompt_info["prompt_fit_attempts"],
@@ -408,6 +414,7 @@ def live_decision_row(row: dict[str, Any], result: dict[str, Any], *, plan: dict
         "source_suite": row.get("source_suite"),
         "correct": result["correct"],
         "parse_failure": result["parse_failure"],
+        "confidence_warning": result.get("confidence_warning"),
         "latency_ms": result.get("latency_ms"),
         "tokens": (result.get("usage") or {}).get("completion_tokens"),
         "era": plan["request"]["era"],
@@ -425,6 +432,9 @@ def summarize_decisions(decisions: list[dict[str, Any]]) -> dict[str, Any]:
         "parse_failures": parse_failures,
         "parse_failure_rate": (parse_failures / len(decisions)) if decisions else None,
         "decision_counts": dict(Counter(str(row.get("decision")) for row in decisions)),
+        "confidence_warning_counts": dict(
+            Counter(str(row["confidence_warning"]["reason"]) for row in decisions if row.get("confidence_warning"))
+        ),
         "gold_label_counts": dict(Counter(str(row.get("gold_label")) for row in decisions)),
     }
 
@@ -517,8 +527,9 @@ def write_score_outputs(args: argparse.Namespace, plan: dict[str, Any], rows: li
     run_manifest = {
         "schema": RUN_MANIFEST_SCHEMA,
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "observation_only": True,
+        "observation_only": bool(plan.get("observation_only", True)),
         "measurement_protocol": plan["measurement_protocol"],
+        "protocol_attestation": plan.get("protocol_attestation"),
         "rows_jsonl": str(args.rows_jsonl),
         "responses_jsonl": str(args.score_responses_jsonl),
         "decisions_path": str(decisions_path),
@@ -557,6 +568,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.set_defaults(trace_logs=True)
     parser.add_argument("--metrics", action="store_true")
     args = parser.parse_args(argv)
+    if args.measurement_protocol == MEASUREMENT_PROTOCOL_P_REV1 and args.era == DEFAULT_ERA:
+        args.era = P_REV1_ERA
     args.rows_jsonl = args.rows_jsonl.expanduser().resolve()
     if args.output_dir is None:
         args.output_dir = Path("data") / "glm52_external_ground_truth_direct" / utc_stamp()
