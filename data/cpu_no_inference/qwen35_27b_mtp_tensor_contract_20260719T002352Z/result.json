@@ -1,0 +1,18 @@
+{
+  "architecture": "qwen35",
+  "descriptor_extraction": true,
+  "execution_device": "CPU",
+  "gpu_used": false,
+  "inference": false,
+  "qwen_specific_validator": false,
+  "schema": "epyc.cpu_no_inference_tensor_contract_audit.v1",
+  "selected_metadata": {
+    "general.architecture": "qwen35",
+    "qwen35.attention.head_count": 24,
+    "qwen35.attention.head_count_kv": 4,
+    "qwen35.block_count": 65,
+    "qwen35.embedding_length": 5120,
+    "qwen35.nextn_predict_layers": 1
+  },
+  "tensor_count": 46
+}

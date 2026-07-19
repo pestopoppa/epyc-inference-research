@@ -1,0 +1,17 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z",
+  "model": "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "device": "MI210 ROCm0",
+  "preflight_gpu_busy": false,
+  "startup_ready_s": 7.125,
+  "http_code": 200,
+  "request_wall_s": 0.86,
+  "content_exact": true,
+  "content": "{\"status\":\"ok\",\"model\":\"qwen35_122b_iq2m\"}",
+  "prompt_tps": 120.257183,
+  "decode_tps": 45.370367,
+  "prompt_tokens": 43,
+  "completion_tokens": 22,
+  "cleanup_result": "server_pid_dead"
+}

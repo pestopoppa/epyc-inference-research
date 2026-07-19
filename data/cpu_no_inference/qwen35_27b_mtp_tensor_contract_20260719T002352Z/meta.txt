@@ -1,0 +1,9 @@
+task=qwen35_27b_mtp_header_only_tensor_contract
+started_utc=2026-07-19T00:23:52Z
+model=/mnt/raid0/llm/models/Qwen3.5-27B-MTP-Q4_K_M.gguf
+model_bytes=17106773056
+inference=false
+execution_device=CPU
+gpu_used=false
+finished_utc=2026-07-19T00:23:57Z
+exit_code=0

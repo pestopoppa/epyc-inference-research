@@ -1,0 +1,1 @@
+uv run --with numpy python scripts/benchmark/gguf_tensor_contract.py MODEL --tensor-regex nextn --tensor-regex blk-layer --metadata-regex architecture --metadata-regex shape-keys --output contract.json

@@ -2282,6 +2282,68 @@ roles:
       pinned: false
     benchmark_date: null
     notes: 256 total experts, 8 active. MoE reduction tests [4,6]. 3 shards.
+  qwen35_122b_iq2m:
+    tier: B
+    description: Qwen3.5-122B-A10B UD-IQ2_M — GPU-resident architect/drafter research candidate
+    model:
+      name: Qwen3.5-122B-A10B
+      path: /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf
+      quant: UD-IQ2_M
+      size_gb: 37.6
+      architecture: qwen35moe
+      baseline_experts: 8
+    artifact_status:
+      download: complete
+      observed_date: 2026-07-19
+      file_bytes: 40377862848
+    candidate_roles:
+    - architect
+    - gpu_resident_architect
+    - drafter_control_research
+    acceleration:
+      type: gpu_residency
+      notes: >
+        Sub-4-bit quantization fits fully on the 64 GB MI210 and is intended
+        for Gate-R / architect-residency and drafter-control experiments, not
+        production stack registration without the role quality gates.
+    constraints:
+      forbid:
+      - production_stack_registration_without_quality_gate
+      - decision_grade_claim_from_smoke_only
+      reason: >
+        Fresh current-v7 bounded MI210 smoke passed, but role admission still
+        requires the documented architect quality/eval gates and, for
+        production, P-GPU-1 measurement ratification.
+    performance:
+      benchmark_status: bounded_mi210_smoke_pass_context_observed_quality_gate_open
+      load_smoke_observation: >
+        2026-07-19 experimental-v7 source-head MI210 server smoke loaded in
+        7.125s, returned exact `{"status":"ok","model":"qwen35_122b_iq2m"}`,
+        and reported prompt eval 120.26 t/s over 43 tokens plus completion
+        45.37 t/s over 22 tokens. Cleanup verified no remaining KFD process.
+      context_observation: >
+        2026-07-19 experimental-v7 source-head MI210 llama-bench context run
+        measured prompt-only `pp512 736.96 t/s`, decode-only `tg512 44.94-45.06
+        t/s`, combined `pp2048+tg512 180.15 t/s`, and `pp4096+tg512 269.32
+        t/s`. The JSON rows completed and a manual cleanup check found no
+        residual llama/KFD process, but the wrapper postflight failed to write
+        `exit_code.txt`; treat as observation-grade, not a clean canonical
+        measurement.
+      evidence:
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/metrics_summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/summary.md
+    memory:
+      residency: cold
+      pinned: false
+      gpu_only_candidate: true
+      cpu_only_candidate: false
+      hybrid_candidate: true
+      notes: "Observed smoke used about 41 GB VRAM, leaving headroom on MI210."
+    benchmark_plan:
+      gpu_only: "Run the architect quality gate before any production claim; repeat context under canonical wrapper if it becomes decision-grade."
+      cpu_only: "Not a useful primary lane for this quant; Q4 CPU architect remains the production comparison."
+      cpu_gpu_hybrid: "Use only for drafter-control/residency experiments after the gpu-only quality baseline is understood."
   qwen35_397b_q4kxl:
     tier: B
     description: Qwen3.5-397B-A17B Q4_K_XL — architect candidate (MoE, 512 experts, 10 active)
