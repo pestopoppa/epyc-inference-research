@@ -1,0 +1,100 @@
+{
+  "dataset": {
+    "available": {
+      "fail_to_pass_total": 1516,
+      "gold_label_counts": {
+        "accept": 500
+      },
+      "n": 500,
+      "pass_to_pass_total": 60142,
+      "repo_counts": {
+        "astropy/astropy": 22,
+        "django/django": 231,
+        "matplotlib/matplotlib": 34,
+        "mwaskom/seaborn": 2,
+        "pallets/flask": 1,
+        "psf/requests": 8,
+        "pydata/xarray": 22,
+        "pylint-dev/pylint": 10,
+        "pytest-dev/pytest": 19,
+        "scikit-learn/scikit-learn": 32,
+        "sphinx-doc/sphinx": 44,
+        "sympy/sympy": 75
+      },
+      "task_kind_counts": {
+        "patch_review_oracle": 500
+      }
+    },
+    "file_sha256": "43ed5a3d1d98da36472c1ade65ddd2085d7b4ff694fcaf6a023a07c5c1f32f21",
+    "gold_instrument_version": "file-sha256:43ed5a3d1d98da36472c1ade65ddd2085d7b4ff694fcaf6a023a07c5c1f32f21",
+    "kind": "swe-bench-verified",
+    "path": "/mnt/raid0/llm/datasets/swe-bench-verified/data/test-00000-of-00001.parquet",
+    "selected": {
+      "fail_to_pass_total": 30,
+      "gold_label_counts": {
+        "accept": 24
+      },
+      "n": 24,
+      "pass_to_pass_total": 1449,
+      "repo_counts": {
+        "astropy/astropy": 1,
+        "django/django": 11,
+        "pydata/xarray": 1,
+        "pylint-dev/pylint": 1,
+        "sphinx-doc/sphinx": 2,
+        "sympy/sympy": 8
+      },
+      "task_kind_counts": {
+        "patch_review_oracle": 24
+      }
+    },
+    "selected_row_ids": [
+      "glm52-swebench-verified:aaac35f5684e0cd7d324",
+      "glm52-swebench-verified:9cad4fccd76d792011bd",
+      "glm52-swebench-verified:8b01d0ce2fd481542629",
+      "glm52-swebench-verified:135cab909bed3632729c",
+      "glm52-swebench-verified:1ff5b0646b7d0585cb5e",
+      "glm52-swebench-verified:7a9145c53c881bc60ba2",
+      "glm52-swebench-verified:7796098912154409596a",
+      "glm52-swebench-verified:dd8cb81b28d9d1a50b61",
+      "glm52-swebench-verified:e975812011ab21814f67",
+      "glm52-swebench-verified:21d534d11a3921e7aed6",
+      "glm52-swebench-verified:3ab2791b333e454dcfe6",
+      "glm52-swebench-verified:16cd07cd421c1e8ce001",
+      "glm52-swebench-verified:e3d60cf958a3bd8d5466",
+      "glm52-swebench-verified:5effe256ffa7220a85fe",
+      "glm52-swebench-verified:0350babf917e900e18d6",
+      "glm52-swebench-verified:b095de3514463921d358",
+      "glm52-swebench-verified:a6fc52f8b61b30f052b7",
+      "glm52-swebench-verified:086e0babe6296b770052",
+      "glm52-swebench-verified:c93041c5b6e3811dde1a",
+      "glm52-swebench-verified:5eabd55911d8aa19f493",
+      "glm52-swebench-verified:e4bf08601465811f09a0",
+      "glm52-swebench-verified:39e7c1e9a17469854015",
+      "glm52-swebench-verified:1ba5df6cf0c13fe8918e",
+      "glm52-swebench-verified:d203b2f1a5a87af13f7d"
+    ]
+  },
+  "execution": {
+    "docker_allowed": false,
+    "inference_allowed": false,
+    "live_execution_allowed": false,
+    "server_or_model_load_allowed": false
+  },
+  "generated_at": "2026-07-19T15:35:01.118282+00:00",
+  "mode": "dry-run",
+  "oracle_contract": {
+    "candidate_field": "patch",
+    "gold_confidence": "test_oracle",
+    "gold_label": "accept",
+    "gold_source": "swe-bench-verified",
+    "oracle_fields": [
+      "FAIL_TO_PASS",
+      "PASS_TO_PASS"
+    ],
+    "task_field": "problem_statement",
+    "task_kind": "patch_review_oracle"
+  },
+  "refusal_reasons": [],
+  "schema": "glm52_swebench_verified_adapter.v1"
+}
