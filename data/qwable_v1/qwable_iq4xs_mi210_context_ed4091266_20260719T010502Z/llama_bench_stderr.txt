@@ -1,0 +1,23 @@
+ggml_cuda_init: found 1 ROCm devices (Total VRAM: 65520 MiB):
+  Device 0: AMD Instinct MI210, gfx90a:sramecc+:xnack- (0x90a), VMM: no, Wave Size: 64, VRAM: 65520 MiB
+llama-bench: benchmark 1/5: starting
+llama-bench: benchmark 1/5: warmup prompt run
+llama-bench: benchmark 1/5: prompt run 1/1
+llama-bench: benchmark 2/5: starting
+llama-bench: benchmark 2/5: warmup generation run
+llama-bench: benchmark 2/5: generation run 1/1
+llama-bench: benchmark 3/5: starting
+llama-bench: benchmark 3/5: warmup prompt run
+llama-bench: benchmark 3/5: warmup generation run
+llama-bench: benchmark 3/5: prompt run 1/1
+llama-bench: benchmark 3/5: generation run 1/1
+llama-bench: benchmark 4/5: starting
+llama-bench: benchmark 4/5: warmup prompt run
+llama-bench: benchmark 4/5: warmup generation run
+llama-bench: benchmark 4/5: prompt run 1/1
+llama-bench: benchmark 4/5: generation run 1/1
+llama-bench: benchmark 5/5: starting
+llama-bench: benchmark 5/5: warmup prompt run
+llama-bench: benchmark 5/5: warmup generation run
+llama-bench: benchmark 5/5: prompt run 1/1
+llama-bench: benchmark 5/5: generation run 1/1
