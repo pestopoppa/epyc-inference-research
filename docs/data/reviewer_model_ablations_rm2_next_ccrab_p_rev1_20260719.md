@@ -11,7 +11,7 @@ Protocol: `P-REV-1`, attestation `MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719`
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | A0 objective-verifier floor | `data/reviewer_model_ablations/rm2-next-a0-objective-floor-ccrab-p-rev1-20260719T205208Z` | 0.0% | 0.0% | undefined | 0.000 | 0.000 | 0.0% | 0.0s |
 | A3 same-family GPU heavyweight, Qwen3.5-122B UD-IQ2_M | `data/reviewer_model_ablations/rm2-next-a3-qwen35-122b-iq2-ccrab-p-rev1-20260719T204845Z` | 12.5% | 58.3% | 0.513 | 0.302 | 0.319 | 0.0% | 5.5s |
-| A1 status-quo architect self-review | `data/reviewer_model_ablations/rm2-next-a1-architect-statusquo-ccrab-p-rev1-dryrun-20260719T205239Z` | not run | not run | not run | not run | not run | not run | not run |
+| A1 status-quo architect self-review, Qwen3.5-122B UD-Q4_K_M CPU | `data/reviewer_model_ablations/rm2-next-a1-architect-statusquo-ccrab-p-rev1-20260719T210513Z` | 45.8% | 41.7% | 0.463 | 0.385 | 0.397 | 0.0% | 41.4s |
 
 Comparator context from the earlier same-slice slate:
 
@@ -27,6 +27,6 @@ Comparator context from the earlier same-slice slate:
 - A0 is a no-inference objective floor/ceiling for the calibration plumbing, not a deployable reviewer.
 - A3 materially reduces false accepts versus GLM (`12.5%` vs `41.7%`) but false-rejects most good patches (`58.3%`), so it is not a production reviewer replacement.
 - A3's AUC remains near random (`0.513`), matching the broader finding that this prompt/schema family is not separating the C-CRAB accept/reject boundary cleanly.
-- A1 is dry-run scaffolded only; it still requires a live CPU status-quo architect run if the operator wants the exact self-review baseline.
+- A1 status-quo self-review is parse-clean but worse than GLM on the matched C-CRAB slice (`FA 45.8%`, `FR 41.7%`, `AUC 0.463`, `ECE 0.385`) and is too slow for ordinary reviewer use on CPU (`2164.234s` total wall, median row wall `41.4s`).
 
-Decision-grade conclusion: RM-2.next does not produce a clean reviewer route. The reviewer/control-plane choice remains a policy decision or requires a new repair hypothesis / RM-3 screening path.
+Decision-grade conclusion: RM-2.next is complete and does not produce a clean reviewer route. The reviewer/control-plane choice remains a policy decision or requires a new repair hypothesis / RM-3 screening path.

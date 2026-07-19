@@ -2287,11 +2287,34 @@ roles:
       baseline_tps: null
       optimized_tps: null
       speedup: null
+      measured:
+      - protocol: p_rev1
+        instrument_era: p_rev1_attested
+        attestation: MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719
+        date: 2026-07-19
+        role: patch_reviewer
+        corpus: c-crab
+        slice: GC-shadow-repair4b.2c
+        n: 48
+        accept_controls: 24
+        hard_negatives: 24
+        reviewer_arm: architect_general_self_review_status_quo
+        false_accept_rate: 0.458
+        false_reject_rate: 0.417
+        auc: 0.463
+        ece: 0.385
+        brier: 0.397
+        parse_failure_rate: 0.0
+        median_latency_seconds: 41.4
+        total_wall_seconds: 2164.234
+        role_ready: false
+        verdict: status_quo_self_review_failed_patch_reviewer
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-next-a1-architect-statusquo-ccrab-p-rev1-20260719T210513Z
     memory:
       residency: cold
       pinned: false
     benchmark_date: null
-    notes: 256 total experts, 8 active. MoE reduction tests [4,6]. 3 shards.
+    notes: 256 total experts, 8 active. MoE reduction tests [4,6]. 3 shards. A1 status-quo self-review failed C-CRAB P-REV-1 patch-review admission on 2026-07-19.
   qwen35_122b_iq2m:
     tier: B
     description: Qwen3.5-122B-A10B UD-IQ2_M — GPU-resident architect/drafter research candidate
