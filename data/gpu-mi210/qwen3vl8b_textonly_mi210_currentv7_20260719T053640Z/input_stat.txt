@@ -1,0 +1,2 @@
+/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench 17984 bytes mtime=2026-07-19 04:45:47.679234461 +0000
+/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf 5027784800 bytes mtime=2026-02-10 16:06:31.896015143 +0000

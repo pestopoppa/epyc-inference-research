@@ -1,0 +1,41 @@
+{
+  "artifact_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen3vl8b_textonly_mi210_currentv7_20260719T053640Z",
+  "exit_code": 0,
+  "model": "/mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench",
+  "experimental_commit": "6a8dd5ea680860f790f98136cc370e400c3dabe3",
+  "rows": [
+    {
+      "n_prompt": 2048,
+      "n_gen": 0,
+      "avg_ts": 2275.956946,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        2275.96
+      ],
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "model_type": "qwen3vl 8B Q4_K - Medium",
+      "build_commit": "6a8dd5ea6",
+      "build_number": 10097
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 1024,
+      "avg_ts": 105.99538,
+      "stddev_ts": 0.0,
+      "samples_ts": [
+        105.995
+      ],
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "model_type": "qwen3vl 8B Q4_K - Medium",
+      "build_commit": "6a8dd5ea6",
+      "build_number": 10097
+    }
+  ]
+}

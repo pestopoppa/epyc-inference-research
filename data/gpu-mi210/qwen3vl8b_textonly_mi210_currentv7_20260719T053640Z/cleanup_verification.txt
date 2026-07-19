@@ -1,0 +1,7 @@
+--- cleanup verification ---
+gpu_benchmark_process_absent=true
+preexisting_cpu_r1_pid=289984
+preexisting_cpu_r1_unchanged=true
+rocm_smi_gpu_benchmark_present=false
+rocm_smi_kfd_processes=none
+rocm_smi_vram_allocated_percent=0
