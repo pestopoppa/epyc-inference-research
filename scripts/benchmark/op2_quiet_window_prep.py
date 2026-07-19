@@ -312,16 +312,101 @@ for pid in $(pgrep -f '/mnt/raid0/llm/llama.cpp/build/bin/llama-server' || true)
     > "$OP2_RUN_ROOT/live-v6/pid-${{pid}}/maps.llama.txt" || true
 done
 
-cat > "$OP2_RUN_ROOT/live-v6/README.role_smokes.md" <<'EOF'
-# Live v6 role smokes
+cat > "$OP2_RUN_ROOT/live-v6/role_smoke_ports.tsv" <<'EOF'
+frontdoor 8070
+worker_general 8072
+architect_general 8083
+ingest_long_context 8085
+worker_vision 8086
+vision_escalation 8087
+EOF
 
-For each hot role/port from orchestrator_stack status, run one fixed request and
-record role, port, pid, request JSON, response JSON, exact OP2_READY pass/fail,
-latency, usage/timing fields, and output hash.
-
-Example request body:
+cat > "$OP2_RUN_ROOT/live-v6/role_smoke_request.json" <<'EOF'
 {{"model":"local","messages":[{{"role":"user","content":"Return exactly: OP2_READY"}}],"temperature":0,"seed":42,"max_tokens":32}}
 EOF
+
+cat > "$OP2_RUN_ROOT/live-v6/role_smoke_check.py" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+role, port, response_path, meta_path, out_path = sys.argv[1:]
+response_text = Path(response_path).read_text(encoding="utf-8")
+meta_text = Path(meta_path).read_text(encoding="utf-8")
+try:
+    response = json.loads(response_text)
+except json.JSONDecodeError as exc:
+    response = None
+    content = ""
+    parse_error = str(exc)
+else:
+    choice = (response.get("choices") or [{{}}])[0]
+    message = choice.get("message") or {{}}
+    content = message.get("content") or choice.get("text") or ""
+    parse_error = None
+try:
+    curl_meta = json.loads(meta_text)
+except json.JSONDecodeError:
+    curl_meta = dict(raw=meta_text.strip())
+ok = content.strip() == "OP2_READY"
+out = dict(
+    role=role,
+    port=int(port),
+    ok=ok,
+    expected="OP2_READY",
+    content=content,
+    content_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+    response_parse_error=parse_error,
+    usage=(response or {{}}).get("usage"),
+    timings=(response or {{}}).get("timings"),
+    curl=curl_meta,
+)
+Path(out_path).write_text(json.dumps(out, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+print(json.dumps(out, sort_keys=True))
+PY
+
+: > "$OP2_RUN_ROOT/live-v6/role_smoke_summary.jsonl"
+while read -r role port; do
+  role_dir="$OP2_RUN_ROOT/live-v6/role-${{role}}"
+  mkdir -p "$role_dir"
+  cp "$OP2_RUN_ROOT/live-v6/role_smoke_request.json" "$role_dir/request.json"
+  if curl -sS --max-time 180 \\
+      -H 'Content-Type: application/json' \\
+      -o "$role_dir/response.json" \\
+      -w '{{"http_code":%{{http_code}},"time_total":%{{time_total}},"remote_ip":"%{{remote_ip}}","remote_port":%{{remote_port}}}}\\n' \\
+      "http://127.0.0.1:${{port}}/v1/chat/completions" \\
+      -d @"$role_dir/request.json" \\
+      > "$role_dir/curl_meta.json"; then
+    python3 "$OP2_RUN_ROOT/live-v6/role_smoke_check.py" \\
+      "$role" "$port" "$role_dir/response.json" "$role_dir/curl_meta.json" "$role_dir/check.json" \\
+      >> "$OP2_RUN_ROOT/live-v6/role_smoke_summary.jsonl"
+  else
+    rc=$?
+    printf '{{"role":"%s","port":%s,"ok":false,"curl_exit":%s}}\\n' "$role" "$port" "$rc" \\
+      | tee "$role_dir/check.json" >> "$OP2_RUN_ROOT/live-v6/role_smoke_summary.jsonl"
+  fi
+done < "$OP2_RUN_ROOT/live-v6/role_smoke_ports.tsv"
+
+python3 - "$OP2_RUN_ROOT/live-v6/role_smoke_summary.jsonl" "$OP2_RUN_ROOT/live-v6/role_smoke_aggregate.json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+summary_path = Path(sys.argv[1])
+aggregate_path = Path(sys.argv[2])
+rows = [json.loads(line) for line in summary_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+aggregate = dict(
+    schema="epyc.op2.live_v6_role_smoke.v1",
+    row_n=len(rows),
+    pass_n=sum(1 for row in rows if row.get("ok") is True),
+    fail_n=sum(1 for row in rows if row.get("ok") is not True),
+    roles=[row.get("role") for row in rows],
+    all_pass=all(row.get("ok") is True for row in rows) if rows else False,
+)
+aggregate_path.write_text(json.dumps(aggregate, indent=2, sort_keys=True) + "\\n", encoding="utf-8")
+print(json.dumps(aggregate, sort_keys=True))
+PY
 
 cd /mnt/raid0/llm/epyc-inference-research
 python3 scripts/benchmark/cpu_bench_clean_preflight.py \\

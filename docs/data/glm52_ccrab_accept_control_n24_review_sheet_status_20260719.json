@@ -1,0 +1,8 @@
+{
+  "audit_packet": "docs/data/glm52_ccrab_accept_control_n24_audit_packet_20260718.json",
+  "note": "This helper emits/applies explicit review decisions only; machine recommendations are advisory and are never converted to signoff decisions.",
+  "review_csv_written": "docs/data/glm52_ccrab_accept_control_n24_review_sheet_20260719.csv",
+  "review_row_n": 24,
+  "schema": "glm52_ccrab_accept_control_review_sheet.v1",
+  "signed_packet_written": null
+}

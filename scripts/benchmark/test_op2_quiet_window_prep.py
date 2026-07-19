@@ -103,6 +103,10 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
             self.assertIn(f'OP2_RUN_ROOT:-{bundle.resolve()}', commands)
             self.assertIn("bench_canonical.sh", commands)
             self.assertIn("orchestrator_stack.py status", commands)
+            self.assertIn("role_smoke_ports.tsv", commands)
+            self.assertIn("/v1/chat/completions", commands)
+            self.assertIn("role_smoke_aggregate.json", commands)
+            self.assertNotIn("README.role_smokes.md", commands)
 
             loaded = json.loads((bundle / "manifest.json").read_text())
             self.assertEqual(loaded["schema"], op2.SCHEMA)
