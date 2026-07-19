@@ -2337,11 +2337,21 @@ roles:
         cleanup verified no KFD PIDs. Caveat: auto reasoning consumed the
         384-token budget without final content in the initial probe, so
         reasoning-mode policy remains open.
+      reasoning_policy_observation: >
+        2026-07-19 MI210 reasoning-mode characterization showed `--reasoning
+        auto` is not usable for bounded architect responses at 1024 tokens:
+        `0/4` prompts produced final content and all stopped by length with
+        reasoning-only output. The paired `--reasoning off` arm passed `4/4`
+        with normal stop reasons. Decode was effectively unchanged (`43.94 t/s`
+        auto vs `44.30 t/s` off), so prefer reasoning-off for this candidate
+        until the template/termination behavior is fixed or an unrestricted
+        budget study proves otherwise.
       evidence:
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/metrics_summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/summary.md
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002502Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/summary.md
     memory:
       residency: cold
       pinned: false
