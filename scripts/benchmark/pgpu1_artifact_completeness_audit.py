@@ -83,6 +83,16 @@ FIELD_RULES: tuple[FieldRule, ...] = (
         ),
     ),
     FieldRule(
+        key="production_named_kernel_identity",
+        label="production-named kernel identity",
+        required=True,
+        patterns=(
+            r"production_named_kernel['\"]?\s*:\s*true",
+            r"production-consolidated-v[0-9]",
+        ),
+        near_patterns=(r"llama\.cpp-experimental", r"experimental-v7", r"v7-candidate"),
+    ),
+    FieldRule(
         key="warmup_discard_policy",
         label="explicit warm-up/discard policy",
         required=True,

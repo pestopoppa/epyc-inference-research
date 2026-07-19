@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import hashlib
 import json
 import os
 import re
@@ -589,14 +590,43 @@ def collect_process_blockers() -> list[dict[str, Any]]:
     return blockers
 
 
+def collect_binary_git_state(binary: Path) -> dict[str, Any]:
+    binary_dir = runtime_library_dir(binary)
+    root = run_capture(["git", "-C", str(binary_dir), "rev-parse", "--show-toplevel"], timeout=10)
+    if not root["ok"]:
+        return {
+            "binary_dir": str(binary_dir),
+            "root": None,
+            "root_probe": root,
+            "head": None,
+            "status": None,
+            "branch": None,
+            "production_named_kernel": False,
+        }
+    root_path = Path(root["stdout"].strip())
+    branch = run_capture(["git", "-C", str(root_path), "branch", "--show-current"], timeout=10)
+    branch_name = branch["stdout"].strip() if branch["ok"] else ""
+    return {
+        "binary_dir": str(binary_dir),
+        "root": str(root_path),
+        "root_probe": root,
+        "head": run_capture(["git", "-C", str(root_path), "rev-parse", "--short", "HEAD"], timeout=10),
+        "status": run_capture(["git", "-C", str(root_path), "status", "--short"], timeout=10),
+        "branch": branch,
+        "production_named_kernel": branch_name.startswith("production-consolidated-v"),
+    }
+
+
 def collect_guard_state(binary: Path) -> dict[str, Any]:
     lib_dir = runtime_library_dir(binary)
+    binary_git = collect_binary_git_state(binary)
     return {
         "captured_at": utc_now(),
         "binary": str(binary),
         "runtime_library_dir": str(lib_dir),
         "server_version": run_capture([*runtime_env_prefix(binary), str(binary), "--version"], timeout=30),
         "git": {
+            "binary": binary_git,
             "experimental_head": run_capture(
                 ["git", "-C", str(EXPERIMENTAL_ROOT), "rev-parse", "--short", "HEAD"], timeout=10
             ),
@@ -635,13 +665,11 @@ def wait_for_health(port: int, timeout_s: int) -> None:
     raise TimeoutError(f"server on port {port} did not become healthy: {last_error}")
 
 
-def query_chat(
+def build_chat_request_body(
     scenario: Scenario,
-    port: int,
     prompt: str,
     *,
     max_tokens: int,
-    timeout_s: int,
 ) -> dict[str, Any]:
     body = {
         "model": "k35-local",
@@ -654,6 +682,15 @@ def query_chat(
     }
     if scenario.enable_thinking is not None:
         body["chat_template_kwargs"] = {"enable_thinking": scenario.enable_thinking}
+    return body
+
+
+def query_chat(
+    port: int,
+    body: dict[str, Any],
+    *,
+    timeout_s: int,
+) -> dict[str, Any]:
     request = urllib.request.Request(
         f"http://127.0.0.1:{port}/v1/chat/completions",
         data=json.dumps(body).encode("utf-8"),
@@ -738,6 +775,59 @@ def render_commands(plan: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def build_runner_invocation(args: argparse.Namespace, *, execute: bool) -> list[str]:
+    argv = [sys.executable, str(Path(__file__).resolve())]
+    if execute:
+        argv.append("--execute")
+    for scenario in args.only or []:
+        argv.extend(["--only", scenario])
+    for context in args.context or []:
+        argv.extend(["--context", str(context)])
+    argv.extend(
+        [
+            "--max-tokens",
+            str(args.max_tokens),
+            "--min-completion-tokens",
+            str(args.min_completion_tokens),
+            "--output-dir",
+            str(args.output_dir),
+            "--binary",
+            str(args.binary),
+            "--port-base",
+            str(args.port_base),
+            "--request-timeout",
+            str(args.request_timeout),
+            "--startup-timeout",
+            str(args.startup_timeout),
+            "--reps",
+            str(args.reps),
+            "--warmup-discard-policy",
+            args.warmup_discard_policy,
+            "--cpu-interference-policy",
+            args.cpu_interference_policy,
+        ]
+    )
+    if args.allow_dirty_host:
+        argv.append("--allow-dirty-host")
+    return argv
+
+
+def render_operator_run_script(args: argparse.Namespace) -> str:
+    invocation = shlex.join(build_runner_invocation(args, execute=True))
+    return "\n".join(
+        [
+            "#!/bin/bash",
+            "set -euo pipefail",
+            "",
+            "# Re-run this K35/P-GPU-1 plan inside an approved operator bench window.",
+            "# The dry-run preparer only writes this script; it does not execute inference.",
+            f"cd {shlex.quote(str(RESEARCH_ROOT))}",
+            invocation,
+            "",
+        ]
+    )
+
+
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     scenarios = selected_scenarios(args.only)
     contexts = selected_contexts(args.context)
@@ -782,8 +872,12 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "warmup_discard_policy": args.warmup_discard_policy,
             "cpu_interference_policy": args.cpu_interference_policy,
             "post_cleanup_vram_sample": "collected as memory_samples phase=after_cleanup after server termination",
+            "pre_launch_gpu_sample": "collected as memory_samples phase=before_launch before server start",
+            "request_artifacts": "each executed cell writes prompt.txt, prompt_sha256.txt, request.json, response.json, and result.json",
+            "operator_invocation": "operator_run.sh records the exact --execute runner invocation for the prepared plan",
             "rocm_hardware_state": "collect_rocm_snapshot captures pid/memory/utilization plus clocks, power, and temperature",
         },
+        "operator_invocation": build_runner_invocation(args, execute=True),
         "cells": cells,
     }
 
@@ -794,10 +888,20 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
     cell_dir = output_dir / "runs" / f"{scenario.name}_ctx{cell['nominal_context']}_rep{rep}"
     cell_dir.mkdir(parents=True, exist_ok=True)
     server_log = cell_dir / "server.stderr"
+    prompt_path = cell_dir / "prompt.txt"
+    prompt_hash_path = cell_dir / "prompt_sha256.txt"
+    request_path = cell_dir / "request.json"
     response_path = cell_dir / "response.json"
     result_path = cell_dir / "result.json"
     argv_path = cell_dir / "server_argv.json"
     write_json(argv_path, cell["server_argv"])
+    memory_samples: list[dict[str, Any]] = [
+        {
+            "phase": "before_launch",
+            "rocm": collect_rocm_snapshot(),
+            "process_blockers": collect_process_blockers(),
+        }
+    ]
     with server_log.open("w", encoding="utf-8") as stderr:
         proc = subprocess.Popen(
             cell["server_argv"],
@@ -808,17 +912,18 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
         )
     started = time.monotonic()
     cleanup: dict[str, Any] | None = None
-    memory_samples: list[dict[str, Any]] = []
     try:
         wait_for_health(cell["port"], args.startup_timeout)
         memory_samples.append(collect_resident_memory_sample(proc.pid, "after_health"))
         prompt = prompt_for_context(cell["nominal_context"], args.max_tokens)
+        request_body = build_chat_request_body(scenario, prompt, max_tokens=args.max_tokens)
+        prompt_path.write_text(prompt, encoding="utf-8")
+        prompt_hash_path.write_text(hashlib.sha256(prompt.encode("utf-8")).hexdigest() + "\n", encoding="utf-8")
+        write_json(request_path, request_body)
         request_started = time.monotonic()
         response = query_chat(
-            scenario,
             cell["port"],
-            prompt,
-            max_tokens=args.max_tokens,
+            request_body,
             timeout_s=args.request_timeout,
         )
         elapsed_s = time.monotonic() - request_started
@@ -853,6 +958,9 @@ def run_cell(cell: dict[str, Any], args: argparse.Namespace, output_dir: Path) -
     result["memory_samples"] = memory_samples
     result["cleanup"] = cleanup
     result["server_log"] = str(server_log)
+    result["prompt_path"] = str(prompt_path)
+    result["prompt_sha256_path"] = str(prompt_hash_path)
+    result["request_path"] = str(request_path)
     result["response_path"] = str(response_path)
     write_json(result_path, result)
     return result
@@ -985,6 +1093,9 @@ def main(argv: list[str] | None = None) -> int:
     plan = build_plan(args)
     write_json(args.output_dir / "plan.json", plan)
     (args.output_dir / "commands.sh").write_text(render_commands(plan), encoding="utf-8")
+    operator_run = args.output_dir / "operator_run.sh"
+    operator_run.write_text(render_operator_run_script(args), encoding="utf-8")
+    operator_run.chmod(0o755)
     if not args.execute:
         print(f"dry-run plan written to {args.output_dir}")
         print(f"cells: {len(plan['cells'])}")

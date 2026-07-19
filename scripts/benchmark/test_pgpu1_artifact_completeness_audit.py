@@ -60,9 +60,11 @@ def test_primary_near_misses_do_not_satisfy_explicit_policy_fields() -> None:
     assert result["status"] == "incomplete"
     assert "cpu_interference_policy" in result["missing_required_fields"]
     assert "warmup_discard_policy" in result["missing_required_fields"]
+    assert "production_named_kernel_identity" in result["missing_required_fields"]
     assert "post_cleanup_vram_sample" in result["missing_required_fields"]
     assert "cpu_interference_policy" in result["near_miss_fields"]
     assert "warmup_discard_policy" in result["near_miss_fields"]
+    assert "production_named_kernel_identity" in result["near_miss_fields"]
     assert "post_cleanup_vram_sample" in result["near_miss_fields"]
 
 
@@ -105,7 +107,8 @@ def test_complete_artifact_is_retro_cert_candidate() -> None:
                 ],
             },
             extra=(
-                "llama-server /mnt/raid0/llm/llama.cpp-experimental rev-parse "
+                "llama-server /mnt/raid0/llm/llama.cpp rev-parse production-consolidated-v7 "
+                "production_named_kernel: true "
                 "/mnt/raid0/llm/models/model.gguf LD_LIBRARY_PATH ROCm0 median MAD n=5 "
                 "no warm-up; no discard after graph recapture. CPU stack quiesced by policy. "
                 "post-cleanup VRAM 0% and post-cleanup KFD none."
@@ -128,7 +131,7 @@ def test_batch_report_marks_incomplete_when_any_artifact_fails() -> None:
             {"status": "ok", "results": [{"rep": 5, "prompt_tps": 1, "decode_tps": 1, "draft_n_accepted": 1, "cleanup": {"dead": True}}]},
             extra=(
                 "summary.json rocm-smi --showpidgpus --showmemuse --showuse --showclocks --showpower --showtemp "
-                "llama-server llama.cpp-experimental rev-parse model.gguf LD_LIBRARY_PATH ROCm0 median MAD n=5 "
+                "llama-server production-consolidated-v7 production_named_kernel: true rev-parse model.gguf LD_LIBRARY_PATH ROCm0 median MAD n=5 "
                 "no warm-up discard graph recapture CPU stack quiesced after_cleanup no KFD PIDs 0% VRAM"
             ),
         )

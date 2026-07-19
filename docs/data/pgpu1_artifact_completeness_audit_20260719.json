@@ -48,6 +48,15 @@
           "required": true,
           "state": "missing"
         },
+        "production_named_kernel_identity": {
+          "label": "production-named kernel identity",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "llama\\.cpp-experimental"
+          ],
+          "required": true,
+          "state": "missing"
+        },
         "rep_count": {
           "label": "rep count sufficient for >=5% claim",
           "matched_patterns": [
@@ -209,6 +218,7 @@
         "rocm_clocks_before_after",
         "rocm_power_before_after",
         "rocm_temp_before_after",
+        "production_named_kernel_identity",
         "warmup_discard_policy",
         "cpu_interference_policy",
         "post_cleanup_vram_sample"
@@ -217,6 +227,7 @@
         "rocm_clocks_before_after",
         "rocm_power_before_after",
         "rocm_temp_before_after",
+        "production_named_kernel_identity",
         "warmup_discard_policy",
         "cpu_interference_policy",
         "post_cleanup_vram_sample"
@@ -274,6 +285,15 @@
           "near_miss_patterns": [
             "before_cleanup",
             "\"dead\"\\s*:\\s*true"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "production_named_kernel_identity": {
+          "label": "production-named kernel identity",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "llama\\.cpp-experimental"
           ],
           "required": true,
           "state": "missing"
@@ -370,6 +390,7 @@
         "rocm_clocks_before_after",
         "rocm_power_before_after",
         "rocm_temp_before_after",
+        "production_named_kernel_identity",
         "warmup_discard_policy",
         "rep_count",
         "cpu_interference_policy",
@@ -379,6 +400,7 @@
         "rocm_clocks_before_after",
         "rocm_power_before_after",
         "rocm_temp_before_after",
+        "production_named_kernel_identity",
         "warmup_discard_policy",
         "cpu_interference_policy",
         "post_cleanup_vram_sample"
@@ -435,6 +457,15 @@
           "near_miss_patterns": [
             "before_cleanup",
             "\"dead\"\\s*:\\s*true"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "production_named_kernel_identity": {
+          "label": "production-named kernel identity",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "llama\\.cpp-experimental"
           ],
           "required": true,
           "state": "missing"
@@ -527,6 +558,7 @@
         "rocm_clocks_before_after",
         "rocm_power_before_after",
         "rocm_temp_before_after",
+        "production_named_kernel_identity",
         "warmup_discard_policy",
         "rep_count",
         "cpu_interference_policy",
@@ -536,6 +568,7 @@
         "rocm_clocks_before_after",
         "rocm_power_before_after",
         "rocm_temp_before_after",
+        "production_named_kernel_identity",
         "cpu_interference_policy",
         "post_cleanup_vram_sample"
       ],
@@ -590,6 +623,15 @@
           "matched_patterns": [],
           "near_miss_patterns": [
             "\"dead\"\\s*:\\s*true"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "production_named_kernel_identity": {
+          "label": "production-named kernel identity",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "llama\\.cpp-experimental"
           ],
           "required": true,
           "state": "missing"
@@ -684,6 +726,7 @@
         "rocm_clocks_before_after",
         "rocm_power_before_after",
         "rocm_temp_before_after",
+        "production_named_kernel_identity",
         "warmup_discard_policy",
         "rep_count",
         "cpu_interference_policy",
@@ -693,6 +736,7 @@
         "rocm_clocks_before_after",
         "rocm_power_before_after",
         "rocm_temp_before_after",
+        "production_named_kernel_identity",
         "warmup_discard_policy",
         "cpu_interference_policy",
         "post_cleanup_vram_sample"
@@ -749,6 +793,15 @@
           "near_miss_patterns": [
             "before_cleanup",
             "\"dead\"\\s*:\\s*true"
+          ],
+          "required": true,
+          "state": "missing"
+        },
+        "production_named_kernel_identity": {
+          "label": "production-named kernel identity",
+          "matched_patterns": [],
+          "near_miss_patterns": [
+            "llama\\.cpp-experimental"
           ],
           "required": true,
           "state": "missing"
@@ -841,6 +894,7 @@
         "rocm_clocks_before_after",
         "rocm_power_before_after",
         "rocm_temp_before_after",
+        "production_named_kernel_identity",
         "warmup_discard_policy",
         "rep_count",
         "cpu_interference_policy",
@@ -850,6 +904,7 @@
         "rocm_clocks_before_after",
         "rocm_power_before_after",
         "rocm_temp_before_after",
+        "production_named_kernel_identity",
         "cpu_interference_policy",
         "post_cleanup_vram_sample"
       ],
@@ -902,6 +957,13 @@
           "near_miss_patterns": [],
           "required": true,
           "state": "present"
+        },
+        "production_named_kernel_identity": {
+          "label": "production-named kernel identity",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
         },
         "rep_count": {
           "label": "rep count sufficient for >=5% claim",
@@ -976,6 +1038,7 @@
         "rocm_power_before_after",
         "rocm_temp_before_after",
         "vram_pid_util_samples",
+        "production_named_kernel_identity",
         "warmup_discard_policy",
         "rep_count",
         "cpu_interference_policy"
@@ -1030,6 +1093,13 @@
           "near_miss_patterns": [],
           "required": true,
           "state": "present"
+        },
+        "production_named_kernel_identity": {
+          "label": "production-named kernel identity",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
         },
         "rep_count": {
           "label": "rep count sufficient for >=5% claim",
@@ -1106,6 +1176,7 @@
         "rocm_power_before_after",
         "rocm_temp_before_after",
         "vram_pid_util_samples",
+        "production_named_kernel_identity",
         "rep_count",
         "cpu_interference_policy"
       ],
@@ -1160,6 +1231,13 @@
           "near_miss_patterns": [],
           "required": true,
           "state": "present"
+        },
+        "production_named_kernel_identity": {
+          "label": "production-named kernel identity",
+          "matched_patterns": [],
+          "near_miss_patterns": [],
+          "required": true,
+          "state": "missing"
         },
         "rep_count": {
           "label": "rep count sufficient for >=5% claim",
@@ -1236,6 +1314,7 @@
         "rocm_power_before_after",
         "rocm_temp_before_after",
         "vram_pid_util_samples",
+        "production_named_kernel_identity",
         "rep_count",
         "cpu_interference_policy"
       ],
@@ -1253,7 +1332,7 @@
       "summary_status": "summary_present"
     }
   ],
-  "created_at": "2026-07-19T09:33:07.707266+00:00",
+  "created_at": "2026-07-19T10:37:46.007255+00:00",
   "policy": "draft P-GPU-1 mandatory-field audit",
   "recommendation": "rerun_required_for_incomplete_artifacts",
   "schema": "epyc.pgpu1_artifact_completeness_audit.v1",

@@ -214,7 +214,20 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             self.assertEqual(fields["warmup_discard_policy"], "no warm-up; no discard")
             self.assertEqual(fields["cpu_interference_policy"], "CPU stack quiesced")
             self.assertIn("after_cleanup", fields["post_cleanup_vram_sample"])
+            self.assertIn("before_launch", fields["pre_launch_gpu_sample"])
+            self.assertIn("request.json", fields["request_artifacts"])
             self.assertIn("clocks", fields["rocm_hardware_state"])
+            self.assertIn("--execute", plan["operator_invocation"])
+
+    def test_build_chat_request_body_records_thinking_contract(self):
+        scenario = k35.scenario_by_name("frontdoor_gpu_native_mtp")
+        body = k35.build_chat_request_body(scenario, "Return exactly: OK", max_tokens=32)
+
+        self.assertEqual(body["messages"][0]["content"], "Return exactly: OK")
+        self.assertEqual(body["max_tokens"], 32)
+        self.assertEqual(body["temperature"], 0)
+        self.assertEqual(body["seed"], 35)
+        self.assertEqual(body["chat_template_kwargs"], {"enable_thinking": False})
 
     def test_main_dry_run_writes_plan_and_commands(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -233,6 +246,11 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             self.assertEqual(len(plan["cells"]), 1)
             self.assertEqual(plan["reps"], 1)
             self.assertTrue((Path(tmp) / "commands.sh").exists())
+            operator_run = Path(tmp) / "operator_run.sh"
+            self.assertTrue(operator_run.exists())
+            operator_text = operator_run.read_text()
+            self.assertIn("--execute", operator_text)
+            self.assertIn("--output-dir", operator_text)
 
     def test_summarize_results_by_scenario_reports_medians_and_speedups(self):
         summary = k35.summarize_results_by_scenario(
