@@ -1,0 +1,40 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "OK-FRONTDOOR. reliable scheduling ensures that every task is completed on time without unnecessary delays or confusion. it helps teams stay organized and focused on their goals. when everyone knows their responsibilities, productivity increases significantly. clear communication reduces errors and prevents misunderstandings among colleagues. consistent planning allows for better resource allocation and efficient use of time. this structure supports long-term success by minimizing stress and maximizing output. employees feel more confident when they understand expectations. ultimately, a well-maintained schedule fosters a positive work environment where trust and cooperation thrive naturally among all members."
+      }
+    }
+  ],
+  "created": 1784422419,
+  "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+  "system_fingerprint": "b10096-ed4091266",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 115,
+    "prompt_tokens": 33,
+    "total_tokens": 148,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "id": "chatcmpl-6yQzNuRXbm2h6zNhnseOcZO0EpmJdcXt",
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 33,
+    "prompt_ms": 135.403,
+    "prompt_per_token_ms": 4.103121212121212,
+    "prompt_per_second": 243.7169043521931,
+    "predicted_n": 115,
+    "predicted_ms": 1777.053,
+    "predicted_per_token_ms": 15.452634782608696,
+    "predicted_per_second": 64.71388304119235,
+    "draft_n": 138,
+    "draft_n_accepted": 68
+  },
+  "client_wall_ms": 1943,
+  "lane": "frontdoor"
+}

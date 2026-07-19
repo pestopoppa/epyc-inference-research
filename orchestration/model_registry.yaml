@@ -565,7 +565,8 @@ server_mode:
     previous_model: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf
     acceleration:
       type: speculative_decoding
-      spec_type: ngram-mod,draft-mtp
+      spec_type: draft-mtp
+      ngram_candidate_spec_type: ngram-mod,draft-mtp
       draft_max: 2
       draft_p_min: 0.0
       threads_draft: 16
@@ -3784,7 +3785,8 @@ roles:
     - coder
     acceleration:
       type: speculative_decoding
-      spec_type: ngram-mod,draft-mtp  # 2026-07-16: v7 common_speculative ngram-mod first, native draft-mtp fallback.
+      spec_type: draft-mtp
+      ngram_candidate_spec_type: ngram-mod,draft-mtp  # Repetitive/token-reuse candidate only; not a broad worker default on 2026-07-19 prompt-diverse MI210 evidence.
       draft_role: draft_gemma4_26b_a4b_assistant_q8
       draft_max: 2
       draft_p_min: 0.0
@@ -3801,6 +3803,8 @@ roles:
       quality_pct: 90
       tool_compliance_pct: 96
       draft_depth_sweep_observation: "2026-07-17 T5 production-shaped CPU worker sweep at /mnt/raid0/llm/tmp/t5-gemma-worker-draft-depth-20260717T213641Z/summary.json confirms draft_max=2: depth2 87.76 t/s with 492/666 accepted; depth3 76.38 t/s with 492/812 accepted; depth4 84.40 t/s with 494/734 accepted."
+      mi210_ngram_mtp_repetition_observation: "2026-07-19 current-v7 MI210 strict repetitive JSON/tool-shaped fixture: no-spec passed at 74.15 t/s, draft-mtp passed at 113.45 t/s with 465/474 drafts accepted, and ngram-mod,draft-mtp passed at 183.50 t/s with 625/1454 accepted. Artifact: /mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_gemma4_mi210_modes_20260719T004400Z/summary.json."
+      mi210_ngram_mtp_prompt_diverse_observation: "2026-07-19 prompt-diverse MI210 follow-up: ngram-mod,draft-mtp reproduced the large repetitive-output speedup (330.57 t/s vs draft-mtp 143.58 and no-spec 85.77) but did not improve non-repetitive coding explanation speed and failed the required-heading contract under the 640-token cap; short edit was only marginally faster than draft-mtp and all modes failed the exact patch contract. Treat ngram-mod,draft-mtp as a task-specific token-reuse lane, not the broad worker default. Artifact: /mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z/compact_summary.json."
     memory:
       residency: hot
       pinned: true

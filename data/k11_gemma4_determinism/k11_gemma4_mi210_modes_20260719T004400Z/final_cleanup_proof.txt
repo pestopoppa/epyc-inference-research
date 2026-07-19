@@ -1,0 +1,33 @@
+Sun Jul 19 00:44:54 UTC 2026
+ps -C llama-server -o pid,lstart,cmd:
+    PID                  STARTED CMD
+
+pgrep exact llama-server command lines:
+
+rocm-smi current:
+
+
+============================ ROCm System Management Interface ============================
+====================================== Temperature =======================================
+GPU[0]		: Temperature (Sensor edge) (C): 30.0
+GPU[0]		: Temperature (Sensor junction) (C): 34.0
+GPU[0]		: Temperature (Sensor memory) (C): 37.0
+GPU[0]		: Temperature (Sensor HBM 0) (C): 32.0
+GPU[0]		: Temperature (Sensor HBM 1) (C): 34.0
+GPU[0]		: Temperature (Sensor HBM 2) (C): 32.0
+GPU[0]		: Temperature (Sensor HBM 3) (C): 37.0
+==========================================================================================
+=================================== Power Consumption ====================================
+GPU[0]		: Average Graphics Package Power (W): 40.0
+==========================================================================================
+=================================== % time GPU is busy ===================================
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GFX Activity: 491695319
+==========================================================================================
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: 2499311893
+GPU[0]		: Avg. Memory Bandwidth: 0
+==========================================================================================
+================================== End of ROCm SMI Log ===================================

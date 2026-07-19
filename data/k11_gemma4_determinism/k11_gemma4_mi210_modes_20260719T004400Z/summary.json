@@ -1,0 +1,324 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_gemma4_mi210_modes_20260719T004400Z",
+  "created_at": "2026-07-19T00:44:34.333250+00:00",
+  "draft_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+  "modes": [
+    {
+      "acceptance_rate": null,
+      "content_sha256": "f62098a392ac6c4f7c6eeb5a638cf980f9940016f28da554d6ad318ddcf7150b",
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "mode": "no_spec",
+      "port": 39661,
+      "ps_after_cleanup": "    PID TTY          TIME CMD\n",
+      "quality": {
+        "bad_word_count": 0,
+        "done": "END",
+        "json_ok": true,
+        "observed_word_count": 200,
+        "parse_error": null,
+        "passed": true,
+        "tool_name": "emit_benchmark_words"
+      },
+      "reasoning_content": "",
+      "response_sha256": "bec33f4684d74c1ee18f4ac72e88abaac1d32245a8213a9d8a814c9a8d398f0f",
+      "server_argv": [
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "39661",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "--metrics",
+        "--slots",
+        "--jinja",
+        "--reasoning",
+        "off",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-ctk",
+        "q8_0",
+        "-ctv",
+        "q8_0",
+        "-fa",
+        "on",
+        "--no-mmap",
+        "--spec-type",
+        "none"
+      ],
+      "server_exit_code_after_cleanup": 0,
+      "server_pid": 78673,
+      "spec_type": "none",
+      "status": "ok",
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 9440.018,
+        "predicted_n": 700,
+        "predicted_per_second": 74.15240098059135,
+        "predicted_per_token_ms": 13.48574,
+        "prompt_ms": 177.13,
+        "prompt_n": 74,
+        "prompt_per_second": 417.7722576638627,
+        "prompt_per_token_ms": 2.393648648648649
+      },
+      "usage": {
+        "completion_tokens": 700,
+        "prompt_tokens": 74,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 774
+      }
+    },
+    {
+      "acceptance_rate": 0.9810126582278481,
+      "content_sha256": "f62098a392ac6c4f7c6eeb5a638cf980f9940016f28da554d6ad318ddcf7150b",
+      "draft_n": 474,
+      "draft_n_accepted": 465,
+      "mode": "draft_mtp",
+      "port": 46351,
+      "ps_after_cleanup": "    PID TTY          TIME CMD\n",
+      "quality": {
+        "bad_word_count": 0,
+        "done": "END",
+        "json_ok": true,
+        "observed_word_count": 200,
+        "parse_error": null,
+        "passed": true,
+        "tool_name": "emit_benchmark_words"
+      },
+      "reasoning_content": "",
+      "response_sha256": "c311547f6369a9aca2219beca7dc67feedc7a66fedb62ab8b0896c77c104c7cd",
+      "server_argv": [
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "46351",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "--metrics",
+        "--slots",
+        "--jinja",
+        "--reasoning",
+        "off",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-ctk",
+        "q8_0",
+        "-ctv",
+        "q8_0",
+        "-fa",
+        "on",
+        "--no-mmap",
+        "-md",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-n-max",
+        "2",
+        "--device-draft",
+        "ROCm0",
+        "--spec-draft-ngl",
+        "99",
+        "--no-spec-draft-backend-sampling"
+      ],
+      "server_exit_code_after_cleanup": 0,
+      "server_pid": 79041,
+      "spec_type": "draft-mtp",
+      "status": "ok",
+      "timings": {
+        "cache_n": 0,
+        "draft_n": 474,
+        "draft_n_accepted": 465,
+        "predicted_ms": 6178.831,
+        "predicted_n": 701,
+        "predicted_per_second": 113.45188110825494,
+        "predicted_per_token_ms": 8.814309557774608,
+        "prompt_ms": 176.071,
+        "prompt_n": 74,
+        "prompt_per_second": 420.28499866531115,
+        "prompt_per_token_ms": 2.379337837837838
+      },
+      "usage": {
+        "completion_tokens": 701,
+        "prompt_tokens": 74,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 775
+      }
+    },
+    {
+      "acceptance_rate": 0.4298486932599725,
+      "content_sha256": "f62098a392ac6c4f7c6eeb5a638cf980f9940016f28da554d6ad318ddcf7150b",
+      "draft_n": 1454,
+      "draft_n_accepted": 625,
+      "mode": "ngram_mod_draft_mtp",
+      "port": 50449,
+      "ps_after_cleanup": "    PID TTY          TIME CMD\n",
+      "quality": {
+        "bad_word_count": 0,
+        "done": "END",
+        "json_ok": true,
+        "observed_word_count": 200,
+        "parse_error": null,
+        "passed": true,
+        "tool_name": "emit_benchmark_words"
+      },
+      "reasoning_content": "",
+      "response_sha256": "e5640785ce0c686b432066d7303c69467d73fd2396fb8a3e6bd98ccc883fa3bf",
+      "server_argv": [
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "50449",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "--metrics",
+        "--slots",
+        "--jinja",
+        "--reasoning",
+        "off",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-ctk",
+        "q8_0",
+        "-ctv",
+        "q8_0",
+        "-fa",
+        "on",
+        "--no-mmap",
+        "-md",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+        "--spec-type",
+        "ngram-mod,draft-mtp",
+        "--spec-draft-n-max",
+        "2",
+        "--device-draft",
+        "ROCm0",
+        "--spec-draft-ngl",
+        "99",
+        "--no-spec-draft-backend-sampling"
+      ],
+      "server_exit_code_after_cleanup": 0,
+      "server_pid": 79341,
+      "spec_type": "ngram-mod,draft-mtp",
+      "status": "ok",
+      "timings": {
+        "cache_n": 0,
+        "draft_n": 1454,
+        "draft_n_accepted": 625,
+        "predicted_ms": 3814.81,
+        "predicted_n": 700,
+        "predicted_per_second": 183.49537722717514,
+        "predicted_per_token_ms": 5.4497285714285715,
+        "prompt_ms": 176.177,
+        "prompt_n": 74,
+        "prompt_per_second": 420.032126781589,
+        "prompt_per_token_ms": 2.38077027027027
+      },
+      "usage": {
+        "completion_tokens": 700,
+        "prompt_tokens": 74,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 774
+      }
+    }
+  ],
+  "prompt": "Return only a JSON object matching the supplied schema. It must represent one tool call named emit_benchmark_words. Its arguments.words must contain exactly 200 items, and every item must be the string benchmark. Its arguments.done must be END. Do not include markdown or extra text.",
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "tool_call": {
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "additionalProperties": false,
+            "properties": {
+              "done": {
+                "enum": [
+                  "END"
+                ],
+                "type": "string"
+              },
+              "words": {
+                "items": {
+                  "enum": [
+                    "benchmark"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "minItems": 200,
+                "type": "array"
+              }
+            },
+            "required": [
+              "words",
+              "done"
+            ],
+            "type": "object"
+          },
+          "name": {
+            "enum": [
+              "emit_benchmark_words"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "arguments"
+        ],
+        "type": "object"
+      }
+    },
+    "required": [
+      "tool_call"
+    ],
+    "type": "object"
+  },
+  "server_bin": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "target_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf"
+}

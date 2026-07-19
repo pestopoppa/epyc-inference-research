@@ -1,0 +1,189 @@
+{
+  "artifact_dir": "/mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_gemma4_mi210_prompt_diverse_20260719T004626Z",
+  "cleanup": {
+    "post_pgrep": "82224 bash -lc pgrep -af 'llama-server|llama-cli' || true\n1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh\n",
+    "post_rocm_smi_excerpt": "GPU[0]\t\t: Average Graphics Package Power (W): 54.0\nGPU[0]\t\t: GPU use (%): 0\nGPU[0]\t\t: GPU Memory Allocated (VRAM%): 0",
+    "pre_pgrep": "81176 bash -lc pgrep -af 'llama-server|llama-cli' || true\n1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh\n"
+  },
+  "created_at": "2026-07-19T00:48:31.368591+00:00",
+  "draft_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+  "interpretation": {
+    "candidate_decision": "ngram-mod,draft-mtp remains useful for repetitive JSON-like/token-reuse outputs, but this prompt-diverse follow-up does not support it as a broad worker default candidate.",
+    "nonrepetitive_coding_explanation": "draft-mtp passed; ngram-mod,draft-mtp matched draft-mtp speed but failed required headings under the 640-token cap; no-spec also failed the heading contract.",
+    "repetitive_strict_json": "ngram-mod,draft-mtp was fastest but all modes failed the strict top-level tool_call schema; payload content otherwise repeated correctly.",
+    "short_structured_edit": "all modes emitted parseable JSON but failed exact patch path/order contract; ngram-mod,draft-mtp only slightly faster than draft-mtp."
+  },
+  "kernel_commit": [
+    "ed4091266d286045510e498ceb059c209a65aff9",
+    "experimental-v7-refresh-20260716"
+  ],
+  "rows": [
+    {
+      "content_sha256": "e7a44f7bf596e59d9b904d9fccac484acceddd2f7bdae792467a940ca8c1d4ad",
+      "decode_tps": 143.58053631085497,
+      "draft_acceptance": 0.9931192660550459,
+      "draft_accepted": 433,
+      "draft_generated": 436,
+      "generated_tokens": 650,
+      "mode": "draft_mtp",
+      "prompt_class": "repetitive_strict_json",
+      "prompt_tokens": 74,
+      "quality": {
+        "json_ok": false,
+        "parse_error": "'tool_call'",
+        "passed": false
+      },
+      "quality_passed": false
+    },
+    {
+      "content_sha256": "c3a32b3a4a6e9c9b377bb5f2af8123ef4cdc6490523e2788905b0c0dfb6b737b",
+      "decode_tps": 101.69235140046257,
+      "draft_acceptance": 0.5459016393442623,
+      "draft_accepted": 333,
+      "draft_generated": 610,
+      "generated_tokens": 640,
+      "mode": "draft_mtp",
+      "prompt_class": "nonrepetitive_coding_explanation",
+      "prompt_tokens": 137,
+      "quality": {
+        "no_code_fence": true,
+        "passed": true,
+        "repeated_5grams": 0,
+        "required_headings_ok": true,
+        "required_terms_ok": true,
+        "word_count": 541
+      },
+      "quality_passed": true
+    },
+    {
+      "content_sha256": "0151dd546b13628d5939374f347303be9c8f65523de37b11b588ec30399cd8e1",
+      "decode_tps": 137.1406325574811,
+      "draft_acceptance": 0.9307692307692308,
+      "draft_accepted": 121,
+      "draft_generated": 130,
+      "generated_tokens": 186,
+      "mode": "draft_mtp",
+      "prompt_class": "short_structured_edit",
+      "prompt_tokens": 90,
+      "quality": {
+        "edit_count": 5,
+        "exact_edits": false,
+        "json_ok": true,
+        "passed": false
+      },
+      "quality_passed": false
+    },
+    {
+      "content_sha256": "deeacd00900435c14417fa1fc643532681fb66f786727274ac9ad12609212234",
+      "decode_tps": 330.57018024314846,
+      "draft_acceptance": 0.4673105497771174,
+      "draft_accepted": 629,
+      "draft_generated": 1346,
+      "generated_tokens": 682,
+      "mode": "ngram_mod_draft_mtp",
+      "prompt_class": "repetitive_strict_json",
+      "prompt_tokens": 74,
+      "quality": {
+        "json_ok": false,
+        "parse_error": "'tool_call'",
+        "passed": false
+      },
+      "quality_passed": false
+    },
+    {
+      "content_sha256": "0603d97d6af8b65ba4e28ee0f6694d3164a14fb4c9f66f3548d64bb2786305cf",
+      "decode_tps": 101.76734902734266,
+      "draft_acceptance": 0.5518945634266886,
+      "draft_accepted": 335,
+      "draft_generated": 607,
+      "generated_tokens": 640,
+      "mode": "ngram_mod_draft_mtp",
+      "prompt_class": "nonrepetitive_coding_explanation",
+      "prompt_tokens": 137,
+      "quality": {
+        "no_code_fence": true,
+        "passed": false,
+        "repeated_5grams": 0,
+        "required_headings_ok": false,
+        "required_terms_ok": true,
+        "word_count": 556
+      },
+      "quality_passed": false
+    },
+    {
+      "content_sha256": "0151dd546b13628d5939374f347303be9c8f65523de37b11b588ec30399cd8e1",
+      "decode_tps": 139.1505234603294,
+      "draft_acceptance": 0.953125,
+      "draft_accepted": 122,
+      "draft_generated": 128,
+      "generated_tokens": 186,
+      "mode": "ngram_mod_draft_mtp",
+      "prompt_class": "short_structured_edit",
+      "prompt_tokens": 90,
+      "quality": {
+        "edit_count": 5,
+        "exact_edits": false,
+        "json_ok": true,
+        "passed": false
+      },
+      "quality_passed": false
+    },
+    {
+      "content_sha256": "3a26926000c3ed29df3006ea17271a3ee004316008bfa25c3be835690570b0ab",
+      "decode_tps": 85.7671153744281,
+      "draft_acceptance": null,
+      "draft_accepted": 0,
+      "draft_generated": 0,
+      "generated_tokens": 714,
+      "mode": "no_spec",
+      "prompt_class": "repetitive_strict_json",
+      "prompt_tokens": 74,
+      "quality": {
+        "json_ok": false,
+        "parse_error": "'tool_call'",
+        "passed": false
+      },
+      "quality_passed": false
+    },
+    {
+      "content_sha256": "cf630afc04d3498715966a8287f6121e2460f5bffa5de21c1f182be3e6e92f02",
+      "decode_tps": 85.57307485986071,
+      "draft_acceptance": null,
+      "draft_accepted": 0,
+      "draft_generated": 0,
+      "generated_tokens": 640,
+      "mode": "no_spec",
+      "prompt_class": "nonrepetitive_coding_explanation",
+      "prompt_tokens": 137,
+      "quality": {
+        "no_code_fence": true,
+        "passed": false,
+        "repeated_5grams": 0,
+        "required_headings_ok": false,
+        "required_terms_ok": true,
+        "word_count": 557
+      },
+      "quality_passed": false
+    },
+    {
+      "content_sha256": "0151dd546b13628d5939374f347303be9c8f65523de37b11b588ec30399cd8e1",
+      "decode_tps": 86.5208031363326,
+      "draft_acceptance": null,
+      "draft_accepted": 0,
+      "draft_generated": 0,
+      "generated_tokens": 186,
+      "mode": "no_spec",
+      "prompt_class": "short_structured_edit",
+      "prompt_tokens": 90,
+      "quality": {
+        "edit_count": 5,
+        "exact_edits": false,
+        "json_ok": true,
+        "passed": false
+      },
+      "quality_passed": false
+    }
+  ],
+  "server_bin": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "target_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf"
+}

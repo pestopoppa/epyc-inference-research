@@ -1,0 +1,44 @@
+
+
+============================ ROCm System Management Interface ============================
+=========================================== ID ===========================================
+GPU[0]		: Device Name: 		Instinct MI210
+GPU[0]		: Device ID: 		0x740f
+GPU[0]		: Device Rev: 		0x02
+GPU[0]		: Subsystem ID: 	0x0c34
+GPU[0]		: GUID: 		57300
+==========================================================================================
+====================================== Temperature =======================================
+GPU[0]		: Temperature (Sensor edge) (C): 27.0
+GPU[0]		: Temperature (Sensor junction) (C): 31.0
+GPU[0]		: Temperature (Sensor memory) (C): 34.0
+GPU[0]		: Temperature (Sensor HBM 0) (C): 29.0
+GPU[0]		: Temperature (Sensor HBM 1) (C): 31.0
+GPU[0]		: Temperature (Sensor HBM 2) (C): 28.0
+GPU[0]		: Temperature (Sensor HBM 3) (C): 34.0
+==========================================================================================
+=================================== % time GPU is busy ===================================
+GPU[0]		: GPU use (%): 0
+GPU[0]		: GFX Activity: 496078450
+==========================================================================================
+=================================== Current Memory Use ===================================
+GPU[0]		: GPU Memory Allocated (VRAM%): 0
+GPU[0]		: GPU Memory Read/Write Activity (%): 0
+GPU[0]		: Memory Activity: 2499912033
+GPU[0]		: Avg. Memory Bandwidth: 0
+==========================================================================================
+===================================== KFD Processes ======================================
+No KFD PIDs currently running
+==========================================================================================
+====================================== Product Info ======================================
+GPU[0]		: Card Series: 		Instinct MI210
+GPU[0]		: Card Model: 		0x740f
+GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[0]		: Card SKU: 		D67301V
+GPU[0]		: Subsystem ID: 	0x0c34
+GPU[0]		: Device Rev: 		0x02
+GPU[0]		: Node ID: 		4
+GPU[0]		: GUID: 		57300
+GPU[0]		: GFX Version: 		gfx9010
+==========================================================================================
+================================== End of ROCm SMI Log ===================================

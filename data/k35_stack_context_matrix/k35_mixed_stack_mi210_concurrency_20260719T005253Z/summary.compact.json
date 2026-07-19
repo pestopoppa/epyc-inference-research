@@ -1,0 +1,72 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/k35_stack_context_matrix/k35_mixed_stack_mi210_concurrency_20260719T005253Z",
+  "preferred_status": "ok errors=[]",
+  "responses": {
+    "frontdoor_solo": {
+      "prompt_tokens": 25,
+      "completion_tokens": 8,
+      "client_wall_ms": 259,
+      "client_decode_tps": 30.888030888030887,
+      "quality": "PASS"
+    },
+    "gemma_solo": {
+      "prompt_tokens": 24,
+      "completion_tokens": 6,
+      "client_wall_ms": 208,
+      "client_decode_tps": 28.846153846153847,
+      "quality": "PASS"
+    },
+    "preferred_frontdoor_warm": {
+      "prompt_tokens": 25,
+      "completion_tokens": 8,
+      "client_wall_ms": 261,
+      "client_decode_tps": 30.65134099616858,
+      "quality": "PASS"
+    },
+    "preferred_gemma_warm": {
+      "prompt_tokens": 24,
+      "completion_tokens": 6,
+      "client_wall_ms": 207,
+      "client_decode_tps": 28.985507246376812,
+      "quality": "PASS"
+    },
+    "preferred_frontdoor_concurrent": {
+      "prompt_tokens": 33,
+      "completion_tokens": 115,
+      "client_wall_ms": 1943,
+      "client_decode_tps": 59.18682449819866,
+      "quality": "PASS"
+    },
+    "preferred_gemma_concurrent": {
+      "prompt_tokens": 33,
+      "completion_tokens": 93,
+      "client_wall_ms": 1327,
+      "client_decode_tps": 70.08289374529014,
+      "quality": "PASS"
+    },
+    "fallback_frontdoor_concurrent": null,
+    "fallback_minicpm_concurrent": null
+  },
+  "memory_files": [
+    "frontdoor_solo_after_request.rocm_smi.txt",
+    "after_preferred_cleanup.rocm_smi.txt",
+    "preferred_after_concurrent.rocm_smi.txt",
+    "gemma_solo_loaded.rocm_smi.txt",
+    "preferred_frontdoor_loaded.rocm_smi.txt",
+    "after_gemma_solo_cleanup.rocm_smi.txt",
+    "final.rocm_smi.txt",
+    "frontdoor_solo_loaded.rocm_smi.txt",
+    "preferred_both_loaded.rocm_smi.txt",
+    "after_frontdoor_solo_cleanup.rocm_smi.txt",
+    "gemma_solo_after_request.rocm_smi.txt"
+  ],
+  "cleanup": {
+    "final_rocm": [
+      "GPU[0]\t\t: GPU use (%): 0",
+      "GPU[0]\t\t: GPU Memory Allocated (VRAM%): 0",
+      "================================== GPUs Indexed by PID ===================================",
+      "No KFD PIDs currently running",
+      "================================== End of ROCm SMI Log ==================================="
+    ]
+  }
+}

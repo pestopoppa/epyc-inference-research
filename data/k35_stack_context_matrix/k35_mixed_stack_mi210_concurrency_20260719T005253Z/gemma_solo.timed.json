@@ -1,0 +1,40 @@
+{
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "OK-GEMMA."
+      }
+    }
+  ],
+  "created": 1784422397,
+  "model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+  "system_fingerprint": "b10096-ed4091266",
+  "object": "chat.completion",
+  "usage": {
+    "completion_tokens": 6,
+    "prompt_tokens": 24,
+    "total_tokens": 30,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "id": "chatcmpl-f7LHJbdAmv2GdlIdsLG6UbRuUYhYJxl2",
+  "timings": {
+    "cache_n": 0,
+    "prompt_n": 24,
+    "prompt_ms": 130.835,
+    "prompt_per_token_ms": 5.451458333333334,
+    "prompt_per_second": 183.43715366683224,
+    "predicted_n": 6,
+    "predicted_ms": 75.361,
+    "predicted_per_token_ms": 12.560166666666667,
+    "predicted_per_second": 79.61677790899802,
+    "draft_n": 6,
+    "draft_n_accepted": 4
+  },
+  "client_wall_ms": 208,
+  "lane": "gemma"
+}
