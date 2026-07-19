@@ -93,6 +93,10 @@ LONG_OUTPUT_ANSWER_INSTRUCTION = (
 )
 
 
+class StreamProtocolError(OSError):
+    """Raised when a streaming response closes without a usable SSE event."""
+
+
 @dataclasses.dataclass(frozen=True)
 class ShardRecord:
     path: str
@@ -833,6 +837,8 @@ def call_completion_streaming(
 
     if completed_at is None:
         completed_at = datetime.now(timezone.utc).isoformat()
+    if chunk_count == 0:
+        raise StreamProtocolError("stream closed without any SSE data chunks")
 
     return {
         "choices": [

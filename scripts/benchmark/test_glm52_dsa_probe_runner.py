@@ -823,6 +823,61 @@ class TestGlm52DsaProbeRunner(unittest.TestCase):
         self.assertEqual(result["streaming"], {"enabled": True, "chunk_count": 1})
         self.assertEqual(result["stream_progress_samples_tail"], [{"status": "stream_chunk", "chunk_count": 1}])
 
+    def test_run_stage_streaming_zero_chunk_close_is_failed_request(self) -> None:
+        stage = {
+            "name": "long_context_dsa_probe",
+            "prompt": {
+                "task_line": "Return READY.",
+                "context_length": 4096,
+                "kind": "long_context_probe",
+                "answer_instruction": runner.SHORT_ANSWER_INSTRUCTION,
+            },
+            "server": {"server_command": [], "port": 1, "context_length": 4096, "log_file": None, "metrics": False},
+            "request": {
+                "max_tokens": 16,
+                "temperature": 0.0,
+                "seed": 1,
+                "timeout_s": 60,
+                "min_completion_tokens": 4,
+                "progress_poll_interval_s": 0,
+                "purpose": "coherence_plus_throughput",
+                "stream": True,
+            },
+        }
+
+        class FakeProc:
+            pid = None
+
+        def fake_stream(port, prompt, max_tokens, temperature, seed, timeout_s, progress_callback=None):
+            raise runner.StreamProtocolError("stream closed without any SSE data chunks")
+
+        originals = (
+            runner.launch_server,
+            runner.wait_for_health,
+            runner.count_prompt_tokens,
+            runner.call_completion_streaming,
+            runner.terminate_server,
+        )
+        try:
+            runner.launch_server = lambda command: FakeProc()  # type: ignore[assignment]
+            runner.wait_for_health = lambda port: None  # type: ignore[assignment]
+            runner.count_prompt_tokens = lambda port, prompt, timeout_s: 100  # type: ignore[assignment]
+            runner.call_completion_streaming = fake_stream  # type: ignore[assignment]
+            runner.terminate_server = lambda proc: None  # type: ignore[assignment]
+            result = runner.run_stage(stage)
+        finally:
+            (
+                runner.launch_server,
+                runner.wait_for_health,
+                runner.count_prompt_tokens,
+                runner.call_completion_streaming,
+                runner.terminate_server,
+            ) = originals  # type: ignore[assignment]
+
+        self.assertEqual(result["status"], "failed_request")
+        self.assertEqual(result["request_error"]["type"], "StreamProtocolError")
+        self.assertIn("without any SSE data chunks", result["request_error"]["message"])
+
     def test_run_stage_rejects_short_completion_for_throughput_evidence(self) -> None:
         stage = {
             "name": "long_context_dsa_probe",
