@@ -1,0 +1,7 @@
+GPU-only MI210 `llama-bench` row; no mmproj (text-only).
+Prompt tokens: 2048
+Generation tokens: 1024
+Repetitions: 1
+CPU threads: 8
+Timeout: 900 seconds
+Experimental binary only; production llama.cpp was not touched.

@@ -1,0 +1,19 @@
+{
+  "artifact_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen25vl7b_worker_vision_textonly_mi210_currentv7_20260719T054159Z",
+  "exit_code": 0,
+  "model": "/mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench",
+  "experimental_commit": "6a8dd5ea680860f790f98136cc370e400c3dabe3",
+  "gpu": "AMD Instinct MI210",
+  "device": "ROCm0",
+  "gpu_only": true,
+  "text_only": true,
+  "n_prompt": 2048,
+  "n_gen": 1024,
+  "repetitions": 1,
+  "rows": [
+    {"phase": "prompt", "n_prompt": 2048, "n_gen": 0, "avg_ts": 3474.966969, "stddev_ts": 0.0},
+    {"phase": "decode", "n_prompt": 0, "n_gen": 1024, "avg_ts": 123.296409, "stddev_ts": 0.0}
+  ],
+  "cleanup": {"executable_processes": 0, "rocm_vram_percent": 0}
+}

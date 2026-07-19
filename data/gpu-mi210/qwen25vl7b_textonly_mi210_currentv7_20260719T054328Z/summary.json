@@ -1,0 +1,32 @@
+{
+  "artifact_path": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen25vl7b_textonly_mi210_currentv7_20260719T054328Z",
+  "exit_code": 0,
+  "rows": [
+    {
+      "n_prompt": 2048,
+      "n_gen": 0,
+      "avg_ts": 3485.468609,
+      "stddev_ts": 0.0,
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "model_type": "qwen2vl ?B Q4_K - Medium",
+      "build_commit": "6a8dd5ea6",
+      "build_number": 10097
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 1024,
+      "avg_ts": 123.160345,
+      "stddev_ts": 0.0,
+      "backends": "ROCm",
+      "devices": "ROCm0",
+      "n_gpu_layers": 99,
+      "flash_attn": 1,
+      "model_type": "qwen2vl ?B Q4_K - Medium",
+      "build_commit": "6a8dd5ea6",
+      "build_number": 10097
+    }
+  ]
+}

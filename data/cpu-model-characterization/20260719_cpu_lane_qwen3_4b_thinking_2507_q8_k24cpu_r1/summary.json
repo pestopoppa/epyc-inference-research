@@ -1,0 +1,67 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/cpu-model-characterization/20260719_cpu_lane_qwen3_4b_thinking_2507_q8_k24cpu_r1",
+  "exit_code": "0",
+  "repetitions": 1,
+  "rows": [
+    {
+      "build_commit": "9882c2c69",
+      "build_number": 10085,
+      "backends": "CPU",
+      "n_prompt": 512,
+      "n_gen": 0,
+      "n_threads": 32,
+      "devices": "none",
+      "avg_ts": 319.779724,
+      "stddev_ts": 0.0,
+      "model_type": "qwen3 4B Q8_0"
+    },
+    {
+      "build_commit": "9882c2c69",
+      "build_number": 10085,
+      "backends": "CPU",
+      "n_prompt": 2048,
+      "n_gen": 0,
+      "n_threads": 32,
+      "devices": "none",
+      "avg_ts": 274.319555,
+      "stddev_ts": 0.0,
+      "model_type": "qwen3 4B Q8_0"
+    },
+    {
+      "build_commit": "9882c2c69",
+      "build_number": 10085,
+      "backends": "CPU",
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "n_threads": 32,
+      "devices": "none",
+      "avg_ts": 158.950852,
+      "stddev_ts": 0.0,
+      "model_type": "qwen3 4B Q8_0"
+    },
+    {
+      "build_commit": "9882c2c69",
+      "build_number": 10085,
+      "backends": "CPU",
+      "n_prompt": 32768,
+      "n_gen": 0,
+      "n_threads": 32,
+      "devices": "none",
+      "avg_ts": 49.367133,
+      "stddev_ts": 0.0,
+      "model_type": "qwen3 4B Q8_0"
+    },
+    {
+      "build_commit": "9882c2c69",
+      "build_number": 10085,
+      "backends": "CPU",
+      "n_prompt": 0,
+      "n_gen": 512,
+      "n_threads": 32,
+      "devices": "none",
+      "avg_ts": 11.533012,
+      "stddev_ts": 0.0,
+      "model_type": "qwen3 4B Q8_0"
+    }
+  ]
+}

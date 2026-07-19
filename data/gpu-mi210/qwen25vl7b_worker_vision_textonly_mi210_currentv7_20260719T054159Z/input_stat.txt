@@ -1,0 +1,16 @@
+  File: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench
+  size: 17984     	Blocks: 40         IO Block: 4096   regular file
+Device: 97fh/2431d	Inode: 98327814    Links: 1
+Access: (0755/-rwxr-xr-x)  Uid: ( 1000/    node)   Gid: ( 1000/    node)
+Access: 2026-07-19 04:48:01.261831114 +0000
+Modify: 2026-07-19 04:45:47.679234461 +0000
+Change: 2026-07-19 04:45:47.679254481 +0000
+ Birth: 2026-07-19 04:45:47.612784191 +0000
+  File: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf
+  size: 4683072032	Blocks: 9146640    IO Block: 4096   regular file
+Device: 97fh/2431d	Inode: 188751340   Links: 1
+Access: (0664/-rw-rw-r--)  Uid: ( 1000/    node)   Gid: ( 1000/    node)
+Access: 2026-07-18 23:37:02.504272722 +0000
+Modify: 2025-12-11 23:41:56.436755925 +0000
+Change: 2026-01-28 19:04:24.374075132 +0000
+ Birth: 2025-12-11 16:13:21.211137701 +0000

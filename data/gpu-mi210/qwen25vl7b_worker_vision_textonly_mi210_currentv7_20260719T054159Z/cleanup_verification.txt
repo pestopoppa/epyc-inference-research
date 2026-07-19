@@ -1,0 +1,2 @@
+device,GPU Memory Allocated (VRAM%),GPU Memory Read/Write Activity (%),Memory Activity,Avg. Memory Bandwidth,Card Series,Card Model,Card Vendor,Card SKU,Subsystem ID,Device Rev,Node ID,GUID,GFX Version
+card0,0,0,2545656791,0,Instinct MI210,0x740f,Advanced Micro Devices Inc. [AMD/ATI],D67301V,0x0c34,0x02,4,57300,gfx9010

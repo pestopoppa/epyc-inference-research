@@ -1,0 +1,1 @@
+env LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin ROCR_VISIBLE_DEVICES= HIP_VISIBLE_DEVICES= /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/llama-bench -m /mnt/raid0/llm/models/Qwen3-4B-Thinking-2507-GGUF/Qwen3-4B-Thinking-2507-Q8_0.gguf -dev none -ngl 0 -fa off -t 32 -b 512 -ub 512 -p 512\,2048\,8192\,32768 -n 512 -r 1 -o json
