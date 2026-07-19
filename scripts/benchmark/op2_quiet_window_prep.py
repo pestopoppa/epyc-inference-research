@@ -346,12 +346,12 @@ cd /mnt/raid0/llm/epyc-orchestrator
 python3 scripts/server/orchestrator_stack.py status \\
   | tee "$OP2_RUN_ROOT/live-v6/orchestrator_stack_status.txt"
 
-ps -eo pid,lstart,comm,args \\
-  | rg 'llama-server|uvicorn|autopilot|perf|rocprof' \\
+ps -eo pid=,lstart=,comm=,args= \\
   > "$OP2_RUN_ROOT/live-v6/process_snapshot.txt" || true
 
 python3 - "$OP2_RUN_ROOT/live-v6/process_snapshot.txt" "$OP2_RUN_ROOT/live-v6/process_blockers.json" <<'PY'
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -361,17 +361,19 @@ allowed = {{"llama-server", "uvicorn"}}
 blocked_basenames = {{"llama-bench", "llama-cli", "perf", "rocprof", "rocprofv2"}}
 blockers = []
 for raw in snapshot_path.read_text(encoding="utf-8").splitlines():
-    parts = raw.split(maxsplit=4)
-    if len(parts) < 5:
+    parts = raw.split(maxsplit=7)
+    if len(parts) < 7:
         continue
-    pid, _weekday, _month, _day, rest = parts
-    fields = rest.split(maxsplit=4)
-    if len(fields) < 5:
+    pid, _weekday, _month, _day, _time, _year, comm = parts[:7]
+    if pid == str(os.getpid()):
         continue
-    _time, _year, comm, args = fields[0], fields[1], fields[2], fields[3] if len(fields) == 4 else fields[4]
+    args = parts[7] if len(parts) > 7 else ""
+    argv0 = Path(args.split(maxsplit=1)[0]).name if args else comm
+    if comm in allowed or argv0 in allowed:
+        continue
     lower_args = raw.lower()
     reason = None
-    if comm in blocked_basenames:
+    if comm in blocked_basenames or argv0 in blocked_basenames:
         reason = f"blocked process {{comm}}"
     elif "autopilot" in lower_args:
         reason = "blocked AutoPilot process"

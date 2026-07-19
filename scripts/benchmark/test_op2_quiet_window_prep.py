@@ -134,6 +134,7 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
             self.assertIn("P-GPU-1 caveat", commands)
             self.assertIn("process_blockers.json", commands)
             self.assertIn("raise SystemExit(74)", commands)
+            self.assertNotIn("rg 'llama-server|uvicorn|autopilot|perf|rocprof'", commands)
             self.assertIn("production-named MI210 GPU claims only", commands)
             self.assertNotIn("README.role_smokes.md", commands)
             summary = (bundle / "summary.md").read_text()
