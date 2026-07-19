@@ -1,0 +1,22 @@
+timestamp_utc=2026-07-19T00:09:37Z
+artifact=/mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z
+
+[processes]
+29399 /usr/bin/bash -c set -u ART=$(cat /tmp/nemotron_cpu_sourcehead_artifact_path.txt) BENCH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench BIN_DIR=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin MODEL=/mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf printf 'benchmark_start_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$ART/meta.txt" env LD_LIBRARY_PATH="$BIN_DIR" "$BENCH" \   -m "$MODEL" \   -dev none -ngl 0 -fa off -t 16 -n 512 \   -pg 512,0 -pg 0,512 -pg 2048,512 -pg 8192,512 -pg 32768,512 \   -r 1 -o json --progress \   > "$ART/raw_stdout.json" 2> "$ART/raw_stderr.txt" & BENCH_PID=$! printf '%s\n' "$BENCH_PID" > "$ART/run_pid.txt" printf 'bench_pid=%s\n' "$BENCH_PID" wait "$BENCH_PID" EC=$? printf '%s\n' "$EC" > "$ART/exit_code.txt" printf 'benchmark_end_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$ART/meta.txt" printf 'benchmark_exit_code=%s\n' "$EC" >> "$ART/meta.txt" {   printf 'timestamp_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"   pgrep -af '[l]lama' || true } > "$ART/post_pgrep.txt" {   printf 'timestamp_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"   if command -v rocm-smi >/dev/null 2>&1; then     rocm-smi     printf 'rocm_smi_exit_code=%s\n' "$?"   else     printf 'rocm-smi not found\n'   fi } > "$ART/post_rocm-smi.txt" 2>&1 if ps -p "$BENCH_PID" >/dev/null 2>&1; then   printf 'bench_pid_still_alive_after_wait=%s\n' "$BENCH_PID" > "$ART/cleanup_status.txt"   kill -TERM "$BENCH_PID" 2>/dev/null || true   sleep 2   if ps -p "$BENCH_PID" >/dev/null 2>&1; then     kill -KILL "$BENCH_PID" 2>/dev/null || true     sleep 1   fi   if ps -p "$BENCH_PID" >/dev/null 2>&1; then     printf 'cleanup_result=failed_pid_alive\n' >> "$ART/cleanup_status.txt"   else     printf 'cleanup_result=pid_dead_after_signal\n' >> "$ART/cleanup_status.txt"   fi else   {     printf 'bench_pid=%s\n' "$BENCH_PID"     printf 'cleanup_result=pid_not_present_after_wait\n'     printf 'signals_sent=none\n'   } > "$ART/cleanup_status.txt" fi printf 'benchmark_done_exit_code=%s\n' "$EC"
+29402 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Nemotron-Nano-9B-v2-GGUF/nvidia_NVIDIA-Nemotron-Nano-9B-v2-Q8_0.gguf -dev none -ngl 0 -fa off -t 16 -n 512 -pg 512,0 -pg 0,512 -pg 2048,512 -pg 8192,512 -pg 32768,512 -r 1 -o json --progress
+1849379 /usr/local/bin/earlyoom -M 41943040,20971520 -s 100,100 -r 60 --sort-by-rss --ignore ^(llama-server|sd-server)$ --prefer ^llama-bench$ -N /mnt/raid0/llm/epyc-root/scripts/hooks/earlyoom_audit.sh
+
+[rocm-smi]
+
+
+============================ ROCm System Management Interface ============================
+===================================== KFD Processes ======================================
+KFD process information:
+PID  	PROCESS NAME	GPU(s)	VRAM USED	SDMA USED	CU OCCUPANCY
+29402	llama-bench 	0     	0        	0        	0
+==========================================================================================
+================================== Memory Usage (Bytes) ==================================
+GPU[0]		: VRAM Total Memory (B): 68702699520
+GPU[0]		: VRAM Total Used Memory (B): 13148160
+==========================================================================================
+================================== End of ROCm SMI Log ===================================

@@ -1,0 +1,24 @@
+K11 Gemma4 determinism runner
+mode: execute
+output_dir: /mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z
+server_bin: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server
+ld_library_path: /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin
+target_model: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf
+draft_model: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf
+runs: 2
+prompt: Return a compact JSON object with keys status, model, and seed, using values "ok", "gemma4", and 42.
+seed: 42
+temperature: 0.0
+max_tokens: 1024
+stop: []
+spec_type: draft-mtp
+spec_draft_n_max: 2
+slots: 4
+request_sampler_mode: explicit-greedy
+draft_backend_sampling: off
+schema_task: word-array-200
+run_01: ok hash=70111df39b2b draft=406/426 accept=95.3% pid=42517
+run_02: ok hash=70111df39b2b draft=406/426 accept=95.3% pid=42916
+Summary written to /mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z/summary.json
+Unique output hashes: 1
+Determinism check passed.

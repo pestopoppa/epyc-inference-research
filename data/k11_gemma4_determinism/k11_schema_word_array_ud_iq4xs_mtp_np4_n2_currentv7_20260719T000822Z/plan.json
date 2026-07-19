@@ -1,0 +1,146 @@
+{
+  "meta": {
+    "context": 8192,
+    "created_at": "2026-07-19T00:08:22.388700+00:00",
+    "draft_backend_sampling": "off",
+    "draft_device": "ROCm0",
+    "draft_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+    "expected_word": null,
+    "expected_word_count": null,
+    "json_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "done": {
+          "enum": [
+            "END"
+          ],
+          "type": "string"
+        },
+        "words": {
+          "items": {
+            "enum": [
+              "benchmark"
+            ],
+            "type": "string"
+          },
+          "maxItems": 200,
+          "minItems": 200,
+          "type": "array"
+        }
+      },
+      "required": [
+        "words",
+        "done"
+      ],
+      "type": "object"
+    },
+    "ld_library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+    "max_tokens": 1024,
+    "mode": "dry_run",
+    "n_gpu_layers": 99,
+    "prompt": "Return a compact JSON object with keys status, model, and seed, using values \"ok\", \"gemma4\", and 42.",
+    "request_sampler_mode": "explicit-greedy",
+    "schema_task": "word-array-200",
+    "seed": 42,
+    "server_bin": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+    "slots": 4,
+    "spec_draft_n_max": 2,
+    "spec_type": "draft-mtp",
+    "stop": [],
+    "target_device": "ROCm0",
+    "target_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+    "temperature": 0.0,
+    "threads": 8,
+    "ubatch": 512
+  },
+  "runs": [
+    {
+      "label": "run_01",
+      "repeat_index": 1,
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "8",
+        "-ub",
+        "512",
+        "-c",
+        "8192",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "[ephemeral]",
+        "-md",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-n-max",
+        "2",
+        "--device-draft",
+        "ROCm0",
+        "--spec-draft-ngl",
+        "99",
+        "--no-spec-draft-backend-sampling"
+      ]
+    },
+    {
+      "label": "run_02",
+      "repeat_index": 2,
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "8",
+        "-ub",
+        "512",
+        "-c",
+        "8192",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "[ephemeral]",
+        "-md",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-n-max",
+        "2",
+        "--device-draft",
+        "ROCm0",
+        "--spec-draft-ngl",
+        "99",
+        "--no-spec-draft-backend-sampling"
+      ]
+    }
+  ]
+}

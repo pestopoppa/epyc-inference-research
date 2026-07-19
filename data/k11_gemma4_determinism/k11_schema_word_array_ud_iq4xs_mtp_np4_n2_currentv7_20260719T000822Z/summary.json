@@ -1,0 +1,240 @@
+{
+  "created_at": "2026-07-19T00:08:49.075683+00:00",
+  "deterministic": true,
+  "draft_backend_sampling": "off",
+  "draft_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+  "expected_word": null,
+  "expected_word_count": null,
+  "json_schema": {
+    "additionalProperties": false,
+    "properties": {
+      "done": {
+        "enum": [
+          "END"
+        ],
+        "type": "string"
+      },
+      "words": {
+        "items": {
+          "enum": [
+            "benchmark"
+          ],
+          "type": "string"
+        },
+        "maxItems": 200,
+        "minItems": 200,
+        "type": "array"
+      }
+    },
+    "required": [
+      "words",
+      "done"
+    ],
+    "type": "object"
+  },
+  "ld_library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "mode": "execute",
+  "request_sampler_mode": "explicit-greedy",
+  "runs": [
+    {
+      "acceptance_rate": 0.953052,
+      "content": "{\"done\": \"END\", \"words\": [\"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\"]}",
+      "draft_n": 426,
+      "draft_n_accepted": 406,
+      "label": "run_01",
+      "output_sha256": "70111df39b2bd3e66c424fb653632df69db4078d2dad70f70b492649bc475680",
+      "port": 36315,
+      "reasoning_content": "",
+      "repeat_index": 1,
+      "request": {
+        "max_tokens": 1024,
+        "prompt": "Return a compact JSON object with keys status, model, and seed, using values \"ok\", \"gemma4\", and 42.",
+        "schema_task": "word-array-200",
+        "seed": 42,
+        "stop": [],
+        "temperature": 0.0
+      },
+      "response_path": "/mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z/responses/run_01.raw.json",
+      "response_sha256": "ee5eb0099f8e49b674c1aa1804f7fc0e54c598e4527c50286a35ce6b3823423a",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "8",
+        "-ub",
+        "512",
+        "-c",
+        "8192",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "36315",
+        "-md",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-n-max",
+        "2",
+        "--device-draft",
+        "ROCm0",
+        "--spec-draft-ngl",
+        "99",
+        "--no-spec-draft-backend-sampling"
+      ],
+      "server_log": "/mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z/logs/run_01.server.log",
+      "server_pid": 42517,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "done": "END",
+        "done_ok": true,
+        "json_ok": true,
+        "observed_word_count": 200,
+        "passed": true,
+        "schema_task": "word-array-200",
+        "words_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "draft_n": 426,
+        "draft_n_accepted": 406,
+        "predicted_ms": 6476.756,
+        "predicted_n": 620,
+        "predicted_per_second": 95.72693490383148,
+        "predicted_per_token_ms": 10.446380645161291,
+        "prompt_ms": 162.278,
+        "prompt_n": 42,
+        "prompt_per_second": 258.8151197328042,
+        "prompt_per_token_ms": 3.8637619047619047
+      },
+      "usage": {
+        "completion_tokens": 620,
+        "prompt_tokens": 42,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 662
+      }
+    },
+    {
+      "acceptance_rate": 0.953052,
+      "content": "{\"done\": \"END\", \"words\": [\"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\", \"benchmark\"]}",
+      "draft_n": 426,
+      "draft_n_accepted": 406,
+      "label": "run_02",
+      "output_sha256": "70111df39b2bd3e66c424fb653632df69db4078d2dad70f70b492649bc475680",
+      "port": 47551,
+      "reasoning_content": "",
+      "repeat_index": 2,
+      "request": {
+        "max_tokens": 1024,
+        "prompt": "Return a compact JSON object with keys status, model, and seed, using values \"ok\", \"gemma4\", and 42.",
+        "schema_task": "word-array-200",
+        "seed": 42,
+        "stop": [],
+        "temperature": 0.0
+      },
+      "response_path": "/mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z/responses/run_02.raw.json",
+      "response_sha256": "a1513ec4c8b44d8cab59e8dec1e1ba41e1f14f6d01655818d75d768ffdd70136",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "8",
+        "-ub",
+        "512",
+        "-c",
+        "8192",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "47551",
+        "-md",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-n-max",
+        "2",
+        "--device-draft",
+        "ROCm0",
+        "--spec-draft-ngl",
+        "99",
+        "--no-spec-draft-backend-sampling"
+      ],
+      "server_log": "/mnt/raid0/llm/epyc-inference-research/data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z/logs/run_02.server.log",
+      "server_pid": 42916,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "done": "END",
+        "done_ok": true,
+        "json_ok": true,
+        "observed_word_count": 200,
+        "passed": true,
+        "schema_task": "word-array-200",
+        "words_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "draft_n": 426,
+        "draft_n_accepted": 406,
+        "predicted_ms": 6561.221,
+        "predicted_n": 620,
+        "predicted_per_second": 94.49460702512536,
+        "predicted_per_token_ms": 10.582614516129032,
+        "prompt_ms": 164.147,
+        "prompt_n": 42,
+        "prompt_per_second": 255.86821568472163,
+        "prompt_per_token_ms": 3.9082619047619045
+      },
+      "usage": {
+        "completion_tokens": 620,
+        "prompt_tokens": 42,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 662
+      }
+    }
+  ],
+  "schema_task": "word-array-200",
+  "server_bin": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "slots": 4,
+  "spec_type": "draft-mtp",
+  "stop": [],
+  "target_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
+  "task_passed": true,
+  "unique_output_hashes": [
+    "70111df39b2bd3e66c424fb653632df69db4078d2dad70f70b492649bc475680"
+  ]
+}

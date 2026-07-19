@@ -686,7 +686,9 @@ Evidence lives at `data/gemma4_iq4_residency/gemma4_26b_ud_iq4xs_mi210_v7_202607
 
 The follow-up at `data/gemma4_iq4_residency/mtp_ab_local_20260718T170739Z/summary.json` measured a clean no-spec control with q8 KV (`pp2048 2450.51 t/s`, `tg512 81.41 t/s`) and an external assistant-head MTP server/API run with `--spec-type draft-mtp --spec-draft-n-max 2`. The MTP run decoded `542` eval tokens at `117.01 t/s`, accepted `360/362` drafts (`0.99448`), and reused `179` graphs. The strict JSON prompt was not content-clean: the response wrapped the JSON in channel markers and failed the parser.
 
-Interpretation: UD-IQ4_XS is fully MI210-resident and runtime/coherence-clean on current v7, and the assistant-head MTP lane is speed-positive on this structured-output probe. It remains a compression candidate, not a production worker replacement: quality retention against ORIG Q4_K_M and content-template cleanup are still open.
+The source-head schema repeat at `data/k11_gemma4_determinism/k11_schema_word_array_ud_iq4xs_mtp_np4_n2_currentv7_20260719T000822Z/summary.json` reran the UD-IQ4_XS target with the assistant-head Q8 drafter, `--spec-type draft-mtp`, `--spec-draft-n-max 2`, four slots, and the `word-array-200` JSON schema diagnostic. It passed `2/2` fresh-server runs with one output hash, exact `200` `"benchmark"` words plus `done=END`, mean decode `95.11 t/s`, and identical draft acceptance `406/426` (`95.31%`) in both runs.
+
+Interpretation: UD-IQ4_XS is fully MI210-resident and runtime/coherence-clean on current v7, and the assistant-head MTP lane is speed-positive on bounded structured-output probes. It remains a compression candidate, not a production worker replacement: quality retention against ORIG Q4_K_M and broader free-form/termination behavior are still open.
 
 ## Gemma4 Combined Ngram-Then-MTP Probe
 
