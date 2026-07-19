@@ -1002,7 +1002,8 @@ with reasoning disabled and q4_0/f16 KV:
 | 3-prompt mixed architect/reviewer slice | `41.85 t/s`, `3/3` | not repeated | `50.77 t/s`, `3/3` (`235/356` accepted) | PASS |
 | 8-prompt broadened sanity slice | not repeated | not repeated | mean `80.77 t/s`, `1166/1440` accepted | FAIL overall (`5/8`) |
 | CPU-only IQ2 prefill sizing | `pp2048 122.31 t/s`; `pp8192 114.40 t/s`; `tg16 6.24 t/s` | not applicable | not applicable | PASS runtime; no KFD PIDs |
-| AXA-2 MI210 prefill sizing | `pp2048 342.06 t/s`; `pp8192 135.56 t/s`; `pp16384 76.52 t/s`; `pp32768` no row after three bounded attempts | not applicable | not applicable | PARTIAL runtime; cleanup clean |
+| AXA-2 MI210 prefill sizing | q4_0/f16 KV: `pp2048 342.06 t/s`; `pp8192 135.56 t/s`; `pp16384 76.52 t/s`; mixed-KV `pp32768` no row. Homogeneous 32K controls: f16/f16 `489.31 t/s`, q4_0/q4_0 `487.87 t/s` | not applicable | not applicable | PARTIAL runtime; cleanup clean |
+| AXA-2 hot page-cache lease/load smoke | health-ready `7052 ms`; chat request `315 ms`; exact `READY` | not applicable | not applicable | PASS runtime; no KFD PIDs |
 
 Artifacts:
 
@@ -1014,6 +1015,10 @@ Artifacts:
 - `data/gpu-mi210/axa2-qwen35-122b-iq2m-prefill-sizing-20260719T060039Z/summary.json`
 - `data/gpu-mi210/axa2-qwen35-122b-iq2m-prefill32k-t32-20260719T062410Z/summary.json`
 - `data/gpu-mi210/axa2_32k_prefill_qwen35_122b_v1_q4k_f16v_b1024_ub256_20260719T064333Z/summary.json`
+- `data/gpu-mi210/axa2_32k_prefill_qwen35_122b_v1_f16kv_b1024_ub256_20260719T065143Z/summary.json`
+- `data/gpu-mi210/axa2_qwen35_122b_hot_load_lease_smoke_20260719T065557Z/summary.json`
+- `data/gpu-mi210/axa2_32k_prefill_qwen35_122b_v1_f16k_q4v_b1024_ub256_rerun_20260719T070336Z/summary.json`
+- `data/gpu-mi210/axa2_32k_prefill_qwen35_122b_v1_q4kv_b1024_ub256_20260719T071051Z/summary.json`
 
 Disposition: composed `ngram-mod,draft-mtp` is a strong routing candidate for
 repetitive/structured generation and a modest positive candidate on mixed
@@ -1024,10 +1029,16 @@ their simple sanity checks. It is therefore a task-class lever only, not a
 blanket default. The CPU-only IQ2 row is useful for CPU prefill-compute and
 hybrid-placement economics, but decode is too slow for a primary CPU-only
 serving lane. The AXA-2 MI210 prefill rows are observation-grade teleport cost
-inputs only: 2K/8K/16K completed cleanly with q4_0/f16 KV, while 32K did not
-emit a `llama-bench` row before bounded stops across the original b2048/ub512
-shape, a direct t32 repeat, and a b1024/ub256 repeat. This needs a separate
-profile/rerun before any 32K cutover policy is claimed.
+inputs only: 2K/8K/16K completed cleanly with q4_0/f16 KV; homogeneous 32K KV
+controls completed at f16/f16 `489.31 t/s` and q4_0/q4_0 `487.87 t/s`. The
+mixed-KV 32K shapes still did not emit a `llama-bench` row: q4_0/f16 failed
+across the original b2048/ub512 shape, a direct t32 repeat, and a b1024/ub256
+repeat, while a corrected f16/q4_0 b1024/ub256 rerun held VRAM but stayed at
+0% GPU through warmup until watchdog stop. This narrows the root cause to the
+mixed-KV 32K graph/scheduling path, not q4 KV generally. The hot page-cache
+lease/load smoke shows the resident-lane acquisition path can reach health in
+about `7.05s` when the artifact is page-cache-hot, but it is not a cold-load
+measurement and must not be used for the cold-load break-even branch.
 
 ## Deferred Low-Contention Manifest Work
 

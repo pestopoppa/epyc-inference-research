@@ -1,0 +1,19 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/axa2_qwen35_122b_hot_load_lease_smoke_20260719T065557Z",
+  "variant": "hot page-cache 122B IQ2_M MI210 lease/load smoke, f16/f16 KV, c32768",
+  "load_ready_ms": 7052,
+  "request_ms": 315,
+  "pid": 426746,
+  "health": {
+    "status": "ok"
+  },
+  "usage": {
+    "completion_tokens": 2,
+    "prompt_tokens": 16,
+    "total_tokens": 18,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "content": "READY"
+}

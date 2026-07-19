@@ -1,0 +1,6 @@
+artifact=/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/axa2_qwen35_122b_hot_load_lease_smoke_20260719T065557Z
+start_utc=2026-07-19T06:55:57Z
+binary=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server
+version: 10097 (6a8dd5ea6)
+built with GNU 15.2.0 for Linux x86_64
+6a8dd5ea6
