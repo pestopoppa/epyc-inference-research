@@ -253,7 +253,10 @@ class K35StackContextMatrixRunnerTests(unittest.TestCase):
             self.assertIn("--output-dir", operator_text)
             self.assertIn("K35_RUN_ID:=k35_stack_context_matrix_$(date -u +%Y%m%dT%H%M%SZ)", operator_text)
             self.assertIn("/mnt/raid0/llm/epyc-inference-research/data/k35_stack_context_matrix", operator_text)
+            self.assertIn("P-GPU-1 caveat", operator_text)
+            self.assertIn("production-named-kernel only", operator_text)
             self.assertNotIn(f"--output-dir {tmp}", operator_text)
+            self.assertIn("production-named-kernel only", plan["pgpu1_protocol_fields"]["certification_note"])
             self.assertEqual(
                 plan["pgpu1_protocol_fields"]["operator_execution_output_dir"],
                 "${K35_EXECUTION_BASE}/${K35_RUN_ID}",

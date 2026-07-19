@@ -285,7 +285,7 @@
   "contexts": [
     8192
   ],
-  "created_at": "2026-07-19T11:23:53.071345+00:00",
+  "created_at": "2026-07-19T11:49:28.063395+00:00",
   "execute": false,
   "max_tokens": 1024,
   "operator_invocation": [
@@ -318,6 +318,7 @@
     "CPU stack quiesced; AutoPilot and unrelated llama workloads stopped before operator-window execution"
   ],
   "pgpu1_protocol_fields": {
+    "certification_note": "Current P-GPU-1 amendment prep is production-named-kernel only: experimental, candidate, or fork GPU rows remain observation-grade unless the signed amendment explicitly permits pre-promotion evidence or retro-certification.",
     "cpu_interference_policy": "CPU stack quiesced; AutoPilot and unrelated llama workloads stopped before operator-window execution",
     "operator_execution_output_dir": "${K35_EXECUTION_BASE}/${K35_RUN_ID}",
     "operator_invocation": "operator_run.sh records the exact --execute runner invocation for the prepared plan",

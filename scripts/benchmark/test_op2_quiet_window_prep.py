@@ -90,6 +90,7 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
 
             self.assertEqual(manifest["status"], "prepared_no_inference")
             self.assertTrue(manifest["measurement"]["p_gpu_1_deferred"])
+            self.assertIn("production-named-kernel only", manifest["measurement"]["p_gpu_1_certification_note"])
             self.assertFalse(manifest["autopilot_restart_authorized"])
             self.assertFalse(manifest["production_v6_touch_authorized"])
             called = [" ".join(call) for call in fake.calls]
@@ -108,7 +109,12 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
             self.assertIn("role_smoke_ports.tsv", commands)
             self.assertIn("/v1/chat/completions", commands)
             self.assertIn("role_smoke_aggregate.json", commands)
+            self.assertIn("P-GPU-1 caveat", commands)
+            self.assertIn("production-named-kernel only", commands)
             self.assertNotIn("README.role_smokes.md", commands)
+            summary = (bundle / "summary.md").read_text()
+            self.assertIn("P-GPU-1 certification caveat", summary)
+            self.assertIn("production-named-kernel only", summary)
 
             loaded = json.loads((bundle / "manifest.json").read_text())
             self.assertEqual(loaded["schema"], op2.SCHEMA)

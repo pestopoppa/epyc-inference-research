@@ -7083,7 +7083,7 @@ roles:
       gpu_only_candidate: true
       hybrid_candidate: false
     benchmark_plan:
-      cpu_only: "Runtime and strict-output quality gate ran; CPU CLI structured-copy control timed out, while raw p512/tg128 control was 8.39 decode t/s. Reopen only for a narrower CPU lane or quality fix."
+      cpu_only: "Runtime and strict-output quality gate already ran; CPU follow-up is parked. Reopen only after a named quality/protocol fix that could make the lane role-ready; no speed-only CPU reruns."
       gpu_only: "Runtime and strict-output quality gate ran; MI210 ngram-mod structured-copy speedup is positive, but quality failure and <think> leakage block role use."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
@@ -7129,8 +7129,8 @@ roles:
       gpu_only_candidate: true
       hybrid_candidate: false
     benchmark_plan:
-      cpu_only: "Optional loader/provenance classification after primary Bonsai Q1/Q2 gates."
-      gpu_only: "Optional MI210 smoke only if CPU loader classification is coherent."
+      cpu_only: "Parked. Reopen only when provenance repair is paired with a named role-quality protocol/fix; no speed-only CPU reruns."
+      gpu_only: "Parked. No optional MI210 speed smoke unless the provenance repair plus role-quality protocol/fix first makes this a live candidate."
       cpu_gpu_hybrid: "Not a primary path at this size."
 
   qwable_v1_iq4xs:

@@ -72,6 +72,11 @@ DEFAULT_CPU_INTERFERENCE_POLICY = (
     "CPU stack quiet required; runner aborts on AutoPilot or llama workload process blockers "
     "unless --allow-dirty-host is explicit"
 )
+PGPU1_CERTIFICATION_NOTE = (
+    "Current P-GPU-1 amendment prep is production-named-kernel only: experimental, "
+    "candidate, or fork GPU rows remain observation-grade unless the signed amendment "
+    "explicitly permits pre-promotion evidence or retro-certification."
+)
 
 BLOCKER_BASENAMES = {"llama-server", "llama-cli", "llama-bench", "llama-mtmd-cli"}
 AUTOPILOT_MARKERS = (
@@ -843,6 +848,8 @@ def render_operator_run_script(args: argparse.Namespace) -> str:
             "",
             "# Re-run this K35/P-GPU-1 plan inside an approved operator bench window.",
             "# The dry-run preparer only writes this script; it does not execute inference.",
+            f"# P-GPU-1 caveat: {PGPU1_CERTIFICATION_NOTE}",
+            "# Default experimental-v7 K35 rows are promotion observations unless the signed protocol says otherwise.",
             operator_output_preamble(args),
             f"cd {shlex.quote(str(RESEARCH_ROOT))}",
             invocation,
@@ -901,6 +908,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "operator_execution_output_dir": args.execution_output_dir
             or "${K35_EXECUTION_BASE}/${K35_RUN_ID}",
             "rocm_hardware_state": "collect_rocm_snapshot captures pid/memory/utilization plus clocks, power, and temperature",
+            "certification_note": PGPU1_CERTIFICATION_NOTE,
         },
         "operator_invocation": build_runner_invocation(args, execute=True, output_dir="${K35_EXEC_OUTPUT_DIR}"),
         "cells": cells,

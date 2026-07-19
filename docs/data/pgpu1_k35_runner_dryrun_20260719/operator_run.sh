@@ -3,6 +3,8 @@ set -euo pipefail
 
 # Re-run this K35/P-GPU-1 plan inside an approved operator bench window.
 # The dry-run preparer only writes this script; it does not execute inference.
+# P-GPU-1 caveat: Current P-GPU-1 amendment prep is production-named-kernel only: experimental, candidate, or fork GPU rows remain observation-grade unless the signed amendment explicitly permits pre-promotion evidence or retro-certification.
+# Default experimental-v7 K35 rows are promotion observations unless the signed protocol says otherwise.
 : "${K35_RUN_ID:=k35_stack_context_matrix_$(date -u +%Y%m%dT%H%M%SZ)}"
 export K35_EXECUTION_BASE="${K35_EXECUTION_BASE:-/mnt/raid0/llm/epyc-inference-research/data/k35_stack_context_matrix}"
 export K35_EXEC_OUTPUT_DIR="${K35_EXEC_OUTPUT_DIR:-${K35_EXECUTION_BASE}/${K35_RUN_ID}}"

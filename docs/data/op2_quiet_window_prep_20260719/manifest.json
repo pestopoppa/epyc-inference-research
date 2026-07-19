@@ -5,9 +5,9 @@
     "summary": "/mnt/raid0/llm/epyc-inference-research/docs/data/op2_quiet_window_prep_20260719/summary.md"
   },
   "autopilot_restart_authorized": false,
-  "generated_at": "2026-07-19T11:18:05.085146+00:00",
+  "generated_at": "2026-07-19T11:49:27.910846+00:00",
   "host_state": {
-    "captured_at": "2026-07-19T11:18:05.085249+00:00",
+    "captured_at": "2026-07-19T11:49:27.910948+00:00",
     "commands": {
       "free_h": {
         "argv": [
@@ -39,7 +39,7 @@
         "ok": true,
         "returncode": 0,
         "stderr": "",
-        "stdout": " 11:18:05 up 16 days, 17:16,  0 users,  load average: 0.84, 0.70, 0.74\n"
+        "stdout": " 11:49:27 up 16 days, 17:48,  0 users,  load average: 1.46, 1.37, 1.28\n"
       }
     },
     "kernel_knobs": {
@@ -59,6 +59,7 @@
   "measurement": {
     "authoritative": true,
     "exists": true,
+    "p_gpu_1_certification_note": "Current P-GPU-1 amendment prep is production-named-kernel only: experimental, candidate, or fork GPU rows remain observation-grade unless the signed amendment explicitly permits pre-promotion evidence or retro-certification.",
     "p_gpu_1_deferred": true,
     "p_gpu_1_line": "### P-GPU-1 \u2014 GPU canonical (DEFERRED \u2014 hardware not acquired, all GPU work HW-GATED)",
     "path": "/workspace/MEASUREMENT.md"
@@ -70,7 +71,7 @@
     "output_base": "/mnt/raid0/llm/epyc-inference-research/data/op2_canonical_bench_window"
   },
   "process_state": {
-    "captured_at": "2026-07-19T11:18:05.124436+00:00",
+    "captured_at": "2026-07-19T11:49:28.020669+00:00",
     "matching_processes": [],
     "ps_ok": true,
     "ps_stderr": ""
@@ -164,7 +165,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": "ea3f9d4cbc5498361b2d526cdca7958ded2bb0d0\n"
+          "stdout": "b8f835dd131d223574d94fa41f236ba87edd95a5\n"
         },
         "tracked_status": {
           "argv": [
@@ -177,7 +178,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": " M orchestration/autopilot_baseline.yaml\n M orchestration/autopilot_journal_1.jsonl\n M orchestration/classifier_config.yaml\n M orchestration/repl_memory/q_scorer.py\n M scripts/autopilot/failure_blacklist.yaml\n M scripts/benchmark/mtp_acceptance_report.py\n M scripts/benchmark/seeding_rewards.py\n M tests/unit/test_mtp_acceptance_report.py\n M tests/unit/test_q_scorer.py\n M tests/unit/test_seeding_rewards.py\n"
+          "stdout": " M orchestration/autopilot_baseline.yaml\n M orchestration/autopilot_journal_1.jsonl\n M orchestration/classifier_config.yaml\n M orchestration/repl_memory/q_scorer.py\n M scripts/analysis/reviewer_pool_gen.py\n M scripts/autopilot/failure_blacklist.yaml\n M scripts/benchmark/mtp_acceptance_report.py\n M scripts/benchmark/seeding_rewards.py\n M tests/test_reviewer_pool_gen.py\n M tests/unit/test_mtp_acceptance_report.py\n M tests/unit/test_q_scorer.py\n M tests/unit/test_seeding_rewards.py\n"
         },
         "upstream": {
           "argv": [
@@ -195,9 +196,9 @@
         }
       },
       "exists": true,
-      "head": "ea3f9d4cbc5498361b2d526cdca7958ded2bb0d0",
+      "head": "b8f835dd131d223574d94fa41f236ba87edd95a5",
       "path": "/mnt/raid0/llm/epyc-orchestrator",
-      "tracked_dirty_lines": 10,
+      "tracked_dirty_lines": 12,
       "upstream": "origin/spec-dec-mtp-refresh-2026-06-22"
     },
     "production_llama": {
@@ -286,7 +287,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": "73aac2d49519c131c482e9759947ece2a018b460\n"
+          "stdout": "0487c378e9bf8689410f80b77f626b358096db3a\n"
         },
         "tracked_status": {
           "argv": [
@@ -299,7 +300,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": " M scripts/benchmark/op2_quiet_window_prep.py\n M scripts/benchmark/test_op2_quiet_window_prep.py\n"
+          "stdout": " M orchestration/model_registry.yaml\n M scripts/benchmark/k35_stack_context_matrix_runner.py\n M scripts/benchmark/op2_quiet_window_prep.py\n M scripts/benchmark/test_k35_stack_context_matrix_runner.py\n M scripts/benchmark/test_op2_quiet_window_prep.py\n"
         },
         "upstream": {
           "argv": [
@@ -317,9 +318,9 @@
         }
       },
       "exists": true,
-      "head": "73aac2d49519c131c482e9759947ece2a018b460",
+      "head": "0487c378e9bf8689410f80b77f626b358096db3a",
       "path": "/mnt/raid0/llm/epyc-inference-research",
-      "tracked_dirty_lines": 2,
+      "tracked_dirty_lines": 5,
       "upstream": "origin/main"
     },
     "root": {
@@ -347,7 +348,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": "8b6ba5c54dc96a723870a19dbed0db82ada42dd0\n"
+          "stdout": "47e7ce4e365177ae35918a9d48aade16c1a9d44b\n"
         },
         "tracked_status": {
           "argv": [
@@ -378,7 +379,7 @@
         }
       },
       "exists": true,
-      "head": "8b6ba5c54dc96a723870a19dbed0db82ada42dd0",
+      "head": "47e7ce4e365177ae35918a9d48aade16c1a9d44b",
       "path": "/mnt/raid0/llm/epyc-root",
       "tracked_dirty_lines": 10,
       "upstream": "origin/spec-dec-mtp-refresh-2026-06-22"
