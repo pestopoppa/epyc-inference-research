@@ -2315,7 +2315,7 @@ roles:
         requires the documented architect quality/eval gates and, for
         production, P-GPU-1 measurement ratification.
     performance:
-      benchmark_status: bounded_mi210_smoke_pass_context_observed_quality_gate_open
+      benchmark_status: bounded_mi210_smoke_context_and_architect_slice_pass_role_gate_open
       load_smoke_observation: >
         2026-07-19 experimental-v7 source-head MI210 server smoke loaded in
         7.125s, returned exact `{"status":"ok","model":"qwen35_122b_iq2m"}`,
@@ -2329,10 +2329,19 @@ roles:
         residual llama/KFD process, but the wrapper postflight failed to write
         `exit_code.txt`; treat as observation-grade, not a clean canonical
         measurement.
+      architect_slice_observation: >
+        2026-07-19 bounded MI210 architect-style admission slice with reasoning
+        disabled and `--spec-type none` passed `8/8` deterministic JSON /
+        numbered-plan checkers. The run generated 1508 tokens, averaged prompt
+        `148.43 t/s`, decode `44.34 t/s` with range `44.16-44.45 t/s`, and
+        cleanup verified no KFD PIDs. Caveat: auto reasoning consumed the
+        384-token budget without final content in the initial probe, so
+        reasoning-mode policy remains open.
       evidence:
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/metrics_summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/summary.md
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002502Z/summary.json
     memory:
       residency: cold
       pinned: false

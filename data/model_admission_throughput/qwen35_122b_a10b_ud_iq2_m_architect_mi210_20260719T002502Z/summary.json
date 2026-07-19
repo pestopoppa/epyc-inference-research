@@ -1,0 +1,20 @@
+{
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "model": "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+  "server_mode": "single_server_rocm0_reasoning_off_spec_none",
+  "max_tokens": 384,
+  "prompts": 8,
+  "request_ok": 8,
+  "checker_pass": 8,
+  "checker_fail": 0,
+  "prompt_tps_avg": 148.4266,
+  "prompt_tps_min": 130.9038,
+  "prompt_tps_max": 168.2256,
+  "decode_tps_avg": 44.3359,
+  "decode_tps_min": 44.1598,
+  "decode_tps_max": 44.4533,
+  "generated_tokens": 1508,
+  "request_wall_seconds_sum": 37.2198,
+  "quality_gate": "PASS: all JSON objects valid and all numbered-item minimums met",
+  "caveat": "Reasoning was disabled after an initial auto-reasoning harness probe consumed the 384-token budget without final content."
+}

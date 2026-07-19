@@ -1,0 +1,9 @@
+{
+  "server_pid": 58761,
+  "server_process_verified_absent": true,
+  "postflight_rocm_smi": "No KFD PIDs currently running; GPU use 0%; VRAM allocated 0%",
+  "postflight_process_scan": "no llama-server, run_slice.py, or numactl process",
+  "production_stack_restarted": false,
+  "production_v6_touched": false,
+  "autopilot_restarted": false
+}
