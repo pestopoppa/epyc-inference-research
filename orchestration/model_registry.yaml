@@ -2819,8 +2819,54 @@ roles:
         `854.17/807.61/666.62 t/s` and decode `29.64 t/s`. Speed-only
         observation; `llama-bench` exposed no native-MTP or ngram selector, so
         this is not a spec-dec/NEXTN boosted role claim.
+      measured:
+      - protocol: p_rev1
+        instrument_era: p_rev1_attested
+        attestation: MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719
+        date: 2026-07-19
+        role: patch_reviewer
+        corpus: c-crab
+        slice: GC-shadow-repair4b.2c
+        n: 48
+        accept_controls: 24
+        hard_negatives: 24
+        reviewer_arm: qwen36_27b_q8_reviewer
+        false_accept_rate: 0.542
+        false_reject_rate: 0.167
+        auc: 0.503
+        ece: 0.316
+        brier: 0.329
+        parse_failure_rate: 0.0
+        median_latency_seconds: 6.2
+        role_ready: false
+        verdict: fast_but_overapproves_random_auc
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-fast-qwen36-27b-q8-ccrab-p-rev1-20260719T162109Z
+      - protocol: p_rev1
+        instrument_era: p_rev1_attested
+        attestation: MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719
+        date: 2026-07-19
+        role: patch_reviewer
+        corpus: c-crab
+        slice: GC-shadow-repair4b.2c
+        n: 48
+        accept_controls: 24
+        hard_negatives: 24
+        reviewer_arm: qwen36_27b_q8_plus_qwable_iq4xs_scaffold
+        scaffold_model: qwable_v1_iq4xs
+        false_accept_rate: 0.333
+        false_reject_rate: 0.417
+        auc: 0.659
+        ece: 0.315
+        brier: 0.325
+        parse_failure_rate: 0.0
+        median_latency_seconds: 6.5
+        role_ready: false
+        verdict: repair_hypothesis_only_false_reject_too_high
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-fast-b-qwen36-27b-q8-plus-qwable-iq4xs-scaffold-ccrab-p-rev1-20260719T162958Z
       evidence:
       - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-dense-v7-context-20260718T2225Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-fast-qwen36-27b-q8-ccrab-p-rev1-20260719T162109Z/reviewer_calibration_report.md
+      - /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-fast-b-qwen36-27b-q8-plus-qwable-iq4xs-scaffold-ccrab-p-rev1-20260719T162958Z/reviewer_calibration_report.md
       quality_score: null  # benchmark pending
     benchmark_date: 2026-04-23
     notes: >
@@ -6455,6 +6501,15 @@ roles:
         Result: FA 41.7% (10/24), FR 25.0% (6/24), accept 58.3%, parse 0.0%,
         ECE/AUC/Brier 0.239/0.509/0.278. Verdict: not patch-reviewer role-ready
         under this policy; do not rerun unchanged.
+      native_mtp_repair_observation: >
+        2026-07-19 DeepSeek32/GLM-DSA NEXTN row-selection repair made the
+        matched long-context draft-mtp retry stream successfully. Evidence:
+        data/glm52_native_mtp_ab/glm52-native-mtp-draft-long-repair-20260719T195037Z/plan.json.
+        Repaired draft-mtp processed 2919 prompt tokens at 22.77 t/s and
+        decoded 512 tokens at 5.33 t/s with alpha=0.933 (376/403 accepted),
+        versus matched no-spec decode 2.49 t/s. This is acceleration evidence
+        for the single-NextN repaired path only; it does not reverse the
+        P-REV-1 reviewer-admission failure.
       external_judgebench_gpt_p_rev1_observation: >
         2026-07-19 external JudgeBench-GPT pairwise live gate used n=24,
         observation_only=false, measurement_protocol=p_rev1, attestation
@@ -6497,6 +6552,42 @@ roles:
         corpus: median layer top_32=39.19%, max=45.74%. Generic GLM hot-expert
         offload/REAP is not justified by current workload evidence; reopen only
         with a narrower role-specific corpus or different placement mechanism.
+      measured:
+      - protocol: p_rev1
+        instrument_era: p_rev1_attested
+        attestation: MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719
+        date: 2026-07-19
+        role: patch_reviewer
+        corpus: c-crab
+        slice: GC-shadow-repair4b.2c
+        n: 48
+        accept_controls: 24
+        hard_negatives: 24
+        false_accept_rate: 0.417
+        false_reject_rate: 0.250
+        auc: 0.509
+        ece: 0.239
+        brier: 0.278
+        parse_failure_rate: 0.0
+        median_latency_seconds: 124.0
+        role_ready: false
+        verdict: route_away_on_current_policy
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z
+      - protocol: native_mtp_repair_observation
+        date: 2026-07-19
+        role: acceleration
+        path: single_nextn_draft_mtp
+        prompt_tokens: 2919
+        completion_tokens: 512
+        prompt_tps: 22.77
+        decode_tps: 5.33
+        no_spec_decode_tps: 2.49
+        draft_generated_tokens: 403
+        draft_accepted_tokens: 376
+        alpha: 0.933
+        role_ready: false
+        limitation: single-NextN repaired path; acceleration evidence only, not reviewer admission
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/glm52_native_mtp_ab/glm52-native-mtp-draft-long-repair-20260719T195037Z/plan.json
       evidence:
       - /mnt/raid0/llm/models/glm52_clean.log
       - /mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json
@@ -6562,6 +6653,9 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/decisions.jsonl
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_corpus_direct/gc-shadow-repair4b-p-rev1-20260719T132459Z/reviewer_calibration_report.md
+      native_mtp_repair:
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_native_mtp_ab/glm52-native-mtp-draft-long-repair-20260719T195037Z/plan.json
+      - /mnt/raid0/llm/epyc-inference-research/docs/data/glm52_native_mtp_ab_20260719.md
       external_ground_truth:
       - /mnt/raid0/llm/epyc-inference-research/docs/data/glm52_external_judgebench_gpt_p_rev1_live_20260719.md
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/summary.json
@@ -7325,6 +7419,48 @@ roles:
         `pp2048 116.13 t/s`, `pp8192 110.76 t/s`, and `tg512 13.99 t/s`.
         IQ4_XS remains the preferred default unless a broader quality slice
         shows a Q8-only gain.
+      measured:
+      - protocol: p_rev1
+        instrument_era: p_rev1_attested
+        attestation: MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719
+        date: 2026-07-19
+        role: patch_reviewer
+        corpus: c-crab
+        slice: GC-shadow-repair4b.2c
+        n: 48
+        accept_controls: 24
+        hard_negatives: 24
+        reviewer_arm: qwable_iq4xs_reviewer
+        false_accept_rate: 0.542
+        false_reject_rate: 0.458
+        auc: 0.438
+        ece: 0.441
+        brier: 0.448
+        parse_failure_rate: 0.0
+        median_latency_seconds: 2.1
+        role_ready: false
+        verdict: fastest_but_not_patch_reviewer
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-fast-b-qwable-iq4xs-ccrab-p-rev1-20260719T162712Z
+      - protocol: p_rev1
+        instrument_era: p_rev1_attested
+        attestation: MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719
+        date: 2026-07-19
+        role: scaffold_generator
+        corpus: c-crab
+        slice: GC-shadow-repair4b.2c
+        n: 48
+        beneficiary_model: qwen36_27b_q8
+        reviewer_arm: qwen36_27b_q8_plus_qwable_iq4xs_scaffold
+        false_accept_rate: 0.333
+        false_reject_rate: 0.417
+        auc: 0.659
+        ece: 0.315
+        brier: 0.325
+        parse_failure_rate: 0.0
+        median_latency_seconds: 6.5
+        role_ready: false
+        verdict: scaffold_repair_hypothesis_only
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-fast-b-qwen36-27b-q8-plus-qwable-iq4xs-scaffold-ccrab-p-rev1-20260719T162958Z
       evidence:
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/summary.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716Tcheckpoint/responses/standalone_iq4_gpu.raw.json
@@ -7356,6 +7492,8 @@ roles:
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c32768/summary.txt
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-fast-b-qwable-iq4xs-ccrab-p-rev1-20260719T162712Z/reviewer_calibration_report.md
+      - /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-fast-b-qwen36-27b-q8-plus-qwable-iq4xs-scaffold-ccrab-p-rev1-20260719T162958Z/reviewer_calibration_report.md
     memory:
       residency: cold
       pinned: false
