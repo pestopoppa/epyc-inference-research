@@ -1,0 +1,49 @@
+{
+  "events": {
+    "canonical": [
+      "fp_ops_retired_by_type.vector_mac",
+      "fp_ops_retired_by_type.vector_all",
+      "fp_ops_retired_by_type.scalar_all",
+      "ls_dmnd_fills_from_sys.dram_io_all",
+      "ls_hw_pf_dc_fills.dram_io_all",
+      "cycles",
+      "instructions",
+      "task-clock"
+    ],
+    "missing": [],
+    "present": [
+      "fp_ops_retired_by_type.vector_mac",
+      "fp_ops_retired_by_type.vector_all",
+      "fp_ops_retired_by_type.scalar_all",
+      "ls_dmnd_fills_from_sys.dram_io_all",
+      "ls_hw_pf_dc_fills.dram_io_all",
+      "cycles",
+      "instructions",
+      "task-clock"
+    ]
+  },
+  "generated_at": "2026-07-19T13:08:28.874136+00:00",
+  "host": {
+    "cpu_count": 192,
+    "kernel": "6.14.0-37-generic",
+    "machine": "x86_64",
+    "model_name": "AMD EPYC 9655 96-Core Processor",
+    "perf_event_paranoid": "1",
+    "vendor_id": "AuthenticAMD"
+  },
+  "perf": {
+    "binary": "/usr/bin/perf",
+    "found": true,
+    "list_ok": true,
+    "list_returncode": 0
+  },
+  "probe": {
+    "attempted": true,
+    "ok": true,
+    "returncode": 0,
+    "stderr": "4453981,,cycles,1291710,100.00,3.448,GHz\n5514302,,instructions,1291710,100.00,1.24,insn per cycle\n1291710,,task-clock,1291710,100.00,0.013,CPUs utilized\n"
+  },
+  "recommendation": "Canonical AMD perf events are visible and the smoke probe passed.",
+  "schema": "amd_perf_counter_preflight.v1",
+  "status": "ok"
+}

@@ -1,0 +1,36 @@
+{
+  "content": "OP2_READY",
+  "content_sha256": "cf20ad7164c9627516045f85808b859be0f83f6990b6acb5e7d93a801b7173d4",
+  "curl": {
+    "http_code": 200,
+    "remote_ip": "127.0.0.1",
+    "remote_port": 8070,
+    "time_total": 0.261581
+  },
+  "expected": "OP2_READY",
+  "ok": true,
+  "port": 8070,
+  "response_parse_error": null,
+  "role": "frontdoor",
+  "timings": {
+    "cache_n": 12,
+    "draft_n": 4,
+    "draft_n_accepted": 4,
+    "predicted_ms": 112.737,
+    "predicted_n": 4,
+    "predicted_per_second": 35.48080931726053,
+    "predicted_per_token_ms": 28.18425,
+    "prompt_ms": 138.684,
+    "prompt_n": 6,
+    "prompt_per_second": 43.26382279138185,
+    "prompt_per_token_ms": 23.114
+  },
+  "usage": {
+    "completion_tokens": 4,
+    "prompt_tokens": 18,
+    "prompt_tokens_details": {
+      "cached_tokens": 12
+    },
+    "total_tokens": 22
+  }
+}

@@ -1,0 +1,1 @@
+{"model":"local","messages":[{"role":"user","content":"Return exactly: OP2_READY"}],"temperature":0,"seed":42,"max_tokens":32,"chat_template_kwargs":{"enable_thinking":false}}

@@ -1,0 +1,6 @@
+frontdoor 8070
+worker_general 8072
+architect_general 8083
+ingest_long_context 8085
+worker_vision 8086
+vision_escalation 8087

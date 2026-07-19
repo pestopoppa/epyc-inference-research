@@ -1,0 +1,7 @@
+=== Validating canonical recipe ===
+=== Canonical bench command ===
+Binary:    /mnt/raid0/llm/llama.cpp/build/bin/llama-bench
+Env:       LD_LIBRARY_PATH=/usr/lib/llvm-20/lib:/opt/AMD/aocc-compiler-5.0.0/lib:/mnt/raid0/llm/llama.cpp/build/bin:/mnt/raid0/llm/llama.cpp-dflash/build/bin:/opt/rocm/lib OMP_PROC_BIND=spread OMP_PLACES=cores OMP_WAIT_POLICY=active OMP_DYNAMIC=false GGML_IQK=1
+Cmd:       taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/llama.cpp/build/bin/llama-bench -t 96 -fa 1 -mmp 0 -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf -p 0 -n 128 -r 10 -o md -o json
+=================================
+DRY RUN — skipping llama-bench execution.

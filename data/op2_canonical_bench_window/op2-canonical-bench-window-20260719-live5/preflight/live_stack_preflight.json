@@ -1,0 +1,75 @@
+{
+  "ts": "2026-07-19T13:08:26",
+  "topology_hash": "acf01b15781654d5904e8d4c0aa4aec3987d2def4b7a9546eeb2df8ee095774c",
+  "registry_hash": "a185591d35134009ebab23706b28140d322ccb2d84478b2dec3909bcd8f9ee4c",
+  "expected_topology_hash": null,
+  "live_affinity_verified": true,
+  "contention_matrix_fresh": false,
+  "health_ok": true,
+  "checks": {
+    "live_affinity": {
+      "ok": true,
+      "live_affinity_verified": true,
+      "configured_affinity_verified": false,
+      "live_only": true,
+      "returncode": 1,
+      "artifact_summary": {
+        "instances": 18,
+        "matched": 6,
+        "live_instances": 6,
+        "live_matched": 6,
+        "live_memory_placement_verified": true
+      },
+      "error": null,
+      "probe": "affinity_preflight.py",
+      "method": "subprocess"
+    },
+    "health": {
+      "ok": true,
+      "health_ok": true,
+      "structural_ok": null,
+      "health_check_rc": null,
+      "require_servers": true,
+      "server_ports": {
+        "ports": {
+          "8070": true,
+          "8072": true,
+          "8083": true,
+          "8085": true,
+          "8086": true,
+          "8087": true
+        },
+        "error": null
+      },
+      "probe": "health_check.sh (+ stack_health.wait_for_health)",
+      "structural_skipped": true
+    },
+    "topology": {
+      "topology_hash": "acf01b15781654d5904e8d4c0aa4aec3987d2def4b7a9546eeb2df8ee095774c",
+      "registry_hash": "a185591d35134009ebab23706b28140d322ccb2d84478b2dec3909bcd8f9ee4c",
+      "topology_source": "/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml",
+      "registry_source": "/mnt/raid0/llm/epyc-orchestrator/orchestration/model_registry.yaml",
+      "expected_topology_hash": null,
+      "ok": true,
+      "topology_match": null,
+      "error": null
+    },
+    "contention_matrix": {
+      "ok": true,
+      "contention_matrix_fresh": false,
+      "returncode": 2,
+      "message_tail": [
+        "FAIL: contention matrix is STALE (live topology hash=8c8cfcbb or file age > 30 days).",
+        "      Run: python scripts/server/contention_matrix.py"
+      ],
+      "error": null,
+      "warning": "contention matrix not fresh (rc=2)",
+      "observation_only": true,
+      "probe": "check_contention_matrix_fresh.py",
+      "method": "subprocess"
+    }
+  },
+  "overall": "PASS",
+  "fail_reasons": [],
+  "_written_to": "/mnt/raid0/llm/epyc-inference-research/data/op2_canonical_bench_window/op2-canonical-bench-window-20260719-live5/attestations/20260719T130826.json"
+}

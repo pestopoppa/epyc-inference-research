@@ -1,0 +1,2 @@
+    PID                  STARTED     ELAPSED COMMAND         COMMAND
+ 711627 Sun Jul 19 12:49:52 2026       18:44 llama-server    /mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 8085 -np 1 -c 32768 -t 96 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv q4_0 --mlock --slot-save-path /mnt/raid0/llm/cache/kv_slots/ingest_long_context --device none

@@ -1,0 +1,9 @@
+{
+  "allowed_processes": [
+    "llama-server",
+    "uvicorn"
+  ],
+  "blocker_n": 0,
+  "blockers": [],
+  "schema": "epyc.op2.quiet_window_process_blockers.v1"
+}

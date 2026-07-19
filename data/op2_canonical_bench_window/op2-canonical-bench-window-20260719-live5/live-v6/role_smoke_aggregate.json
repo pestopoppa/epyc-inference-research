@@ -1,0 +1,15 @@
+{
+  "all_pass": true,
+  "fail_n": 0,
+  "pass_n": 6,
+  "roles": [
+    "frontdoor",
+    "worker_general",
+    "architect_general",
+    "ingest_long_context",
+    "worker_vision",
+    "vision_escalation"
+  ],
+  "row_n": 6,
+  "schema": "epyc.op2.live_v6_role_smoke.v1"
+}

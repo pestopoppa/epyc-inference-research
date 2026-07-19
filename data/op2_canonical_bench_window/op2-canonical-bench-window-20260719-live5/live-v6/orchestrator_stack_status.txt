@@ -1,0 +1,14 @@
+
+COMPONENT                 PORT     PID        STATUS     ATTEST       MODEL
+------------------------------------------------------------------------------------------------
+architect_general         8083     711192     healthy    ok           Qwen3.5-122B-A10B-UD-Q4_K_M-00
+coder_escalation          8070     710566     healthy    ok           Qwen3.6-35B-A3B-MTP-Q8_0
+handoff_dashboard         8100     2973673    healthy    n/a          epyc-root handoff progress hub
+ingest_long_context       8085     711627     healthy    ok           Qwen3-Next-80B-A3B-Instruct-Q4
+server_8072               8072     710875     healthy    ok           gemma-4-26B-A4B-it-ORIG-Q4_K_M
+server_8086               8086     711927     healthy    ok           Qwen2.5-VL-7B-Instruct-Q4_K_M
+server_8087               8087     712155     healthy    ok           Qwen2.5-VL-7B-Instruct-Q4_K_M
+
+Episodic FAISS: ORPHANED — 648,389/648,354 indexed vectors (100.0%), id_map 648,354 ids / overlap 100.0% missing 0 stale 0, 121,625 repairable lag/stale, reembedded overlap 81.2%
+
+State file: /mnt/raid0/llm/epyc-orchestrator/logs/orchestrator_state.json

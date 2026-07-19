@@ -1,0 +1,2 @@
+    PID                  STARTED     ELAPSED COMMAND         COMMAND
+ 711927 Sun Jul 19 12:49:57 2026       18:40 llama-server    /mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf --mmproj /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-model-f16.gguf --host 127.0.0.1 --port 8086 -np 2 -c 8192 -t 24 --flash-attn on --device none

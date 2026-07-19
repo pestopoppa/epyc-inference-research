@@ -1,0 +1,454 @@
+{
+  "artifacts": {
+    "operator_next_commands": "/mnt/raid0/llm/epyc-inference-research/data/op2_canonical_bench_window/op2-20260719-live-nothink/operator_next_commands.sh",
+    "stage_plan": "/mnt/raid0/llm/epyc-inference-research/data/op2_canonical_bench_window/op2-20260719-live-nothink/stage_plan.json",
+    "summary": "/mnt/raid0/llm/epyc-inference-research/data/op2_canonical_bench_window/op2-20260719-live-nothink/summary.md"
+  },
+  "autopilot_restart_authorized": false,
+  "generated_at": "2026-07-19T13:08:10.965927+00:00",
+  "host_state": {
+    "captured_at": "2026-07-19T13:08:10.966068+00:00",
+    "commands": {
+      "free_h": {
+        "argv": [
+          "free",
+          "-h"
+        ],
+        "cwd": null,
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "               total        used        free      shared  buff/cache   available\nMem:           1.1Ti       207Gi        35Gi       197Mi       1.0Ti       925Gi\nSwap:          8.0Gi       1.8Gi       6.2Gi\n"
+      },
+      "uname_a": {
+        "argv": [
+          "uname",
+          "-a"
+        ],
+        "cwd": null,
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "Linux Beelzebub 6.14.0-37-generic #37~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu Nov 20 10:25:38 UTC 2 x86_64 GNU/Linux\n"
+      },
+      "uptime": {
+        "argv": [
+          "uptime"
+        ],
+        "cwd": null,
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": " 13:08:10 up 16 days, 19:06,  0 users,  load average: 18.27, 10.53, 5.45\n"
+      }
+    },
+    "kernel_knobs": {
+      "numa_balancing": "0",
+      "perf_event_paranoid": "1",
+      "thp_defrag": "[always] defer defer+madvise madvise never",
+      "thp_enabled": "[always] madvise never"
+    },
+    "platform": {
+      "cpu_count": 192,
+      "machine": "x86_64",
+      "processor": "",
+      "release": "6.14.0-37-generic",
+      "system": "Linux"
+    }
+  },
+  "measurement": {
+    "authoritative": true,
+    "exists": true,
+    "p_gpu_1_certification_note": "P-GPU-1 is ratified for production-named MI210 GPU claims only: experimental, candidate, or fork GPU rows remain observation-grade until promoted to a production-named kernel or strict retro-certification applies.",
+    "p_gpu_1_deferred": false,
+    "p_gpu_1_line": "### P-GPU-1 \u2014 GPU canonical (RATIFIED 2026-07-19; amendment appended at end of file)",
+    "p_gpu_1_line_note": "",
+    "path": "/workspace/MEASUREMENT.md"
+  },
+  "operator_approval_ref": "operator-directive-2026-07-19-op2-ungated",
+  "operator_execution": {
+    "default_run_root": "/mnt/raid0/llm/epyc-inference-research/data/op2_canonical_bench_window/op2-canonical-bench-window-20260719-live5",
+    "mode": "static",
+    "output_base": null
+  },
+  "process_state": {
+    "captured_at": "2026-07-19T13:08:11.067517+00:00",
+    "matching_processes": [
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 8070 -np 1 -c 32768 -t 96 -ub 8192 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --mlock --spec-type draft-mtp --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/frontdoor --device none --device-draft none",
+        "comm": "llama-server",
+        "pid": 710566
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf -md /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf --spec-type draft-mtp --spec-draft-n-max 2 --draft-p-min 0.0 --threads-draft 16 -ub 512 --no-mmap --reasoning off --jinja --host 127.0.0.1 --port 8072 -np 1 -c 16384 -t 96 -ctk q8_0 -ctv q8_0 --flash-attn on --device none --device-draft none",
+        "comm": "llama-server",
+        "pid": 710875
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf --host 127.0.0.1 --port 8083 -np 2 -c 16384 -t 96 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv f16 --mlock --spec-type draft-mtp --spec-draft-n-max 4 --slot-save-path /mnt/raid0/llm/cache/kv_slots/architect_general --device none --device-draft none",
+        "comm": "llama-server",
+        "pid": 711192
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf --host 127.0.0.1 --port 8085 -np 1 -c 32768 -t 96 -ub 8192 --flash-attn on --jinja -ctk q4_0 -ctv q4_0 --mlock --slot-save-path /mnt/raid0/llm/cache/kv_slots/ingest_long_context --device none",
+        "comm": "llama-server",
+        "pid": 711627
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf --mmproj /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-model-f16.gguf --host 127.0.0.1 --port 8086 -np 2 -c 8192 -t 24 --flash-attn on --device none",
+        "comm": "llama-server",
+        "pid": 711927
+      },
+      {
+        "args": "/mnt/raid0/llm/llama.cpp/build/bin/llama-server -m /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf --mmproj /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-VL-7B-Instruct-GGUF/mmproj-model-f16.gguf --host 127.0.0.1 --port 8087 -np 1 -c 8192 -t 24 --flash-attn on --reasoning off --device none",
+        "comm": "llama-server",
+        "pid": 712155
+      }
+    ],
+    "ps_ok": true,
+    "ps_stderr": ""
+  },
+  "production_v6_touch_authorized": false,
+  "quiet_window_required": true,
+  "repo_state": {
+    "experimental_llama": {
+      "branch": "experimental-v7-refresh-20260716",
+      "commands": {
+        "branch": {
+          "argv": [
+            "git",
+            "branch",
+            "--show-current"
+          ],
+          "cwd": "/mnt/raid0/llm/llama.cpp-experimental",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "experimental-v7-refresh-20260716\n"
+        },
+        "head": {
+          "argv": [
+            "git",
+            "rev-parse",
+            "HEAD"
+          ],
+          "cwd": "/mnt/raid0/llm/llama.cpp-experimental",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3\n"
+        },
+        "tracked_status": {
+          "argv": [
+            "git",
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=no"
+          ],
+          "cwd": "/mnt/raid0/llm/llama.cpp-experimental",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        "upstream": {
+          "argv": [
+            "git",
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            "@{u}"
+          ],
+          "cwd": "/mnt/raid0/llm/llama.cpp-experimental",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "fork/experimental-v7-refresh-20260716\n"
+        }
+      },
+      "exists": true,
+      "head": "6ad45fa3ff6718c07c000061dbc6e29c1771f6e3",
+      "path": "/mnt/raid0/llm/llama.cpp-experimental",
+      "tracked_dirty_lines": 0,
+      "upstream": "fork/experimental-v7-refresh-20260716"
+    },
+    "orchestrator": {
+      "branch": "spec-dec-mtp-refresh-2026-06-22",
+      "commands": {
+        "branch": {
+          "argv": [
+            "git",
+            "branch",
+            "--show-current"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-orchestrator",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "spec-dec-mtp-refresh-2026-06-22\n"
+        },
+        "head": {
+          "argv": [
+            "git",
+            "rev-parse",
+            "HEAD"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-orchestrator",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "a2b5eb17af6be92b412c0ca304b99b10a13b9011\n"
+        },
+        "tracked_status": {
+          "argv": [
+            "git",
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=no"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-orchestrator",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": " M orchestration/autopilot_baseline.yaml\n M orchestration/autopilot_journal_1.jsonl\n M orchestration/classifier_config.yaml\n M orchestration/repl_memory/q_scorer.py\n M scripts/autopilot/failure_blacklist.yaml\n M scripts/benchmark/mtp_acceptance_report.py\n M scripts/benchmark/seeding_rewards.py\n M tests/unit/test_mtp_acceptance_report.py\n M tests/unit/test_q_scorer.py\n M tests/unit/test_seeding_rewards.py\n"
+        },
+        "upstream": {
+          "argv": [
+            "git",
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            "@{u}"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-orchestrator",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "origin/spec-dec-mtp-refresh-2026-06-22\n"
+        }
+      },
+      "exists": true,
+      "head": "a2b5eb17af6be92b412c0ca304b99b10a13b9011",
+      "path": "/mnt/raid0/llm/epyc-orchestrator",
+      "tracked_dirty_lines": 10,
+      "upstream": "origin/spec-dec-mtp-refresh-2026-06-22"
+    },
+    "production_llama": {
+      "branch": "production-consolidated-v6",
+      "commands": {
+        "branch": {
+          "argv": [
+            "git",
+            "branch",
+            "--show-current"
+          ],
+          "cwd": "/mnt/raid0/llm/llama.cpp",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "production-consolidated-v6\n"
+        },
+        "head": {
+          "argv": [
+            "git",
+            "rev-parse",
+            "HEAD"
+          ],
+          "cwd": "/mnt/raid0/llm/llama.cpp",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "91a8424ea7cba91289ade45176b8fc4499425af8\n"
+        },
+        "tracked_status": {
+          "argv": [
+            "git",
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=no"
+          ],
+          "cwd": "/mnt/raid0/llm/llama.cpp",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        "upstream": {
+          "argv": [
+            "git",
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            "@{u}"
+          ],
+          "cwd": "/mnt/raid0/llm/llama.cpp",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "fork/production-consolidated-v6\n"
+        }
+      },
+      "exists": true,
+      "head": "91a8424ea7cba91289ade45176b8fc4499425af8",
+      "path": "/mnt/raid0/llm/llama.cpp",
+      "tracked_dirty_lines": 0,
+      "upstream": "fork/production-consolidated-v6"
+    },
+    "research": {
+      "branch": "main",
+      "commands": {
+        "branch": {
+          "argv": [
+            "git",
+            "branch",
+            "--show-current"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-inference-research",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "main\n"
+        },
+        "head": {
+          "argv": [
+            "git",
+            "rev-parse",
+            "HEAD"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-inference-research",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "b786de6341a108e4303ad76893145caf846f1366\n"
+        },
+        "tracked_status": {
+          "argv": [
+            "git",
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=no"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-inference-research",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        "upstream": {
+          "argv": [
+            "git",
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            "@{u}"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-inference-research",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "origin/main\n"
+        }
+      },
+      "exists": true,
+      "head": "b786de6341a108e4303ad76893145caf846f1366",
+      "path": "/mnt/raid0/llm/epyc-inference-research",
+      "tracked_dirty_lines": 0,
+      "upstream": "origin/main"
+    },
+    "root": {
+      "branch": "spec-dec-mtp-refresh-2026-06-22",
+      "commands": {
+        "branch": {
+          "argv": [
+            "git",
+            "branch",
+            "--show-current"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-root",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "spec-dec-mtp-refresh-2026-06-22\n"
+        },
+        "head": {
+          "argv": [
+            "git",
+            "rev-parse",
+            "HEAD"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-root",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "7e5d1dacab7d08f05dd453efcc8c93a362934a0f\n"
+        },
+        "tracked_status": {
+          "argv": [
+            "git",
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=no"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-root",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": " M CLAUDE.md\n M handoffs/active/gpu-acceleration-path.md\n M handoffs/active/moe-spec-cpu-spec-dec-integration.md\n M handoffs/active/qwen-mtp-llamacpp-port.md\n M handoffs/active/scaffold-autopilot-cost-lever-deployment.md\n M handoffs/active/speculative-decoding-mtp-refresh.md\n D llama.log\n M logs/.current_session\n M logs/agent_audit.log\n D main.log\n"
+        },
+        "upstream": {
+          "argv": [
+            "git",
+            "rev-parse",
+            "--abbrev-ref",
+            "--symbolic-full-name",
+            "@{u}"
+          ],
+          "cwd": "/mnt/raid0/llm/epyc-root",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "origin/spec-dec-mtp-refresh-2026-06-22\n"
+        }
+      },
+      "exists": true,
+      "head": "7e5d1dacab7d08f05dd453efcc8c93a362934a0f",
+      "path": "/mnt/raid0/llm/epyc-root",
+      "tracked_dirty_lines": 10,
+      "upstream": "origin/spec-dec-mtp-refresh-2026-06-22"
+    }
+  },
+  "run_id": "op2-20260719-live-nothink",
+  "run_root": "/mnt/raid0/llm/epyc-inference-research/data/op2_canonical_bench_window/op2-20260719-live-nothink",
+  "schema": "epyc.op2_quiet_window_prep.v1",
+  "stage_plan": {
+    "remaining_payload": [
+      {
+        "production_v6_edits_allowed": false,
+        "protocol": "P-SMOKE-1 unless a stronger runner stamps otherwise",
+        "stage": "live_v6_iqk_role_garbage_verification",
+        "starts_inference": true,
+        "status": "operator_window_required"
+      },
+      {
+        "production_v6_edits_allowed": false,
+        "protocol": "P-BENCH-1 via bench_canonical.sh/canonical_recipe.py",
+        "stage": "clean_canonical_cpu_decode_bench",
+        "starts_inference": true,
+        "status": "operator_window_required"
+      }
+    ],
+    "skipped_or_closed": [
+      {
+        "reason": "no current v7 barrier-fusion flag or immutable binary pair",
+        "stage": "b1_barrier_fusion_ab",
+        "status": "skipped_not_staged"
+      },
+      {
+        "reason": "D3.1 profile found Lightning Indexer at only 1.08% of cycle samples",
+        "stage": "b4_dsa_d3_profile",
+        "status": "closed_no_go"
+      }
+    ]
+  },
+  "status": "prepared_no_inference"
+}
