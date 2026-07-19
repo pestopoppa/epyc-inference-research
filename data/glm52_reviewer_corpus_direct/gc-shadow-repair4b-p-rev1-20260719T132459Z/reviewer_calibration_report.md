@@ -11,3 +11,4 @@
 | glm_52_ud_iq2m | — | glm52_direct_nearmiss_review_v5+binary_schema+task_test_alignment+oracle_notes | nearmiss-v1 | code | 48 | 41.7% | 25.0% | 1.67 | 58.3% | — | — | 0.239 | 0.509 | 0.278 | — | — | 0.0% |
 
 Directions: FA/FR/parse **lower-better**; accept=context; yield/esc.prec/CR/AUC **higher-better**; ECE/Brier **lower-better**. FA/FR ratio is first-class (overcorrection prior FR≫FA).
+

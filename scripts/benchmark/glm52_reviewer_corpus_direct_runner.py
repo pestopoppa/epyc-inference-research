@@ -47,6 +47,7 @@ DEFAULT_CORPUS = Path("/mnt/raid0/llm/datasets/nearmiss-corpus-v1/rows.jsonl")
 DEFAULT_N = 12
 DEFAULT_RUBRIC_VERSION = "glm52_direct_nearmiss_review_v5+binary_schema+task_test_alignment+oracle_notes"
 DEFAULT_ERA = "pre_p_rev1_observation"
+P_REV1_ERA = "p_rev1_attested"
 DEFAULT_MAX_FIELD_CHARS = 24000
 MEASUREMENT_PROTOCOL_OBSERVATION = "pre_p_rev1_observation"
 MEASUREMENT_PROTOCOL_P_REV1 = "p_rev1"
@@ -57,6 +58,9 @@ P_REV1_MIN_HARD_ACCEPT_CONTROLS = 24
 ANSWER_FRAGMENT_SCORING_METHODS = frozenset({"substring", "exact_match"})
 GOLD_LABELS = ("accept", "reject")
 DEFAULT_GOLD_CONFIDENCE = ("multi_oracle",)
+DEFAULT_REVIEWER_ID = "glm_52_ud_iq2m"
+DEFAULT_SCAFFOLD_REVIEWER_ID = "qwable_iq4xs_scaffold"
+INDEXER_TOP_K_OVERRIDE_MODES = ("auto", "on", "off")
 REVIEW_DECISIONS = (
     "approve",
     "reject",
@@ -442,7 +446,12 @@ def truncate_middle(text: str, max_chars: int) -> tuple[str, bool]:
     return text[:keep_head] + marker + text[-keep_tail:], True
 
 
-def build_review_prompt(row: dict[str, Any], *, max_field_chars: int) -> tuple[str, dict[str, Any]]:
+def build_review_prompt(
+    row: dict[str, Any],
+    *,
+    max_field_chars: int,
+    scaffold_note: str | None = None,
+) -> tuple[str, dict[str, Any]]:
     task, task_truncated = truncate_middle(str(row.get("task") or ""), max_field_chars)
     candidate, candidate_truncated = truncate_middle(str(row.get("candidate") or ""), max_field_chars)
     oracle_note_raw = str(row.get("oracle_note") or "").strip()
@@ -454,11 +463,19 @@ def build_review_prompt(row: dict[str, Any], *, max_field_chars: int) -> tuple[s
         if oracle_note
         else ""
     )
+    scaffold_raw = (scaffold_note or "").strip()
+    scaffold_section = (
+        "AUXILIARY REVIEW SCAFFOLD (advisory; may be wrong; final decision must follow TASK/CANDIDATE):\n"
+        f"{scaffold_raw}\n\n"
+        if scaffold_raw
+        else ""
+    )
     prompt = (
         f"{header}\n\n"
         f"TASK:\n{task}\n\n"
         f"CANDIDATE:\n{candidate}\n\n"
         f"{oracle_section}"
+        f"{scaffold_section}"
         "ReviewDecision JSON only:"
     )
     return prompt, {
@@ -470,8 +487,39 @@ def build_review_prompt(row: dict[str, Any], *, max_field_chars: int) -> tuple[s
         "task_chars_original": len(str(row.get("task") or "")),
         "candidate_chars_original": len(str(row.get("candidate") or "")),
         "oracle_note_chars_original": len(oracle_note_raw),
+        "scaffold_note_chars": len(scaffold_raw),
         "prompt_chars": len(prompt),
         "review_mode": review_mode,
+    }
+
+
+def build_scaffold_prompt(row: dict[str, Any], *, max_field_chars: int) -> tuple[str, dict[str, Any]]:
+    task, task_truncated = truncate_middle(str(row.get("task") or ""), max_field_chars)
+    candidate, candidate_truncated = truncate_middle(str(row.get("candidate") or ""), max_field_chars)
+    oracle_note_raw = str(row.get("oracle_note") or "").strip()
+    oracle_note, oracle_note_truncated = truncate_middle(oracle_note_raw, 2000)
+    oracle_section = f"CURATED REVIEW CONSTRAINT:\n{oracle_note}\n\n" if oracle_note else ""
+    prompt = (
+        "You are producing private advisory review notes for another reviewer. "
+        "Do not output JSON and do not make the final decision. In at most 140 words, "
+        "identify concrete accept evidence, concrete reject risk, and the single most "
+        "important diff/test fact to verify. Be specific to the TASK and CANDIDATE.\n\n"
+        f"TASK:\n{task}\n\n"
+        f"CANDIDATE:\n{candidate}\n\n"
+        f"{oracle_section}"
+        "Advisory notes:"
+    )
+    return prompt, {
+        "task_truncated": task_truncated,
+        "candidate_truncated": candidate_truncated,
+        "oracle_note_present": bool(oracle_note),
+        "oracle_note_truncated": oracle_note_truncated,
+        "max_field_chars": max_field_chars,
+        "task_chars_original": len(str(row.get("task") or "")),
+        "candidate_chars_original": len(str(row.get("candidate") or "")),
+        "oracle_note_chars_original": len(oracle_note_raw),
+        "prompt_chars": len(prompt),
+        "review_mode": review_mode_for_row(row),
     }
 
 
@@ -483,6 +531,7 @@ def fit_prompt_to_budget(
     prompt_context_guard_tokens: int,
     max_field_chars: int,
     token_counter: Any,
+    scaffold_note: str | None = None,
 ) -> dict[str, Any]:
     max_prompt_tokens = context_length - max_completion_tokens - prompt_context_guard_tokens
     if max_prompt_tokens <= 0:
@@ -490,7 +539,7 @@ def fit_prompt_to_budget(
     attempts: list[dict[str, Any]] = []
     field_chars = max_field_chars
     for _ in range(10):
-        prompt, trunc = build_review_prompt(row, max_field_chars=field_chars)
+        prompt, trunc = build_review_prompt(row, max_field_chars=field_chars, scaffold_note=scaffold_note)
         token_count = token_counter(prompt)
         attempt = dict(trunc)
         attempt["field_chars"] = field_chars
@@ -551,9 +600,23 @@ def server_extra_args() -> list[str]:
     ]
 
 
-def decision_id_for(row_id: str, *, seed: int, attempt: int = 0) -> str:
-    key = f"glm52_ud_iq2m\x00nearmiss-v1\x00{row_id}\x00{seed}\x00{attempt}"
-    return "glm52-rev-" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:24]
+def scaffold_server_extra_args() -> list[str]:
+    return [
+        "--reasoning",
+        "off",
+        "--reasoning-budget",
+        "0",
+    ]
+
+
+def safe_name(value: str) -> str:
+    name = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in value)
+    return name.strip("._-") or "reviewer"
+
+
+def decision_id_for(row_id: str, *, seed: int, reviewer_id: str = DEFAULT_REVIEWER_ID, attempt: int = 0) -> str:
+    key = f"{reviewer_id}\x00nearmiss-v1\x00{row_id}\x00{seed}\x00{attempt}"
+    return f"{safe_name(reviewer_id)}-rev-" + hashlib.sha1(key.encode("utf-8")).hexdigest()[:24]
 
 
 def extract_response_text(response: dict[str, Any]) -> str:
@@ -633,6 +696,7 @@ def ledger_row_for_result(
     *,
     result: dict[str, Any],
     seed: int,
+    reviewer_id: str,
     rubric_version: str,
     era: str,
 ) -> dict[str, Any]:
@@ -645,8 +709,8 @@ def ledger_row_for_result(
             telemetry_tokens = usage[key]
             break
     return {
-        "decision_id": decision_id_for(row.row_id, seed=seed),
-        "reviewer_model_quant": "glm_52_ud_iq2m",
+        "decision_id": decision_id_for(row.row_id, seed=seed, reviewer_id=reviewer_id),
+        "reviewer_model_quant": reviewer_id,
         "grading_model": None,
         "rubric_version": rubric_version,
         "corpus_id": row.raw.get("corpus_id"),
@@ -698,13 +762,16 @@ def write_task_artifacts(
     request_payload: dict[str, Any],
     response: dict[str, Any],
     port: int,
+    *,
+    kind: str = "review",
 ) -> dict[str, str]:
     safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in row_id)
+    prefix = safe if kind == "review" else f"{safe}.{safe_name(kind)}"
     artifact_dir = output_dir / "artifacts"
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    prompt_path = artifact_dir / f"{safe}.prompt.txt"
-    request_path = artifact_dir / f"{safe}.request.json"
-    response_path = artifact_dir / f"{safe}.response.json"
+    prompt_path = artifact_dir / f"{prefix}.prompt.txt"
+    request_path = artifact_dir / f"{prefix}.request.json"
+    response_path = artifact_dir / f"{prefix}.response.json"
     prompt_path.write_text(prompt, encoding="utf-8")
     write_json(
         request_path,
@@ -718,30 +785,218 @@ def write_task_artifacts(
     return {"prompt": str(prompt_path), "request": str(request_path), "response": str(response_path)}
 
 
+def collect_model_inventory(model_dir: Path, model_path: Path | None) -> dict[str, Any]:
+    if model_path is not None:
+        resolved = model_path.expanduser().resolve()
+        refusal_reasons: list[str] = []
+        if not resolved.exists():
+            refusal_reasons.append(f"model file missing: {resolved}")
+        elif not resolved.is_file():
+            refusal_reasons.append(f"model path is not a file: {resolved}")
+        elif resolved.suffix.lower() != ".gguf":
+            refusal_reasons.append(f"model path is not a GGUF file: {resolved}")
+        return {
+            "model_dir": str(resolved.parent),
+            "status": "ready" if not refusal_reasons else "blocked",
+            "mode": "explicit_model_path",
+            "primary_shard": str(resolved) if not refusal_reasons else None,
+            "non_cache_shard_count": 1 if not refusal_reasons else 0,
+            "non_cache_shards": [{"path": resolved.name, "size": resolved.stat().st_size}]
+            if not refusal_reasons
+            else [],
+            "refusal_reasons": refusal_reasons,
+        }
+
+    resolved_dir = model_dir.expanduser().resolve()
+    glm_inventory = base.collect_inventory(resolved_dir)
+    if glm_inventory.get("status") == "ready":
+        glm_inventory["mode"] = "glm_sharded_inventory"
+        return glm_inventory
+
+    ggufs = [
+        path
+        for path in sorted(resolved_dir.rglob("*.gguf"))
+        if ".cache" not in path.relative_to(resolved_dir).parts
+    ] if resolved_dir.exists() else []
+    refusal_reasons: list[str] = []
+    if not resolved_dir.exists():
+        refusal_reasons.append(f"model directory missing: {resolved_dir}")
+    if not ggufs:
+        refusal_reasons.append(f"no non-cache GGUF files found under: {resolved_dir}")
+    if len(ggufs) > 1:
+        refusal_reasons.append(
+            "multiple GGUF files found; pass --model-path explicitly: "
+            + ", ".join(path.name for path in ggufs[:4])
+        )
+    primary = ggufs[0] if len(ggufs) == 1 else None
+    return {
+        "model_dir": str(resolved_dir),
+        "status": "ready" if primary and not refusal_reasons else "blocked",
+        "mode": "generic_gguf_directory",
+        "primary_shard": str(primary) if primary else None,
+        "non_cache_shard_count": len(ggufs),
+        "non_cache_shards": [
+            {"path": path.relative_to(resolved_dir).as_posix(), "size": path.stat().st_size}
+            for path in ggufs
+        ],
+        "glm_inventory_refusal_reasons": glm_inventory.get("refusal_reasons", []),
+        "refusal_reasons": refusal_reasons,
+    }
+
+
+def should_apply_indexer_top_k_override(args: argparse.Namespace) -> bool:
+    if args.indexer_top_k_override == "on":
+        return True
+    if args.indexer_top_k_override == "off":
+        return False
+    probe = " ".join([args.reviewer_id, str(args.model_dir), str(args.model_path or "")]).lower()
+    return "glm" in probe
+
+
 def build_server_spec(args: argparse.Namespace, *, band: Any, binary: Path, library_path: Path, model_path: Path) -> dict[str, Any]:
-    log_file = args.output_dir / "logs" / f"glm52_corpus__{band.name}.server.log"
-    return base._server_spec(
-        binary=binary,
-        library_path=library_path,
-        model_path=model_path,
-        port=args.port,
-        context_length=band.context_length,
-        threads=args.threads,
-        ubatch=args.ubatch,
-        indexer_top_k=band.indexer_top_k,
-        trace_logs=args.trace_logs,
-        metrics=args.metrics,
-        log_file=log_file if args.trace_logs else None,
-        extra_args=server_extra_args(),
+    log_file = args.output_dir / "logs" / f"{safe_name(args.reviewer_id)}__{band.name}.server.log"
+    command = [
+        "env",
+        "-i",
+        "PATH=/usr/bin:/bin",
+        f"LD_LIBRARY_PATH={library_path}",
+        "OMP_NUM_THREADS=1",
+        "numactl",
+        "--interleave=all",
+        str(binary),
+        "-m",
+        str(model_path),
+    ]
+    indexer_override = should_apply_indexer_top_k_override(args)
+    if indexer_override:
+        command.extend(["--override-kv", f"{base.INDEXER_TOP_K_OVERRIDE_KEY}=int:{band.indexer_top_k}"])
+    command.extend(
+        [
+            "--device",
+            args.device,
+            "-ngl",
+            str(args.ngl),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(args.port),
+            "-c",
+            str(band.context_length),
+            "-t",
+            str(args.threads),
+            "-ub",
+            str(args.ubatch),
+        ]
     )
+    if args.flash_attn != "auto":
+        command.extend(["-fa", args.flash_attn])
+    if args.trace_logs:
+        command.extend(["--log-verbosity", "4"])
+        command.extend(["--log-file", str(log_file)])
+    else:
+        command.append("--log-disable")
+    if args.metrics:
+        command.append("--metrics")
+    extra_args = server_extra_args()
+    command.extend(extra_args)
+    return {
+        "port": args.port,
+        "context_length": band.context_length,
+        "threads": args.threads,
+        "ubatch": args.ubatch,
+        "device": args.device,
+        "ngl": args.ngl,
+        "flash_attn": args.flash_attn,
+        "indexer_top_k": band.indexer_top_k,
+        "indexer_top_k_override": indexer_override,
+        "trace_logs": args.trace_logs,
+        "metrics": args.metrics,
+        "log_file": str(log_file) if args.trace_logs else None,
+        "extra_args": extra_args,
+        "server_command": command,
+        "server_command_shell": " ".join(json.dumps(part) for part in command),
+    }
+
+
+def build_scaffold_server_spec(
+    args: argparse.Namespace,
+    *,
+    band: Any,
+    binary: Path,
+    library_path: Path,
+    model_path: Path,
+) -> dict[str, Any]:
+    context_length = args.scaffold_context_length or band.context_length
+    port = args.scaffold_port or (args.port + 1)
+    device = args.scaffold_device or args.device
+    ngl = args.scaffold_ngl if args.scaffold_ngl is not None else args.ngl
+    log_file = args.output_dir / "logs" / f"{safe_name(args.scaffold_reviewer_id)}__{band.name}.server.log"
+    command = [
+        "env",
+        "-i",
+        "PATH=/usr/bin:/bin",
+        f"LD_LIBRARY_PATH={library_path}",
+        "OMP_NUM_THREADS=1",
+        "numactl",
+        "--interleave=all",
+        str(binary),
+        "-m",
+        str(model_path),
+        "--device",
+        device,
+        "-ngl",
+        str(ngl),
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(port),
+        "-c",
+        str(context_length),
+        "-t",
+        str(args.threads),
+        "-ub",
+        str(args.ubatch),
+    ]
+    if args.flash_attn != "auto":
+        command.extend(["-fa", args.flash_attn])
+    if args.trace_logs:
+        command.extend(["--log-verbosity", "4"])
+        command.extend(["--log-file", str(log_file)])
+    else:
+        command.append("--log-disable")
+    if args.metrics:
+        command.append("--metrics")
+    extra_args = scaffold_server_extra_args()
+    command.extend(extra_args)
+    return {
+        "port": port,
+        "context_length": context_length,
+        "threads": args.threads,
+        "ubatch": args.ubatch,
+        "device": device,
+        "ngl": ngl,
+        "flash_attn": args.flash_attn,
+        "trace_logs": args.trace_logs,
+        "metrics": args.metrics,
+        "log_file": str(log_file) if args.trace_logs else None,
+        "extra_args": extra_args,
+        "server_command": command,
+        "server_command_shell": " ".join(json.dumps(part) for part in command),
+    }
 
 
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     band = smoke.PROMPT_BANDS[args.band]
     binary = base.resolve_binary(args.binary)
     library_path = base.resolve_library_path(binary, args.library_path)
-    inventory = base.collect_inventory(args.model_dir)
+    inventory = collect_model_inventory(args.model_dir, args.model_path)
     primary_shard = Path(inventory["primary_shard"]) if inventory["primary_shard"] else args.model_dir
+    scaffold_inventory: dict[str, Any] | None = None
+    scaffold_primary_shard: Path | None = None
+    if args.scaffold_model_path is not None:
+        scaffold_inventory = collect_model_inventory(args.model_dir, args.scaffold_model_path)
+        if scaffold_inventory.get("primary_shard"):
+            scaffold_primary_shard = Path(str(scaffold_inventory["primary_shard"]))
     gold_conf = set(split_csv(args.gold_confidence))
     source_suites = optional_filter(args.source_suite)
     source_benchmarks = optional_filter(args.source_benchmark)
@@ -774,7 +1029,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         selected = [rows_by_id[row_id] for row_id in explicit_row_ids if row_id in rows_by_id]
         selection_mode = "explicit_row_ids"
     else:
-        selected = select_balanced_rows(rows, n=args.n, seed_key=f"{args.seed}:glm52")
+        selected = select_balanced_rows(rows, n=args.n, seed_key=f"{args.seed}:{args.reviewer_id}")
         selection_mode = "balanced_seeded"
     counts = Counter(
         (
@@ -812,6 +1067,18 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         library_path=library_path,
         model_path=primary_shard,
     )
+    scaffold_server = (
+        build_scaffold_server_spec(
+            args,
+            band=band,
+            binary=binary,
+            library_path=library_path,
+            model_path=scaffold_primary_shard,
+        )
+        if scaffold_primary_shard is not None
+        else None
+    )
+    scaffold_refusals = list(scaffold_inventory.get("refusal_reasons", [])) if scaffold_inventory else []
     observation_only = args.measurement_protocol != MEASUREMENT_PROTOCOL_P_REV1 or bool(protocol_refusals)
     if args.measurement_protocol != MEASUREMENT_PROTOCOL_P_REV1:
         measurement_note = "pre-P-REV-1 observation; non-decision-gating"
@@ -872,12 +1139,29 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "band": band.__dict__,
         "binary": str(binary),
         "library_path": str(library_path),
+        "reviewer": {
+            "reviewer_id": args.reviewer_id,
+            "model_path": str(primary_shard),
+            "device": args.device,
+            "ngl": args.ngl,
+        },
+        "scaffold": {
+            "enabled": scaffold_server is not None,
+            "reviewer_id": args.scaffold_reviewer_id,
+            "model_path": str(scaffold_primary_shard) if scaffold_primary_shard else None,
+            "max_tokens": args.scaffold_max_tokens,
+            "temperature": args.scaffold_temperature,
+            "context_chars": args.scaffold_context_chars,
+            "inventory": scaffold_inventory,
+            "server": scaffold_server,
+        },
         "model_dir": str(args.model_dir.resolve()),
         "model_path": str(primary_shard),
         "output_dir": str(args.output_dir),
         "decisions_path": str(args.output_dir / "decisions.jsonl"),
         "execution_allowed": (
             inventory["status"] == "ready"
+            and (scaffold_inventory is None or scaffold_inventory["status"] == "ready")
             and len(selected) > 0
             and not missing_explicit_row_ids
             and set(selected_counts) == set(GOLD_LABELS)
@@ -886,6 +1170,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             and not protocol_refusals
         ),
         "refusal_reasons": list(inventory["refusal_reasons"])
+        + scaffold_refusals
         + ([] if selected else ["no selected judgeable rows"])
         + (
             []
@@ -901,7 +1186,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         + fragment_refusals
         + protocol_refusals,
         "inventory": inventory,
-        "preexisting_processes": runtime_processes("llama-server|llama-cli|autopilot|glm52"),
+        "preexisting_processes": runtime_processes("llama-server|llama-cli|autopilot"),
         "server": server,
         "execution": None,
     }
@@ -927,6 +1212,12 @@ def call_row(
     prompt_row = dict(row.raw)
     if isinstance(oracle_notes, dict) and row.row_id in oracle_notes:
         prompt_row["oracle_note"] = oracle_notes[row.row_id]
+    scaffold_result: dict[str, Any] | None = None
+    scaffold_note: str | None = None
+    scaffold_plan = plan.get("scaffold") if isinstance(plan.get("scaffold"), dict) else {}
+    if scaffold_plan.get("enabled"):
+        scaffold_result = call_scaffold(row=row, plan=plan, prompt_row=prompt_row, output_dir=output_dir)
+        scaffold_note = str(scaffold_result.get("scaffold_note") or "").strip() or None
     prompt_info = fit_prompt_to_budget(
         prompt_row,
         context_length=int(band["context_length"]),
@@ -934,6 +1225,7 @@ def call_row(
         prompt_context_guard_tokens=int(band["prompt_context_guard_tokens"]),
         max_field_chars=int(plan["request"]["max_field_chars"]),
         token_counter=token_counter,
+        scaffold_note=scaffold_note,
     )
     payload = base.build_request_payload(
         "chat",
@@ -986,6 +1278,70 @@ def call_row(
         "parse_failure": parse_failure,
         "request_error": request_error,
         "channels": smoke.channel_preview(response),
+        "scaffold": scaffold_result,
+        "artifacts": artifacts,
+    }
+
+
+def call_scaffold(
+    *,
+    row: CorpusRow,
+    plan: dict[str, Any],
+    prompt_row: dict[str, Any],
+    output_dir: Path,
+) -> dict[str, Any]:
+    scaffold = plan["scaffold"]
+    server = scaffold["server"]
+    port = int(server["port"])
+    prompt, prompt_info = build_scaffold_prompt(
+        prompt_row,
+        max_field_chars=int(plan["request"]["max_field_chars"]),
+    )
+    max_tokens = int(scaffold["max_tokens"])
+    temperature = float(scaffold["temperature"])
+    seed = int(plan["request"]["seed"])
+    payload = base.build_request_payload("chat", prompt, max_tokens, temperature, seed)
+    started = time.monotonic()
+    request_error = None
+    try:
+        response = base.call_completion(
+            port,
+            prompt,
+            max_tokens,
+            temperature,
+            seed,
+            int(plan["request"]["timeout_s"]),
+            "chat",
+        )
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+        request_error = base._request_error_payload(exc)
+        response = {"request_error": request_error, "usage": {}, "timings": {}, "choices": []}
+    latency_ms = round((time.monotonic() - started) * 1000.0, 3)
+    artifacts = write_task_artifacts(
+        output_dir,
+        row.row_id,
+        prompt,
+        payload,
+        response,
+        port,
+        kind="scaffold",
+    )
+    text = extract_response_text(response).strip()
+    max_chars = int(scaffold["context_chars"])
+    note, truncated = truncate_middle(text, max_chars)
+    return {
+        "status": "failed_request" if request_error else "ok",
+        "reviewer_id": scaffold.get("reviewer_id"),
+        "usage": response.get("usage", {}),
+        "timings": response.get("timings", {}),
+        "finish_reason": (response.get("choices") or [{}])[0].get("finish_reason"),
+        "latency_ms": latency_ms,
+        "prompt_info": prompt_info,
+        "scaffold_note": note,
+        "scaffold_note_chars": len(note),
+        "scaffold_note_truncated": truncated,
+        "request_error": request_error,
+        "channels": smoke.channel_preview(response),
         "artifacts": artifacts,
     }
 
@@ -1013,14 +1369,26 @@ def run_execution(plan: dict[str, Any], rows_by_id: dict[str, CorpusRow]) -> dic
     if log_file:
         Path(log_file).parent.mkdir(parents=True, exist_ok=True)
         Path(log_file).unlink(missing_ok=True)
+    scaffold_plan = plan.get("scaffold") if isinstance(plan.get("scaffold"), dict) else {}
+    scaffold_server = scaffold_plan.get("server") if isinstance(scaffold_plan.get("server"), dict) else None
+    if scaffold_server and scaffold_server.get("log_file"):
+        Path(scaffold_server["log_file"]).parent.mkdir(parents=True, exist_ok=True)
+        Path(scaffold_server["log_file"]).unlink(missing_ok=True)
     progress({"status": "server_starting", "row_total": len(plan["corpus"]["selected_row_ids"])})
     proc = base.launch_server(plan["server"]["server_command"])
+    scaffold_proc = None
     started = time.monotonic()
     task_results: list[dict[str, Any]] = []
     ledger_rows: list[dict[str, Any]] = []
     try:
+        if scaffold_server:
+            progress({"status": "scaffold_server_starting", "row_total": len(plan["corpus"]["selected_row_ids"])})
+            scaffold_proc = base.launch_server(scaffold_server["server_command"])
         base.wait_for_health(int(plan["server"]["port"]), timeout_s=300)
         progress({"status": "server_healthy", "row_total": len(plan["corpus"]["selected_row_ids"])})
+        if scaffold_server:
+            base.wait_for_health(int(scaffold_server["port"]), timeout_s=300)
+            progress({"status": "scaffold_server_healthy", "row_total": len(plan["corpus"]["selected_row_ids"])})
         selected_ids = plan["corpus"]["selected_row_ids"]
         for idx, row_id in enumerate(selected_ids, start=1):
             row = rows_by_id[row_id]
@@ -1041,6 +1409,7 @@ def run_execution(plan: dict[str, Any], rows_by_id: dict[str, CorpusRow]) -> dic
                     row,
                     result=result,
                     seed=int(plan["request"]["seed"]),
+                    reviewer_id=str(plan["reviewer"]["reviewer_id"]),
                     rubric_version=str(plan["request"]["rubric_version"]),
                     era=str(plan["request"]["era"]),
                 )
@@ -1059,6 +1428,9 @@ def run_execution(plan: dict[str, Any], rows_by_id: dict[str, CorpusRow]) -> dic
                 }
             )
     finally:
+        if scaffold_proc is not None:
+            base.terminate_server(scaffold_proc)
+            progress({"status": "scaffold_server_stopped", "row_total": len(plan["corpus"]["selected_row_ids"])})
         base.terminate_server(proc)
         progress({"status": "server_stopped", "row_total": len(plan["corpus"]["selected_row_ids"])})
 
@@ -1090,9 +1462,10 @@ def run_execution(plan: dict[str, Any], rows_by_id: dict[str, CorpusRow]) -> dic
         "progress_path": str(progress_path),
         "run_manifest": run_manifest,
         "server_log": base.summarize_server_log(plan["server"].get("log_file")),
+        "scaffold_server_log": base.summarize_server_log(scaffold_server.get("log_file")) if scaffold_server else None,
         "score": summarize_decisions(ledger_rows),
         "task_results": task_results,
-        "post_processes": runtime_processes("llama-server|llama-cli|autopilot|glm52"),
+        "post_processes": runtime_processes("llama-server|llama-cli|autopilot"),
     }
 
 
@@ -1102,8 +1475,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--model-dir", type=Path, default=base.MODEL_DIR)
+    parser.add_argument("--model-path", type=Path, default=None)
+    parser.add_argument("--reviewer-id", default=DEFAULT_REVIEWER_ID)
+    parser.add_argument("--scaffold-model-path", type=Path, default=None)
+    parser.add_argument("--scaffold-reviewer-id", default=DEFAULT_SCAFFOLD_REVIEWER_ID)
+    parser.add_argument("--scaffold-port", type=int, default=None)
+    parser.add_argument("--scaffold-device", default=None)
+    parser.add_argument("--scaffold-ngl", type=int, default=None)
+    parser.add_argument("--scaffold-context-length", type=int, default=0)
+    parser.add_argument("--scaffold-max-tokens", type=int, default=768)
+    parser.add_argument("--scaffold-temperature", type=float, default=0.0)
+    parser.add_argument("--scaffold-context-chars", type=int, default=1800)
     parser.add_argument("--binary", type=Path, default=base.DEFAULT_BINARY)
     parser.add_argument("--library-path", type=Path, default=None)
+    parser.add_argument("--device", default="none")
+    parser.add_argument("--ngl", type=int, default=0)
+    parser.add_argument("--flash-attn", choices=("auto", "on", "off"), default="auto")
+    parser.add_argument("--indexer-top-k-override", choices=INDEXER_TOP_K_OVERRIDE_MODES, default="auto")
     parser.add_argument("--band", choices=tuple(smoke.PROMPT_BANDS), default="p12000_tk16384")
     parser.add_argument("--domain", default="code")
     parser.add_argument("--gold-confidence", default=",".join(DEFAULT_GOLD_CONFIDENCE))
@@ -1197,6 +1585,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("--n must be positive")
     if args.max_field_chars <= 0:
         parser.error("--max-field-chars must be positive")
+    if args.scaffold_context_length < 0:
+        parser.error("--scaffold-context-length must be non-negative")
+    if args.scaffold_max_tokens <= 0:
+        parser.error("--scaffold-max-tokens must be positive")
+    if args.scaffold_context_chars <= 0:
+        parser.error("--scaffold-context-chars must be positive")
+    if args.measurement_protocol == MEASUREMENT_PROTOCOL_P_REV1 and args.era == DEFAULT_ERA:
+        args.era = P_REV1_ERA
     return args
 
 

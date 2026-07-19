@@ -225,12 +225,27 @@ def test_build_review_prompt_includes_oracle_note_only_when_present():
     assert noted_meta["oracle_note_present"] is True
 
 
+def test_build_review_prompt_includes_scaffold_note_as_advisory():
+    row = _row("ordinary", label="reject")
+    prompt, meta = runner.build_review_prompt(
+        row,
+        max_field_chars=1000,
+        scaffold_note="Diff changes helper only; verify the failing rule path.",
+    )
+
+    assert "AUXILIARY REVIEW SCAFFOLD" in prompt
+    assert "advisory; may be wrong" in prompt
+    assert "Diff changes helper only" in prompt
+    assert meta["scaffold_note_chars"] > 0
+
+
 def test_ledger_row_for_parse_error_marks_parse_error():
     row = runner.CorpusRow("r1", _row("r1", label="reject"))
     ledger = runner.ledger_row_for_result(
         row,
         result={"latency_ms": 12.0, "usage": {}, "artifacts": {"response": "resp.json"}},
         seed=42,
+        reviewer_id=runner.DEFAULT_REVIEWER_ID,
         rubric_version="rv",
         era="era",
     )
@@ -252,6 +267,118 @@ def test_runtime_processes_excludes_current_runner(monkeypatch):
     assert runner.runtime_processes("glm52|llama-server") == [
         {"pid": 12345, "command": "llama-server -m glm.gguf"}
     ]
+
+
+def test_collect_model_inventory_accepts_explicit_single_gguf(tmp_path):
+    model = tmp_path / "qwen.gguf"
+    model.write_bytes(b"gguf")
+
+    inventory = runner.collect_model_inventory(tmp_path / "unused", model)
+
+    assert inventory["status"] == "ready"
+    assert inventory["mode"] == "explicit_model_path"
+    assert inventory["primary_shard"] == str(model.resolve())
+
+
+def test_build_plan_allows_generic_gpu_reviewer_model_path(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    model = tmp_path / "qwen.gguf"
+    model.write_bytes(b"gguf")
+    rows = [
+        {**_row("a", label="accept"), "provenance": {}},
+        {**_row("r", label="reject"), "provenance": {}},
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--model-path",
+            str(model),
+            "--reviewer-id",
+            "qwen36_27b_q8_reviewer",
+            "--device",
+            "ROCm0",
+            "--ngl",
+            "99",
+            "--flash-attn",
+            "on",
+            "--indexer-top-k-override",
+            "off",
+            "--n",
+            "2",
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+
+    plan = runner.build_plan(args)
+
+    command = plan["server"]["server_command"]
+    assert plan["execution_allowed"] is True
+    assert plan["reviewer"]["reviewer_id"] == "qwen36_27b_q8_reviewer"
+    assert plan["inventory"]["mode"] == "explicit_model_path"
+    assert command[command.index("--device") + 1] == "ROCm0"
+    assert command[command.index("-ngl") + 1] == "99"
+    assert command[command.index("-fa") + 1] == "on"
+    assert "--override-kv" not in command
+
+
+def test_build_plan_allows_qwable_scaffold_sidecar(tmp_path, monkeypatch):
+    corpus = tmp_path / "rows.jsonl"
+    reviewer = tmp_path / "qwen.gguf"
+    scaffold = tmp_path / "qwable.gguf"
+    reviewer.write_bytes(b"gguf")
+    scaffold.write_bytes(b"gguf")
+    rows = [
+        {**_row("a", label="accept"), "provenance": {}},
+        {**_row("r", label="reject"), "provenance": {}},
+    ]
+    corpus.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    args = runner.parse_args(
+        [
+            "--corpus",
+            str(corpus),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--model-path",
+            str(reviewer),
+            "--reviewer-id",
+            "qwen36_27b_q8_plus_qwable_iq4xs_scaffold",
+            "--scaffold-model-path",
+            str(scaffold),
+            "--scaffold-reviewer-id",
+            "qwable_iq4xs_scaffold",
+            "--device",
+            "ROCm0",
+            "--ngl",
+            "99",
+            "--flash-attn",
+            "on",
+            "--indexer-top-k-override",
+            "off",
+            "--n",
+            "2",
+        ]
+    )
+    monkeypatch.setattr(runner.base, "resolve_binary", lambda path: Path("/tmp/llama-server"))
+    monkeypatch.setattr(runner.base, "resolve_library_path", lambda binary, library_path: Path("/tmp"))
+    monkeypatch.setattr(runner, "server_extra_args", lambda: ["--json-schema", "{}"])
+    monkeypatch.setattr(runner, "scaffold_server_extra_args", lambda: ["--reasoning", "off"])
+    monkeypatch.setattr(runner.smoke, "pgrep", lambda pattern: [])
+
+    plan = runner.build_plan(args)
+
+    assert plan["execution_allowed"] is True
+    assert plan["scaffold"]["enabled"] is True
+    assert plan["scaffold"]["model_path"] == str(scaffold.resolve())
+    assert plan["scaffold"]["server"]["port"] == plan["server"]["port"] + 1
+    assert "--json-schema" not in plan["scaffold"]["server"]["server_command"]
+    assert "--json-schema" in plan["server"]["server_command"]
 
 
 def test_build_plan_records_selected_rows_without_inference(tmp_path, monkeypatch):
@@ -375,6 +502,12 @@ def test_requested_row_ids_dedupes_files_and_cli(tmp_path):
     )
 
     assert runner.requested_row_ids(args) == ["row-a", "row-b", "row-c"]
+
+
+def test_parse_args_defaults_p_rev1_to_attested_era():
+    args = runner.parse_args(["--measurement-protocol", "p_rev1"])
+
+    assert args.era == runner.P_REV1_ERA
 
 
 def test_build_plan_uses_explicit_row_ids_in_order(tmp_path, monkeypatch):
