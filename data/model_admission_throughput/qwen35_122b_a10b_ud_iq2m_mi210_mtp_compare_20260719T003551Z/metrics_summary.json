@@ -1,0 +1,33 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z",
+  "date_utc": "2026-07-19T00:35:51Z",
+  "model": "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "device": "MI210 ROCm0",
+  "reasoning": "off",
+  "max_tokens": 384,
+  "modes": {
+    "none": {
+      "n": 3,
+      "quality_pass": 3,
+      "decode_tps": [50.339793606846214, 46.28049450708381, 80.27292795504717],
+      "decode_tps_mean": 58.96440535632574,
+      "finish_reasons": ["stop", "stop", "stop"]
+    },
+    "draft_mtp": {
+      "n": 3,
+      "quality_pass": 3,
+      "decode_tps": [46.17871161394597, 37.42555822559191, 24.20457708552687],
+      "decode_tps_mean": 35.93628230835492,
+      "finish_reasons": ["stop", "stop", "stop"],
+      "draft_acceptance": {
+        "accepted_tokens": 24,
+        "generated_tokens": 30,
+        "acceptance_rate": 0.8
+      }
+    }
+  },
+  "speed_ratio_draft_mtp_vs_none": 0.6094589120719502,
+  "verdict": "native_mtp_functional_but_slower_on_this_slice",
+  "measurement_status": "observation_grade"
+}

@@ -2346,12 +2346,22 @@ roles:
         auto vs `44.30 t/s` off), so prefer reasoning-off for this candidate
         until the template/termination behavior is fixed or an unrestricted
         budget study proves otherwise.
+      native_mtp_observation: >
+        2026-07-19 same-window MI210 comparison showed native `draft-mtp` is
+        runtime-functional for this same GGUF without `-md`, but slower on the
+        bounded architect slice. Both no-spec and native-MTP passed `3/3`; mean
+        decode was `58.96 t/s` no-spec vs `35.94 t/s` native-MTP (`0.61x`).
+        Draft counters reported `24/30` accepted tokens (`80%`). Keep this
+        candidate no-spec by default unless a longer/repetitive workload proves
+        a separate MTP win.
       evidence:
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_smoke_20260719T001535Z
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/metrics_summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_iq2m_mi210_context_20260719T001712Z/summary.md
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_architect_mi210_20260719T002502Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2_m_reasoning_characterization_20260719T0030Z/summary.md
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/metrics_summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/summary.md
     memory:
       residency: cold
       pinned: false

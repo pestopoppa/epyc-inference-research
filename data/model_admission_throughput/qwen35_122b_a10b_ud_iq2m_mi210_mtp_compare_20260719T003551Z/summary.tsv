@@ -1,0 +1,7 @@
+mode	prompt	http	finish	prompt_tps	decode_tps	quality	response_file
+none	arithmetic	200	stop	95.15122482593888	50.339793606846214	pass	/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/none/arithmetic.json
+none	logic	200	stop	135.67030823001932	46.28049450708381	pass	/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/none/logic.json
+none	knowledge	200	stop	107.91625698457997	80.27292795504717	pass	/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/none/knowledge.json
+draft-mtp	arithmetic	200	stop	83.31202652195272	46.17871161394597	pass	/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/draft-mtp/arithmetic.json
+draft-mtp	logic	200	stop	129.72652413222224	37.42555822559191	pass	/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/draft-mtp/logic.json
+draft-mtp	knowledge	200	stop	102.96226242411299	24.20457708552687	pass	/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/draft-mtp/knowledge.json

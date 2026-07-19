@@ -1,0 +1,17 @@
+cleanup_check_utc=2026-07-19T00:36:54Z
+llama-server processes matching executable:
+KFD GPU processes and VRAM:
+
+
+============================ ROCm System Management Interface ============================
+===================================== KFD Processes ======================================
+No KFD PIDs currently running
+==========================================================================================
+================================== Memory Usage (Bytes) ==================================
+GPU[0]		: VRAM Total Memory (B): 68702699520
+GPU[0]		: VRAM Total Used Memory (B): 13094912
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+mode cleanup status files:
+/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/none/cleanup_status.txt: pid_dead_and_port_command_absent
+/mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwen35_122b_a10b_ud_iq2m_mi210_mtp_compare_20260719T003551Z/draft-mtp/cleanup_status.txt: pid_dead_and_port_command_absent
