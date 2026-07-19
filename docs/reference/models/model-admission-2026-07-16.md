@@ -1092,7 +1092,8 @@ jq -r '.files | to_entries[] | [.key, .value.size, (.value.lfs_sha256 // ""), (.
    or extra vision-candidate speed/first-load reruns unless a concrete quality, protocol,
    parser, artifact/export, or loader fix has landed. Reopened probes must use the stopped-case
    fix-reference gate in `scripts/benchmark/run_model_admission_smoke_queue.sh` and append a
-   row to `/mnt/raid0/llm/epyc-root/docs/reference/model-probe-scoreboard.md`. Redirect ordinary
+   row to `/mnt/raid0/llm/epyc-root/docs/reference/model-probe-scoreboard.md` (canonical; this
+   repo's `docs/reference/model-probe-scoreboard.md` is only a pointer/append contract). Redirect ordinary
    runtime churn to AXA-2 teleport, GLM accept-control / GC-shadow-repair4b, OP-2, and
    `P-GPU-1`. Qwen3.5-9B MTP and Qwen3.5-122B UD-IQ2_M still support structured/repetitive
    routing niches, not a general frontdoor/worker default. MiniCPM-o remains the active

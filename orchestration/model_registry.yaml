@@ -3301,6 +3301,12 @@ roles:
       mi210_quiet_repeat_observation: "2026-07-17 quiet-host sidecar repeat with Firefox/MegaSync gone: stock experimental-v7 CLI prompt 448.9 t/s, generation 83.3 t/s over a 1536-token cap on MI210. Throughput-only: prompt drifted into meta/help text, and the invoked build-hip binary self-reported stale 9d70bae4b while source HEAD was 2e79e10cc."
       protocol_correction_observation: "2026-07-17 protocol probe showed the earlier exact-output concern was harness/protocol-specific: llama-cli must use -f for prompt files, not -p @file; --reasoning-format none leaves thought text in the content channel. A server/API probe with --reasoning-format deepseek --reasoning off returned message.content exactly 'ok' while separating message.reasoning_content, prompt 201.34 t/s and generation 83.11 t/s on MI210. Treat old CLI exactness rows as load/throughput controls only."
       task_quality_channel_observation: "2026-07-18 protocol/channel follow-up keeps Q8_0 research-only but no longer first-pass quality-blocked under the bounded lane. With the strict system prompt, 512-token deepseek and deepseek-legacy arms reached only 2/5 in message.content and 4/5 with content_or_reasoning fallback; reasoning-format none failed 0/5. Removing the system prompt improved deepseek to 4/5 in message.content with clean host cleanup and uncontaminated observational throughput (82.73 t/s mean decode). A current-v7 clean-host rerun showed the token budget boundary directly: conservative task caps failed 0/5 at 83.56 t/s; `--ignore-task-token-caps --max-tokens 512` improved to 4/5 at 81.43 t/s; the 1024-token no-system deepseek lane then passed 5/5 at mean decode 81.42 t/s. Any role claim must preserve that serving contract: no system prompt, deepseek reasoning extraction, and 1024-token task budget."
+      broad24_quality_observation: >
+        2026-07-19 broad24 no-system deepseek MI210 quality slice failed role
+        readiness: 7/24 passed at mean wall decode 31.65 t/s. The run exposed
+        content-channel/reasoning-content failures even when grammar constrained
+        short answers, so Nemotron-Nano Q8 remains research-only pending a
+        protocol/parser or prompt repair.
       current_v7_llama_bench_observation: "2026-07-18 current experimental-v7 `d1e5a20eb` MI210 llama-bench: `pp2048 2066.77 t/s`, `pp8192 1978.87 t/s`, `tg1024 84.00 t/s`; 32K rider `pp32768 1696.72 t/s`, `tg512 84.50 t/s`. Speed-only context evidence, not role admission."
       current_v7_mi210_context_observation: >
         2026-07-18 current experimental-v7 `cf051d3e1` MI210 llama-bench
@@ -3354,6 +3360,8 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/nemotron-nano-9b-q8-v7-context-20260718T230602Z/summary.md
       - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/nemotron-nano-9b-q8-kvq8-v7-context-20260718T231115Z/metrics_summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/nemotron-nano-9b-q8-kvq8-v7-context-20260718T231115Z/summary.md
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/deepseek-nosystem-clean-mi210-1024tok-sourcehead-v7-20260719T000109Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_nano_task_quality/nemotron_nano_q8_mi210_broad24_deepseek_nosystem_20260719T033826Z/summary.json
     benchmark_date: 2026-04-23
     notes: |
       Reasoning-mode toggle (default AUTO/ON per user preference):
@@ -6568,6 +6576,14 @@ roles:
         This is positive judge-native pairwise preference evidence, not patch-review
         admission. SWE-bench-Verified accept controls later passed 22/24 with
         FR 8.3%, but that slice has no hard negatives.
+      external_swebench_verified_p_rev1_observation: >
+        2026-07-19 external SWE-bench-Verified accept-control live gate used
+        n=24 known-good patches, observation_only=false, measurement_protocol=p_rev1,
+        attestation MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719, and era
+        p_rev1_attested. GLM approved 22/24 rows, false-rejected 2/24
+        (FR 8.3%), and had parse failures 0/24. This is positive accept-control
+        evidence only; the slice has no hard negatives and does not clear the
+        failed C-CRAB patch-review gate.
       expert_activation_stats_observation: >
         2026-07-17 first expert-routing-skew attempt rebuilt stale
         experimental-v7 llama-imatrix, calibrated
@@ -6634,6 +6650,68 @@ roles:
         role_ready: false
         limitation: single-NextN repaired path; acceleration evidence only, not reviewer admission
         evidence: /mnt/raid0/llm/epyc-inference-research/data/glm52_native_mtp_ab/glm52-native-mtp-draft-long-repair-20260719T195037Z/plan.json
+      - protocol: p_rev1
+        instrument_era: p_rev1_attested
+        attestation: MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719
+        date: 2026-07-19
+        role: judge_pairwise_preference
+        corpus: judgebench-gpt
+        n: 24
+        exact_choice_accuracy: 0.917
+        correct: 22
+        parse_failure_rate: 0.0
+        confidence_warning_count: 7
+        role_ready: false
+        limitation: judge-native pairwise evidence; not a hard-negative patch-review gate
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/summary.json
+      - protocol: p_rev1
+        instrument_era: p_rev1_attested
+        attestation: MEASUREMENT-P-REV1-OPERATOR-APPROVED-20260719
+        date: 2026-07-19
+        role: patch_review_accept_control
+        corpus: swe-bench-verified
+        n: 24
+        accept_controls: 24
+        correct_approvals: 22
+        false_reject_rate: 0.083
+        parse_failure_rate: 0.0
+        role_ready: false
+        limitation: accept-control only; no hard negatives
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/summary.json
+      - protocol: reviewer_capability_smoke_observation
+        date: 2026-07-18
+        role: typed_decision_emission
+        gate: GC-1r
+        mode: natural_prompt_free_lane_repair
+        n: 3
+        schema_valid: 3
+        emission_rate: 1.0
+        role_ready: false
+        limitation: small synthetic observation; not P-REV-1 admission
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair2-20260718Tglm52/summary.json
+      - protocol: reviewer_capability_smoke_observation
+        date: 2026-07-18
+        role: rubric_authoring
+        gate: GC-2r
+        mode: natural_prompt_grammar_repair
+        n: 3
+        schema_valid: 3
+        mean_axis_coverage: 1.0
+        mean_composite: 1.0
+        role_ready: false
+        limitation: small synthetic observation; frontier-reference breadth still open
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-grammar-natural-repair-20260718Tglm52/summary.json
+      - protocol: reviewer_capability_smoke_observation
+        date: 2026-07-18
+        role: why_diagnosis
+        gate: GC-3r
+        mode: natural_prompt_free_lane_repair
+        n: 3
+        defect_detection_rate: 1.0
+        why_match_rate: 1.0
+        role_ready: false
+        limitation: small synthetic observation; corpus-v1/P-REV-1 gate still open
+        evidence: /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-natural-repair2-20260718Tglm52/summary.json
       evidence:
       - /mnt/raid0/llm/models/glm52_clean.log
       - /mnt/raid0/llm/tmp/glm52-dsa-preflight-20260716T2303/plan.json
@@ -6702,12 +6780,19 @@ roles:
       native_mtp_repair:
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_native_mtp_ab/glm52-native-mtp-draft-long-repair-20260719T195037Z/plan.json
       - /mnt/raid0/llm/epyc-inference-research/docs/data/glm52_native_mtp_ab_20260719.md
+      reviewer_capability_direct:
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc1-free-natural-repair2-20260718Tglm52/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc2-grammar-natural-repair-20260718Tglm52/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_reviewer_capability_direct/gc3-why-natural-repair2-20260718Tglm52/summary.json
       external_ground_truth:
       - /mnt/raid0/llm/epyc-inference-research/docs/data/glm52_external_judgebench_gpt_p_rev1_live_20260719.md
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-20260719T154517Z/decisions.jsonl
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-judgebench-gpt-n24-p-rev1-choice-rescore-20260719/decisions.jsonl
+      - /mnt/raid0/llm/epyc-inference-research/docs/data/glm52_external_swebench_verified_p_rev1_live_20260719.md
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/glm52_external_ground_truth_direct/glm52-external-swebench-verified-n24-p-rev1-20260719Tlive/decisions.jsonl
     memory:
       residency: cold
       pinned: false
@@ -6778,6 +6863,12 @@ roles:
         mi210_hybrid_repaired_strict_suite_total: 7
         mi210_hybrid_repaired_strict_suite_mean_prompt_tps: 22.33
         mi210_hybrid_repaired_strict_suite_mean_generation_tps: 11.43
+        mi210_hybrid_max384_task_quality_evidence_dir: /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/hy3_iq1m_mi210_hybrid_task_quality_max384_20260719T035151Z
+        mi210_hybrid_max384_task_quality_passed: 5
+        mi210_hybrid_max384_task_quality_total: 6
+        mi210_hybrid_max384_task_quality_mean_prompt_tps: 22.29
+        mi210_hybrid_max384_task_quality_mean_decode_tps: 11.17
+        mi210_hybrid_max384_task_quality_failed_task: lowercase_six_words
         mi210_hybrid_context_sweep_evidence_dir: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3_mi210_hybrid_context_sweep_20260718Tmain
         mi210_hybrid_context_sweep_observation: "2026-07-18 server/chat context sweep under the production-shaped hybrid lane measured nominal 2K at 1562 prompt / 310 completion tokens, prompt 71.31 t/s and decode 9.62 t/s; nominal 8K at 6030 prompt / 258 completion tokens, prompt 82.65 t/s and decode 9.37 t/s. Follow-up 32K worker row measured 20171 prompt / 334 completion tokens, prompt 72.34 t/s and decode 8.61 t/s, with the requested marker present. Cleanup returned MI210 to 0% VRAM/no KFD PIDs."
         mi210_hybrid_context32k_evidence_dir: /mnt/raid0/llm/epyc-inference-research/data/hy3_current_v7/hy3_mi210_hybrid_context32k_20260718T201619Z
@@ -6913,6 +7004,12 @@ roles:
         failed strict minified-JSON content control with prose/malformed target
         text. This is speed/runnability evidence plus a failing quality verdict;
         production-role content control remains open.
+      stock_v7_sourcehead_content_control_observation: >
+        2026-07-19 source-head stock-v7 MI210 content-control repair repeat
+        still failed all four deterministic content-control probes. It produced
+        valid process exits and about 37.5-37.8 tok/s equivalent over 32
+        diffusion steps, but exact JSON/copy controls remained prose-contaminated
+        or malformed. This confirms loader feasibility without role readiness.
       fork_cpu_observation: >
         2026-07-16 scratch buun CPU llama-diffusion-cli self-spec smoke passed:
         one cycle, average 5.0 tokens/cycle, 100.0% draft accept, output ok,
@@ -6961,6 +7058,7 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/mi210_dream_fix_local_20260718T165819Z
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/mi210_cli_dream_fix_local_20260718T170018Z
       - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/cpu_dream_fix_clean_local_20260718T171131Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/nemotron_diffusion_stock_v7/content_control_repair_sourcehead_mi210_20260719T020722Z/summary.json
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c2048/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c8192/summary.txt
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/nemotron_diff14_buun-c32768/summary.txt
@@ -7291,11 +7389,20 @@ roles:
       mi210_observation: "Prior MI210 smoke passed under experimental v7: output `OK`, generation 72.7 t/s."
       long_cpu_observation: "2026-07-16 longer CPU server run generated 593 tokens at 30.08 t/s after a 66-token prompt."
       long_mi210_observation: "2026-07-16 longer MI210 server run generated 1073 tokens at 38.00 t/s after an 84-token prompt; use this longer number for throughput hypotheses, while provenance remains unresolved."
+      current_v7_mi210_context_observation: >
+        2026-07-19 current experimental-v7 `6a8dd5ea6` MI210 speed-only
+        context row for the orphan Bonsai-8B artifact measured prompt-only
+        `pp512 2414.00 t/s`, `pp4096 2062.67 t/s`, `pp16384 1284.44 t/s`,
+        and decode-only `tg1024 36.74 t/s` with q8_0 KV and flash attention.
+        This refreshes throughput hypotheses only; provenance remains unresolved
+        and the model stays catalogue-only.
       evidence:
       - /mnt/raid0/llm/tmp/bonsai-dspark-cpu-churn-20260716/bonsai_8b_cpu_v7/bonsai_8b_cpu_v7.stdout
       - /mnt/raid0/llm/tmp/mi210-inference-churn-20260716b/bonsai_8b_mi210_v7_final.log
       - /mnt/raid0/llm/tmp/model-long-cpu-remaining2-20260716T224231/bonsai_8b_cpu/summary.txt
       - /mnt/raid0/llm/tmp/model-long1536-mi210-20260716T220422/bonsai_8b_mi210/summary.txt
+      - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai8b_mi210_context_6a8dd5ea68_20260719T052624Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/bonsai_current_v7/bonsai8b_mi210_context_6a8dd5ea68_20260719T052624Z/summary.md
     memory:
       residency: cold
       pinned: false
@@ -7463,6 +7570,11 @@ roles:
         faster on decode but about double the footprint. A paired CPU-only
         current-v7 control with `-dev none -ngl 0 -fa off -t 16` measured
         `pp2048 116.13 t/s`, `pp8192 110.76 t/s`, and `tg512 13.99 t/s`.
+        Current-build `6a8dd5ea6` refresh measured MI210 prompt-only
+        `pp2048 2194.04 t/s`, `pp8192 2123.69 t/s`, `pp32768 1739.88 t/s`,
+        and decode-only `tg512 89.48 t/s`; the current-head CPU-only control
+        measured `pp2048 125.05 t/s`, `pp8192 112.33 t/s`, `pp32768 98.51 t/s`,
+        and `tg512 13.78 t/s`.
         IQ4_XS remains the preferred default unless a broader quality slice
         shows a Q8-only gain.
       measured:
@@ -7538,6 +7650,9 @@ roles:
       - /mnt/raid0/llm/tmp/context-sweep-mi210-20260716T221524-fixed/qwable_iq4xs-c32768/summary.txt
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_mi210_llama_bench_20260718T144626Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_cpu_v7_llama_bench_20260718T155234Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_mi210_context_6a8dd5ea68_20260719T050043Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_mi210_context_6a8dd5ea68_20260719T050043Z/summary.md
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_iq4xs_cpu_v7_context_currenthead_20260719T032854Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-fast-b-qwable-iq4xs-ccrab-p-rev1-20260719T162712Z/reviewer_calibration_report.md
       - /mnt/raid0/llm/epyc-inference-research/data/reviewer_model_ablations/rm2-fast-b-qwen36-27b-q8-plus-qwable-iq4xs-scaffold-ccrab-p-rev1-20260719T162958Z/reviewer_calibration_report.md
     memory:
@@ -7619,8 +7734,14 @@ roles:
         2026-07-18 current experimental-v7 `cf051d3e1` CPU-only llama-bench
         rerun with `-dev none -ngl 0 -fa off -t 16` measured prompt-only
         `pp2048 145.23 t/s`, `pp8192 121.33 t/s`, `pp32768 99.11 t/s`, and
-        decode-only `tg512 10.84 t/s`. Speed-only single-rep evidence; MI210
-        remains the primary Qwable execution lane when available.
+        decode-only `tg512 10.84 t/s`. A 2026-07-19 current-head CPU-only
+        control measured `pp2048 101.60 t/s`, `pp8192 92.73 t/s`,
+        `pp32768 74.00 t/s`, and `tg512 10.24 t/s`; that artifact notes a
+        possible separate GPU-sidecar, so treat it as observation-grade.
+        Current-build `6a8dd5ea6` MI210 context refresh measured prompt-only
+        `pp2048 2047.33 t/s`, `pp8192 1943.50 t/s`, `pp32768 1623.43 t/s`,
+        and decode-only `tg512 86.18 t/s`. Speed-only evidence; MI210 remains
+        the primary Qwable execution lane when available.
       evidence:
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/summary.json
       - /mnt/raid0/llm/tmp/qwable-reasoning-economics-20260716T2300-selector/responses/standalone_q8_gpu.raw.json
@@ -7633,6 +7754,9 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/model_admission_throughput/qwable_q8_mi210_llama_bench_20260718T220220Z_rebuilt_cf051d3e1/bench.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_run2_20260718T224956Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_run2_20260718T224956Z/summary.md
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_mi210_context_6a8dd5ea68_20260719T050423Z/summary.json
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_mi210_context_6a8dd5ea68_20260719T050423Z/summary.md
+      - /mnt/raid0/llm/epyc-inference-research/data/qwable_v1/qwable_q8_cpu_v7_context_currenthead_20260719T034724Z/summary.json
     memory:
       residency: cold
       pinned: false
