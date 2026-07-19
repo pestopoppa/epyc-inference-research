@@ -158,6 +158,7 @@ def build_report(
             raise AssertionError(f"validated unexpected decision: {decision!r}")
 
     hard_accept_n = len(accepted_row_ids)
+    rejected_or_ambiguous_n = len(rejected_row_ids)
     unreviewed_n = len(unreviewed_row_ids)
     if expected_row_ids is None:
         accepted_row_ids_match_expected = None
@@ -172,6 +173,7 @@ def build_report(
     expected_gate = accepted_row_ids_match_expected is not False
     decision_grade = (
         hard_accept_n >= min_hard_accepts
+        and rejected_or_ambiguous_n == 0
         and (allow_unreviewed or unreviewed_n == 0)
         and expected_gate
     )
@@ -182,7 +184,7 @@ def build_report(
         "min_hard_accepts": min_hard_accepts,
         "allow_unreviewed": allow_unreviewed,
         "hard_accept_n": hard_accept_n,
-        "rejected_or_ambiguous_n": len(rejected_row_ids),
+        "rejected_or_ambiguous_n": rejected_or_ambiguous_n,
         "unreviewed_n": unreviewed_n,
         "decision_grade": decision_grade,
         "expected_row_ids_n": len(expected_row_ids) if expected_row_ids is not None else None,

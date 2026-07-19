@@ -1,11 +1,12 @@
 # OP-2 Quiet-Window Prep
 
 - Schema: `epyc.op2_quiet_window_prep.v1`
-- Generated: `2026-07-19T11:49:27.910846+00:00`
+- Generated: `2026-07-19T12:01:29.216767+00:00`
 - Run id: `op2_quiet_window_prep_20260719`
 - Run root: `/mnt/raid0/llm/epyc-inference-research/docs/data/op2_quiet_window_prep_20260719`
 - Status: `prepared_no_inference`
-- P-GPU-1 status line: `### P-GPU-1 — GPU canonical (DEFERRED — hardware not acquired, all GPU work HW-GATED)`
+- Raw P-GPU-1 MEASUREMENT line: `### P-GPU-1 — GPU canonical (DEFERRED — hardware not acquired, all GPU work HW-GATED)`
+- Raw-line caveat: `Raw MEASUREMENT line still carries the pre-MI210 defer reason; treat only the deferred/unratified status as current until the human MEASUREMENT amendment updates P-GPU-1.`
 - P-GPU-1 certification caveat: `Current P-GPU-1 amendment prep is production-named-kernel only: experimental, candidate, or fork GPU rows remain observation-grade unless the signed amendment explicitly permits pre-promotion evidence or retro-certification.`
 - Matching live process lines at prep time: `0`
 

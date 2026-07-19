@@ -95,7 +95,7 @@ def test_rejected_or_ambiguous_rows_are_dropped_from_accepts():
     assert report["rejected_or_ambiguous_n"] == 1
     assert report["accepted_row_ids"] == ["a"]
     assert report["rejected_row_ids"] == ["b"]
-    assert report["decision_grade"] is True
+    assert report["decision_grade"] is False
 
 
 def test_expected_row_ids_must_match_for_decision_grade():

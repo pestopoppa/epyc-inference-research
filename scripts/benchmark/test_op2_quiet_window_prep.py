@@ -90,6 +90,7 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
 
             self.assertEqual(manifest["status"], "prepared_no_inference")
             self.assertTrue(manifest["measurement"]["p_gpu_1_deferred"])
+            self.assertIn("pre-MI210 defer reason", manifest["measurement"]["p_gpu_1_line_note"])
             self.assertIn("production-named-kernel only", manifest["measurement"]["p_gpu_1_certification_note"])
             self.assertFalse(manifest["autopilot_restart_authorized"])
             self.assertFalse(manifest["production_v6_touch_authorized"])
@@ -113,6 +114,9 @@ class OP2QuietWindowPrepTests(unittest.TestCase):
             self.assertIn("production-named-kernel only", commands)
             self.assertNotIn("README.role_smokes.md", commands)
             summary = (bundle / "summary.md").read_text()
+            self.assertIn("Raw P-GPU-1 MEASUREMENT line", summary)
+            self.assertIn("Raw-line caveat", summary)
+            self.assertIn("pre-MI210 defer reason", summary)
             self.assertIn("P-GPU-1 certification caveat", summary)
             self.assertIn("production-named-kernel only", summary)
 

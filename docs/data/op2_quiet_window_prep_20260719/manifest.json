@@ -5,9 +5,9 @@
     "summary": "/mnt/raid0/llm/epyc-inference-research/docs/data/op2_quiet_window_prep_20260719/summary.md"
   },
   "autopilot_restart_authorized": false,
-  "generated_at": "2026-07-19T11:49:27.910846+00:00",
+  "generated_at": "2026-07-19T12:01:29.216767+00:00",
   "host_state": {
-    "captured_at": "2026-07-19T11:49:27.910948+00:00",
+    "captured_at": "2026-07-19T12:01:29.216866+00:00",
     "commands": {
       "free_h": {
         "argv": [
@@ -39,7 +39,7 @@
         "ok": true,
         "returncode": 0,
         "stderr": "",
-        "stdout": " 11:49:27 up 16 days, 17:48,  0 users,  load average: 1.46, 1.37, 1.28\n"
+        "stdout": " 12:01:29 up 16 days, 18:00,  0 users,  load average: 1.00, 2.78, 2.57\n"
       }
     },
     "kernel_knobs": {
@@ -62,6 +62,7 @@
     "p_gpu_1_certification_note": "Current P-GPU-1 amendment prep is production-named-kernel only: experimental, candidate, or fork GPU rows remain observation-grade unless the signed amendment explicitly permits pre-promotion evidence or retro-certification.",
     "p_gpu_1_deferred": true,
     "p_gpu_1_line": "### P-GPU-1 \u2014 GPU canonical (DEFERRED \u2014 hardware not acquired, all GPU work HW-GATED)",
+    "p_gpu_1_line_note": "Raw MEASUREMENT line still carries the pre-MI210 defer reason; treat only the deferred/unratified status as current until the human MEASUREMENT amendment updates P-GPU-1.",
     "path": "/workspace/MEASUREMENT.md"
   },
   "operator_approval_ref": "MISSING_OPERATOR_APPROVAL",
@@ -71,7 +72,7 @@
     "output_base": "/mnt/raid0/llm/epyc-inference-research/data/op2_canonical_bench_window"
   },
   "process_state": {
-    "captured_at": "2026-07-19T11:49:28.020669+00:00",
+    "captured_at": "2026-07-19T12:01:29.257993+00:00",
     "matching_processes": [],
     "ps_ok": true,
     "ps_stderr": ""
@@ -165,7 +166,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": "b8f835dd131d223574d94fa41f236ba87edd95a5\n"
+          "stdout": "d30593a293c5f8c6a578a8b022f1a539be4df139\n"
         },
         "tracked_status": {
           "argv": [
@@ -178,7 +179,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": " M orchestration/autopilot_baseline.yaml\n M orchestration/autopilot_journal_1.jsonl\n M orchestration/classifier_config.yaml\n M orchestration/repl_memory/q_scorer.py\n M scripts/analysis/reviewer_pool_gen.py\n M scripts/autopilot/failure_blacklist.yaml\n M scripts/benchmark/mtp_acceptance_report.py\n M scripts/benchmark/seeding_rewards.py\n M tests/test_reviewer_pool_gen.py\n M tests/unit/test_mtp_acceptance_report.py\n M tests/unit/test_q_scorer.py\n M tests/unit/test_seeding_rewards.py\n"
+          "stdout": " M orchestration/autopilot_baseline.yaml\n M orchestration/autopilot_journal_1.jsonl\n M orchestration/classifier_config.yaml\n M orchestration/repl_memory/q_scorer.py\n M scripts/autopilot/failure_blacklist.yaml\n M scripts/benchmark/mtp_acceptance_report.py\n M scripts/benchmark/seeding_rewards.py\n M tests/unit/test_mtp_acceptance_report.py\n M tests/unit/test_q_scorer.py\n M tests/unit/test_seeding_rewards.py\n"
         },
         "upstream": {
           "argv": [
@@ -196,9 +197,9 @@
         }
       },
       "exists": true,
-      "head": "b8f835dd131d223574d94fa41f236ba87edd95a5",
+      "head": "d30593a293c5f8c6a578a8b022f1a539be4df139",
       "path": "/mnt/raid0/llm/epyc-orchestrator",
-      "tracked_dirty_lines": 12,
+      "tracked_dirty_lines": 10,
       "upstream": "origin/spec-dec-mtp-refresh-2026-06-22"
     },
     "production_llama": {
@@ -287,7 +288,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": "0487c378e9bf8689410f80b77f626b358096db3a\n"
+          "stdout": "80b126176fde1febeb086586fa08c9cbb9051b02\n"
         },
         "tracked_status": {
           "argv": [
@@ -300,7 +301,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": " M orchestration/model_registry.yaml\n M scripts/benchmark/k35_stack_context_matrix_runner.py\n M scripts/benchmark/op2_quiet_window_prep.py\n M scripts/benchmark/test_k35_stack_context_matrix_runner.py\n M scripts/benchmark/test_op2_quiet_window_prep.py\n"
+          "stdout": " M scripts/benchmark/glm52_ccrab_accept_control_signoff.py\n M scripts/benchmark/op2_quiet_window_prep.py\n M scripts/benchmark/test_glm52_ccrab_accept_control_signoff.py\n M scripts/benchmark/test_op2_quiet_window_prep.py\n"
         },
         "upstream": {
           "argv": [
@@ -318,9 +319,9 @@
         }
       },
       "exists": true,
-      "head": "0487c378e9bf8689410f80b77f626b358096db3a",
+      "head": "80b126176fde1febeb086586fa08c9cbb9051b02",
       "path": "/mnt/raid0/llm/epyc-inference-research",
-      "tracked_dirty_lines": 5,
+      "tracked_dirty_lines": 4,
       "upstream": "origin/main"
     },
     "root": {
@@ -348,7 +349,7 @@
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": "47e7ce4e365177ae35918a9d48aade16c1a9d44b\n"
+          "stdout": "e8d978096f418fae10880406ff54fda73461fd75\n"
         },
         "tracked_status": {
           "argv": [
@@ -379,7 +380,7 @@
         }
       },
       "exists": true,
-      "head": "47e7ce4e365177ae35918a9d48aade16c1a9d44b",
+      "head": "e8d978096f418fae10880406ff54fda73461fd75",
       "path": "/mnt/raid0/llm/epyc-root",
       "tracked_dirty_lines": 10,
       "upstream": "origin/spec-dec-mtp-refresh-2026-06-22"

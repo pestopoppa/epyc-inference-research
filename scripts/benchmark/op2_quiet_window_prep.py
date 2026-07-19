@@ -196,11 +196,19 @@ def measurement_status(measurement_path: Path) -> dict[str, Any]:
         if "P-GPU-1" in line:
             p_gpu_line = line.strip()
             break
+    stale_reason_note = ""
+    if "hardware not acquired" in p_gpu_line:
+        stale_reason_note = (
+            "Raw MEASUREMENT line still carries the pre-MI210 defer reason; "
+            "treat only the deferred/unratified status as current until the human "
+            "MEASUREMENT amendment updates P-GPU-1."
+        )
     return {
         "path": str(measurement_path),
         "exists": measurement_path.exists(),
         "p_gpu_1_line": p_gpu_line,
         "p_gpu_1_deferred": "DEFERRED" in p_gpu_line,
+        "p_gpu_1_line_note": stale_reason_note,
         "p_gpu_1_certification_note": PGPU1_CERTIFICATION_NOTE,
         "authoritative": True,
     }
@@ -497,7 +505,8 @@ def render_summary(manifest: dict[str, Any]) -> str:
             f"- Run id: `{manifest['run_id']}`",
             f"- Run root: `{manifest['run_root']}`",
             "- Status: `prepared_no_inference`",
-            f"- P-GPU-1 status line: `{measurement.get('p_gpu_1_line', '')}`",
+            f"- Raw P-GPU-1 MEASUREMENT line: `{measurement.get('p_gpu_1_line', '')}`",
+            f"- Raw-line caveat: `{measurement.get('p_gpu_1_line_note', '')}`",
             f"- P-GPU-1 certification caveat: `{measurement.get('p_gpu_1_certification_note', '')}`",
             f"- Matching live process lines at prep time: `{process_count}`",
             "",
