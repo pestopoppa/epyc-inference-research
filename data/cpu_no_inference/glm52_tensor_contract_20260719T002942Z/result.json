@@ -1,0 +1,41 @@
+{
+  "descriptor_extraction": true,
+  "execution_device": "CPU",
+  "file_count": 6,
+  "gpu_used": false,
+  "inference": false,
+  "matched_tensor_count": 1806,
+  "schema": "epyc.cpu_no_inference_tensor_contract_audit.v1",
+  "selected_metadata": {
+    "general.architecture": "glm-dsa",
+    "glm-dsa.attention.indexer.head_count": 32,
+    "glm-dsa.attention.indexer.key_length": 128,
+    "glm-dsa.attention.indexer.top_k": 2048,
+    "glm-dsa.block_count": 79,
+    "glm-dsa.embedding_length": 6144,
+    "glm-dsa.leading_dense_block_count": 3,
+    "glm-dsa.nextn_predict_layers": 1
+  },
+  "tail_facts": {
+    "architecture": "glm-dsa",
+    "block_count": 79,
+    "embedding_length": 6144,
+    "nextn_predict_layers": 1,
+    "tail_group_counts": {
+      "attention": 9,
+      "ffn": 9,
+      "indexer": 5,
+      "nextn": 4,
+      "other": 0
+    },
+    "tail_layers": [
+      78
+    ]
+  },
+  "task": "glm52_header_only_tensor_contract",
+  "total_tensors_seen": 1809,
+  "validator": "glm-nextn",
+  "validator_errors": [],
+  "validator_passed": true,
+  "validator_warnings": []
+}

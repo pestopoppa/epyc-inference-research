@@ -1,0 +1,15 @@
+task=glm52_header_only_tensor_contract
+status=PASS
+mode=CPU header/metadata/tensor-descriptor only; no inference
+shards=6
+architecture=glm-dsa
+block_count=79
+embedding_length=6144
+nextn_predict_layers=1
+tail_layer=78
+tail_groups=attention:9,ffn:9,indexer:5,nextn:4
+total_tensors_seen=1809
+matched_tensor_descriptors=1806
+validator_errors=0
+validator_warnings=0
+exit_code=0

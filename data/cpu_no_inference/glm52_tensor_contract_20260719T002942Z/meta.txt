@@ -1,0 +1,15 @@
+task=glm52_header_only_tensor_contract
+started_utc=2026-07-19T00:29:42Z
+model_dir=/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M
+helper=scripts/benchmark/gguf_tensor_contract.py
+inference=false
+execution_device=CPU
+gpu_used=false
+shard=GLM-5.2-UD-IQ2_M-00001-of-00006.gguf bytes=9423744
+shard=GLM-5.2-UD-IQ2_M-00002-of-00006.gguf bytes=49223976800
+shard=GLM-5.2-UD-IQ2_M-00003-of-00006.gguf bytes=49143176640
+shard=GLM-5.2-UD-IQ2_M-00004-of-00006.gguf bytes=49143176640
+shard=GLM-5.2-UD-IQ2_M-00005-of-00006.gguf bytes=49143176640
+shard=GLM-5.2-UD-IQ2_M-00006-of-00006.gguf bytes=41914650304
+finished_utc=2026-07-19T00:29:47Z
+exit_code=0
