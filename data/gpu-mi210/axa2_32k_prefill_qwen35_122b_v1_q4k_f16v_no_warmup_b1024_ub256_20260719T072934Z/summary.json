@@ -1,0 +1,20 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/axa2_32k_prefill_qwen35_122b_v1_q4k_f16v_no_warmup_b1024_ub256_20260719T072934Z",
+  "variant": "q4_0/f16 KV, b1024/ub256, t32, fa on, p32768, n0, no-warmup",
+  "exit_code": "143",
+  "stop_reason": "manual_stop_cpu_fallback_zero_gpu_no_stdout_after_182s",
+  "rows": [],
+  "independent_cleanup": {
+    "no_exact_llama_processes": true,
+    "post_rocm_smi_no_kfd": true
+  },
+  "cpu_fallback_signal": {
+    "manual_stop": true,
+    "observed_elapsed_s": 182,
+    "gpu_use_pct": 0,
+    "vram_alloc_pct": 60,
+    "stdout_bytes": 0,
+    "ps_cpu_pct_observed": "2378",
+    "interpretation": "mixed q4_0/f16 forced flash did not take MI210 flash compute path in current build; process burned host CPU while holding VRAM"
+  }
+}

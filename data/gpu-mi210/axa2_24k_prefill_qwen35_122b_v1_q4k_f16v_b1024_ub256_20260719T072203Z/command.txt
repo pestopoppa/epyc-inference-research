@@ -1,0 +1,1 @@
+/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf -dev ROCm0 -ngl 99 -p 24576 -n 0 -t 32 -b 1024 -ub 256 -ctk q4_0 -ctv f16 -fa on -r 1 -o json --progress

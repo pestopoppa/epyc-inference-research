@@ -1,0 +1,36 @@
+{
+  "choices": [
+    {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+        "content": "</think>",
+        "role": "assistant"
+      }
+    }
+  ],
+  "created": 1784447847,
+  "id": "chatcmpl-X85P59Bya8g6BoGAxP7W1c07N7wwAzSK",
+  "model": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+  "object": "chat.completion",
+  "system_fingerprint": "b10088-d1e5a20eb",
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 0.001,
+    "predicted_n": 1,
+    "predicted_per_second": 1000000.0,
+    "predicted_per_token_ms": 0.001,
+    "prompt_ms": 315917.603,
+    "prompt_n": 5906,
+    "prompt_per_second": 18.694748073281627,
+    "prompt_per_token_ms": 53.49095885540129
+  },
+  "usage": {
+    "completion_tokens": 1,
+    "prompt_tokens": 5906,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 5907
+  }
+}

@@ -1,0 +1,4 @@
+BIN=/mnt/raid0/llm/llama.cpp-experimental/build-hip-fa-all-quants-gfx90a/bin/llama-bench
+MODEL=/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf
+BUILD=/mnt/raid0/llm/llama.cpp-experimental/build-hip-fa-all-quants-gfx90a
+GGML_CUDA_FA_ALL_QUANTS=ON

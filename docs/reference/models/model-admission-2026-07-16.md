@@ -95,6 +95,17 @@ The GLM DSA runner now supports selected-stage execution and retained trace logs
 
 Interpretation: this proves loader metadata reconciliation, expected tail-block skip behavior, and Lightning Indexer enablement at 4K/8K for the stale-binary run. It is not yet a decision-grade DSA classification. The open K23/D2 question is still whether attention compute at 64K+ scales near `indexer_top_k` or full KV, and whether quality/needle behavior remains coherent at long context.
 
+2026-07-19 OP-2/B4 landed-code DSA-D3 profile-first artifact:
+`data/op2_canonical_window/op2_b4_dsa_d3_profile_20260719T075142/b4-dsa-d3/summary.md`.
+The CPU-only `kv_length_scaling` stage used the experimental CPU binary,
+`indexer_top_k=2048`, `c8192`, `96` threads, and processed `5906` prompt tokens at
+`18.69 t/s`; logs again show main/indexer DSA KV caches and `Lightning Indexer enabled`.
+The bounded symbol-only perf report had zero lost samples and put
+`ggml_compute_forward_lightning_indexer` at only `1.08%` of cycle samples, with dot-product
+and flash-attention symbols dominating. This closes D3.1 as a no-go for immediate
+AVX-512BW Lightning Indexer kernel work; D2/sparse-final-attention and higher-share CPU
+bottlenecks remain the better optimization targets.
+
 ## GLM-5.2 True >64K DSA Probe
 
 Evidence directory: `/mnt/raid0/llm/tmp/glm52-dsa-true64k-probe-20260717T0125/`.
@@ -1002,7 +1013,7 @@ with reasoning disabled and q4_0/f16 KV:
 | 3-prompt mixed architect/reviewer slice | `41.85 t/s`, `3/3` | not repeated | `50.77 t/s`, `3/3` (`235/356` accepted) | PASS |
 | 8-prompt broadened sanity slice | not repeated | not repeated | mean `80.77 t/s`, `1166/1440` accepted | FAIL overall (`5/8`) |
 | CPU-only IQ2 prefill sizing | `pp2048 122.31 t/s`; `pp8192 114.40 t/s`; `tg16 6.24 t/s` | not applicable | not applicable | PASS runtime; no KFD PIDs |
-| AXA-2 MI210 prefill sizing | q4_0/f16 KV: `pp2048 342.06 t/s`; `pp8192 135.56 t/s`; `pp16384 76.52 t/s`; mixed-KV `pp32768` no row. Homogeneous 32K controls: f16/f16 `489.31 t/s`, q4_0/q4_0 `487.87 t/s` | not applicable | not applicable | PARTIAL runtime; cleanup clean |
+| AXA-2 MI210 prefill sizing | q4_0/f16 KV: `pp2048 342.06 t/s`; `pp8192 135.56 t/s`; `pp16384 76.52 t/s`; current default HIP build mixed-KV `pp32768` rejected as CPU fallback. Default-build homogeneous 32K controls: f16/f16 `489.31-489.82 t/s`, q4_0/q4_0 `487.87-489.07 t/s`. Isolated `GGML_CUDA_FA_ALL_QUANTS=ON` build: mixed q4_0/f16 `pp32768 415.31 t/s`, but homogeneous controls dropped to f16/f16 `416.55 t/s` and q4_0/q4_0 `414.60 t/s` | not applicable | not applicable | PASS runtime only as a lane-specific all-quants mixed-KV build; cleanup clean |
 | AXA-2 hot page-cache lease/load smoke | health-ready `7052 ms`; chat request `315 ms`; exact `READY` | not applicable | not applicable | PASS runtime; no KFD PIDs |
 
 Artifacts:
@@ -1019,6 +1030,12 @@ Artifacts:
 - `data/gpu-mi210/axa2_qwen35_122b_hot_load_lease_smoke_20260719T065557Z/summary.json`
 - `data/gpu-mi210/axa2_32k_prefill_qwen35_122b_v1_f16k_q4v_b1024_ub256_rerun_20260719T070336Z/summary.json`
 - `data/gpu-mi210/axa2_32k_prefill_qwen35_122b_v1_q4kv_b1024_ub256_20260719T071051Z/summary.json`
+- `data/gpu-mi210/axa2_24k_prefill_qwen35_122b_v1_q4k_f16v_b1024_ub256_20260719T072203Z/summary.json`
+- `data/gpu-mi210/axa2_32k_prefill_qwen35_122b_v1_q4k_f16v_no_warmup_b1024_ub256_20260719T072934Z/summary.json`
+- `data/gpu-mi210/axa2_mixed_kv_fa_matrix_current_build_20260719T073441Z/summary.json`
+- `data/gpu-mi210/axa2_fa_all_quants_mixed_kv_validation_20260719T073906Z/summary.json`
+- `data/gpu-mi210/axa2_fa_all_quants_regression_controls_20260719T074221Z/summary.json`
+- `data/gpu-mi210/axa2_current_build_no_warmup_homogeneous_controls_20260719T074757Z/summary.json`
 
 Disposition: composed `ngram-mod,draft-mtp` is a strong routing candidate for
 repetitive/structured generation and a modest positive candidate on mixed
@@ -1031,13 +1048,19 @@ hybrid-placement economics, but decode is too slow for a primary CPU-only
 serving lane. The AXA-2 MI210 prefill rows are observation-grade teleport cost
 inputs only: 2K/8K/16K completed cleanly with q4_0/f16 KV; homogeneous 32K KV
 controls completed at f16/f16 `489.31 t/s` and q4_0/q4_0 `487.87 t/s`. The
-mixed-KV 32K shapes still did not emit a `llama-bench` row: q4_0/f16 failed
-across the original b2048/ub512 shape, a direct t32 repeat, and a b1024/ub256
-repeat, while a corrected f16/q4_0 b1024/ub256 rerun held VRAM but stayed at
-0% GPU through warmup until watchdog stop. This narrows the root cause to the
-mixed-KV 32K graph/scheduling path, not q4 KV generally. The hot page-cache
-lease/load smoke shows the resident-lane acquisition path can reach health in
-about `7.05s` when the artifact is page-cache-hot, but it is not a cold-load
+current default HIP build's mixed-KV 32K shape is rejected for cost modeling:
+q4_0/f16 `pp32768` held 60% VRAM, emitted no row, used 0% GPU, and burned host
+CPU, while smaller mixed-KV shapes completed. The root cause is build coverage,
+not q4 KV generally: the current build has `GGML_CUDA_FA_ALL_QUANTS=OFF`, which
+rejects mixed K/V flash-attn pairs. A separate experimental all-quants HIP build
+completed q4_0/f16 `pp32768` at `415.31 t/s` with real MI210 activity and clean
+KFD cleanup, so any mixed-KV 32K teleport cost must be tied to a serving lane
+that actually uses `GGML_CUDA_FA_ALL_QUANTS=ON`. However, current default
+no-warmup homogeneous controls stayed at `489.82`/`489.07 t/s`, while the
+all-quants build's homogeneous controls were only `416.55`/`414.60 t/s`; do not
+turn this into a global HIP build default from AXA-2 alone. The hot page-cache lease/load
+smoke shows the resident-lane acquisition path can reach health in about
+`7.05s` when the artifact is page-cache-hot, but it is not a cold-load
 measurement and must not be used for the cold-load break-even branch.
 
 ## Deferred Low-Contention Manifest Work
