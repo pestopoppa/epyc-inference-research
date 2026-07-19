@@ -8,6 +8,15 @@ Measurement interpretation rule: baseline/no-spec rows are attribution controls,
 
 Production v6 is immutable. The staged command file uses the experimental v7 `build-hip` CLI for candidate smokes, with CPU probes pinned to `--device none` and GPU probes pinned to `ROCm0`.
 
+2026-07-19 steering update: this is now a **historical admission queue plus reopen-only
+runbook**, not a license to keep rerunning speed-only probes. Do not run Bonsai Q1_0/8B,
+Ternary Q2_g64/Q2_0/dspark, Nemotron-Nano, Nemotron-Diffusion, Qwen3-VL/SuperGemma/PaddleOCR
+or other extra vision candidates unless a named quality fix, protocol/parser fix,
+artifact/export fix, or loader contract has landed. The default queue runner excludes those
+cases; explicit stopped-case runs require a fix reference and must append a row to
+`/mnt/raid0/llm/epyc-root/docs/reference/model-probe-scoreboard.md`. Redirect ordinary task
+churn to AXA-2 teleport, GLM accept-control / GC-shadow-repair4b, OP-2, and `P-GPU-1`.
+
 Command file:
 
 ```bash
@@ -20,6 +29,7 @@ Captured queue runner:
 ```bash
 cd /mnt/raid0/llm/epyc-inference-research
 scripts/benchmark/run_model_admission_smoke_queue.sh --list
+scripts/benchmark/run_model_admission_smoke_queue.sh --list-stopped
 scripts/benchmark/run_model_admission_smoke_queue.sh --run --out /mnt/raid0/llm/tmp/model-admission-smoke-$(date -u +%Y%m%dT%H%M%SZ)
 ```
 
@@ -199,6 +209,7 @@ These do not depend on GLM download completion by logic, but decision-grade repe
 
 For each case, capture stdout/stderr into a dated directory under `/mnt/raid0/llm/tmp/`, then update:
 
+- `/mnt/raid0/llm/epyc-root/docs/reference/model-probe-scoreboard.md`
 - `docs/reference/models/model-admission-2026-07-16.md`
 - `orchestration/model_registry.yaml`
 - the current daily progress file under `/mnt/raid0/llm/epyc-root/progress/2026-07/`

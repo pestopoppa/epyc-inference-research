@@ -10,6 +10,7 @@ V7_BIN_DIR=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin
 V7_LLAMA="${V7_BIN_DIR}/llama-cli"
 HY3_DIR=/mnt/raid0/llm/models/hy3-angelslim
 HY3_BUILD=/mnt/raid0/llm/tmp/llama.cpp-hyv3-20260716
+MODEL_PROBE_SCOREBOARD=/mnt/raid0/llm/epyc-root/docs/reference/model-probe-scoreboard.md
 
 # Production v6 is immutable: this script must never build or modify production
 # v6. Candidate smokes use the relinked v7 build-hip binary path above.
@@ -37,6 +38,21 @@ require_no_glm_download() {
     pgrep -af "hf download unsloth/GLM-5.2-GGUF" >&2
     exit 75
   fi
+}
+
+require_reopen_fix() {
+  local case_name="$1"
+  local reason="$2"
+  if [[ -n "${MODEL_PROBE_REOPEN_FIX_REF:-}" ]]; then
+    echo "WARNING: reopening stopped model probe ${case_name} with ${MODEL_PROBE_REOPEN_FIX_REF}." >&2
+    echo "Append the result to ${MODEL_PROBE_SCOREBOARD}." >&2
+    return 0
+  fi
+  echo "blocked: ${case_name} is on the 2026-07-19 stop list; do not run speed-only reruns." >&2
+  echo "reason: ${reason}" >&2
+  echo "Set MODEL_PROBE_REOPEN_FIX_REF=<quality/protocol/loader/artifact fix ref> only after a concrete fix lands." >&2
+  echo "Every reopened probe must append a row to ${MODEL_PROBE_SCOREBOARD}." >&2
+  return 75
 }
 
 glm_status() {
@@ -75,6 +91,7 @@ registry_gap_status() {
 }
 
 bonsai_q1_cpu() {
+  require_reopen_fix "${FUNCNAME[0]}" "Bonsai Q1_0 is loadable but failed strict instruction quality; role-readiness needs a quality/template fix."
   require_no_glm_download
   v7_cpu_llama \
     -m /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf \
@@ -83,6 +100,7 @@ bonsai_q1_cpu() {
 }
 
 bonsai_q1_mi210_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Bonsai Q1_0 is loadable but failed strict instruction quality; role-readiness needs a quality/template fix."
   require_no_glm_download
   v7_mi210_llama \
     -m /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf \
@@ -91,6 +109,7 @@ bonsai_q1_mi210_v7() {
 }
 
 bonsai_dspark_cpu_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Bonsai dspark is unsupported by the current v7 loader; role-readiness needs a loader/artifact fix."
   require_no_glm_download
   v7_cpu_llama \
     -m /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-dspark-Q4_1.gguf \
@@ -99,6 +118,7 @@ bonsai_dspark_cpu_v7() {
 }
 
 bonsai_dspark_mi210_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Bonsai dspark is unsupported by the current v7 loader; role-readiness needs a loader/artifact fix."
   require_no_glm_download
   v7_mi210_llama \
     -m /mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-dspark-Q4_1.gguf \
@@ -107,16 +127,19 @@ bonsai_dspark_mi210_v7() {
 }
 
 ternary_q2_0_mi210_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Ternary Q2_0 has noncanonical 17-byte/block packing under the standard Q2_0 type id."
   echo "blocked: Ternary-Bonsai-27B-Q2_0 uses noncanonical 17-byte/block Q2_0 packing under GGML_TYPE_Q2_0; v7 expects standard 18-byte/block Q2_0 and fails offset validation before prompt execution." >&2
   return 75
 }
 
 ternary_q2_0_cpu_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Ternary Q2_0 has noncanonical 17-byte/block packing under the standard Q2_0 type id."
   echo "blocked: Ternary-Bonsai-27B-Q2_0 uses noncanonical 17-byte/block Q2_0 packing under GGML_TYPE_Q2_0; v7 expects standard 18-byte/block Q2_0 and fails offset validation before prompt execution." >&2
   return 75
 }
 
 ternary_bonsai_dspark_cpu_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Ternary dspark has an artifact/runtime offset mismatch; role-readiness needs a loader/artifact fix."
   require_no_glm_download
   v7_cpu_llama \
     -m /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-dspark-Q4_1.gguf \
@@ -125,6 +148,7 @@ ternary_bonsai_dspark_cpu_v7() {
 }
 
 ternary_bonsai_dspark_mi210_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Ternary dspark has an artifact/runtime offset mismatch; role-readiness needs a loader/artifact fix."
   require_no_glm_download
   v7_mi210_llama \
     -m /mnt/raid0/llm/models/ternary-bonsai-27b/Ternary-Bonsai-27B-dspark-Q4_1.gguf \
@@ -133,6 +157,7 @@ ternary_bonsai_dspark_mi210_v7() {
 }
 
 bonsai_8b_cpu_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Bonsai-8B is an orphan/provenance-limited speed-only row; reopen only on provenance plus quality scope."
   require_no_glm_download
   v7_cpu_llama \
     -m /mnt/raid0/llm/models/Bonsai-8B.gguf \
@@ -141,6 +166,7 @@ bonsai_8b_cpu_v7() {
 }
 
 bonsai_8b_mi210_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Bonsai-8B is an orphan/provenance-limited speed-only row; reopen only on provenance plus quality scope."
   require_no_glm_download
   v7_mi210_llama \
     -m /mnt/raid0/llm/models/Bonsai-8B.gguf \
@@ -195,6 +221,7 @@ deepseek_v4_flash_cpu_v7() {
 }
 
 nemotron_diff14_q8_cpu_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Nemotron-Diffusion stock path is loader-feasible but not quality-clean; constrained decode/server path is unresolved."
   require_no_glm_download
   v7_cpu_llama \
     -m /mnt/raid0/llm/models/Nemotron-Labs-Diffusion-14B-Q8_0-GGUF/nemotron-diffusion-14b-Q8_0.gguf \
@@ -203,6 +230,7 @@ nemotron_diff14_q8_cpu_v7() {
 }
 
 nemotron_diff14_q8_mi210_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Nemotron-Diffusion stock path is loader-feasible but not quality-clean; constrained decode/server path is unresolved."
   require_no_glm_download
   v7_mi210_llama \
     -m /mnt/raid0/llm/models/Nemotron-Labs-Diffusion-14B-Q8_0-GGUF/nemotron-diffusion-14b-Q8_0.gguf \
@@ -211,6 +239,7 @@ nemotron_diff14_q8_mi210_v7() {
 }
 
 nemotron_nano_9b_q8_cpu_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Nemotron-Nano broad visible-content behavior failed; reopen only on protocol/parser quality fix."
   require_no_glm_download
   # CLI stdout includes reasoning markers for this model; use server/chat with
   # --reasoning-format deepseek for exact-output scoring.
@@ -221,6 +250,7 @@ nemotron_nano_9b_q8_cpu_v7() {
 }
 
 nemotron_nano_9b_q8_mi210_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Nemotron-Nano broad visible-content behavior failed; reopen only on protocol/parser quality fix."
   require_no_glm_download
   # CLI stdout includes reasoning markers for this model; use server/chat with
   # --reasoning-format deepseek for exact-output scoring.
@@ -281,6 +311,7 @@ qwen35_9b_mtp_mi210_v7() {
 }
 
 qwen3_vl8_cpu_text_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Qwen3-VL extra vision candidacy is paused behind the chart-fixture/role-gap fix."
   require_no_glm_download
   v7_cpu_llama \
     -m /mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf \
@@ -290,6 +321,7 @@ qwen3_vl8_cpu_text_v7() {
 }
 
 qwen3_vl8_mi210_text_v7() {
+  require_reopen_fix "${FUNCNAME[0]}" "Qwen3-VL extra vision candidacy is paused behind the chart-fixture/role-gap fix."
   require_no_glm_download
   v7_mi210_llama \
     -m /mnt/raid0/llm/models/Qwen3-VL-8B-Instruct-GGUF/Qwen3VL-8B-Instruct-Q4_K_M.gguf \
