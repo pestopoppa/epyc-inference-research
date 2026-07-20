@@ -1,0 +1,3 @@
+LLAMA_QWEN35_PREFILL_TRACE
+%s: layer %d subphase=%s graph_nodes=%d delta=%d
+%s: LLAMA_QWEN35_PREFILL_TRACE level=%d, n_tokens=%d, n_seq_tokens=%d, n_layer=%lld

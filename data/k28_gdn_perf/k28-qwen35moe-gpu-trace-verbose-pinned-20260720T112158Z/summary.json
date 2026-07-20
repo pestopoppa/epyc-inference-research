@@ -1,0 +1,232 @@
+{
+  "artifact": "/mnt/raid0/llm/epyc-inference-research/data/k28_gdn_perf/k28-qwen35moe-gpu-trace-verbose-pinned-20260720T112158Z",
+  "created_utc": "2026-07-20T11:24:24.086355+00:00",
+  "kernel_tree": "/mnt/raid0/llm/llama.cpp-experimental",
+  "build_commit": "93d945885",
+  "command_shape": "llama-bench -v prompt-only p2048,p8192,p32768 n0 r1 b2048 ub512 ngl99 ROCm0 fa on ctk/ctv f16 with LLAMA_QWEN35_PREFILL_TRACE=2 and LD_LIBRARY_PATH pinned to build-hip/bin",
+  "bench_prompt_rows": [
+    {
+      "n_prompt": 2048,
+      "avg_ts": 2079.361751,
+      "avg_ns": 984917607,
+      "backends": "ROCm",
+      "devices": "ROCm0"
+    },
+    {
+      "n_prompt": 8192,
+      "avg_ts": 1982.564673,
+      "avg_ns": 4132021574,
+      "backends": "ROCm",
+      "devices": "ROCm0"
+    },
+    {
+      "n_prompt": 32768,
+      "avg_ts": 1650.802067,
+      "avg_ns": 19849744950,
+      "backends": "ROCm",
+      "devices": "ROCm0"
+    }
+  ],
+  "trace_group_count": 186,
+  "trace_by_n_tokens": {
+    "1": {
+      "trace_group_count": 9,
+      "graph_nodes_final_min": 3727,
+      "graph_nodes_final_max": 3727,
+      "phase_delta_totals": {
+        "linear_attn": 26748,
+        "full_attn": 6750
+      },
+      "subphase_top": [
+        [
+          "ffn_total",
+          14400
+        ],
+        [
+          "linear_attn_total",
+          14328
+        ],
+        [
+          "ffn_moe",
+          11520
+        ],
+        [
+          "conv_state",
+          4068
+        ],
+        [
+          "ffn_moe_router_weights",
+          3960
+        ],
+        [
+          "gated_delta_net",
+          3510
+        ],
+        [
+          "ffn_moe_expert_views",
+          2880
+        ],
+        [
+          "full_attn_total",
+          2610
+        ],
+        [
+          "ffn_moe_aggregate",
+          2520
+        ],
+        [
+          "ssm_state",
+          2160
+        ],
+        [
+          "gated_norm",
+          1620
+        ],
+        [
+          "ffn_shared",
+          1440
+        ]
+      ],
+      "gated_delta_net_delta": 3510,
+      "linear_attn_total_delta": 14328,
+      "ffn_total_delta": 14400,
+      "gdn_over_linear_attn_total_delta": 0.2449748743718593,
+      "gdn_over_linear_plus_ffn_total_delta": 0.12218045112781954
+    },
+    "16": {
+      "trace_group_count": 3,
+      "graph_nodes_final_min": 3727,
+      "graph_nodes_final_max": 3727,
+      "phase_delta_totals": {
+        "linear_attn": 8916,
+        "full_attn": 2250
+      },
+      "subphase_top": [
+        [
+          "ffn_total",
+          4800
+        ],
+        [
+          "linear_attn_total",
+          4776
+        ],
+        [
+          "ffn_moe",
+          3840
+        ],
+        [
+          "conv_state",
+          1356
+        ],
+        [
+          "ffn_moe_router_weights",
+          1320
+        ],
+        [
+          "gated_delta_net",
+          1170
+        ],
+        [
+          "ffn_moe_expert_views",
+          960
+        ],
+        [
+          "full_attn_total",
+          870
+        ],
+        [
+          "ffn_moe_aggregate",
+          840
+        ],
+        [
+          "ssm_state",
+          720
+        ],
+        [
+          "gated_norm",
+          540
+        ],
+        [
+          "ffn_shared",
+          480
+        ]
+      ],
+      "gated_delta_net_delta": 1170,
+      "linear_attn_total_delta": 4776,
+      "ffn_total_delta": 4800,
+      "gdn_over_linear_attn_total_delta": 0.2449748743718593,
+      "gdn_over_linear_plus_ffn_total_delta": 0.12218045112781954
+    },
+    "512": {
+      "trace_group_count": 174,
+      "graph_nodes_final_min": 3727,
+      "graph_nodes_final_max": 3727,
+      "phase_delta_totals": {
+        "linear_attn": 517128,
+        "full_attn": 130500
+      },
+      "subphase_top": [
+        [
+          "ffn_total",
+          278400
+        ],
+        [
+          "linear_attn_total",
+          277008
+        ],
+        [
+          "ffn_moe",
+          222720
+        ],
+        [
+          "conv_state",
+          78648
+        ],
+        [
+          "ffn_moe_router_weights",
+          76560
+        ],
+        [
+          "gated_delta_net",
+          67860
+        ],
+        [
+          "ffn_moe_expert_views",
+          55680
+        ],
+        [
+          "full_attn_total",
+          50460
+        ],
+        [
+          "ffn_moe_aggregate",
+          48720
+        ],
+        [
+          "ssm_state",
+          41760
+        ],
+        [
+          "gated_norm",
+          31320
+        ],
+        [
+          "ffn_shared",
+          27840
+        ]
+      ],
+      "gated_delta_net_delta": 67860,
+      "linear_attn_total_delta": 277008,
+      "ffn_total_delta": 278400,
+      "gdn_over_linear_attn_total_delta": 0.2449748743718593,
+      "gdn_over_linear_plus_ffn_total_delta": 0.12218045112781954
+    }
+  },
+  "interpretation": {
+    "trace_type": "structural graph-node delta attribution, not wall-clock timing attribution",
+    "usable_for_phase0": "supports structural GDN share sanity-check only; does not replace rocprof/op timing or a throwaway prototype",
+    "headline": "gated_delta_net is 24.50% of linear_attn_total graph-node deltas and 12.22% of linear_attn_total+ffn_total graph-node deltas in all emitted graph groups",
+    "k28_roi_effect": "does not raise the existing Phase 0 full-model ceiling enough to justify delaying frozen-v7 promotion; keep K28 default-off/post-promotion unless direct profiler/prototype evidence changes the ceiling",
+    "operational_note": "llama-bench suppresses this trace unless -v is used; previous pinned non-verbose artifact is a negative control for log suppression, not absence of trace support"
+  }
+}
