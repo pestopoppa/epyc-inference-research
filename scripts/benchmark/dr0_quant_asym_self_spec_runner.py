@@ -59,8 +59,13 @@ DEFAULT_REQUEST_TIMEOUT_S = 600
 DEFAULT_SEED = 42
 DEFAULT_TEMPERATURE = 0.0
 STRUCTURED_JSON_LINE_COUNT = 16
-STRICT_FORMAT_LINE_COUNT = 5
-STRICT_FORMAT_WORD_COUNT = 6
+STRICT_FORMAT_EXPECTED_LINES = [
+    "DR0-1 alpha beta gamma delta epsilon",
+    "DR0-2 alpha beta gamma delta epsilon",
+    "DR0-3 alpha beta gamma delta epsilon",
+    "DR0-4 alpha beta gamma delta epsilon",
+    "DR0-5 alpha beta gamma delta epsilon",
+]
 FH_NOT_OBSERVABLE = "not_observable_without_engine_telemetry"
 PROCESS_PATTERN = "llama-bench|llama-server|llama-cli|llama-mtmd-cli"
 SPEC_TELEMETRY_MS_FIELDS = (
@@ -99,11 +104,10 @@ TASK_CLASSES = [
     },
     {
         "id": "exact_format_strict_instruction",
-        "quality_sanity": "exact prefix and item count",
+        "quality_sanity": "exact expected five-line fixture",
         "prompt": (
-            "Write exactly five lines. Each line must start with one DR0-N token such as DR0-1, "
-            "then exactly five plain words, for six whitespace-separated tokens total. Do not write "
-            "any text before or after the five lines."
+            "Return exactly these five lines and nothing else:\n"
+            + "\n".join(STRICT_FORMAT_EXPECTED_LINES)
         ),
     },
 ]
@@ -919,7 +923,8 @@ def score_quality(task: dict[str, Any], content: str) -> dict[str, Any]:
         indexes = [item.get("index") for item in parsed]
         statuses = [item.get("status") for item in parsed]
         keys_ok = all(set(item) == {"index", "status"} for item in parsed)
-        indexes_ok = sorted(indexes) == list(range(STRUCTURED_JSON_LINE_COUNT))
+        expected_indexes = list(range(STRUCTURED_JSON_LINE_COUNT))
+        indexes_ok = indexes == expected_indexes
         passed = (
             len(lines) == STRUCTURED_JSON_LINE_COUNT
             and len(parsed) == STRUCTURED_JSON_LINE_COUNT
@@ -940,7 +945,8 @@ def score_quality(task: dict[str, Any], content: str) -> dict[str, Any]:
                 "errors": errors[:5],
                 "keys_exact": keys_ok,
                 "all_status_ready": statuses == ["READY"] * len(statuses),
-                "indexes_unique_0_to_63": indexes_ok,
+                "expected_indexes": expected_indexes,
+                "indexes_in_order": indexes_ok,
             },
         }
     if task_id == "bounded_architect_reviewer_json_decision":
@@ -1003,13 +1009,7 @@ def score_quality(task: dict[str, Any], content: str) -> dict[str, Any]:
         }
     if task_id == "exact_format_strict_instruction":
         lines = [line.strip() for line in stripped.splitlines() if line.strip()]
-        starts_ok = [line.startswith("DR0-") for line in lines]
-        word_counts = [len(line.split()) for line in lines]
-        passed = (
-            len(lines) == STRICT_FORMAT_LINE_COUNT
-            and all(starts_ok)
-            and word_counts == [STRICT_FORMAT_WORD_COUNT] * STRICT_FORMAT_LINE_COUNT
-        )
+        passed = lines == STRICT_FORMAT_EXPECTED_LINES
         return {
             "task_class": task_id,
             "status": "checked",
@@ -1017,8 +1017,8 @@ def score_quality(task: dict[str, Any], content: str) -> dict[str, Any]:
             "checker": task["quality_sanity"],
             "details": {
                 "line_count": len(lines),
-                "starts_ok": starts_ok,
-                "word_counts": word_counts,
+                "expected_line_count": len(STRICT_FORMAT_EXPECTED_LINES),
+                "exact_match": passed,
             },
         }
     raise ValueError(f"unknown task class: {task_id}")

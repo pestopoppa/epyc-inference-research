@@ -69,19 +69,29 @@ def test_combined_arm_uses_external_mtp_drafter_template() -> None:
 
 def test_quality_checker_strict_format_task_passes() -> None:
     task = next(task for task in runner.TASK_CLASSES if task["id"] == "exact_format_strict_instruction")
+    content = "\n".join(runner.STRICT_FORMAT_EXPECTED_LINES)
+
+    result = runner.score_quality(task, content)
+
+    assert result["pass"] is True
+
+
+def test_quality_checker_strict_format_rejects_creative_fixture() -> None:
+    task = next(task for task in runner.TASK_CLASSES if task["id"] == "exact_format_strict_instruction")
     content = "\n".join(
         [
-            "DR0-alpha beta gamma delta epsilon zeta",
-            "DR0-bravo beta gamma delta epsilon zeta",
-            "DR0-charlie beta gamma delta epsilon zeta",
-            "DR0-delta beta gamma delta epsilon zeta",
-            "DR0-echo beta gamma delta epsilon zeta",
+            "DR0-1 the sky is blue today",
+            "DR0-2 birds fly high above",
+            "DR0-3 clouds drift slowly west",
+            "DR0-4 wind blows soft and light",
+            "DR0-5 sun shines warm and bright",
         ]
     )
 
     result = runner.score_quality(task, content)
 
-    assert result["pass"] is True
+    assert result["pass"] is False
+    assert result["details"]["exact_match"] is False
 
 
 def test_quality_checker_repetitive_structured_task_fits_token_cap() -> None:
