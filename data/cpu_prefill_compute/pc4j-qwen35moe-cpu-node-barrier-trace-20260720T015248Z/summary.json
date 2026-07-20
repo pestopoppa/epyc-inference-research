@@ -1,0 +1,481 @@
+{
+  "run_root": "/mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/pc4j-qwen35moe-cpu-node-barrier-trace-20260720T015248Z",
+  "bench_rows": [
+    {
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "avg_ts": 99.266829,
+      "stddev_ts": 0.0,
+      "avg_ns": 82525049969,
+      "cpu_info": "AMD EPYC 9655 96-Core Processor",
+      "gpu_info": "",
+      "backends": "CPU",
+      "build_commit": "12a292f0c",
+      "build_number": 10099
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 1,
+      "avg_ts": 5.173757,
+      "stddev_ts": 0.0,
+      "avg_ns": 193283123,
+      "cpu_info": "AMD EPYC 9655 96-Core Processor",
+      "gpu_info": "",
+      "backends": "CPU",
+      "build_commit": "12a292f0c",
+      "build_number": 10099
+    }
+  ],
+  "trace_graph_summaries": 34,
+  "trace_summary_stats": {
+    "n_nodes_unique": [
+      4471
+    ],
+    "n_threads_unique": [
+      96
+    ],
+    "traced_nodes_unique": [
+      2668
+    ],
+    "compute_us_median": 288785618.0,
+    "barrier_us_median": 202412198.5,
+    "barrier_to_compute_median_ratio": 0.7009081681484568
+  },
+  "top_barrier_ops_by_sum": [
+    {
+      "op": "CONCAT",
+      "appearances": 34,
+      "rank1": 32,
+      "avg_rank": 1.2941176470588236,
+      "nodes_sum": 1224,
+      "compute_us_sum": 25266307,
+      "barrier_us_sum": 2399051163,
+      "calls_sum": 117504,
+      "top_examples": [
+        "conv_input-0"
+      ]
+    },
+    {
+      "op": "MUL_MAT_ID",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 2.0294117647058822,
+      "nodes_sum": 4896,
+      "compute_us_sum": 3692188731,
+      "barrier_us_sum": 1174958024,
+      "calls_sum": 470016,
+      "top_examples": [
+        "ffn_moe_gate-0"
+      ]
+    },
+    {
+      "op": "GATED_DELTA_NET",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 3.735294117647059,
+      "nodes_sum": 1224,
+      "compute_us_sum": 511441338,
+      "barrier_us_sum": 554312238,
+      "calls_sum": 117504,
+      "top_examples": [
+        "node_44"
+      ]
+    },
+    {
+      "op": "MUL_MAT",
+      "appearances": 34,
+      "rank1": 2,
+      "avg_rank": 3.4411764705882355,
+      "nodes_sum": 15946,
+      "compute_us_sum": 2881268302,
+      "barrier_us_sum": 538605575,
+      "calls_sum": 1527552,
+      "top_examples": [
+        "node_13"
+      ]
+    },
+    {
+      "op": "ADD",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 5.176470588235294,
+      "nodes_sum": 17544,
+      "compute_us_sum": 231234804,
+      "barrier_us_sum": 408310503,
+      "calls_sum": 1684224,
+      "top_examples": [
+        "node_36"
+      ]
+    },
+    {
+      "op": "RMS_NORM",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 6.676470588235294,
+      "nodes_sum": 5338,
+      "compute_us_sum": 205778583,
+      "barrier_us_sum": 256106183,
+      "calls_sum": 512448,
+      "top_examples": [
+        "norm-0"
+      ]
+    },
+    {
+      "op": "FLASH_ATTN_EXT",
+      "appearances": 29,
+      "rank1": 0,
+      "avg_rank": 7.724137931034483,
+      "nodes_sum": 348,
+      "compute_us_sum": 796717959,
+      "barrier_us_sum": 230435030,
+      "calls_sum": 33408,
+      "top_examples": [
+        "node_324"
+      ]
+    },
+    {
+      "op": "MUL",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 8.0,
+      "nodes_sum": 6120,
+      "compute_us_sum": 261565006,
+      "barrier_us_sum": 172958529,
+      "calls_sum": 587520,
+      "top_examples": [
+        "gate-0"
+      ]
+    },
+    {
+      "op": "UNARY",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 9.735294117647058,
+      "nodes_sum": 6936,
+      "compute_us_sum": 175479566,
+      "barrier_us_sum": 151658292,
+      "calls_sum": 665856,
+      "top_examples": [
+        "conv_output_silu-0"
+      ]
+    },
+    {
+      "op": "GET_ROWS",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 9.529411764705882,
+      "nodes_sum": 6596,
+      "compute_us_sum": 2997456,
+      "barrier_us_sum": 150894506,
+      "calls_sum": 633216,
+      "top_examples": [
+        "model.input_embed"
+      ]
+    },
+    {
+      "op": "L2_NORM",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 10.058823529411764,
+      "nodes_sum": 2448,
+      "compute_us_sum": 16068488,
+      "barrier_us_sum": 136878021,
+      "calls_sum": 235008,
+      "top_examples": [
+        "q_conv_predelta-0"
+      ]
+    },
+    {
+      "op": "GLU",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 12.147058823529411,
+      "nodes_sum": 3264,
+      "compute_us_sum": 183576517,
+      "barrier_us_sum": 103308432,
+      "calls_sum": 313344,
+      "top_examples": [
+        "ffn_moe_swiglu-0"
+      ]
+    },
+    {
+      "op": "CPY",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 12.647058823529411,
+      "nodes_sum": 4896,
+      "compute_us_sum": 11070919,
+      "barrier_us_sum": 94965801,
+      "calls_sum": 470016,
+      "top_examples": [
+        "cache_r_l0 (view) (copy of )"
+      ]
+    },
+    {
+      "op": "SSM_CONV",
+      "appearances": 33,
+      "rank1": 0,
+      "avg_rank": 13.06060606060606,
+      "nodes_sum": 1188,
+      "compute_us_sum": 160566620,
+      "barrier_us_sum": 82367945,
+      "calls_sum": 114048,
+      "top_examples": [
+        "conv_output_raw-0"
+      ]
+    },
+    {
+      "op": "SCALE",
+      "appearances": 20,
+      "rank1": 0,
+      "avg_rank": 14.1,
+      "nodes_sum": 1440,
+      "compute_us_sum": 54724,
+      "barrier_us_sum": 30593864,
+      "calls_sum": 138240,
+      "top_examples": [
+        "cache_r_l0 (reshaped) (view) (view)"
+      ]
+    },
+    {
+      "op": "CONT",
+      "appearances": 19,
+      "rank1": 0,
+      "avg_rank": 14.842105263157896,
+      "nodes_sum": 228,
+      "compute_us_sum": 6146179,
+      "barrier_us_sum": 21485466,
+      "calls_sum": 21888,
+      "top_examples": [
+        "gate_reshaped-3"
+      ]
+    }
+  ],
+  "top_compute_ops_by_sum": [
+    {
+      "op": "MUL_MAT_ID",
+      "appearances": 34,
+      "rank1": 32,
+      "avg_rank": 1.0588235294117647,
+      "nodes_sum": 4896,
+      "compute_us_sum": 3692188731,
+      "barrier_us_sum": 1174958024,
+      "calls_sum": 470016,
+      "top_examples": [
+        "ffn_moe_gate-0"
+      ]
+    },
+    {
+      "op": "MUL_MAT",
+      "appearances": 34,
+      "rank1": 2,
+      "avg_rank": 1.9411764705882353,
+      "nodes_sum": 15946,
+      "compute_us_sum": 2881268302,
+      "barrier_us_sum": 538605575,
+      "calls_sum": 1530816,
+      "top_examples": [
+        "node_13"
+      ]
+    },
+    {
+      "op": "FLASH_ATTN_EXT",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 4.0588235294117645,
+      "nodes_sum": 408,
+      "compute_us_sum": 809476594,
+      "barrier_us_sum": 232455002,
+      "calls_sum": 39168,
+      "top_examples": [
+        "node_324"
+      ]
+    },
+    {
+      "op": "GATED_DELTA_NET",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 3.7058823529411766,
+      "nodes_sum": 1224,
+      "compute_us_sum": 511441338,
+      "barrier_us_sum": 554312238,
+      "calls_sum": 117504,
+      "top_examples": [
+        "node_44"
+      ]
+    },
+    {
+      "op": "MUL",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 5.117647058823529,
+      "nodes_sum": 6120,
+      "compute_us_sum": 261565006,
+      "barrier_us_sum": 172958529,
+      "calls_sum": 587520,
+      "top_examples": [
+        "gate-0"
+      ]
+    },
+    {
+      "op": "ADD",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 6.205882352941177,
+      "nodes_sum": 17544,
+      "compute_us_sum": 231234804,
+      "barrier_us_sum": 408310503,
+      "calls_sum": 1684224,
+      "top_examples": [
+        "node_36"
+      ]
+    },
+    {
+      "op": "RMS_NORM",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 6.9411764705882355,
+      "nodes_sum": 5338,
+      "compute_us_sum": 205778583,
+      "barrier_us_sum": 256106183,
+      "calls_sum": 512448,
+      "top_examples": [
+        "norm-0"
+      ]
+    },
+    {
+      "op": "GLU",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 8.352941176470589,
+      "nodes_sum": 3264,
+      "compute_us_sum": 183576517,
+      "barrier_us_sum": 103308432,
+      "calls_sum": 313344,
+      "top_examples": [
+        "ffn_moe_swiglu-0"
+      ]
+    },
+    {
+      "op": "UNARY",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 9.147058823529411,
+      "nodes_sum": 6936,
+      "compute_us_sum": 175479566,
+      "barrier_us_sum": 151658292,
+      "calls_sum": 665856,
+      "top_examples": [
+        "conv_output_silu-0"
+      ]
+    },
+    {
+      "op": "SSM_CONV",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 9.647058823529411,
+      "nodes_sum": 1224,
+      "compute_us_sum": 160591149,
+      "barrier_us_sum": 82384118,
+      "calls_sum": 117504,
+      "top_examples": [
+        "conv_output_raw-0"
+      ]
+    },
+    {
+      "op": "CONCAT",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 11.176470588235293,
+      "nodes_sum": 1224,
+      "compute_us_sum": 25266307,
+      "barrier_us_sum": 2399051163,
+      "calls_sum": 117504,
+      "top_examples": [
+        "conv_input-0"
+      ]
+    },
+    {
+      "op": "ROPE",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 12.147058823529411,
+      "nodes_sum": 816,
+      "compute_us_sum": 16486627,
+      "barrier_us_sum": 15089990,
+      "calls_sum": 78336,
+      "top_examples": [
+        "Qcur-3"
+      ]
+    },
+    {
+      "op": "L2_NORM",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 13.029411764705882,
+      "nodes_sum": 2448,
+      "compute_us_sum": 16068488,
+      "barrier_us_sum": 136878021,
+      "calls_sum": 235008,
+      "top_examples": [
+        "q_conv_predelta-0"
+      ]
+    },
+    {
+      "op": "ARGSORT",
+      "appearances": 32,
+      "rank1": 0,
+      "avg_rank": 14.0,
+      "nodes_sum": 1536,
+      "compute_us_sum": 14169768,
+      "barrier_us_sum": 34332602,
+      "calls_sum": 147456,
+      "top_examples": [
+        "ffn_moe_argsort-0"
+      ]
+    },
+    {
+      "op": "CPY",
+      "appearances": 34,
+      "rank1": 0,
+      "avg_rank": 14.764705882352942,
+      "nodes_sum": 4896,
+      "compute_us_sum": 11070919,
+      "barrier_us_sum": 94965801,
+      "calls_sum": 470016,
+      "top_examples": [
+        "cache_r_l0 (view) (copy of )"
+      ]
+    },
+    {
+      "op": "CONT",
+      "appearances": 31,
+      "rank1": 0,
+      "avg_rank": 15.516129032258064,
+      "nodes_sum": 372,
+      "compute_us_sum": 9935774,
+      "barrier_us_sum": 36189131,
+      "calls_sum": 35712,
+      "top_examples": [
+        "gate_reshaped-3"
+      ]
+    }
+  ],
+  "rank1_barrier_ops": {
+    "CONCAT": 32,
+    "MUL_MAT": 2
+  },
+  "iqk_active_lines": [
+    "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+    "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+  ],
+  "ldd": [
+    "\tlibllama-bench-impl.so => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libllama-bench-impl.so (0x000075c0be5c3000)",
+    "\tlibllama-common.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libllama-common.so.0 (0x000075c0bdc00000)",
+    "\tlibllama.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libllama.so.0 (0x000075c0bd800000)",
+    "\tlibggml.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libggml.so.0 (0x000075c0be0b0000)",
+    "\tlibggml-base.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libggml-base.so.0 (0x000075c0bd72b000)",
+    "\tlibggml-cpu.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libggml-cpu.so.0 (0x000075c0bd200000)"
+  ],
+  "note": "sanitized summary; raw bench.json left local because model_n_params trips PII account-number heuristic"
+}
