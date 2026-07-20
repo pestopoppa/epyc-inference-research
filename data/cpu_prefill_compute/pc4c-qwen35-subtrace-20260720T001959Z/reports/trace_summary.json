@@ -1,0 +1,4358 @@
+{
+  "artifact_root": "/mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/pc4c-qwen35-subtrace-20260720T001959Z",
+  "bench": [
+    {
+      "avg_ts": 118.04003,
+      "cpu_mask": "0x0",
+      "n_gen": 0,
+      "n_prompt": 8192,
+      "stdev_ts": null,
+      "threads": null
+    },
+    {
+      "avg_ts": 5.339296,
+      "cpu_mask": "0x0",
+      "n_gen": 1,
+      "n_prompt": 0,
+      "stdev_ts": null,
+      "threads": null
+    }
+  ],
+  "exit": [
+    "exit_status=0",
+    "finished_utc=2026-07-20T00:22:28Z"
+  ],
+  "phase_delta_stats": {
+    "full_attn": {
+      "count": 540,
+      "max": 75,
+      "median": 75.0,
+      "min": 75,
+      "total_delta": 40500,
+      "unique": [
+        75
+      ]
+    },
+    "linear_attn": {
+      "count": 1620,
+      "max": 101,
+      "median": 99.0,
+      "min": 99,
+      "total_delta": 160470,
+      "unique": [
+        99,
+        101
+      ]
+    }
+  },
+  "phase_layer_modes": {
+    "full_attn": {
+      "11": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      },
+      "15": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      },
+      "19": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      },
+      "23": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      },
+      "27": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      },
+      "3": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      },
+      "31": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      },
+      "35": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      },
+      "39": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      },
+      "43": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      },
+      "47": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      },
+      "7": {
+        "count": 45,
+        "mode_delta": 75,
+        "unique": [
+          75
+        ]
+      }
+    },
+    "linear_attn": {
+      "0": {
+        "count": 45,
+        "mode_delta": 101,
+        "unique": [
+          101
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 99,
+        "unique": [
+          99
+        ]
+      }
+    }
+  },
+  "resource_time": {
+    "maximum_resident_set_size_kbytes": "77038696",
+    "system_time_seconds": "134.76",
+    "user_time_seconds": "13253.01"
+  },
+  "run_id": "pc4c-qwen35-subtrace-20260720T001959Z",
+  "subphase_delta_stats": {
+    "attn_post_norm": {
+      "count": 2160,
+      "max": 2,
+      "median": 2.0,
+      "min": 2,
+      "total_delta": 4320,
+      "unique": [
+        2
+      ]
+    },
+    "attn_residual": {
+      "count": 2160,
+      "max": 1,
+      "median": 1.0,
+      "min": 1,
+      "total_delta": 2160,
+      "unique": [
+        1
+      ]
+    },
+    "conv_qkv_norm": {
+      "count": 1620,
+      "max": 3,
+      "median": 3.0,
+      "min": 3,
+      "total_delta": 4860,
+      "unique": [
+        3
+      ]
+    },
+    "conv_state": {
+      "count": 1620,
+      "max": 17,
+      "median": 15.0,
+      "min": 15,
+      "total_delta": 24390,
+      "unique": [
+        15,
+        17
+      ]
+    },
+    "ffn_total": {
+      "count": 2160,
+      "max": 40,
+      "median": 40.0,
+      "min": 40,
+      "total_delta": 86400,
+      "unique": [
+        40
+      ]
+    },
+    "full_attn_total": {
+      "count": 540,
+      "max": 29,
+      "median": 29.0,
+      "min": 29,
+      "total_delta": 15660,
+      "unique": [
+        29
+      ]
+    },
+    "gated_delta_net": {
+      "count": 1620,
+      "max": 13,
+      "median": 13.0,
+      "min": 13,
+      "total_delta": 21060,
+      "unique": [
+        13
+      ]
+    },
+    "gated_norm": {
+      "count": 1620,
+      "max": 6,
+      "median": 6.0,
+      "min": 6,
+      "total_delta": 9720,
+      "unique": [
+        6
+      ]
+    },
+    "layer_out": {
+      "count": 2160,
+      "max": 0,
+      "median": 0.0,
+      "min": 0,
+      "total_delta": 0,
+      "unique": [
+        0
+      ]
+    },
+    "linear_attn_total": {
+      "count": 1620,
+      "max": 55,
+      "median": 53.0,
+      "min": 53,
+      "total_delta": 85950,
+      "unique": [
+        53,
+        55
+      ]
+    },
+    "linear_out": {
+      "count": 1620,
+      "max": 2,
+      "median": 2.0,
+      "min": 2,
+      "total_delta": 3240,
+      "unique": [
+        2
+      ]
+    },
+    "linear_proj": {
+      "count": 1620,
+      "max": 5,
+      "median": 5.0,
+      "min": 5,
+      "total_delta": 8100,
+      "unique": [
+        5
+      ]
+    },
+    "post_moe": {
+      "count": 2160,
+      "max": 1,
+      "median": 1.0,
+      "min": 1,
+      "total_delta": 2160,
+      "unique": [
+        1
+      ]
+    },
+    "ssm_state": {
+      "count": 1620,
+      "max": 8,
+      "median": 8.0,
+      "min": 8,
+      "total_delta": 12960,
+      "unique": [
+        8
+      ]
+    }
+  },
+  "subphase_layer_modes": {
+    "attn_post_norm": {
+      "0": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "11": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "15": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "19": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "23": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "27": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "3": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "31": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "35": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "39": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "43": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "47": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "7": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      }
+    },
+    "attn_residual": {
+      "0": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "11": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "15": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "19": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "23": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "27": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "3": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "31": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "35": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "39": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "43": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "47": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "7": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      }
+    },
+    "conv_qkv_norm": {
+      "0": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 3,
+        "unique": [
+          3
+        ]
+      }
+    },
+    "conv_state": {
+      "0": {
+        "count": 45,
+        "mode_delta": 17,
+        "unique": [
+          17
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 15,
+        "unique": [
+          15
+        ]
+      }
+    },
+    "ffn_total": {
+      "0": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "11": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "15": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "19": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "23": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "27": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "3": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "31": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "35": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "39": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "43": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "47": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "7": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 40,
+        "unique": [
+          40
+        ]
+      }
+    },
+    "full_attn_total": {
+      "11": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      },
+      "15": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      },
+      "19": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      },
+      "23": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      },
+      "27": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      },
+      "3": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      },
+      "31": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      },
+      "35": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      },
+      "39": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      },
+      "43": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      },
+      "47": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      },
+      "7": {
+        "count": 45,
+        "mode_delta": 29,
+        "unique": [
+          29
+        ]
+      }
+    },
+    "gated_delta_net": {
+      "0": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 13,
+        "unique": [
+          13
+        ]
+      }
+    },
+    "gated_norm": {
+      "0": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 6,
+        "unique": [
+          6
+        ]
+      }
+    },
+    "layer_out": {
+      "0": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "11": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "15": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "19": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "23": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "27": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "3": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "31": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "35": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "39": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "43": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "47": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "7": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 0,
+        "unique": [
+          0
+        ]
+      }
+    },
+    "linear_attn_total": {
+      "0": {
+        "count": 45,
+        "mode_delta": 55,
+        "unique": [
+          55
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 53,
+        "unique": [
+          53
+        ]
+      }
+    },
+    "linear_out": {
+      "0": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 2,
+        "unique": [
+          2
+        ]
+      }
+    },
+    "linear_proj": {
+      "0": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 5,
+        "unique": [
+          5
+        ]
+      }
+    },
+    "post_moe": {
+      "0": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "11": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "15": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "19": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "23": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "27": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "3": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "31": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "35": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "39": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "43": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "47": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "7": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 1,
+        "unique": [
+          1
+        ]
+      }
+    },
+    "ssm_state": {
+      "0": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "1": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "10": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "12": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "13": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "14": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "16": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "17": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "18": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "2": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "20": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "21": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "22": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "24": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "25": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "26": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "28": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "29": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "30": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "32": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "33": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "34": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "36": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "37": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "38": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "4": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "40": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "41": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "42": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "44": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "45": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "46": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "5": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "6": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "8": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      },
+      "9": {
+        "count": 45,
+        "mode_delta": 8,
+        "unique": [
+          8
+        ]
+      }
+    }
+  },
+  "trace_counts": {
+    "final_graph_node_counts": [
+      4471
+    ],
+    "graph_builds_final_lines": 45,
+    "phase_lines": 2160,
+    "subphase_lines": 24300
+  }
+}
