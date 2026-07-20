@@ -1,6 +1,6 @@
 {
   "created_utc": "2026-07-20T11:38:44.097713+00:00",
-  "verdict": "K11 natural-prose nondeterminism reproduces in MTP, no-spec np4, and no-spec np1; external-head MTP and multi-slot scheduling are not required",
+  "verdict": "K11 natural-prose nondeterminism reproduces on GPU MTP/no-spec/np1 but CPU no-spec np1 is deterministic; defect is GPU/backend-path dependent, not external-head MTP or multi-slot scheduling alone",
   "rows": [
     {
       "artifact": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_mtp_n10_explicit_greedy_trace_20260720T113126Z",
@@ -103,7 +103,31 @@
           "count": 5
         }
       ]
+    },
+    {
+      "artifact": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_cpu_nospec_np1_explicit_greedy_trace_20260720T114120Z",
+      "spec_type": "none",
+      "slots": 1,
+      "device": "CPU",
+      "unique_output_hash_count": 1,
+      "task_passed": false,
+      "content_word_counts": [
+        156,
+        156,
+        156,
+        156,
+        156,
+        156,
+        156,
+        156,
+        156,
+        156
+      ],
+      "mean_decode_tps": 21.124037294215505,
+      "all_token_sequences_identical": true,
+      "common_prefix_length": 182,
+      "branch_counts": []
     }
   ],
-  "next_debug_step": "inspect GPU no-spec sampler/backend determinism around the first seven tokens; CPU no-spec traced control can split GPU backend from model/prompt ambiguity"
+  "next_debug_step": "inspect GPU backend deterministic reductions/tie-breaking and sampler logits handoff; CPU no-spec is clean on the paired traced control"
 }

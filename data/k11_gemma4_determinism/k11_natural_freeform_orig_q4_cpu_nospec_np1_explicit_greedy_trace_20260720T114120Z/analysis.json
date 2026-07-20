@@ -1,0 +1,56 @@
+{
+  "artifact": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_cpu_nospec_np1_explicit_greedy_trace_20260720T114120Z",
+  "created_utc": "2026-07-20T11:44:30.093448+00:00",
+  "verdict": "cpu_no_spec_single_slot_deterministic_control_pass",
+  "run_shape": {
+    "model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+    "spec_type": "none",
+    "slots": 1,
+    "target_device": "none",
+    "n_gpu_layers": "0",
+    "request_sampler_mode": "explicit-greedy",
+    "stop": [
+      "END"
+    ],
+    "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+    "max_tokens": 320,
+    "seed": 42,
+    "temperature": 0.0
+  },
+  "summary": {
+    "runs_ok": 10,
+    "unique_output_hash_count": 1,
+    "deterministic": true,
+    "task_passed": false,
+    "finish_reasons": {
+      "stop": 10
+    },
+    "content_word_counts": [
+      156,
+      156,
+      156,
+      156,
+      156,
+      156,
+      156,
+      156,
+      156,
+      156
+    ],
+    "mean_decode_tps": 21.124037294215505,
+    "mean_acceptance_rate": 0.0
+  },
+  "token_divergence": {
+    "available": true,
+    "all_token_sequences_identical": true,
+    "common_prefix_length": 182,
+    "sample_prefix_text": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when serving machine learning models, resources like gpu memory, cpu cycles, and network sockets",
+    "sequence_source": "__verbose.tokens",
+    "probability_source": "choices[0].logprobs.content"
+  },
+  "interpretation": {
+    "primary_narrowing": "paired GPU no-spec np1 diverges while CPU no-spec np1 is deterministic, so this natural-prose defect is GPU/backend-path dependent for ORIG-Q4",
+    "next_debug_step": "inspect GPU backend deterministic reductions/tie-breaking and sampler logits handoff; compare pre-sampling n_probs if available or force CPU sampling/logits materialization on GPU eval path",
+    "claim_grade": "observation only; root-cause evidence, not lane admission"
+  }
+}
