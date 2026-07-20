@@ -1,0 +1,190 @@
+0.00.018.616 E ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
+warning: no usable GPU found, --gpu-layers option will be ignored
+warning: one possible reason is that llama.cpp was compiled without GPU support
+warning: consult docs/build.md for compilation instructions
+0.00.019.783 I llama_completion: llama backend init
+0.00.019.789 I llama_completion: load the model and apply lora adapter, if any
+0.00.234.077 W load: control-looking token: 128247 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.349.053 I llama_completion: llama threadpool init, n_threads = 32
+0.00.349.080 I
+0.00.349.176 I system_info: n_threads = 32 (n_threads_batch = 32) / 192 | ROCm : NO_VMM = 1 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX_VNNI = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | BMI2 = 1 | AVX512 = 1 | AVX512_VBMI = 1 | AVX512_VNNI = 1 | AVX512_BF16 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 |
+0.00.349.178 I
+0.00.349.541 I llama_completion: prompt: 'You are running a deterministic long-output KV-retention check.
+
+Keep these anchors alive throughout the answer:
+- ANCHOR_ALPHA_17
+- ANCHOR_BRAVO_29
+- ANCHOR_CHARLIE_41
+
+Write numbered audit lines from 001 upward. Every line must contain
+ANCHOR_ALPHA_17 and the word retained. Every tenth line must also contain
+ANCHOR_BRAVO_29. The final line must be exactly:
+STREAMINGLLM_DONE ANCHOR_ALPHA_17 ANCHOR_BRAVO_29 ANCHOR_CHARLIE_41
+
+Begin now.'
+0.00.349.543 I llama_completion: number of tokens in prompt = 135
+0.00.349.544 I   2610 -> 'You'
+0.00.349.545 I    525 -> ' are'
+0.00.349.545 I   4303 -> ' running'
+0.00.349.545 I    264 -> ' a'
+0.00.349.546 I  72349 -> ' deterministic'
+0.00.349.546 I   1293 -> ' long'
+0.00.349.546 I  59524 -> '-output'
+0.00.349.547 I  84648 -> ' KV'
+0.00.349.547 I  69110 -> '-ret'
+0.00.349.547 I   2939 -> 'ention'
+0.00.349.548 I   1779 -> ' check'
+0.00.349.548 I    382 -> '.
+
+'
+0.00.349.548 I  19434 -> 'Keep'
+0.00.349.549 I   1493 -> ' these'
+0.00.349.549 I  55439 -> ' anchors'
+0.00.349.549 I  13675 -> ' alive'
+0.00.349.550 I   6814 -> ' throughout'
+0.00.349.550 I    279 -> ' the'
+0.00.349.550 I   4226 -> ' answer'
+0.00.349.550 I    510 -> ':
+'
+0.00.349.550 I     12 -> '-'
+0.00.349.551 I   2100 -> ' AN'
+0.00.349.551 I   2149 -> 'CH'
+0.00.349.551 I    868 -> 'OR'
+0.00.349.551 I  39497 -> '_ALPHA'
+0.00.349.552 I     62 -> '_'
+0.00.349.552 I     16 -> '1'
+0.00.349.552 I     22 -> '7'
+0.00.349.552 I    198 -> '
+'
+0.00.349.553 I     12 -> '-'
+0.00.349.553 I   2100 -> ' AN'
+0.00.349.553 I   2149 -> 'CH'
+0.00.349.553 I    868 -> 'OR'
+0.00.349.553 I   1668 -> '_B'
+0.00.349.553 I   5609 -> 'RA'
+0.00.349.554 I  11169 -> 'VO'
+0.00.349.554 I     62 -> '_'
+0.00.349.554 I     17 -> '2'
+0.00.349.555 I     24 -> '9'
+0.00.349.555 I    198 -> '
+'
+0.00.349.555 I     12 -> '-'
+0.00.349.555 I   2100 -> ' AN'
+0.00.349.555 I   2149 -> 'CH'
+0.00.349.555 I    868 -> 'OR'
+0.00.349.556 I  20891 -> '_CHAR'
+0.00.349.556 I     43 -> 'L'
+0.00.349.556 I   5371 -> 'IE'
+0.00.349.556 I     62 -> '_'
+0.00.349.556 I     19 -> '4'
+0.00.349.557 I     16 -> '1'
+0.00.349.557 I    271 -> '
+
+'
+0.00.349.557 I   7985 -> 'Write'
+0.00.349.557 I  48826 -> ' numbered'
+0.00.349.558 I  24275 -> ' audit'
+0.00.349.558 I   5128 -> ' lines'
+0.00.349.560 I    504 -> ' from'
+0.00.349.561 I    220 -> ' '
+0.00.349.561 I     15 -> '0'
+0.00.349.561 I     15 -> '0'
+0.00.349.561 I     16 -> '1'
+0.00.349.562 I  39772 -> ' upward'
+0.00.349.562 I     13 -> '.'
+0.00.349.562 I   7209 -> ' Every'
+0.00.349.562 I   1555 -> ' line'
+0.00.349.562 I   1969 -> ' must'
+0.00.349.563 I   6644 -> ' contain'
+0.00.349.563 I    198 -> '
+'
+0.00.349.563 I  41933 -> 'ANCH'
+0.00.349.564 I    868 -> 'OR'
+0.00.349.564 I  39497 -> '_ALPHA'
+0.00.349.564 I     62 -> '_'
+0.00.349.564 I     16 -> '1'
+0.00.349.564 I     22 -> '7'
+0.00.349.565 I    323 -> ' and'
+0.00.349.565 I    279 -> ' the'
+0.00.349.565 I   3409 -> ' word'
+0.00.349.566 I  34263 -> ' retained'
+0.00.349.566 I     13 -> '.'
+0.00.349.566 I   7209 -> ' Every'
+0.00.349.566 I  55666 -> ' tenth'
+0.00.349.566 I   1555 -> ' line'
+0.00.349.566 I   1969 -> ' must'
+0.00.349.567 I   1083 -> ' also'
+0.00.349.567 I   6644 -> ' contain'
+0.00.349.567 I    198 -> '
+'
+0.00.349.567 I  41933 -> 'ANCH'
+0.00.349.567 I    868 -> 'OR'
+0.00.349.568 I   1668 -> '_B'
+0.00.349.568 I   5609 -> 'RA'
+0.00.349.568 I  11169 -> 'VO'
+0.00.349.568 I     62 -> '_'
+0.00.349.568 I     17 -> '2'
+0.00.349.568 I     24 -> '9'
+0.00.349.568 I     13 -> '.'
+0.00.349.569 I    576 -> ' The'
+0.00.349.569 I   1590 -> ' final'
+0.00.349.569 I   1555 -> ' line'
+0.00.349.569 I   1969 -> ' must'
+0.00.349.570 I    387 -> ' be'
+0.00.349.570 I   6896 -> ' exactly'
+0.00.349.570 I    510 -> ':
+'
+0.00.349.570 I  54326 -> 'STREAM'
+0.00.349.571 I   1718 -> 'ING'
+0.00.349.571 I   4086 -> 'LL'
+0.00.349.571 I     44 -> 'M'
+0.00.349.572 I  42741 -> '_DONE'
+0.00.349.572 I   2100 -> ' AN'
+0.00.349.572 I   2149 -> 'CH'
+0.00.349.572 I    868 -> 'OR'
+0.00.349.572 I  39497 -> '_ALPHA'
+0.00.349.572 I     62 -> '_'
+0.00.349.573 I     16 -> '1'
+0.00.349.573 I     22 -> '7'
+0.00.349.573 I   2100 -> ' AN'
+0.00.349.573 I   2149 -> 'CH'
+0.00.349.573 I    868 -> 'OR'
+0.00.349.573 I   1668 -> '_B'
+0.00.349.574 I   5609 -> 'RA'
+0.00.349.574 I  11169 -> 'VO'
+0.00.349.574 I     62 -> '_'
+0.00.349.574 I     17 -> '2'
+0.00.349.574 I     24 -> '9'
+0.00.349.574 I   2100 -> ' AN'
+0.00.349.575 I   2149 -> 'CH'
+0.00.349.575 I    868 -> 'OR'
+0.00.349.575 I  20891 -> '_CHAR'
+0.00.349.575 I     43 -> 'L'
+0.00.349.575 I   5371 -> 'IE'
+0.00.349.576 I     62 -> '_'
+0.00.349.576 I     19 -> '4'
+0.00.349.576 I     16 -> '1'
+0.00.349.576 I    271 -> '
+
+'
+0.00.349.576 I  11135 -> 'Begin'
+0.00.349.577 I   1431 -> ' now'
+0.00.349.577 I     13 -> '.'
+0.00.349.577 I
+0.00.349.583 I sampler seed: 1234
+0.00.349.589 I sampler params:
+	repeat_last_n = 64, repeat_penalty = 1.000, frequency_penalty = 0.000, presence_penalty = 0.000
+	dry_multiplier = 0.000, dry_base = 1.750, dry_allowed_length = 2, dry_penalty_last_n = -1
+	top_k = 1, top_p = 0.950, min_p = 0.050, xtc_probability = 0.000, xtc_threshold = 0.100, typical_p = 1.000, top_n_sigma = -1.000, temp = 0.000
+	mirostat = 0, mirostat_lr = 0.100, mirostat_ent = 5.000, adaptive_target = -1.000, adaptive_decay = 0.900
+0.00.349.597 I sampler chain: logits -> ?penalties -> ?dry -> ?top-n-sigma -> top-k -> ?typical -> top-p -> min-p -> ?xtc -> temp-ext -> dist
+0.00.349.597 I generate: n_ctx = 512, n_batch = 2048, n_predict = 768, n_keep = 0
+0.00.349.597 I
+0.25.166.711 I common_perf_print:    sampling time =      72.24 ms
+0.25.166.712 I common_perf_print:    samplers time =      33.31 ms /   903 tokens
+0.25.166.716 I common_perf_print:        load time =     128.63 ms
+0.25.166.718 I common_perf_print: prompt eval time =     128.03 ms /   135 tokens (    0.95 ms per token,  1054.44 tokens per second)
+0.25.166.719 I common_perf_print:        eval time =   24609.97 ms /   767 runs   (   32.09 ms per token,    31.17 tokens per second)
+0.25.166.722 I common_perf_print:       total time =   24817.66 ms /   902 tokens
+0.25.166.722 I common_perf_print: unaccounted time =       7.43 ms /   0.0 %      (total - sampling - prompt eval - eval) / (total)
+0.25.166.722 I common_perf_print:    graphs reused =        763

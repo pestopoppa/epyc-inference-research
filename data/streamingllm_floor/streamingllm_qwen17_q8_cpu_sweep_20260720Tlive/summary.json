@@ -1,0 +1,206 @@
+{
+  "mode": "execute",
+  "decision_grade": false,
+  "observation_grade": true,
+  "admission_decision": {
+    "admit_cluster": false,
+    "reason": "no_streaming_cluster_passed_quality_and_speed_floor",
+    "candidate_rows": []
+  },
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-completion",
+  "model": "/mnt/raid0/llm/models/Qwen3-1.7B-Q8_0.gguf",
+  "context": 384,
+  "tokens": 768,
+  "threads": 32,
+  "seed": 1234,
+  "arms": [
+    {
+      "name": "baseline_context_shift",
+      "sink": 0,
+      "window": 0
+    },
+    {
+      "name": "streaming_sink8_window128",
+      "sink": 8,
+      "window": 128
+    },
+    {
+      "name": "streaming_sink16_window192",
+      "sink": 16,
+      "window": 192
+    },
+    {
+      "name": "streaming_sink32_window256",
+      "sink": 32,
+      "window": 256
+    }
+  ],
+  "rows": [
+    {
+      "arm": "baseline_context_shift",
+      "sink": 0,
+      "window": 0,
+      "return_code": 0,
+      "decode_tps": 31.17,
+      "decode_ratio_vs_baseline": 1.0,
+      "quality_pass": false,
+      "final_marker_present": false,
+      "alpha_count": 31,
+      "numbered_line_count": 31
+    },
+    {
+      "arm": "streaming_sink8_window128",
+      "sink": 8,
+      "window": 128,
+      "return_code": 0,
+      "decode_tps": 31.5,
+      "decode_ratio_vs_baseline": 1.010587102983638,
+      "quality_pass": false,
+      "final_marker_present": false,
+      "alpha_count": 31,
+      "numbered_line_count": 31
+    },
+    {
+      "arm": "streaming_sink16_window192",
+      "sink": 16,
+      "window": 192,
+      "return_code": 0,
+      "decode_tps": 31.28,
+      "decode_ratio_vs_baseline": 1.0035290343278793,
+      "quality_pass": false,
+      "final_marker_present": false,
+      "alpha_count": 31,
+      "numbered_line_count": 31
+    },
+    {
+      "arm": "streaming_sink32_window256",
+      "sink": 32,
+      "window": 256,
+      "return_code": 0,
+      "decode_tps": 30.86,
+      "decode_ratio_vs_baseline": 0.9900545396214308,
+      "quality_pass": false,
+      "final_marker_present": false,
+      "alpha_count": 31,
+      "numbered_line_count": 31
+    }
+  ],
+  "results": [
+    {
+      "arm": "baseline_context_shift",
+      "sink": 0,
+      "window": 0,
+      "streaming_enabled": false,
+      "return_code": 0,
+      "timed_out": false,
+      "wall_time_s": 25.364709762157872,
+      "stdout_sha256": "5f233da641411aa22e8b2bc26fafed3d16e4f8b8be692caf0971de516f032179",
+      "stderr_sha256": "5d701b94bf5245d4b5781c5d7c09bd6960e9e10d01654c6f387feac7c493e65b",
+      "perf": {
+        "prompt_tokens": 135,
+        "prompt_tps": 1054.44,
+        "decode_runs": 767,
+        "decode_tps": 31.17,
+        "total_tokens": 902,
+        "max_rss_kib": null,
+        "exit_status_reported": null
+      },
+      "quality": {
+        "pass": false,
+        "final_marker_present": false,
+        "alpha_count": 31,
+        "bravo_count": 1,
+        "charlie_count": 0,
+        "numbered_line_count": 31,
+        "line_count": 31
+      }
+    },
+    {
+      "arm": "streaming_sink8_window128",
+      "sink": 8,
+      "window": 128,
+      "streaming_enabled": true,
+      "return_code": 0,
+      "timed_out": false,
+      "wall_time_s": 25.09974365704693,
+      "stdout_sha256": "5f233da641411aa22e8b2bc26fafed3d16e4f8b8be692caf0971de516f032179",
+      "stderr_sha256": "67c96ffbafea80d447ee76300d357b0623368e15a4d14a9779f1bf0c842b42be",
+      "perf": {
+        "prompt_tokens": 135,
+        "prompt_tps": 1040.41,
+        "decode_runs": 767,
+        "decode_tps": 31.5,
+        "total_tokens": 902,
+        "max_rss_kib": null,
+        "exit_status_reported": null
+      },
+      "quality": {
+        "pass": false,
+        "final_marker_present": false,
+        "alpha_count": 31,
+        "bravo_count": 1,
+        "charlie_count": 0,
+        "numbered_line_count": 31,
+        "line_count": 31
+      }
+    },
+    {
+      "arm": "streaming_sink16_window192",
+      "sink": 16,
+      "window": 192,
+      "streaming_enabled": true,
+      "return_code": 0,
+      "timed_out": false,
+      "wall_time_s": 25.262152432929724,
+      "stdout_sha256": "5f233da641411aa22e8b2bc26fafed3d16e4f8b8be692caf0971de516f032179",
+      "stderr_sha256": "89d18dc5d9b3c4cd2b89efddbaed203dcbb1462d6e1a7cc934b2e643c6cefb7d",
+      "perf": {
+        "prompt_tokens": 135,
+        "prompt_tps": 1063.92,
+        "decode_runs": 767,
+        "decode_tps": 31.28,
+        "total_tokens": 902,
+        "max_rss_kib": null,
+        "exit_status_reported": null
+      },
+      "quality": {
+        "pass": false,
+        "final_marker_present": false,
+        "alpha_count": 31,
+        "bravo_count": 1,
+        "charlie_count": 0,
+        "numbered_line_count": 31,
+        "line_count": 31
+      }
+    },
+    {
+      "arm": "streaming_sink32_window256",
+      "sink": 32,
+      "window": 256,
+      "streaming_enabled": true,
+      "return_code": 0,
+      "timed_out": false,
+      "wall_time_s": 25.62771213799715,
+      "stdout_sha256": "5f233da641411aa22e8b2bc26fafed3d16e4f8b8be692caf0971de516f032179",
+      "stderr_sha256": "a947ef863c1c79027de9cdeb7014aed91fe76879482f1b3e3382bdbe7f1077c3",
+      "perf": {
+        "prompt_tokens": 135,
+        "prompt_tps": 959.36,
+        "decode_runs": 767,
+        "decode_tps": 30.86,
+        "total_tokens": 902,
+        "max_rss_kib": null,
+        "exit_status_reported": null
+      },
+      "quality": {
+        "pass": false,
+        "final_marker_present": false,
+        "alpha_count": 31,
+        "bravo_count": 1,
+        "charlie_count": 0,
+        "numbered_line_count": 31,
+        "line_count": 31
+      }
+    }
+  ]
+}

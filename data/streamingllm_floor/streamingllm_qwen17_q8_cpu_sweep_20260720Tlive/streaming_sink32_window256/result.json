@@ -1,0 +1,29 @@
+{
+  "arm": "streaming_sink32_window256",
+  "sink": 32,
+  "window": 256,
+  "streaming_enabled": true,
+  "return_code": 0,
+  "timed_out": false,
+  "wall_time_s": 25.62771213799715,
+  "stdout_sha256": "5f233da641411aa22e8b2bc26fafed3d16e4f8b8be692caf0971de516f032179",
+  "stderr_sha256": "a947ef863c1c79027de9cdeb7014aed91fe76879482f1b3e3382bdbe7f1077c3",
+  "perf": {
+    "prompt_tokens": 135,
+    "prompt_tps": 959.36,
+    "decode_runs": 767,
+    "decode_tps": 30.86,
+    "total_tokens": 902,
+    "max_rss_kib": null,
+    "exit_status_reported": null
+  },
+  "quality": {
+    "pass": false,
+    "final_marker_present": false,
+    "alpha_count": 31,
+    "bravo_count": 1,
+    "charlie_count": 0,
+    "numbered_line_count": 31,
+    "line_count": 31
+  }
+}
