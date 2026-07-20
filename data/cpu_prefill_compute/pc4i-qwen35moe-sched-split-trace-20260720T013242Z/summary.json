@@ -1,0 +1,29 @@
+{
+  "bench_rows": [
+    {
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "avg_ts": 96.92126,
+      "stddev_ts": 0.0,
+      "avg_ns": 84522219233,
+      "cpu_info": "AMD EPYC 9655 96-Core Processor",
+      "gpu_info": "",
+      "backends": "CPU",
+      "build_commit": "12a292f0c",
+      "build_number": 10099
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 1,
+      "avg_ts": 4.945796,
+      "stddev_ts": 0.0,
+      "avg_ns": 202191927,
+      "cpu_info": "AMD EPYC 9655 96-Core Processor",
+      "gpu_info": "",
+      "backends": "CPU",
+      "build_commit": "12a292f0c",
+      "build_number": 10099
+    }
+  ],
+  "note": "sanitized summary; raw bench.json left local because model_n_params trips PII account-number heuristic"
+}

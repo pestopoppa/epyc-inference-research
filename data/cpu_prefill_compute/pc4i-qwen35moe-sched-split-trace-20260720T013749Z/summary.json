@@ -1,0 +1,61 @@
+{
+  "run_root": "/mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/pc4i-qwen35moe-sched-split-trace-20260720T013749Z",
+  "bench_rows": [
+    {
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "avg_ts": 98.610457,
+      "stddev_ts": 0.0,
+      "avg_ns": 83074354272,
+      "cpu_info": "AMD EPYC 9655 96-Core Processor",
+      "gpu_info": "",
+      "backends": "CPU",
+      "build_commit": "12a292f0c",
+      "build_number": 10099
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 1,
+      "avg_ts": 4.897132,
+      "stddev_ts": 0.0,
+      "avg_ns": 204201154,
+      "cpu_info": "AMD EPYC 9655 96-Core Processor",
+      "gpu_info": "",
+      "backends": "CPU",
+      "build_commit": "12a292f0c",
+      "build_number": 10099
+    }
+  ],
+  "trace_plan_count": 45,
+  "trace_unique_plans": [
+    {
+      "split": 0,
+      "backend": "CPU",
+      "i_start": 0,
+      "i_end": 4471,
+      "graph_nodes": 4471,
+      "inputs": 0,
+      "first": "model.input_embed/GET_ROWS",
+      "last": "result_output/MUL_MAT"
+    }
+  ],
+  "trace_compute_count": 34,
+  "trace_compute_elapsed_us": {
+    "min": 204085,
+    "max": 5778892,
+    "median": 5171460.0,
+    "mean": 4930579.176470588
+  },
+  "iqk_active_lines": [
+    "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+    "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+  ],
+  "ldd": [
+    "\tlibllama-bench-impl.so => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libllama-bench-impl.so (0x000079dd01720000)",
+    "\tlibllama-common.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libllama-common.so.0 (0x000079dd00c00000)",
+    "\tlibllama.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libllama.so.0 (0x000079dd00800000)",
+    "\tlibggml.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libggml.so.0 (0x000079dd0120d000)",
+    "\tlibggml-base.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libggml-base.so.0 (0x000079dd01138000)",
+    "\tlibggml-cpu.so.0 => /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/libggml-cpu.so.0 (0x000079dd00400000)"
+  ]
+}
