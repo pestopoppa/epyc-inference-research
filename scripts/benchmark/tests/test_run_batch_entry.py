@@ -140,6 +140,14 @@ def stale_matrix_gate(resolved, *, runner):  # noqa: ARG001
     )
 
 
+def running_autopilot_blocks_gate(resolved):  # noqa: ARG001
+    return rbe.AutopilotPreconditionGateResult(
+        required="stopped",
+        ok=False,
+        reason="requires autopilot stopped; observed running",
+    )
+
+
 def drift_stack_gate(resolved, *, runner):  # noqa: ARG001
     return rbe.StackContractGateResult(
         required=True,
@@ -548,6 +556,44 @@ def test_execute_requested_but_unverified_still_refuses():
     assert res["topology"]["verified"] is False
 
 
+def test_execute_keyboard_interrupt_returns_structured_result():
+    entry = {
+        "task_id": "INTERRUPT",
+        "driver": rbe.DRIVER_COMMAND,
+        "preconditions": {
+            "topology": {
+                "required_topology_hash": "HASH_A",
+            },
+        },
+        "execution": {
+            "command": "python live_probe.py",
+            "concurrency_mode": "serial_noninference",
+        },
+    }
+
+    def interrupt_runner(argv, *, timeout_s, cwd=None):  # noqa: ARG001
+        raise KeyboardInterrupt()
+
+    with tempfile.TemporaryDirectory() as d:
+        att = Path(d) / "attest-20260720.json"
+        att.write_text(
+            json.dumps({"topology_hash": "HASH_A", "live_affinity_verified": True, "status": "ok"})
+        )
+        res = rbe.run_batch_entry(
+            entry,
+            attestation_dir=Path(d),
+            runner=interrupt_runner,
+            stack_contract_checker=ok_stack_gate,
+            contention_matrix_checker=ok_matrix_gate,
+            execute=True,
+            live_hash_override="HASH_A",
+        )
+
+    assert res["phase"] == "execute"
+    assert res["exit_code"] == 130
+    assert any("INTERRUPTED" in r for r in res["blocking_reasons"])
+
+
 def test_continue_on_error_captures_resolution_failure():
     m = synthetic_manifest()
     entry = {"driver": rbe.DRIVER_CLEAN_WINDOW, "selector": {"package": "DOES-NOT-EXIST"}}
@@ -682,6 +728,54 @@ def test_eval_fanout_not_required_contention_matrix_is_blocked():
     assert gate.required is True
     assert gate.ok is False
     assert any("not_required" in reason for reason in gate.reasons)
+
+
+def test_autopilot_precondition_gate_blocks_mismatched_live_state():
+    entry = {
+        "task_id": "AP-stopped-required",
+        "preconditions": {"autopilot": "stopped"},
+        "execution": {
+            "command": "python some_probe.py",
+            "concurrency_mode": "serial_noninference",
+        },
+    }
+    resolved = rbe.resolve_entry(entry)
+
+    gate = rbe.autopilot_precondition_gate(
+        resolved,
+        load_signals={"autopilot": {"running": True}},
+    )
+
+    assert gate.required == "stopped"
+    assert gate.ok is False
+    assert "observed running" in gate.reason
+
+
+def test_preflight_blocks_on_autopilot_precondition_mismatch():
+    entry = {
+        "task_id": "AP-stopped-required",
+        "preconditions": {"autopilot": "stopped"},
+        "execution": {
+            "command": "python some_probe.py",
+            "concurrency_mode": "serial_noninference",
+        },
+    }
+    resolved = rbe.resolve_entry(entry)
+
+    with tempfile.TemporaryDirectory() as d:
+        res = rbe.run_preflight(
+            resolved,
+            attestation_dir=Path(d),
+            runner=ok_runner,
+            stack_contract_checker=ok_stack_gate,
+            contention_matrix_checker=ok_matrix_gate,
+            autopilot_precondition_checker=running_autopilot_blocks_gate,
+            live_hash_override="HASH_A",
+        )
+
+    assert res["autopilot_precondition"]["ok"] is False
+    assert any("requires autopilot stopped" in r for r in res["blocking_reasons"])
+    assert res["dry_run_ok"] is True
 
 
 def test_never_regenerates_manifest_when_supplied():

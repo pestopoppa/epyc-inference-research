@@ -67,6 +67,8 @@ Result dict (JSONL-appendable; the B5 verdict layer consumes it)
 
 import argparse
 import json
+import os
+import signal
 import shlex
 import subprocess
 import sys
@@ -81,6 +83,8 @@ RESEARCH_ROOT = BENCHMARK_DIR.parents[1]
 SCRIPTS_DIR = RESEARCH_ROOT / "scripts"
 ORCHESTRATOR_ROOT = Path("/mnt/raid0/llm/epyc-orchestrator")
 ORCHESTRATOR_PYTHON = ORCHESTRATOR_ROOT / ".venv" / "bin" / "python"
+EPYC_ROOT = Path("/mnt/raid0/llm/epyc-root")
+EPYC_ROOT_COORDINATION = EPYC_ROOT / "scripts" / "coordination"
 
 # clean_window_manifest.py performs its own sys.path.insert for dataset_adapters /
 # lib.registry / suites at import time, so it must be importable first.
@@ -555,6 +559,20 @@ class ContentionMatrixGateResult:
         }
 
 
+@dataclass
+class AutopilotPreconditionGateResult:
+    required: str
+    ok: bool
+    reason: str
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "required": self.required,
+            "ok": self.ok,
+            "reason": self.reason,
+        }
+
+
 def _truthy(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "ok", "pass", "verified"}
@@ -817,6 +835,60 @@ def contention_matrix_gate(
     )
 
 
+def autopilot_precondition_gate(
+    resolved: ResolvedEntry,
+    *,
+    load_signals: Optional[dict[str, Any]] = None,
+) -> AutopilotPreconditionGateResult:
+    """Require the live AutoPilot state to match ``preconditions.autopilot``.
+
+    This is a read-only, no-inference gate. It imports the root-owned pure
+    checker so the batch runner and status tooling share the same semantics.
+    Entries that omit the precondition default to ``any`` and do not probe the
+    live system.
+    """
+    required = str((resolved.preconditions or {}).get("autopilot") or "any")
+    if required == "any":
+        return AutopilotPreconditionGateResult(
+            required=required,
+            ok=True,
+            reason="precondition 'any' imposes no autopilot constraint",
+        )
+
+    if str(EPYC_ROOT_COORDINATION) not in sys.path:
+        sys.path.insert(0, str(EPYC_ROOT_COORDINATION))
+    try:
+        from autopilot_precondition_gate import check_autopilot_precondition
+    except Exception as exc:  # noqa: BLE001
+        return AutopilotPreconditionGateResult(
+            required=required,
+            ok=False,
+            reason=f"autopilot precondition checker unavailable: {exc}",
+        )
+
+    if load_signals is None:
+        try:
+            import inference_load_check as ic  # type: ignore[import-not-found]
+
+            load_signals = ic.classify_load()
+        except Exception as exc:  # noqa: BLE001
+            return AutopilotPreconditionGateResult(
+                required=required,
+                ok=False,
+                reason=f"autopilot state signal unavailable: {exc}",
+            )
+
+    ok, reason = check_autopilot_precondition(
+        {"preconditions": {"autopilot": required}},
+        load_signals,
+    )
+    return AutopilotPreconditionGateResult(
+        required=required,
+        ok=bool(ok),
+        reason=str(reason),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Artifact prediction / validation (borrowed from run_job.py patterns)
 # ---------------------------------------------------------------------------
@@ -863,21 +935,51 @@ def validate_output_artifacts(artifacts: list[str]) -> list[str]:
 def _default_runner(
     argv: list[str], *, timeout_s: float, cwd: str | Path | None = None
 ) -> tuple[int, str, str]:
-    """subprocess.run with timeout enforcement (borrowed from run_job.py)."""
+    """Run a child process with timeout and interrupt-safe process-group cleanup."""
+    proc: subprocess.Popen[str] | None = None
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             argv,
             cwd=str(cwd or RESEARCH_ROOT),
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout_s,
-            check=False,
+            start_new_session=True,
         )
+        out, err = proc.communicate(timeout=timeout_s)
     except subprocess.TimeoutExpired as exc:
-        return 124, "", f"TIMEOUT after {timeout_s}s: {exc}"
+        out, err = _terminate_child_group(proc, signal.SIGTERM)
+        return 124, out, f"TIMEOUT after {timeout_s}s: {exc}\n{err}".strip()
+    except KeyboardInterrupt:
+        out, err = _terminate_child_group(proc, signal.SIGINT)
+        return 130, out, f"INTERRUPTED by KeyboardInterrupt; child terminated\n{err}".strip()
     except OSError as exc:
         return 127, "", f"spawn error: {exc}"
-    return proc.returncode, proc.stdout, proc.stderr
+    return proc.returncode or 0, out, err
+
+
+def _terminate_child_group(
+    proc: subprocess.Popen[str] | None,
+    sig: signal.Signals,
+    *,
+    grace_s: float = 10.0,
+) -> tuple[str, str]:
+    """Terminate a child process group and collect any remaining output."""
+    if proc is None:
+        return "", ""
+    if proc.poll() is None:
+        try:
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            pass
+        try:
+            return proc.communicate(timeout=grace_s)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    return proc.communicate()
 
 
 def _run_with_cwd(
@@ -919,6 +1021,7 @@ def _blank_result(resolved: ResolvedEntry) -> dict[str, Any]:
         "topology": {},
         "stack_contract": {},
         "contention_matrix": {},
+        "autopilot_precondition": {},
         "notes": list(resolved.notes),
         "generated_at": _utc_now(),
     }
@@ -932,6 +1035,9 @@ def run_preflight(
     runner: Callable[..., tuple[int, str, str]] = _default_runner,
     stack_contract_checker: Callable[..., StackContractGateResult] = live_stack_contract_gate,
     contention_matrix_checker: Callable[..., ContentionMatrixGateResult] = contention_matrix_gate,
+    autopilot_precondition_checker: Callable[
+        ..., AutopilotPreconditionGateResult
+    ] = autopilot_precondition_gate,
     live_hash_override: Optional[str] = None,
 ) -> dict[str, Any]:
     """Run the MANDATORY preflight: topology gate + canonical dry-run. Runs NO
@@ -952,6 +1058,10 @@ def run_preflight(
     matrix_gate = contention_matrix_checker(resolved, runner=runner)
     result["contention_matrix"] = matrix_gate.as_dict()
     blocking.extend(matrix_gate.reasons)
+    autopilot_gate = autopilot_precondition_checker(resolved)
+    result["autopilot_precondition"] = autopilot_gate.as_dict()
+    if not autopilot_gate.ok:
+        blocking.append(autopilot_gate.reason)
 
     dry_cmd = build_dry_run_command(resolved)
     result["artifacts"] = predict_artifacts(resolved)
@@ -1002,12 +1112,15 @@ def _execute_resolved(
     if argv is None:
         # compound shell string (e.g. `cd X && uv run ...`) — run via a shell.
         argv = ["bash", "-lc", resolved.command_resolved]
-    rc, out, err = _run_with_cwd(
-        runner,
-        argv,
-        timeout_s=execute_timeout_s,
-        cwd=resolved.cwd,
-    )
+    try:
+        rc, out, err = _run_with_cwd(
+            runner,
+            argv,
+            timeout_s=execute_timeout_s,
+            cwd=resolved.cwd,
+        )
+    except KeyboardInterrupt:
+        rc, out, err = 130, "", "INTERRUPTED by KeyboardInterrupt before runner returned"
     result["exit_code"] = rc
 
     missing = validate_output_artifacts(result.get("artifacts", []))
@@ -1037,6 +1150,9 @@ def run_batch_entry(
     runner: Callable[..., tuple[int, str, str]] = _default_runner,
     stack_contract_checker: Callable[..., StackContractGateResult] = live_stack_contract_gate,
     contention_matrix_checker: Callable[..., ContentionMatrixGateResult] = contention_matrix_gate,
+    autopilot_precondition_checker: Callable[
+        ..., AutopilotPreconditionGateResult
+    ] = autopilot_precondition_gate,
     live_hash_override: Optional[str] = None,
 ) -> dict[str, Any]:
     """Bridge one inference-batch entry through preflight (always) and, only when
@@ -1073,6 +1189,9 @@ def run_batch_entry(
             "exit_code": None,
             "model_path": None,
             "topology": {},
+            "stack_contract": {},
+            "contention_matrix": {},
+            "autopilot_precondition": {},
             "notes": [],
             "generated_at": _utc_now(),
         }
@@ -1084,6 +1203,7 @@ def run_batch_entry(
         runner=runner,
         stack_contract_checker=stack_contract_checker,
         contention_matrix_checker=contention_matrix_checker,
+        autopilot_precondition_checker=autopilot_precondition_checker,
         live_hash_override=live_hash_override,
     )
 
