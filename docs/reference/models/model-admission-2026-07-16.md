@@ -752,7 +752,9 @@ No-stop free-form follow-up at `data/gpu-mi210/gemma4_ud_iq4xs_mtp_freeform_term
 
 Stop-string follow-up at `data/k11_gemma4_determinism/k11_stop_end_ud_iq4xs_mtp_n10_concurrent_pc4o_20260720T084818Z/summary.json` passed `10/10` fresh-server runs with `stop=["END"]`, one output hash, exact 200 observed words, mean decode `113.738 t/s`, and `1333/1340` accepted drafts (`99.48%`). Matched ORIG-Q4 comparison at `data/k11_gemma4_determinism/k11_stop_end_orig_q4_mtp_n10_concurrent_pc4o_20260720T085122Z/summary.json` also passed `10/10` with one hash and exact 200 words, but decoded faster at `141.788 t/s` with `1330/1340` accepted drafts (`99.25%`). These rows are observation-grade because the CPU PC-4o bench overlapped.
 
-Interpretation: UD-IQ4_XS is fully MI210-resident and runtime/coherence-clean on current v7, and the assistant-head MTP lane is stable on bounded schema-constrained structured-output probes plus no-stop and stop-string exact-count free-form slices. It remains a compression candidate, not a production worker replacement: ORIG-Q4 is faster on the matched stop-string slice, and quality retention against ORIG Q4_K_M is still open.
+Clean natural-prose follow-up at `data/k11_gemma4_determinism/k11_natural_freeform_compare_20260720T0937Z.summary.json` removed the PC-4o overlap and used a less synthetic prompt: exactly 160 lowercase words about deterministic cleanup, no bullets/markdown/JSON, ending with `END`, `stop=["END"]`, four slots, assistant-head MTP, and 10 fresh servers per arm. ORIG-Q4 completed every run but produced `9` output hashes, mean decode `108.702 t/s`, mean acceptance `0.5279` (`906/1720`), and `0/10` exact 160-word completions (`152-159` words observed). UD-IQ4_XS completed every run but produced `10` output hashes, mean decode `89.548 t/s`, mean acceptance `0.5608` (`953/1702`), and `1/10` exact 160-word completions (`152-160` words observed). Post-run cleanup showed no KFD PIDs and no live llama processes.
+
+Interpretation: UD-IQ4_XS is fully MI210-resident and runtime/coherence-clean on current v7, and the assistant-head MTP lane is stable on bounded schema-constrained or repeated-token probes. It remains a compression candidate, not a production worker replacement: ORIG-Q4 is faster on matched stop-string and natural-prose slices, and broad natural free-form serving is still policy-blocked for both ORIG and UD until a bounded-output policy, stronger prompt/template constraints, or sampler/control fix lands.
 
 ## Gemma4 Combined Ngram-Then-MTP Probe
 
@@ -846,7 +848,10 @@ JSON task. Later UD-IQ4_XS and ORIG-Q4 stop-string n=10 repeats both passed, so
 the stop-string concern is narrowed, not the active deployment blocker by
 itself. The remaining K11 risk is broad free-form serving policy plus
 ORIG-vs-UD quality/speed selection, not general target nondeterminism or MTP
-acceptance drift under a structurally bounded schema.
+acceptance drift under a structurally bounded schema. The 2026-07-20 natural
+free-form comparison above confirms that repeated-token success does not
+generalize to natural prose: both ORIG and UD diverged across fresh servers and
+missed the exact word-count contract.
 
 ## MI210 Context-Size Sweep
 
