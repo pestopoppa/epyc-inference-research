@@ -7,6 +7,9 @@ Script: `scripts/benchmark/dr3_quant_asym_k2_admission_runner.py`
 Passing live artifact:
 `data/dr3_quant_asym_k2_admission/dr3_quant_asym_k2_admission_20260720T071200Z_live_smoke_ctx8192_r1_v2/`
 
+Passing default admission artifact:
+`data/dr3_quant_asym_k2_admission/dr3_quant_asym_k2_admission_20260720T071816Z_dr3c_default_ctx8192_16384_r1/`
+
 Dry-run artifact:
 `data/dr3_quant_asym_k2_admission/dr3_quant_asym_k2_admission_20260720T071100Z_live_runner_dryrun_v2/`
 
@@ -71,15 +74,47 @@ Speed:
 
 The combined K2 row accepted `408/466` draft tokens. Spec telemetry was observed.
 
+## DR-3c Default Admission Result
+
+Default 8K+16K package:
+
+```bash
+LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin \
+python3 scripts/benchmark/dr3_quant_asym_k2_admission_runner.py --execute \
+  --output-dir data/dr3_quant_asym_k2_admission/dr3_quant_asym_k2_admission_20260720T071816Z_dr3c_default_ctx8192_16384_r1 \
+  --context-band 8192 --context-band 16384 --rows-per-class 1 \
+  --startup-timeout 900 --request-timeout 1200 --max-tokens 1024
+```
+
+Summary:
+
+- `quality_gate.status=pass` (`24/24`).
+- `output_stability_gate.status=pass`.
+- `context_coverage_gate.status=pass` for `8192` and `16384`.
+- `cleanup_proof.status=pass`.
+- `observation_grade=true`.
+- `decision_grade=false`.
+- `serving_route_allowed=false`.
+- `numeric_swarm_surface_allowed=false`.
+
+Speed:
+
+| Context | CPU baseline decode t/s | Combined K2 decode t/s | Ratio | Alpha | Draft accepted/generated |
+|---:|---:|---:|---:|---:|---:|
+| 8192 | 6.980 | 10.535 | 1.509x | 0.876 | 408/466 |
+| 16384 | 6.979 | 10.429 | 1.494x | 0.879 | 420/478 |
+
+The package keeps the lane non-serving. `frontdoor_opportunity_cost_gate` remains
+`not_run`, and `p_gpu_1_gate.status=not_applicable_to_experimental_observation`.
+
 ## Interpretation
 
-DR-3b closes the live-runner implementation gap and gives a clean 8K
-observation-grade admission smoke for the quant-asymmetric K2 lane. It does not
-admit a production route yet.
+DR-3b closed the live-runner implementation gap, and DR-3c closes the default
+8K+16K admission-package execution gap for the quant-asymmetric K2 lane. It does
+not admit a production route yet.
 
 Remaining work:
 
-- Run the default 8K+16K admission package, not just the 8K smoke.
 - Run the frontdoor opportunity-cost gate before any routing policy.
 - Rerun required GPU claims under production-named `P-GPU-1` if the result is
   used for decision-grade production routing.

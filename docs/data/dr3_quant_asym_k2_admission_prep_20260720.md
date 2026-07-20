@@ -74,9 +74,26 @@ vs CPU baseline `7.185 t/s` (`1.545x`, alpha `0.876`). It remains non-serving
 and decision-grade false pending default 8K+16K admission, frontdoor opportunity
 cost, and production-named `P-GPU-1` gates.
 
+## DR-3c Default Admission Package
+
+Default package artifact:
+`data/dr3_quant_asym_k2_admission/dr3_quant_asym_k2_admission_20260720T071816Z_dr3c_default_ctx8192_16384_r1/`.
+
+The default 8K+16K package passed quality (`24/24`), output stability, context
+coverage, and cleanup. Decode results:
+
+| Context | CPU baseline decode t/s | Combined K2 decode t/s | Ratio | Alpha |
+|---:|---:|---:|---:|---:|
+| 8192 | 6.980 | 10.535 | 1.509x | 0.876 |
+| 16384 | 6.979 | 10.429 | 1.494x | 0.879 |
+
+It remains non-serving and decision-grade false because the frontdoor
+opportunity-cost gate has not run and production GPU claims require the
+production-named `P-GPU-1` rerun path.
+
 ## Verdict
 
-DR-3a is scaffolded and DR-3b now has a live executor plus an 8K observation
-smoke. The next code/execution step is the default 8K+16K admission package; do
-not add a serving route or NumericSwarm K tunable until that broader package and
-the frontdoor opportunity-cost gate pass.
+DR-3a is scaffolded, DR-3b has a live executor plus an 8K observation smoke, and
+DR-3c has a passing default 8K+16K observation package. The next execution step
+is the frontdoor opportunity-cost gate; do not add a serving route or NumericSwarm
+K tunable until that gate and any required production-named `P-GPU-1` rerun pass.

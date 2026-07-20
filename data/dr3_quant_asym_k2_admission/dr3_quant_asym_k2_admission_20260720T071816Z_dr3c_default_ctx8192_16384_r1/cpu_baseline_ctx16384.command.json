@@ -1,0 +1,41 @@
+{
+  "argv": [
+    "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+    "-m",
+    "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "60077",
+    "-np",
+    "1",
+    "-c",
+    "16384",
+    "-t",
+    "96",
+    "-ub",
+    "1024",
+    "--metrics",
+    "--slots",
+    "--jinja",
+    "--reasoning",
+    "off",
+    "--device",
+    "none",
+    "-ngl",
+    "0",
+    "--spec-type",
+    "none"
+  ],
+  "arm": "cpu_baseline_ctx16384",
+  "base_arm": "cpu_high_quant_verifier_baseline",
+  "context_band": 16384,
+  "env": {
+    "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+    "OMP_NUM_THREADS": "1",
+    "PATH": "/usr/bin:/bin:/opt/rocm/bin"
+  },
+  "k": null,
+  "port": 60077,
+  "shell": "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 PATH=/usr/bin:/bin:/opt/rocm/bin /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf --host 127.0.0.1 --port 60077 -np 1 -c 16384 -t 96 -ub 1024 --metrics --slots --jinja --reasoning off --device none -ngl 0 --spec-type none"
+}

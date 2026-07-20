@@ -185,3 +185,26 @@ economics, and proves cleanup. The corrected 8K smoke passed:
 This closes the DR-3b implementation/smoke gap, not the production-routing gate.
 Remaining DR-3 work is the default 8K+16K admission package plus frontdoor
 opportunity-cost measurement before any serving or NumericSwarm exposure.
+
+## DR-3c Default 8K+16K Admission Package
+
+Default admission artifact:
+`data/dr3_quant_asym_k2_admission/dr3_quant_asym_k2_admission_20260720T071816Z_dr3c_default_ctx8192_16384_r1/`.
+
+The broader package passed both requested context bands with one row per class:
+
+- `quality_gate.status=pass` (`24/24`).
+- `output_stability_gate.status=pass`.
+- `context_coverage_gate.status=pass` for `8192` and `16384`.
+- `cleanup_proof.status=pass`.
+- `observation_grade=true`; `decision_grade=false`.
+- `serving_route_allowed=false`; `numeric_swarm_surface_allowed=false`.
+
+| Context | CPU baseline decode t/s | Combined K2 decode t/s | Ratio | Alpha | Draft accepted/generated |
+|---:|---:|---:|---:|---:|---:|
+| 8192 | 6.980 | 10.535 | 1.509x | 0.876 | 408/466 |
+| 16384 | 6.979 | 10.429 | 1.494x | 0.879 | 420/478 |
+
+This closes the default admission-package execution gap. Production/routing
+remains blocked on the frontdoor opportunity-cost gate and any required
+production-named `P-GPU-1` rerun.
