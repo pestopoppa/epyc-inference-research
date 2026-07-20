@@ -125,6 +125,37 @@ class TestRowToPrompt:
         p = self._get_prompt(self._make_row(label=0))
         assert p["expected"] == "incorrect"
 
+    def test_falsy_zero_label_not_overridden_by_stale_score(self):
+        # SV-1: label=0 is a valid "incorrect" label and must win over a stale
+        # truthy score alias. The old `or` chain fell through 0 → score=1.0.
+        row = {
+            "id": "sv1", "subset": "he_r_plus",
+            "problem": "P", "solution": "S",
+            "label": 0, "score": 1.0,
+        }
+        p = self._get_prompt(row)
+        assert p["expected"] == "incorrect"
+
+    def test_bool_false_label_is_incorrect(self):
+        # SV-1: label=False is a present, valid label — not "missing".
+        row = {
+            "id": "sv2", "subset": "he_r_plus",
+            "problem": "P", "solution": "S",
+            "label": False, "score": 1.0,
+        }
+        p = self._get_prompt(row)
+        assert p["expected"] == "incorrect"
+
+    def test_float_zero_label_not_overridden(self):
+        # SV-1: 0.0 average_test_score under `label` must not fall through.
+        row = {
+            "id": "sv3", "subset": "he_r_plus",
+            "problem": "P", "solution": "S",
+            "label": 0.0, "score": 0.9,
+        }
+        p = self._get_prompt(row)
+        assert p["expected"] == "incorrect"
+
     def test_prompt_contains_problem(self):
         p = self._get_prompt(self._make_row(problem="Is 2+2=5?"))
         assert "Is 2+2=5?" in p["prompt"]
@@ -221,6 +252,40 @@ class TestSolutionExpansion:
         assert expanded[1]["label"] == 0.0
         assert expanded[0]["solution"] == "def f(): return 1"
         assert expanded[0]["id"] == "HumanEval/0::sol0"
+
+    def test_unlabeled_problem_row_without_all_solutions_is_dropped(self):
+        # SV-1: a bare problem row (no all_solutions, no candidate solution text)
+        # would render as an "(empty solution)" unlabeled junk item — drop it.
+        rows = [{"task_id": "HumanEval/7", "prompt": "Write g().", "subset": "HE-R+"}]
+        expanded = ScoringVerifiersAdapter._expand_solution_rows(rows)
+        assert expanded == []
+
+    def test_standalone_row_with_solution_is_kept(self):
+        # SV-1: a row already carrying a real candidate solution is preserved even
+        # without all_solutions (guards against over-dropping legit per-item rows).
+        rows = [{"id": "x", "problem": "P", "solution": "def f(): return 1", "label": 1}]
+        expanded = ScoringVerifiersAdapter._expand_solution_rows(rows)
+        assert len(expanded) == 1
+        assert expanded[0]["label"] == 1
+
+    def test_dropped_unlabeled_rows_are_counted_and_logged(self, caplog):
+        # SV-1: dropped rows are counted and summarised in a log line.
+        import logging as _logging
+
+        rows = [
+            {"task_id": "a", "prompt": "P1"},          # dropped
+            {"task_id": "b", "prompt": "P2"},          # dropped
+            {
+                "task_id": "c",
+                "all_solutions": [
+                    {"rank": 1, "average_test_score": 1.0, "solution": "def f(): return 1"},
+                ],
+            },
+        ]
+        with caplog.at_level(_logging.INFO):
+            expanded = ScoringVerifiersAdapter._expand_solution_rows(rows)
+        assert len(expanded) == 1  # only the expanded candidate survives
+        assert "dropped 2" in caplog.text
 
     def test_prompt_uses_expanded_solution_score(self):
         adapter = ScoringVerifiersAdapter()

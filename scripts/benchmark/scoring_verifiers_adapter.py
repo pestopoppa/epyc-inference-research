@@ -37,10 +37,30 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 import random
 import re
 from pathlib import Path
 from typing import Optional
+
+log = logging.getLogger(__name__)
+
+# Solution-text aliases, in the order _row_to_prompt resolves them. Used to decide
+# whether an un-expanded row (no all_solutions) carries a real candidate to verify.
+_SOLUTION_KEYS = ("solution", "completion", "code", "response")
+
+# Label aliases, in priority order. SV-1: first key PRESENT (value is not None) wins —
+# never fall through a valid falsy label (0 / 0.0 / False) to a stale truthy alias.
+_LABEL_KEYS = ("label", "is_correct", "score", "verdict", "ground_truth")
+
+
+def _row_has_solution_text(row: dict) -> bool:
+    """True if the row carries non-empty candidate-solution text under any alias."""
+    for key in _SOLUTION_KEYS:
+        val = row.get(key)
+        if val is not None and str(val).strip():
+            return True
+    return False
 
 # Allow standalone import outside the benchmarks package
 try:
@@ -126,6 +146,7 @@ class ScoringVerifiersAdapter(BaseAdapter):
     def _load_from_local(base: Path) -> list[dict]:
         """Load rows from a local snapshot directory (JSONL or parquet files)."""
         rows: list[dict] = []
+        malformed = 0  # SV-1: count silently-dropped JSONL parse errors
 
         # Look for JSONL files first
         jsonl_files = sorted(base.rglob("*.jsonl"))
@@ -140,7 +161,16 @@ class ScoringVerifiersAdapter(BaseAdapter):
                             row.setdefault("subset", subset)
                             rows.append(row)
                         except json.JSONDecodeError:
-                            pass
+                            malformed += 1
+                            continue
+            if malformed:
+                log.warning(
+                    "[scoring_verifiers] skipped %d malformed JSONL line(s) while "
+                    "loading %d file(s) from %s",
+                    malformed,
+                    len(jsonl_files),
+                    base,
+                )
             if rows:
                 return rows
 
@@ -168,10 +198,18 @@ class ScoringVerifiersAdapter(BaseAdapter):
         row, so each solution becomes its own verifier item.
         """
         expanded: list[dict] = []
+        dropped = 0  # SV-1: unlabeled problem rows with no candidate solutions
         for row_idx, row in enumerate(rows):
             solutions = row.get("all_solutions")
             if not isinstance(solutions, list) or not solutions:
-                expanded.append(row)
+                # No candidate solutions to expand. Keep the row only if it already
+                # carries a real standalone candidate (some subsets ship per-item);
+                # otherwise it is a bare problem row that would render as an
+                # "(empty solution)" unlabeled junk item — drop it (SV-1).
+                if _row_has_solution_text(row):
+                    expanded.append(row)
+                else:
+                    dropped += 1
                 continue
 
             for sol_idx, solution in enumerate(solutions):
@@ -194,6 +232,12 @@ class ScoringVerifiersAdapter(BaseAdapter):
                 }
                 expanded.append(item)
 
+        if dropped:
+            log.info(
+                "[scoring_verifiers] expansion dropped %d unlabeled problem row(s) "
+                "lacking all_solutions (would have become '(empty solution)' items)",
+                dropped,
+            )
         return expanded
 
     # ── prompt construction ──────────────────────────────────────────────────
@@ -247,13 +291,15 @@ class ScoringVerifiersAdapter(BaseAdapter):
             or row.get("response")
             or ""
         )
-        raw_label = (
-            row.get("label")
-            or row.get("is_correct")
-            or row.get("score")
-            or row.get("verdict")
-            or row.get("ground_truth")
-        )
+        # SV-1: first alias key whose value is not None wins. The old `or` chain
+        # dropped valid falsy labels (0 / 0.0 / False) through to a stale truthy
+        # alias — e.g. label=0 with score=1.0 was mis-scored "correct".
+        raw_label = None
+        for _label_key in _LABEL_KEYS:
+            val = row.get(_label_key)
+            if val is not None:
+                raw_label = val
+                break
         subset_tag = str(row.get("subset", row.get("split", row.get("source", "unknown"))))
         item_id = str(row.get("id", row.get("idx", idx)))
 
