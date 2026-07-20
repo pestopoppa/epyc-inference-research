@@ -62,7 +62,7 @@ CHAT_ENDPOINT_PATH = "/chat"
 DEFAULT_KS: tuple[int, ...] = (10, 50)
 DEFAULT_NDCG_K = 10
 DEFAULT_EMBED_BATCH_SIZE = 8
-DEFAULT_MAX_INPUT_CHARS = 1536
+DEFAULT_MAX_INPUT_CHARS = 512
 
 
 @dataclass(frozen=True)
@@ -276,10 +276,10 @@ def aggregate_metrics(
 def truncate_text(text: str, max_input_chars: int | None) -> str:
     """Apply the common Phase-B embedder input cap.
 
-    The serving recipes for the candidate/reference embedders use 512-token
-    context windows. We do not have a model-independent tokenizer in this
-    harness, so the benchmark applies the same conservative character cap to all
-    subjects before sending inputs to the embedding endpoint.
+    The serving recipes for the smallest candidate/reference embedders expose a
+    256-token slot under ``-np 4``. We do not have a model-independent tokenizer
+    in this harness, so the benchmark applies the same conservative character
+    cap to all subjects before sending inputs to the embedding endpoint.
     """
     if max_input_chars is None or max_input_chars <= 0:
         return text
