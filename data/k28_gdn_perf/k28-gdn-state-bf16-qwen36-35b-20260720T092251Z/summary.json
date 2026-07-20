@@ -1,0 +1,38 @@
+{
+  "status": "bf16_gdn_state_speed_neutral",
+  "date_utc": "2026-07-20",
+  "artifact_root": "/mnt/raid0/llm/epyc-inference-research/data/k28_gdn_perf/k28-gdn-state-bf16-qwen36-35b-20260720T092251Z",
+  "model": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench",
+  "env_under_test": "GGML_CUDA_GDN_STATE_BF16=1",
+  "rows": [
+    {
+      "n_prompt": 0,
+      "n_gen": 128,
+      "f32_state_tps": 99.515563,
+      "f32_state_stddev_tps": 0.397251,
+      "bf16_state_tps": 100.250142,
+      "bf16_state_stddev_tps": 0.406065,
+      "bf16_delta_pct": 0.7381548954307648
+    },
+    {
+      "n_prompt": 2048,
+      "n_gen": 0,
+      "f32_state_tps": 2098.07244,
+      "f32_state_stddev_tps": 5.970633,
+      "bf16_state_tps": 2081.519787,
+      "bf16_state_stddev_tps": 5.710382,
+      "bf16_delta_pct": -0.7889457334466332
+    },
+    {
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "f32_state_tps": 1994.422403,
+      "f32_state_stddev_tps": 7.987094,
+      "bf16_state_tps": 1979.344589,
+      "bf16_state_stddev_tps": 7.545546,
+      "bf16_delta_pct": -0.7559990289579543
+    }
+  ],
+  "interpretation": "BF16 recurrent GDN state is neutral/slightly negative for prompt throughput and only a tiny decode win on this Qwen3.6-35B-A3B Q8 MI210 slice; treat as memory/residency research, not throughput optimization."
+}
