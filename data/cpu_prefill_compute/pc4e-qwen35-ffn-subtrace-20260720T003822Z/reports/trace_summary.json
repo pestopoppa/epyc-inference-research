@@ -1,0 +1,250 @@
+{
+  "artifact_root": "/mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/pc4e-qwen35-ffn-subtrace-20260720T003822Z",
+  "bench": [
+    {
+      "avg_ts": 115.84265,
+      "n_gen": 0,
+      "n_prompt": 8192
+    },
+    {
+      "avg_ts": 5.266122,
+      "n_gen": 1,
+      "n_prompt": 0
+    }
+  ],
+  "exit": [
+    "exit_status=0",
+    "finished_utc=2026-07-20T00:40:54Z"
+  ],
+  "phase_delta_stats": {
+    "full_attn": {
+      "count": 540,
+      "max": 75,
+      "median": 75.0,
+      "min": 75,
+      "total_delta": 40500,
+      "unique": [
+        75
+      ]
+    },
+    "linear_attn": {
+      "count": 1620,
+      "max": 101,
+      "median": 99.0,
+      "min": 99,
+      "total_delta": 160470,
+      "unique": [
+        99,
+        101
+      ]
+    }
+  },
+  "resource_time": {
+    "maximum_resident_set_size_kbytes": "77043940",
+    "system_time_seconds": "134.07",
+    "user_time_seconds": "13509.37"
+  },
+  "run_id": "pc4e-qwen35-ffn-subtrace-20260720T003822Z",
+  "subphase_delta_stats": {
+    "attn_post_norm": {
+      "count": 2160,
+      "max": 2,
+      "median": 2.0,
+      "min": 2,
+      "total_delta": 4320,
+      "unique": [
+        2
+      ]
+    },
+    "attn_residual": {
+      "count": 2160,
+      "max": 1,
+      "median": 1.0,
+      "min": 1,
+      "total_delta": 2160,
+      "unique": [
+        1
+      ]
+    },
+    "conv_qkv_norm": {
+      "count": 1620,
+      "max": 3,
+      "median": 3.0,
+      "min": 3,
+      "total_delta": 4860,
+      "unique": [
+        3
+      ]
+    },
+    "conv_state": {
+      "count": 1620,
+      "max": 17,
+      "median": 15.0,
+      "min": 15,
+      "total_delta": 24390,
+      "unique": [
+        15,
+        17
+      ]
+    },
+    "ffn_moe": {
+      "count": 2160,
+      "max": 32,
+      "median": 32.0,
+      "min": 32,
+      "total_delta": 69120,
+      "unique": [
+        32
+      ]
+    },
+    "ffn_moe_shared_add": {
+      "count": 2160,
+      "max": 1,
+      "median": 1.0,
+      "min": 1,
+      "total_delta": 2160,
+      "unique": [
+        1
+      ]
+    },
+    "ffn_shared": {
+      "count": 2160,
+      "max": 4,
+      "median": 4.0,
+      "min": 4,
+      "total_delta": 8640,
+      "unique": [
+        4
+      ]
+    },
+    "ffn_shared_gate": {
+      "count": 2160,
+      "max": 2,
+      "median": 2.0,
+      "min": 2,
+      "total_delta": 4320,
+      "unique": [
+        2
+      ]
+    },
+    "ffn_shared_gated": {
+      "count": 2160,
+      "max": 1,
+      "median": 1.0,
+      "min": 1,
+      "total_delta": 2160,
+      "unique": [
+        1
+      ]
+    },
+    "ffn_total": {
+      "count": 2160,
+      "max": 40,
+      "median": 40.0,
+      "min": 40,
+      "total_delta": 86400,
+      "unique": [
+        40
+      ]
+    },
+    "full_attn_total": {
+      "count": 540,
+      "max": 29,
+      "median": 29.0,
+      "min": 29,
+      "total_delta": 15660,
+      "unique": [
+        29
+      ]
+    },
+    "gated_delta_net": {
+      "count": 1620,
+      "max": 13,
+      "median": 13.0,
+      "min": 13,
+      "total_delta": 21060,
+      "unique": [
+        13
+      ]
+    },
+    "gated_norm": {
+      "count": 1620,
+      "max": 6,
+      "median": 6.0,
+      "min": 6,
+      "total_delta": 9720,
+      "unique": [
+        6
+      ]
+    },
+    "layer_out": {
+      "count": 2160,
+      "max": 0,
+      "median": 0.0,
+      "min": 0,
+      "total_delta": 0,
+      "unique": [
+        0
+      ]
+    },
+    "linear_attn_total": {
+      "count": 1620,
+      "max": 55,
+      "median": 53.0,
+      "min": 53,
+      "total_delta": 85950,
+      "unique": [
+        53,
+        55
+      ]
+    },
+    "linear_out": {
+      "count": 1620,
+      "max": 2,
+      "median": 2.0,
+      "min": 2,
+      "total_delta": 3240,
+      "unique": [
+        2
+      ]
+    },
+    "linear_proj": {
+      "count": 1620,
+      "max": 5,
+      "median": 5.0,
+      "min": 5,
+      "total_delta": 8100,
+      "unique": [
+        5
+      ]
+    },
+    "post_moe": {
+      "count": 2160,
+      "max": 1,
+      "median": 1.0,
+      "min": 1,
+      "total_delta": 2160,
+      "unique": [
+        1
+      ]
+    },
+    "ssm_state": {
+      "count": 1620,
+      "max": 8,
+      "median": 8.0,
+      "min": 8,
+      "total_delta": 12960,
+      "unique": [
+        8
+      ]
+    }
+  },
+  "trace_counts": {
+    "final_graph_node_counts": [
+      4471
+    ],
+    "graph_builds_final_lines": 45,
+    "phase_lines": 2160,
+    "subphase_lines": 35100
+  }
+}
