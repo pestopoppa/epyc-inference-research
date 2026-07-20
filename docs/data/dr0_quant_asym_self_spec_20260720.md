@@ -92,3 +92,44 @@ still not decision-grade: quality passed only `6/12`, and combined K2 still chan
 one CPU-baseline output hash (`exact_format_strict_instruction`). Next gate: repair
 the strict prompt/schema controls and require target-output stability on every task
 before considering any serving or routing integration.
+
+## DR-0e.2 Quality/Stability Repair And Full K Sweep
+
+Runner source commits:
+
+- `e0347ff3` repaired the DR-0e strict task geometry: the structured JSON task now
+  fits the global token cap, and the runner added an explicit combined-vs-CPU
+  output-stability gate.
+- `531a4e83` replaced the remaining ambiguous strict-format row with an exact
+  five-line fixture.
+- `61a21d0a` corrected the F/H accounting verdict when F/H telemetry, quality,
+  cleanup, and output stability all pass.
+
+Final artifact:
+`data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T060423Z_dr0e2_full_k_sweep_final/`.
+
+The final full K sweep passed the repaired gates:
+
+- `quality_gate.status=pass` (`28/28` rows).
+- `output_stability_gate.status=pass`: every combined K arm matched the CPU Q4
+  verifier baseline hash on all four task classes.
+- `cleanup_proof.status=pass`; post-run checks showed no llama-family process leak
+  and no KFD PID leak.
+- `observation_grade=true`; `decision_grade=false`.
+
+| Arm | Decode t/s | Ratio vs CPU baseline | Alpha | F(K) verifier time | H(K) overhead |
+|---|---:|---:|---:|---:|---:|
+| CPU Q4 verifier baseline | 7.083 | 1.000x | n/a | n/a | n/a |
+| MI210 IQ2 drafter alone, K1 | 52.776 | n/a | 0.817 | n/a | n/a |
+| MI210 IQ2 drafter alone, K2 | 58.848 | n/a | 0.845 | n/a | n/a |
+| MI210 IQ2 drafter alone, K4 | 40.513 | n/a | 0.725 | n/a | n/a |
+| CPU Q4 + MI210 IQ2 combined, K1 | 9.888 | 1.396x | 0.945 | 39.040 s | 0.545 s |
+| CPU Q4 + MI210 IQ2 combined, K2 | 11.407 | 1.610x | 0.900 | 33.667 s | 0.657 s |
+| CPU Q4 + MI210 IQ2 combined, K4 | 11.847 | 1.672x | 0.787 | 32.280 s | 0.781 s |
+
+Interpretation: DR-0e.2 closes the acceptance/economics measurement gate for this
+bounded task slice. The best decode speed remains K4 (`1.672x`), while K2 is the
+cleaner middle point (`1.610x`, alpha `0.900`, lower H than K4). This does not
+roll out serving: the result is observation-grade and still needs a separate
+serving/routing design plus any production-named GPU certification required by
+`P-GPU-1`.

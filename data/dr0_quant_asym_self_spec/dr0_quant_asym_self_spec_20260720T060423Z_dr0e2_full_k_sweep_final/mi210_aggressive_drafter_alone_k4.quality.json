@@ -1,0 +1,75 @@
+[
+  {
+    "checker": "strict repeated/structured output count",
+    "details": {
+      "all_status_ready": true,
+      "error_count": 0,
+      "errors": [],
+      "expected_indexes": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "indexes_in_order": true,
+      "json_object_count": 16,
+      "keys_exact": true,
+      "line_count": 16
+    },
+    "pass": true,
+    "status": "checked",
+    "task_class": "repetitive_structured_generation"
+  },
+  {
+    "checker": "single valid JSON decision object with required keys",
+    "details": {
+      "confidence_ok": true,
+      "decision_ok": true,
+      "json_ok": true,
+      "keys": [
+        "confidence",
+        "decision",
+        "rationale"
+      ],
+      "keys_exact": true
+    },
+    "pass": true,
+    "status": "checked",
+    "task_class": "bounded_architect_reviewer_json_decision"
+  },
+  {
+    "checker": "states no blocking bug and cites the invariant",
+    "details": {
+      "bullet_like": true,
+      "cites_invariant": true,
+      "line_count": 3,
+      "states_no_bug": true
+    },
+    "pass": true,
+    "status": "checked",
+    "task_class": "short_code_review_no_bug_control"
+  },
+  {
+    "checker": "exact expected five-line fixture",
+    "details": {
+      "exact_match": true,
+      "expected_line_count": 5,
+      "line_count": 5
+    },
+    "pass": true,
+    "status": "checked",
+    "task_class": "exact_format_strict_instruction"
+  }
+]

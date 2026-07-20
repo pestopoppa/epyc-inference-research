@@ -1,0 +1,609 @@
+{
+  "arms": [
+    {
+      "device": "cpu",
+      "id": "cpu_high_quant_verifier_baseline",
+      "purpose": "High-quant CPU verifier baseline for the selected task classes",
+      "role": "verifier_baseline",
+      "spec_type": "none"
+    },
+    {
+      "device": "mi210",
+      "id": "mi210_aggressive_drafter_alone",
+      "purpose": "MI210 resident aggressive same-family artifact, measured without CPU verifier",
+      "role": "drafter_alone",
+      "spec_type": "ngram-mod,draft-mtp"
+    },
+    {
+      "device": "cpu_plus_mi210",
+      "id": "quant_asymmetric_combined",
+      "purpose": "CPU 122B Q4 verifier with MI210 122B IQ2 MTP drafter, only valid when F/H are observable",
+      "role": "combined",
+      "spec_type": "draft-mtp"
+    }
+  ],
+  "command_templates": [
+    {
+      "argv": [
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19730",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "96",
+        "-ub",
+        "1024",
+        "--metrics",
+        "--slots",
+        "--jinja",
+        "--reasoning",
+        "off",
+        "--device",
+        "none",
+        "-ngl",
+        "0",
+        "--spec-type",
+        "none"
+      ],
+      "arm": "cpu_high_quant_verifier_baseline",
+      "base_arm": "cpu_high_quant_verifier_baseline",
+      "env": {
+        "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "OMP_NUM_THREADS": "1",
+        "PATH": "/usr/bin:/bin:/opt/rocm/bin"
+      },
+      "expected_artifacts": [
+        "cpu_high_quant_verifier_baseline.server.log",
+        "cpu_high_quant_verifier_baseline.responses.jsonl",
+        "cpu_high_quant_verifier_baseline.metrics.json",
+        "cpu_high_quant_verifier_baseline.quality.json",
+        "cpu_high_quant_verifier_baseline.cleanup.json"
+      ],
+      "fresh_server_required": true,
+      "k": null,
+      "port": 19730,
+      "purpose": "High-quant CPU verifier baseline for the selected task classes",
+      "role": "verifier_baseline",
+      "shell": "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 PATH=/usr/bin:/bin:/opt/rocm/bin /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf --host 127.0.0.1 --port 19730 -np 1 -c 8192 -t 96 -ub 1024 --metrics --slots --jinja --reasoning off --device none -ngl 0 --spec-type none"
+    },
+    {
+      "argv": [
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19731",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "32",
+        "-ub",
+        "1024",
+        "--metrics",
+        "--slots",
+        "--jinja",
+        "--reasoning",
+        "off",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "all",
+        "-ctk",
+        "q4_0",
+        "-ctv",
+        "f16",
+        "-fa",
+        "on",
+        "--spec-type",
+        "ngram-mod,draft-mtp",
+        "--spec-draft-n-max",
+        "1"
+      ],
+      "arm": "mi210_aggressive_drafter_alone_k1",
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "env": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "OMP_NUM_THREADS": "1",
+        "PATH": "/usr/bin:/bin:/opt/rocm/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "expected_artifacts": [
+        "mi210_aggressive_drafter_alone_k1.server.log",
+        "mi210_aggressive_drafter_alone_k1.responses.jsonl",
+        "mi210_aggressive_drafter_alone_k1.metrics.json",
+        "mi210_aggressive_drafter_alone_k1.quality.json",
+        "mi210_aggressive_drafter_alone_k1.cleanup.json"
+      ],
+      "fresh_server_required": true,
+      "k": 1,
+      "port": 19731,
+      "purpose": "MI210 resident aggressive same-family artifact, measured without CPU verifier",
+      "role": "drafter_alone",
+      "shell": "HIP_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 PATH=/usr/bin:/bin:/opt/rocm/bin ROCR_VISIBLE_DEVICES=0 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf --host 127.0.0.1 --port 19731 -np 1 -c 8192 -t 32 -ub 1024 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl all -ctk q4_0 -ctv f16 -fa on --spec-type ngram-mod,draft-mtp --spec-draft-n-max 1"
+    },
+    {
+      "argv": [
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19732",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "32",
+        "-ub",
+        "1024",
+        "--metrics",
+        "--slots",
+        "--jinja",
+        "--reasoning",
+        "off",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "all",
+        "-ctk",
+        "q4_0",
+        "-ctv",
+        "f16",
+        "-fa",
+        "on",
+        "--spec-type",
+        "ngram-mod,draft-mtp",
+        "--spec-draft-n-max",
+        "2"
+      ],
+      "arm": "mi210_aggressive_drafter_alone_k2",
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "env": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "OMP_NUM_THREADS": "1",
+        "PATH": "/usr/bin:/bin:/opt/rocm/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "expected_artifacts": [
+        "mi210_aggressive_drafter_alone_k2.server.log",
+        "mi210_aggressive_drafter_alone_k2.responses.jsonl",
+        "mi210_aggressive_drafter_alone_k2.metrics.json",
+        "mi210_aggressive_drafter_alone_k2.quality.json",
+        "mi210_aggressive_drafter_alone_k2.cleanup.json"
+      ],
+      "fresh_server_required": true,
+      "k": 2,
+      "port": 19732,
+      "purpose": "MI210 resident aggressive same-family artifact, measured without CPU verifier",
+      "role": "drafter_alone",
+      "shell": "HIP_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 PATH=/usr/bin:/bin:/opt/rocm/bin ROCR_VISIBLE_DEVICES=0 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf --host 127.0.0.1 --port 19732 -np 1 -c 8192 -t 32 -ub 1024 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl all -ctk q4_0 -ctv f16 -fa on --spec-type ngram-mod,draft-mtp --spec-draft-n-max 2"
+    },
+    {
+      "argv": [
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19733",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "32",
+        "-ub",
+        "1024",
+        "--metrics",
+        "--slots",
+        "--jinja",
+        "--reasoning",
+        "off",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "all",
+        "-ctk",
+        "q4_0",
+        "-ctv",
+        "f16",
+        "-fa",
+        "on",
+        "--spec-type",
+        "ngram-mod,draft-mtp",
+        "--spec-draft-n-max",
+        "4"
+      ],
+      "arm": "mi210_aggressive_drafter_alone_k4",
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "env": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "OMP_NUM_THREADS": "1",
+        "PATH": "/usr/bin:/bin:/opt/rocm/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "expected_artifacts": [
+        "mi210_aggressive_drafter_alone_k4.server.log",
+        "mi210_aggressive_drafter_alone_k4.responses.jsonl",
+        "mi210_aggressive_drafter_alone_k4.metrics.json",
+        "mi210_aggressive_drafter_alone_k4.quality.json",
+        "mi210_aggressive_drafter_alone_k4.cleanup.json"
+      ],
+      "fresh_server_required": true,
+      "k": 4,
+      "port": 19733,
+      "purpose": "MI210 resident aggressive same-family artifact, measured without CPU verifier",
+      "role": "drafter_alone",
+      "shell": "HIP_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 PATH=/usr/bin:/bin:/opt/rocm/bin ROCR_VISIBLE_DEVICES=0 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf --host 127.0.0.1 --port 19733 -np 1 -c 8192 -t 32 -ub 1024 --metrics --slots --jinja --reasoning off --device ROCm0 -ngl all -ctk q4_0 -ctv f16 -fa on --spec-type ngram-mod,draft-mtp --spec-draft-n-max 4"
+    },
+    {
+      "argv": [
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf",
+        "-md",
+        "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19734",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "96",
+        "-ub",
+        "1024",
+        "--metrics",
+        "--slots",
+        "--jinja",
+        "--reasoning",
+        "off",
+        "--device",
+        "none",
+        "-ngl",
+        "0",
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-device",
+        "ROCm0",
+        "--spec-draft-ngl",
+        "all",
+        "--spec-draft-n-max",
+        "1"
+      ],
+      "arm": "quant_asymmetric_combined_k1",
+      "base_arm": "quant_asymmetric_combined",
+      "env": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "OMP_NUM_THREADS": "1",
+        "PATH": "/usr/bin:/bin:/opt/rocm/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "expected_artifacts": [
+        "quant_asymmetric_combined_k1.server.log",
+        "quant_asymmetric_combined_k1.responses.jsonl",
+        "quant_asymmetric_combined_k1.metrics.json",
+        "quant_asymmetric_combined_k1.quality.json",
+        "quant_asymmetric_combined_k1.cleanup.json"
+      ],
+      "fresh_server_required": true,
+      "k": 1,
+      "port": 19734,
+      "purpose": "CPU 122B Q4 verifier with MI210 122B IQ2 MTP drafter, only valid when F/H are observable",
+      "role": "combined",
+      "shell": "HIP_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 PATH=/usr/bin:/bin:/opt/rocm/bin ROCR_VISIBLE_DEVICES=0 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf -md /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf --host 127.0.0.1 --port 19734 -np 1 -c 8192 -t 96 -ub 1024 --metrics --slots --jinja --reasoning off --device none -ngl 0 --spec-type draft-mtp --spec-draft-device ROCm0 --spec-draft-ngl all --spec-draft-n-max 1"
+    },
+    {
+      "argv": [
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf",
+        "-md",
+        "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19735",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "96",
+        "-ub",
+        "1024",
+        "--metrics",
+        "--slots",
+        "--jinja",
+        "--reasoning",
+        "off",
+        "--device",
+        "none",
+        "-ngl",
+        "0",
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-device",
+        "ROCm0",
+        "--spec-draft-ngl",
+        "all",
+        "--spec-draft-n-max",
+        "2"
+      ],
+      "arm": "quant_asymmetric_combined_k2",
+      "base_arm": "quant_asymmetric_combined",
+      "env": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "OMP_NUM_THREADS": "1",
+        "PATH": "/usr/bin:/bin:/opt/rocm/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "expected_artifacts": [
+        "quant_asymmetric_combined_k2.server.log",
+        "quant_asymmetric_combined_k2.responses.jsonl",
+        "quant_asymmetric_combined_k2.metrics.json",
+        "quant_asymmetric_combined_k2.quality.json",
+        "quant_asymmetric_combined_k2.cleanup.json"
+      ],
+      "fresh_server_required": true,
+      "k": 2,
+      "port": 19735,
+      "purpose": "CPU 122B Q4 verifier with MI210 122B IQ2 MTP drafter, only valid when F/H are observable",
+      "role": "combined",
+      "shell": "HIP_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 PATH=/usr/bin:/bin:/opt/rocm/bin ROCR_VISIBLE_DEVICES=0 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf -md /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf --host 127.0.0.1 --port 19735 -np 1 -c 8192 -t 96 -ub 1024 --metrics --slots --jinja --reasoning off --device none -ngl 0 --spec-type draft-mtp --spec-draft-device ROCm0 --spec-draft-ngl all --spec-draft-n-max 2"
+    },
+    {
+      "argv": [
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf",
+        "-md",
+        "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "19736",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "96",
+        "-ub",
+        "1024",
+        "--metrics",
+        "--slots",
+        "--jinja",
+        "--reasoning",
+        "off",
+        "--device",
+        "none",
+        "-ngl",
+        "0",
+        "--spec-type",
+        "draft-mtp",
+        "--spec-draft-device",
+        "ROCm0",
+        "--spec-draft-ngl",
+        "all",
+        "--spec-draft-n-max",
+        "4"
+      ],
+      "arm": "quant_asymmetric_combined_k4",
+      "base_arm": "quant_asymmetric_combined",
+      "env": {
+        "HIP_VISIBLE_DEVICES": "0",
+        "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "OMP_NUM_THREADS": "1",
+        "PATH": "/usr/bin:/bin:/opt/rocm/bin",
+        "ROCR_VISIBLE_DEVICES": "0"
+      },
+      "expected_artifacts": [
+        "quant_asymmetric_combined_k4.server.log",
+        "quant_asymmetric_combined_k4.responses.jsonl",
+        "quant_asymmetric_combined_k4.metrics.json",
+        "quant_asymmetric_combined_k4.quality.json",
+        "quant_asymmetric_combined_k4.cleanup.json"
+      ],
+      "fresh_server_required": true,
+      "k": 4,
+      "port": 19736,
+      "purpose": "CPU 122B Q4 verifier with MI210 122B IQ2 MTP drafter, only valid when F/H are observable",
+      "role": "combined",
+      "shell": "HIP_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin OMP_NUM_THREADS=1 PATH=/usr/bin:/bin:/opt/rocm/bin ROCR_VISIBLE_DEVICES=0 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf -md /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf --host 127.0.0.1 --port 19736 -np 1 -c 8192 -t 96 -ub 1024 --metrics --slots --jinja --reasoning off --device none -ngl 0 --spec-type draft-mtp --spec-draft-device ROCm0 --spec-draft-ngl all --spec-draft-n-max 4"
+    }
+  ],
+  "created_at": "2026-07-20T06:04:23.587221+00:00",
+  "dry_run_only": false,
+  "execution_variants": [
+    {
+      "base_arm": "cpu_high_quant_verifier_baseline",
+      "device": "cpu",
+      "id": "cpu_high_quant_verifier_baseline",
+      "k": null,
+      "role": "verifier_baseline",
+      "spec_type": "none"
+    },
+    {
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "device": "mi210",
+      "id": "mi210_aggressive_drafter_alone_k1",
+      "k": 1,
+      "role": "drafter_alone",
+      "spec_type": "ngram-mod,draft-mtp"
+    },
+    {
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "device": "mi210",
+      "id": "mi210_aggressive_drafter_alone_k2",
+      "k": 2,
+      "role": "drafter_alone",
+      "spec_type": "ngram-mod,draft-mtp"
+    },
+    {
+      "base_arm": "mi210_aggressive_drafter_alone",
+      "device": "mi210",
+      "id": "mi210_aggressive_drafter_alone_k4",
+      "k": 4,
+      "role": "drafter_alone",
+      "spec_type": "ngram-mod,draft-mtp"
+    },
+    {
+      "base_arm": "quant_asymmetric_combined",
+      "device": "cpu_plus_mi210",
+      "id": "quant_asymmetric_combined_k1",
+      "k": 1,
+      "role": "combined",
+      "spec_type": "draft-mtp"
+    },
+    {
+      "base_arm": "quant_asymmetric_combined",
+      "device": "cpu_plus_mi210",
+      "id": "quant_asymmetric_combined_k2",
+      "k": 2,
+      "role": "combined",
+      "spec_type": "draft-mtp"
+    },
+    {
+      "base_arm": "quant_asymmetric_combined",
+      "device": "cpu_plus_mi210",
+      "id": "quant_asymmetric_combined_k4",
+      "k": 4,
+      "role": "combined",
+      "spec_type": "draft-mtp"
+    }
+  ],
+  "identity": {
+    "llama_cpp_experimental": {
+      "branch": "experimental-v7-refresh-20260716",
+      "head": "12a292f0c21d34b6d1db437291afbcbfb33bc491",
+      "root": "/mnt/raid0/llm/llama.cpp-experimental",
+      "tracked_status_short": "M ggml/src/ggml-backend.cpp\n M ggml/src/ggml-cpu/ggml-cpu.c\n M ggml/src/ggml-cpu/ops.cpp\n M src/llama-graph.cpp\n M src/llama-graph.h\n M src/models/models.h\n M src/models/qwen35.cpp\n M src/models/qwen35moe.cpp\n M tests/test-backend-ops.cpp\n M tools/server/server-context.cpp\n M tools/server/server-task.cpp\n M tools/server/server-task.h",
+      "untracked_status": "omitted_from_manifest"
+    },
+    "models": {
+      "cpu_verifier": {
+        "exists": true,
+        "mtime_utc": "2026-06-25T20:32:28.905745+00:00",
+        "path": "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf",
+        "size_bytes": 10943808
+      },
+      "mi210_drafter": {
+        "exists": true,
+        "mtime_utc": "2026-07-05T00:43:26.354768+00:00",
+        "path": "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf",
+        "size_bytes": 40377862848
+      }
+    },
+    "research": {
+      "branch": "main",
+      "head": "61a21d0a9d3039669f7dbe81d0f48517f293db6e",
+      "root": "/mnt/raid0/llm/epyc-inference-research",
+      "tracked_status_short": "",
+      "untracked_status": "omitted_from_manifest"
+    },
+    "server_binary": {
+      "exists": true,
+      "mtime_utc": "2026-07-20T05:00:45.531921+00:00",
+      "path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+      "production_v6_refused": "/mnt/raid0/llm/llama.cpp",
+      "size_bytes": 17984,
+      "version": "version: 10099 (12a292f0c)\nbuilt with GNU 15.2.0 for Linux x86_64"
+    }
+  },
+  "live_port_policy": "execute uses ephemeral ports by default; per-arm *.command.json files are the source of truth for actual live ports unless --fixed-ports is supplied",
+  "mode": "execute",
+  "parameters": {
+    "context": 8192,
+    "fixed_ports": false,
+    "k_values": [
+      1,
+      2,
+      4
+    ],
+    "max_tokens": 256,
+    "request_timeout_s": 600,
+    "seed": 42,
+    "spec_draft_n_max": 2,
+    "startup_timeout_s": 900,
+    "temperature": 0.0,
+    "threads": 96,
+    "ubatch": 1024
+  },
+  "recent_observation_inputs": [
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_long_mtp_ab_local_20260719T013555Z/summary.json",
+      "summary": "long repeated output: no-spec 37.87 t/s, draft-mtp 60.65 t/s, 511/511 accepted"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_long_ngram_mtp_local_20260719T013814Z/summary.json",
+      "summary": "long repeated output: ngram-mod,draft-mtp 287.09 t/s, 746/746 accepted, quality_sanity=true"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_mixed_ngram_mtp_ab_local_20260719T013943Z/summary.json",
+      "summary": "mixed 3-prompt slice: no-spec 41.85 t/s, composed 50.77 t/s, 3/3 quality"
+    },
+    {
+      "artifact": "data/model_admission_throughput/qwen35_122b_iq2m_ngram_mtp_broad_20260719T014335Z/summary.json",
+      "summary": "broad 8-prompt slice: composed mean 80.77 t/s, 1166/1440 accepted, 5/8 quality"
+    }
+  ],
+  "required_live_artifacts": [
+    "manifest.json",
+    "commands.sh",
+    "summary.json",
+    "per-arm server command/env/identity",
+    "per-arm metrics: prompt/generated/draft/accepted tokens, alpha, wall/prompt/decode times",
+    "per-arm quality results for every included task class",
+    "pre/post pgrep process snapshots",
+    "pre/post rocm-smi --showpids cleanup proof",
+    "F/H accounting fields with observable values or machine-readable not-observable markers"
+  ],
+  "run_id": "dr0_quant_asym_self_spec_20260720T060423Z_dr0e2_full_k_sweep_final",
+  "schema": "epyc.dr0_quant_asym_self_spec.manifest.v1",
+  "scope": "DR-0 quant-asymmetric self-spec accounting runner",
+  "source_run_sheet": "/mnt/raid0/llm/epyc-root/docs/reference/mi210-axa-dr0-run-sheets-2026-07-19.md",
+  "task_classes": [
+    {
+      "id": "repetitive_structured_generation",
+      "prompt": "Write exactly 16 lines. Each line must be valid JSON with keys index and status. Use index values 0 through 15 in order. Use status value READY on every line. Do not write any text before or after the JSON lines.",
+      "quality_sanity": "strict repeated/structured output count"
+    },
+    {
+      "id": "bounded_architect_reviewer_json_decision",
+      "prompt": "Return only JSON with keys decision, confidence, and rationale. Decide whether a default-off benchmark gate should run when cleanup telemetry is missing.",
+      "quality_sanity": "single valid JSON decision object with required keys"
+    },
+    {
+      "id": "short_code_review_no_bug_control",
+      "prompt": "Review this function for bugs: def add(a, b): return a + b. Return exactly three concise bullets. State that there is no blocking bug and cite the addition invariant. Do not invent missing context.",
+      "quality_sanity": "states no blocking bug and cites the invariant"
+    },
+    {
+      "id": "exact_format_strict_instruction",
+      "prompt": "Return exactly these five lines and nothing else:\nDR0-1 alpha beta gamma delta epsilon\nDR0-2 alpha beta gamma delta epsilon\nDR0-3 alpha beta gamma delta epsilon\nDR0-4 alpha beta gamma delta epsilon\nDR0-5 alpha beta gamma delta epsilon",
+      "quality_sanity": "exact expected five-line fixture"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+DR-0 cpu_high_quant_verifier_baseline: launch port=38453 k=None
+DR-0 cpu_high_quant_verifier_baseline: status=ok decode_tps=7.083239703264296 alpha=None
+DR-0 mi210_aggressive_drafter_alone_k1: launch port=52351 k=1
+DR-0 mi210_aggressive_drafter_alone_k1: status=ok decode_tps=52.775735911262565 alpha=0.8174603174603174
+DR-0 mi210_aggressive_drafter_alone_k2: launch port=57505 k=2
+DR-0 mi210_aggressive_drafter_alone_k2: status=ok decode_tps=58.8482773425787 alpha=0.8452012383900929
+DR-0 mi210_aggressive_drafter_alone_k4: launch port=60249 k=4
+DR-0 mi210_aggressive_drafter_alone_k4: status=ok decode_tps=40.513118857604965 alpha=0.725
+DR-0 quant_asymmetric_combined_k1: launch port=55421 k=1
+DR-0 quant_asymmetric_combined_k1: status=ok decode_tps=9.888239684472326 alpha=0.945273631840796
+DR-0 quant_asymmetric_combined_k2: launch port=58843 k=2
+DR-0 quant_asymmetric_combined_k2: status=ok decode_tps=11.407290678835064 alpha=0.9
+DR-0 quant_asymmetric_combined_k4: launch port=42607 k=4
+DR-0 quant_asymmetric_combined_k4: status=ok decode_tps=11.846607467073836 alpha=0.7868421052631579
+{"cleanup_status": "pass", "decision_grade": false, "output_dir": "data/dr0_quant_asym_self_spec/dr0_quant_asym_self_spec_20260720T060423Z_dr0e2_full_k_sweep_final", "quality_status": "pass", "status": "execute_complete"}
