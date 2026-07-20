@@ -1,0 +1,26 @@
+{
+  "status": "graph_chunked_path_negative",
+  "date_utc": "2026-07-20",
+  "model": "/mnt/raid0/llm/models/Qwen_Qwen3.6-35B-A3B-Q8_0.gguf",
+  "binary": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench",
+  "source_note": "temporary LLAMA_DISABLE_FUSED_GDN_CH=1 instrumentation used for measurement, then reverted",
+  "rows": [
+    {
+      "n_prompt": 2048,
+      "fused_ch_default_tps": 2100.063569,
+      "fused_ch_default_stddev_tps": 7.162508,
+      "fused_ch_disabled_tps": 1959.582667,
+      "fused_ch_disabled_stddev_tps": 5.989664,
+      "disabled_delta_pct": -6.689364268477538
+    },
+    {
+      "n_prompt": 8192,
+      "fused_ch_default_tps": 1995.065182,
+      "fused_ch_default_stddev_tps": 7.917836,
+      "fused_ch_disabled_tps": 1869.342129,
+      "fused_ch_disabled_stddev_tps": 6.367219,
+      "disabled_delta_pct": -6.301701525058235
+    }
+  ],
+  "interpretation": "Disabling fused GDN-CH and using the existing graph chunking path was slower in every measured prompt cell; K28 should remain a fused-kernel implementation task, not a policy switch."
+}
