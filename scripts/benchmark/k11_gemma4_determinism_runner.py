@@ -63,6 +63,16 @@ DEFAULT_REQUEST_SAMPLER_MODE = "current"
 DEFAULT_DRAFT_BACKEND_SAMPLING = "default"
 DEFAULT_SCHEMA_TASK = "none"
 SCHEMA_TASK_WORD_ARRAY_200 = "word-array-200"
+DEFAULT_TRACE_N_PROBS = 5
+DEFAULT_TRACE_RESPONSE_FIELDS = [
+    "choices",
+    "usage",
+    "timings",
+    "tokens",
+    "completion_probabilities",
+    "__verbose/tokens",
+    "__verbose/completion_probabilities",
+]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -141,6 +151,39 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Server-side speculative draft backend sampling toggle for K11 diagnostics.",
     )
     parser.add_argument(
+        "--trace-token-divergence",
+        action="store_true",
+        help=(
+            "Request token/probability metadata and write compact per-run traces for "
+            "first-divergent-token diagnostics."
+        ),
+    )
+    parser.add_argument(
+        "--trace-n-probs",
+        type=int,
+        default=DEFAULT_TRACE_N_PROBS,
+        help="Top token probabilities to request when --trace-token-divergence is set.",
+    )
+    parser.add_argument(
+        "--trace-post-sampling-probs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "When tracing, request post-sampling probabilities. Use "
+            "--no-trace-post-sampling-probs for pre-sampling logprobs."
+        ),
+    )
+    parser.add_argument(
+        "--trace-response-field",
+        action="append",
+        dest="trace_response_fields",
+        default=[],
+        help=(
+            "Response field to request when tracing; may be repeated. Defaults to "
+            "compact chat/native token fields."
+        ),
+    )
+    parser.add_argument(
         "--target-model",
         type=Path,
         default=DEFAULT_TARGET_MODEL,
@@ -189,7 +232,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_PORT_TIMEOUT_S,
         help="Server health timeout in seconds",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.trace_n_probs < 0:
+        parser.error("--trace-n-probs must be >= 0")
+    return args
 
 
 def canonical_json(obj: Any) -> str:
@@ -239,6 +285,28 @@ def apply_request_sampler_mode(payload: dict[str, Any], mode: str) -> None:
         raise ValueError(f"unknown request sampler mode: {mode}")
 
 
+def trace_response_fields_from_args(args: argparse.Namespace) -> list[str]:
+    fields = getattr(args, "trace_response_fields", None)
+    return list(fields) if fields else list(DEFAULT_TRACE_RESPONSE_FIELDS)
+
+
+def apply_token_trace_options(
+    payload: dict[str, Any],
+    *,
+    enabled: bool,
+    n_probs: int = DEFAULT_TRACE_N_PROBS,
+    post_sampling_probs: bool = True,
+    response_fields: list[str] | None = None,
+) -> None:
+    if not enabled:
+        return
+    payload["return_tokens"] = True
+    payload["n_probs"] = max(0, n_probs)
+    payload["post_sampling_probs"] = bool(post_sampling_probs)
+    payload["response_fields"] = list(response_fields or DEFAULT_TRACE_RESPONSE_FIELDS)
+    payload["verbose"] = True
+
+
 def json_schema_for_schema_task(schema_task: str) -> dict[str, Any] | None:
     if schema_task == DEFAULT_SCHEMA_TASK:
         return None
@@ -270,6 +338,11 @@ def query_chat(
     request_sampler_mode: str = DEFAULT_REQUEST_SAMPLER_MODE,
     stop: list[str] | None = None,
     json_schema: dict[str, Any] | None = None,
+    *,
+    trace_token_divergence: bool = False,
+    trace_n_probs: int = DEFAULT_TRACE_N_PROBS,
+    trace_post_sampling_probs: bool = True,
+    trace_response_fields: list[str] | None = None,
 ) -> tuple[dict[str, Any], str]:
     payload = {
         "model": "auto",
@@ -286,6 +359,13 @@ def query_chat(
     if json_schema is not None:
         payload["json_schema"] = json_schema
     apply_request_sampler_mode(payload, request_sampler_mode)
+    apply_token_trace_options(
+        payload,
+        enabled=trace_token_divergence,
+        n_probs=trace_n_probs,
+        post_sampling_probs=trace_post_sampling_probs,
+        response_fields=trace_response_fields,
+    )
     req = urllib.request.Request(
         f"http://127.0.0.1:{port}/v1/chat/completions",
         data=canonical_json(payload).encode("utf-8"),
@@ -446,6 +526,10 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "json_schema": json_schema_for_schema_task(args.schema_task),
             "request_sampler_mode": args.request_sampler_mode,
             "draft_backend_sampling": args.draft_backend_sampling,
+            "trace_token_divergence": args.trace_token_divergence,
+            "trace_n_probs": args.trace_n_probs,
+            "trace_post_sampling_probs": args.trace_post_sampling_probs,
+            "trace_response_fields": trace_response_fields_from_args(args),
             "threads": args.threads,
             "context": args.context,
             "ubatch": args.ubatch,
@@ -457,7 +541,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             {
                 "label": run.label,
                 "repeat_index": run.repeat_index,
-        "server_argv": build_server_argv(args, "[ephemeral]"),
+                "server_argv": build_server_argv(args, "[ephemeral]"),
             }
             for run in runs
         ],
@@ -533,22 +617,283 @@ def score_schema_task(content: str, schema_task: str) -> dict[str, Any] | None:
     }
 
 
+def normalize_text_content(value: Any) -> str:
+    if isinstance(value, list):
+        return "".join(part.get("text", "") if isinstance(part, dict) else str(part) for part in value)
+    return str(value or "")
+
+
+def first_choice(response: dict[str, Any]) -> dict[str, Any]:
+    choices = response.get("choices", [])
+    choice = choices[0] if choices else {}
+    return choice if isinstance(choice, dict) else {}
+
+
+def semantic_output_from_response(response: dict[str, Any]) -> tuple[dict[str, str], str | None]:
+    choice = first_choice(response)
+    message = choice.get("message", {}) if isinstance(choice, dict) else {}
+    if not isinstance(message, dict):
+        message = {}
+    return (
+        {
+            "content": normalize_text_content(message.get("content", "")),
+            "reasoning_content": normalize_text_content(message.get("reasoning_content", "")),
+        },
+        choice.get("finish_reason") if isinstance(choice, dict) else None,
+    )
+
+
+def word_count(text: str) -> int:
+    return len(text.split())
+
+
+def compact_token_entry(entry: Any, *, include_top: bool = True) -> dict[str, Any]:
+    if not isinstance(entry, dict):
+        return {"value": entry}
+
+    compact: dict[str, Any] = {}
+    for key in ("id", "token", "bytes", "prob", "logprob"):
+        if key in entry:
+            compact[key] = entry[key]
+
+    if include_top:
+        for top_key in ("top_probs", "top_logprobs"):
+            top_values = entry.get(top_key)
+            if isinstance(top_values, list):
+                compact[top_key] = [
+                    compact_token_entry(top_entry, include_top=False)
+                    for top_entry in top_values
+                    if isinstance(top_entry, dict)
+                ]
+    return compact
+
+
+def _token_ids_from_list(values: Any) -> list[int | str] | None:
+    if not isinstance(values, list):
+        return None
+    token_ids: list[int | str] = []
+    for value in values:
+        if isinstance(value, int):
+            token_ids.append(value)
+        elif isinstance(value, str):
+            token_ids.append(value)
+        elif isinstance(value, dict) and "id" in value:
+            token_ids.append(value["id"])
+        else:
+            return None
+    return token_ids
+
+
+def extract_token_ids(response: dict[str, Any]) -> tuple[list[int | str] | None, str | None]:
+    top_level = _token_ids_from_list(response.get("tokens"))
+    if top_level is not None:
+        return top_level, "tokens"
+
+    verbose = response.get("__verbose")
+    if isinstance(verbose, dict):
+        verbose_tokens = _token_ids_from_list(verbose.get("tokens"))
+        if verbose_tokens is not None:
+            return verbose_tokens, "__verbose.tokens"
+    return None, None
+
+
+def extract_probability_entries(response: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
+    choice = first_choice(response)
+    logprobs = choice.get("logprobs") if isinstance(choice, dict) else None
+    if isinstance(logprobs, dict) and isinstance(logprobs.get("content"), list):
+        return [entry for entry in logprobs["content"] if isinstance(entry, dict)], "choices[0].logprobs.content"
+
+    completion_probabilities = response.get("completion_probabilities")
+    if isinstance(completion_probabilities, list):
+        return [entry for entry in completion_probabilities if isinstance(entry, dict)], "completion_probabilities"
+
+    verbose = response.get("__verbose")
+    if isinstance(verbose, dict) and isinstance(verbose.get("completion_probabilities"), list):
+        return [
+            entry for entry in verbose["completion_probabilities"] if isinstance(entry, dict)
+        ], "__verbose.completion_probabilities"
+
+    return [], None
+
+
+def token_identity_from_entry(entry: dict[str, Any]) -> int | str | None:
+    if "id" in entry:
+        return entry["id"]
+    if "token" in entry:
+        return str(entry["token"])
+    return None
+
+
+def build_token_trace(
+    *,
+    label: str,
+    response: dict[str, Any],
+    content: str,
+    finish_reason: str | None,
+) -> dict[str, Any]:
+    token_ids, token_source = extract_token_ids(response)
+    probability_entries, probability_source = extract_probability_entries(response)
+    compact_entries = [compact_token_entry(entry) for entry in probability_entries]
+
+    sequence: list[int | str] = []
+    sequence_source: str | None = None
+    if token_ids is not None:
+        sequence = list(token_ids)
+        sequence_source = token_source
+    elif probability_entries:
+        sequence = [
+            identity
+            for identity in (token_identity_from_entry(entry) for entry in probability_entries)
+            if identity is not None
+        ]
+        sequence_source = probability_source
+
+    trace: dict[str, Any] = {
+        "label": label,
+        "finish_reason": finish_reason,
+        "content_word_count": word_count(content),
+        "token_count": len(sequence),
+        "sequence_source": sequence_source,
+        "probability_source": probability_source,
+        "sequence": sequence,
+    }
+    if token_ids is not None:
+        trace["token_ids"] = token_ids
+    if compact_entries:
+        trace["tokens"] = compact_entries
+    return trace
+
+
+def token_at(trace: dict[str, Any], index: int) -> dict[str, Any] | None:
+    tokens = trace.get("tokens")
+    if isinstance(tokens, list) and 0 <= index < len(tokens):
+        token = tokens[index]
+        return token if isinstance(token, dict) else {"value": token}
+    sequence = trace.get("sequence")
+    if isinstance(sequence, list) and 0 <= index < len(sequence):
+        return {"value": sequence[index]}
+    return None
+
+
+def common_prefix_length(sequences: list[list[int | str]]) -> int | None:
+    if not sequences:
+        return None
+    min_length = min(len(sequence) for sequence in sequences)
+    for index in range(min_length):
+        first = sequences[0][index]
+        if any(sequence[index] != first for sequence in sequences[1:]):
+            return index
+    return min_length
+
+
+def count_values(values: list[Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        key = str(value if value is not None else "missing")
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def build_token_divergence_summary(
+    *,
+    enabled: bool,
+    traces: list[dict[str, Any]],
+    results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not enabled:
+        return {"enabled": False}
+
+    trace_by_label = {trace.get("label"): trace for trace in traces}
+    ok_results = [result for result in results if result.get("status") == "ok"]
+    ordered_traces = [
+        trace_by_label.get(result.get("label"))
+        for result in ok_results
+        if isinstance(trace_by_label.get(result.get("label")), dict)
+    ]
+    sequences = [
+        list(trace.get("sequence", []))
+        for trace in ordered_traces
+        if trace.get("sequence_source") is not None and isinstance(trace.get("sequence"), list)
+    ]
+    per_run = [
+        {
+            "label": trace.get("label"),
+            "finish_reason": trace.get("finish_reason"),
+            "content_word_count": trace.get("content_word_count"),
+            "token_count": trace.get("token_count"),
+            "sequence_source": trace.get("sequence_source"),
+            "probability_source": trace.get("probability_source"),
+        }
+        for trace in ordered_traces
+    ]
+    if len(sequences) != len(ok_results) or not sequences:
+        return {
+            "enabled": True,
+            "available": False,
+            "ok_run_count": len(ok_results),
+            "trace_run_count": len(ordered_traces),
+            "sequence_run_count": len(sequences),
+            "per_run": per_run,
+        }
+
+    prefix_len = common_prefix_length(sequences)
+    assert prefix_len is not None
+    all_identical = all(sequence == sequences[0] for sequence in sequences[1:])
+    first_divergence = None
+    if not all_identical:
+        first_divergence = {
+            "index": prefix_len,
+            "by_run": [
+                {
+                    "label": trace.get("label"),
+                    "finish_reason": trace.get("finish_reason"),
+                    "token_count": trace.get("token_count"),
+                    "token": token_at(trace, prefix_len),
+                    "ended_before_index": prefix_len >= len(trace.get("sequence", [])),
+                }
+                for trace in ordered_traces
+            ],
+        }
+
+    token_counts = [len(sequence) for sequence in sequences]
+    return {
+        "enabled": True,
+        "available": True,
+        "ok_run_count": len(ok_results),
+        "trace_run_count": len(ordered_traces),
+        "sequence_run_count": len(sequences),
+        "common_prefix_length": prefix_len,
+        "all_token_sequences_identical": all_identical,
+        "min_token_count": min(token_counts),
+        "max_token_count": max(token_counts),
+        "first_divergence": first_divergence,
+        "per_run": per_run,
+    }
+
+
 def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     runs_dir = output_dir / "runs"
     logs_dir = output_dir / "logs"
     responses_dir = output_dir / "responses"
-    for directory in (runs_dir, logs_dir, responses_dir):
+    token_traces_dir = output_dir / "token_traces"
+    directories = [runs_dir, logs_dir, responses_dir]
+    if args.trace_token_divergence:
+        directories.append(token_traces_dir)
+    for directory in directories:
         directory.mkdir(parents=True, exist_ok=True)
 
     results: list[dict[str, Any]] = []
+    token_traces: list[dict[str, Any]] = []
     json_schema = json_schema_for_schema_task(args.schema_task)
+    trace_response_fields = trace_response_fields_from_args(args)
     for index in range(1, args.runs + 1):
         label = f"run_{index:02d}"
         port = pick_ephemeral_port()
         log_path = logs_dir / f"{label}.server.log"
         result_path = runs_dir / f"{label}.json"
         raw_response_path = responses_dir / f"{label}.raw.json"
+        token_trace_path = token_traces_dir / f"{label}.tokens.json"
         argv = build_server_argv(args, port)
         proc: subprocess.Popen[str] | None = None
         run_record: dict[str, Any] = {
@@ -564,6 +909,12 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
                 "prompt": args.prompt,
                 "stop": args.stop,
                 "schema_task": args.schema_task,
+                "trace_token_divergence": args.trace_token_divergence,
+                "trace_n_probs": args.trace_n_probs if args.trace_token_divergence else None,
+                "trace_post_sampling_probs": (
+                    args.trace_post_sampling_probs if args.trace_token_divergence else None
+                ),
+                "trace_response_fields": trace_response_fields if args.trace_token_divergence else None,
             },
         }
         try:
@@ -580,27 +931,13 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
                 request_sampler_mode=args.request_sampler_mode,
                 stop=args.stop,
                 json_schema=json_schema,
+                trace_token_divergence=args.trace_token_divergence,
+                trace_n_probs=args.trace_n_probs,
+                trace_post_sampling_probs=args.trace_post_sampling_probs,
+                trace_response_fields=trace_response_fields,
             )
             raw_response_path.write_text(raw_response, encoding="utf-8")
-            choices = response.get("choices", [])
-            choice = choices[0] if choices else {}
-            message = choice.get("message", {}) if isinstance(choice, dict) else {}
-            content = message.get("content", "")
-            if isinstance(content, list):
-                content = "".join(
-                    part.get("text", "") if isinstance(part, dict) else str(part)
-                    for part in content
-                )
-            reasoning_content = message.get("reasoning_content", "")
-            if isinstance(reasoning_content, list):
-                reasoning_content = "".join(
-                    part.get("text", "") if isinstance(part, dict) else str(part)
-                    for part in reasoning_content
-                )
-            semantic_output = {
-                "content": str(content or ""),
-                "reasoning_content": str(reasoning_content or ""),
-            }
+            semantic_output, finish_reason = semantic_output_from_response(response)
             timings = response.get("timings", {})
             usage = response.get("usage", {})
             output_hash = sha256_text(canonical_json(semantic_output))
@@ -615,13 +952,37 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
                     args.expected_word,
                     args.expected_word_count,
                 )
+            content_word_count = word_count(semantic_output["content"])
+            reasoning_word_count = word_count(semantic_output["reasoning_content"])
+            token_trace_summary = None
+            if args.trace_token_divergence:
+                token_trace = build_token_trace(
+                    label=label,
+                    response=response,
+                    content=semantic_output["content"],
+                    finish_reason=finish_reason,
+                )
+                token_trace_path.write_text(
+                    json.dumps(token_trace, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
+                token_traces.append(token_trace)
+                token_trace_summary = {
+                    "path": str(token_trace_path),
+                    "token_count": token_trace.get("token_count"),
+                    "sequence_source": token_trace.get("sequence_source"),
+                    "probability_source": token_trace.get("probability_source"),
+                }
             run_record.update(
                 {
                     "status": "ok",
+                    "finish_reason": finish_reason,
                     "response_sha256": response_hash,
                     "output_sha256": output_hash,
                     "content": semantic_output["content"],
                     "reasoning_content": semantic_output["reasoning_content"],
+                    "content_word_count": content_word_count,
+                    "reasoning_word_count": reasoning_word_count,
                     "usage": usage,
                     "timings": timings,
                     "draft_n": draft_n,
@@ -629,6 +990,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
                     "acceptance_rate": round(acceptance_rate, 6),
                     "task_eval": task_eval,
                     "response_path": str(raw_response_path),
+                    "token_trace": token_trace_summary,
                 }
             )
             result_path.write_text(json.dumps(run_record, indent=2, sort_keys=True), encoding="utf-8")
@@ -657,6 +1019,9 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     deterministic = len(unique_hashes) <= 1 and len(hashes) == args.runs and all(r.get("status") == "ok" for r in results)
     task_evals = [r.get("task_eval") for r in results if r.get("task_eval") is not None]
     task_passed = all(e.get("passed") for e in task_evals) if task_evals else None
+    ok_results = [r for r in results if r.get("status") == "ok"]
+    finish_reasons = count_values([r.get("finish_reason") for r in ok_results])
+    content_word_counts = [r.get("content_word_count") for r in ok_results]
     summary = {
         "mode": "execute",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -673,10 +1038,21 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         "json_schema": json_schema,
         "request_sampler_mode": args.request_sampler_mode,
         "draft_backend_sampling": args.draft_backend_sampling,
+        "trace_token_divergence": args.trace_token_divergence,
+        "trace_n_probs": args.trace_n_probs,
+        "trace_post_sampling_probs": args.trace_post_sampling_probs,
+        "trace_response_fields": trace_response_fields,
         "runs": results,
         "unique_output_hashes": unique_hashes,
         "deterministic": deterministic,
         "task_passed": task_passed,
+        "finish_reasons": finish_reasons,
+        "content_word_counts": content_word_counts,
+        "token_divergence": build_token_divergence_summary(
+            enabled=args.trace_token_divergence,
+            traces=token_traces,
+            results=results,
+        ),
     }
     (output_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
     return summary
@@ -712,6 +1088,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"request_sampler_mode: {args.request_sampler_mode}")
     print(f"draft_backend_sampling: {args.draft_backend_sampling}")
     print(f"schema_task: {args.schema_task}")
+    print(f"trace_token_divergence: {args.trace_token_divergence}")
+    if args.trace_token_divergence:
+        print(f"trace_n_probs: {args.trace_n_probs}")
+        print(f"trace_post_sampling_probs: {args.trace_post_sampling_probs}")
+        print(f"trace_response_fields: {trace_response_fields_from_args(args)}")
     if args.expected_word is not None or args.expected_word_count is not None:
         print(f"expected_word: {args.expected_word}")
         print(f"expected_word_count: {args.expected_word_count}")

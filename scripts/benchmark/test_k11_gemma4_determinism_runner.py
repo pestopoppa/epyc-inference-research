@@ -28,6 +28,11 @@ class _FakeResponse:
         return json.dumps(self._payload).encode("utf-8")
 
 
+class _FakeProc:
+    def __init__(self, pid: int):
+        self.pid = pid
+
+
 class TestK11Gemma4DeterminismRunner(unittest.TestCase):
     def test_build_server_argv_pins_experimental_v7_build(self) -> None:
         args = runner.parse_args(["--runs", "2"])
@@ -174,6 +179,8 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
         self.assertEqual(seen["payload"]["seed"], 42)
         self.assertEqual(seen["payload"]["temperature"], 0.0)
         self.assertEqual(seen["payload"]["top_k"], 1)
+        self.assertNotIn("return_tokens", seen["payload"])
+        self.assertNotIn("n_probs", seen["payload"])
         self.assertEqual(response["choices"][0]["message"]["content"], "OK")
         self.assertEqual(json.loads(raw)["timings"]["draft_n_accepted"], 4)
 
@@ -202,6 +209,33 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
 
         self.assertEqual(seen["payload"]["json_schema"], schema)
 
+    def test_query_chat_can_request_token_trace_metadata(self) -> None:
+        seen = {}
+
+        def fake_urlopen(req, timeout):  # noqa: ANN001
+            seen["payload"] = json.loads(req.data.decode("utf-8"))
+            return _FakeResponse({"choices": [{"message": {"content": "OK"}}]})
+
+        with mock.patch.object(runner.urllib.request, "urlopen", fake_urlopen):
+            runner.query_chat(
+                18080,
+                "prompt",
+                64,
+                0.0,
+                42,
+                5,
+                trace_token_divergence=True,
+                trace_n_probs=7,
+                trace_post_sampling_probs=True,
+                trace_response_fields=["choices", "tokens"],
+            )
+
+        self.assertIs(seen["payload"]["return_tokens"], True)
+        self.assertEqual(seen["payload"]["n_probs"], 7)
+        self.assertIs(seen["payload"]["post_sampling_probs"], True)
+        self.assertEqual(seen["payload"]["response_fields"], ["choices", "tokens"])
+        self.assertIs(seen["payload"]["verbose"], True)
+
     def test_query_chat_can_send_explicit_greedy_payload(self) -> None:
         seen = {}
 
@@ -220,6 +254,179 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
         self.assertEqual(seen["payload"]["samplers"], ["temperature"])
         self.assertEqual(seen["payload"]["top_k"], 0)
         self.assertIs(seen["payload"]["backend_sampling"], False)
+
+    def test_build_token_trace_compacts_chat_logprobs(self) -> None:
+        response = {
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {"content": "alpha beta"},
+                    "logprobs": {
+                        "content": [
+                            {
+                                "id": 11,
+                                "token": "alpha",
+                                "bytes": [97],
+                                "prob": 0.8,
+                                "top_probs": [
+                                    {"id": 11, "token": "alpha", "prob": 0.8},
+                                    {"id": 12, "token": "beta", "prob": 0.2},
+                                ],
+                            },
+                            {"id": 13, "token": " beta", "bytes": [32, 98], "prob": 0.9},
+                        ]
+                    },
+                }
+            ],
+        }
+
+        trace = runner.build_token_trace(
+            label="run_01",
+            response=response,
+            content="alpha beta",
+            finish_reason="stop",
+        )
+
+        self.assertEqual(trace["finish_reason"], "stop")
+        self.assertEqual(trace["content_word_count"], 2)
+        self.assertEqual(trace["token_count"], 2)
+        self.assertEqual(trace["sequence"], [11, 13])
+        self.assertEqual(trace["sequence_source"], "choices[0].logprobs.content")
+        self.assertEqual(trace["tokens"][0]["top_probs"][1]["token"], "beta")
+
+    def test_build_token_trace_prefers_returned_token_ids(self) -> None:
+        response = {
+            "__verbose": {"tokens": [101, 102]},
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {"content": "alpha"},
+                    "logprobs": {"content": [{"id": 201, "token": "alpha", "logprob": -0.1}]},
+                }
+            ],
+        }
+
+        trace = runner.build_token_trace(
+            label="run_01",
+            response=response,
+            content="alpha",
+            finish_reason="length",
+        )
+
+        self.assertEqual(trace["sequence"], [101, 102])
+        self.assertEqual(trace["sequence_source"], "__verbose.tokens")
+        self.assertEqual(trace["probability_source"], "choices[0].logprobs.content")
+
+    def test_build_token_divergence_summary_reports_first_divergent_token(self) -> None:
+        traces = [
+            {
+                "label": "run_01",
+                "finish_reason": "stop",
+                "content_word_count": 3,
+                "token_count": 3,
+                "sequence_source": "tokens",
+                "probability_source": "choices[0].logprobs.content",
+                "sequence": [10, 20, 30],
+                "tokens": [{"id": 10}, {"id": 20}, {"id": 30, "token": "A", "prob": 0.7}],
+            },
+            {
+                "label": "run_02",
+                "finish_reason": "stop",
+                "content_word_count": 3,
+                "token_count": 3,
+                "sequence_source": "tokens",
+                "probability_source": "choices[0].logprobs.content",
+                "sequence": [10, 20, 31],
+                "tokens": [{"id": 10}, {"id": 20}, {"id": 31, "token": "B", "prob": 0.6}],
+            },
+        ]
+        results = [{"label": "run_01", "status": "ok"}, {"label": "run_02", "status": "ok"}]
+
+        summary = runner.build_token_divergence_summary(
+            enabled=True,
+            traces=traces,
+            results=results,
+        )
+
+        self.assertTrue(summary["available"])
+        self.assertEqual(summary["common_prefix_length"], 2)
+        self.assertFalse(summary["all_token_sequences_identical"])
+        self.assertEqual(summary["first_divergence"]["index"], 2)
+        self.assertEqual(summary["first_divergence"]["by_run"][0]["token"]["id"], 30)
+        self.assertEqual(summary["first_divergence"]["by_run"][1]["token"]["token"], "B")
+
+    def test_run_execute_writes_token_traces_and_summary_without_server(self) -> None:
+        responses = [
+            (
+                {
+                    "choices": [
+                        {
+                            "finish_reason": "stop",
+                            "message": {"content": "alpha beta"},
+                            "logprobs": {
+                                "content": [
+                                    {"id": 1, "token": "alpha", "prob": 0.8},
+                                    {"id": 2, "token": " beta", "prob": 0.7},
+                                ]
+                            },
+                        }
+                    ],
+                    "usage": {"completion_tokens": 2},
+                    "timings": {"draft_n": 2, "draft_n_accepted": 1},
+                },
+                '{"run":1}',
+            ),
+            (
+                {
+                    "choices": [
+                        {
+                            "finish_reason": "length",
+                            "message": {"content": "alpha gamma"},
+                            "logprobs": {
+                                "content": [
+                                    {"id": 1, "token": "alpha", "prob": 0.8},
+                                    {"id": 3, "token": " gamma", "prob": 0.6},
+                                ]
+                            },
+                        }
+                    ],
+                    "usage": {"completion_tokens": 2},
+                    "timings": {"draft_n": 2, "draft_n_accepted": 2},
+                },
+                '{"run":2}',
+            ),
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "k11"
+            args = runner.parse_args(
+                [
+                    "--execute",
+                    "--runs",
+                    "2",
+                    "--output-dir",
+                    str(output_dir),
+                    "--trace-token-divergence",
+                ]
+            )
+            with (
+                mock.patch.object(runner, "pick_ephemeral_port", side_effect=[18081, 18082]),
+                mock.patch.object(runner, "launch_server", side_effect=[_FakeProc(101), _FakeProc(102)]),
+                mock.patch.object(runner, "wait_for_health"),
+                mock.patch.object(runner, "query_chat", side_effect=responses),
+                mock.patch.object(runner, "terminate_server"),
+            ):
+                summary = runner.run_execute(args, output_dir)
+
+            self.assertEqual(summary["finish_reasons"], {"stop": 1, "length": 1})
+            self.assertEqual(summary["content_word_counts"], [2, 2])
+            self.assertEqual(summary["token_divergence"]["common_prefix_length"], 1)
+            self.assertEqual(summary["token_divergence"]["first_divergence"]["index"], 1)
+            self.assertTrue((output_dir / "token_traces" / "run_01.tokens.json").exists())
+            self.assertTrue((output_dir / "summary.json").exists())
+            run_record = json.loads((output_dir / "runs" / "run_01.json").read_text())
+            self.assertEqual(run_record["finish_reason"], "stop")
+            self.assertEqual(run_record["content_word_count"], 2)
+            self.assertEqual(run_record["token_trace"]["token_count"], 2)
 
     def test_terminate_server_stops_process_group(self) -> None:
         proc = subprocess.Popen(["sleep", "30"], start_new_session=True)
@@ -266,6 +473,7 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
             self.assertEqual(plan["meta"]["stop"], ["DONE", "END"])
             self.assertEqual(plan["meta"]["schema_task"], "word-array-200")
             self.assertEqual(plan["meta"]["json_schema"]["properties"]["done"]["enum"], ["END"])
+            self.assertFalse(plan["meta"]["trace_token_divergence"])
             self.assertEqual(plan["meta"]["slots"], runner.DEFAULT_SLOTS)
             self.assertEqual(plan["meta"]["target_device"], runner.DEFAULT_TARGET_DEVICE)
             self.assertEqual(plan["meta"]["draft_device"], runner.DEFAULT_DRAFT_DEVICE)
@@ -279,6 +487,37 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
             self.assertIn("--device ROCm0", commands)
             self.assertIn("--device-draft ROCm0", commands)
             self.assertIn("--spec-type draft-mtp", commands)
+
+    def test_dry_run_records_token_trace_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "k11"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(Path(__file__).with_name("k11_gemma4_determinism_runner.py")),
+                    "--output-dir",
+                    str(output_dir),
+                    "--runs",
+                    "1",
+                    "--trace-token-divergence",
+                    "--trace-n-probs",
+                    "7",
+                    "--no-trace-post-sampling-probs",
+                    "--trace-response-field",
+                    "choices",
+                    "--trace-response-field",
+                    "tokens",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+            plan = json.loads((output_dir / "plan.json").read_text())
+            self.assertTrue(plan["meta"]["trace_token_divergence"])
+            self.assertEqual(plan["meta"]["trace_n_probs"], 7)
+            self.assertFalse(plan["meta"]["trace_post_sampling_probs"])
+            self.assertEqual(plan["meta"]["trace_response_fields"], ["choices", "tokens"])
 
 
 if __name__ == "__main__":
