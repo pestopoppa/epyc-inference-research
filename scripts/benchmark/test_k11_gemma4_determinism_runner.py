@@ -60,6 +60,7 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
         )
         self.assertEqual(argv[argv.index("--device") + 1], runner.DEFAULT_TARGET_DEVICE)
         self.assertEqual(argv[argv.index("--device-draft") + 1], runner.DEFAULT_DRAFT_DEVICE)
+        self.assertEqual(argv[argv.index("-fa") + 1], runner.DEFAULT_FLASH_ATTN)
         self.assertEqual(argv[argv.index("-rea") + 1], "off")
         self.assertEqual(argv[argv.index("--port") + 1], "31337")
 
@@ -72,6 +73,12 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
         self.assertNotIn("-md", argv)
         self.assertNotIn("--device-draft", argv)
         self.assertNotIn("--spec-draft-ngl", argv)
+
+    def test_build_server_argv_can_disable_flash_attention(self) -> None:
+        args = runner.parse_args(["--flash-attn", "off"])
+        argv = runner.build_server_argv(args, 31337)
+
+        self.assertEqual(argv[argv.index("-fa") + 1], "off")
 
     def test_build_server_argv_supports_cpu_no_spec_control(self) -> None:
         args = runner.parse_args(
@@ -503,6 +510,7 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
             self.assertEqual(plan["meta"]["slots"], runner.DEFAULT_SLOTS)
             self.assertEqual(plan["meta"]["target_device"], runner.DEFAULT_TARGET_DEVICE)
             self.assertEqual(plan["meta"]["draft_device"], runner.DEFAULT_DRAFT_DEVICE)
+            self.assertEqual(plan["meta"]["flash_attn"], runner.DEFAULT_FLASH_ATTN)
             self.assertEqual(len(plan["runs"]), 2)
             self.assertEqual(plan["runs"][0]["label"], "run_01")
 

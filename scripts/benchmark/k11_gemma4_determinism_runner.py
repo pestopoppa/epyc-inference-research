@@ -54,6 +54,7 @@ DEFAULT_THREADS = 96
 DEFAULT_CONTEXT = 16384
 DEFAULT_UBATCH = 512
 DEFAULT_N_GPU_LAYERS = 99
+DEFAULT_FLASH_ATTN = "on"
 DEFAULT_TARGET_DEVICE = "ROCm0"
 DEFAULT_DRAFT_DEVICE = "ROCm0"
 DEFAULT_SPEC_DRAFT_N_MAX = 2
@@ -198,6 +199,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--threads", type=int, default=DEFAULT_THREADS, help="CPU threads for llama-server")
     parser.add_argument("--context", type=int, default=DEFAULT_CONTEXT, help="Context size")
     parser.add_argument("--ubatch", type=int, default=DEFAULT_UBATCH, help="Micro-batch size")
+    parser.add_argument(
+        "--flash-attn",
+        choices=("on", "off"),
+        default=DEFAULT_FLASH_ATTN,
+        help="llama-server flash-attention flag for K11 backend-path A/Bs",
+    )
     parser.add_argument(
         "--n-gpu-layers",
         type=int,
@@ -414,7 +421,7 @@ def build_server_argv(args: argparse.Namespace, port: int | str) -> list[str]:
         "-c",
         str(args.context),
         "-fa",
-        "on",
+        str(args.flash_attn),
         "-rea",
         "off",
         "--host",
@@ -548,6 +555,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "threads": args.threads,
             "context": args.context,
             "ubatch": args.ubatch,
+            "flash_attn": args.flash_attn,
             "n_gpu_layers": args.n_gpu_layers,
             "target_device": args.target_device,
             "draft_device": args.draft_device,
@@ -1059,6 +1067,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         "trace_post_sampling_probs": args.trace_post_sampling_probs,
         "trace_response_fields": trace_response_fields,
         "server_env": args.server_env,
+        "flash_attn": args.flash_attn,
         "runs": results,
         "unique_output_hashes": unique_hashes,
         "deterministic": deterministic,
