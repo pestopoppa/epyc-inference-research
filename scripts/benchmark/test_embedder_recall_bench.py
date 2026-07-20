@@ -19,6 +19,8 @@ import os
 import sys
 import tempfile
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -157,6 +159,20 @@ class TestRunRecallBench(unittest.TestCase):
             bench.run_recall_bench(documents, queries, specs, _bad_embed, ks=[1], ndcg_k=1)
 
 
+class TestInputPolicy(unittest.TestCase):
+    def test_prepare_embedding_inputs_applies_common_char_cap(self) -> None:
+        prepared, policy = bench.prepare_embedding_inputs(["abcdef", "xyz"], max_input_chars=3)
+        self.assertEqual(prepared, ["abc", "xyz"])
+        self.assertEqual(policy["truncated_count"], 1)
+        self.assertEqual(policy["max_original_chars"], 6)
+        self.assertEqual(policy["max_prepared_chars"], 3)
+
+    def test_prepare_embedding_inputs_can_disable_cap(self) -> None:
+        prepared, policy = bench.prepare_embedding_inputs(["abcdef"], max_input_chars=0)
+        self.assertEqual(prepared, ["abcdef"])
+        self.assertEqual(policy["truncated_count"], 0)
+
+
 class TestCorpusParsing(unittest.TestCase):
     def _write(self, rows) -> Path:
         tmp = Path(tempfile.mkdtemp()) / "corpus.jsonl"
@@ -245,6 +261,61 @@ class TestEmbedRequestRouting(unittest.TestCase):
         with self.assertRaises(ValueError):
             bench._assert_not_chat_endpoint("http://localhost:8000/chat")
 
+    def test_eval_batch_embed_fn_chunks_requests(self) -> None:
+        calls = []
+        original_urlopen = urllib.request.urlopen
+
+        class _Resp:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                data = [{"embedding": [float(i), 0.0]} for i, _ in enumerate(self.payload["input"])]
+                return json.dumps({"data": data}).encode("utf-8")
+
+        def _fake_urlopen(req, timeout):
+            payload = json.loads(req.data.decode("utf-8"))
+            calls.append(payload)
+            return _Resp(payload)
+
+        urllib.request.urlopen = _fake_urlopen
+        try:
+            embed = bench.make_eval_batch_embed_fn(batch_size=2)
+            spec = bench.ModelSpec("granite-embedding-97m-r2", "Q8_0", 8096)
+            vectors = embed(["a", "b", "c"], spec)
+        finally:
+            urllib.request.urlopen = original_urlopen
+
+        self.assertEqual([call["input"] for call in calls], [["a", "b"], ["c"]])
+        self.assertEqual(len(vectors), 3)
+
+    def test_eval_batch_embed_fn_reports_http_body(self) -> None:
+        original_urlopen = urllib.request.urlopen
+
+        def _fake_urlopen(req, timeout):
+            raise urllib.error.HTTPError(
+                req.full_url,
+                413,
+                "Payload Too Large",
+                {},
+                io.BytesIO(b"input is too large for embedding context"),
+            )
+
+        urllib.request.urlopen = _fake_urlopen
+        try:
+            embed = bench.make_eval_batch_embed_fn(batch_size=2)
+            spec = bench.ModelSpec("granite-embedding-97m-r2", "Q8_0", 8096)
+            with self.assertRaisesRegex(RuntimeError, "HTTP 413.*input is too large"):
+                embed(["long input"], spec)
+        finally:
+            urllib.request.urlopen = original_urlopen
+
 
 class TestPlan(unittest.TestCase):
     def _fixture(self):
@@ -274,12 +345,22 @@ class TestPlan(unittest.TestCase):
         self.assertEqual(plan["metrics"], ["recall@10", "recall@50", "mrr", "ndcg@10"])
         self.assertEqual(plan["routing"]["workload_class"], "eval_batch")
         self.assertEqual(plan["routing"]["request_priority"], "background")
+        self.assertEqual(plan["routing"]["batch_size"], bench.DEFAULT_EMBED_BATCH_SIZE)
         self.assertTrue(plan["routing"]["never_chat"])
+        self.assertEqual(plan["input_policy"]["common_max_input_chars"], bench.DEFAULT_MAX_INPUT_CHARS)
         self.assertFalse(plan["execution_gate"]["will_execute"])
         self.assertEqual(plan["execution_gate"]["reason"], "dry_run_default")
         self.assertEqual(plan["models"][0]["result_key"], "granite-embedding-97m-r2/Q8_0")
         self.assertEqual(plan["models"][0]["workload_class"], "eval_batch")
         self.assertEqual(plan["missing_relevance_refs"], [])
+
+    def test_select_specs_requires_exact_key_for_ambiguous_model_name(self) -> None:
+        with self.assertRaisesRegex(ValueError, "ambiguous model name"):
+            bench._select_specs(["granite-embedding-97m-r2"])
+
+    def test_select_specs_accepts_exact_model_quant_keys(self) -> None:
+        specs = bench._select_specs(["granite-embedding-97m-r2/Q8_0", "bge-m3/Q8_0"])
+        self.assertEqual([spec.result_key for spec in specs], ["granite-embedding-97m-r2/Q8_0", "bge-m3/Q8_0"])
 
 
 class TestCli(unittest.TestCase):

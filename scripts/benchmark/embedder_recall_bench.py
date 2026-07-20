@@ -33,6 +33,7 @@ import json
 import math
 import os
 import statistics
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence
@@ -60,6 +61,8 @@ CHAT_ENDPOINT_PATH = "/chat"
 # recall@k targets + ndcg@k target from the granite bench plan.
 DEFAULT_KS: tuple[int, ...] = (10, 50)
 DEFAULT_NDCG_K = 10
+DEFAULT_EMBED_BATCH_SIZE = 8
+DEFAULT_MAX_INPUT_CHARS = 1536
 
 
 @dataclass(frozen=True)
@@ -270,6 +273,37 @@ def aggregate_metrics(
     return metrics
 
 
+def truncate_text(text: str, max_input_chars: int | None) -> str:
+    """Apply the common Phase-B embedder input cap.
+
+    The serving recipes for the candidate/reference embedders use 512-token
+    context windows. We do not have a model-independent tokenizer in this
+    harness, so the benchmark applies the same conservative character cap to all
+    subjects before sending inputs to the embedding endpoint.
+    """
+    if max_input_chars is None or max_input_chars <= 0:
+        return text
+    if len(text) <= max_input_chars:
+        return text
+    return text[:max_input_chars]
+
+
+def prepare_embedding_inputs(
+    texts: Sequence[str],
+    max_input_chars: int | None,
+) -> tuple[list[str], dict[str, Any]]:
+    prepared = [truncate_text(str(text), max_input_chars) for text in texts]
+    original_lengths = [len(str(text)) for text in texts]
+    prepared_lengths = [len(text) for text in prepared]
+    truncated_count = sum(1 for before, after in zip(original_lengths, prepared_lengths) if after < before)
+    return prepared, {
+        "max_input_chars": max_input_chars,
+        "truncated_count": truncated_count,
+        "max_original_chars": max(original_lengths, default=0),
+        "max_prepared_chars": max(prepared_lengths, default=0),
+    }
+
+
 # --------------------------------------------------------------------------- #
 # Bench driver (pure given the injected embed function)
 # --------------------------------------------------------------------------- #
@@ -287,6 +321,7 @@ def run_recall_bench(
     embed_fn: EmbedFn,
     ks: Sequence[int] = DEFAULT_KS,
     ndcg_k: int = DEFAULT_NDCG_K,
+    max_input_chars: int | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Compute recall@k / MRR / ndcg@k for each spec, keyed by ``model/quant``.
 
@@ -295,11 +330,18 @@ def run_recall_bench(
     any model or server.
     """
     doc_ids = [doc.doc_id for doc in documents]
-    doc_texts = [doc.text for doc in documents]
-    query_texts = [query.text for query in queries]
+    doc_texts, doc_input_policy = prepare_embedding_inputs(
+        [doc.text for doc in documents],
+        max_input_chars,
+    )
+    query_texts, query_input_policy = prepare_embedding_inputs(
+        [query.text for query in queries],
+        max_input_chars,
+    )
 
     results: dict[str, dict[str, Any]] = {}
     for spec in specs:
+        started = time.monotonic()
         doc_matrix = embed_fn(list(doc_texts), spec)
         query_matrix = embed_fn(list(query_texts), spec)
         if len(doc_matrix) != len(doc_ids):
@@ -316,6 +358,11 @@ def run_recall_bench(
         row = aggregate_metrics(per_query, ks, ndcg_k)
         row["model"] = spec.model
         row["quant"] = spec.quant
+        row["embedding_wall_clock_s"] = round(time.monotonic() - started, 6)
+        row["input_policy"] = {
+            "documents": doc_input_policy,
+            "queries": query_input_policy,
+        }
         results[spec.result_key] = row  # model/quant-indexed, never role/port
     return results
 
@@ -359,24 +406,60 @@ def build_embed_request(spec: ModelSpec, inputs: Sequence[str], host: str = "loc
     return EmbedRequest(url=url, headers=headers, payload=payload)
 
 
-def make_eval_batch_embed_fn(host: str = "localhost", timeout_s: float = 120.0) -> EmbedFn:
+def make_eval_batch_embed_fn(
+    host: str = "localhost",
+    timeout_s: float = 120.0,
+    batch_size: int = DEFAULT_EMBED_BATCH_SIZE,
+) -> EmbedFn:
     """Build a real embed function that routes through the eval-batch lane.
 
     Constructed ONLY on the ``--execute`` path. Importing urllib lazily keeps the
     default dry-run import surface tiny and makes it obvious that no network
     handle is created unless execution is explicitly requested.
     """
+    from urllib import error as _urlerror  # local import: execute-only
     from urllib import request as _urlrequest  # local import: execute-only
 
+    if batch_size <= 0:
+        raise ValueError(f"batch_size must be positive, got {batch_size}")
+
     def _embed(inputs: list[str], spec: ModelSpec) -> list[list[float]]:
-        req_spec = build_embed_request(spec, inputs, host=host)
-        _assert_not_chat_endpoint(req_spec.url)
-        body = json.dumps(req_spec.payload).encode("utf-8")
-        http_req = _urlrequest.Request(req_spec.url, data=body, headers=req_spec.headers, method="POST")
-        with _urlrequest.urlopen(http_req, timeout=timeout_s) as resp:
-            parsed = json.loads(resp.read().decode("utf-8"))
-        data = parsed.get("data", [])
-        return [list(item["embedding"]) for item in data]
+        vectors: list[list[float]] = []
+        for start in range(0, len(inputs), batch_size):
+            chunk = inputs[start:start + batch_size]
+            req_spec = build_embed_request(spec, chunk, host=host)
+            _assert_not_chat_endpoint(req_spec.url)
+            body = json.dumps(req_spec.payload).encode("utf-8")
+            http_req = _urlrequest.Request(req_spec.url, data=body, headers=req_spec.headers, method="POST")
+            try:
+                with _urlrequest.urlopen(http_req, timeout=timeout_s) as resp:
+                    parsed = json.loads(resp.read().decode("utf-8"))
+            except _urlerror.HTTPError as exc:
+                try:
+                    detail = exc.read().decode("utf-8", errors="replace")[-2000:]
+                finally:
+                    close = getattr(exc, "close", None)
+                    if close is not None:
+                        close()
+                max_chars = max((len(text) for text in chunk), default=0)
+                raise RuntimeError(
+                    f"{spec.result_key}: embedding HTTP {exc.code} {exc.reason}; "
+                    f"url={req_spec.url}; input_range={start}:{start + len(chunk)}; "
+                    f"input_count={len(chunk)}; max_chars={max_chars}; body_tail={detail!r}"
+                ) from exc
+            except _urlerror.URLError as exc:
+                raise RuntimeError(
+                    f"{spec.result_key}: embedding request failed for {req_spec.url}; "
+                    f"input_range={start}:{start + len(chunk)}; reason={exc.reason!r}"
+                ) from exc
+            data = parsed.get("data", [])
+            if len(data) != len(chunk):
+                raise RuntimeError(
+                    f"{spec.result_key}: embedding endpoint returned {len(data)} vector(s), "
+                    f"expected {len(chunk)} for input_range={start}:{start + len(chunk)}"
+                )
+            vectors.extend(list(item["embedding"]) for item in data)
+        return vectors
 
     return _embed
 
@@ -414,11 +497,15 @@ def build_plan(
     host: str,
     will_execute: bool,
     execute_reason: str,
+    batch_size: int = DEFAULT_EMBED_BATCH_SIZE,
+    max_input_chars: int | None = DEFAULT_MAX_INPUT_CHARS,
 ) -> dict[str, Any]:
     doc_word_counts = [len(doc.text.split()) for doc in documents]
     query_word_counts = [len(query.text.split()) for query in queries]
     missing = missing_relevance_refs(documents, queries)
     metrics = [f"recall@{k}" for k in ks] + ["mrr", f"ndcg@{ndcg_k}"]
+    _, doc_input_policy = prepare_embedding_inputs([doc.text for doc in documents], max_input_chars)
+    _, query_input_policy = prepare_embedding_inputs([query.text for query in queries], max_input_chars)
 
     model_rows = []
     for spec in specs:
@@ -453,10 +540,16 @@ def build_plan(
         "ndcg_k": ndcg_k,
         "metrics": metrics,
         "result_index": "model/quant",
+        "input_policy": {
+            "common_max_input_chars": max_input_chars,
+            "documents": doc_input_policy,
+            "queries": query_input_policy,
+        },
         "routing": {
             "workload_class": WORKLOAD_CLASS,
             "request_priority": REQUEST_PRIORITY,
             "endpoint_path": EMBED_ENDPOINT_PATH,
+            "batch_size": batch_size,
             "never_chat": CHAT_ENDPOINT_PATH not in EMBED_ENDPOINT_PATH,
         },
         "execution_gate": {
@@ -476,10 +569,27 @@ def build_plan(
 def _select_specs(names: Sequence[str] | None) -> list[ModelSpec]:
     if not names:
         return list(DEFAULT_MODEL_SPECS)
-    wanted = set(names)
-    selected = [spec for spec in DEFAULT_MODEL_SPECS if spec.result_key in wanted or spec.model in wanted]
-    if not selected:
-        raise ValueError(f"no known model spec matched {sorted(wanted)!r}")
+    selected: list[ModelSpec] = []
+    seen: set[str] = set()
+    unknown: list[str] = []
+    for name in names:
+        exact = [spec for spec in DEFAULT_MODEL_SPECS if spec.result_key == name]
+        if exact:
+            candidates = exact
+        else:
+            candidates = [spec for spec in DEFAULT_MODEL_SPECS if spec.model == name]
+            if len(candidates) > 1:
+                options = ", ".join(spec.result_key for spec in candidates)
+                raise ValueError(f"ambiguous model name {name!r}; use exact model/quant key: {options}")
+        if not candidates:
+            unknown.append(name)
+            continue
+        for spec in candidates:
+            if spec.result_key not in seen:
+                selected.append(spec)
+                seen.add(spec.result_key)
+    if unknown:
+        raise ValueError(f"no known model spec matched {unknown!r}")
     return selected
 
 
@@ -489,6 +599,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--models", nargs="+", default=None, help="Subset of model/quant result-keys or model names to bench")
     parser.add_argument("--k", dest="ks", type=int, nargs="+", default=list(DEFAULT_KS), help="recall@k cut-offs")
     parser.add_argument("--ndcg-k", type=int, default=DEFAULT_NDCG_K, help="ndcg@k cut-off")
+    parser.add_argument("--batch-size", type=int, default=DEFAULT_EMBED_BATCH_SIZE, help="embedding request batch size")
+    parser.add_argument(
+        "--max-input-chars",
+        type=int,
+        default=DEFAULT_MAX_INPUT_CHARS,
+        help="common character cap applied before embedding; use 0 to disable",
+    )
     parser.add_argument("--host", default="localhost", help="Embedder server host (serving detail; execute-only)")
     parser.add_argument("--output", type=Path, default=None, help="Optional JSON path for model/quant-indexed results")
     parser.add_argument(
@@ -517,6 +634,8 @@ def main(argv: list[str] | None = None) -> int:
         host=args.host,
         will_execute=will_execute,
         execute_reason=reason,
+        batch_size=args.batch_size,
+        max_input_chars=args.max_input_chars,
     )
 
     # Refuse an explicit --execute that is missing the env flag: print the plan
@@ -535,8 +654,16 @@ def main(argv: list[str] | None = None) -> int:
 
     # Execute path (env + flag confirmed). Routes embeddings through the
     # eval-batch lane only. Not exercised by tests / this session.
-    embed_fn = make_eval_batch_embed_fn(host=args.host)
-    results = run_recall_bench(documents, queries, specs, embed_fn, ks=args.ks, ndcg_k=args.ndcg_k)
+    embed_fn = make_eval_batch_embed_fn(host=args.host, batch_size=args.batch_size)
+    results = run_recall_bench(
+        documents,
+        queries,
+        specs,
+        embed_fn,
+        ks=args.ks,
+        ndcg_k=args.ndcg_k,
+        max_input_chars=args.max_input_chars,
+    )
     report = {"plan": plan, "results": results}  # results keyed by model/quant
     rendered = json.dumps(report, indent=2, ensure_ascii=False)
     if args.output is not None:
