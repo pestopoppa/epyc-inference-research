@@ -1,0 +1,107 @@
+{
+  "acceptance_rate": 0.0,
+  "content": "deterministic cleanup is a critical component of a robust inference service because it ensures predictable resource management and prevents memory leaks. in high-throughput environments, models often allocate large chunks of gpu memory or system ram to handle incoming requests. if these resources are not released in a strictly defined, predictable manner, the service will eventually encounter out of memory errors, leading to catastrophic downtime. deterministic cleanup guarantees that every allocated buffer, tensor, or temporary file is destroyed immediately after its lifecycle ends, rather than waiting for an unpredictable garbage collector. this predictability allows engineers to calculate precise capacity limits and maintain stable latency profiles. without it, fragmentation accumulates, causing performance degradation and unpredictable spikes in tail latency. by enforcing a clear sequence of destruction, developers can ensure that the service remains resilient under heavy load, maintaining a consistent state across every single inference cycle and preventing the gradual erosion of system stability over time. ",
+  "content_word_count": 154,
+  "draft_n": 0,
+  "draft_n_accepted": 0,
+  "finish_reason": "stop",
+  "label": "run_01",
+  "output_sha256": "7826fa5b011d81b7c52aa7d071247ed7a98da2f3052924a7aa0f3d56f5346419",
+  "port": 37387,
+  "reasoning_content": "",
+  "reasoning_word_count": 0,
+  "repeat_index": 1,
+  "request": {
+    "max_tokens": 320,
+    "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+    "schema_task": "none",
+    "seed": 42,
+    "stop": [
+      "END"
+    ],
+    "temperature": 0.0,
+    "trace_n_probs": 10,
+    "trace_post_sampling_probs": false,
+    "trace_response_fields": [
+      "choices",
+      "usage",
+      "timings",
+      "tokens",
+      "completion_probabilities",
+      "__verbose/tokens",
+      "__verbose/completion_probabilities"
+    ],
+    "trace_token_divergence": true
+  },
+  "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_graphs_off_20260720T115655Z/responses/run_01.raw.json",
+  "response_sha256": "d8b62aa0e8702a65855e9dc4ddaddc31a9c675d6b9c4ac0b5f7f2e26d0a5808e",
+  "server_argv": [
+    "env",
+    "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+    "GGML_CUDA_DISABLE_GRAPHS=1",
+    "numactl",
+    "--interleave=all",
+    "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+    "-m",
+    "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+    "-np",
+    "1",
+    "--device",
+    "ROCm0",
+    "-ngl",
+    "99",
+    "-t",
+    "96",
+    "-ub",
+    "512",
+    "-c",
+    "16384",
+    "-fa",
+    "on",
+    "-rea",
+    "off",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "37387",
+    "--spec-type",
+    "none"
+  ],
+  "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_graphs_off_20260720T115655Z/logs/run_01.server.log",
+  "server_pid": 3429794,
+  "status": "ok",
+  "task_eval": {
+    "bad_word_count": 0,
+    "count_ok": false,
+    "expected_word": null,
+    "expected_word_count": 160,
+    "observed_word_count": 154,
+    "passed": false,
+    "word_ok": true
+  },
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 2644.567,
+    "predicted_n": 175,
+    "predicted_per_second": 66.17340381241995,
+    "predicted_per_token_ms": 15.111811428571428,
+    "prompt_ms": 147.07,
+    "prompt_n": 53,
+    "prompt_per_second": 360.37261168151224,
+    "prompt_per_token_ms": 2.7749056603773585
+  },
+  "token_trace": {
+    "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_graphs_off_20260720T115655Z/token_traces/run_01.tokens.json",
+    "probability_source": "choices[0].logprobs.content",
+    "sequence_source": "__verbose.tokens",
+    "token_count": 175
+  },
+  "usage": {
+    "completion_tokens": 175,
+    "prompt_tokens": 53,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 228
+  }
+}

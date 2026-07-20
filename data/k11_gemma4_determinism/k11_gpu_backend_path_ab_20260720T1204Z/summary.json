@@ -1,0 +1,83 @@
+{
+  "created_at": "2026-07-20T12:04:00Z",
+  "verdict": "K11 natural-prose nondeterminism persists on MI210 no-spec single-slot with pre-sampling probabilities; CPU no-spec single-slot is deterministic. Disabling HIP graphs and disabling flash-attention do not repair the defect.",
+  "invalid_artifact_not_admitted": {
+    "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_20260720T115054Z",
+    "reason": "default compact JSON prompt was used instead of the natural 160-word K11 prompt",
+    "moved_to": "/tmp/k11_invalid_default_prompt_20260720T115054Z"
+  },
+  "runs": [
+    {
+      "label": "gpu_graphs_on_fa_on_presampling",
+      "artifact": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_corrected_20260720T115334Z/summary.json",
+      "device": "MI210",
+      "spec_type": "none",
+      "slots": 1,
+      "flash_attn": "on",
+      "server_env": [],
+      "trace_post_sampling_probs": false,
+      "unique_hashes": 10,
+      "deterministic": false,
+      "finish_reasons": {
+        "stop": 10
+      },
+      "word_counts": [160, 155, 153, 157, 153, 155, 153, 159, 158, 154],
+      "mean_decode_tps": 72.52090783814842,
+      "first_divergence_index": 16,
+      "branch_counts": {
+        " a": 4,
+        " serving": 6
+      },
+      "top1_top2_logprob_gap_range": [0.058746337890625, 0.5555171966552734]
+    },
+    {
+      "label": "gpu_graphs_off_fa_on_presampling",
+      "artifact": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_graphs_off_20260720T115655Z/summary.json",
+      "device": "MI210",
+      "spec_type": "none",
+      "slots": 1,
+      "flash_attn": "on",
+      "server_env": ["GGML_CUDA_DISABLE_GRAPHS=1"],
+      "trace_post_sampling_probs": false,
+      "unique_hashes": 10,
+      "deterministic": false,
+      "finish_reasons": {
+        "stop": 10
+      },
+      "word_counts": [154, 156, 153, 157, 156, 151, 156, 154, 157, 155],
+      "mean_decode_tps": 66.47555728644306,
+      "first_divergence_index": 7,
+      "branch_counts": {
+        " a": 2,
+        " maintaining": 8
+      },
+      "top1_top2_logprob_gap_range": [0.0031795501708984375, 0.4274291396141052]
+    },
+    {
+      "label": "gpu_graphs_on_fa_off_presampling",
+      "artifact": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_presampling_trace_fa_off_20260720T120133Z/summary.json",
+      "device": "MI210",
+      "spec_type": "none",
+      "slots": 1,
+      "flash_attn": "off",
+      "server_env": [],
+      "trace_post_sampling_probs": false,
+      "unique_hashes": 9,
+      "deterministic": false,
+      "finish_reasons": {
+        "stop": 10
+      },
+      "word_counts": [158, 157, 156, 158, 155, 155, 155, 153, 156, 153],
+      "mean_decode_tps": 79.60543451355045,
+      "first_divergence_index": 16,
+      "branch_counts": {
+        " a": 5,
+        " serving": 5
+      }
+    }
+  ],
+  "next_actions": [
+    "Inspect GPU backend matmul/reduction determinism and logits copy/handoff rather than repeating MTP, slot-count, graph, or flash-attention toggles.",
+    "If another discriminator is needed, run a target-backend lower-precision/graph/device kernel A/B only if it changes the actual GPU math path and records the command surface."
+  ]
+}
