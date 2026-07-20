@@ -1,0 +1,248 @@
+{
+  "audited_roles": [
+    "glm_52_ud_iq2m",
+    "hy3_angelslim_iq1m_mtp",
+    "bonsai_27b_q1_0",
+    "bonsai_8b_local_orphan",
+    "qwable_v1_iq4xs",
+    "qwable_v1_q8_0"
+  ],
+  "entries": [
+    {
+      "download": "complete",
+      "hf_metadata": null,
+      "hf_tree_manifest": {
+        "exists": true,
+        "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/.cache/huggingface/trees/abc55e72527792c6e77069c99b4cb7de16fa9f23.json"
+      },
+      "model_path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+      "observed_date": "2026-07-16",
+      "path_results": [
+        {
+          "actual_bytes": 9423744,
+          "exists": true,
+          "expected_bytes": null,
+          "label": "model.path",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "verdict": "ok_split_primary"
+        },
+        {
+          "actual_bytes": 9423744,
+          "exists": true,
+          "expected_bytes": 9423744,
+          "label": "shard.1",
+          "lfs_sha256": "7b8e91dd6dde4999da6c05bc75ae39e4982c6d8fa14969af9445c4d44d992623",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00001-of-00006.gguf",
+          "verdict": "ok"
+        },
+        {
+          "actual_bytes": 49223976800,
+          "exists": true,
+          "expected_bytes": 49223976800,
+          "label": "shard.2",
+          "lfs_sha256": "251603ba5daf220ac3cf998ab4919943803b07a8e289afc9a4f98967cc8f62e1",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00002-of-00006.gguf",
+          "verdict": "ok"
+        },
+        {
+          "actual_bytes": 49143176640,
+          "exists": true,
+          "expected_bytes": 49143176640,
+          "label": "shard.3",
+          "lfs_sha256": "1cd0b1a3d9d939ce5a184c548f1b1c42edafaf1856cb0d7e586a2884a366256b",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00003-of-00006.gguf",
+          "verdict": "ok"
+        },
+        {
+          "actual_bytes": 49143176640,
+          "exists": true,
+          "expected_bytes": 49143176640,
+          "label": "shard.4",
+          "lfs_sha256": "10f3965db697a46ba66494475045af183c1bcaf639984160930c91a377816d3e",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00004-of-00006.gguf",
+          "verdict": "ok"
+        },
+        {
+          "actual_bytes": 49143176640,
+          "exists": true,
+          "expected_bytes": 49143176640,
+          "label": "shard.5",
+          "lfs_sha256": "40d7d4524ff07e0f9af494fb13130dc7090184800cc5af0a1563188b076af50d",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00005-of-00006.gguf",
+          "verdict": "ok"
+        },
+        {
+          "actual_bytes": 41914650304,
+          "exists": true,
+          "expected_bytes": 41914650304,
+          "label": "shard.6",
+          "lfs_sha256": "eeceb9084350e64be8eebcd1f19ab14bbbb6b40132c86d77ffc65e72f425044d",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/GLM-5.2-UD-IQ2_M/UD-IQ2_M/GLM-5.2-UD-IQ2_M-00006-of-00006.gguf",
+          "verdict": "ok"
+        }
+      ],
+      "role": "glm_52_ud_iq2m"
+    },
+    {
+      "download": "complete",
+      "hf_metadata": {
+        "exists": true,
+        "path": "/mnt/raid0/llm/models/hy3-angelslim/.cache/huggingface/download/Hy3-IQ1_M-mtp.gguf.metadata",
+        "source_hash": "f3b9ab6394d9de03394b9d95aa75af42ca7025711cf8418857eddd0d213e5f13"
+      },
+      "hf_tree_manifest": null,
+      "model_path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+      "observed_date": "2026-07-16",
+      "path_results": [
+        {
+          "actual_bytes": 91756066624,
+          "exists": true,
+          "expected_bytes": 91756066624,
+          "label": "model.path",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/hy3-angelslim/Hy3-IQ1_M-mtp.gguf",
+          "verdict": "ok"
+        }
+      ],
+      "role": "hy3_angelslim_iq1m_mtp"
+    },
+    {
+      "download": "complete",
+      "hf_metadata": {
+        "exists": true,
+        "path": "/mnt/raid0/llm/models/bonsai-27b/.cache/huggingface/download/Bonsai-27B-Q1_0.gguf.metadata",
+        "source_hash": "17ef842e47450caeb8eaa3ebfbbab5d2f2278b62b79be107985fb69a2f819aa0"
+      },
+      "hf_tree_manifest": null,
+      "model_path": "/mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf",
+      "observed_date": "2026-07-16",
+      "path_results": [
+        {
+          "actual_bytes": 3803452480,
+          "exists": true,
+          "expected_bytes": 3803452480,
+          "label": "model.path",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-Q1_0.gguf",
+          "verdict": "ok"
+        },
+        {
+          "actual_bytes": 1787468768,
+          "exists": true,
+          "expected_bytes": 1787468768,
+          "label": "related.dspark_q4_1",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-dspark-Q4_1.gguf",
+          "source_hash": "25e73f9f7ab5d1f7f1336711496dbc12da674e639ec88d579dc8683045befb1b",
+          "verdict": "ok"
+        },
+        {
+          "actual_bytes": 629246880,
+          "exists": true,
+          "expected_bytes": 629246880,
+          "label": "related.mmproj_q8_0",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/bonsai-27b/Bonsai-27B-mmproj-Q8_0.gguf",
+          "source_hash": "eb561d41a7bbeb0fcf04883c8af11078ef6cae0a66862a0b68443cfca495269d",
+          "verdict": "ok"
+        }
+      ],
+      "role": "bonsai_27b_q1_0"
+    },
+    {
+      "download": "complete",
+      "hf_metadata": null,
+      "hf_tree_manifest": null,
+      "model_path": "/mnt/raid0/llm/models/Bonsai-8B.gguf",
+      "observed_date": "2026-07-16",
+      "path_results": [
+        {
+          "actual_bytes": 1158654496,
+          "exists": true,
+          "expected_bytes": 1158654496,
+          "label": "model.path",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/Bonsai-8B.gguf",
+          "verdict": "ok"
+        }
+      ],
+      "role": "bonsai_8b_local_orphan"
+    },
+    {
+      "download": "complete",
+      "hf_metadata": {
+        "exists": true,
+        "path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/.cache/huggingface/download/Qwable-v1.IQ4_XS.gguf.metadata",
+        "source_hash": "3921bb8f1fc26ddd80ee97d0f48ccf507bd1dab04dbe4fc475e2eae65a05f460"
+      },
+      "hf_tree_manifest": {
+        "exists": true,
+        "path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/.cache/huggingface/trees/f35ea1502056a2886dd88fb8a29272f8f3c9c3a5.json"
+      },
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+      "observed_date": "2026-07-16",
+      "path_results": [
+        {
+          "actual_bytes": 18939313056,
+          "exists": true,
+          "expected_bytes": 18939313056,
+          "label": "model.path",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.IQ4_XS.gguf",
+          "verdict": "ok"
+        }
+      ],
+      "role": "qwable_v1_iq4xs"
+    },
+    {
+      "download": "complete",
+      "hf_metadata": {
+        "exists": true,
+        "path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/.cache/huggingface/download/Qwable-v1.Q8_0.gguf.metadata",
+        "source_hash": "d7420a49e8c2c7adabafe199f20cac27a5b291173604cc758bf3d2f29a2334c0"
+      },
+      "hf_tree_manifest": {
+        "exists": true,
+        "path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/.cache/huggingface/trees/f35ea1502056a2886dd88fb8a29272f8f3c9c3a5.json"
+      },
+      "model_path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+      "observed_date": "2026-07-16",
+      "path_results": [
+        {
+          "actual_bytes": 36903140256,
+          "exists": true,
+          "expected_bytes": 36903140256,
+          "label": "model.path",
+          "ok": true,
+          "path": "/mnt/raid0/llm/models/Qwable-v1-GGUF/Qwable-v1.Q8_0.gguf",
+          "verdict": "ok"
+        }
+      ],
+      "role": "qwable_v1_q8_0"
+    }
+  ],
+  "failure_count": 0,
+  "failures": [],
+  "generated_at": "2026-07-20T10:54:35.957995+00:00",
+  "registry_path": "/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml",
+  "registry_validator": {
+    "argv": [
+      "uv",
+      "run",
+      "python",
+      "scripts/validate_model_registry.py"
+    ],
+    "returncode": 0,
+    "stderr": "",
+    "stdout": "model_registry.yaml consistency check: /mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml\n  WARNING [MISSING_CATALOGUE_MODEL] active catalogue role 'architect_hermes_4_70b' -> off-disk model: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Hermes-4-70B-GGUF/Hermes-4-70B-Q4_K_M.gguf (deprecate, download, or accept as research record)\n  WARNING [MISSING_CATALOGUE_MODEL] active catalogue role 'architect_qwen2_5_72b' -> off-disk model: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-72B-Instruct-GGUF/Qwen2.5-72B-Instruct-Q4_K_M.gguf (deprecate, download, or accept as research record)\n  WARNING [MISSING_CATALOGUE_MODEL] active catalogue role 'architect_qwen2_5_72b_q4_k_m' -> off-disk model: /mnt/raid0/llm/lmstudio/models/mradermacher/Qwen2.5-72B-GGUF/Qwen2.5-72B.Q4_K_M.gguf (deprecate, download, or accept as research record)\n  WARNING [MISSING_CATALOGUE_MODEL] active catalogue role 'general_gemma_3_27b_it_qat' -> off-disk model: /mnt/raid0/llm/lmstudio/models/lmstudio-community/gemma-3-27B-it-qat-GGUF/gemma-3-27B-it-QAT-Q4_0.gguf (deprecate, download, or accept as research record)\n  WARNING [MISSING_CATALOGUE_MODEL] active catalogue role 'general_meta_llama_3_8b_instruct_fp16' -> off-disk model: /mnt/raid0/llm/lmstudio/models/bartowski/Meta-Llama-3-8B-Instruct-GGUF/Meta-Llama-3-8B-Instruct-fp16.gguf (deprecate, download, or accept as research record)\n  WARNING [MISSING_CATALOGUE_MODEL] active catalogue role 'ingest_hermes_4_70b' -> off-disk model: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Hermes-4-70B-GGUF/Hermes-4-70B-Q4_K_M.gguf (deprecate, download, or accept as research record)\n  WARNING [MISSING_CATALOGUE_MODEL] active catalogue role 'ingest_qwen2_5_72b' -> off-disk model: /mnt/raid0/llm/lmstudio/models/mradermacher/Qwen2.5-72B-GGUF/Qwen2.5-72B.Q4_K_M.gguf (deprecate, download, or accept as research record)\n  WARNING [MISSING_CATALOGUE_MODEL] active catalogue role 'ingest_qwen3_30b_thinking' -> off-disk model: /mnt/raid0/llm/lmstudio/models/unsloth/Qwen3-30B-A3B-Thinking-2507-GGUF/Qwen3-30B-A3B-Thinking-2507-Q8_0.gguf (deprecate, download, or accept as research record)\n  WARNING [MISSING_CATALOGUE_MODEL] active catalogue role 'math_qwen2_5_math_72b' -> off-disk model: /mnt/raid0/llm/lmstudio/models/tensorblock/Qwen2.5-Math-72B-Instruct-GGUF/Qwen2.5-Math-72B-Instruct-Q6_K-00001-of-00002.gguf (deprecate, download, or accept as research record)\n  WARNING [MISSING_CATALOGUE_MODEL] active catalogue role 'math_qwen2_5_math_72b_2' -> off-disk model: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Qwen2.5-Math-72B-Instruct-GGUF/Qwen2.5-Math-72B-Instruct-Q4_K_M.gguf (deprecate, download, or accept as research record)\n\n0 error(s), 10 warning(s).\n"
+  },
+  "schema": "epyc_model_artifact_manifest_audit.v1",
+  "verdict": "pass"
+}
