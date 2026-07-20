@@ -1,0 +1,117 @@
+{
+  "status": "phase0_ceiling_model_no_profiler",
+  "date_utc": "2026-07-20T10:26:44Z",
+  "op_rerun_artifact": "/mnt/raid0/llm/epyc-inference-research/data/k28_gdn_perf/k28-phase0-op-rerun-20260720T102526Z",
+  "full_model_summary": "/mnt/raid0/llm/epyc-inference-research/data/k28_gdn_perf/k28-fused-vs-graph-qwen36-35b-summary-20260720.json",
+  "profiler_tools_available": {
+    "rocprofv2": null,
+    "rocprof": null,
+    "omniperf": null
+  },
+  "assumptions": {
+    "model": "Qwen3.6-35B-A3B Q8",
+    "recurrent_gdn_layers": 30,
+    "layer_count": 40,
+    "full_attention_interval": 4,
+    "op_shape": "GATED_DELTA_NET f32 head_count=32 head_size=128 kda=0 K=1",
+    "n_gt_1024_model": "linear extrapolation from serial-token-loop op timing at 1024 tokens",
+    "decision_grade": false,
+    "observation_grade": true
+  },
+  "op_rows": [
+    {
+      "n_seq_tokens": 1,
+      "us_per_run": 6.33,
+      "kb_per_run": 4160,
+      "effective_gbps": 626.79
+    },
+    {
+      "n_seq_tokens": 64,
+      "us_per_run": 152.9,
+      "kb_per_run": 8208,
+      "effective_gbps": 51.2
+    },
+    {
+      "n_seq_tokens": 256,
+      "us_per_run": 624.81,
+      "kb_per_run": 20544,
+      "effective_gbps": 31.37
+    },
+    {
+      "n_seq_tokens": 512,
+      "us_per_run": 1253.84,
+      "kb_per_run": 36992,
+      "effective_gbps": 28.16
+    },
+    {
+      "n_seq_tokens": 1024,
+      "us_per_run": 2488.21,
+      "kb_per_run": 69888,
+      "effective_gbps": 26.84
+    }
+  ],
+  "ceiling_rows": [
+    {
+      "n_prompt": 64,
+      "full_model_prompt_tps": 706.395949,
+      "full_model_prompt_seconds": 0.09060074606968054,
+      "gdn_op_us_per_layer": 152.9,
+      "gdn_op_time_method": "measured",
+      "recurrent_gdn_layers": 30,
+      "estimated_total_gdn_seconds": 0.004587,
+      "estimated_gdn_prefill_share_pct": 5.062872215723437,
+      "op_2x_full_model_gain_pct": 2.5314361078617185,
+      "op_3x_full_model_gain_pct": 3.375248143815625,
+      "op_4x_full_model_gain_pct": 3.7971541617925775,
+      "op_5x_full_model_gain_pct": 4.05029777257875
+    },
+    {
+      "n_prompt": 256,
+      "full_model_prompt_tps": 1643.629082,
+      "full_model_prompt_seconds": 0.15575290240575093,
+      "gdn_op_us_per_layer": 624.81,
+      "gdn_op_time_method": "measured",
+      "recurrent_gdn_layers": 30,
+      "estimated_total_gdn_seconds": 0.0187443,
+      "estimated_gdn_prefill_share_pct": 12.034639297551795,
+      "op_2x_full_model_gain_pct": 6.0173196487758975,
+      "op_3x_full_model_gain_pct": 8.023092865034531,
+      "op_4x_full_model_gain_pct": 9.025979473163847,
+      "op_5x_full_model_gain_pct": 9.627711438041437
+    },
+    {
+      "n_prompt": 2048,
+      "full_model_prompt_tps": 2100.063569,
+      "full_model_prompt_seconds": 0.9752085747457676,
+      "gdn_op_us_per_layer": 4976.42,
+      "gdn_op_time_method": "linear_extrapolated_from_1024",
+      "recurrent_gdn_layers": 30,
+      "estimated_total_gdn_seconds": 0.1492926,
+      "estimated_gdn_prefill_share_pct": 15.308786639711396,
+      "op_2x_full_model_gain_pct": 7.654393319855698,
+      "op_3x_full_model_gain_pct": 10.205857759807598,
+      "op_4x_full_model_gain_pct": 11.481589979783546,
+      "op_5x_full_model_gain_pct": 12.247029311769118
+    },
+    {
+      "n_prompt": 8192,
+      "full_model_prompt_tps": 1995.065182,
+      "full_model_prompt_seconds": 4.106131505832675,
+      "gdn_op_us_per_layer": 19905.68,
+      "gdn_op_time_method": "linear_extrapolated_from_1024",
+      "recurrent_gdn_layers": 30,
+      "estimated_total_gdn_seconds": 0.5971704,
+      "estimated_gdn_prefill_share_pct": 14.543382235852206,
+      "op_2x_full_model_gain_pct": 7.271691117926103,
+      "op_3x_full_model_gain_pct": 9.695588157234805,
+      "op_4x_full_model_gain_pct": 10.907536676889155,
+      "op_5x_full_model_gain_pct": 11.634705788681766
+    }
+  ],
+  "gate_interpretation": {
+    "profile_direct_attribution": "not_available_no_rocprof_or_omniperf_binary",
+    "modeled_p2048_op_4x_gain_pct": 11.481589979783546,
+    "modeled_p8192_op_4x_gain_pct": 10.907536676889155,
+    "recommendation": "do_not_delay_v7_promotion_for_k28_phase1; keep K28 as post-promotion/default-off kernel project unless a direct profiler rerun or throwaway prototype shows materially higher ceiling"
+  }
+}
