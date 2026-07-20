@@ -1,0 +1,21 @@
+0.00.036.647 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.036.986 W srv  llama_server: -----------------
+0.00.036.988 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.036.988 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.036.988 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.036.988 W srv  llama_server: -----------------
+0.00.038.232 I srv    load_model: loading model '/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf'
+0.00.886.029 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.886.244 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.897.166 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.03.655.506 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 4096, kv_unified = 'false'
+0.03.659.866 I srv  llama_server: model loaded
+0.03.659.872 I srv  llama_server: listening on http://127.0.0.1:59597
+0.04.050.839 I slot get_availabl: id  3 | task -1 | selected slot by LRU, t_last = -1
+0.04.050.896 I slot launch_slot_: id  3 | task 0 | processing task, is_child = 0
+0.06.716.332 I slot print_timing: id  3 | task 0 | prompt eval time =     146.90 ms /    53 tokens (    2.77 ms per token,   360.79 tokens per second)
+0.06.716.336 I slot print_timing: id  3 | task 0 |        eval time =    2516.91 ms /   176 tokens (   14.30 ms per token,    69.93 tokens per second)
+0.06.716.336 I slot print_timing: id  3 | task 0 |       total time =    2663.81 ms /   229 tokens
+0.06.716.342 I slot print_timing: id  3 | task 0 |    graphs reused =        175
+0.06.716.429 I slot      release: id  3 | task 0 | stop processing: n_tokens = 228, truncated = 0
+0.06.723.263 I srv    operator(): operator(): cleaning up before exit...

@@ -1,0 +1,109 @@
+{
+  "created_utc": "2026-07-20T11:38:44.097713+00:00",
+  "verdict": "K11 natural-prose nondeterminism reproduces in MTP, no-spec np4, and no-spec np1; external-head MTP and multi-slot scheduling are not required",
+  "rows": [
+    {
+      "artifact": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_mtp_n10_explicit_greedy_trace_20260720T113126Z",
+      "spec_type": "draft-mtp",
+      "slots": 4,
+      "unique_output_hash_count": 10,
+      "task_passed": false,
+      "content_word_counts": [
+        156,
+        156,
+        155,
+        154,
+        156,
+        155,
+        155,
+        152,
+        158,
+        155
+      ],
+      "mean_decode_tps": 89.80816276543806,
+      "common_prefix_length": 7,
+      "common_prefix_text": "deterministic cleanup is a critical component of",
+      "branch_counts": [
+        {
+          "token_id": 16977,
+          "token": " maintaining",
+          "count": 9
+        },
+        {
+          "token_id": 496,
+          "token": " a",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "artifact": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z",
+      "spec_type": "none",
+      "slots": 4,
+      "unique_output_hash_count": 9,
+      "task_passed": false,
+      "content_word_counts": [
+        160,
+        154,
+        157,
+        157,
+        156,
+        153,
+        159,
+        153,
+        158,
+        156
+      ],
+      "mean_decode_tps": 69.74805931468646,
+      "common_prefix_length": 7,
+      "common_prefix_text": "deterministic cleanup is a critical component of",
+      "branch_counts": [
+        {
+          "token_id": 16977,
+          "token": " maintaining",
+          "count": 9
+        },
+        {
+          "token_id": 496,
+          "token": " a",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "artifact": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_np1_explicit_greedy_trace_20260720T113634Z",
+      "spec_type": "none",
+      "slots": 1,
+      "unique_output_hash_count": 10,
+      "task_passed": false,
+      "content_word_counts": [
+        152,
+        156,
+        160,
+        155,
+        152,
+        155,
+        157,
+        152,
+        153,
+        155
+      ],
+      "mean_decode_tps": 69.43521950963208,
+      "common_prefix_length": 16,
+      "common_prefix_text": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when",
+      "branch_counts": [
+        {
+          "token_id": 12284,
+          "token": " serving",
+          "count": 5
+        },
+        {
+          "token_id": 496,
+          "token": " a",
+          "count": 5
+        }
+      ]
+    }
+  ],
+  "next_debug_step": "inspect GPU no-spec sampler/backend determinism around the first seven tokens; CPU no-spec traced control can split GPU backend from model/prompt ambiguity"
+}

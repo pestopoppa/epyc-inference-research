@@ -1,0 +1,171 @@
+{
+  "artifact": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_np1_explicit_greedy_trace_20260720T113634Z",
+  "created_utc": "2026-07-20T11:38:44.097475+00:00",
+  "verdict": "failed_determinism_with_available_token_divergence_trace",
+  "run_shape": {
+    "model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+    "draft_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+    "spec_type": "none",
+    "slots": 1,
+    "request_sampler_mode": "explicit-greedy",
+    "draft_backend_sampling": "default",
+    "stop": [
+      "END"
+    ],
+    "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+    "max_tokens": 320,
+    "seed": 42,
+    "temperature": 0.0
+  },
+  "summary": {
+    "runs_ok": 10,
+    "unique_output_hash_count": 10,
+    "deterministic": false,
+    "task_passed": false,
+    "finish_reasons": {
+      "stop": 10
+    },
+    "content_word_counts": [
+      152,
+      156,
+      160,
+      155,
+      152,
+      155,
+      157,
+      152,
+      153,
+      155
+    ],
+    "mean_decode_tps": 69.43521950963208,
+    "mean_acceptance_rate": 0.0
+  },
+  "token_divergence": {
+    "available": true,
+    "sequence_source": "__verbose.tokens",
+    "probability_source": "choices[0].logprobs.content",
+    "common_prefix_length": 16,
+    "common_prefix_text": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when",
+    "first_divergence_index": 16,
+    "branch_counts": [
+      {
+        "token_id": 12284,
+        "token": " serving",
+        "count": 5
+      },
+      {
+        "token_id": 496,
+        "token": " a",
+        "count": 5
+      }
+    ],
+    "first_divergence_by_run": [
+      {
+        "label": "run_01",
+        "token_id": 12284,
+        "token": " serving",
+        "prob": 1.0,
+        "token_count": 181,
+        "finish_reason": "stop",
+        "content_word_count": 152,
+        "acceptance_rate": 0.0
+      },
+      {
+        "label": "run_02",
+        "token_id": 12284,
+        "token": " serving",
+        "prob": 1.0,
+        "token_count": 178,
+        "finish_reason": "stop",
+        "content_word_count": 156,
+        "acceptance_rate": 0.0
+      },
+      {
+        "label": "run_03",
+        "token_id": 496,
+        "token": " a",
+        "prob": 1.0,
+        "token_count": 181,
+        "finish_reason": "stop",
+        "content_word_count": 160,
+        "acceptance_rate": 0.0
+      },
+      {
+        "label": "run_04",
+        "token_id": 496,
+        "token": " a",
+        "prob": 1.0,
+        "token_count": 176,
+        "finish_reason": "stop",
+        "content_word_count": 155,
+        "acceptance_rate": 0.0
+      },
+      {
+        "label": "run_05",
+        "token_id": 12284,
+        "token": " serving",
+        "prob": 1.0,
+        "token_count": 174,
+        "finish_reason": "stop",
+        "content_word_count": 152,
+        "acceptance_rate": 0.0
+      },
+      {
+        "label": "run_06",
+        "token_id": 496,
+        "token": " a",
+        "prob": 1.0,
+        "token_count": 176,
+        "finish_reason": "stop",
+        "content_word_count": 155,
+        "acceptance_rate": 0.0
+      },
+      {
+        "label": "run_07",
+        "token_id": 496,
+        "token": " a",
+        "prob": 1.0,
+        "token_count": 184,
+        "finish_reason": "stop",
+        "content_word_count": 157,
+        "acceptance_rate": 0.0
+      },
+      {
+        "label": "run_08",
+        "token_id": 496,
+        "token": " a",
+        "prob": 1.0,
+        "token_count": 173,
+        "finish_reason": "stop",
+        "content_word_count": 152,
+        "acceptance_rate": 0.0
+      },
+      {
+        "label": "run_09",
+        "token_id": 12284,
+        "token": " serving",
+        "prob": 1.0,
+        "token_count": 172,
+        "finish_reason": "stop",
+        "content_word_count": 153,
+        "acceptance_rate": 0.0
+      },
+      {
+        "label": "run_10",
+        "token_id": 12284,
+        "token": " serving",
+        "prob": 1.0,
+        "token_count": 172,
+        "finish_reason": "stop",
+        "content_word_count": 155,
+        "acceptance_rate": 0.0
+      }
+    ]
+  },
+  "interpretation": {
+    "primary_narrowing": "natural-prose nondeterminism appears before stop handling and before long generation",
+    "claim_grade": "observation only; root-cause instrumentation evidence, not lane admission",
+    "paired_result": "single-slot no-spec also diverges, so multi-slot scheduling is not required to reproduce the defect",
+    "next_debug_step": "inspect GPU sampler/backend deterministic tie-breaking, thread scheduling, and post-sampling probability reporting around the first seven tokens; CPU no-spec traced control is the next isolation if GPU backend remains suspect"
+  }
+}

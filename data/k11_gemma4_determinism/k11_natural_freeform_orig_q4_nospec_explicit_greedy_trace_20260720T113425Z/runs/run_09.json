@@ -1,0 +1,106 @@
+{
+  "acceptance_rate": 0.0,
+  "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when serving machine learning models, resources like gpu memory, cpu cycles, and network sockets are finite and expensive. if a service fails to release these resources predictably after a request is processed, it leads to memory leaks and fragmentation. such leaks cause the service to degrade over time, eventually resulting in out of memory errors that crash the entire container. deterministic cleanup ensures that every allocated object is destroyed at a specific, predictable point in the execution lifecycle. this predictability allows engineers to calculate precise capacity requirements and prevents the accumulation of zombie processes or stale tensors. by guaranteeing that resources are reclaimed immediately after use, the system maintains consistent latency and high throughput. without this rigor, the overhead of garbage collection or unpredictable resource exhaustion can introduce jitter, making the service unreliable for production workloads that demand strict performance guarantees and long-term stability. ",
+  "content_word_count": 158,
+  "draft_n": 0,
+  "draft_n_accepted": 0,
+  "finish_reason": "stop",
+  "label": "run_09",
+  "output_sha256": "44ae40ba4cb5cd20cc00976ea9ab4ac5d269d97bbccbb598772c38f10006ec03",
+  "port": 56299,
+  "reasoning_content": "",
+  "reasoning_word_count": 0,
+  "repeat_index": 9,
+  "request": {
+    "max_tokens": 320,
+    "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+    "schema_task": "none",
+    "seed": 42,
+    "stop": [
+      "END"
+    ],
+    "temperature": 0.0,
+    "trace_n_probs": 5,
+    "trace_post_sampling_probs": true,
+    "trace_response_fields": [
+      "choices",
+      "usage",
+      "timings",
+      "tokens",
+      "completion_probabilities",
+      "__verbose/tokens",
+      "__verbose/completion_probabilities"
+    ],
+    "trace_token_divergence": true
+  },
+  "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/responses/run_09.raw.json",
+  "response_sha256": "6c8e9891304265e9bce96eaa7c1fc489dedcfcc9e6ef9c245df5b6e374d916ef",
+  "server_argv": [
+    "env",
+    "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+    "numactl",
+    "--interleave=all",
+    "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+    "-m",
+    "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+    "-np",
+    "4",
+    "--device",
+    "ROCm0",
+    "-ngl",
+    "99",
+    "-t",
+    "96",
+    "-ub",
+    "512",
+    "-c",
+    "16384",
+    "-fa",
+    "on",
+    "-rea",
+    "off",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "56299",
+    "--spec-type",
+    "none"
+  ],
+  "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/logs/run_09.server.log",
+  "server_pid": 3393929,
+  "status": "ok",
+  "task_eval": {
+    "bad_word_count": 0,
+    "count_ok": false,
+    "expected_word": null,
+    "expected_word_count": 160,
+    "observed_word_count": 158,
+    "passed": false,
+    "word_ok": true
+  },
+  "timings": {
+    "cache_n": 0,
+    "predicted_ms": 2553.572,
+    "predicted_n": 178,
+    "predicted_per_second": 69.70627810768602,
+    "predicted_per_token_ms": 14.345910112359551,
+    "prompt_ms": 148.449,
+    "prompt_n": 53,
+    "prompt_per_second": 357.02497153904704,
+    "prompt_per_token_ms": 2.800924528301887
+  },
+  "token_trace": {
+    "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/token_traces/run_09.tokens.json",
+    "probability_source": "choices[0].logprobs.content",
+    "sequence_source": "__verbose.tokens",
+    "token_count": 178
+  },
+  "usage": {
+    "completion_tokens": 178,
+    "prompt_tokens": 53,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 231
+  }
+}

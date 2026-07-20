@@ -1,0 +1,21 @@
+0.00.036.430 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.036.773 W srv  llama_server: -----------------
+0.00.036.775 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.036.775 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.036.775 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.036.775 W srv  llama_server: -----------------
+0.00.037.983 I srv    load_model: loading model '/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf'
+0.00.880.846 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.881.075 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.892.556 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+0.03.628.019 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 16384, kv_unified = 'false'
+0.03.632.434 I srv  llama_server: model loaded
+0.03.632.440 I srv  llama_server: listening on http://127.0.0.1:56425
+0.04.048.424 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.04.048.510 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.06.812.131 I slot print_timing: id  0 | task 0 | prompt eval time =     148.21 ms /    53 tokens (    2.80 ms per token,   357.60 tokens per second)
+0.06.812.134 I slot print_timing: id  0 | task 0 |        eval time =    2613.78 ms /   181 tokens (   14.44 ms per token,    69.25 tokens per second)
+0.06.812.135 I slot print_timing: id  0 | task 0 |       total time =    2762.00 ms /   234 tokens
+0.06.812.139 I slot print_timing: id  0 | task 0 |    graphs reused =        180
+0.06.812.223 I slot      release: id  0 | task 0 | stop processing: n_tokens = 233, truncated = 0
+0.06.819.870 I srv    operator(): operator(): cleaning up before exit...

@@ -1,0 +1,1659 @@
+{
+  "content_word_counts": [
+    160,
+    154,
+    157,
+    157,
+    156,
+    153,
+    159,
+    153,
+    158,
+    156
+  ],
+  "created_at": "2026-07-20T11:35:37.824907+00:00",
+  "deterministic": false,
+  "draft_backend_sampling": "default",
+  "draft_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+  "expected_word": null,
+  "expected_word_count": 160,
+  "finish_reasons": {
+    "stop": 10
+  },
+  "json_schema": null,
+  "ld_library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "mode": "execute",
+  "request_sampler_mode": "explicit-greedy",
+  "runs": [
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when a model processes requests, it consumes significant system resources including gpu memory, cpu cycles, and network bandwidth. if these resources are not released in a predictable and consistent manner, the service becomes vulnerable to memory leaks and resource fragmentation. deterministic cleanup ensures that every allocated buffer, temporary tensor, and connection is explicitly destroyed at a known point in the execution lifecycle. without this predictability, the accumulation of orphaned objects can lead to sudden out of memory errors, causing service downtime and unpredictable latency spikes for users. by implementing strict cleanup protocols, engineers can guarantee that the service maintains a steady state of resource availability. this reliability is essential for scaling workloads and ensuring that high throughput does not compromise the long term health of the infrastructure. ultimately, deterministic behavior transforms a fragile system into a robust production environment capable of handling continuous heavy inference loads. ",
+      "content_word_count": 160,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_01",
+      "output_sha256": "36e9aa88e0b79697396391281f65ecfa7032511b1bfeb44f23798582ecd219d9",
+      "port": 47817,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 1,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 5,
+        "trace_post_sampling_probs": true,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/responses/run_01.raw.json",
+      "response_sha256": "6d7a7c8fa3336585b9fc49f4b47fd965a51fd6da301e084e9f925d89989bc5c4",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "47817",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/logs/run_01.server.log",
+      "server_pid": 3392021,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": true,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 160,
+        "passed": true,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2554.273,
+        "predicted_n": 179,
+        "predicted_per_second": 70.07864860177436,
+        "predicted_per_token_ms": 14.269681564245811,
+        "prompt_ms": 147.187,
+        "prompt_n": 53,
+        "prompt_per_second": 360.08614891260777,
+        "prompt_per_token_ms": 2.77711320754717
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/token_traces/run_01.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 179
+      },
+      "usage": {
+        "completion_tokens": 179,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 232
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when a model processes requests, it consumes significant system resources including gpu memory, cpu cycles, and network bandwidth. if these resources are not released in a predictable and consistent manner, the service becomes vulnerable to memory leaks and resource fragmentation. deterministic cleanup ensures that every allocated buffer, tensor, and temporary file is destroyed at a specific, known point in the execution lifecycle. this predictability prevents the accumulation of stale data that could lead to out of memory errors or unexpected latency spikes during high throughput periods. without it, the service might function correctly under light loads but fail catastrophically under stress as unreleased objects slowly choke the system. by enforcing strict rules for resource deallocation, engineers can guarantee that the service remains performant, scalable, and reliable over long periods of continuous operation, ensuring consistent response times for every user request. ",
+      "content_word_count": 154,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_02",
+      "output_sha256": "7b7aa143d849dac89854030ae8d569cff1e06f5277eb1e6f03cb118de7d96572",
+      "port": 47237,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 2,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 5,
+        "trace_post_sampling_probs": true,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/responses/run_02.raw.json",
+      "response_sha256": "31fe6d0e4036e94c6ed166b2a3e280d9126dffeb471952b8d5ded8e298fa1b11",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "47237",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/logs/run_02.server.log",
+      "server_pid": 3392266,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 154,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2554.819,
+        "predicted_n": 179,
+        "predicted_per_second": 70.0636718295895,
+        "predicted_per_token_ms": 14.27273184357542,
+        "prompt_ms": 146.47,
+        "prompt_n": 53,
+        "prompt_per_second": 361.8488427664368,
+        "prompt_per_token_ms": 2.763584905660377
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/token_traces/run_02.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 179
+      },
+      "usage": {
+        "completion_tokens": 179,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 232
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when serving machine learning models, resources like gpu memory, cpu cycles, and network sockets are finite and precious. if a service fails to release these resources predictably after a request is processed, it leads to memory leaks and fragmentation. over time, these leaks accumulate, causing the service to slow down or crash entirely due to out of memory errors. deterministic cleanup ensures that every allocated object is destroyed at a specific, predictable point in the execution lifecycle. this predictability allows engineers to reason about the system state and prevents non-deterministic behavior where some requests succeed while others fail randomly due to lingering artifacts. by enforcing strict cleanup rules, we ensure consistent latency, prevent resource exhaustion, and maintain high availability for all users. ultimately, deterministic management transforms a fragile system into a robust production environment capable of handling heavy, continuous workloads without manual intervention. ",
+      "content_word_count": 157,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_03",
+      "output_sha256": "bf3c37ad8b4379f66100a1130ee58fcba9d17699d0f29ac606a087ce381c0d37",
+      "port": 33059,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 3,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 5,
+        "trace_post_sampling_probs": true,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/responses/run_03.raw.json",
+      "response_sha256": "7f20658e8e89d0958f3bf79559df031309d5fe4d174f44d81329e88d0fe7686a",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "33059",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/logs/run_03.server.log",
+      "server_pid": 3392498,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 157,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2563.587,
+        "predicted_n": 180,
+        "predicted_per_second": 70.21411795269674,
+        "predicted_per_token_ms": 14.24215,
+        "prompt_ms": 146.082,
+        "prompt_n": 53,
+        "prompt_per_second": 362.80992867019893,
+        "prompt_per_token_ms": 2.7562641509433963
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/token_traces/run_03.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 180
+      },
+      "usage": {
+        "completion_tokens": 180,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 233
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when serving machine learning models, resources like gpu memory, cpu cycles, and network sockets are finite and precious. if a service fails to release these resources predictably after a request is processed, it leads to memory leaks and fragmentation. over time, these leaks accumulate, causing the service to slow down or crash entirely due to out of memory errors. deterministic cleanup ensures that every allocated object is destroyed at a specific, predictable point in the execution lifecycle. this predictability allows engineers to reason about the system state and prevents non-deterministic behavior where some requests succeed while others fail randomly due to lingering artifacts. by enforcing strict cleanup rules, we ensure consistent latency, prevent resource exhaustion, and maintain high availability for all users. ultimately, deterministic management transforms a fragile system into a robust production environment capable of handling heavy, continuous workloads without manual intervention. ",
+      "content_word_count": 157,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_04",
+      "output_sha256": "bf3c37ad8b4379f66100a1130ee58fcba9d17699d0f29ac606a087ce381c0d37",
+      "port": 51663,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 4,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 5,
+        "trace_post_sampling_probs": true,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/responses/run_04.raw.json",
+      "response_sha256": "1e7cfae02ea38d337744f9a6d31cfa5a7fb19e3335391fe8ff77e3678d3dfcd6",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "51663",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/logs/run_04.server.log",
+      "server_pid": 3392735,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 157,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2573.396,
+        "predicted_n": 180,
+        "predicted_per_second": 69.94648316854459,
+        "predicted_per_token_ms": 14.296644444444446,
+        "prompt_ms": 147.599,
+        "prompt_n": 53,
+        "prompt_per_second": 359.0810235841706,
+        "prompt_per_token_ms": 2.7848867924528298
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/token_traces/run_04.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 180
+      },
+      "usage": {
+        "completion_tokens": 180,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 233
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when a service processes high volumes of requests, it frequently allocates temporary resources such as gpu memory, cpu buffers, and network sockets. if these resources are not released in a predictable and consistent manner, the system becomes vulnerable to memory leaks and fragmentation. non-deterministic cleanup can lead to unpredictable latency spikes, as the garbage collector or resource manager might trigger at inconvenient moments during a live inference task. this unpredictability is unacceptable in production environments where low latency and high throughput are required. by ensuring that every allocated object is destroyed at a specific, known point in the execution lifecycle, developers can guarantee that the service maintains a steady state of resource availability. this prevents the gradual degradation of performance and avoids the dreaded out of memory errors that crash entire clusters. deterministic behavior ensures reliability, predictability, and long term operational stability. ",
+      "content_word_count": 156,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_05",
+      "output_sha256": "b5ab15ba3b96092b09a8330c4efd918467d9458684b3fa8eeacacccaa89152b0",
+      "port": 59901,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 5,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 5,
+        "trace_post_sampling_probs": true,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/responses/run_05.raw.json",
+      "response_sha256": "f86d6fac64d098fd61dd2a61e6a26a1a7984c1bc62f19023d6df946ae2a4126f",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "59901",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/logs/run_05.server.log",
+      "server_pid": 3392977,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 156,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2558.51,
+        "predicted_n": 177,
+        "predicted_per_second": 69.18089044013898,
+        "predicted_per_token_ms": 14.454858757062148,
+        "prompt_ms": 148.218,
+        "prompt_n": 53,
+        "prompt_per_second": 357.5814003697257,
+        "prompt_per_token_ms": 2.796566037735849
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/token_traces/run_05.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 177
+      },
+      "usage": {
+        "completion_tokens": 177,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 230
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when serving machine learning models, resources like gpu memory, cpu cycles, and network sockets are finite and expensive. if a service fails to release these resources predictably after a request is processed, it leads to memory leaks and fragmentation. such leaks cause the service to degrade over time, eventually resulting in out of memory errors that crash the entire container. deterministic cleanup ensures that every allocated object is destroyed at a specific, predictable point in the execution lifecycle. this predictability allows engineers to calculate precise resource bounds and prevents the accumulation of zombie processes or stale tensors. without it, the system becomes non-deterministic, making debugging nearly impossible and scaling unpredictable. by enforcing strict cleanup protocols, developers can guarantee high availability, consistent latency, and optimal throughput, which are the fundamental requirements for any production grade inference engine operating at scale. ",
+      "content_word_count": 153,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_06",
+      "output_sha256": "be449a5e83b7aeca2dcc54a587bb635dabe9304a89629e48a2ce493f25522150",
+      "port": 59597,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 6,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 5,
+        "trace_post_sampling_probs": true,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/responses/run_06.raw.json",
+      "response_sha256": "0b84044e4cc3a24827738943b6aa32ac7ee021506f5971934517e57fbd9ff8bd",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "59597",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/logs/run_06.server.log",
+      "server_pid": 3393222,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 153,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2516.912,
+        "predicted_n": 176,
+        "predicted_per_second": 69.9269581137521,
+        "predicted_per_token_ms": 14.300636363636363,
+        "prompt_ms": 146.9,
+        "prompt_n": 53,
+        "prompt_per_second": 360.78965282505106,
+        "prompt_per_token_ms": 2.771698113207547
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/token_traces/run_06.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 176
+      },
+      "usage": {
+        "completion_tokens": 176,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 229
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when a model processes requests, it consumes significant system resources including gpu memory, cpu cycles, and network bandwidth. if these resources are not released in a predictable and consistent manner, the service becomes vulnerable to memory leaks and resource fragmentation. deterministic cleanup ensures that every allocated buffer, tensor, and temporary file is explicitly destroyed at a known point in the execution lifecycle. without this predictability, the accumulation of orphaned objects can lead to out of memory errors, causing sudden service crashes or severe latency spikes that degrade user experience. furthermore, consistent cleanup simplifies debugging and monitoring by ensuring that the system state remains reproducible across different requests. by managing the lifecycle of every object with precision, developers can guarantee that the service maintains a steady state, preventing the gradual degradation of performance that often plagues long running production environments in high throughput machine learning pipelines. ",
+      "content_word_count": 159,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_07",
+      "output_sha256": "64d402410be4600d284765eeda5ae78412a49917846bd5e4574b55b23714be5b",
+      "port": 42439,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 7,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 5,
+        "trace_post_sampling_probs": true,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/responses/run_07.raw.json",
+      "response_sha256": "2b73539c6748e3c8c9b4c050ed818c37583b44a0727b4cf99a0c90e6d625570c",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "42439",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/logs/run_07.server.log",
+      "server_pid": 3393448,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 159,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2560.883,
+        "predicted_n": 178,
+        "predicted_per_second": 69.50727542023591,
+        "predicted_per_token_ms": 14.386983146067415,
+        "prompt_ms": 146.639,
+        "prompt_n": 53,
+        "prompt_per_second": 361.43181554702363,
+        "prompt_per_token_ms": 2.7667735849056605
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/token_traces/run_07.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      "usage": {
+        "completion_tokens": 178,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 231
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of a robust inference service because it ensures predictable resource management and prevents memory leaks. in high-throughput environments, models often allocate significant gpu memory and system ram for tensors, buffers, and temporary caches. if these resources are not released in a strictly defined, deterministic manner, the service will eventually suffer from fragmentation or exhaustion. non-deterministic cleanup, often relying on garbage collection cycles, introduces unpredictable latency spikes and can lead to out-of-memory errors during peak loads. by implementing deterministic patterns, developers can guarantee that every request cycle begins with a clean slate, ensuring that memory is reclaimed immediately after the inference task completes. this predictability is essential for maintaining consistent throughput and long-term stability in production. without it, the cumulative effect of lingering objects can degrade performance, making the system unreliable for real-time applications. thus, deterministic cleanup is the foundation of scalable, reliable, and efficient machine learning deployment. ",
+      "content_word_count": 153,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_08",
+      "output_sha256": "5f16cbf1d620f7b5d112646905cd24469f8779af7f6f81c254bf10989de9fcc4",
+      "port": 49079,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 8,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 5,
+        "trace_post_sampling_probs": true,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/responses/run_08.raw.json",
+      "response_sha256": "53666ff8f3b7e565ef72594af7f0ae0ae78a503c5d9c0b941ef41e5e3166e22c",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "49079",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/logs/run_08.server.log",
+      "server_pid": 3393684,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 153,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2707.721,
+        "predicted_n": 188,
+        "predicted_per_second": 69.4310824490411,
+        "predicted_per_token_ms": 14.402771276595745,
+        "prompt_ms": 148.357,
+        "prompt_n": 53,
+        "prompt_per_second": 357.2463719271757,
+        "prompt_per_token_ms": 2.799188679245283
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/token_traces/run_08.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 188
+      },
+      "usage": {
+        "completion_tokens": 188,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 241
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when serving machine learning models, resources like gpu memory, cpu cycles, and network sockets are finite and expensive. if a service fails to release these resources predictably after a request is processed, it leads to memory leaks and fragmentation. such leaks cause the service to degrade over time, eventually resulting in out of memory errors that crash the entire container. deterministic cleanup ensures that every allocated object is destroyed at a specific, predictable point in the execution lifecycle. this predictability allows engineers to calculate precise capacity requirements and prevents the accumulation of zombie processes or stale tensors. by guaranteeing that resources are reclaimed immediately after use, the system maintains consistent latency and high throughput. without this rigor, the overhead of garbage collection or unpredictable resource exhaustion can introduce jitter, making the service unreliable for production workloads that demand strict performance guarantees and long-term stability. ",
+      "content_word_count": 158,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_09",
+      "output_sha256": "44ae40ba4cb5cd20cc00976ea9ab4ac5d269d97bbccbb598772c38f10006ec03",
+      "port": 56299,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 9,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 5,
+        "trace_post_sampling_probs": true,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/responses/run_09.raw.json",
+      "response_sha256": "6c8e9891304265e9bce96eaa7c1fc489dedcfcc9e6ef9c245df5b6e374d916ef",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "56299",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/logs/run_09.server.log",
+      "server_pid": 3393929,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 158,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2553.572,
+        "predicted_n": 178,
+        "predicted_per_second": 69.70627810768602,
+        "predicted_per_token_ms": 14.345910112359551,
+        "prompt_ms": 148.449,
+        "prompt_n": 53,
+        "prompt_per_second": 357.02497153904704,
+        "prompt_per_token_ms": 2.800924528301887
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/token_traces/run_09.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      "usage": {
+        "completion_tokens": 178,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 231
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when a service processes requests, it often allocates significant system resources such as gpu memory, cpu cycles, and temporary buffers to handle large models and input tensors. if these resources are not released in a predictable and consistent manner, the system becomes vulnerable to memory leaks and fragmentation. deterministic cleanup ensures that every allocated object is destroyed at a specific, known point in the execution lifecycle. this prevents the gradual accumulation of unused data that eventually leads to out of memory errors and service crashes. by ensuring that cleanup follows a strict, repeatable logic, developers can guarantee that the service maintains a steady state of resource availability. this predictability is essential for high throughput and low latency, as it avoids the unpredictable pauses caused by non-deterministic garbage collection cycles. ultimately, deterministic management provides the reliability required for production grade machine learning deployments. ",
+      "content_word_count": 156,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_10",
+      "output_sha256": "32ffc83c5ac78cce54ac36d2210de644ef0e5eeae0a537adcb203f995c16be4e",
+      "port": 48665,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 10,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 5,
+        "trace_post_sampling_probs": true,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/responses/run_10.raw.json",
+      "response_sha256": "558238b097e73304c32d6ad5ec626cbf8876257de250a05c7d38f8301765e100",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "4",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "48665",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/logs/run_10.server.log",
+      "server_pid": 3394174,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 156,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2535.103,
+        "predicted_n": 176,
+        "predicted_per_second": 69.4251870634053,
+        "predicted_per_token_ms": 14.403994318181818,
+        "prompt_ms": 148.29,
+        "prompt_n": 53,
+        "prompt_per_second": 357.4077820486884,
+        "prompt_per_token_ms": 2.7979245283018868
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_nospec_explicit_greedy_trace_20260720T113425Z/token_traces/run_10.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 176
+      },
+      "usage": {
+        "completion_tokens": 176,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 229
+      }
+    }
+  ],
+  "schema_task": "none",
+  "server_bin": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "slots": 4,
+  "spec_type": "none",
+  "stop": [
+    "END"
+  ],
+  "target_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+  "task_passed": false,
+  "token_divergence": {
+    "all_token_sequences_identical": false,
+    "available": true,
+    "common_prefix_length": 7,
+    "enabled": true,
+    "first_divergence": {
+      "by_run": [
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_01",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "prob": 1.0,
+            "token": " maintaining",
+            "top_probs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "prob": 1.0,
+                "token": " maintaining"
+              }
+            ]
+          },
+          "token_count": 179
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_02",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "prob": 1.0,
+            "token": " maintaining",
+            "top_probs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "prob": 1.0,
+                "token": " maintaining"
+              }
+            ]
+          },
+          "token_count": 179
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_03",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "prob": 1.0,
+            "token": " maintaining",
+            "top_probs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "prob": 1.0,
+                "token": " maintaining"
+              }
+            ]
+          },
+          "token_count": 180
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_04",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "prob": 1.0,
+            "token": " maintaining",
+            "top_probs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "prob": 1.0,
+                "token": " maintaining"
+              }
+            ]
+          },
+          "token_count": 180
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_05",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "prob": 1.0,
+            "token": " maintaining",
+            "top_probs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "prob": 1.0,
+                "token": " maintaining"
+              }
+            ]
+          },
+          "token_count": 177
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_06",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "prob": 1.0,
+            "token": " maintaining",
+            "top_probs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "prob": 1.0,
+                "token": " maintaining"
+              }
+            ]
+          },
+          "token_count": 176
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_07",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "prob": 1.0,
+            "token": " maintaining",
+            "top_probs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "prob": 1.0,
+                "token": " maintaining"
+              }
+            ]
+          },
+          "token_count": 178
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_08",
+          "token": {
+            "bytes": [
+              32,
+              97
+            ],
+            "id": 496,
+            "prob": 1.0,
+            "token": " a",
+            "top_probs": [
+              {
+                "bytes": [
+                  32,
+                  97
+                ],
+                "id": 496,
+                "prob": 1.0,
+                "token": " a"
+              }
+            ]
+          },
+          "token_count": 188
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_09",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "prob": 1.0,
+            "token": " maintaining",
+            "top_probs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "prob": 1.0,
+                "token": " maintaining"
+              }
+            ]
+          },
+          "token_count": 178
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_10",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "prob": 1.0,
+            "token": " maintaining",
+            "top_probs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "prob": 1.0,
+                "token": " maintaining"
+              }
+            ]
+          },
+          "token_count": 176
+        }
+      ],
+      "index": 7
+    },
+    "max_token_count": 188,
+    "min_token_count": 176,
+    "ok_run_count": 10,
+    "per_run": [
+      {
+        "content_word_count": 160,
+        "finish_reason": "stop",
+        "label": "run_01",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 179
+      },
+      {
+        "content_word_count": 154,
+        "finish_reason": "stop",
+        "label": "run_02",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 179
+      },
+      {
+        "content_word_count": 157,
+        "finish_reason": "stop",
+        "label": "run_03",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 180
+      },
+      {
+        "content_word_count": 157,
+        "finish_reason": "stop",
+        "label": "run_04",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 180
+      },
+      {
+        "content_word_count": 156,
+        "finish_reason": "stop",
+        "label": "run_05",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 177
+      },
+      {
+        "content_word_count": 153,
+        "finish_reason": "stop",
+        "label": "run_06",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 176
+      },
+      {
+        "content_word_count": 159,
+        "finish_reason": "stop",
+        "label": "run_07",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      {
+        "content_word_count": 153,
+        "finish_reason": "stop",
+        "label": "run_08",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 188
+      },
+      {
+        "content_word_count": 158,
+        "finish_reason": "stop",
+        "label": "run_09",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      {
+        "content_word_count": 156,
+        "finish_reason": "stop",
+        "label": "run_10",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 176
+      }
+    ],
+    "sequence_run_count": 10,
+    "trace_run_count": 10
+  },
+  "trace_n_probs": 5,
+  "trace_post_sampling_probs": true,
+  "trace_response_fields": [
+    "choices",
+    "usage",
+    "timings",
+    "tokens",
+    "completion_probabilities",
+    "__verbose/tokens",
+    "__verbose/completion_probabilities"
+  ],
+  "trace_token_divergence": true,
+  "unique_output_hashes": [
+    "32ffc83c5ac78cce54ac36d2210de644ef0e5eeae0a537adcb203f995c16be4e",
+    "36e9aa88e0b79697396391281f65ecfa7032511b1bfeb44f23798582ecd219d9",
+    "44ae40ba4cb5cd20cc00976ea9ab4ac5d269d97bbccbb598772c38f10006ec03",
+    "5f16cbf1d620f7b5d112646905cd24469f8779af7f6f81c254bf10989de9fcc4",
+    "64d402410be4600d284765eeda5ae78412a49917846bd5e4574b55b23714be5b",
+    "7b7aa143d849dac89854030ae8d569cff1e06f5277eb1e6f03cb118de7d96572",
+    "b5ab15ba3b96092b09a8330c4efd918467d9458684b3fa8eeacacccaa89152b0",
+    "be449a5e83b7aeca2dcc54a587bb635dabe9304a89629e48a2ce493f25522150",
+    "bf3c37ad8b4379f66100a1130ee58fcba9d17699d0f29ac606a087ce381c0d37"
+  ]
+}
