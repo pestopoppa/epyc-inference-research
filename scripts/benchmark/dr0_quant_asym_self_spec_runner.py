@@ -1580,9 +1580,17 @@ def run_execute(args: argparse.Namespace, manifest: dict[str, Any]) -> dict[str,
             "unit": "seconds",
             "caveat": "HTTP/request wall time remains outside engine telemetry",
         }
-        summary["fh_accounting"]["accounting_verdict"] = (
-            "engine_F_K_and_H_K_observed_not_decision_grade_until_quality_and_output_stability_pass"
-        )
+        if (
+            summary["quality_gate"]["status"] == "pass"
+            and summary["output_stability_gate"]["status"] == "pass"
+        ):
+            summary["fh_accounting"]["accounting_verdict"] = (
+                "engine_F_K_and_H_K_observed_quality_and_output_stability_passed_observation_grade"
+            )
+        else:
+            summary["fh_accounting"]["accounting_verdict"] = (
+                "engine_F_K_and_H_K_observed_not_decision_grade_until_quality_and_output_stability_pass"
+            )
     else:
         summary["fh_accounting"]["accounting_verdict"] = (
             "not_decision_grade_until_F_K_and_H_K_are_separately_observable"

@@ -123,6 +123,12 @@ def test_execute_path_writes_summary_with_mocked_run(tmp_path: Path, monkeypatch
             "draft_tokens": 10 if variant.k else 0,
             "accepted_draft_tokens": 5 if variant.k else 0,
             "alpha": 0.5 if variant.k else None,
+            "spec_telemetry_status": "observed" if variant.k else "missing",
+            "spec_verify_time_s": 0.012 if variant.k else 0.0,
+            "spec_draft_time_s": 0.001 if variant.k else 0.0,
+            "spec_process_time_s": 0.002 if variant.k else 0.0,
+            "spec_sample_accept_time_s": 0.003 if variant.k else 0.0,
+            "spec_verify_steps": 2 if variant.k else 0,
             "wall_time_s": 1.0,
             "prompt_time_s": 0.25,
             "decode_time_s": 0.5,
@@ -165,7 +171,10 @@ def test_execute_path_writes_summary_with_mocked_run(tmp_path: Path, monkeypatch
     assert summary["cleanup_proof"]["status"] == "pass"
     assert summary["observation_grade"] is True
     assert summary["decision_grade"] is False
-    assert summary["fh_accounting"]["accounting_verdict"].startswith("not_decision_grade")
+    assert (
+        summary["fh_accounting"]["accounting_verdict"]
+        == "engine_F_K_and_H_K_observed_quality_and_output_stability_passed_observation_grade"
+    )
 
 
 def test_execute_preflight_refuses_existing_llama_processes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
