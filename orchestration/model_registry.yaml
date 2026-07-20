@@ -7361,13 +7361,13 @@ roles:
 
   bonsai_8b_local_orphan:
     tier: D
-    description: Bonsai-8B local GGUF - orphaned pre-existing artifact without local HF sidecar; catalogue-only until provenance is resolved.
+    description: Bonsai-8B local GGUF - orphaned pre-existing qwen3 8B Q1_0 artifact without local HF sidecar; catalogue-only until provenance is resolved.
     model:
       name: Bonsai-8B
       path: /mnt/raid0/llm/models/Bonsai-8B.gguf
-      quant: unknown
+      quant: Q1_0
       size_gb: 1.1
-      architecture: unknown
+      architecture: qwen3
     artifact_status:
       download: complete
       observed_date: 2026-07-16
