@@ -33,6 +33,7 @@ Usage:
 """
 
 import json
+import logging
 import random
 import re
 import sys
@@ -42,6 +43,8 @@ from typing import Optional
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 sys.path.insert(0, str(Path(__file__).parent))
+
+logger = logging.getLogger(__name__)
 
 # Suites that have dataset adapters (vs YAML-only)
 ADAPTER_SUITES = {
@@ -201,6 +204,49 @@ class BaseAdapter:
     # Adapters with real difficulty data should set this True
     has_real_tiers: bool = False
 
+    def __init__(self):
+        self._reset_accounting()
+
+    def _reset_accounting(self) -> None:
+        self.dropped_rows: int = 0
+        self.dropped_by_reason: dict[str, int] = {}
+        self.degraded_sources: list[dict[str, str]] = []
+
+    def _ensure_accounting(self) -> None:
+        if not hasattr(self, "dropped_rows"):
+            self._reset_accounting()
+
+    def drop_row(self, reason: str, *, source: str | None = None) -> None:
+        """Record one source row that did not become a benchmark prompt."""
+        self._ensure_accounting()
+        reason_key = f"{source}:{reason}" if source else reason
+        self.dropped_rows += 1
+        self.dropped_by_reason[reason_key] = self.dropped_by_reason.get(reason_key, 0) + 1
+
+    def record_degraded_source(self, source: str, error: BaseException | str) -> None:
+        """Record a failed optional sub-source without hiding the degradation."""
+        self._ensure_accounting()
+        message = str(error)
+        self.degraded_sources.append({"source": source, "error": message})
+        logger.warning(
+            "[adapter:%s] degraded source %s: %s",
+            self.suite_name or self.__class__.__name__,
+            source,
+            message,
+        )
+
+    def accounting_summary(self) -> dict:
+        """Return loss/degradation metadata for pool headers and tests."""
+        self._ensure_accounting()
+        summary = {
+            "dropped_rows": self.dropped_rows,
+            "dropped_by_reason": dict(sorted(self.dropped_by_reason.items())),
+            "degraded_sources": list(self.degraded_sources),
+        }
+        if hasattr(self, "source_counts"):
+            summary["source_counts"] = dict(getattr(self, "source_counts"))
+        return summary
+
     def _ensure_loaded(self):
         raise NotImplementedError
 
@@ -259,6 +305,7 @@ class BaseAdapter:
         _row_to_prompt(). Used by question_pool.py to pre-extract the
         complete question corpus into a JSONL file.
         """
+        self._ensure_accounting()
         self._ensure_loaded()
         if not self._dataset:
             return []
@@ -269,8 +316,18 @@ class BaseAdapter:
                 prompt = self._row_to_prompt(i, row)
                 if prompt:
                     results.append(prompt)
+                else:
+                    self.drop_row("empty_prompt")
             except Exception:
+                self.drop_row("row_to_prompt_exception")
                 continue
+        if self.dropped_rows:
+            logger.warning(
+                "[adapter:%s] dropped %d source row(s): %s",
+                self.suite_name or self.__class__.__name__,
+                self.dropped_rows,
+                self.dropped_by_reason,
+            )
         return results
 
     def _get_tier_for_index(self, idx: int) -> int:
@@ -363,22 +420,41 @@ class MathAdapter(BaseAdapter):
     has_real_tiers = True  # GSM8K=T1, MATH-500 level 1-3=T2, level 4-5=T3
     _gsm8k = None
     _math500 = None
+    source_counts: dict[str, int] = {}
 
     def _ensure_loaded(self):
         if self._dataset is not None:
             return
+        self._ensure_accounting()
+        self.source_counts = {"gsm8k": 0, "math500": 0}
         try:
-            import datasets as hf
-            self._gsm8k = hf.load_dataset("gsm8k", "main", split="test")
-            try:
-                self._math500 = hf.load_dataset("HuggingFaceH4/MATH-500", split="test")
-            except Exception as e:
-                self._math500 = []
-            # Combine into unified list
-            self._dataset = list(range(len(self._gsm8k) + len(self._math500)))
+            import datasets as hf  # type: ignore
         except Exception as e:
+            self.record_degraded_source("datasets_import", e)
             print(f"  [adapter] Math datasets load failed: {e}")
+            self._gsm8k = []
+            self._math500 = []
             self._dataset = []
+            return
+
+        try:
+            self._gsm8k = hf.load_dataset("gsm8k", "main", split="test")
+        except Exception as e:
+            self.record_degraded_source("gsm8k", e)
+            print(f"  [adapter] GSM8K load failed: {e}")
+            self._gsm8k = []
+
+        try:
+            self._math500 = hf.load_dataset("HuggingFaceH4/MATH-500", split="test")
+        except Exception as e:
+            self.record_degraded_source("math500", e)
+            print(f"  [adapter] MATH-500 load failed: {e}")
+            self._math500 = []
+
+        n_gsm8k = len(self._gsm8k) if self._gsm8k else 0
+        n_math500 = len(self._math500) if self._math500 else 0
+        self.source_counts = {"gsm8k": n_gsm8k, "math500": n_math500}
+        self._dataset = list(range(n_gsm8k + n_math500))
 
     def _row_to_prompt(self, idx: int, row: dict) -> dict:
         # idx is from unified list; row is ignored, we index directly

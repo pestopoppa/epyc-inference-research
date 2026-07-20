@@ -50,6 +50,8 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     stats: dict[str, int] = {}
+    adapter_stats: dict[str, dict[str, Any]] = {}
+    source_counts: dict[str, dict[str, int]] = {}
     all_questions: list[dict] = []
 
     # 1. Extract from HF dataset adapters
@@ -60,6 +62,14 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
             continue
         try:
             questions = adapter.extract_all()
+            if hasattr(adapter, "accounting_summary"):
+                summary = adapter.accounting_summary()
+                adapter_stats[suite_name] = summary
+                counts = summary.get("source_counts")
+                if isinstance(counts, dict):
+                    source_counts[suite_name] = {
+                        str(k): int(v) for k, v in counts.items()
+                    }
             # Ensure suite field is set
             for q in questions:
                 q.setdefault("suite", suite_name)
@@ -117,6 +127,9 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
         "generator": "question_pool.py",
         "total_questions": len(all_questions),
         "suites": stats,
+        "adapter_stats": adapter_stats,
+        "source_counts": source_counts,
+        "n_math500": source_counts.get("math", {}).get("math500", 0),
     }
 
     with open(output_path, "w") as f:
@@ -142,6 +155,7 @@ def load_pool(
 
     pool: dict[str, list[dict]] = {}
     header_seen = False
+    header: dict[str, Any] | None = None
 
     with open(pool_path) as f:
         for line in f:
@@ -156,6 +170,7 @@ def load_pool(
             # Header line
             if obj.get(_HEADER_KEY):
                 header_seen = True
+                header = obj
                 if warn_stale:
                     _check_staleness(obj)
                 continue
@@ -165,8 +180,50 @@ def load_pool(
 
     if not header_seen:
         logger.warning("Pool file has no header — consider rebuilding with --rebuild-pool")
+    elif header is not None:
+        _reconcile_loaded_counts(header, pool, pool_path)
 
     return pool
+
+
+def _reconcile_loaded_counts(
+    header: dict[str, Any], pool: dict[str, list[dict]], pool_path: Path,
+) -> None:
+    """Warn when loaded row counts do not match pool header statistics."""
+    expected_total = header.get("total_questions")
+    loaded_total = sum(len(rows) for rows in pool.values())
+    if isinstance(expected_total, int) and expected_total != loaded_total:
+        logger.warning(
+            "Pool loaded count mismatch for %s: header total_questions=%d, loaded=%d",
+            pool_path,
+            expected_total,
+            loaded_total,
+        )
+
+    expected_suites = header.get("suites", {})
+    if not isinstance(expected_suites, dict):
+        return
+
+    for suite, expected in sorted(expected_suites.items()):
+        if not isinstance(expected, int):
+            continue
+        loaded = len(pool.get(suite, []))
+        if expected != loaded:
+            logger.warning(
+                "Pool suite count mismatch for %s [%s]: header=%d, loaded=%d",
+                pool_path,
+                suite,
+                expected,
+                loaded,
+            )
+
+    unexpected_suites = sorted(set(pool) - set(expected_suites))
+    if unexpected_suites:
+        logger.warning(
+            "Pool contains suite(s) absent from header for %s: %s",
+            pool_path,
+            ", ".join(unexpected_suites),
+        )
 
 
 def _check_staleness(header: dict) -> None:
