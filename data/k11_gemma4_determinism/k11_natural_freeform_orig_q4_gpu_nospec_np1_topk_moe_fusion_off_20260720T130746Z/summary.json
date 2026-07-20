@@ -1,0 +1,2926 @@
+{
+  "content_word_counts": [
+    149,
+    158,
+    154,
+    158,
+    158,
+    156,
+    154,
+    159,
+    155,
+    158
+  ],
+  "created_at": "2026-07-20T13:08:58.416236+00:00",
+  "deterministic": false,
+  "draft_backend_sampling": "default",
+  "draft_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-Q8_0.gguf",
+  "expected_word": null,
+  "expected_word_count": 160,
+  "finish_reasons": {
+    "stop": 10
+  },
+  "flash_attn": "on",
+  "json_schema": null,
+  "ld_library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+  "mode": "execute",
+  "request_sampler_mode": "explicit-greedy",
+  "runs": [
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of a robust inference service because it ensures predictable resource management and prevents memory leaks. in high-throughput environments, models often allocate significant gpu memory and system ram to handle incoming requests. if cleanup processes are non-deterministic, resources might remain locked due to unpredictable garbage collection cycles or unhandled exceptions. this leads to fragmentation and eventual out-of-memory errors that crash the entire service. by implementing deterministic cleanup, developers can guarantee that tensors, buffers, and temporary files are released immediately after a request is processed. this predictability allows for much tighter resource scheduling and higher concurrency levels, as the system knows exactly when capacity becomes available again. furthermore, deterministic behavior simplifies debugging and monitoring, as resource usage patterns become stable and repeatable. without it, the service becomes a black box of accumulating overhead, making scaling impossible and reducing the overall reliability of the production deployment. ",
+      "content_word_count": 149,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_01",
+      "output_sha256": "f14677d4d81997c4ffd656c5398947fd30eeb88737a65c7f2e4b493e0b07027c",
+      "port": 54573,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 1,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 10,
+        "trace_post_sampling_probs": false,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/responses/run_01.raw.json",
+      "response_sha256": "62988d7ab1a918eee0dc2892a483ee73ca48c6409ca8559117f7505007b0f797",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_CUDA_DISABLE_TOPK_MOE_FUSION=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "1",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "54573",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/logs/run_01.server.log",
+      "server_pid": 3985016,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 149,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2545.859,
+        "predicted_n": 177,
+        "predicted_per_second": 69.52466731268306,
+        "predicted_per_token_ms": 14.38338418079096,
+        "prompt_ms": 151.851,
+        "prompt_n": 53,
+        "prompt_per_second": 349.02634819658743,
+        "prompt_per_token_ms": 2.8651132075471697
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/token_traces/run_01.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 177
+      },
+      "usage": {
+        "completion_tokens": 177,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 230
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when serving machine learning models, resources like gpu memory, cpu cycles, and network sockets are finite and precious. if a service fails to release these resources predictably after a request is processed, it leads to memory leaks and fragmentation. over time, these leaks accumulate, causing the service to slow down or crash entirely due to out of memory errors. deterministic cleanup ensures that every allocated object is destroyed at a specific, predictable point in the execution lifecycle. this predictability allows engineers to reason about the system state and prevents non-deterministic behavior where some requests succeed while others fail randomly due to lingering artifacts. by enforcing strict cleanup protocols, developers can guarantee consistent latency and high availability. ultimately, deterministic resource management transforms a fragile system into a robust production environment capable of handling high throughput without the constant threat of silent degradation or unexpected downtime. ",
+      "content_word_count": 158,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_02",
+      "output_sha256": "214c111d15991d02ff9ed08bcfa52960c39b719b0df26502476822d4b53800f4",
+      "port": 58857,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 2,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 10,
+        "trace_post_sampling_probs": false,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/responses/run_02.raw.json",
+      "response_sha256": "e3e43acb4a4e1f1359d6d0d33e51c7d6aa711656c09a9d202ffb001fde1b6fd5",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_CUDA_DISABLE_TOPK_MOE_FUSION=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "1",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "58857",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/logs/run_02.server.log",
+      "server_pid": 3985276,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 158,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2549.264,
+        "predicted_n": 178,
+        "predicted_per_second": 69.82407471332903,
+        "predicted_per_token_ms": 14.32170786516854,
+        "prompt_ms": 154.121,
+        "prompt_n": 53,
+        "prompt_per_second": 343.8856482893311,
+        "prompt_per_token_ms": 2.907943396226415
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/token_traces/run_02.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      "usage": {
+        "completion_tokens": 178,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 231
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when a service processes high volumes of requests, it frequently allocates significant resources such as gpu memory, cpu cycles, and temporary buffers. if these resources are not released in a predictable and consistent manner, the system becomes vulnerable to memory leaks and fragmentation. deterministic cleanup ensures that every allocated object is destroyed at a specific, known point in the execution lifecycle. this prevents the gradual accumulation of unused data that eventually leads to out of memory errors and service crashes. furthermore, predictable resource management simplifies debugging and performance profiling, as developers can trace exactly when memory is freed. without this certainty, the service might exhibit non-deterministic latency spikes or unpredictable behavior under heavy load. by enforcing strict rules for resource deallocation, engineers can guarantee that the inference engine remains responsive, scalable, and robust against the pressures of continuous production workloads. ",
+      "content_word_count": 154,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_03",
+      "output_sha256": "648daba444234e3488e7009d6ce6b405f507dc507dc681724d98ab4299722335",
+      "port": 52029,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 3,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 10,
+        "trace_post_sampling_probs": false,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/responses/run_03.raw.json",
+      "response_sha256": "276137d907fe2c9787dc2f9cb4032cb4da98e6149bf9b1f5d6dff28e453b11a9",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_CUDA_DISABLE_TOPK_MOE_FUSION=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "1",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "52029",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/logs/run_03.server.log",
+      "server_pid": 3985524,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 154,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2531.824,
+        "predicted_n": 177,
+        "predicted_per_second": 69.91007273807342,
+        "predicted_per_token_ms": 14.304090395480227,
+        "prompt_ms": 152.152,
+        "prompt_n": 53,
+        "prompt_per_second": 348.33587465166414,
+        "prompt_per_token_ms": 2.8707924528301882
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/token_traces/run_03.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 177
+      },
+      "usage": {
+        "completion_tokens": 177,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 230
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when serving machine learning models, resources like gpu memory, cpu cycles, and network sockets are finite and precious. if a service fails to release these resources predictably after a request is processed, it risks accumulating leaks that eventually lead to out of memory errors or system crashes. deterministic cleanup ensures that every allocated object is destroyed at a specific, known point in the execution lifecycle. this predictability prevents the accumulation of zombie processes and stale tensors that can degrade latency or cause unexpected downtime. in a high throughput environment, even small leaks can compound rapidly, causing cascading failures across a cluster. by implementing strict cleanup protocols, developers can guarantee that the service remains in a consistent state, allowing for reliable scaling and much higher availability. ultimately, deterministic resource management is the foundation of building robust, production grade inference pipelines that can handle heavy workloads. ",
+      "content_word_count": 158,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_04",
+      "output_sha256": "0726c598dafbffb80c2e9c38ee3438f6d45fcf94d8314f67919130b1ed9a0ad0",
+      "port": 59891,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 4,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 10,
+        "trace_post_sampling_probs": false,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/responses/run_04.raw.json",
+      "response_sha256": "a930f95ad12436659d8d31f94d1709661a500dcc98eb44f56af79b3cf8cde96a",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_CUDA_DISABLE_TOPK_MOE_FUSION=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "1",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "59891",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/logs/run_04.server.log",
+      "server_pid": 3985763,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 158,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2566.451,
+        "predicted_n": 178,
+        "predicted_per_second": 69.35647709619236,
+        "predicted_per_token_ms": 14.41826404494382,
+        "prompt_ms": 154.029,
+        "prompt_n": 53,
+        "prompt_per_second": 344.091047789702,
+        "prompt_per_token_ms": 2.9062075471698114
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/token_traces/run_04.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      "usage": {
+        "completion_tokens": 178,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 231
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when a service processes high volumes of requests, it frequently allocates significant resources such as gpu memory, cpu cycles, and temporary buffers. if these resources are not released in a predictable and consistent manner, the system becomes vulnerable to memory leaks and fragmentation. non-deterministic cleanup can lead to unpredictable latency spikes, as the garbage collector or resource manager might trigger at inconvenient moments during a live inference task. such timing issues can cause request timeouts or even complete service crashes under heavy load. by ensuring that every allocated object is destroyed at a specific, known point in the execution lifecycle, developers can guarantee that the memory footprint remains stable. this predictability allows for better capacity planning and ensures that the service can handle peak traffic without sudden degradation in performance or reliability. consistent resource management is the foundation of scalable machine learning production environments. ",
+      "content_word_count": 158,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_05",
+      "output_sha256": "1576365c99efa54be457bf980ff552b428e32745ee92d2fecb42752455b94ad4",
+      "port": 51181,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 5,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 10,
+        "trace_post_sampling_probs": false,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/responses/run_05.raw.json",
+      "response_sha256": "25dd4fea7323a83b0d0495089dd4e5d4ca7c7e3fce9120e58b5492658c06f8db",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_CUDA_DISABLE_TOPK_MOE_FUSION=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "1",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "51181",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/logs/run_05.server.log",
+      "server_pid": 3986363,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 158,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2509.916,
+        "predicted_n": 176,
+        "predicted_per_second": 70.12186862030441,
+        "predicted_per_token_ms": 14.260886363636365,
+        "prompt_ms": 152.668,
+        "prompt_n": 53,
+        "prompt_per_second": 347.15854010008644,
+        "prompt_per_token_ms": 2.8805283018867924
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/token_traces/run_05.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 176
+      },
+      "usage": {
+        "completion_tokens": 176,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 229
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when serving machine learning models, resources like gpu memory, cpu cycles, and network sockets are finite and expensive. if a service fails to release these resources predictably after a request is processed, it leads to memory leaks and fragmentation. such leaks cause the service to degrade over time, eventually resulting in out of memory errors that crash the entire container. deterministic cleanup ensures that every allocated object is destroyed at a specific, predictable point in the execution lifecycle. this predictability allows engineers to calculate precise capacity requirements and prevents the accumulation of zombie processes that consume background bandwidth. by ensuring that cleanup happens regardless of whether a request succeeds or fails, the system maintains a consistent baseline of availability. ultimately, deterministic resource management reduces latency spikes and prevents cascading failures, ensuring that the inference engine remains responsive under heavy, continuous production workloads. ",
+      "content_word_count": 156,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_06",
+      "output_sha256": "9cc116c671396d755c0419c4be40fae38643053648c9e124401fa18c70d0770e",
+      "port": 41507,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 6,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 10,
+        "trace_post_sampling_probs": false,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/responses/run_06.raw.json",
+      "response_sha256": "14e8296a1996c2df110d26cf3ec2227604ed7d1127453d4124a31671c49d0862",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_CUDA_DISABLE_TOPK_MOE_FUSION=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "1",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "41507",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/logs/run_06.server.log",
+      "server_pid": 3986842,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 156,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2511.453,
+        "predicted_n": 175,
+        "predicted_per_second": 69.68077841791187,
+        "predicted_per_token_ms": 14.35116,
+        "prompt_ms": 151.023,
+        "prompt_n": 53,
+        "prompt_per_second": 350.9399230580772,
+        "prompt_per_token_ms": 2.8494905660377357
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/token_traces/run_06.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 175
+      },
+      "usage": {
+        "completion_tokens": 175,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 228
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when serving machine learning models, resources like gpu memory, cpu cycles, and network sockets are finite and precious. if a service fails to release these resources predictably after a request is processed, it leads to memory leaks and fragmentation. over time, these small leaks accumulate, causing the service to slow down or crash entirely due to out of memory errors. deterministic cleanup ensures that every allocated object is destroyed at a specific, predictable point in the execution lifecycle. this predictability allows engineers to reason about the system state and prevents non-deterministic behavior where resources might linger indefinitely. by guaranteeing that cleanup happens immediately after use, we ensure high throughput, low latency, and consistent performance under heavy load. without it, the system becomes unpredictable, making scaling and debugging nearly impossible in production environments. reliability depends on this rigorous management of lifecycle. ",
+      "content_word_count": 154,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_07",
+      "output_sha256": "98bfd403fe156ce550ef79f6a4cf179902967bc2834e65a7416461782a208385",
+      "port": 51099,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 7,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 10,
+        "trace_post_sampling_probs": false,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/responses/run_07.raw.json",
+      "response_sha256": "5dc760a154aaccb9d71452df516046317ac7e98105eb78a2cbeaee6117168e16",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_CUDA_DISABLE_TOPK_MOE_FUSION=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "1",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "51099",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/logs/run_07.server.log",
+      "server_pid": 3987693,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 154,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2544.859,
+        "predicted_n": 178,
+        "predicted_per_second": 69.94493604557266,
+        "predicted_per_token_ms": 14.296960674157303,
+        "prompt_ms": 154.042,
+        "prompt_n": 53,
+        "prompt_per_second": 344.06200906246346,
+        "prompt_per_token_ms": 2.9064528301886794
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/token_traces/run_07.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      "usage": {
+        "completion_tokens": 178,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 231
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when a service processes requests, it often allocates significant system resources such as gpu memory, cpu cycles, and temporary buffers to handle large models and input tensors. if these resources are not released in a predictable and consistent manner, the system becomes vulnerable to memory leaks and fragmentation. deterministic cleanup ensures that every allocated object is destroyed at a specific, known point in the execution lifecycle, preventing the gradual accumulation of unused data that eventually leads to out of memory errors. this predictability is essential for high throughput environments where resource reuse is frequent. without it, the service might experience unpredictable latency spikes or sudden crashes during peak loads. by enforcing strict rules for resource deallocation, developers can guarantee that the service remains performant and reliable over long periods of continuous operation, ensuring that each new inference request starts with a clean and stable environment. ",
+      "content_word_count": 159,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_08",
+      "output_sha256": "6a96cbf2f23431cf2bc32ab5e1c05ed1509811d247405fb92919e0e3df2a9cb5",
+      "port": 44271,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 8,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 10,
+        "trace_post_sampling_probs": false,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/responses/run_08.raw.json",
+      "response_sha256": "3edb59e828616d06620dbb36dc5a6ab0a01ece14d88504c4dc5872651962ba35",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_CUDA_DISABLE_TOPK_MOE_FUSION=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "1",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "44271",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/logs/run_08.server.log",
+      "server_pid": 3988547,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 159,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2569.856,
+        "predicted_n": 178,
+        "predicted_per_second": 69.26458136175722,
+        "predicted_per_token_ms": 14.437393258426967,
+        "prompt_ms": 156.368,
+        "prompt_n": 53,
+        "prompt_per_second": 338.9440294689451,
+        "prompt_per_token_ms": 2.9503396226415095
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/token_traces/run_08.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      "usage": {
+        "completion_tokens": 178,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 231
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when a service processes requests, it often allocates significant system resources such as gpu memory, cpu cycles, and temporary buffers to handle large models and input tensors. if these resources are not released in a predictable and consistent manner, the system becomes vulnerable to memory leaks and fragmentation. deterministic cleanup ensures that every allocated object is destroyed at a specific, known point in the execution lifecycle. this prevents the gradual accumulation of unused data that eventually leads to out of memory errors and service crashes. furthermore, predictable resource management allows for better orchestration of concurrent requests, as the system can accurately calculate available capacity for incoming tasks. without this certainty, latency spikes and unpredictable downtime become inevitable, undermining the reliability of the entire machine learning pipeline. consistent destruction of stateful objects maintains the long term health and performance of production environments. ",
+      "content_word_count": 155,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_09",
+      "output_sha256": "d89af3d2f26afe8402c38161273316827d191024b38e1ea8bf5a0eda401138f0",
+      "port": 57473,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 9,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 10,
+        "trace_post_sampling_probs": false,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/responses/run_09.raw.json",
+      "response_sha256": "bdaa7ac5e78c503016e64c5b9ecd2b3d01de60a3bc61548d07cd84d3dd7a4a2d",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_CUDA_DISABLE_TOPK_MOE_FUSION=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "1",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "57473",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/logs/run_09.server.log",
+      "server_pid": 3989229,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 155,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2484.891,
+        "predicted_n": 174,
+        "predicted_per_second": 70.02319216416333,
+        "predicted_per_token_ms": 14.28098275862069,
+        "prompt_ms": 152.759,
+        "prompt_n": 53,
+        "prompt_per_second": 346.9517344313592,
+        "prompt_per_token_ms": 2.8822452830188676
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/token_traces/run_09.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 174
+      },
+      "usage": {
+        "completion_tokens": 174,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 227
+      }
+    },
+    {
+      "acceptance_rate": 0.0,
+      "content": "deterministic cleanup is a critical component of maintaining a stable and efficient inference service. when serving machine learning models, resources like gpu memory, cpu cycles, and network sockets are finite and expensive. if a service fails to release these resources predictably after a request is processed, it leads to memory leaks and fragmentation. such leaks cause the service to degrade over time, eventually resulting in out of memory errors that crash the entire container. deterministic cleanup ensures that every allocated buffer or temporary tensor is explicitly destroyed at a known point in the execution lifecycle. this predictability allows for much higher throughput and lower latency because the system does not have to wait for unpredictable garbage collection cycles to reclaim space. by managing lifecycles strictly, developers can guarantee that the service remains performant under heavy load and can recover gracefully from errors without leaving behind orphaned processes or locked hardware resources that prevent new requests from being handled. ",
+      "content_word_count": 158,
+      "draft_n": 0,
+      "draft_n_accepted": 0,
+      "finish_reason": "stop",
+      "label": "run_10",
+      "output_sha256": "ab886ad446eeab129a757d045a865b60cb6eb70dd17750bc2c4e3b1b971c3ac3",
+      "port": 54659,
+      "reasoning_content": "",
+      "reasoning_word_count": 0,
+      "repeat_index": 10,
+      "request": {
+        "max_tokens": 320,
+        "prompt": "Write exactly 160 words about why deterministic cleanup matters in an inference service. Use lowercase letters only. Do not use bullets, numbering, markdown, or JSON. End with the token END.",
+        "schema_task": "none",
+        "seed": 42,
+        "stop": [
+          "END"
+        ],
+        "temperature": 0.0,
+        "trace_n_probs": 10,
+        "trace_post_sampling_probs": false,
+        "trace_response_fields": [
+          "choices",
+          "usage",
+          "timings",
+          "tokens",
+          "completion_probabilities",
+          "__verbose/tokens",
+          "__verbose/completion_probabilities"
+        ],
+        "trace_token_divergence": true
+      },
+      "response_path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/responses/run_10.raw.json",
+      "response_sha256": "4a58ba3cdfd94f1598a37c90e97f637bbc920df9814a3ed8b90ff22d340f6b2a",
+      "server_argv": [
+        "env",
+        "LD_LIBRARY_PATH=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin",
+        "GGML_CUDA_DISABLE_TOPK_MOE_FUSION=1",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+        "-np",
+        "1",
+        "--device",
+        "ROCm0",
+        "-ngl",
+        "99",
+        "-t",
+        "96",
+        "-ub",
+        "512",
+        "-c",
+        "16384",
+        "-fa",
+        "on",
+        "-rea",
+        "off",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "54659",
+        "--spec-type",
+        "none"
+      ],
+      "server_log": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/logs/run_10.server.log",
+      "server_pid": 3989715,
+      "status": "ok",
+      "task_eval": {
+        "bad_word_count": 0,
+        "count_ok": false,
+        "expected_word": null,
+        "expected_word_count": 160,
+        "observed_word_count": 158,
+        "passed": false,
+        "word_ok": true
+      },
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 2522.005,
+        "predicted_n": 175,
+        "predicted_per_second": 69.38923594521026,
+        "predicted_per_token_ms": 14.411457142857143,
+        "prompt_ms": 152.372,
+        "prompt_n": 53,
+        "prompt_per_second": 347.8329351849421,
+        "prompt_per_token_ms": 2.8749433962264153
+      },
+      "token_trace": {
+        "path": "data/k11_gemma4_determinism/k11_natural_freeform_orig_q4_gpu_nospec_np1_topk_moe_fusion_off_20260720T130746Z/token_traces/run_10.tokens.json",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 175
+      },
+      "usage": {
+        "completion_tokens": 175,
+        "prompt_tokens": 53,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 228
+      }
+    }
+  ],
+  "schema_task": "none",
+  "server_bin": "/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-server",
+  "server_env": [
+    "GGML_CUDA_DISABLE_TOPK_MOE_FUSION=1"
+  ],
+  "slots": 1,
+  "spec_type": "none",
+  "stop": [
+    "END"
+  ],
+  "target_model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf",
+  "task_passed": false,
+  "token_divergence": {
+    "all_token_sequences_identical": false,
+    "available": true,
+    "common_prefix_length": 7,
+    "enabled": true,
+    "first_divergence": {
+      "by_run": [
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_01",
+          "token": {
+            "bytes": [
+              32,
+              97
+            ],
+            "id": 496,
+            "logprob": -1.1347957849502563,
+            "token": " a",
+            "top_logprobs": [
+              {
+                "bytes": [
+                  32,
+                  97
+                ],
+                "id": 496,
+                "logprob": -1.1347957849502563,
+                "token": " a"
+              },
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "logprob": -1.4203048944473267,
+                "token": " maintaining"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110,
+                  121
+                ],
+                "id": 1027,
+                "logprob": -1.5402122735977173,
+                "token": " any"
+              },
+              {
+                "bytes": [
+                  32,
+                  98,
+                  117,
+                  105,
+                  108,
+                  100,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 3788,
+                "logprob": -1.6587482690811157,
+                "token": " building"
+              },
+              {
+                "bytes": [
+                  32,
+                  100,
+                  101,
+                  115,
+                  105,
+                  103,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 25470,
+                "logprob": -4.671149730682373,
+                "token": " designing"
+              },
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  110,
+                  97,
+                  103,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 15724,
+                "logprob": -5.2338690757751465,
+                "token": " managing"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  111,
+                  98,
+                  117,
+                  115,
+                  116
+                ],
+                "id": 16317,
+                "logprob": -5.29538106918335,
+                "token": " robust"
+              },
+              {
+                "bytes": [
+                  32,
+                  104,
+                  105,
+                  103,
+                  104
+                ],
+                "id": 1494,
+                "logprob": -5.381040096282959,
+                "token": " high"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  101,
+                  108,
+                  105,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 13451,
+                "logprob": -6.026092052459717,
+                "token": " reliable"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110
+                ],
+                "id": 614,
+                "logprob": -6.739146709442139,
+                "token": " an"
+              }
+            ]
+          },
+          "token_count": 177
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_02",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "logprob": -0.9727412462234497,
+            "token": " maintaining",
+            "top_logprobs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "logprob": -0.9727412462234497,
+                "token": " maintaining"
+              },
+              {
+                "bytes": [
+                  32,
+                  97
+                ],
+                "id": 496,
+                "logprob": -1.4803458452224731,
+                "token": " a"
+              },
+              {
+                "bytes": [
+                  32,
+                  98,
+                  117,
+                  105,
+                  108,
+                  100,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 3788,
+                "logprob": -1.6106101274490356,
+                "token": " building"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110,
+                  121
+                ],
+                "id": 1027,
+                "logprob": -1.818360447883606,
+                "token": " any"
+              },
+              {
+                "bytes": [
+                  32,
+                  100,
+                  101,
+                  115,
+                  105,
+                  103,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 25470,
+                "logprob": -4.596550941467285,
+                "token": " designing"
+              },
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  110,
+                  97,
+                  103,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 15724,
+                "logprob": -4.799456596374512,
+                "token": " managing"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  111,
+                  98,
+                  117,
+                  115,
+                  116
+                ],
+                "id": 16317,
+                "logprob": -5.477303504943848,
+                "token": " robust"
+              },
+              {
+                "bytes": [
+                  32,
+                  104,
+                  105,
+                  103,
+                  104
+                ],
+                "id": 1494,
+                "logprob": -5.571728706359863,
+                "token": " high"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  101,
+                  108,
+                  105,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 13451,
+                "logprob": -6.7976789474487305,
+                "token": " reliable"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110
+                ],
+                "id": 614,
+                "logprob": -7.200863838195801,
+                "token": " an"
+              }
+            ]
+          },
+          "token_count": 178
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_03",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "logprob": -1.106400489807129,
+            "token": " maintaining",
+            "top_logprobs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "logprob": -1.106400489807129,
+                "token": " maintaining"
+              },
+              {
+                "bytes": [
+                  32,
+                  97
+                ],
+                "id": 496,
+                "logprob": -1.3498659133911133,
+                "token": " a"
+              },
+              {
+                "bytes": [
+                  32,
+                  98,
+                  117,
+                  105,
+                  108,
+                  100,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 3788,
+                "logprob": -1.6794500350952148,
+                "token": " building"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110,
+                  121
+                ],
+                "id": 1027,
+                "logprob": -1.705836296081543,
+                "token": " any"
+              },
+              {
+                "bytes": [
+                  32,
+                  100,
+                  101,
+                  115,
+                  105,
+                  103,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 25470,
+                "logprob": -4.499173164367676,
+                "token": " designing"
+              },
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  110,
+                  97,
+                  103,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 15724,
+                "logprob": -4.629290580749512,
+                "token": " managing"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  111,
+                  98,
+                  117,
+                  115,
+                  116
+                ],
+                "id": 16317,
+                "logprob": -4.768048286437988,
+                "token": " robust"
+              },
+              {
+                "bytes": [
+                  32,
+                  104,
+                  105,
+                  103,
+                  104
+                ],
+                "id": 1494,
+                "logprob": -5.467432975769043,
+                "token": " high"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  101,
+                  108,
+                  105,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 13451,
+                "logprob": -6.204129219055176,
+                "token": " reliable"
+              },
+              {
+                "bytes": [
+                  32,
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ],
+                "id": 3719,
+                "logprob": -6.930478096008301,
+                "token": " production"
+              }
+            ]
+          },
+          "token_count": 177
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_04",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "logprob": -0.8817439079284668,
+            "token": " maintaining",
+            "top_logprobs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "logprob": -0.8817439079284668,
+                "token": " maintaining"
+              },
+              {
+                "bytes": [
+                  32,
+                  97
+                ],
+                "id": 496,
+                "logprob": -1.5547194480895996,
+                "token": " a"
+              },
+              {
+                "bytes": [
+                  32,
+                  98,
+                  117,
+                  105,
+                  108,
+                  100,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 3788,
+                "logprob": -1.6450971364974976,
+                "token": " building"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110,
+                  121
+                ],
+                "id": 1027,
+                "logprob": -1.9404826164245605,
+                "token": " any"
+              },
+              {
+                "bytes": [
+                  32,
+                  100,
+                  101,
+                  115,
+                  105,
+                  103,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 25470,
+                "logprob": -4.598826885223389,
+                "token": " designing"
+              },
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  110,
+                  97,
+                  103,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 15724,
+                "logprob": -4.617234706878662,
+                "token": " managing"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  111,
+                  98,
+                  117,
+                  115,
+                  116
+                ],
+                "id": 16317,
+                "logprob": -5.163634777069092,
+                "token": " robust"
+              },
+              {
+                "bytes": [
+                  32,
+                  104,
+                  105,
+                  103,
+                  104
+                ],
+                "id": 1494,
+                "logprob": -5.313350200653076,
+                "token": " high"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  101,
+                  108,
+                  105,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 13451,
+                "logprob": -6.276706218719482,
+                "token": " reliable"
+              },
+              {
+                "bytes": [
+                  32,
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 10385,
+                "logprob": -7.15326452255249,
+                "token": " stable"
+              }
+            ]
+          },
+          "token_count": 178
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_05",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "logprob": -1.0968358516693115,
+            "token": " maintaining",
+            "top_logprobs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "logprob": -1.0968358516693115,
+                "token": " maintaining"
+              },
+              {
+                "bytes": [
+                  32,
+                  97
+                ],
+                "id": 496,
+                "logprob": -1.4552534818649292,
+                "token": " a"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110,
+                  121
+                ],
+                "id": 1027,
+                "logprob": -1.6161478757858276,
+                "token": " any"
+              },
+              {
+                "bytes": [
+                  32,
+                  98,
+                  117,
+                  105,
+                  108,
+                  100,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 3788,
+                "logprob": -1.621972918510437,
+                "token": " building"
+              },
+              {
+                "bytes": [
+                  32,
+                  100,
+                  101,
+                  115,
+                  105,
+                  103,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 25470,
+                "logprob": -4.479379653930664,
+                "token": " designing"
+              },
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  110,
+                  97,
+                  103,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 15724,
+                "logprob": -4.820390701293945,
+                "token": " managing"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  111,
+                  98,
+                  117,
+                  115,
+                  116
+                ],
+                "id": 16317,
+                "logprob": -5.151628494262695,
+                "token": " robust"
+              },
+              {
+                "bytes": [
+                  32,
+                  104,
+                  105,
+                  103,
+                  104
+                ],
+                "id": 1494,
+                "logprob": -5.468845367431641,
+                "token": " high"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  101,
+                  108,
+                  105,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 13451,
+                "logprob": -6.233814239501953,
+                "token": " reliable"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110
+                ],
+                "id": 614,
+                "logprob": -6.899349212646484,
+                "token": " an"
+              }
+            ]
+          },
+          "token_count": 176
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_06",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "logprob": -0.988439679145813,
+            "token": " maintaining",
+            "top_logprobs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "logprob": -0.988439679145813,
+                "token": " maintaining"
+              },
+              {
+                "bytes": [
+                  32,
+                  97
+                ],
+                "id": 496,
+                "logprob": -1.4622098207473755,
+                "token": " a"
+              },
+              {
+                "bytes": [
+                  32,
+                  98,
+                  117,
+                  105,
+                  108,
+                  100,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 3788,
+                "logprob": -1.574127435684204,
+                "token": " building"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110,
+                  121
+                ],
+                "id": 1027,
+                "logprob": -1.915390133857727,
+                "token": " any"
+              },
+              {
+                "bytes": [
+                  32,
+                  100,
+                  101,
+                  115,
+                  105,
+                  103,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 25470,
+                "logprob": -4.361185073852539,
+                "token": " designing"
+              },
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  110,
+                  97,
+                  103,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 15724,
+                "logprob": -4.725547790527344,
+                "token": " managing"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  111,
+                  98,
+                  117,
+                  115,
+                  116
+                ],
+                "id": 16317,
+                "logprob": -4.946550369262695,
+                "token": " robust"
+              },
+              {
+                "bytes": [
+                  32,
+                  104,
+                  105,
+                  103,
+                  104
+                ],
+                "id": 1494,
+                "logprob": -5.328899383544922,
+                "token": " high"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  101,
+                  108,
+                  105,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 13451,
+                "logprob": -6.14869499206543,
+                "token": " reliable"
+              },
+              {
+                "bytes": [
+                  32,
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 10385,
+                "logprob": -6.969768524169922,
+                "token": " stable"
+              }
+            ]
+          },
+          "token_count": 175
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_07",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "logprob": -0.9620761871337891,
+            "token": " maintaining",
+            "top_logprobs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "logprob": -0.9620761871337891,
+                "token": " maintaining"
+              },
+              {
+                "bytes": [
+                  32,
+                  98,
+                  117,
+                  105,
+                  108,
+                  100,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 3788,
+                "logprob": -1.5806769132614136,
+                "token": " building"
+              },
+              {
+                "bytes": [
+                  32,
+                  97
+                ],
+                "id": 496,
+                "logprob": -1.6091690063476562,
+                "token": " a"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110,
+                  121
+                ],
+                "id": 1027,
+                "logprob": -1.7632122039794922,
+                "token": " any"
+              },
+              {
+                "bytes": [
+                  32,
+                  100,
+                  101,
+                  115,
+                  105,
+                  103,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 25470,
+                "logprob": -4.489068984985352,
+                "token": " designing"
+              },
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  110,
+                  97,
+                  103,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 15724,
+                "logprob": -4.682470321655273,
+                "token": " managing"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  111,
+                  98,
+                  117,
+                  115,
+                  116
+                ],
+                "id": 16317,
+                "logprob": -4.963727951049805,
+                "token": " robust"
+              },
+              {
+                "bytes": [
+                  32,
+                  104,
+                  105,
+                  103,
+                  104
+                ],
+                "id": 1494,
+                "logprob": -5.26666259765625,
+                "token": " high"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  101,
+                  108,
+                  105,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 13451,
+                "logprob": -6.175525665283203,
+                "token": " reliable"
+              },
+              {
+                "bytes": [
+                  32,
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  116,
+                  105,
+                  111,
+                  110
+                ],
+                "id": 3719,
+                "logprob": -7.023220062255859,
+                "token": " production"
+              }
+            ]
+          },
+          "token_count": 178
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_08",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "logprob": -0.9405051469802856,
+            "token": " maintaining",
+            "top_logprobs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "logprob": -0.9405051469802856,
+                "token": " maintaining"
+              },
+              {
+                "bytes": [
+                  32,
+                  97
+                ],
+                "id": 496,
+                "logprob": -1.4077348709106445,
+                "token": " a"
+              },
+              {
+                "bytes": [
+                  32,
+                  98,
+                  117,
+                  105,
+                  108,
+                  100,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 3788,
+                "logprob": -1.654959797859192,
+                "token": " building"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110,
+                  121
+                ],
+                "id": 1027,
+                "logprob": -1.970204472541809,
+                "token": " any"
+              },
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  110,
+                  97,
+                  103,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 15724,
+                "logprob": -4.5889081954956055,
+                "token": " managing"
+              },
+              {
+                "bytes": [
+                  32,
+                  100,
+                  101,
+                  115,
+                  105,
+                  103,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 25470,
+                "logprob": -4.760651588439941,
+                "token": " designing"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  111,
+                  98,
+                  117,
+                  115,
+                  116
+                ],
+                "id": 16317,
+                "logprob": -5.25821590423584,
+                "token": " robust"
+              },
+              {
+                "bytes": [
+                  32,
+                  104,
+                  105,
+                  103,
+                  104
+                ],
+                "id": 1494,
+                "logprob": -5.76265811920166,
+                "token": " high"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  101,
+                  108,
+                  105,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 13451,
+                "logprob": -6.260775566101074,
+                "token": " reliable"
+              },
+              {
+                "bytes": [
+                  32,
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 10385,
+                "logprob": -7.046189308166504,
+                "token": " stable"
+              }
+            ]
+          },
+          "token_count": 178
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_09",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "logprob": -0.9430531859397888,
+            "token": " maintaining",
+            "top_logprobs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "logprob": -0.9430531859397888,
+                "token": " maintaining"
+              },
+              {
+                "bytes": [
+                  32,
+                  97
+                ],
+                "id": 496,
+                "logprob": -1.4532136917114258,
+                "token": " a"
+              },
+              {
+                "bytes": [
+                  32,
+                  98,
+                  117,
+                  105,
+                  108,
+                  100,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 3788,
+                "logprob": -1.6588125228881836,
+                "token": " building"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110,
+                  121
+                ],
+                "id": 1027,
+                "logprob": -1.8926936388015747,
+                "token": " any"
+              },
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  110,
+                  97,
+                  103,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 15724,
+                "logprob": -4.776528358459473,
+                "token": " managing"
+              },
+              {
+                "bytes": [
+                  32,
+                  100,
+                  101,
+                  115,
+                  105,
+                  103,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 25470,
+                "logprob": -4.798369407653809,
+                "token": " designing"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  111,
+                  98,
+                  117,
+                  115,
+                  116
+                ],
+                "id": 16317,
+                "logprob": -4.864880561828613,
+                "token": " robust"
+              },
+              {
+                "bytes": [
+                  32,
+                  104,
+                  105,
+                  103,
+                  104
+                ],
+                "id": 1494,
+                "logprob": -5.56656551361084,
+                "token": " high"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  101,
+                  108,
+                  105,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 13451,
+                "logprob": -6.115878105163574,
+                "token": " reliable"
+              },
+              {
+                "bytes": [
+                  32,
+                  115,
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 10385,
+                "logprob": -6.996136665344238,
+                "token": " stable"
+              }
+            ]
+          },
+          "token_count": 174
+        },
+        {
+          "ended_before_index": false,
+          "finish_reason": "stop",
+          "label": "run_10",
+          "token": {
+            "bytes": [
+              32,
+              109,
+              97,
+              105,
+              110,
+              116,
+              97,
+              105,
+              110,
+              105,
+              110,
+              103
+            ],
+            "id": 16977,
+            "logprob": -1.0958338975906372,
+            "token": " maintaining",
+            "top_logprobs": [
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  105,
+                  110,
+                  116,
+                  97,
+                  105,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 16977,
+                "logprob": -1.0958338975906372,
+                "token": " maintaining"
+              },
+              {
+                "bytes": [
+                  32,
+                  97
+                ],
+                "id": 496,
+                "logprob": -1.3714802265167236,
+                "token": " a"
+              },
+              {
+                "bytes": [
+                  32,
+                  98,
+                  117,
+                  105,
+                  108,
+                  100,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 3788,
+                "logprob": -1.670643925666809,
+                "token": " building"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110,
+                  121
+                ],
+                "id": 1027,
+                "logprob": -1.6787062883377075,
+                "token": " any"
+              },
+              {
+                "bytes": [
+                  32,
+                  100,
+                  101,
+                  115,
+                  105,
+                  103,
+                  110,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 25470,
+                "logprob": -4.52053165435791,
+                "token": " designing"
+              },
+              {
+                "bytes": [
+                  32,
+                  109,
+                  97,
+                  110,
+                  97,
+                  103,
+                  105,
+                  110,
+                  103
+                ],
+                "id": 15724,
+                "logprob": -4.814230918884277,
+                "token": " managing"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  111,
+                  98,
+                  117,
+                  115,
+                  116
+                ],
+                "id": 16317,
+                "logprob": -5.234439373016357,
+                "token": " robust"
+              },
+              {
+                "bytes": [
+                  32,
+                  104,
+                  105,
+                  103,
+                  104
+                ],
+                "id": 1494,
+                "logprob": -5.302655220031738,
+                "token": " high"
+              },
+              {
+                "bytes": [
+                  32,
+                  114,
+                  101,
+                  108,
+                  105,
+                  97,
+                  98,
+                  108,
+                  101
+                ],
+                "id": 13451,
+                "logprob": -6.172911643981934,
+                "token": " reliable"
+              },
+              {
+                "bytes": [
+                  32,
+                  97,
+                  110
+                ],
+                "id": 614,
+                "logprob": -6.965819358825684,
+                "token": " an"
+              }
+            ]
+          },
+          "token_count": 175
+        }
+      ],
+      "index": 7
+    },
+    "max_token_count": 178,
+    "min_token_count": 174,
+    "ok_run_count": 10,
+    "per_run": [
+      {
+        "content_word_count": 149,
+        "finish_reason": "stop",
+        "label": "run_01",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 177
+      },
+      {
+        "content_word_count": 158,
+        "finish_reason": "stop",
+        "label": "run_02",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      {
+        "content_word_count": 154,
+        "finish_reason": "stop",
+        "label": "run_03",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 177
+      },
+      {
+        "content_word_count": 158,
+        "finish_reason": "stop",
+        "label": "run_04",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      {
+        "content_word_count": 158,
+        "finish_reason": "stop",
+        "label": "run_05",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 176
+      },
+      {
+        "content_word_count": 156,
+        "finish_reason": "stop",
+        "label": "run_06",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 175
+      },
+      {
+        "content_word_count": 154,
+        "finish_reason": "stop",
+        "label": "run_07",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      {
+        "content_word_count": 159,
+        "finish_reason": "stop",
+        "label": "run_08",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 178
+      },
+      {
+        "content_word_count": 155,
+        "finish_reason": "stop",
+        "label": "run_09",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 174
+      },
+      {
+        "content_word_count": 158,
+        "finish_reason": "stop",
+        "label": "run_10",
+        "probability_source": "choices[0].logprobs.content",
+        "sequence_source": "__verbose.tokens",
+        "token_count": 175
+      }
+    ],
+    "sequence_run_count": 10,
+    "trace_run_count": 10
+  },
+  "trace_n_probs": 10,
+  "trace_post_sampling_probs": false,
+  "trace_response_fields": [
+    "choices",
+    "usage",
+    "timings",
+    "tokens",
+    "completion_probabilities",
+    "__verbose/tokens",
+    "__verbose/completion_probabilities"
+  ],
+  "trace_token_divergence": true,
+  "unique_output_hashes": [
+    "0726c598dafbffb80c2e9c38ee3438f6d45fcf94d8314f67919130b1ed9a0ad0",
+    "1576365c99efa54be457bf980ff552b428e32745ee92d2fecb42752455b94ad4",
+    "214c111d15991d02ff9ed08bcfa52960c39b719b0df26502476822d4b53800f4",
+    "648daba444234e3488e7009d6ce6b405f507dc507dc681724d98ab4299722335",
+    "6a96cbf2f23431cf2bc32ab5e1c05ed1509811d247405fb92919e0e3df2a9cb5",
+    "98bfd403fe156ce550ef79f6a4cf179902967bc2834e65a7416461782a208385",
+    "9cc116c671396d755c0419c4be40fae38643053648c9e124401fa18c70d0770e",
+    "ab886ad446eeab129a757d045a865b60cb6eb70dd17750bc2c4e3b1b971c3ac3",
+    "d89af3d2f26afe8402c38161273316827d191024b38e1ea8bf5a0eda401138f0",
+    "f14677d4d81997c4ffd656c5398947fd30eeb88737a65c7f2e4b493e0b07027c"
+  ]
+}

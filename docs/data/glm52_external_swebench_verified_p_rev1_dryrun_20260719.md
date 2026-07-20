@@ -21,7 +21,7 @@ The dry-run is execution-ready:
 - first prompt: `571` estimated tokens against `15744` max
 - response schema: ReviewDecision, not pairwise `A|B`
 
-This is no-inference prep only. The live CPU-only GLM run remains the open gate that reports SWE false-reject rate on known-good patches.
+This is no-inference prep only. Supersession: the live CPU-only GLM SWE-Bench-Verified run later completed on 2026-07-19 (`docs/data/glm52_external_swebench_verified_p_rev1_live_20260719.md`) with `22/24` correct approvals and FR `8.3%`. That positive accept-control slice does not admit GLM as a patch reviewer because the decision-grade C-CRAB P-REV-1 gate failed overall (`FA 41.7%`, `FR 25.0%`, `AUC 0.509`).
 
 ## Validation
 

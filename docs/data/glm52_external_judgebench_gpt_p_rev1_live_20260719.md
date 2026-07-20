@@ -20,7 +20,7 @@ The live run completed `24` JudgeBench-GPT pairwise rows (`12` gold A, `12` gold
 | Original strict schema score | `15/24` | `62.5%` | `7/24` | Seven responses used 0-100 confidence values despite valid A/B decisions. |
 | Exact-choice P-REV-1 rescore | `22/24` | `91.7%` | `0/24` | Scorer now normalizes 0-100 confidence as a warning, not a failed exact-choice decision. |
 
-The exact-choice rescore records `confidence_warning_counts={"confidence_scale_0_100": 7}` and balanced final decisions (`12` A / `12` B). This is positive judge-native evidence for GLM's pairwise preference capability, but it does not clear patch-review admission because the same model already failed decision-grade C-CRAB P-REV-1 (`FA 41.7%`, `FR 25.0%`, `AUC 0.509`) and SWE-bench-Verified live execution remains open.
+The exact-choice rescore records `confidence_warning_counts={"confidence_scale_0_100": 7}` and balanced final decisions (`12` A / `12` B). This is positive judge-native evidence for GLM's pairwise preference capability, but it does not clear patch-review admission because the same model already failed decision-grade C-CRAB P-REV-1 (`FA 41.7%`, `FR 25.0%`, `AUC 0.509`). Supersession: SWE-Bench-Verified live execution later completed with `22/24` correct approvals and FR `8.3%`, but that accept-control result still does not clear the C-CRAB hard-negative risk.
 
 ## Code Hygiene
 
