@@ -1,0 +1,38 @@
+{
+  "default": [
+    {
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "avg_ts": 141.588462,
+      "stddev_ts": 0.037917,
+      "avg_ns": 57857823734,
+      "repetitions": null
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 1,
+      "avg_ts": 5.242545,
+      "stddev_ts": 0.013065,
+      "avg_ns": 190747639,
+      "repetitions": null
+    }
+  ],
+  "compact": [
+    {
+      "n_prompt": 8192,
+      "n_gen": 0,
+      "avg_ts": 100.069829,
+      "stddev_ts": 0.027345,
+      "avg_ns": 81862839391,
+      "repetitions": null
+    },
+    {
+      "n_prompt": 0,
+      "n_gen": 1,
+      "avg_ts": 4.840255,
+      "stddev_ts": 0.063811,
+      "avg_ns": 206618628,
+      "repetitions": null
+    }
+  ]
+}
