@@ -1,0 +1,56 @@
+{
+  "admission_result": {
+    "blocked_on": [
+      "frontdoor_opportunity_cost_gate",
+      "production-named P-GPU-1 certification before decision-grade GPU claim"
+    ],
+    "serving_route_allowed": false,
+    "task_slice_admitted_observation": false
+  },
+  "arms": {},
+  "artifact_dir": "data/dr3_quant_asym_k2_admission/dr3_quant_asym_k2_admission_20260720T071100Z_live_runner_dryrun_v2",
+  "cleanup_proof": {
+    "status": "not_run"
+  },
+  "context_coverage_gate": {
+    "executed_context_bands": [],
+    "required_context_bands": [
+      8192
+    ],
+    "status": "not_run"
+  },
+  "created_at": "2026-07-20T07:00:56.581080+00:00",
+  "decision_grade": false,
+  "fixed_k": 2,
+  "frontdoor_opportunity_cost_gate": {
+    "requirement": "measure resident frontdoor alone, frontdoor after eviction/reload, and DR-3 lane active before any routing policy rollout",
+    "serving_blocker": true,
+    "status": "not_run"
+  },
+  "mode": "dry_run",
+  "numeric_swarm_surface_allowed": false,
+  "observation_grade": false,
+  "output_stability_gate": {
+    "required": "combined K2 output must match CPU verifier baseline by row hash",
+    "rows": [],
+    "status": "not_run"
+  },
+  "p_gpu_1_gate": {
+    "requirement": "decision-grade production GPU claims require production-consolidated-v7 or later",
+    "serving_blocker": true,
+    "status": "not_applicable_to_experimental_observation"
+  },
+  "quality_gate": {
+    "pass_count": 0,
+    "required": "every admission row quality checker passes on baseline and combined K2",
+    "status": "not_run",
+    "total_count": 0
+  },
+  "run_id": "dr3_quant_asym_k2_admission_20260720T071100Z_live_runner_dryrun_v2",
+  "schema": "epyc.dr3_quant_asym_k2_admission_live.v1.summary",
+  "serving_route_allowed": false,
+  "speed_economics": {
+    "rows": [],
+    "status": "not_run"
+  }
+}

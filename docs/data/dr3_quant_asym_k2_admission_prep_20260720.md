@@ -3,7 +3,7 @@
 Date: 2026-07-20
 Artifact: `data/dr3_quant_asym_k2_admission/dr3_quant_asym_k2_admission_20260720T063100Z_codex_dryrun/`
 Script: `scripts/benchmark/dr3_quant_asym_k2_admission_prep.py`
-Status: dry-run package only; no inference executed
+Status: dry-run package complete; live-runner follow-up added later the same day
 
 ## Purpose
 
@@ -57,8 +57,26 @@ Required gates:
 - Frontdoor opportunity-cost measurement.
 - Production-named `P-GPU-1` certification for any decision-grade GPU claim.
 
+## Live-Runner Follow-Up
+
+Follow-up report:
+`docs/data/dr3_quant_asym_k2_admission_live_20260720.md`.
+
+Live runner:
+`scripts/benchmark/dr3_quant_asym_k2_admission_runner.py`.
+
+Corrected 8K smoke artifact:
+`data/dr3_quant_asym_k2_admission/dr3_quant_asym_k2_admission_20260720T071200Z_live_smoke_ctx8192_r1_v2/`.
+
+The live runner passed a one-row-per-class 8K smoke: quality `12/12`, output
+stability pass, cleanup pass, `observation_grade=true`, combined K2 `11.104 t/s`
+vs CPU baseline `7.185 t/s` (`1.545x`, alpha `0.876`). It remains non-serving
+and decision-grade false pending default 8K+16K admission, frontdoor opportunity
+cost, and production-named `P-GPU-1` gates.
+
 ## Verdict
 
-DR-3 is scaffolded, not executable. The next code step is a live admission executor
-that materializes task rows, runs CPU baseline vs combined K2, scores equivalence,
-and keeps serving/NumericSwarm integration disabled until the package passes.
+DR-3a is scaffolded and DR-3b now has a live executor plus an 8K observation
+smoke. The next code/execution step is the default 8K+16K admission package; do
+not add a serving route or NumericSwarm K tunable until that broader package and
+the frontdoor opportunity-cost gate pass.

@@ -159,3 +159,29 @@ Validation:
 
 Next step: implement the live admission executor; do not add a serving route or
 NumericSwarm K tunable until the broader K2 package passes.
+
+## DR-3b Live K2 Admission Runner And 8K Smoke
+
+Runner:
+`scripts/benchmark/dr3_quant_asym_k2_admission_runner.py`.
+
+Report:
+`docs/data/dr3_quant_asym_k2_admission_live_20260720.md`.
+
+Passing live artifact:
+`data/dr3_quant_asym_k2_admission/dr3_quant_asym_k2_admission_20260720T071200Z_live_smoke_ctx8192_r1_v2/`.
+
+The live runner materializes broader admission rows, runs fresh CPU-baseline and
+combined-K2 servers, scores row-level quality and equivalence, records speed
+economics, and proves cleanup. The corrected 8K smoke passed:
+
+- `quality_gate.status=pass` (`12/12`).
+- `output_stability_gate.status=pass`.
+- `cleanup_proof.status=pass`.
+- `observation_grade=true`; `decision_grade=false`.
+- CPU baseline `7.185 t/s`; combined K2 `11.104 t/s`; ratio `1.545x`; alpha
+  `0.876`.
+
+This closes the DR-3b implementation/smoke gap, not the production-routing gate.
+Remaining DR-3 work is the default 8K+16K admission package plus frontdoor
+opportunity-cost measurement before any serving or NumericSwarm exposure.

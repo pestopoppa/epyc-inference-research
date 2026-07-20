@@ -1,0 +1,82 @@
+[
+  {
+    "checker": "valid JSON objects, schema-valid, no extra prose",
+    "details": {
+      "errors": [],
+      "indexes_in_order": true,
+      "json_object_count": 8,
+      "line_count": 8,
+      "payloads_match": true
+    },
+    "pass": true,
+    "row_id": "structured_json_long_ctx8192_r00",
+    "status": "checked",
+    "task_class": "structured_json_long"
+  },
+  {
+    "checker": "exact requested line/word/token shape",
+    "details": {
+      "exact_match": true,
+      "line_count": 4
+    },
+    "pass": true,
+    "row_id": "strict_formatting_ctx8192_r00",
+    "status": "checked",
+    "task_class": "strict_formatting"
+  },
+  {
+    "checker": "preserve CPU-target no-bug verdict and invariant citation",
+    "details": {
+      "bullet_like": true,
+      "cites_invariant": true,
+      "line_count": 3,
+      "states_no_bug": true
+    },
+    "pass": true,
+    "row_id": "code_review_no_bug_controls_ctx8192_r00",
+    "status": "checked",
+    "task_class": "code_review_no_bug_controls"
+  },
+  {
+    "checker": "valid bounded decision JSON with confidence and rationale",
+    "details": {
+      "confidence_ok": true,
+      "decision_ok": true,
+      "json_ok": true,
+      "keys": [
+        "confidence",
+        "decision",
+        "rationale"
+      ]
+    },
+    "pass": true,
+    "row_id": "architect_json_decisions_ctx8192_r00",
+    "status": "checked",
+    "task_class": "architect_json_decisions"
+  },
+  {
+    "checker": "requested repeated/templated content length and stop behavior",
+    "details": {
+      "all_expected_word": true,
+      "exact_match": true,
+      "expected_word_count": 64,
+      "word_count": 64
+    },
+    "pass": true,
+    "row_id": "long_repetitive_output_ctx8192_r00",
+    "status": "checked",
+    "task_class": "long_repetitive_output"
+  },
+  {
+    "checker": "tail answer remains coherent after long prompt prefill",
+    "details": {
+      "content_len": 26,
+      "exact_anchor_match": true,
+      "expected_sha256": "8a9a40dddd1b913a31d52f478ebc4b3f7a904f0817fddc708293981b6cdf8725"
+    },
+    "pass": true,
+    "row_id": "long_context_tail_ctx8192_r00",
+    "status": "checked",
+    "task_class": "long_context_tail"
+  }
+]
