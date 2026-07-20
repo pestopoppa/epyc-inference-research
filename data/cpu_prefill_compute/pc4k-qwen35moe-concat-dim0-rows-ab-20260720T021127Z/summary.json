@@ -1,0 +1,1431 @@
+{
+  "run_root": "/mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/pc4k-qwen35moe-concat-dim0-rows-ab-20260720T021127Z",
+  "arms": {
+    "default": {
+      "bench_rows": [
+        {
+          "n_prompt": 8192,
+          "n_gen": 0,
+          "avg_ts": 99.432725,
+          "stddev_ts": 0.0,
+          "avg_ns": 82387363325,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099
+        },
+        {
+          "n_prompt": 0,
+          "n_gen": 1,
+          "avg_ts": 4.835903,
+          "stddev_ts": 0.0,
+          "avg_ns": 206786604,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099
+        }
+      ],
+      "trace_graph_summaries": 34,
+      "trace_summary_stats": {
+        "n_nodes_unique": [
+          4471
+        ],
+        "n_threads_unique": [
+          96
+        ],
+        "traced_nodes_unique": [
+          2668
+        ],
+        "compute_us_median": 291034484.0,
+        "barrier_us_median": 201249411.0,
+        "barrier_to_compute_median_ratio": 0.6914967884011985
+      },
+      "top_barrier_ops_by_sum": [
+        {
+          "op": "CONCAT",
+          "appearances": 34,
+          "rank1": 32,
+          "rank_sum": 43,
+          "nodes_sum": 1224,
+          "compute_us_sum": 23114250,
+          "barrier_us_sum": 2196940708,
+          "calls_sum": 117504,
+          "avg_rank": 1.2647058823529411,
+          "top_examples": [
+            "conv_input-0"
+          ]
+        },
+        {
+          "op": "MUL_MAT_ID",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 69,
+          "nodes_sum": 4896,
+          "compute_us_sum": 3771891769,
+          "barrier_us_sum": 1185494410,
+          "calls_sum": 470016,
+          "avg_rank": 2.0294117647058822,
+          "top_examples": [
+            "ffn_moe_gate-0"
+          ]
+        },
+        {
+          "op": "MUL_MAT",
+          "appearances": 34,
+          "rank1": 2,
+          "rank_sum": 112,
+          "nodes_sum": 15946,
+          "compute_us_sum": 2947089919,
+          "barrier_us_sum": 582193532,
+          "calls_sum": 1530816,
+          "avg_rank": 3.2941176470588234,
+          "top_examples": [
+            "node_13"
+          ]
+        },
+        {
+          "op": "GATED_DELTA_NET",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 135,
+          "nodes_sum": 1224,
+          "compute_us_sum": 510999402,
+          "barrier_us_sum": 536436623,
+          "calls_sum": 117504,
+          "avg_rank": 3.9705882352941178,
+          "top_examples": [
+            "node_44"
+          ]
+        },
+        {
+          "op": "ADD",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 175,
+          "nodes_sum": 17544,
+          "compute_us_sum": 226913081,
+          "barrier_us_sum": 448855432,
+          "calls_sum": 1684224,
+          "avg_rank": 5.147058823529412,
+          "top_examples": [
+            "node_36"
+          ]
+        },
+        {
+          "op": "RMS_NORM",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 228,
+          "nodes_sum": 5338,
+          "compute_us_sum": 207926023,
+          "barrier_us_sum": 267585879,
+          "calls_sum": 512448,
+          "avg_rank": 6.705882352941177,
+          "top_examples": [
+            "norm-0"
+          ]
+        },
+        {
+          "op": "FLASH_ATTN_EXT",
+          "appearances": 31,
+          "rank1": 0,
+          "rank_sum": 270,
+          "nodes_sum": 372,
+          "compute_us_sum": 803764283,
+          "barrier_us_sum": 231047238,
+          "calls_sum": 35712,
+          "avg_rank": 8.709677419354838,
+          "top_examples": [
+            "node_324"
+          ]
+        },
+        {
+          "op": "MUL",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 285,
+          "nodes_sum": 6120,
+          "compute_us_sum": 259189839,
+          "barrier_us_sum": 188903521,
+          "calls_sum": 587520,
+          "avg_rank": 8.382352941176471,
+          "top_examples": [
+            "gate-0"
+          ]
+        },
+        {
+          "op": "GET_ROWS",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 303,
+          "nodes_sum": 6596,
+          "compute_us_sum": 3044586,
+          "barrier_us_sum": 177410129,
+          "calls_sum": 633216,
+          "avg_rank": 8.911764705882353,
+          "top_examples": [
+            "model.input_embed"
+          ]
+        },
+        {
+          "op": "UNARY",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 326,
+          "nodes_sum": 6936,
+          "compute_us_sum": 178620112,
+          "barrier_us_sum": 167427069,
+          "calls_sum": 665856,
+          "avg_rank": 9.588235294117647,
+          "top_examples": [
+            "conv_output_silu-0"
+          ]
+        },
+        {
+          "op": "L2_NORM",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 347,
+          "nodes_sum": 2448,
+          "compute_us_sum": 16652170,
+          "barrier_us_sum": 147013030,
+          "calls_sum": 235008,
+          "avg_rank": 10.205882352941176,
+          "top_examples": [
+            "q_conv_predelta-0"
+          ]
+        },
+        {
+          "op": "CPY",
+          "appearances": 33,
+          "rank1": 0,
+          "rank_sum": 400,
+          "nodes_sum": 4752,
+          "compute_us_sum": 11938801,
+          "barrier_us_sum": 113249210,
+          "calls_sum": 456192,
+          "avg_rank": 12.121212121212121,
+          "top_examples": [
+            "cache_r_l0 (view) (copy of )"
+          ]
+        },
+        {
+          "op": "GLU",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 412,
+          "nodes_sum": 3264,
+          "compute_us_sum": 182924426,
+          "barrier_us_sum": 112529476,
+          "calls_sum": 313344,
+          "avg_rank": 12.117647058823529,
+          "top_examples": [
+            "ffn_moe_swiglu-0"
+          ]
+        },
+        {
+          "op": "SSM_CONV",
+          "appearances": 33,
+          "rank1": 0,
+          "rank_sum": 445,
+          "nodes_sum": 1188,
+          "compute_us_sum": 163201508,
+          "barrier_us_sum": 85599987,
+          "calls_sum": 114048,
+          "avg_rank": 13.484848484848484,
+          "top_examples": [
+            "conv_output_raw-0"
+          ]
+        },
+        {
+          "op": "SCALE",
+          "appearances": 21,
+          "rank1": 0,
+          "rank_sum": 290,
+          "nodes_sum": 1512,
+          "compute_us_sum": 51826,
+          "barrier_us_sum": 42157606,
+          "calls_sum": 145152,
+          "avg_rank": 13.80952380952381,
+          "top_examples": [
+            "cache_r_l0 (reshaped) (view) (view)"
+          ]
+        },
+        {
+          "op": "ARGSORT",
+          "appearances": 17,
+          "rank1": 0,
+          "rank_sum": 259,
+          "nodes_sum": 816,
+          "compute_us_sum": 6693386,
+          "barrier_us_sum": 24378487,
+          "calls_sum": 78336,
+          "avg_rank": 15.235294117647058,
+          "top_examples": [
+            "ffn_moe_argsort-0"
+          ]
+        },
+        {
+          "op": "CONT",
+          "appearances": 18,
+          "rank1": 0,
+          "rank_sum": 272,
+          "nodes_sum": 216,
+          "compute_us_sum": 5591961,
+          "barrier_us_sum": 20800199,
+          "calls_sum": 20736,
+          "avg_rank": 15.11111111111111,
+          "top_examples": [
+            "gate_reshaped-3"
+          ]
+        },
+        {
+          "op": "SOFT_MAX",
+          "appearances": 5,
+          "rank1": 0,
+          "rank_sum": 77,
+          "nodes_sum": 240,
+          "compute_us_sum": 720940,
+          "barrier_us_sum": 10265641,
+          "calls_sum": 23040,
+          "avg_rank": 15.4,
+          "top_examples": [
+            "ffn_moe_probs-0"
+          ]
+        },
+        {
+          "op": "CLAMP",
+          "appearances": 6,
+          "rank1": 0,
+          "rank_sum": 94,
+          "nodes_sum": 288,
+          "compute_us_sum": 65719,
+          "barrier_us_sum": 9037294,
+          "calls_sum": 27648,
+          "avg_rank": 15.666666666666666,
+          "top_examples": [
+            "ffn_moe_weights_sum_clamped-0"
+          ]
+        },
+        {
+          "op": "DIV",
+          "appearances": 1,
+          "rank1": 0,
+          "rank_sum": 16,
+          "nodes_sum": 48,
+          "compute_us_sum": 9558,
+          "barrier_us_sum": 1742599,
+          "calls_sum": 4608,
+          "avg_rank": 16.0,
+          "top_examples": [
+            "ffn_moe_weights_norm-0"
+          ]
+        },
+        {
+          "op": "SUM_ROWS",
+          "appearances": 1,
+          "rank1": 0,
+          "rank_sum": 16,
+          "nodes_sum": 48,
+          "compute_us_sum": 1345,
+          "barrier_us_sum": 1453899,
+          "calls_sum": 4608,
+          "avg_rank": 16.0,
+          "top_examples": [
+            "ffn_moe_weights_sum-0"
+          ]
+        },
+        {
+          "op": "ROPE",
+          "appearances": 2,
+          "rank1": 0,
+          "rank_sum": 32,
+          "nodes_sum": 48,
+          "compute_us_sum": 1064537,
+          "barrier_us_sum": 929971,
+          "calls_sum": 4608,
+          "avg_rank": 16.0,
+          "top_examples": [
+            "Qcur-3"
+          ]
+        },
+        {
+          "op": "NONE",
+          "appearances": 2,
+          "rank1": 0,
+          "rank_sum": 18,
+          "nodes_sum": 0,
+          "compute_us_sum": 0,
+          "barrier_us_sum": 229488,
+          "calls_sum": 0,
+          "avg_rank": 9.0,
+          "top_examples": [
+            "final_barrier"
+          ]
+        }
+      ],
+      "top_compute_ops_by_sum": [
+        {
+          "op": "MUL_MAT_ID",
+          "appearances": 34,
+          "rank1": 32,
+          "rank_sum": 36,
+          "nodes_sum": 4896,
+          "compute_us_sum": 3771891769,
+          "barrier_us_sum": 1185494410,
+          "calls_sum": 470016,
+          "avg_rank": 1.0588235294117647,
+          "top_examples": [
+            "ffn_moe_gate-0"
+          ]
+        },
+        {
+          "op": "MUL_MAT",
+          "appearances": 34,
+          "rank1": 2,
+          "rank_sum": 66,
+          "nodes_sum": 15946,
+          "compute_us_sum": 2947089919,
+          "barrier_us_sum": 582193532,
+          "calls_sum": 1530816,
+          "avg_rank": 1.9411764705882353,
+          "top_examples": [
+            "node_13"
+          ]
+        },
+        {
+          "op": "FLASH_ATTN_EXT",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 138,
+          "nodes_sum": 408,
+          "compute_us_sum": 811659916,
+          "barrier_us_sum": 232867379,
+          "calls_sum": 39168,
+          "avg_rank": 4.0588235294117645,
+          "top_examples": [
+            "node_324"
+          ]
+        },
+        {
+          "op": "GATED_DELTA_NET",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 126,
+          "nodes_sum": 1224,
+          "compute_us_sum": 510999402,
+          "barrier_us_sum": 536436623,
+          "calls_sum": 117504,
+          "avg_rank": 3.7058823529411766,
+          "top_examples": [
+            "node_44"
+          ]
+        },
+        {
+          "op": "MUL",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 174,
+          "nodes_sum": 6120,
+          "compute_us_sum": 259189839,
+          "barrier_us_sum": 188903521,
+          "calls_sum": 587520,
+          "avg_rank": 5.117647058823529,
+          "top_examples": [
+            "gate-0"
+          ]
+        },
+        {
+          "op": "ADD",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 212,
+          "nodes_sum": 17544,
+          "compute_us_sum": 226913081,
+          "barrier_us_sum": 448855432,
+          "calls_sum": 1684224,
+          "avg_rank": 6.235294117647059,
+          "top_examples": [
+            "node_36"
+          ]
+        },
+        {
+          "op": "RMS_NORM",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 236,
+          "nodes_sum": 5338,
+          "compute_us_sum": 207926023,
+          "barrier_us_sum": 267585879,
+          "calls_sum": 512448,
+          "avg_rank": 6.9411764705882355,
+          "top_examples": [
+            "norm-0"
+          ]
+        },
+        {
+          "op": "GLU",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 284,
+          "nodes_sum": 3264,
+          "compute_us_sum": 182924426,
+          "barrier_us_sum": 112529476,
+          "calls_sum": 313344,
+          "avg_rank": 8.352941176470589,
+          "top_examples": [
+            "ffn_moe_swiglu-0"
+          ]
+        },
+        {
+          "op": "UNARY",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 310,
+          "nodes_sum": 6936,
+          "compute_us_sum": 178620112,
+          "barrier_us_sum": 167427069,
+          "calls_sum": 665856,
+          "avg_rank": 9.117647058823529,
+          "top_examples": [
+            "conv_output_silu-0"
+          ]
+        },
+        {
+          "op": "SSM_CONV",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 327,
+          "nodes_sum": 1224,
+          "compute_us_sum": 163225338,
+          "barrier_us_sum": 85616866,
+          "calls_sum": 117504,
+          "avg_rank": 9.617647058823529,
+          "top_examples": [
+            "conv_output_raw-0"
+          ]
+        },
+        {
+          "op": "CONCAT",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 380,
+          "nodes_sum": 1224,
+          "compute_us_sum": 23114250,
+          "barrier_us_sum": 2196940708,
+          "calls_sum": 117504,
+          "avg_rank": 11.176470588235293,
+          "top_examples": [
+            "conv_input-0"
+          ]
+        },
+        {
+          "op": "ROPE",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 414,
+          "nodes_sum": 816,
+          "compute_us_sum": 17118292,
+          "barrier_us_sum": 14597575,
+          "calls_sum": 78336,
+          "avg_rank": 12.176470588235293,
+          "top_examples": [
+            "Qcur-3"
+          ]
+        },
+        {
+          "op": "L2_NORM",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 443,
+          "nodes_sum": 2448,
+          "compute_us_sum": 16652170,
+          "barrier_us_sum": 147013030,
+          "calls_sum": 235008,
+          "avg_rank": 13.029411764705882,
+          "top_examples": [
+            "q_conv_predelta-0"
+          ]
+        },
+        {
+          "op": "ARGSORT",
+          "appearances": 32,
+          "rank1": 0,
+          "rank_sum": 448,
+          "nodes_sum": 1536,
+          "compute_us_sum": 14266839,
+          "barrier_us_sum": 38707232,
+          "calls_sum": 147456,
+          "avg_rank": 14.0,
+          "top_examples": [
+            "ffn_moe_argsort-0"
+          ]
+        },
+        {
+          "op": "CPY",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 495,
+          "nodes_sum": 4896,
+          "compute_us_sum": 12274850,
+          "barrier_us_sum": 114927965,
+          "calls_sum": 470016,
+          "avg_rank": 14.558823529411764,
+          "top_examples": [
+            "cache_r_l0 (view) (copy of )"
+          ]
+        },
+        {
+          "op": "CONT",
+          "appearances": 31,
+          "rank1": 0,
+          "rank_sum": 487,
+          "nodes_sum": 372,
+          "compute_us_sum": 9803234,
+          "barrier_us_sum": 37113553,
+          "calls_sum": 35712,
+          "avg_rank": 15.709677419354838,
+          "top_examples": [
+            "gate_reshaped-3"
+          ]
+        },
+        {
+          "op": "GET_ROWS",
+          "appearances": 3,
+          "rank1": 0,
+          "rank_sum": 28,
+          "nodes_sum": 582,
+          "compute_us_sum": 374783,
+          "barrier_us_sum": 8059472,
+          "calls_sum": 55872,
+          "avg_rank": 9.333333333333334,
+          "top_examples": [
+            "model.input_embed"
+          ]
+        },
+        {
+          "op": "SCALE",
+          "appearances": 2,
+          "rank1": 0,
+          "rank_sum": 20,
+          "nodes_sum": 144,
+          "compute_us_sum": 12722,
+          "barrier_us_sum": 979723,
+          "calls_sum": 13824,
+          "avg_rank": 10.0,
+          "top_examples": [
+            "cache_r_l0 (reshaped) (view) (view)"
+          ]
+        }
+      ],
+      "iqk_active_lines": [
+        "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+        "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+      ],
+      "time_v": {
+        "User time (seconds)": "14212.93",
+        "System time (seconds)": "19.51",
+        "Percent of CPU this job got": "8005%",
+        "Maximum resident set size (kbytes)": "77037608",
+        "Exit status": "0"
+      }
+    },
+    "concat_dim0_rows": {
+      "bench_rows": [
+        {
+          "n_prompt": 8192,
+          "n_gen": 0,
+          "avg_ts": 103.385572,
+          "stddev_ts": 0.0,
+          "avg_ns": 79237361908,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099
+        },
+        {
+          "n_prompt": 0,
+          "n_gen": 1,
+          "avg_ts": 4.730467,
+          "stddev_ts": 0.0,
+          "avg_ns": 211395631,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099
+        }
+      ],
+      "trace_graph_summaries": 34,
+      "trace_summary_stats": {
+        "n_nodes_unique": [
+          4471
+        ],
+        "n_threads_unique": [
+          96
+        ],
+        "traced_nodes_unique": [
+          2668
+        ],
+        "compute_us_median": 305180705.5,
+        "barrier_us_median": 171007051.0,
+        "barrier_to_compute_median_ratio": 0.5603468630817487
+      },
+      "top_barrier_ops_by_sum": [
+        {
+          "op": "MUL_MAT_ID",
+          "appearances": 34,
+          "rank1": 30,
+          "rank_sum": 40,
+          "nodes_sum": 4896,
+          "compute_us_sum": 3831027823,
+          "barrier_us_sum": 1220824844,
+          "calls_sum": 470016,
+          "avg_rank": 1.1764705882352942,
+          "top_examples": [
+            "ffn_moe_gate-0"
+          ]
+        },
+        {
+          "op": "MUL_MAT",
+          "appearances": 34,
+          "rank1": 4,
+          "rank_sum": 69,
+          "nodes_sum": 15946,
+          "compute_us_sum": 3255991768,
+          "barrier_us_sum": 818589982,
+          "calls_sum": 1530816,
+          "avg_rank": 2.0294117647058822,
+          "top_examples": [
+            "node_13"
+          ]
+        },
+        {
+          "op": "ADD",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 127,
+          "nodes_sum": 17544,
+          "compute_us_sum": 235230713,
+          "barrier_us_sum": 677299771,
+          "calls_sum": 1684224,
+          "avg_rank": 3.735294117647059,
+          "top_examples": [
+            "node_36"
+          ]
+        },
+        {
+          "op": "GATED_DELTA_NET",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 120,
+          "nodes_sum": 1224,
+          "compute_us_sum": 549490957,
+          "barrier_us_sum": 554340104,
+          "calls_sum": 117504,
+          "avg_rank": 3.5294117647058822,
+          "top_examples": [
+            "node_44"
+          ]
+        },
+        {
+          "op": "RMS_NORM",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 191,
+          "nodes_sum": 5338,
+          "compute_us_sum": 209718593,
+          "barrier_us_sum": 340429452,
+          "calls_sum": 512448,
+          "avg_rank": 5.617647058823529,
+          "top_examples": [
+            "norm-0"
+          ]
+        },
+        {
+          "op": "MUL",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 245,
+          "nodes_sum": 6120,
+          "compute_us_sum": 264591675,
+          "barrier_us_sum": 266818106,
+          "calls_sum": 587520,
+          "avg_rank": 7.205882352941177,
+          "top_examples": [
+            "gate-0"
+          ]
+        },
+        {
+          "op": "GET_ROWS",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 234,
+          "nodes_sum": 6596,
+          "compute_us_sum": 3118782,
+          "barrier_us_sum": 261713368,
+          "calls_sum": 633216,
+          "avg_rank": 6.882352941176471,
+          "top_examples": [
+            "model.input_embed"
+          ]
+        },
+        {
+          "op": "UNARY",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 282,
+          "nodes_sum": 6936,
+          "compute_us_sum": 181061952,
+          "barrier_us_sum": 244968016,
+          "calls_sum": 665856,
+          "avg_rank": 8.294117647058824,
+          "top_examples": [
+            "conv_output_silu-0"
+          ]
+        },
+        {
+          "op": "FLASH_ATTN_EXT",
+          "appearances": 25,
+          "rank1": 0,
+          "rank_sum": 184,
+          "nodes_sum": 300,
+          "compute_us_sum": 744084368,
+          "barrier_us_sum": 221085674,
+          "calls_sum": 28800,
+          "avg_rank": 7.36,
+          "top_examples": [
+            "node_324"
+          ]
+        },
+        {
+          "op": "L2_NORM",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 356,
+          "nodes_sum": 2448,
+          "compute_us_sum": 16751621,
+          "barrier_us_sum": 163191471,
+          "calls_sum": 235008,
+          "avg_rank": 10.470588235294118,
+          "top_examples": [
+            "q_conv_predelta-0"
+          ]
+        },
+        {
+          "op": "CPY",
+          "appearances": 32,
+          "rank1": 0,
+          "rank_sum": 332,
+          "nodes_sum": 4608,
+          "compute_us_sum": 12904792,
+          "barrier_us_sum": 154422957,
+          "calls_sum": 442368,
+          "avg_rank": 10.375,
+          "top_examples": [
+            "cache_r_l0 (view) (copy of )"
+          ]
+        },
+        {
+          "op": "GLU",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 376,
+          "nodes_sum": 3264,
+          "compute_us_sum": 182561907,
+          "barrier_us_sum": 147574849,
+          "calls_sum": 313344,
+          "avg_rank": 11.058823529411764,
+          "top_examples": [
+            "ffn_moe_swiglu-0"
+          ]
+        },
+        {
+          "op": "SOFT_MAX",
+          "appearances": 22,
+          "rank1": 0,
+          "rank_sum": 310,
+          "nodes_sum": 1056,
+          "compute_us_sum": 3288861,
+          "barrier_us_sum": 61237534,
+          "calls_sum": 101376,
+          "avg_rank": 14.090909090909092,
+          "top_examples": [
+            "ffn_moe_probs-0"
+          ]
+        },
+        {
+          "op": "ARGSORT",
+          "appearances": 26,
+          "rank1": 0,
+          "rank_sum": 364,
+          "nodes_sum": 1248,
+          "compute_us_sum": 10713379,
+          "barrier_us_sum": 60974135,
+          "calls_sum": 119808,
+          "avg_rank": 14.0,
+          "top_examples": [
+            "ffn_moe_argsort-0"
+          ]
+        },
+        {
+          "op": "SUM_ROWS",
+          "appearances": 20,
+          "rank1": 0,
+          "rank_sum": 313,
+          "nodes_sum": 960,
+          "compute_us_sum": 27410,
+          "barrier_us_sum": 57936721,
+          "calls_sum": 92160,
+          "avg_rank": 15.65,
+          "top_examples": [
+            "ffn_moe_weights_sum-0"
+          ]
+        },
+        {
+          "op": "CLAMP",
+          "appearances": 17,
+          "rank1": 0,
+          "rank_sum": 251,
+          "nodes_sum": 816,
+          "compute_us_sum": 163819,
+          "barrier_us_sum": 49191225,
+          "calls_sum": 78336,
+          "avg_rank": 14.764705882352942,
+          "top_examples": [
+            "ffn_moe_weights_sum_clamped-0"
+          ]
+        },
+        {
+          "op": "SCALE",
+          "appearances": 17,
+          "rank1": 0,
+          "rank_sum": 205,
+          "nodes_sum": 1224,
+          "compute_us_sum": 46532,
+          "barrier_us_sum": 46363517,
+          "calls_sum": 117504,
+          "avg_rank": 12.058823529411764,
+          "top_examples": [
+            "cache_r_l0 (reshaped) (view) (view)"
+          ]
+        },
+        {
+          "op": "SSM_CONV",
+          "appearances": 14,
+          "rank1": 0,
+          "rank_sum": 192,
+          "nodes_sum": 504,
+          "compute_us_sum": 30533957,
+          "barrier_us_sum": 24714497,
+          "calls_sum": 48384,
+          "avg_rank": 13.714285714285714,
+          "top_examples": [
+            "conv_output_raw-0"
+          ]
+        },
+        {
+          "op": "CONCAT",
+          "appearances": 13,
+          "rank1": 0,
+          "rank_sum": 182,
+          "nodes_sum": 468,
+          "compute_us_sum": 41401514,
+          "barrier_us_sum": 17871828,
+          "calls_sum": 44928,
+          "avg_rank": 14.0,
+          "top_examples": [
+            "conv_input-0"
+          ]
+        },
+        {
+          "op": "CONT",
+          "appearances": 11,
+          "rank1": 0,
+          "rank_sum": 157,
+          "nodes_sum": 132,
+          "compute_us_sum": 3534837,
+          "barrier_us_sum": 17243825,
+          "calls_sum": 12672,
+          "avg_rank": 14.272727272727273,
+          "top_examples": [
+            "gate_reshaped-3"
+          ]
+        },
+        {
+          "op": "DIV",
+          "appearances": 5,
+          "rank1": 0,
+          "rank_sum": 78,
+          "nodes_sum": 240,
+          "compute_us_sum": 44960,
+          "barrier_us_sum": 17036036,
+          "calls_sum": 23040,
+          "avg_rank": 15.6,
+          "top_examples": [
+            "ffn_moe_weights_norm-0"
+          ]
+        },
+        {
+          "op": "NONE",
+          "appearances": 2,
+          "rank1": 0,
+          "rank_sum": 16,
+          "nodes_sum": 0,
+          "compute_us_sum": 0,
+          "barrier_us_sum": 256342,
+          "calls_sum": 0,
+          "avg_rank": 8.0,
+          "top_examples": [
+            "final_barrier"
+          ]
+        }
+      ],
+      "top_compute_ops_by_sum": [
+        {
+          "op": "MUL_MAT_ID",
+          "appearances": 34,
+          "rank1": 30,
+          "rank_sum": 38,
+          "nodes_sum": 4896,
+          "compute_us_sum": 3831027823,
+          "barrier_us_sum": 1220824844,
+          "calls_sum": 470016,
+          "avg_rank": 1.1176470588235294,
+          "top_examples": [
+            "ffn_moe_gate-0"
+          ]
+        },
+        {
+          "op": "MUL_MAT",
+          "appearances": 34,
+          "rank1": 4,
+          "rank_sum": 64,
+          "nodes_sum": 15946,
+          "compute_us_sum": 3255991768,
+          "barrier_us_sum": 818589982,
+          "calls_sum": 1530816,
+          "avg_rank": 1.8823529411764706,
+          "top_examples": [
+            "node_13"
+          ]
+        },
+        {
+          "op": "FLASH_ATTN_EXT",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 137,
+          "nodes_sum": 408,
+          "compute_us_sum": 811705157,
+          "barrier_us_sum": 235260314,
+          "calls_sum": 39168,
+          "avg_rank": 4.029411764705882,
+          "top_examples": [
+            "node_324"
+          ]
+        },
+        {
+          "op": "GATED_DELTA_NET",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 126,
+          "nodes_sum": 1224,
+          "compute_us_sum": 549490957,
+          "barrier_us_sum": 554340104,
+          "calls_sum": 117504,
+          "avg_rank": 3.7058823529411766,
+          "top_examples": [
+            "node_44"
+          ]
+        },
+        {
+          "op": "MUL",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 177,
+          "nodes_sum": 6120,
+          "compute_us_sum": 264591675,
+          "barrier_us_sum": 266818106,
+          "calls_sum": 587520,
+          "avg_rank": 5.205882352941177,
+          "top_examples": [
+            "gate-0"
+          ]
+        },
+        {
+          "op": "ADD",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 214,
+          "nodes_sum": 17544,
+          "compute_us_sum": 235230713,
+          "barrier_us_sum": 677299771,
+          "calls_sum": 1684224,
+          "avg_rank": 6.294117647058823,
+          "top_examples": [
+            "node_36"
+          ]
+        },
+        {
+          "op": "RMS_NORM",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 239,
+          "nodes_sum": 5338,
+          "compute_us_sum": 209718593,
+          "barrier_us_sum": 340429452,
+          "calls_sum": 512448,
+          "avg_rank": 7.029411764705882,
+          "top_examples": [
+            "norm-0"
+          ]
+        },
+        {
+          "op": "GLU",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 288,
+          "nodes_sum": 3264,
+          "compute_us_sum": 182561907,
+          "barrier_us_sum": 147574849,
+          "calls_sum": 313344,
+          "avg_rank": 8.470588235294118,
+          "top_examples": [
+            "ffn_moe_swiglu-0"
+          ]
+        },
+        {
+          "op": "UNARY",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 309,
+          "nodes_sum": 6936,
+          "compute_us_sum": 181061952,
+          "barrier_us_sum": 244968016,
+          "calls_sum": 665856,
+          "avg_rank": 9.088235294117647,
+          "top_examples": [
+            "conv_output_silu-0"
+          ]
+        },
+        {
+          "op": "CONCAT",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 330,
+          "nodes_sum": 1224,
+          "compute_us_sum": 120317650,
+          "barrier_us_sum": 54682334,
+          "calls_sum": 117504,
+          "avg_rank": 9.705882352941176,
+          "top_examples": [
+            "conv_input-0"
+          ]
+        },
+        {
+          "op": "SSM_CONV",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 364,
+          "nodes_sum": 1224,
+          "compute_us_sum": 75206507,
+          "barrier_us_sum": 63889175,
+          "calls_sum": 117504,
+          "avg_rank": 10.705882352941176,
+          "top_examples": [
+            "conv_output_raw-0"
+          ]
+        },
+        {
+          "op": "ROPE",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 415,
+          "nodes_sum": 816,
+          "compute_us_sum": 16931880,
+          "barrier_us_sum": 22553177,
+          "calls_sum": 78336,
+          "avg_rank": 12.205882352941176,
+          "top_examples": [
+            "Qcur-3"
+          ]
+        },
+        {
+          "op": "L2_NORM",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 442,
+          "nodes_sum": 2448,
+          "compute_us_sum": 16751621,
+          "barrier_us_sum": 163191471,
+          "calls_sum": 235008,
+          "avg_rank": 13.0,
+          "top_examples": [
+            "q_conv_predelta-0"
+          ]
+        },
+        {
+          "op": "ARGSORT",
+          "appearances": 32,
+          "rank1": 0,
+          "rank_sum": 448,
+          "nodes_sum": 1536,
+          "compute_us_sum": 14270313,
+          "barrier_us_sum": 75020672,
+          "calls_sum": 147456,
+          "avg_rank": 14.0,
+          "top_examples": [
+            "ffn_moe_argsort-0"
+          ]
+        },
+        {
+          "op": "CPY",
+          "appearances": 34,
+          "rank1": 0,
+          "rank_sum": 488,
+          "nodes_sum": 4896,
+          "compute_us_sum": 13599306,
+          "barrier_us_sum": 158312166,
+          "calls_sum": 470016,
+          "avg_rank": 14.352941176470589,
+          "top_examples": [
+            "cache_r_l0 (view) (copy of )"
+          ]
+        },
+        {
+          "op": "CONT",
+          "appearances": 32,
+          "rank1": 0,
+          "rank_sum": 510,
+          "nodes_sum": 384,
+          "compute_us_sum": 10501977,
+          "barrier_us_sum": 48592480,
+          "calls_sum": 36864,
+          "avg_rank": 15.9375,
+          "top_examples": [
+            "gate_reshaped-3"
+          ]
+        },
+        {
+          "op": "GET_ROWS",
+          "appearances": 2,
+          "rank1": 0,
+          "rank_sum": 14,
+          "nodes_sum": 388,
+          "compute_us_sum": 25182,
+          "barrier_us_sum": 2186291,
+          "calls_sum": 37248,
+          "avg_rank": 7.0,
+          "top_examples": [
+            "model.input_embed"
+          ]
+        },
+        {
+          "op": "SCALE",
+          "appearances": 2,
+          "rank1": 0,
+          "rank_sum": 21,
+          "nodes_sum": 144,
+          "compute_us_sum": 13019,
+          "barrier_us_sum": 1015090,
+          "calls_sum": 13824,
+          "avg_rank": 10.5,
+          "top_examples": [
+            "cache_r_l0 (reshaped) (view) (view)"
+          ]
+        }
+      ],
+      "iqk_active_lines": [
+        "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+        "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+      ],
+      "time_v": {
+        "User time (seconds)": "15126.42",
+        "System time (seconds)": "17.42",
+        "Percent of CPU this job got": "8808%",
+        "Maximum resident set size (kbytes)": "77037232",
+        "Exit status": "0"
+      }
+    },
+    "clean_default": {
+      "bench_rows": [
+        {
+          "n_prompt": 8192,
+          "n_gen": 0,
+          "avg_ts": 97.492993,
+          "stddev_ts": 2.768699,
+          "avg_ns": 84060448945,
+          "stddev_ns": 2387229134,
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        },
+        {
+          "n_prompt": 0,
+          "n_gen": 1,
+          "avg_ts": 4.64828,
+          "stddev_ts": 0.011758,
+          "avg_ns": 215134035,
+          "stddev_ns": 544172,
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        }
+      ],
+      "iqk_active_lines": [
+        "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+        "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+      ],
+      "time_v": {
+        "User time (seconds)": "21497.09",
+        "System time (seconds)": "18.24",
+        "Percent of CPU this job got": "8127%",
+        "Elapsed (wall clock) time (h:mm:ss or m:ss)": "4:24.73",
+        "Maximum resident set size (kbytes)": "77036888",
+        "Major (requiring I/O) page faults": "0",
+        "Minor (reclaiming a frame) page faults": "99880",
+        "Voluntary context switches": "362920",
+        "Involuntary context switches": "30712",
+        "File system inputs": "0",
+        "File system outputs": "16",
+        "Exit status": "0"
+      },
+      "trace_graph_summaries": 0
+    },
+    "clean_concat_dim0_rows": {
+      "bench_rows": [
+        {
+          "n_prompt": 8192,
+          "n_gen": 0,
+          "avg_ts": 100.641523,
+          "stddev_ts": 3.442213,
+          "avg_ns": 81445453124,
+          "stddev_ns": 2785655508,
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        },
+        {
+          "n_prompt": 0,
+          "n_gen": 1,
+          "avg_ts": 4.743434,
+          "stddev_ts": 0.005471,
+          "avg_ns": 210817872,
+          "stddev_ns": 243161,
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        }
+      ],
+      "iqk_active_lines": [
+        "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+        "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+      ],
+      "time_v": {
+        "User time (seconds)": "22651.46",
+        "System time (seconds)": "17.43",
+        "Percent of CPU this job got": "8983%",
+        "Elapsed (wall clock) time (h:mm:ss or m:ss)": "4:12.34",
+        "Maximum resident set size (kbytes)": "77036992",
+        "Major (requiring I/O) page faults": "0",
+        "Minor (reclaiming a frame) page faults": "100494",
+        "Voluntary context switches": "201314",
+        "Involuntary context switches": "41204",
+        "File system inputs": "0",
+        "File system outputs": "16",
+        "Exit status": "0"
+      },
+      "trace_graph_summaries": 0
+    }
+  },
+  "comparison": {
+    "clean_no_trace": {
+      "pp8192_speed_delta_pct": 3.229493631403857,
+      "tg1_speed_delta_pct": 2.0470797800476728,
+      "pp8192_default_avg_ts": 97.492993,
+      "pp8192_concat_dim0_rows_avg_ts": 100.641523,
+      "tg1_default_avg_ts": 4.64828,
+      "tg1_concat_dim0_rows_avg_ts": 4.743434,
+      "default_elapsed": "4:24.73",
+      "concat_dim0_rows_elapsed": "4:12.34",
+      "default_max_rss_kb": "77036888",
+      "concat_dim0_rows_max_rss_kb": "77036992"
+    },
+    "traced": {
+      "pp8192_speed_delta_pct": 3.9753984415090704,
+      "tg1_speed_delta_pct": -2.180275328103154,
+      "median_barrier_delta_pct": -15.027303607859999,
+      "median_compute_delta_pct": 4.860668504148813,
+      "median_barrier_to_compute_ratio_delta_pct": -18.96609319367628,
+      "concat_barrier_delta_pct": -99.18651295708977,
+      "concat_compute_delta_pct": 79.11683917929415,
+      "default_concat": {
+        "op": "CONCAT",
+        "appearances": 34,
+        "rank1": 32,
+        "rank_sum": 43,
+        "nodes_sum": 1224,
+        "compute_us_sum": 23114250,
+        "barrier_us_sum": 2196940708,
+        "calls_sum": 117504,
+        "avg_rank": 1.2647058823529411,
+        "top_examples": [
+          "conv_input-0"
+        ]
+      },
+      "concat_dim0_rows_concat": {
+        "op": "CONCAT",
+        "appearances": 13,
+        "rank1": 0,
+        "rank_sum": 182,
+        "nodes_sum": 468,
+        "compute_us_sum": 41401514,
+        "barrier_us_sum": 17871828,
+        "calls_sum": 44928,
+        "avg_rank": 14.0,
+        "top_examples": [
+          "conv_input-0"
+        ]
+      }
+    },
+    "interpretation": {
+      "status": "keep_candidate_default_off",
+      "summary": "Opt-in GGML_CPU_CONCAT_DIM0_ROWS=1 removes the qwen35moe conv_input CONCAT barrier and improves clean p8192 prefill throughput, with tiny tg1 upside in this run.",
+      "required_next": "repeat clean A/B and wider-shape smoke before considering promotion or default-on behavior"
+    }
+  },
+  "updated_at_utc": "2026-07-20T02:31:00.952046+00:00",
+  "raw_bench_json_policy": "left uncommitted; summary stores sanitized llama-bench fields only because raw rows include hook-sensitive model metadata"
+}
