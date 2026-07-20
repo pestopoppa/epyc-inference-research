@@ -305,6 +305,40 @@ def count_pending_tests(
     return pending, total
 
 
+def select_suite_names_for_role(
+    role: str,
+    registry: ModelRegistry,
+    *,
+    suite_filter: Optional[str] = None,
+    all_suites: bool = False,
+    include_vision: bool = True,
+) -> list[str]:
+    """Resolve suites for one role.
+
+    An explicit ``--suite`` is an operator/user selection, not a request to
+    intersect with the role's default suite map. Adapter-backed suites such as
+    ``longcot_mini`` are intentionally absent from normal role maps, so
+    intersection silently turns valid targeted runs into 0-suite no-ops.
+    """
+    if suite_filter:
+        suite = load_suite(suite_filter)
+        if suite is None:
+            raise ValueError(f"unknown benchmark suite: {suite_filter}")
+        return [suite_filter]
+
+    if all_suites:
+        suite_names = [
+            s
+            for s in get_all_suite_names(include_adapters=True)
+            if (suite := load_suite(s)) is not None and suite.questions
+        ]
+        if not include_vision:
+            suite_names = [s for s in suite_names if s != "vl"]
+        return suite_names
+
+    return get_suites_for_role(role, registry)
+
+
 def build_work_items(
     registry: ModelRegistry,
     executor: Executor,
@@ -330,9 +364,9 @@ def build_work_items(
         configs = executor.get_configs_for_architecture(architecture, role, registry)
 
         for config in configs:
-            suite_names = get_suites_for_role(role, registry)
-            if suite_filter:
-                suite_names = [s for s in suite_names if s == suite_filter]
+            suite_names = select_suite_names_for_role(
+                role, registry, suite_filter=suite_filter
+            )
 
             for suite_name in suite_names:
                 suite = load_suite(suite_name)
@@ -1361,14 +1395,13 @@ def run_benchmark(
             if with_lookup:
                 raise ValueError("--existing-server-port cannot enable lookup on a resident server")
 
-        if all_suites:
-            suite_names = [s for s in get_all_suite_names() if load_suite(s) and load_suite(s).questions]
-            if not mmproj_path:
-                suite_names = [s for s in suite_names if s != "vl"]
-        else:
-            suite_names = get_suites_for_role(role, registry)
-        if suite_filter:
-            suite_names = [s for s in suite_names if s == suite_filter]
+        suite_names = select_suite_names_for_role(
+            role,
+            registry,
+            suite_filter=suite_filter,
+            all_suites=all_suites,
+            include_vision=mmproj_path is not None,
+        )
         if skip_long_context:
             suite_names = [s for s in suite_names if s != "long_context"]
 
