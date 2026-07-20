@@ -2339,6 +2339,38 @@ roles:
         Sub-4-bit quantization fits fully on the 64 GB MI210 and is intended
         for Gate-R / architect-residency and drafter-control experiments, not
         production stack registration without the role quality gates.
+      optimal_gpu_serving:
+        # Measured optimum — launch with THIS, do not re-derive. See
+        # gpu_spec_depth_sweep_observation below for the numbers it beat.
+        date: 2026-07-20
+        kernel: production-consolidated-v7
+        binary: /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server
+        device: MI210 (ROCm0)
+        spec_type: draft-mtp
+        spec_draft_n_max: 2
+        flags: >-
+          -np 1 -c 32768 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16
+          --device ROCm0 -ngl all -fa on --reasoning off
+          --spec-type draft-mtp --spec-draft-n-max 2
+        env: "LD_LIBRARY_PATH=<build-hip>/bin GGML_IQK=1 ROCR_VISIBLE_DEVICES=0 OMP_NUM_THREADS=1"
+        decode_t_s: 61.1
+        grade: observation  # pre-P-GPU-1; not decision-gating
+      gpu_spec_depth_sweep_observation: >
+        2026-07-20 MI210 draft-depth sweep on production-consolidated-v7
+        (`10098 6ad45fa3f`, build-hip) at production sampling (temp 0.6,
+        top_p 0.95, top_k 20, seed 42), 512-token generations, best of n=2,
+        f16 KV, `-c 32768 -b/-ub 2048`, `-ngl all -fa on`: no-spec
+        `43.6 t/s`; `draft-mtp` n-max 1 `53.9`, **n-max 2 `61.1`**, n-max 3
+        `46.2`, n-max 4 `47.5`. The sidecar-style config (no-spec, q4_0/f16 KV,
+        `-ub 1024 -c 8192`) measured `40.4 t/s`, so the tuned optimum is
+        **+51%**. All arms passed an output-coherence check.
+        IMPORTANT — this QUALIFIES `native_mtp_observation` above, which
+        concluded "keep this candidate no-spec by default" from a `0.61x`
+        MTP result: that comparison did not control draft depth. MTP loses at
+        the deeper defaults (n-max 3-4 approx equal to no-spec) and wins clearly at
+        n-max 2. Draft depth, not MTP itself, was the uncontrolled variable.
+        Observation-grade (pre-`P-GPU-1`); evidence:
+        `artifacts/architect-bench-gpu-20260720/sweep_a1/results.jsonl`.
     constraints:
       forbid:
       - production_stack_registration_without_quality_gate
@@ -8405,6 +8437,31 @@ roles:
     acceleration:
       type: speculative_decoding
       spec_type: native_mtp_candidate
+      optimal_gpu_serving:
+        # Measured optimum — launch with THIS, do not re-derive.
+        date: 2026-07-20
+        kernel: production-consolidated-v7
+        binary: /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server
+        device: MI210 (ROCm0)
+        spec_type: draft-mtp
+        spec_draft_n_max: 4
+        flags: >-
+          -np 1 -c 32768 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16
+          --device ROCm0 -ngl all -fa on --reasoning off
+          --spec-type draft-mtp --spec-draft-n-max 4
+        decode_t_s: 53.1
+        grade: observation  # pre-P-GPU-1; not decision-gating
+      gpu_spec_depth_sweep_observation: >
+        2026-07-20 MI210 draft-depth sweep on production-consolidated-v7
+        (`10098 6ad45fa3f`, build-hip) at production sampling (temp 0.6,
+        top_p 0.95, top_k 20, seed 42), 512-token generations, best of n=2,
+        f16 KV, `-c 32768 -b/-ub 2048`, `-ngl all -fa on`: no-spec
+        `29.2 t/s`; `draft-mtp` n-max 2 `38.8`, **n-max 4 `53.1`** (`1.82x`
+        over no-spec — the largest MTP win of the three architect-bench GPU
+        arms). Note the optimum is DEEPER than the 122B-IQ2's (n-max 2), so
+        draft depth must be tuned per model, not inherited.
+        Observation-grade (pre-`P-GPU-1`); evidence:
+        `artifacts/architect-bench-gpu-20260720/sweep_a3/results.jsonl`.
     constraints:
       forbid:
       - production_stack_registration_without_mtp_quality_gate
@@ -8435,6 +8492,69 @@ roles:
       - /mnt/raid0/llm/epyc-inference-research/data/gpu-mi210/qwen36-27b-mtp-q8-v7-context-20260718T222725Z/summary.md
       - /mnt/raid0/llm/epyc-inference-research/data/ngram_gpu_smoke_20260718T221549Z/summary.json
       - /mnt/raid0/llm/epyc-inference-research/data/ngram_gpu_smoke_20260718T221549Z/dr0_blocker.txt
+    memory:
+      residency: cold
+      pinned: false
+      cpu_only_candidate: true
+      gpu_only_candidate: true
+      hybrid_candidate: true
+
+  qwen36_35b_a3b_mtp_q8_local:
+    tier: C
+    description: >
+      Qwen3.6-35B-A3B MTP Q8_0 exact local artifact; catalogue-only MTP row.
+      Added 2026-07-20: this artifact is what several role blocks (frontdoor,
+      coder_escalation, worker_summarize) actually launch, but it had no
+      model-indexed row of its own, so per-model measurements had nowhere to
+      live (see feedback: index benches by model/quant, never by role).
+    model:
+      name: Qwen3.6-35B-A3B-MTP-Q8_0
+      path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 35.2
+      architecture: qwen35moe
+      mtp_capable: true
+      use_chat_api: true
+      disable_thinking: true  # mandatory: enable_thinking=false or 0 visible chars
+    artifact_status:
+      download: present
+      observed_date: 2026-07-20
+      file_bytes: 37801097504
+      provenance: local_artifact_no_hf_sidecar_found
+    candidate_roles:
+    - frontdoor
+    - coder_escalation
+    - worker_summarize
+    acceleration:
+      type: speculative_decoding
+      spec_type: native_mtp_candidate
+      optimal_gpu_serving:
+        # Measured optimum — launch with THIS, do not re-derive.
+        date: 2026-07-20
+        kernel: production-consolidated-v7
+        binary: /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server
+        device: MI210 (ROCm0)
+        spec_type: draft-mtp
+        spec_draft_n_max: 4
+        flags: >-
+          -np 1 -c 32768 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16
+          --device ROCm0 -ngl all -fa on --reasoning off
+          --spec-type draft-mtp --spec-draft-n-max 4
+        decode_t_s: 104.0
+        grade: observation  # pre-P-GPU-1; not decision-gating
+      gpu_spec_depth_sweep_observation: >
+        2026-07-20 MI210 draft-depth sweep on production-consolidated-v7
+        (`10098 6ad45fa3f`, build-hip) at production sampling (temp 0.6,
+        top_p 0.95, top_k 20, seed 42), 512-token generations, best of n=2,
+        f16 KV, `-c 32768 -b/-ub 2048`, `-ngl all -fa on`: no-spec
+        `84.8 t/s`; `draft-mtp` n-max 2 `94.5`, **n-max 4 `104.0`** (`1.23x`).
+        Fastest decode of the three architect-bench GPU arms, as expected for
+        3B active params. Observation-grade (pre-`P-GPU-1`); evidence:
+        `artifacts/architect-bench-gpu-20260720/sweep_a4/results.jsonl`.
+    constraints:
+      forbid:
+      - production_stack_registration_without_mtp_quality_gate
+      reason: "GPU-side numbers are observation-grade until P-GPU-1 ratification; role admission needs the role quality gates."
     memory:
       residency: cold
       pinned: false

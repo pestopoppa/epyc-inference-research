@@ -41,7 +41,7 @@ def test_query_server_defaults_to_chat_completions(monkeypatch):
     assert seen["url"] == "http://127.0.0.1:18072/v1/chat/completions"
     assert seen["payload"]["messages"] == [{"role": "user", "content": "prompt"}]
     assert seen["payload"]["stream"] is False
-    assert seen["timeout"] == 120
+    assert seen["timeout"] == runner.REQUEST_TIMEOUT_S
 
 
 def test_query_server_keeps_completion_mode(monkeypatch):
@@ -70,3 +70,24 @@ def test_extract_letter_answer_prefers_explicit_answer():
     assert runner.extract_letter_answer("I think the answer is C.") == "C"
     assert runner.extract_letter_answer("C.") == "C"
     assert runner.extract_letter_answer("I think C is likely") == ""
+
+
+def test_score_response_handles_aime_numeric_exact_match():
+    q = {
+        "scoring_method": "exact_match",
+        "scoring_config": {
+            "extract_pattern": r"(\d+)\s*$",
+            "normalize_numeric": True,
+        },
+    }
+
+    assert runner.score_response("After solving, the final answer is 070", "70", q)
+    assert runner.score_response("Final answer: 7", "007", q)
+    assert not runner.score_response("Final answer: 71", "70", q)
+
+
+def test_score_response_keeps_multiple_choice_path():
+    q = {"scoring_method": "multiple_choice", "scoring_config": {}}
+
+    assert runner.score_response("The answer is D.", "D", q)
+    assert not runner.score_response("The answer is C.", "D", q)

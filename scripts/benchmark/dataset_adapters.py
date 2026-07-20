@@ -18,6 +18,8 @@ Supported suites and their data sources:
   - physics:              PHYBench (Eureka-Lab/PHYBench, 100 with answers)
   - physreason:           PhysReason (zhibei1204/PhysReason, 1,200 problems, ~3,100 sub-questions)
   - aime:                 AIME 2024 (Maxwell-Jia/AIME_2024, 30) + AIME 2025 (opencompass/AIME2025, 30)
+  - aime25:               AIME 2025 only (opencompass/AIME2025, 30) — no 2024 contamination
+  - gpqa_diamond:         GPQA Diamond hard subset (198) — MC from ankner/gpqa, membership from hendrydong mirror
   - olympiadbench:        OlympiadBench (math-ai/olympiadbench, ~674 text-only math competition)
   - agentic:              No public dataset (stays YAML-based)
   - long_context:         Synthetic (stays YAML-based)
@@ -55,6 +57,8 @@ ADAPTER_SUITES = {
     "physreason",
     # Phase 4: competition math
     "aime", "olympiadbench",
+    # Architect bench: uncontaminated / hard-subset variants of the above
+    "aime25", "gpqa_diamond", "gpqa_diamond_cot",
     # Phase 5: long-context evaluation datasets
     "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized",
     # Phase 6: knowledge reliability / hallucination detection
@@ -159,6 +163,10 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         # Phase 4: competition math
         "aime": AIMEAdapter,
         "olympiadbench": OlympiadBenchAdapter,
+        # Architect bench: AIME 2025 only (no 2024 contamination) + GPQA Diamond
+        "aime25": AIME25Adapter,
+        "gpqa_diamond": GPQADiamondAdapter,
+        "gpqa_diamond_cot": GPQADiamondCoTAdapter,
         # Phase 6: knowledge reliability / hallucination detection
         "omniscience": AAOmniscienceAdapter,
         # Phase 6: long-context multi-document reasoning
@@ -2584,3 +2592,179 @@ class AALCRAdapter(BaseAdapter):
                 "normalize": True,
             },
         }
+
+
+# ── AIME 2025 only (architect-bench: uncontaminated competition math) ────────
+
+
+class AIME25Adapter(BaseAdapter):
+    """AIME 2025 ONLY (30 problems) — the architect-bench reasoning core.
+
+    Deliberately excludes AIME 2024 (which the combined `aime` suite mixes in):
+    2024 predates the training cutoff of every arm under test, so a 2024 score
+    conflates recall with reasoning. 2025 is the uncontaminated half.
+
+    Source: opencompass/AIME2025 (configs AIME2025-I / AIME2025-II, MIT).
+    All answers are integers 0-999. Scoring: exact_match, numeric.
+    Tiers: all T3 (olympiad-level).
+    """
+
+    suite_name = "aime25"
+    has_real_tiers = False
+
+    @staticmethod
+    def _clean_answer(raw: str) -> str:
+        """AIME answers are integers 0-999, but the upstream set carries units.
+
+        e.g. 2025-II-5 ships as '336^\\circ'. Left as-is it can never be
+        matched by an integer-emitting model, silently scoring 0 for every arm.
+        """
+        m = re.search(r"\d{1,3}", str(raw))
+        return str(int(m.group(0))) if m else str(raw).strip()
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+        combined = []
+        try:
+            import datasets as hf
+            for cfg, label in (("AIME2025-I", "I"), ("AIME2025-II", "II")):
+                ds = hf.load_dataset("opencompass/AIME2025", cfg, split="test")
+                for i, row in enumerate(ds):
+                    combined.append({
+                        "id": f"2025-{label}-{i + 1}",
+                        "problem": row["question"],
+                        "answer": self._clean_answer(row["answer"]),
+                    })
+        except Exception as e:
+            print(f"  [adapter] AIME 2025 load failed: {e}")
+            combined = []
+        self._dataset = combined
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        return {
+            "id": f"aime25_{row['id']}",
+            "suite": "aime25",
+            "prompt": (
+                f"{row['problem']}\n\n"
+                "This is an AIME problem. The answer is an integer between 0 and 999. "
+                "Reason step by step, then give your final answer on its own last line "
+                "in the form: ANSWER: <integer>"
+            ),
+            "context": "",
+            "expected": row["answer"],
+            "scoring": [],
+            "image_path": "",
+            "tier": 3,
+            "scoring_method": "exact_match",
+            "scoring_config": {
+                # Tried in order; first pattern that matches wins (last occurrence).
+                # Ordered most-explicit -> most-permissive so a stray digit in the
+                # working-out never outranks a stated final answer.
+                "extract_patterns": [
+                    r"ANSWER:\s*\**\s*(\d{1,3})",
+                    r"\\boxed\{\s*(\d{1,3})\s*\}",
+                    r"(?:final\s+answer|answer)\s*(?:is)?\s*[:=]?\s*\**\s*(\d{1,3})",
+                    r"(\d{1,3})\s*\**\s*\.?\s*$",
+                ],
+                "normalize_numeric": True,
+            },
+        }
+
+
+# ── GPQA-Diamond (architect-bench: the 198-question hard subset) ─────────────
+
+
+class GPQADiamondAdapter(GPQAAdapter):
+    """GPQA-Diamond: the 198-question expert-validated hard subset.
+
+    The `gpqa` suite above loads ankner/gpqa, which is GPQA **main** (448) —
+    NOT Diamond. Diamond is the subset both expert validators answered
+    correctly and most non-experts got wrong; it is what published
+    GPQA-Diamond numbers refer to, so the architect bench needs it.
+
+    Membership comes from the hendrydong/gpqa_diamond mirror (198 rows, verified
+    to match all 198 into ankner/gpqa by normalized question text); the
+    multiple-choice framing + real distractors come from ankner/gpqa, since the
+    hendrydong mirror is free-response only.
+
+    Scoring: multiple_choice (A/B/C/D). Tiers inherited from subdomain.
+    """
+
+    suite_name = "gpqa_diamond"
+    has_real_tiers = True
+
+    _DIAMOND_GLOB = (
+        "/mnt/raid0/llm/cache/huggingface/hub/datasets--hendrydong--gpqa_diamond/"
+        "snapshots/*/data/*.parquet"
+    )
+
+    @staticmethod
+    def _norm_q(s: str) -> str:
+        import unicodedata
+        s = unicodedata.normalize("NFKC", s or "")
+        return re.sub(r"\s+", " ", s).strip().lower()
+
+    def _diamond_keys(self) -> set:
+        """Normalized question text of the 198 Diamond items."""
+        import glob as _glob
+        import datasets as hf
+        rows = None
+        matches = sorted(_glob.glob(self._DIAMOND_GLOB))
+        if matches:
+            rows = hf.load_dataset("parquet", data_files=matches[0], split="train")
+        else:
+            rows = hf.load_dataset("hendrydong/gpqa_diamond", split="test")
+        return {self._norm_q(r["problem"]) for r in rows}
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+        try:
+            import datasets as hf
+            main = hf.load_dataset("ankner/gpqa", split="train")
+            keys = self._diamond_keys()
+            selected = [dict(r) for r in main if self._norm_q(r.get("Question", "")) in keys]
+            if len(selected) != len(keys):
+                print(f"  [adapter] gpqa_diamond: matched {len(selected)}/{len(keys)} "
+                      f"Diamond questions into ankner/gpqa")
+            self._dataset = selected
+        except Exception as e:
+            print(f"  [adapter] GPQA-Diamond load failed: {e}")
+            self._dataset = []
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        q = super()._row_to_prompt(idx, row)
+        # Positional ids are not stable across dataset revisions; the architect
+        # bench pairs arms across sessions, so key on the question itself.
+        import hashlib
+        qhash = hashlib.sha256(self._norm_q(row.get("Question", "")).encode()).hexdigest()[:12]
+        q["suite"] = "gpqa_diamond"
+        q["id"] = f"gpqa_diamond_{qhash}"
+        return q
+
+
+class GPQADiamondCoTAdapter(GPQADiamondAdapter):
+    """GPQA-Diamond, but the model is allowed to reason before answering.
+
+    The plain `gpqa_diamond` prompt says "Answer with the letter only", which
+    at enable_thinking=false yields ~2 completion tokens — a pure
+    prior/intuition probe with no chain of thought. That is a fine knowledge
+    measurement but it cannot speak to *reasoning depth*, which is the whole
+    question the architect bench exists to settle. This variant asks for
+    step-by-step work and a tagged final answer.
+    """
+
+    suite_name = "gpqa_diamond_cot"
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        q = super()._row_to_prompt(idx, row)
+        base = q["prompt"].replace(
+            "Answer with the letter only (A, B, C, or D).",
+            "Reason step by step, then give your final answer on its own last "
+            "line in the form: ANSWER: <letter>",
+        )
+        q["prompt"] = base
+        q["suite"] = "gpqa_diamond_cot"
+        q["id"] = q["id"].replace("gpqa_diamond_", "gpqa_diamond_cot_", 1)
+        return q
