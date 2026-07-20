@@ -58,6 +58,9 @@ DEFAULT_STARTUP_TIMEOUT_S = 900
 DEFAULT_REQUEST_TIMEOUT_S = 600
 DEFAULT_SEED = 42
 DEFAULT_TEMPERATURE = 0.0
+STRUCTURED_JSON_LINE_COUNT = 16
+STRICT_FORMAT_LINE_COUNT = 5
+STRICT_FORMAT_WORD_COUNT = 6
 FH_NOT_OBSERVABLE = "not_observable_without_engine_telemetry"
 PROCESS_PATTERN = "llama-bench|llama-server|llama-cli|llama-mtmd-cli"
 SPEC_TELEMETRY_MS_FIELDS = (
@@ -72,8 +75,8 @@ TASK_CLASSES = [
         "id": "repetitive_structured_generation",
         "quality_sanity": "strict repeated/structured output count",
         "prompt": (
-            "Write exactly 64 lines. Each line must be valid JSON with keys index and status. "
-            "Use index values 0 through 63 in order. Use status value READY on every line. "
+            "Write exactly 16 lines. Each line must be valid JSON with keys index and status. "
+            "Use index values 0 through 15 in order. Use status value READY on every line. "
             "Do not write any text before or after the JSON lines."
         ),
     },
@@ -98,8 +101,9 @@ TASK_CLASSES = [
         "id": "exact_format_strict_instruction",
         "quality_sanity": "exact prefix and item count",
         "prompt": (
-            "Write exactly five lines. Each line must start with DR0- and contain exactly six words. "
-            "Do not write any text before or after the five lines."
+            "Write exactly five lines. Each line must start with one DR0-N token such as DR0-1, "
+            "then exactly five plain words, for six whitespace-separated tokens total. Do not write "
+            "any text before or after the five lines."
         ),
     },
 ]
@@ -572,6 +576,11 @@ def build_summary_skeleton(args: argparse.Namespace, manifest: dict[str, Any]) -
             "pass_count": None,
             "total_count": None,
         },
+        "output_stability_gate": {
+            "required": "every quant-asymmetric combined arm must match the CPU verifier baseline content hash for every task",
+            "status": "not_run",
+            "rows": [],
+        },
         "fh_accounting": fh_accounting,
         "cleanup_proof": {
             "status": "not_run",
@@ -910,13 +919,13 @@ def score_quality(task: dict[str, Any], content: str) -> dict[str, Any]:
         indexes = [item.get("index") for item in parsed]
         statuses = [item.get("status") for item in parsed]
         keys_ok = all(set(item) == {"index", "status"} for item in parsed)
-        indexes_ok = sorted(indexes) == list(range(64))
+        indexes_ok = sorted(indexes) == list(range(STRUCTURED_JSON_LINE_COUNT))
         passed = (
-            len(lines) == 64
-            and len(parsed) == 64
+            len(lines) == STRUCTURED_JSON_LINE_COUNT
+            and len(parsed) == STRUCTURED_JSON_LINE_COUNT
             and not errors
             and keys_ok
-            and statuses == ["READY"] * 64
+            and statuses == ["READY"] * STRUCTURED_JSON_LINE_COUNT
             and indexes_ok
         )
         return {
@@ -996,7 +1005,11 @@ def score_quality(task: dict[str, Any], content: str) -> dict[str, Any]:
         lines = [line.strip() for line in stripped.splitlines() if line.strip()]
         starts_ok = [line.startswith("DR0-") for line in lines]
         word_counts = [len(line.split()) for line in lines]
-        passed = len(lines) == 5 and all(starts_ok) and word_counts == [6] * 5
+        passed = (
+            len(lines) == STRICT_FORMAT_LINE_COUNT
+            and all(starts_ok)
+            and word_counts == [STRICT_FORMAT_WORD_COUNT] * STRICT_FORMAT_LINE_COUNT
+        )
         return {
             "task_class": task_id,
             "status": "checked",
@@ -1323,7 +1336,7 @@ def run_arm_variant(args: argparse.Namespace, variant: ArmVariant, port: int) ->
     return aggregate
 
 
-def build_coarse_economics(arms: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def target_output_match_rows(arms: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     baseline = arms.get("cpu_high_quant_verifier_baseline", {})
     baseline_hashes = {
         row.get("task_class"): row.get("content_sha256")
@@ -1331,6 +1344,30 @@ def build_coarse_economics(arms: dict[str, dict[str, Any]]) -> dict[str, Any]:
         if row.get("task_class")
     }
     rows: list[dict[str, Any]] = []
+    for arm_id, metrics in sorted(arms.items()):
+        if not arm_id.startswith("quant_asymmetric_combined_"):
+            continue
+        matches = {
+            row.get("task_class"): row.get("content_sha256")
+            == baseline_hashes.get(row.get("task_class"))
+            for row in metrics.get("task_results", [])
+            if row.get("task_class") in baseline_hashes
+        }
+        rows.append(
+            {
+                "arm": arm_id,
+                "k": metrics.get("k"),
+                "target_output_match_vs_baseline": matches,
+                "pass": bool(matches) and all(matches.values()),
+            }
+        )
+    return rows
+
+
+def build_coarse_economics(arms: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    stability_rows = {row["arm"]: row for row in target_output_match_rows(arms)}
+    rows: list[dict[str, Any]] = []
+    baseline = arms.get("cpu_high_quant_verifier_baseline", {})
     baseline_decode_tps = baseline.get("decode_tps")
     baseline_decode_time_s = baseline.get("decode_time_s")
     for arm_id, metrics in sorted(arms.items()):
@@ -1364,12 +1401,9 @@ def build_coarse_economics(arms: dict[str, dict[str, Any]]) -> dict[str, Any]:
                     + float(metrics.get("spec_process_time_s") or 0.0)
                     + float(metrics.get("spec_sample_accept_time_s") or 0.0)
                 ),
-                "target_output_match_vs_baseline": {
-                    row.get("task_class"): row.get("content_sha256")
-                    == baseline_hashes.get(row.get("task_class"))
-                    for row in metrics.get("task_results", [])
-                    if row.get("task_class") in baseline_hashes
-                },
+                "target_output_match_vs_baseline": stability_rows.get(arm_id, {}).get(
+                    "target_output_match_vs_baseline", {}
+                ),
             }
         )
     return {
@@ -1473,6 +1507,16 @@ def run_execute(args: argparse.Namespace, manifest: dict[str, Any]) -> dict[str,
         "pass_count": pass_quality,
         "total_count": total_quality,
     }
+    stability_rows = target_output_match_rows(launched_summaries)
+    stability_pass = bool(stability_rows) and all(row["pass"] for row in stability_rows)
+    summary["output_stability_gate"] = {
+        "required": (
+            "every quant-asymmetric combined arm must match the CPU verifier baseline "
+            "content hash for every task"
+        ),
+        "status": "pass" if stability_pass else "fail",
+        "rows": stability_rows,
+    }
     all_cleanup_ok = all(
         arm_summary.get("cleanup", {}).get("status") == "ok"
         and arm_summary.get("cleanup", {}).get("terminated") is True
@@ -1546,6 +1590,7 @@ def run_execute(args: argparse.Namespace, manifest: dict[str, Any]) -> dict[str,
     summary["decision_grade"] = False
     summary["observation_grade"] = (
         summary["quality_gate"]["status"] == "pass"
+        and summary["output_stability_gate"]["status"] == "pass"
         and summary["cleanup_proof"]["status"] == "pass"
         and all(arm_summary.get("status") == "ok" for arm_summary in launched_summaries.values())
     )

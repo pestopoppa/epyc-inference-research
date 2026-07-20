@@ -84,6 +84,19 @@ def test_quality_checker_strict_format_task_passes() -> None:
     assert result["pass"] is True
 
 
+def test_quality_checker_repetitive_structured_task_fits_token_cap() -> None:
+    task = next(task for task in runner.TASK_CLASSES if task["id"] == "repetitive_structured_generation")
+    content = "\n".join(
+        f'{{"index": {index}, "status": "READY"}}'
+        for index in range(runner.STRUCTURED_JSON_LINE_COUNT)
+    )
+
+    result = runner.score_quality(task, content)
+
+    assert result["pass"] is True
+    assert result["details"]["line_count"] == runner.STRUCTURED_JSON_LINE_COUNT
+
+
 def test_execute_path_writes_summary_with_mocked_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_validate_live_inputs(args):
         return None
@@ -117,6 +130,12 @@ def test_execute_path_writes_summary_with_mocked_run(tmp_path: Path, monkeypatch
                     "details": {},
                 }
             ],
+            "task_results": [
+                {
+                    "task_class": "mock",
+                    "content_sha256": runner.sha256_text("stable output"),
+                }
+            ],
             "cleanup": {"status": "ok", "terminated": True, "port_open_after": False},
         }
 
@@ -132,6 +151,7 @@ def test_execute_path_writes_summary_with_mocked_run(tmp_path: Path, monkeypatch
     assert summary["mode"] == "execute"
     assert summary["dry_run_only"] is False
     assert summary["quality_gate"]["status"] == "pass"
+    assert summary["output_stability_gate"]["status"] == "pass"
     assert summary["cleanup_proof"]["status"] == "pass"
     assert summary["observation_grade"] is True
     assert summary["decision_grade"] is False
@@ -281,6 +301,35 @@ def test_fh_accounting_upgrades_when_spec_telemetry_is_observed() -> None:
             "draft_tokens": 8,
             "accepted_draft_tokens": 6,
             "alpha": 0.75,
+        }
+    ]
+
+
+def test_target_output_stability_detects_combined_mismatch() -> None:
+    baseline_hash = runner.sha256_text("baseline")
+    changed_hash = runner.sha256_text("changed")
+    arms = {
+        "cpu_high_quant_verifier_baseline": {
+            "task_results": [
+                {"task_class": "strict", "content_sha256": baseline_hash},
+            ]
+        },
+        "quant_asymmetric_combined_k2": {
+            "k": 2,
+            "task_results": [
+                {"task_class": "strict", "content_sha256": changed_hash},
+            ],
+        },
+    }
+
+    rows = runner.target_output_match_rows(arms)
+
+    assert rows == [
+        {
+            "arm": "quant_asymmetric_combined_k2",
+            "k": 2,
+            "target_output_match_vs_baseline": {"strict": False},
+            "pass": False,
         }
     ]
 
