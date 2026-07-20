@@ -232,9 +232,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_PORT_TIMEOUT_S,
         help="Server health timeout in seconds",
     )
+    parser.add_argument(
+        "--server-env",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help=(
+            "Extra environment assignment for the llama-server subprocess; may be repeated. "
+            "Recorded in plan/summary for graph/backend A/B diagnostics."
+        ),
+    )
     args = parser.parse_args(argv)
     if args.trace_n_probs < 0:
         parser.error("--trace-n-probs must be >= 0")
+    for item in args.server_env:
+        key, sep, _value = item.partition("=")
+        if not sep or not key:
+            parser.error("--server-env must be KEY=VALUE with a non-empty KEY")
     return args
 
 
@@ -381,6 +395,7 @@ def build_server_argv(args: argparse.Namespace, port: int | str) -> list[str]:
     argv = [
         "env",
         f"LD_LIBRARY_PATH={SERVER_LIB_DIR}",
+        *args.server_env,
         "numactl",
         "--interleave=all",
         str(SERVER_BIN),
@@ -536,6 +551,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             "n_gpu_layers": args.n_gpu_layers,
             "target_device": args.target_device,
             "draft_device": args.draft_device,
+            "server_env": args.server_env,
         },
         "runs": [
             {
@@ -1042,6 +1058,7 @@ def run_execute(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         "trace_n_probs": args.trace_n_probs,
         "trace_post_sampling_probs": args.trace_post_sampling_probs,
         "trace_response_fields": trace_response_fields,
+        "server_env": args.server_env,
         "runs": results,
         "unique_output_hashes": unique_hashes,
         "deterministic": deterministic,

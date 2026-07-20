@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import subprocess
 import sys
@@ -96,6 +98,30 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
 
         self.assertIn("--no-spec-draft-backend-sampling", argv)
         self.assertNotIn("--spec-draft-backend-sampling", argv)
+
+    def test_build_server_argv_records_extra_server_env(self) -> None:
+        args = runner.parse_args(["--server-env", "GGML_CUDA_DISABLE_GRAPHS=1"])
+        argv = runner.build_server_argv(args, 31337)
+
+        self.assertEqual(
+            argv[:5],
+            [
+                "env",
+                f"LD_LIBRARY_PATH={runner.SERVER_LIB_DIR}",
+                "GGML_CUDA_DISABLE_GRAPHS=1",
+                "numactl",
+                "--interleave=all",
+            ],
+        )
+
+    def test_server_env_requires_assignment(self) -> None:
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit):
+                runner.parse_args(["--server-env", "GGML_CUDA_DISABLE_GRAPHS"])
+
+            with self.assertRaises(SystemExit):
+                runner.parse_args(["--server-env", "=1"])
 
     def test_apply_request_sampler_mode_explicit_greedy(self) -> None:
         payload = {"temperature": 0.0, "top_k": 1, "top_p": 1.0}
@@ -507,6 +533,8 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
                     "choices",
                     "--trace-response-field",
                     "tokens",
+                    "--server-env",
+                    "GGML_CUDA_DISABLE_GRAPHS=1",
                 ],
                 check=True,
                 capture_output=True,
@@ -518,6 +546,11 @@ class TestK11Gemma4DeterminismRunner(unittest.TestCase):
             self.assertEqual(plan["meta"]["trace_n_probs"], 7)
             self.assertFalse(plan["meta"]["trace_post_sampling_probs"])
             self.assertEqual(plan["meta"]["trace_response_fields"], ["choices", "tokens"])
+            self.assertEqual(plan["meta"]["server_env"], ["GGML_CUDA_DISABLE_GRAPHS=1"])
+            self.assertIn(
+                "GGML_CUDA_DISABLE_GRAPHS=1",
+                (output_dir / "commands.sh").read_text(),
+            )
 
 
 if __name__ == "__main__":
