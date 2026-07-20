@@ -1,0 +1,25 @@
+[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)
+[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)
+	Command being timed: "taskset -c 0-95 numactl --interleave=all /mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/llama-bench -m /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf -t 96 -pg 8192,16 -r 2 -fa 1 -mmp 0 -dev none -ngl 0 -nopo 1 -nkvo 1 -o json"
+	User time (seconds): 30462.24
+	System time (seconds): 20.28
+	Percent of CPU this job got: 9122%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 5:34.16
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 77046452
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 89944
+	Voluntary context switches: 215954
+	Involuntary context switches: 46309
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 32
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

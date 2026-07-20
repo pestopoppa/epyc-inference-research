@@ -1,0 +1,523 @@
+{
+  "run_root": "/mnt/raid0/llm/epyc-inference-research/data/cpu_prefill_compute/pc4l-qwen35moe-concat-dim0-repeat-20260720T023955Z",
+  "created_at_utc": "2026-07-20T03:06:38.933550+00:00",
+  "status": "pc4l_complete_keep_candidate_default_off",
+  "model_path": "/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf",
+  "llama_head": "12a292f0c21d34b6d1db437291afbcbfb33bc491",
+  "binary_path": "/mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/llama-bench",
+  "batched_binary_path": "/mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin/llama-batched-bench",
+  "ld_library_path": "/mnt/raid0/llm/llama.cpp-experimental/build-k24-cpu/bin",
+  "arms": {
+    "repeat_default": {
+      "bench_rows": [
+        {
+          "n_prompt": 8192,
+          "n_gen": 0,
+          "avg_ts": 95.531624,
+          "stddev_ts": 1.378569,
+          "samples_ts": [
+            96.9325,
+            95.4858,
+            94.1765
+          ],
+          "avg_ns": 85763607059,
+          "stddev_ns": 1236851314,
+          "samples_ns": [
+            84512396009,
+            85792845096,
+            86985580074
+          ],
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        },
+        {
+          "n_prompt": 0,
+          "n_gen": 1,
+          "avg_ts": 4.678276,
+          "stddev_ts": 0.013411,
+          "samples_ts": [
+            4.66753,
+            4.674,
+            4.6933
+          ],
+          "avg_ns": 213755103,
+          "stddev_ns": 612335,
+          "samples_ns": [
+            214246131,
+            213949699,
+            213069481
+          ],
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        }
+      ],
+      "time_v": {
+        "User time (seconds)": "28507.18",
+        "System time (seconds)": "19.91",
+        "Percent of CPU this job got": "8029%",
+        "Elapsed (wall clock) time (h:mm:ss or m:ss)": "5:55.26",
+        "Maximum resident set size (kbytes)": "77035376",
+        "Major (requiring I/O) page faults": "0",
+        "Minor (reclaiming a frame) page faults": "101797",
+        "Voluntary context switches": "491641",
+        "Involuntary context switches": "39001",
+        "File system inputs": "0",
+        "File system outputs": "16",
+        "Exit status": "0"
+      },
+      "iqk_active_lines": [
+        "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+        "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+      ],
+      "warnings": [],
+      "env_flags": "env"
+    },
+    "repeat_concat_dim0_rows": {
+      "bench_rows": [
+        {
+          "n_prompt": 8192,
+          "n_gen": 0,
+          "avg_ts": 104.210589,
+          "stddev_ts": 6.786525,
+          "samples_ts": [
+            101.984,
+            98.8174,
+            111.831
+          ],
+          "avg_ns": 78826856811,
+          "stddev_ns": 3966002495,
+          "samples_ns": [
+            80326699430,
+            82900357715,
+            73253513289
+          ],
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        },
+        {
+          "n_prompt": 0,
+          "n_gen": 1,
+          "avg_ts": 4.77868,
+          "stddev_ts": 0.022527,
+          "samples_ts": [
+            4.75282,
+            4.78915,
+            4.79406
+          ],
+          "avg_ns": 209265911,
+          "stddev_ns": 989159,
+          "samples_ns": [
+            210401274,
+            208805191,
+            208591269
+          ],
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        }
+      ],
+      "time_v": {
+        "User time (seconds)": "29749.48",
+        "System time (seconds)": "18.37",
+        "Percent of CPU this job got": "9077%",
+        "Elapsed (wall clock) time (h:mm:ss or m:ss)": "5:27.92",
+        "Maximum resident set size (kbytes)": "77036608",
+        "Major (requiring I/O) page faults": "0",
+        "Minor (reclaiming a frame) page faults": "96036",
+        "Voluntary context switches": "261448",
+        "Involuntary context switches": "53218",
+        "File system inputs": "0",
+        "File system outputs": "16",
+        "Exit status": "0"
+      },
+      "iqk_active_lines": [
+        "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+        "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+      ],
+      "warnings": [],
+      "env_flags": "env GGML_CPU_CONCAT_DIM0_ROWS=1"
+    },
+    "pg_default": {
+      "bench_rows": [
+        {
+          "n_prompt": 512,
+          "n_gen": 0,
+          "avg_ts": 95.853716,
+          "stddev_ts": 8.691121,
+          "samples_ts": [
+            101.999,
+            89.7082
+          ],
+          "avg_ns": 5363519836,
+          "stddev_ns": 486313933,
+          "samples_ns": [
+            5019643956,
+            5707395716
+          ],
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        },
+        {
+          "n_prompt": 0,
+          "n_gen": 128,
+          "avg_ts": 4.641114,
+          "stddev_ts": 0.000439,
+          "samples_ts": [
+            4.6408,
+            4.64142
+          ],
+          "avg_ns": 27579587674,
+          "stddev_ns": 2619772,
+          "samples_ns": [
+            27581432674,
+            27577742675
+          ],
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        },
+        {
+          "n_prompt": 8192,
+          "n_gen": 16,
+          "avg_ts": 88.838786,
+          "stddev_ts": 1.075916,
+          "samples_ts": [
+            88.078,
+            89.5996
+          ],
+          "avg_ns": 92398853384,
+          "stddev_ns": 1119031212,
+          "samples_ns": [
+            93190127885,
+            91607578884
+          ],
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        }
+      ],
+      "time_v": {
+        "User time (seconds)": "29272.96",
+        "System time (seconds)": "22.40",
+        "Percent of CPU this job got": "8209%",
+        "Elapsed (wall clock) time (h:mm:ss or m:ss)": "5:56.83",
+        "Maximum resident set size (kbytes)": "77043916",
+        "Major (requiring I/O) page faults": "0",
+        "Minor (reclaiming a frame) page faults": "102568",
+        "Voluntary context switches": "392246",
+        "Involuntary context switches": "34942",
+        "File system inputs": "0",
+        "File system outputs": "32",
+        "Exit status": "0"
+      },
+      "iqk_active_lines": [
+        "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+        "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+      ],
+      "warnings": [],
+      "env_flags": "env"
+    },
+    "pg_concat_dim0_rows": {
+      "bench_rows": [
+        {
+          "n_prompt": 512,
+          "n_gen": 0,
+          "avg_ts": 113.058759,
+          "stddev_ts": 2.087341,
+          "samples_ts": [
+            114.535,
+            111.583
+          ],
+          "avg_ns": 4529390555,
+          "stddev_ns": 83623658,
+          "samples_ns": [
+            4470259738,
+            4588521373
+          ],
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        },
+        {
+          "n_prompt": 0,
+          "n_gen": 128,
+          "avg_ts": 4.654019,
+          "stddev_ts": 0.000892,
+          "samples_ts": [
+            4.65465,
+            4.65339
+          ],
+          "avg_ns": 27503110224,
+          "stddev_ns": 5276152,
+          "samples_ns": [
+            27499383109,
+            27506837340
+          ],
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        },
+        {
+          "n_prompt": 8192,
+          "n_gen": 16,
+          "avg_ts": 93.782587,
+          "stddev_ts": 3.307106,
+          "samples_ts": [
+            96.1211,
+            91.4441
+          ],
+          "avg_ns": 87576029511,
+          "stddev_ns": 3088241061,
+          "samples_ns": [
+            85392313335,
+            89759745688
+          ],
+          "n_threads": 96,
+          "cpu_info": "AMD EPYC 9655 96-Core Processor",
+          "gpu_info": "",
+          "backends": "CPU",
+          "build_commit": "12a292f0c",
+          "build_number": 10099,
+          "n_gpu_layers": 0,
+          "flash_attn": 1,
+          "no_op_offload": 1,
+          "no_kv_offload": true
+        }
+      ],
+      "time_v": {
+        "User time (seconds)": "30462.24",
+        "System time (seconds)": "20.28",
+        "Percent of CPU this job got": "9122%",
+        "Elapsed (wall clock) time (h:mm:ss or m:ss)": "5:34.16",
+        "Maximum resident set size (kbytes)": "77046452",
+        "Major (requiring I/O) page faults": "0",
+        "Minor (reclaiming a frame) page faults": "89944",
+        "Voluntary context switches": "215954",
+        "Involuntary context switches": "46309",
+        "File system inputs": "0",
+        "File system outputs": "32",
+        "Exit status": "0"
+      },
+      "iqk_active_lines": [
+        "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+        "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+      ],
+      "warnings": [],
+      "env_flags": "env GGML_CPU_CONCAT_DIM0_ROWS=1"
+    },
+    "batched_pl2_default": {
+      "bench_rows": [
+        {
+          "n_kv_max": 8192,
+          "n_batch": 2048,
+          "n_ubatch": 512,
+          "flash_attn": 1,
+          "is_pp_shared": 0,
+          "n_gpu_layers": 0,
+          "n_threads": 96,
+          "n_threads_batch": 96,
+          "pp": 2048,
+          "tg": 1,
+          "pl": 2,
+          "n_kv": 4098,
+          "t_pp": 24.183847,
+          "speed_pp": 169.369247,
+          "t_tg": 0.148455,
+          "speed_tg": 13.472096,
+          "t": 24.332302,
+          "speed": 168.418091
+        }
+      ],
+      "time_v": {
+        "User time (seconds)": "1742.70",
+        "System time (seconds)": "10.26",
+        "Percent of CPU this job got": "6061%",
+        "Elapsed (wall clock) time (h:mm:ss or m:ss)": "0:28.92",
+        "Maximum resident set size (kbytes)": "77186256",
+        "Major (requiring I/O) page faults": "0",
+        "Minor (reclaiming a frame) page faults": "1248800",
+        "Voluntary context switches": "28375",
+        "Involuntary context switches": "2275",
+        "File system inputs": "0",
+        "File system outputs": "16",
+        "Exit status": "0"
+      },
+      "iqk_active_lines": [
+        "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+        "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+      ],
+      "warnings": [
+        "warning: no usable GPU found, --gpu-layers option will be ignored",
+        "warning: one possible reason is that llama.cpp was compiled without GPU support",
+        "warning: consult docs/build.md for compilation instructions"
+      ],
+      "env_flags": "env"
+    },
+    "batched_pl2_concat_dim0_rows": {
+      "bench_rows": [
+        {
+          "n_kv_max": 8192,
+          "n_batch": 2048,
+          "n_ubatch": 512,
+          "flash_attn": 1,
+          "is_pp_shared": 0,
+          "n_gpu_layers": 0,
+          "n_threads": 96,
+          "n_threads_batch": 96,
+          "pp": 2048,
+          "tg": 1,
+          "pl": 2,
+          "n_kv": 4098,
+          "t_pp": 15.684051,
+          "speed_pp": 261.157013,
+          "t_tg": 0.143926,
+          "speed_tg": 13.89603,
+          "t": 15.827976,
+          "speed": 258.908661
+        }
+      ],
+      "time_v": {
+        "User time (seconds)": "1541.88",
+        "System time (seconds)": "10.01",
+        "Percent of CPU this job got": "7587%",
+        "Elapsed (wall clock) time (h:mm:ss or m:ss)": "0:20.45",
+        "Maximum resident set size (kbytes)": "77186708",
+        "Major (requiring I/O) page faults": "0",
+        "Minor (reclaiming a frame) page faults": "1248434",
+        "Voluntary context switches": "905",
+        "Involuntary context switches": "1757",
+        "File system inputs": "0",
+        "File system outputs": "16",
+        "Exit status": "0"
+      },
+      "iqk_active_lines": [
+        "[iqk] ACTIVE: MoE mul_mat_id via ik kernels (type=12 n_as=256)",
+        "[iqk] ACTIVE: ik_llama GEMM kernels engaged (first mul_mat type=14 ne00=3072)"
+      ],
+      "warnings": [
+        "warning: no usable GPU found, --gpu-layers option will be ignored",
+        "warning: one possible reason is that llama.cpp was compiled without GPU support",
+        "warning: consult docs/build.md for compilation instructions"
+      ],
+      "env_flags": "env GGML_CPU_CONCAT_DIM0_ROWS=1"
+    }
+  },
+  "comparison": {
+    "repeat_p8192_n1_r3": {
+      "pp8192_default_avg_ts": 95.531624,
+      "pp8192_concat_dim0_rows_avg_ts": 104.210589,
+      "pp8192_speed_delta_pct": 9.08491307548588,
+      "tg1_default_avg_ts": 4.678276,
+      "tg1_concat_dim0_rows_avg_ts": 4.77868,
+      "tg1_speed_delta_pct": 2.146175214972337,
+      "default_elapsed": "5:55.26",
+      "concat_dim0_rows_elapsed": "5:27.92"
+    },
+    "pg_8192_16_r2": {
+      "note": "llama-bench also emitted default pp512 and tg128 rows because -pg does not clear default -p/-n lists.",
+      "pp8192_tg16_default_avg_ts": 88.838786,
+      "pp8192_tg16_concat_dim0_rows_avg_ts": 93.782587,
+      "pp8192_tg16_speed_delta_pct": 5.564912829853402,
+      "tg128_default_avg_ts": 4.641114,
+      "tg128_concat_dim0_rows_avg_ts": 4.654019,
+      "tg128_speed_delta_pct": 0.27805824205136837,
+      "pp512_default_avg_ts": 95.853716,
+      "pp512_concat_dim0_rows_avg_ts": 113.058759,
+      "pp512_speed_delta_pct": 17.949270740844298
+    },
+    "batched_pl2_pp2048_tg1": {
+      "default_speed_pp": 169.369247,
+      "concat_dim0_rows_speed_pp": 261.157013,
+      "speed_pp_delta_pct": 54.19387971890789,
+      "default_speed_tg": 13.472096,
+      "concat_dim0_rows_speed_tg": 13.89603,
+      "speed_tg_delta_pct": 3.146756080122938,
+      "default_total_speed": 168.418091,
+      "concat_dim0_rows_total_speed": 258.908661,
+      "total_speed_delta_pct": 53.72972075784898,
+      "default_t_pp": 24.183847,
+      "concat_dim0_rows_t_pp": 15.684051,
+      "t_pp_delta_pct": -35.146583585316264,
+      "default_t_total": 24.332302,
+      "concat_dim0_rows_t_total": 15.827976,
+      "t_total_delta_pct": -34.95076626946353,
+      "pl": 2,
+      "pp": 2048,
+      "tg": 1
+    }
+  },
+  "decision": {
+    "candidate": "GGML_CPU_CONCAT_DIM0_ROWS=1",
+    "verdict": "carry_forward_default_off_candidate",
+    "reason": "Positive repeat p8192/n1, generated-token, and pl=2 smoke evidence; still experimental-only and not default-on without broader backend/shape validation and code review.",
+    "next_gate": "PC-4m: source-hardening/default-off patch review plus broader backend/shape tests before any promotion/default decision"
+  },
+  "raw_bench_json_policy": "raw llama-bench bench.json files are left untracked; this summary stores sanitized fields only because raw rows include hook-sensitive model metadata"
+}
