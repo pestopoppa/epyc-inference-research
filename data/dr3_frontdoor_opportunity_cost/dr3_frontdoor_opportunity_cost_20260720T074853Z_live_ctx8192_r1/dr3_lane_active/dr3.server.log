@@ -1,0 +1,23 @@
+0.00.036.128 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.036.488 W srv  llama_server: -----------------
+0.00.036.490 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.036.490 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.036.490 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.036.490 W srv  llama_server: -----------------
+0.00.037.706 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-Q4_K_M/Qwen3.5-122B-A10B-UD-Q4_K_M-00001-of-00003.gguf'
+0.16.381.041 I srv    load_model: initializing, n_slots = 1, n_ctx_slot = 8192, kv_unified = 'false'
+0.16.381.233 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.16.435.005 I srv  llama_server: model loaded
+0.16.435.012 I srv  llama_server: listening on http://127.0.0.1:22421
+0.19.709.444 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.19.709.579 I slot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+0.30.641.992 I slot print_timing: id  0 | task 0 | n_decoded =    100, tg =  11.81 t/s, tg_3s =  11.81 t/s
+0.33.738.364 I slot print_timing: id  0 | task 0 | n_decoded =    136, tg =  11.76 t/s, tg_3s =  11.63 t/s
+0.36.833.917 I slot print_timing: id  0 | task 0 | n_decoded =    172, tg =  11.73 t/s, tg_3s =  11.63 t/s
+0.38.668.805 I slot print_timing: id  0 | task 0 | prompt eval time =    2465.37 ms /   215 tokens (   11.47 ms per token,    87.21 tokens per second)
+0.38.668.809 I slot print_timing: id  0 | task 0 |        eval time =   16493.80 ms /   193 tokens (   85.46 ms per token,    11.70 tokens per second)
+0.38.668.810 I slot print_timing: id  0 | task 0 |       total time =   18959.16 ms /   408 tokens
+0.38.668.815 I slot print_timing: id  0 | task 0 |    graphs reused =         63
+0.38.668.819 I slot print_timing: id  0 | task 0 | draft acceptance = 1.00000 (  128 accepted /   128 generated), mean len =  3.00
+0.38.668.881 I slot      release: id  0 | task 0 | stop processing: n_tokens = 407, truncated = 0
+0.39.730.452 I srv    operator(): operator(): cleaning up before exit...

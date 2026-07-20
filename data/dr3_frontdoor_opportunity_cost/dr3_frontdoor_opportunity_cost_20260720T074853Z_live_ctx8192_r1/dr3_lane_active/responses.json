@@ -1,0 +1,53 @@
+[
+  {
+    "accepted_draft_tokens": 128,
+    "alpha": 1.0,
+    "arm": "dr3_combined_k2_ctx8192",
+    "base_arm": "quant_asymmetric_combined",
+    "content_len": 575,
+    "content_sha256": "edbbd53e9dd7925ef3da689e2f90b7084d08c91ff4be038d616b26748d90a2bb",
+    "context_band": 8192,
+    "decode_time_s": 16.493797999999998,
+    "decode_tps": 11.701367992987425,
+    "draft_tokens": 128,
+    "finish_reason": "stop",
+    "generated_tokens": 193,
+    "k": 2,
+    "prompt_time_s": 2.465366,
+    "prompt_tokens": 215,
+    "prompt_tps": 87.20814678226276,
+    "quality": {
+      "checker": "requested repeated/templated content length and stop behavior",
+      "details": {
+        "all_expected_word": true,
+        "exact_match": true,
+        "expected_word_count": 64,
+        "word_count": 64
+      },
+      "pass": true,
+      "row_id": "long_repetitive_output_ctx8192_r00",
+      "status": "checked",
+      "task_class": "long_repetitive_output"
+    },
+    "raw_response_path": "data/dr3_frontdoor_opportunity_cost/dr3_frontdoor_opportunity_cost_20260720T074853Z_live_ctx8192_r1/dr3_lane_active/long_repetitive_output_ctx8192_r00.raw.json",
+    "reasoning_content_len": 0,
+    "reasoning_content_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "response_sha256": "43632da940f2d8a20e354640e83e4c53c6cd9d347c11a8c81ff227afb693ba84",
+    "row_id": "long_repetitive_output_ctx8192_r00",
+    "spec_telemetry": {
+      "spec_accept_by_depth": [
+        64,
+        64
+      ],
+      "spec_draft_ms": 240.65099999999998,
+      "spec_process_ms": 35.281,
+      "spec_sample_accept_ms": 31.033999999999995,
+      "spec_verify_ms": 16166.795999999998,
+      "spec_verify_steps": 64,
+      "status": "observed"
+    },
+    "status": "ok",
+    "task_class": "long_repetitive_output",
+    "wall_time_s": 18.969230020185933
+  }
+]

@@ -205,6 +205,39 @@ The broader package passed both requested context bands with one row per class:
 | 8192 | 6.980 | 10.535 | 1.509x | 0.876 | 408/466 |
 | 16384 | 6.979 | 10.429 | 1.494x | 0.879 | 420/478 |
 
-This closes the default admission-package execution gap. Production/routing
-remains blocked on the frontdoor opportunity-cost gate and any required
-production-named `P-GPU-1` rerun.
+This closed the default admission-package execution gap. At the DR-3c checkpoint,
+production/routing still remained blocked on the frontdoor opportunity-cost gate
+and any required production-named `P-GPU-1` rerun.
+
+## DR-3d Frontdoor Opportunity-Cost Gate
+
+The DR-3d runner is now implemented as
+`scripts/benchmark/dr3_frontdoor_opportunity_cost_gate.py`, with focused tests in
+`scripts/benchmark/test_dr3_frontdoor_opportunity_cost_gate.py`.
+
+Artifacts:
+
+- Dry-run:
+  `data/dr3_frontdoor_opportunity_cost/dr3_frontdoor_opportunity_cost_20260720T075235Z_dryrun_v2/`.
+- Live observation:
+  `data/dr3_frontdoor_opportunity_cost/dr3_frontdoor_opportunity_cost_20260720T074853Z_live_ctx8192_r1/`.
+
+The live gate passed as experimental-v7 observation evidence:
+
+- `frontdoor_opportunity_cost_gate.status=pass`.
+- `cleanup_proof.status=pass`; post-run verification showed no llama-family
+  process leak and no KFD PID.
+- `observation_grade=true`; `decision_grade=false`.
+- `serving_route_allowed=false`; `numeric_swarm_surface_allowed=false`.
+
+| Measurement | Value |
+|---|---:|
+| Frontdoor before lease decode | `93.690 t/s` |
+| Frontdoor after eviction/reload decode | `94.157 t/s` |
+| After/before decode ratio | `1.005x` |
+| DR-3 K2 active decode | `11.701 t/s` |
+| DR-3 K2 active alpha | `1.000` |
+| DR-3 K2 draft accepted/generated | `128/128` |
+
+This closes the experimental frontdoor opportunity-cost gate. Serving/routing
+still remains blocked on a production-named `P-GPU-1` rerun after v7 promotion.
